@@ -82,6 +82,13 @@ const (
 	// both surfaces; targeted by organization group (org slug), like
 	// FlagBudgets. A rollout gate, not authorization. Removed once Explore is GA.
 	FlagExplore Flag = "gram-explore"
+	// FlagMCPConnectionHealth gates the MCP connection health reads (Connection
+	// Logs, sign-in summary, session activity, denied clients). Evaluated
+	// server-side, where every mcpConnectionHealth method answers not found
+	// without it, and by the dashboard under the same key. Targeted by PostHog
+	// organization group (org slug). Fails closed. A rollout gate, not
+	// authorization. Removed once the pages are GA.
+	FlagMCPConnectionHealth Flag = "mcp-connection-health"
 	// FlagRiskLLMAnalyzer selects the engine behind an organization's secret,
 	// PII, prompt injection and destructive tool call detection on both the
 	// realtime enforcement lane and the batch flag lane. It is multivariate:

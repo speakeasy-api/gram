@@ -48,6 +48,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/killswitches"
 	_ "github.com/speakeasy-api/gram/server/design/litellm"
 	_ "github.com/speakeasy-api/gram/server/design/mcpapproval"
+	_ "github.com/speakeasy-api/gram/server/design/mcpconnectionhealth"
 	_ "github.com/speakeasy-api/gram/server/design/mcpendpoints"
 	_ "github.com/speakeasy-api/gram/server/design/mcpmetadata"
 	_ "github.com/speakeasy-api/gram/server/design/mcpregistry"

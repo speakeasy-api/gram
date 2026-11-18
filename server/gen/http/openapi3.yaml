@@ -46140,6 +46140,630 @@ paths:
             x-speakeasy-name-override: startResearch
             x-speakeasy-react-hook:
                 name: StartMcpResearch
+    /rpc/mcpConnectionHealth.getAttempt:
+        post:
+            description: Get one connection attempt by its reference.
+            operationId: getMcpConnectionAttempt
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetAttemptRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetConnectionAttemptResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getAttempt mcpConnectionHealth
+            tags:
+                - mcpConnectionHealth
+            x-speakeasy-name-override: getAttempt
+            x-speakeasy-react-hook:
+                name: McpConnectionAttempt
+    /rpc/mcpConnectionHealth.getAttemptCounts:
+        post:
+            description: 'Count connection attempts for a provider: the total and the count for each filter value.'
+            operationId: getMcpConnectionAttemptCounts
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ConnectionAttemptQuery'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ConnectionAttemptCountsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getAttemptCounts mcpConnectionHealth
+            tags:
+                - mcpConnectionHealth
+            x-speakeasy-name-override: getAttemptCounts
+            x-speakeasy-react-hook:
+                name: McpConnectionAttemptCounts
+    /rpc/mcpConnectionHealth.getSessionActivity:
+        post:
+            description: Count a provider's active sessions per day and report the average session length.
+            operationId: getMcpSessionActivity
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetSessionActivityRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ConnectionSessionActivityResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getSessionActivity mcpConnectionHealth
+            tags:
+                - mcpConnectionHealth
+            x-speakeasy-name-override: getSessionActivity
+            x-speakeasy-react-hook:
+                name: McpSessionActivity
+    /rpc/mcpConnectionHealth.getSignInSummary:
+        post:
+            description: Count sign-ins and renewals through a provider per time bucket, split by whether they succeeded.
+            operationId: getMcpSignInSummary
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetSignInSummaryRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ConnectionSignInSummaryResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getSignInSummary mcpConnectionHealth
+            tags:
+                - mcpConnectionHealth
+            x-speakeasy-name-override: getSignInSummary
+            x-speakeasy-react-hook:
+                name: McpSignInSummary
+    /rpc/mcpConnectionHealth.listAttempts:
+        post:
+            description: List connection attempts for a provider, newest first. Repeats of the same failure fold into one row.
+            operationId: listMcpConnectionAttempts
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ListAttemptsRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListConnectionAttemptsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listAttempts mcpConnectionHealth
+            tags:
+                - mcpConnectionHealth
+            x-speakeasy-name-override: listAttempts
+            x-speakeasy-react-hook:
+                name: McpConnectionAttempts
+    /rpc/mcpConnectionHealth.listDeniedClients:
+        post:
+            description: List apps refused at sign-in through a provider, with the reason and the last time.
+            operationId: listMcpDeniedClients
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ConnectionHealthRangeQuery'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ConnectionDeniedClientsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listDeniedClients mcpConnectionHealth
+            tags:
+                - mcpConnectionHealth
+            x-speakeasy-name-override: listDeniedClients
+            x-speakeasy-react-hook:
+                name: McpDeniedClients
     /rpc/mcpEndpoints.checkSlugAvailability:
         get:
             description: 'Check whether an MCP endpoint slug is available. The uniqueness scope depends on whether a custom_domain_id is provided: platform-domain slugs are checked across all platform-domain endpoints (custom_domain_id IS NULL); custom-domain slugs are checked within the (custom_domain_id, slug) pair. Returns true when the slug is free.'
@@ -107663,6 +108287,675 @@ components:
                     description: The confirmed servers with their new state.
             required:
                 - servers
+        ConnectionApp:
+            type: object
+            properties:
+                app_key:
+                    type: string
+                    description: Catalog host or kind of app.
+                family:
+                    type: string
+                    description: Client family, empty when the app is not on the list.
+                name:
+                    type: string
+                    description: Display name, Unlisted app when the family is unknown.
+                version:
+                    type: string
+            required:
+                - family
+                - name
+        ConnectionAttemptContext:
+            type: object
+            properties:
+                grant_type:
+                    type: string
+                retries:
+                    type: integer
+                    format: int64
+                sub_reason:
+                    type: string
+            required:
+                - retries
+        ConnectionAttemptCountsResult:
+            type: object
+            properties:
+                facets:
+                    $ref: '#/components/schemas/ConnectionAttemptFacets'
+                logging_enabled:
+                    type: boolean
+                    description: False when the organization has logging off. Nothing else is returned then.
+                total_attempts:
+                    type: integer
+                    format: int64
+                truncated:
+                    type: boolean
+                    description: True when counts were cut at the server's cap.
+                viewer_scope:
+                    description: all when the caller reads the whole project, own when only their own attempts.
+                    enum:
+                        - all
+                        - own
+                    type: string
+                    x-speakeasy-name-override: ConnectionViewerScope
+            required:
+                - logging_enabled
+                - viewer_scope
+        ConnectionAttemptDetail:
+            type: object
+            properties:
+                app:
+                    $ref: '#/components/schemas/ConnectionApp'
+                context:
+                    $ref: '#/components/schemas/ConnectionAttemptContext'
+                count:
+                    type: integer
+                    description: Attempts this row stands for.
+                    format: int64
+                first_started_at:
+                    type: string
+                    description: Earliest attempt start in the row.
+                    format: date-time
+                id:
+                    type: string
+                    description: Reference of the newest attempt in the row.
+                member:
+                    $ref: '#/components/schemas/ConnectionServer'
+                message:
+                    type: string
+                network:
+                    $ref: '#/components/schemas/ConnectionNetwork'
+                outcome:
+                    description: How an attempt ended. didnt_finish has no final step past the live window; in_progress is still inside it.
+                    enum:
+                        - connected
+                        - failed
+                        - blocked
+                        - declined
+                        - didnt_finish
+                        - in_progress
+                    type: string
+                    x-speakeasy-name-override: ConnectionOutcome
+                person:
+                    $ref: '#/components/schemas/ConnectionPerson'
+                reason:
+                    type: string
+                server:
+                    $ref: '#/components/schemas/ConnectionServer'
+                service:
+                    type: string
+                source:
+                    description: The party that returned a failure.
+                    enum:
+                        - service
+                        - server
+                        - app
+                        - identity_provider
+                        - speakeasy_setting
+                        - speakeasy
+                    type: string
+                    x-speakeasy-name-override: ConnectionFailureSource
+                started_at:
+                    type: string
+                    format: date-time
+                step:
+                    description: The plain step an attempt ended or stopped at.
+                    enum:
+                        - connect
+                        - sign_in
+                        - service_sign_in
+                        - sign_in_renewal
+                        - service_renewal
+                        - listing_tools
+                        - request
+                        - other
+                    type: string
+                    x-speakeasy-name-override: ConnectionStepGroup
+                steps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ConnectionAttemptStep'
+                technical_message:
+                    type: string
+                    description: 'Reserved: a sentence for administrators about the reason. Not returned yet.'
+                time:
+                    type: string
+                    description: When the newest attempt ended or last moved.
+                    format: date-time
+                trace_id:
+                    type: string
+                user_session_issuer_id:
+                    type: string
+            required:
+                - started_at
+                - steps
+                - context
+                - id
+                - time
+                - first_started_at
+                - count
+                - outcome
+                - step
+                - app
+        ConnectionAttemptFacets:
+            type: object
+            properties:
+                app_versions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ConnectionFacetValue'
+                apps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ConnectionFacetValue'
+                members:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ConnectionFacetValue'
+                networks:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ConnectionFacetValue'
+                outcomes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ConnectionFacetValue'
+                people:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ConnectionFacetValue'
+                reasons:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ConnectionFacetValue'
+                servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ConnectionFacetValue'
+                services:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ConnectionFacetValue'
+                steps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ConnectionFacetValue'
+            required:
+                - outcomes
+                - steps
+                - servers
+                - members
+                - people
+                - networks
+                - apps
+                - app_versions
+                - reasons
+                - services
+        ConnectionAttemptFilters:
+            type: object
+            properties:
+                app_versions:
+                    type: array
+                    items:
+                        type: string
+                    description: App family and version as family@version.
+                    maxItems: 50
+                apps:
+                    type: array
+                    items:
+                        type: string
+                    description: App families. An empty string selects apps that are not on the list.
+                    maxItems: 50
+                member_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Gateway member ids on the step that ended the attempt.
+                    maxItems: 50
+                networks:
+                    type: array
+                    items:
+                        type: string
+                    description: Network keys.
+                    maxItems: 50
+                outcomes:
+                    type: array
+                    items:
+                        description: How an attempt ended. didnt_finish has no final step past the live window; in_progress is still inside it.
+                        enum:
+                            - connected
+                            - failed
+                            - blocked
+                            - declined
+                            - didnt_finish
+                            - in_progress
+                        type: string
+                        x-speakeasy-name-override: ConnectionOutcome
+                    maxItems: 50
+                people:
+                    type: array
+                    items:
+                        type: string
+                    description: Subject URNs.
+                    maxItems: 50
+                reasons:
+                    type: array
+                    items:
+                        type: string
+                    description: Reason codes.
+                    maxItems: 50
+                server_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Server, gateway or toolset ids.
+                    maxItems: 50
+                services:
+                    type: array
+                    items:
+                        type: string
+                    description: Service hosts.
+                    maxItems: 50
+                steps:
+                    type: array
+                    items:
+                        description: The plain step an attempt ended or stopped at.
+                        enum:
+                            - connect
+                            - sign_in
+                            - service_sign_in
+                            - sign_in_renewal
+                            - service_renewal
+                            - listing_tools
+                            - request
+                            - other
+                        type: string
+                        x-speakeasy-name-override: ConnectionStepGroup
+                    maxItems: 50
+            description: Values within one filter are alternatives. Filters combine.
+        ConnectionAttemptQuery:
+            type: object
+            properties:
+                filters:
+                    $ref: '#/components/schemas/ConnectionAttemptFilters'
+                from:
+                    type: string
+                    description: Inclusive start of attempt start times, at most 30 days ago.
+                    format: date-time
+                server_id:
+                    type: string
+                    description: Limit to one server, gateway or toolset.
+                    format: uuid
+                to:
+                    type: string
+                    description: Exclusive end of attempt start times.
+                    format: date-time
+                user_session_issuer_id:
+                    type: string
+                    description: The MCP authentication provider.
+                    format: uuid
+            required:
+                - user_session_issuer_id
+                - from
+                - to
+        ConnectionAttemptRow:
+            type: object
+            properties:
+                app:
+                    $ref: '#/components/schemas/ConnectionApp'
+                count:
+                    type: integer
+                    description: Attempts this row stands for.
+                    format: int64
+                first_started_at:
+                    type: string
+                    description: Earliest attempt start in the row.
+                    format: date-time
+                id:
+                    type: string
+                    description: Reference of the newest attempt in the row.
+                member:
+                    $ref: '#/components/schemas/ConnectionServer'
+                message:
+                    type: string
+                network:
+                    $ref: '#/components/schemas/ConnectionNetwork'
+                outcome:
+                    description: How an attempt ended. didnt_finish has no final step past the live window; in_progress is still inside it.
+                    enum:
+                        - connected
+                        - failed
+                        - blocked
+                        - declined
+                        - didnt_finish
+                        - in_progress
+                    type: string
+                    x-speakeasy-name-override: ConnectionOutcome
+                person:
+                    $ref: '#/components/schemas/ConnectionPerson'
+                reason:
+                    type: string
+                server:
+                    $ref: '#/components/schemas/ConnectionServer'
+                service:
+                    type: string
+                source:
+                    description: The party that returned a failure.
+                    enum:
+                        - service
+                        - server
+                        - app
+                        - identity_provider
+                        - speakeasy_setting
+                        - speakeasy
+                    type: string
+                    x-speakeasy-name-override: ConnectionFailureSource
+                step:
+                    description: The plain step an attempt ended or stopped at.
+                    enum:
+                        - connect
+                        - sign_in
+                        - service_sign_in
+                        - sign_in_renewal
+                        - service_renewal
+                        - listing_tools
+                        - request
+                        - other
+                    type: string
+                    x-speakeasy-name-override: ConnectionStepGroup
+                technical_message:
+                    type: string
+                    description: 'Reserved: a sentence for administrators about the reason. Not returned yet.'
+                time:
+                    type: string
+                    description: When the newest attempt ended or last moved.
+                    format: date-time
+            required:
+                - id
+                - time
+                - first_started_at
+                - count
+                - outcome
+                - step
+                - app
+        ConnectionAttemptStep:
+            type: object
+            properties:
+                at:
+                    type: string
+                    format: date-time
+                final:
+                    type: boolean
+                member:
+                    $ref: '#/components/schemas/ConnectionServer'
+                message:
+                    type: string
+                reason:
+                    type: string
+                result:
+                    type: string
+                service:
+                    type: string
+                step:
+                    description: The plain step an attempt ended or stopped at.
+                    enum:
+                        - connect
+                        - sign_in
+                        - service_sign_in
+                        - sign_in_renewal
+                        - service_renewal
+                        - listing_tools
+                        - request
+                        - other
+                    type: string
+                    x-speakeasy-name-override: ConnectionStepGroup
+                stored_step:
+                    type: string
+                technical_message:
+                    type: string
+                    description: 'Reserved: a sentence for administrators about the reason. Not returned yet.'
+            required:
+                - at
+                - step
+                - stored_step
+                - result
+                - final
+        ConnectionDeniedClient:
+            type: object
+            properties:
+                app:
+                    $ref: '#/components/schemas/ConnectionApp'
+                attempts:
+                    type: integer
+                    format: int64
+                last_at:
+                    type: string
+                    format: date-time
+                message:
+                    type: string
+                networks:
+                    type: integer
+                    format: int64
+                people:
+                    type: integer
+                    format: int64
+                reason:
+                    type: string
+                technical_message:
+                    type: string
+                    description: 'Reserved: a sentence for administrators about the reason. Not returned yet.'
+            required:
+                - app
+                - reason
+                - message
+                - attempts
+                - people
+                - networks
+                - last_at
+        ConnectionDeniedClientsResult:
+            type: object
+            properties:
+                clients:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ConnectionDeniedClient'
+                logging_enabled:
+                    type: boolean
+                    description: False when the organization has logging off. Nothing else is returned then.
+                viewer_scope:
+                    description: all when the caller reads the whole project, own when only their own attempts.
+                    enum:
+                        - all
+                        - own
+                    type: string
+                    x-speakeasy-name-override: ConnectionViewerScope
+            required:
+                - logging_enabled
+                - viewer_scope
+        ConnectionFacetValue:
+            type: object
+            properties:
+                attempts:
+                    type: integer
+                    format: int64
+                label:
+                    type: string
+                value:
+                    type: string
+            required:
+                - value
+                - attempts
+        ConnectionHealthRangeQuery:
+            type: object
+            properties:
+                from:
+                    type: string
+                    description: Inclusive start of attempt start times, at most 30 days ago.
+                    format: date-time
+                server_id:
+                    type: string
+                    description: Limit to one server, gateway or toolset.
+                    format: uuid
+                to:
+                    type: string
+                    description: Exclusive end of attempt start times.
+                    format: date-time
+                user_session_issuer_id:
+                    type: string
+                    description: The MCP authentication provider.
+                    format: uuid
+            required:
+                - user_session_issuer_id
+                - from
+                - to
+        ConnectionNetwork:
+            type: object
+            properties:
+                key:
+                    type: string
+                    description: Opaque per-organization network key, the filter value.
+                label:
+                    type: string
+                    description: Short label for display.
+            required:
+                - key
+                - label
+        ConnectionPerson:
+            type: object
+            properties:
+                email:
+                    type: string
+                    description: Only on getAttempt.
+                kind:
+                    type: string
+                    enum:
+                        - user
+                        - agent
+                        - apikey
+                        - workload
+                        - anonymous
+                        - other
+                name:
+                    type: string
+                subject_urn:
+                    type: string
+                user_id:
+                    type: string
+            required:
+                - subject_urn
+                - kind
+        ConnectionServer:
+            type: object
+            properties:
+                id:
+                    type: string
+                kind:
+                    type: string
+                    enum:
+                        - mcp
+                        - gateway
+                        - toolset
+                        - authorization_server
+                        - none
+                name:
+                    type: string
+            required:
+                - id
+                - kind
+        ConnectionSessionActivityResult:
+            type: object
+            properties:
+                active_now:
+                    type: integer
+                    format: int64
+                average_session_seconds:
+                    type: integer
+                    description: Mean length of sessions that ended in the average window.
+                    format: int64
+                average_window_from:
+                    type: string
+                    description: 'Start of the window the average covers: 30 days before now.'
+                    format: date-time
+                average_window_to:
+                    type: string
+                    description: 'End of the window the average covers: now.'
+                    format: date-time
+                configured_session_seconds:
+                    type: integer
+                    format: int64
+                days:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ConnectionSessionDay'
+            required:
+                - days
+                - active_now
+                - configured_session_seconds
+                - average_window_from
+                - average_window_to
+        ConnectionSessionDay:
+            type: object
+            properties:
+                active_sessions:
+                    type: integer
+                    format: int64
+                day:
+                    type: string
+                    description: UTC day, YYYY-MM-DD.
+            required:
+                - day
+                - active_sessions
+        ConnectionSignInBucket:
+            type: object
+            properties:
+                renewals:
+                    $ref: '#/components/schemas/ConnectionSignInCounts'
+                sign_ins:
+                    $ref: '#/components/schemas/ConnectionSignInCounts'
+                start:
+                    type: string
+                    format: date-time
+            required:
+                - start
+                - sign_ins
+                - renewals
+        ConnectionSignInCounts:
+            type: object
+            properties:
+                did_not:
+                    type: integer
+                    format: int64
+                succeeded:
+                    type: integer
+                    format: int64
+            required:
+                - succeeded
+                - did_not
+        ConnectionSignInSummaryResult:
+            type: object
+            properties:
+                bucket:
+                    type: string
+                    enum:
+                        - hour
+                        - six_hours
+                        - day
+                buckets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ConnectionSignInBucket'
+                logging_enabled:
+                    type: boolean
+                    description: False when the organization has logging off. Nothing else is returned then.
+                viewer_scope:
+                    description: all when the caller reads the whole project, own when only their own attempts.
+                    enum:
+                        - all
+                        - own
+                    type: string
+                    x-speakeasy-name-override: ConnectionViewerScope
+            required:
+                - logging_enabled
+                - viewer_scope
         CountChatsByUserResult:
             type: object
             properties:
@@ -113742,6 +115035,35 @@ components:
             properties:
                 deployment:
                     $ref: '#/components/schemas/Deployment'
+        GetAttemptRequestBody:
+            type: object
+            properties:
+                reference:
+                    type: string
+                    description: The attempt reference a person was shown, or a row id from listAttempts.
+                    maxLength: 200
+            required:
+                - reference
+        GetConnectionAttemptResult:
+            type: object
+            properties:
+                attempt:
+                    $ref: '#/components/schemas/ConnectionAttemptDetail'
+                found:
+                    type: boolean
+                logging_enabled:
+                    type: boolean
+                    description: False when the organization has logging off. Nothing else is returned then.
+                viewer_scope:
+                    description: all when the caller reads the whole project, own when only their own attempts.
+                    enum:
+                        - all
+                        - own
+                    type: string
+                    x-speakeasy-name-override: ConnectionViewerScope
+            required:
+                - logging_enabled
+                - viewer_scope
         GetDeploymentEvaluationResult:
             type: object
             properties:
@@ -114661,6 +115983,25 @@ components:
             required:
                 - message
                 - acknowledged
+        GetSessionActivityRequestBody:
+            type: object
+            properties:
+                from:
+                    type: string
+                    description: Inclusive start.
+                    format: date-time
+                to:
+                    type: string
+                    description: Exclusive end.
+                    format: date-time
+                user_session_issuer_id:
+                    type: string
+                    description: The MCP authentication provider.
+                    format: uuid
+            required:
+                - user_session_issuer_id
+                - from
+                - to
         GetSessionMetaResult:
             type: object
             properties:
@@ -114681,6 +116022,36 @@ components:
                     description: Matching setup guides, most specific match first. Empty when no guide has been published for the server.
             required:
                 - guides
+        GetSignInSummaryRequestBody:
+            type: object
+            properties:
+                bucket:
+                    type: string
+                    description: Bucket size. Defaults to hour for ranges up to 48 hours, otherwise day.
+                    enum:
+                        - hour
+                        - six_hours
+                        - day
+                from:
+                    type: string
+                    description: Inclusive start of attempt start times, at most 30 days ago.
+                    format: date-time
+                server_id:
+                    type: string
+                    description: Limit to one server, gateway or toolset.
+                    format: uuid
+                to:
+                    type: string
+                    description: Exclusive end of attempt start times.
+                    format: date-time
+                user_session_issuer_id:
+                    type: string
+                    description: The MCP authentication provider.
+                    format: uuid
+            required:
+                - user_session_issuer_id
+                - from
+                - to
         GetSignedAssetURLForm:
             type: object
             properties:
@@ -117854,6 +119225,40 @@ components:
                     description: Assistants for the current project.
             required:
                 - assistants
+        ListAttemptsRequestBody:
+            type: object
+            properties:
+                cursor:
+                    type: string
+                    description: Opaque cursor from next_cursor.
+                filters:
+                    $ref: '#/components/schemas/ConnectionAttemptFilters'
+                from:
+                    type: string
+                    description: Inclusive start of attempt start times, at most 30 days ago.
+                    format: date-time
+                limit:
+                    type: integer
+                    description: Page size, default 50, at most 100.
+                    format: int64
+                    minimum: 1
+                    maximum: 100
+                server_id:
+                    type: string
+                    description: Limit to one server, gateway or toolset.
+                    format: uuid
+                to:
+                    type: string
+                    description: Exclusive end of attempt start times.
+                    format: date-time
+                user_session_issuer_id:
+                    type: string
+                    description: The MCP authentication provider.
+                    format: uuid
+            required:
+                - user_session_issuer_id
+                - from
+                - to
         ListAttributeKeysPayload:
             type: object
             properties:
@@ -118135,6 +119540,28 @@ components:
             description: Result type for listing the CIMD preset catalog.
             required:
                 - items
+        ListConnectionAttemptsResult:
+            type: object
+            properties:
+                attempts:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ConnectionAttemptRow'
+                logging_enabled:
+                    type: boolean
+                    description: False when the organization has logging off. Nothing else is returned then.
+                next_cursor:
+                    type: string
+                viewer_scope:
+                    description: all when the caller reads the whole project, own when only their own attempts.
+                    enum:
+                        - all
+                        - own
+                    type: string
+                    x-speakeasy-name-override: ConnectionViewerScope
+            required:
+                - logging_enabled
+                - viewer_scope
         ListCustomDetectionRulesResult:
             type: object
             properties:
@@ -142770,6 +144197,8 @@ tags:
       description: Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.
     - name: mcpApproval
       description: Dashboard API for reviewing and deciding MCP server approval requests.
+    - name: mcpConnectionHealth
+      description: Read MCP connection attempts, sign-in activity and sessions for one MCP authentication provider in a project.
     - name: mcpEndpoints
       description: Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers and meta MCP servers.
     - name: mcpMetadata
