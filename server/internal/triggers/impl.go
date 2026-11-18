@@ -502,6 +502,10 @@ func toTriggerError(ctx context.Context, logger *slog.Logger, err error, message
 		// self-correct. The chain is already user-actionable: it's only
 		// reached when the input fails validation.
 		public = fmt.Sprintf("%s: %s", message, err.Error())
+	case errors.Is(err, bgtriggers.ErrTargetUnavailable):
+		// Deliberate deployment configuration, not an outage: 501 rather
+		// than 503, which generated SDK clients retry.
+		return oops.E(oops.CodeNotImplemented, err, "%s: %s", message, err.Error()).LogWarn(ctx, logger)
 	case errors.Is(err, bgtriggers.ErrAuthFailed):
 		// Webhook signature failures are client faults: a 401 on a public
 		// endpoint, commonly a single trigger with a stale or wrong signing

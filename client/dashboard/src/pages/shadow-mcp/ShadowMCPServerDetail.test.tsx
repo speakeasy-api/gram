@@ -41,6 +41,21 @@ vi.mock("react-router", async (importOriginal) => ({
   }),
 }));
 
+// The panel runs its own connection check and has its own tests; here a
+// marker records that the page hands it the server.
+vi.mock("@/components/shadow-mcp/OfficialServerPanel", () => ({
+  OfficialServerPanel: ({
+    server,
+  }: {
+    server: { canonicalServerUrl: string };
+  }) => (
+    <div
+      data-testid="official-server-panel"
+      data-server-url={server.canonicalServerUrl}
+    />
+  ),
+}));
+
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "acme", projectSlug: "default" }),
   useProjectSlugForRequests: () => "default",
@@ -505,6 +520,12 @@ describe("ShadowMCPServerDetail", () => {
     expect(screen.getByText("alex@example.com")).toBeTruthy();
     expect(screen.getByText("15 calls")).toBeTruthy();
     expect(screen.getByText("sam@example.com")).toBeTruthy();
+    // Making the server official is offered on the same page.
+    expect(
+      screen
+        .getByTestId("official-server-panel")
+        .getAttribute("data-server-url"),
+    ).toBe("https://github.example.com/mcp");
 
     expect(mocks.useShadowMCPInventoryServer).toHaveBeenCalledWith(
       {
@@ -525,23 +546,18 @@ describe("ShadowMCPServerDetail", () => {
     );
   });
 
-  // The page is opened from the MCP approvals tab of Guardrails, and the
-  // sidebar highlights Guardrails, so the trail leads back there rather than
-  // through the retired Shadow AI section its URL still carries.
-  it("leads the breadcrumb back to the MCP approvals tab of Guardrails", () => {
+  // The page is opened from the Shadow MCP page, and the sidebar highlights
+  // Shadow MCP, so the trail leads back there rather than through the Shadow
+  // AI section its URL still carries.
+  it("leads the breadcrumb back to the Shadow MCP page", () => {
     renderDetailPage();
 
     const trail = screen.getByRole("navigation", { name: "Breadcrumb" });
     expect(
       within(trail)
-        .getByRole("link", { name: "Guardrails" })
+        .getByRole("link", { name: "Shadow MCP" })
         .getAttribute("href"),
-    ).toBe("/acme/projects/default/risk-policies");
-    expect(
-      within(trail)
-        .getByRole("link", { name: "MCP approvals" })
-        .getAttribute("href"),
-    ).toBe("/acme/projects/default/risk-policies?tab=mcp-approvals");
+    ).toBe("/acme/projects/default/shadow-mcp");
     expect(within(trail).getByText("GitHub MCP")).toBeTruthy();
     expect(within(trail).queryByText("Shadow AI")).toBeNull();
     expect(within(trail).queryByText("MCPs")).toBeNull();

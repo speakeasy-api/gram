@@ -309,6 +309,7 @@ export const AUDIT_ACTIONS = [
   "risk_result:unmask",
   "session_quarantine:open",
   "session_quarantine:release",
+  "shadow_mcp_official_server:set",
   "sigint-sensor:create",
   "sigint-sensor:delete",
   "sigint-sensor:update",
@@ -1014,6 +1015,11 @@ export function staticActionPhrase(action: AuditAction): string {
       return "saved an evaluation review for";
     case "risk_policy:eval_review_delete":
       return "deleted an evaluation review for";
+
+    // One action records linking, switching the link off or on, and
+    // removing it, so the phrase names the link rather than one of them.
+    case "shadow_mcp_official_server:set":
+      return "changed the official server link of Shadow MCP server";
 
     case "risk_result:dismiss":
       return "dismissed risk finding";

@@ -7154,7 +7154,14 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   autovacuum_vacuum_scale_factor = 0.02,
   autovacuum_vacuum_insert_scale_factor = 0,
   autovacuum_vacuum_insert_threshold = 250000,
-  autovacuum_vacuum_cost_limit = 2000
+  autovacuum_vacuum_cost_limit = 2000,
+  -- The default 0.1 analyze scale factor waits for ~3M new rows on a 30M-row
+  -- table, so the created_at histogram can lag by days. Windowed reads near
+  -- now() then fall past its last bucket, are estimated at ~1 row, and get
+  -- nested-loop plans that hit the statement timeout. A fixed threshold
+  -- keeps the statistics current as the table grows.
+  autovacuum_analyze_scale_factor = 0,
+  autovacuum_analyze_threshold = 500000
 );
 
 COMMENT ON COLUMN chat_messages.id IS '@access: confidential';
@@ -7233,6 +7240,13 @@ WHERE source IS NOT NULL AND source <> '';
 
 CREATE INDEX IF NOT EXISTS chat_messages_project_id_id_idx
 ON chat_messages (project_id, id)
+WHERE project_id IS NOT NULL;
+
+-- Project-wide time-window reads (GetChatMetricsSummary) range-scan one
+-- project's messages by created_at instead of probing every chat in the
+-- project. chat_id is included so per-chat MIN/MAX stays index-only.
+CREATE INDEX IF NOT EXISTS chat_messages_project_id_created_at_idx
+ON chat_messages (project_id, created_at) INCLUDE (chat_id)
 WHERE project_id IS NOT NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS chat_messages_chat_id_external_message_id_key
@@ -7437,6 +7451,11 @@ COMMENT ON COLUMN chat_resolutions.resolution IS '@access: confidential';
 COMMENT ON COLUMN chat_resolutions.resolution_notes IS '@access: opaque-restricted';
 COMMENT ON COLUMN chat_resolutions.score IS '@access: confidential';
 COMMENT ON COLUMN chat_resolutions.created_at IS '@access: confidential';
+
+-- Latest resolution per chat as a single index-only probe
+-- (GetChatMetricsSummary).
+CREATE INDEX IF NOT EXISTS chat_resolutions_chat_id_created_at_idx
+ON chat_resolutions (chat_id, created_at DESC) INCLUDE (project_id, resolution);
 
 CREATE TABLE IF NOT EXISTS chat_user_feedback (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -11319,19 +11338,19 @@ CREATE INDEX IF NOT EXISTS meta_mcp_server_members_meta_mcp_server_id_idx
 ON meta_mcp_server_members (meta_mcp_server_id, sort_order, created_at, id)
 WHERE deleted IS FALSE;
 
--- An administrator's choice about the official version of one Shadow MCP
--- server, keyed by the server's upstream URL. Without a row, the official
--- version is the project's MCP server that proxies to the same URL. A row
--- names a different server, or keeps direct connections to the upstream
--- working while the official version is tested.
+-- An administrator's link from one Shadow MCP server, keyed by its upstream
+-- URL, to the MCP server that is its official version. Only a row makes a
+-- server official: a project MCP server that proxies to the same URL is just
+-- a suggestion until it is linked. A row can also keep direct connections to
+-- the upstream working while the official version is tested.
 CREATE TABLE IF NOT EXISTS shadow_mcp_official_servers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
   -- The Shadow MCP server's upstream URL in inventory form, without a
   -- trailing slash.
   server_url TEXT NOT NULL CHECK (server_url <> ''),
-  -- The MCP server chosen as the official version. NULL keeps the server
-  -- that proxies to server_url.
+  -- The MCP server chosen as the official version. NULL, or a deleted or
+  -- disabled server, reads as no link.
   mcp_server_id uuid,
   -- True keeps direct connections to server_url working after an official
   -- version exists, for example while it is tested.

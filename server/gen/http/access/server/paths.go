@@ -132,6 +132,11 @@ func UpdateShadowMCPInventoryServerNameAccessPath() string {
 	return "/rpc/access.updateShadowMCPInventoryServerName"
 }
 
+// SetShadowMCPOfficialServerAccessPath returns the URL path to the access service setShadowMCPOfficialServer HTTP endpoint.
+func SetShadowMCPOfficialServerAccessPath() string {
+	return "/rpc/access.setShadowMCPOfficialServer"
+}
+
 // ListShadowMCPInventoryUsersAccessPath returns the URL path to the access service listShadowMCPInventoryUsers HTTP endpoint.
 func ListShadowMCPInventoryUsersAccessPath() string {
 	return "/rpc/access.listShadowMCPInventoryUsers"

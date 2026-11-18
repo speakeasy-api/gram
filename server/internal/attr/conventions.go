@@ -499,12 +499,26 @@ const (
 	NetworkIngressResultKey             = attribute.Key("gram.network_ingress.result")
 	NetworkIngressReasonKey             = attribute.Key("gram.network_ingress.reason")
 	NetworkIngressErrorCodeKey          = attribute.Key("gram.network_ingress.error_code")
-	TailnetGatewaySlotKey               = attribute.Key("gram.tailnet_gateway.slot")
-	TailnetGatewayNodeStatusKey         = attribute.Key("gram.tailnet_gateway.node_status")
-	TailnetGatewayOperationKey          = attribute.Key("gram.tailnet_gateway.operation")
-	TailnetGatewayResultKey             = attribute.Key("gram.tailnet_gateway.result")
-	TailnetGatewayIdentityKindKey       = attribute.Key("gram.tailnet_gateway.identity_kind")
-	NetworkIngressDurationKey           = attribute.Key("gram.network_ingress.operation.duration")
+	// NetworkIngressKubernetesReasonKey is the machine-readable reason of a
+	// failed Kubernetes API call (for example Conflict or Forbidden).
+	NetworkIngressKubernetesReasonKey = attribute.Key("gram.network_ingress.kubernetes.reason")
+
+	// NetworkIngressKubernetesStatusCodeKey is the HTTP status of a failed
+	// Kubernetes API call.
+	NetworkIngressKubernetesStatusCodeKey = attribute.Key("gram.network_ingress.kubernetes.status_code")
+
+	// NetworkIngressKubernetesResourceKey is the type a failed Kubernetes API
+	// call addressed, qualified by its API group. The API server reports the
+	// plural resource for most failures (tailnets.tailscale.com) but the Kind
+	// for validation failures (Tailnet.tailscale.com), so filter on both.
+	NetworkIngressKubernetesResourceKey = attribute.Key("gram.network_ingress.kubernetes.resource")
+
+	TailnetGatewaySlotKey         = attribute.Key("gram.tailnet_gateway.slot")
+	TailnetGatewayNodeStatusKey   = attribute.Key("gram.tailnet_gateway.node_status")
+	TailnetGatewayOperationKey    = attribute.Key("gram.tailnet_gateway.operation")
+	TailnetGatewayResultKey       = attribute.Key("gram.tailnet_gateway.result")
+	TailnetGatewayIdentityKindKey = attribute.Key("gram.tailnet_gateway.identity_kind")
+	NetworkIngressDurationKey     = attribute.Key("gram.network_ingress.operation.duration")
 
 	CustomDomainHealthStatusKey         = attribute.Key("gram.custom_domain.health.status")
 	CustomDomainHealthIssueKey          = attribute.Key("gram.custom_domain.health.issue")
@@ -1083,6 +1097,13 @@ const (
 	HookDeliveryFailedIdempotencyKeyKey = attribute.Key("gram.hook.delivery.failed_idempotency_key")
 	HookDeliverySessionIDKey            = attribute.Key("gram.hook.delivery.session_id")
 	HookDeliverySpoolDepthKey           = attribute.Key("gram.hook.delivery.spool_depth")
+	// Bootstrap install failure reports (client.install_failed): a plugin's
+	// bootstrap script could not install the hooks binary. Rows carrying
+	// these are diagnostic. The version the script tried to install is kept
+	// apart from gram.hook.device.binary_version, which names a binary that
+	// actually ran.
+	HookInstallCauseKey   = attribute.Key("gram.hook.install.cause")
+	HookInstallVersionKey = attribute.Key("gram.hook.install.version")
 	// Hardware identity the Speakeasy device agent (speakeasyd) reports via
 	// the Gram-Device-* headers, recorded on the request log for its
 	// endpoints so a fleet's requests can be counted and told apart per
@@ -1888,6 +1909,12 @@ func SlogHookDeliveryPhase(v string) slog.Attr      { return slog.String(string(
 func HookDeliveryCause(v string) attribute.KeyValue { return HookDeliveryCauseKey.String(v) }
 func SlogHookDeliveryCause(v string) slog.Attr      { return slog.String(string(HookDeliveryCauseKey), v) }
 
+func HookInstallCause(v string) attribute.KeyValue { return HookInstallCauseKey.String(v) }
+func SlogHookInstallCause(v string) slog.Attr      { return slog.String(string(HookInstallCauseKey), v) }
+
+func HookInstallVersion(v string) attribute.KeyValue { return HookInstallVersionKey.String(v) }
+func SlogHookInstallVersion(v string) slog.Attr      { return slog.String(string(HookInstallVersionKey), v) }
+
 func SlogHookDeliveryStatusCode(v int) slog.Attr {
 	return slog.Int(string(HookDeliveryStatusCodeKey), v)
 }
@@ -2568,6 +2595,18 @@ func NetworkIngressErrorCode[V ~string](v V) attribute.KeyValue {
 
 func SlogNetworkIngressErrorCode[V ~string](v V) slog.Attr {
 	return slog.String(string(NetworkIngressErrorCodeKey), string(v))
+}
+
+func SlogNetworkIngressKubernetesReason[V ~string](v V) slog.Attr {
+	return slog.String(string(NetworkIngressKubernetesReasonKey), string(v))
+}
+
+func SlogNetworkIngressKubernetesStatusCode(v int32) slog.Attr {
+	return slog.Int(string(NetworkIngressKubernetesStatusCodeKey), int(v))
+}
+
+func SlogNetworkIngressKubernetesResource(v string) slog.Attr {
+	return slog.String(string(NetworkIngressKubernetesResourceKey), v)
 }
 
 func TailnetGatewaySlot(v int32) attribute.KeyValue { return TailnetGatewaySlotKey.Int(int(v)) }

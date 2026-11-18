@@ -14763,6 +14763,9 @@ components:
         ai_platform_push_integrations_enabled:
           type: boolean
           description: Whether the organization can provision push integrations for AI platforms
+        assistants_available:
+          type: boolean
+          description: 'Whether this deployment can run assistants. A deployment-wide setting, not an organization entitlement: false when the deployment runs with the disabled assistant runtime provider. Absent from staff admin responses.'
         authz_challenge_logging_enabled:
           type: boolean
           description: Whether authz challenge logging to ClickHouse is enabled
