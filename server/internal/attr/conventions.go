@@ -499,12 +499,26 @@ const (
 	NetworkIngressResultKey             = attribute.Key("gram.network_ingress.result")
 	NetworkIngressReasonKey             = attribute.Key("gram.network_ingress.reason")
 	NetworkIngressErrorCodeKey          = attribute.Key("gram.network_ingress.error_code")
-	TailnetGatewaySlotKey               = attribute.Key("gram.tailnet_gateway.slot")
-	TailnetGatewayNodeStatusKey         = attribute.Key("gram.tailnet_gateway.node_status")
-	TailnetGatewayOperationKey          = attribute.Key("gram.tailnet_gateway.operation")
-	TailnetGatewayResultKey             = attribute.Key("gram.tailnet_gateway.result")
-	TailnetGatewayIdentityKindKey       = attribute.Key("gram.tailnet_gateway.identity_kind")
-	NetworkIngressDurationKey           = attribute.Key("gram.network_ingress.operation.duration")
+	// NetworkIngressKubernetesReasonKey is the machine-readable reason of a
+	// failed Kubernetes API call (for example Conflict or Forbidden).
+	NetworkIngressKubernetesReasonKey = attribute.Key("gram.network_ingress.kubernetes.reason")
+
+	// NetworkIngressKubernetesStatusCodeKey is the HTTP status of a failed
+	// Kubernetes API call.
+	NetworkIngressKubernetesStatusCodeKey = attribute.Key("gram.network_ingress.kubernetes.status_code")
+
+	// NetworkIngressKubernetesResourceKey is the type a failed Kubernetes API
+	// call addressed, qualified by its API group. The API server reports the
+	// plural resource for most failures (tailnets.tailscale.com) but the Kind
+	// for validation failures (Tailnet.tailscale.com), so filter on both.
+	NetworkIngressKubernetesResourceKey = attribute.Key("gram.network_ingress.kubernetes.resource")
+
+	TailnetGatewaySlotKey         = attribute.Key("gram.tailnet_gateway.slot")
+	TailnetGatewayNodeStatusKey   = attribute.Key("gram.tailnet_gateway.node_status")
+	TailnetGatewayOperationKey    = attribute.Key("gram.tailnet_gateway.operation")
+	TailnetGatewayResultKey       = attribute.Key("gram.tailnet_gateway.result")
+	TailnetGatewayIdentityKindKey = attribute.Key("gram.tailnet_gateway.identity_kind")
+	NetworkIngressDurationKey     = attribute.Key("gram.network_ingress.operation.duration")
 
 	CustomDomainHealthStatusKey         = attribute.Key("gram.custom_domain.health.status")
 	CustomDomainHealthIssueKey          = attribute.Key("gram.custom_domain.health.issue")
@@ -2568,6 +2582,18 @@ func NetworkIngressErrorCode[V ~string](v V) attribute.KeyValue {
 
 func SlogNetworkIngressErrorCode[V ~string](v V) slog.Attr {
 	return slog.String(string(NetworkIngressErrorCodeKey), string(v))
+}
+
+func SlogNetworkIngressKubernetesReason[V ~string](v V) slog.Attr {
+	return slog.String(string(NetworkIngressKubernetesReasonKey), string(v))
+}
+
+func SlogNetworkIngressKubernetesStatusCode(v int32) slog.Attr {
+	return slog.Int(string(NetworkIngressKubernetesStatusCodeKey), int(v))
+}
+
+func SlogNetworkIngressKubernetesResource(v string) slog.Attr {
+	return slog.String(string(NetworkIngressKubernetesResourceKey), v)
 }
 
 func TailnetGatewaySlot(v int32) attribute.KeyValue { return TailnetGatewaySlotKey.Int(int(v)) }
