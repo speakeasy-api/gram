@@ -20,6 +20,8 @@ var sessionCreated = time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
 type evidenceSetup struct {
 	googleHD string
 	disabled bool
+	// noSub answers 200 without a sub, which is not a userinfo response.
+	noSub bool
 	// sessionDelay and userInfoDelay slow each lookup's answer.
 	sessionDelay  time.Duration
 	userInfoDelay time.Duration
@@ -52,7 +54,10 @@ func evidenceAdapter(t *testing.T, setup evidenceSetup) *WorkOSAdapter {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
-			body := map[string]any{"email": "jane@example.com"}
+			body := map[string]any{"sub": "google-user-1", "email": "jane@example.com"}
+			if setup.noSub {
+				delete(body, "sub")
+			}
 			if setup.googleHD != "" {
 				body["hd"] = setup.googleHD
 			}
@@ -133,6 +138,10 @@ func TestSignInEvidence(t *testing.T) {
 		{name: "google without provider tokens", setup: evidenceSetup{googleHD: "example.com", disabled: false}, resp: func(t *testing.T) usermanagement.AuthenticateResponse {
 			t.Helper()
 			return authResponse(t, usermanagement.GoogleOAuth, "")
+		}, want: want("", "")},
+		{name: "google answer without sub is unknown", setup: evidenceSetup{googleHD: "", noSub: true}, resp: func(t *testing.T) usermanagement.AuthenticateResponse {
+			t.Helper()
+			return authResponse(t, usermanagement.GoogleOAuth, "google-token")
 		}, want: want("", "")},
 		{name: "google token google rejects", setup: evidenceSetup{googleHD: "example.com", disabled: false}, resp: func(t *testing.T) usermanagement.AuthenticateResponse {
 			t.Helper()

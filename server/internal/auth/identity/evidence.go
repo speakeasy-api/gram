@@ -241,10 +241,15 @@ func (a *WorkOSAdapter) googleHostedDomain(ctx context.Context, accessToken stri
 		return "", fmt.Errorf("google userinfo: status %d", res.StatusCode)
 	}
 	var info struct {
-		HD string `json:"hd"`
+		Sub string `json:"sub"`
+		HD  string `json:"hd"`
 	}
 	if err := json.NewDecoder(io.LimitReader(res.Body, 64<<10)).Decode(&info); err != nil {
 		return "", fmt.Errorf("decode google userinfo: %w", err)
+	}
+	// Without sub (OIDC Core 5.3.2) the answer is not a userinfo response, so a missing hd proves nothing.
+	if info.Sub == "" {
+		return "", errors.New("google userinfo: no sub")
 	}
 	return strings.ToLower(info.HD), nil
 }
