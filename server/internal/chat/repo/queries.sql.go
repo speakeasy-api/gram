@@ -1212,9 +1212,9 @@ type GetChatMetricsSummaryRow struct {
 }
 
 // Starts from the project's messages in the window, which
-// chat_messages_project_id_created_at_idx serves as a range scan, so the work
-// grows with the chats active in the window rather than with the project's
-// whole chat history. The latest resolution is one LIMIT 1 lookup per active
+// chat_messages_project_id_created_at_idx serves as a range scan, so this step
+// grows with the messages in the window rather than with the project's whole
+// chat history. The latest resolution is then one LIMIT 1 lookup per active
 // chat, which chat_resolutions_chat_id_created_at_idx serves as an index
 // probe. Unlike the join it replaces, this shape stays cheap when the planner
 // underestimates the window's rows, which happens when created_at statistics
