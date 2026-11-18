@@ -41,7 +41,17 @@ const (
 
 	// maxAttemptSteps bounds the steps read for one attempt. Real attempts have fewer than 20.
 	maxAttemptSteps = 500
+
+	// rangeSlack lets a "last 30 days" range computed a moment earlier by the caller still pass.
+	rangeSlack = 5 * time.Minute
 )
+
+// readSettings bound one read: past the spill threshold GROUP BY and sorts go to
+// disk, and a read over the cap fails alone instead of starving the server.
+const readSettings = ` SETTINGS max_memory_usage = 1610612736,
+ max_bytes_before_external_group_by = 536870912,
+ max_bytes_before_external_sort = 536870912,
+ max_execution_time = 30`
 
 // ErrBadCursor is a cursor this package did not issue.
 var ErrBadCursor = errors.New("invalid cursor")
@@ -195,7 +205,7 @@ func ValidateRange(from, to, now time.Time) error {
 	switch {
 	case !from.Before(to):
 		return errors.New("from must be before to")
-	case from.Before(now.Add(-Retention)):
+	case from.Before(now.Add(-Retention - rangeSlack)):
 		return errors.New("from must be within the last 30 days")
 	case to.Sub(from) > Retention:
 		return errors.New("the range must be at most 30 days")
@@ -226,6 +236,12 @@ func attemptsSQL(s Scope, now time.Time) (string, []any, error) {
 	}
 	if s.AttemptID != uuid.Nil {
 		conds, args = append(conds, "attempt_id = ?"), append(args, s.AttemptID)
+	}
+	if s.OwnSubjects != nil {
+		conds = append(conds, `attempt_id IN (
+			SELECT attempt_id FROM `+mcpconnectionattempts.EventsTable+` WHERE `+strings.Join(base, " AND ")+` AND has(?, subject_urn))`)
+		args = append(args, baseArgs...)
+		args = append(args, nonNil(s.OwnSubjects))
 	}
 	if s.IssuerID != uuid.Nil {
 		conds = append(conds, `(has(?, server_id) OR server_id = ? OR attempt_id IN (
@@ -375,7 +391,7 @@ func List(ctx context.Context, ch driver.Conn, s Scope, f Filters, after *Cursor
 				SELECT *, if(a_started > lagInFrame(d_at, 1, toDateTime64(0, 9, 'UTC')) OVER (PARTITION BY fold_key ORDER BY a_started, a_id ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) + toIntervalSecond(?), 1, 0) AS new_run
 				FROM (
 					SELECT *, if(d_outcome IN ` + failing + `,
-						cityHash64(if(a_subject != '', a_subject, concat('network:', a_device)), a_server, d_member, d_stored_step, d_outcome, d_reason, d_app, d_version, d_service),
+						cityHash64(multiIf(a_subject != '', a_subject, a_device != '', concat('network:', a_device), concat('attempt:', toString(a_id))), a_server, d_member, d_stored_step, d_outcome, d_reason, d_app, d_version, d_service),
 						cityHash64(toString(a_id))) AS fold_key
 					FROM attempts
 				)
@@ -385,7 +401,7 @@ func List(ctx context.Context, ch driver.Conn, s Scope, f Filters, after *Cursor
 	)
 	WHERE ` + page + `
 	ORDER BY r_time DESC, r_id DESC
-	LIMIT ?`
+	LIMIT ?` + readSettings
 
 	rows, err := scanRows(ctx, ch, query, args)
 	if err != nil {
@@ -416,7 +432,7 @@ func Get(ctx context.Context, ch driver.Conn, s Scope, now time.Time) (*Row, []S
 		d_version AS r_version, d_member AS r_member, d_service AS r_service, d_trace AS r_trace,
 		d_grant AS r_grant, a_started AS r_started, a_issuers AS r_issuers
 	FROM (` + attempts + `)
-	LIMIT 1`
+	LIMIT 1` + readSettings
 	rows, err := scanRows(ctx, ch, query, args)
 	if err != nil {
 		return nil, nil, err
@@ -495,7 +511,7 @@ func readSteps(ctx context.Context, ch driver.Conn, s Scope) ([]Step, error) {
 		AND attempt_started_at >= fromUnixTimestamp64Nano(?) AND attempt_started_at < fromUnixTimestamp64Nano(?)
 		AND attempt_id = ?
 	ORDER BY event_time, step
-	LIMIT ?`, s.OrganizationID, s.ProjectID, s.From.UnixNano(), s.To.UnixNano(), s.AttemptID, maxAttemptSteps)
+	LIMIT ?`+readSettings, s.OrganizationID, s.ProjectID, s.From.UnixNano(), s.To.UnixNano(), s.AttemptID, maxAttemptSteps)
 	if err != nil {
 		return nil, fmt.Errorf("query attempt steps: %w", err)
 	}

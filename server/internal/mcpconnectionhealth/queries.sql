@@ -39,7 +39,12 @@ SELECT toolset.id, toolset.name, 'toolset'::text AS kind
 FROM toolsets AS toolset
 WHERE toolset.project_id = @project_id
   AND toolset.organization_id = @organization_id::text
-  AND toolset.id = ANY(@ids::uuid[]);
+  AND toolset.id = ANY(@ids::uuid[])
+UNION ALL
+SELECT issuer.id, issuer.slug, 'authorization_server'::text AS kind
+FROM user_session_issuers AS issuer
+WHERE (issuer.project_id = @project_id OR (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text))
+  AND issuer.id = ANY(@ids::uuid[]);
 
 -- name: ListMemberNames :many
 -- Members of the organization by user id. Users who left keep no name.
@@ -64,7 +69,7 @@ lives AS (
          LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), session.refresh_expires_at) AS ended_at
   FROM user_sessions AS session
   WHERE session.user_session_issuer_id = @issuer_id
-    AND (session.project_id = @project_id OR session.organization_id = @organization_id::text)
+    AND (session.project_id = @project_id OR (session.project_id IS NULL AND session.organization_id = @organization_id::text))
     AND session.created_at < @to_day::timestamptz
     AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), session.refresh_expires_at) > @from_day::timestamptz
 )
@@ -80,7 +85,7 @@ ORDER BY days.day_start;
 SELECT COUNT(DISTINCT COALESCE(session.credential_id, session.id))::bigint AS active_sessions
 FROM user_sessions AS session
 WHERE session.user_session_issuer_id = @issuer_id
-  AND (session.project_id = @project_id OR session.organization_id = @organization_id::text)
+  AND (session.project_id = @project_id OR (session.project_id IS NULL AND session.organization_id = @organization_id::text))
   AND session.deleted IS FALSE
   AND session.refresh_expires_at > clock_timestamp();
 
@@ -91,7 +96,7 @@ WITH ended AS (
   SELECT COALESCE(session.credential_id, session.id) AS credential
   FROM user_sessions AS session
   WHERE session.user_session_issuer_id = @issuer_id
-    AND (session.project_id = @project_id OR session.organization_id = @organization_id::text)
+    AND (session.project_id = @project_id OR (session.project_id IS NULL AND session.organization_id = @organization_id::text))
     AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), session.refresh_expires_at) >= @from_time::timestamptz
     AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), session.refresh_expires_at) < @to_time::timestamptz
     AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), session.refresh_expires_at) <= clock_timestamp()
@@ -102,7 +107,7 @@ lives AS (
          MAX(LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), session.refresh_expires_at)) AS ended_at
   FROM user_sessions AS session
   WHERE session.user_session_issuer_id = @issuer_id
-    AND (session.project_id = @project_id OR session.organization_id = @organization_id::text)
+    AND (session.project_id = @project_id OR (session.project_id IS NULL AND session.organization_id = @organization_id::text))
     AND COALESCE(session.credential_id, session.id) IN (SELECT credential FROM ended)
   GROUP BY 1
 )

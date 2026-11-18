@@ -82,7 +82,7 @@ func SignIns(ctx context.Context, ch driver.Conn, s Scope, bucket Bucket, now ti
 	FROM (` + attempts + `)
 	WHERE d_outcome != ? AND (has(?, d_step) OR has(?, d_step))
 	GROUP BY b_start
-	ORDER BY b_start`
+	ORDER BY b_start` + readSettings
 	result, err := ch.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query sign-in summary: %w", err)
@@ -154,7 +154,7 @@ func Denied(ctx context.Context, ch driver.Conn, s Scope, now time.Time) ([]Deni
 	WHERE d_outcome = ? AND has(?, d_step)
 	GROUP BY x_app, x_reason
 	ORDER BY x_last DESC
-	LIMIT ?`
+	LIMIT ?` + readSettings
 	result, err := ch.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query denied clients: %w", err)

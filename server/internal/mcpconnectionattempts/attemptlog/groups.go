@@ -120,6 +120,7 @@ var serverReasons = []string{
 // identityProviderReasons come back from the organization's sign-in service.
 var identityProviderReasons = []string{
 	mcpconnectionattempts.CodeSignInProviderError.String(),
+	mcpconnectionattempts.CodeIDPUnavailable.String(),
 	mcpconnectionattempts.CodeAccessDenied.String(),
 	mcpconnectionattempts.CodeScopePolicyDenied.String(),
 	mcpconnectionattempts.CodeInvalidTarget.String(),
@@ -153,10 +154,10 @@ var serviceReasons = []string{
 	mcpconnectionattempts.CodeRefreshRejected.String(),
 }
 
-// SourceOf names who returned a failure with this reason. It is derived from
-// the code, since rows do not store it. Empty reason has no source.
-func SourceOf(reason string) Source {
-	if reason == "" {
+// SourceOf names who returned a failure with this reason, derived from the code
+// since rows do not store it. Successes, live attempts and the person's own doing have none.
+func SourceOf(reason string, outcome Outcome) Source {
+	if reason == "" || outcome == OutcomeConnected || outcome == OutcomeInProgress {
 		return ""
 	}
 	if slices.Contains(identityProviderReasons, reason) {
@@ -179,8 +180,10 @@ func SourceOf(reason string) Source {
 		return SourceService
 	case mcpconnectionattempts.WhoAdmin:
 		return SourceSpeakeasySetting
-	case mcpconnectionattempts.WhoSpeakeasy, mcpconnectionattempts.WhoPerson, mcpconnectionattempts.WhoNobody:
+	case mcpconnectionattempts.WhoSpeakeasy:
 		return SourceSpeakeasy
+	case mcpconnectionattempts.WhoPerson, mcpconnectionattempts.WhoNobody:
+		return ""
 	default:
 		return SourceSpeakeasy
 	}

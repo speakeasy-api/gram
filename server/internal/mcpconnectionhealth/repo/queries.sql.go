@@ -17,7 +17,7 @@ WITH ended AS (
   SELECT COALESCE(session.credential_id, session.id) AS credential
   FROM user_sessions AS session
   WHERE session.user_session_issuer_id = $3
-    AND (session.project_id = $4 OR session.organization_id = $5::text)
+    AND (session.project_id = $4 OR (session.project_id IS NULL AND session.organization_id = $5::text))
     AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), session.refresh_expires_at) >= $1::timestamptz
     AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), session.refresh_expires_at) < $2::timestamptz
     AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), session.refresh_expires_at) <= clock_timestamp()
@@ -28,7 +28,7 @@ lives AS (
          MAX(LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), session.refresh_expires_at)) AS ended_at
   FROM user_sessions AS session
   WHERE session.user_session_issuer_id = $3
-    AND (session.project_id = $4 OR session.organization_id = $5::text)
+    AND (session.project_id = $4 OR (session.project_id IS NULL AND session.organization_id = $5::text))
     AND COALESCE(session.credential_id, session.id) IN (SELECT credential FROM ended)
   GROUP BY 1
 )
@@ -73,7 +73,7 @@ lives AS (
          LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), session.refresh_expires_at) AS ended_at
   FROM user_sessions AS session
   WHERE session.user_session_issuer_id = $3
-    AND (session.project_id = $4 OR session.organization_id = $5::text)
+    AND (session.project_id = $4 OR (session.project_id IS NULL AND session.organization_id = $5::text))
     AND session.created_at < $6::timestamptz
     AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), session.refresh_expires_at) > $1::timestamptz
 )
@@ -133,7 +133,7 @@ const countActiveSessionsNow = `-- name: CountActiveSessionsNow :one
 SELECT COUNT(DISTINCT COALESCE(session.credential_id, session.id))::bigint AS active_sessions
 FROM user_sessions AS session
 WHERE session.user_session_issuer_id = $1
-  AND (session.project_id = $2 OR session.organization_id = $3::text)
+  AND (session.project_id = $2 OR (session.project_id IS NULL AND session.organization_id = $3::text))
   AND session.deleted IS FALSE
   AND session.refresh_expires_at > clock_timestamp()
 `
@@ -282,6 +282,11 @@ FROM toolsets AS toolset
 WHERE toolset.project_id = $1
   AND toolset.organization_id = $3::text
   AND toolset.id = ANY($2::uuid[])
+UNION ALL
+SELECT issuer.id, issuer.slug, 'authorization_server'::text AS kind
+FROM user_session_issuers AS issuer
+WHERE (issuer.project_id = $1 OR (issuer.project_id IS NULL AND issuer.organization_id = $3::text))
+  AND issuer.id = ANY($2::uuid[])
 `
 
 type ListServerNamesParams struct {
