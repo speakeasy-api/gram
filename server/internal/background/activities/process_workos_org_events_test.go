@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -17,6 +18,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -278,7 +280,7 @@ func requireOrganizationDefaultFeatures(t *testing.T, ctx context.Context, conn 
 	t.Helper()
 
 	q := featurerepo.New(conn)
-	for _, feature := range productfeatures.OrganizationDefaultFeatures {
+	for _, feature := range slices.Concat(productfeatures.OrganizationDefaultFeatures, productfeatures.NewOrganizationFeatures) {
 		got, err := q.IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
 			OrganizationID: organizationID,
 			FeatureName:    string(feature),
@@ -316,6 +318,11 @@ func TestProcessWorkOSOrganizationEvents_OrganizationCreateSeedsLoggingDefaults(
 	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
 	require.NoError(t, err)
 	requireOrganizationDefaultFeatures(t, ctx, conn, row.ID, true)
+
+	personal, err := authz.LoadGrants(ctx, conn, row.ID, []urn.Principal{authz.AllUsersPrincipal()})
+	require.NoError(t, err)
+	require.Len(t, personal, 1, "a created organization must get the personal auth client default")
+	require.Equal(t, authz.PersonalAuthClientSelector(), personal[0].Selector)
 }
 
 func TestProcessWorkOSOrganizationEvents_ExistingOrgUpdateDoesNotSeedLoggingDefaults(t *testing.T) {

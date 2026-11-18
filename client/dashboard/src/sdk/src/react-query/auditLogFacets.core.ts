@@ -13,8 +13,10 @@ import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { ListAuditLogFacetsResult } from "../models/components/listauditlogfacetsresult.js";
 import {
+  ListAuditLogFacetsQueryParamCategory,
   ListAuditLogFacetsRequest,
   ListAuditLogFacetsSecurity,
+  QueryParamOrigin,
 } from "../models/operations/listauditlogfacets.js";
 import { unwrapAsync } from "../types/fp.js";
 export type AuditLogFacetsQueryData = ListAuditLogFacetsResult;
@@ -48,6 +50,8 @@ export function buildAuditLogFacetsQuery(
   return {
     queryKey: queryKeyAuditLogFacets({
       projectSlug: request?.projectSlug,
+      category: request?.category,
+      origin: request?.origin,
       gramKey: request?.gramKey,
       gramSession: request?.gramSession,
     }),
@@ -78,6 +82,8 @@ export function buildAuditLogFacetsQuery(
 export function queryKeyAuditLogFacets(
   parameters: {
     projectSlug?: string | undefined;
+    category?: ListAuditLogFacetsQueryParamCategory | undefined;
+    origin?: QueryParamOrigin | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
   },

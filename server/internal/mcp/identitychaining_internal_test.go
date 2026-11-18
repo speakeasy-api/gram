@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -144,11 +146,21 @@ func TestIdentityChainingError(t *testing.T) {
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, retryable, &shareable)
 	require.Equal(t, oops.CodeUnavailable, shareable.Code)
-	require.Contains(t, retryable.Error(), "transient_failure")
+	require.Equal(t, "Company sign-in for this server is temporarily unavailable. Try again in a moment.", shareable.Error())
 
 	denied := identityChainingError(identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonInvalidTarget, Confidence: identitychaining.ConfidenceInferred, Retryable: false, Cached: false, Provider: ""})
 	require.ErrorAs(t, denied, &shareable)
 	require.Equal(t, oops.CodeForbidden, shareable.Code, "an explicit binding never falls back to interactive authorization")
+	require.Equal(t, "Company sign-in for this server isn't working. Contact your administrator.", shareable.Error())
+
+	rejected := identityChainingError(identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonInvalidGrant, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""})
+	require.ErrorAs(t, rejected, &shareable)
+	require.Equal(t, oops.CodeForbidden, shareable.Code)
+	require.Equal(t, "Company sign-in for this server isn't working. Reconnect this server in your AI client. If that doesn't help, contact your administrator.", shareable.Error())
+
+	redemption := identityChainingError(identitychaining.Outcome{Stage: identitychaining.StageRedemption, Reason: identitychaining.ReasonInvalidGrant, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""})
+	require.ErrorAs(t, redemption, &shareable)
+	require.Equal(t, "Company sign-in for this server isn't working. Contact your administrator.", shareable.Error())
 }
 
 func TestMetaMemberChainer(t *testing.T) {
@@ -162,42 +174,95 @@ func TestMetaMemberChainer(t *testing.T) {
 		s := chainingService(t, &recordingChainer{})
 		other := member
 		other.projectID = uuid.New()
-		require.Nil(t, s.metaMemberChainer(gate, other))
+		for _, kind := range []mcpidentity.Kind{mcpidentity.KindUserSession, mcpidentity.KindConsentDiscovery} {
+			require.Nil(t, s.metaMemberChainer(gate, other, kind, uuid.Nil), "consent and runtime share the project boundary")
+		}
 	})
 	t.Run("ungated gateway", func(t *testing.T) {
 		t.Parallel()
 		s := chainingService(t, &recordingChainer{})
 		ungated := *gate
 		ungated.userSessionIssuerID = uuid.Nil
-		require.Nil(t, s.metaMemberChainer(&ungated, member))
+		require.Nil(t, s.metaMemberChainer(&ungated, member, mcpidentity.KindUserSession, uuid.Nil))
 	})
 	for _, tc := range []struct {
 		name    string
 		outcome identitychaining.Outcome
 		wantErr bool
+		message string
+		code    mcpconnectionattempts.Code
 	}{
-		{"not applicable stays anonymous", identitychaining.Outcome{Stage: identitychaining.StageSelection, Reason: identitychaining.ReasonNotApplicable, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, false},
-		{"reauthentication is member scoped", identitychaining.Outcome{Stage: identitychaining.StageDelegation, Reason: identitychaining.ReasonReauthenticationRequired, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, true},
-		{"provider rejection is member scoped", identitychaining.Outcome{Stage: identitychaining.StageRedemption, Reason: identitychaining.ReasonInvalidGrant, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""}, true},
+		{"not applicable stays anonymous", identitychaining.Outcome{Stage: identitychaining.StageSelection, Reason: identitychaining.ReasonNotApplicable, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, false, "", mcpconnectionattempts.Code{}},
+		{"reauthentication is member scoped", identitychaining.Outcome{Stage: identitychaining.StageDelegation, Reason: identitychaining.ReasonReauthenticationRequired, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, true, `Server "docs" needs a new company sign-in. Reconnect this gateway in your AI client.`, mcpconnectionattempts.CodeReauthenticationRequired},
+		{"an ineligible account names the administrator", identitychaining.Outcome{Stage: identitychaining.StageAuthorization, Reason: identitychaining.ReasonIneligibleIdentity, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, true, `Company sign-in for server "docs" isn't working. Contact your administrator.`, mcpconnectionattempts.CodeIneligibleIdentity},
+		{"provider rejection is member scoped", identitychaining.Outcome{Stage: identitychaining.StageRedemption, Reason: identitychaining.ReasonInvalidGrant, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""}, true, `Company sign-in for server "docs" isn't working. Contact your administrator.`, mcpconnectionattempts.Code{}},
+		{"provider rejecting the saved sign-in offers a reconnect", identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonInvalidGrant, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""}, true, `Company sign-in for server "docs" isn't working. Reconnect this gateway in your AI client. If that doesn't help, contact your administrator.`, mcpconnectionattempts.Code{}},
+		{"temporary failure is member scoped", identitychaining.Outcome{Stage: identitychaining.StageDelegation, Reason: identitychaining.ReasonTransientFailure, Confidence: identitychaining.ConfidenceVerified, Retryable: true, Cached: false, Provider: ""}, true, `Company sign-in for server "docs" is temporarily unavailable. Try again in a moment.`, mcpconnectionattempts.Code{}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			chainer := &recordingChainer{outcome: tc.outcome}
 			s := chainingService(t, chainer)
-			chain := s.metaMemberChainer(gate, member)
+			chain := s.metaMemberChainer(gate, member, mcpidentity.KindUserSession, uuid.Nil)
 			require.NotNil(t, chain)
 			token, err := chain(humanChainingContext(t, "user-1", chainingTestOrg), "https://docs.example.test/mcp")
 			require.Empty(t, token)
 			if tc.wantErr {
 				var memberErr *metaMemberError
 				require.ErrorAs(t, err, &memberErr, "chaining failures surface as member-scoped tool errors")
-				require.Contains(t, memberErr.message, `"docs"`)
+				require.Equal(t, tc.message, memberErr.message)
+				_, credential := errors.AsType[memberCredentialError](err)
+				require.Equal(t, tc.outcome.Reason == identitychaining.ReasonReauthenticationRequired, credential, "only sign-in failures should offer reconnect")
+				var recorded mcpconnectionattempts.Code
+				if failure, ok := errors.AsType[memberConnectionError](err); ok {
+					recorded = failure.code
+				}
+				require.Equal(t, tc.code, recorded)
 			} else {
 				require.NoError(t, err)
 			}
 			require.Len(t, chainer.requests, 1)
 			require.Equal(t, project, chainer.requests[0].ProjectID)
 			require.Equal(t, issuer, chainer.requests[0].UserSessionIssuerID)
+		})
+	}
+}
+
+// An ineligible account is recorded while listing; a sign-in to redo is left to the consent flow.
+func TestListingFailureHappenedForChainingRefusals(t *testing.T) {
+	t.Parallel()
+	ineligible := memberConnectionError{&metaMemberError{message: "contact your administrator"}, mcpconnectionattempts.CodeIneligibleIdentity}
+	code, recorded := listingFailureHappened(ineligible)
+	require.True(t, recorded)
+	require.Equal(t, mcpconnectionattempts.CodeIneligibleIdentity, code)
+
+	reauth := memberConnectionError{memberCredentialError{&metaMemberError{message: "reconnect"}}, mcpconnectionattempts.CodeReauthenticationRequired}
+	_, recorded = listingFailureHappened(reauth)
+	require.False(t, recorded)
+}
+
+// A transient failure that is safe to repeat is retried within a listing,
+// unless the attempt's own context ended, since its time is already spent.
+func TestMetaMemberChainerRetriesSafeTransientFailuresWhileTheAttemptLives(t *testing.T) {
+	t.Parallel()
+	project := uuid.New()
+	gate := &metaGateContext{projectID: project, organizationID: chainingTestOrg, userSessionIssuerID: uuid.New()}
+	member := metaMember{slug: "docs", projectID: project, chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
+	transient := identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonTransientFailure, Confidence: identitychaining.ConfidenceInferred, Retryable: true, Cached: false, Provider: ""}
+
+	for name, ended := range map[string]bool{"live attempt": false, "ended attempt": true} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(humanChainingContext(t, "user-1", chainingTestOrg))
+			defer cancel()
+			if ended {
+				cancel()
+			}
+			chain := chainingService(t, &recordingChainer{outcome: transient}).metaMemberChainer(gate, member, mcpidentity.KindUserSession, uuid.Nil)
+			_, err := chain(ctx, "https://docs.example.test/mcp")
+			failure, ok := errors.AsType[memberDiscoveryError](err)
+			require.True(t, ok, "%v", err)
+			require.Equal(t, !ended, failure.retryable)
 		})
 	}
 }
@@ -236,7 +301,7 @@ func TestIdentityChainingRequest_RequiresAChosenClient(t *testing.T) {
 	member := metaMember{slug: "remote", projectID: project}
 	gate := &metaGateContext{projectID: project, organizationID: chainingTestOrg, userSessionIssuerID: issuer}
 	chainer := &recordingChainer{}
-	token, err := chainingService(t, chainer).metaMemberChainer(gate, member)(ctx, "https://remote.example.test/mcp")
+	token, err := chainingService(t, chainer).metaMemberChainer(gate, member, mcpidentity.KindUserSession, uuid.Nil)(ctx, "https://remote.example.test/mcp")
 	require.NoError(t, err)
 	require.Empty(t, token)
 	require.Empty(t, chainer.requests, "a member without a chosen client never asks the chainer")
@@ -250,14 +315,14 @@ func TestMetaMemberChainer_TunneledMemberRoutesByOwnIssuer(t *testing.T) {
 	chainer := &recordingChainer{outcome: identitychaining.Outcome{Stage: identitychaining.StageSelection, Reason: identitychaining.ReasonNotApplicable, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}}
 	s := chainingService(t, chainer)
 
-	_, err := s.metaMemberChainer(gate, member)(humanChainingContext(t, "user-1", chainingTestOrg), "https://victim.example.test/mcp")
+	_, err := s.metaMemberChainer(gate, member, mcpidentity.KindUserSession, uuid.Nil)(humanChainingContext(t, "user-1", chainingTestOrg), "https://victim.example.test/mcp")
 	require.NoError(t, err)
 	require.Len(t, chainer.requests, 1)
 	require.Equal(t, uuid.NullUUID{UUID: tunnelIssuer, Valid: true}, chainer.requests[0].RemoteSessionIssuerID, "a tunnel claiming a sibling's resource only selects bindings for its own issuer")
 
 	unidentified := member
 	unidentified.remoteSessionIssuerID = uuid.NullUUID{}
-	token, err := s.metaMemberChainer(gate, unidentified)(humanChainingContext(t, "user-1", chainingTestOrg), "https://victim.example.test/mcp")
+	token, err := s.metaMemberChainer(gate, unidentified, mcpidentity.KindUserSession, uuid.Nil)(humanChainingContext(t, "user-1", chainingTestOrg), "https://victim.example.test/mcp")
 	require.NoError(t, err)
 	require.Empty(t, token)
 	require.Len(t, chainer.requests, 1, "a tunnel without a derived issuer never chains")
@@ -305,12 +370,16 @@ func TestIdentityChainingCarriesTheChosenClient(t *testing.T) {
 
 	gate := &metaGateContext{projectID: project, organizationID: chainingTestOrg, userSessionIssuerID: issuer}
 	member := metaMember{slug: "remote", projectID: project, chosenClientID: uuid.NullUUID{UUID: chosen, Valid: true}}
-	_, err := s.metaMemberChainer(gate, member)(ctx, "https://remote.example.test/mcp")
+	_, err := s.metaMemberChainer(gate, member, mcpidentity.KindUserSession, uuid.Nil)(ctx, "https://remote.example.test/mcp")
 	require.NoError(t, err)
 	require.Len(t, chainer.requests, 1)
 	require.Equal(t, uuid.NullUUID{UUID: chosen, Valid: true}, chainer.requests[0].RemoteSessionClientID)
 }
 
-func (c *recordingChainer) RetireConsentCredentials(context.Context, string, uuid.UUID, uuid.UUID, string, uuid.UUID) error {
+func (c *recordingChainer) RetireConsentCredentials(context.Context, string, uuid.UUID, string, uuid.UUID) error {
 	return nil
+}
+
+func (g *recordingChainer) AcquireConsent(ctx context.Context, req identitychaining.Request, _ uuid.UUID) (identitychaining.Token, identitychaining.Outcome) {
+	return g.Acquire(ctx, req)
 }

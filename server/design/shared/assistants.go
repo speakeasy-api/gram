@@ -47,12 +47,16 @@ var Assistant = Type("Assistant", func() {
 	Attribute("agent_id", String, "The assistant's dedicated agent ID, when it has one.", func() { Format(FormatUUID) })
 	Attribute("name", String, "The assistant name.")
 	Attribute("model", String, "The model identifier used by the assistant.")
+	Attribute("reasoning_effort", String, "The reasoning effort used by the assistant.", func() { Enum("none", "low", "medium", "high") })
 	Attribute("instructions", String, "The system instructions for the assistant.")
 	Attribute("toolsets", ArrayOf(AssistantToolsetRef), "Hosted (toolset-backed) MCP servers attached to the assistant, by toolset slug.")
 	Attribute("mcp_servers", ArrayOf(AssistantMCPServerRef), "MCP servers attached to the assistant that are not hosted (toolset-backed); hosted servers are listed under toolsets.")
 	Attribute("skills", ArrayOf(AssistantSkillRef), "Skills attached to the assistant.")
 	Attribute("warm_ttl_seconds", Int, "Warm runtime TTL in seconds.")
 	Attribute("max_concurrency", Int, "Maximum active warm runtimes for the assistant.")
+	Attribute("runtime_version", Int, "Desired runtime protocol version: 2 is the default runtime, 3 is Kit. Runtime changes require a settled assistant and available destination.", func() {
+		Enum(2, 3)
+	})
 	Attribute("status", String, "The assistant status.", func() {
 		Enum("active", "paused")
 	})
@@ -68,12 +72,14 @@ var Assistant = Type("Assistant", func() {
 		"project_id",
 		"name",
 		"model",
+		"reasoning_effort",
 		"instructions",
 		"toolsets",
 		"mcp_servers",
 		"skills",
 		"warm_ttl_seconds",
 		"max_concurrency",
+		"runtime_version",
 		"status",
 		"created_at",
 		"updated_at",

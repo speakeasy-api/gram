@@ -17,6 +17,48 @@ import {
 } from "./assistanttoolsetref.js";
 
 /**
+ * The runtime version read before requesting a switch. Required with runtime_version; conflicts require a fresh read.
+ */
+export const ExpectedRuntimeVersion = {
+  Two: 2,
+  Three: 3,
+} as const;
+/**
+ * The runtime version read before requesting a switch. Required with runtime_version; conflicts require a fresh read.
+ */
+export type ExpectedRuntimeVersion = ClosedEnum<typeof ExpectedRuntimeVersion>;
+
+/**
+ * The reasoning effort used by the assistant.
+ */
+export const UpdateAssistantFormReasoningEffort = {
+  None: "none",
+  Low: "low",
+  Medium: "medium",
+  High: "high",
+} as const;
+/**
+ * The reasoning effort used by the assistant.
+ */
+export type UpdateAssistantFormReasoningEffort = ClosedEnum<
+  typeof UpdateAssistantFormReasoningEffort
+>;
+
+/**
+ * Desired runtime protocol: 2 for the default runtime, 3 for Kit. Switching requires the assistant and all background work to be settled.
+ */
+export const UpdateAssistantFormRuntimeVersion = {
+  Two: 2,
+  Three: 3,
+} as const;
+/**
+ * Desired runtime protocol: 2 for the default runtime, 3 for Kit. Switching requires the assistant and all background work to be settled.
+ */
+export type UpdateAssistantFormRuntimeVersion = ClosedEnum<
+  typeof UpdateAssistantFormRuntimeVersion
+>;
+
+/**
  * The assistant status.
  */
 export const UpdateAssistantFormStatus = {
@@ -31,6 +73,10 @@ export type UpdateAssistantFormStatus = ClosedEnum<
 >;
 
 export type UpdateAssistantForm = {
+  /**
+   * The runtime version read before requesting a switch. Required with runtime_version; conflicts require a fresh read.
+   */
+  expectedRuntimeVersion?: ExpectedRuntimeVersion | undefined;
   /**
    * The assistant ID.
    */
@@ -56,6 +102,14 @@ export type UpdateAssistantForm = {
    */
   name?: string | undefined;
   /**
+   * The reasoning effort used by the assistant.
+   */
+  reasoningEffort?: UpdateAssistantFormReasoningEffort | undefined;
+  /**
+   * Desired runtime protocol: 2 for the default runtime, 3 for Kit. Switching requires the assistant and all background work to be settled.
+   */
+  runtimeVersion?: UpdateAssistantFormRuntimeVersion | undefined;
+  /**
    * The assistant status.
    */
   status?: UpdateAssistantFormStatus | undefined;
@@ -70,18 +124,36 @@ export type UpdateAssistantForm = {
 };
 
 /** @internal */
+export const ExpectedRuntimeVersion$outboundSchema: z.ZodMiniEnum<
+  typeof ExpectedRuntimeVersion
+> = z.enum(ExpectedRuntimeVersion);
+
+/** @internal */
+export const UpdateAssistantFormReasoningEffort$outboundSchema: z.ZodMiniEnum<
+  typeof UpdateAssistantFormReasoningEffort
+> = z.enum(UpdateAssistantFormReasoningEffort);
+
+/** @internal */
+export const UpdateAssistantFormRuntimeVersion$outboundSchema: z.ZodMiniEnum<
+  typeof UpdateAssistantFormRuntimeVersion
+> = z.enum(UpdateAssistantFormRuntimeVersion);
+
+/** @internal */
 export const UpdateAssistantFormStatus$outboundSchema: z.ZodMiniEnum<
   typeof UpdateAssistantFormStatus
 > = z.enum(UpdateAssistantFormStatus);
 
 /** @internal */
 export type UpdateAssistantForm$Outbound = {
+  expected_runtime_version?: number | undefined;
   id: string;
   instructions?: string | undefined;
   max_concurrency?: number | undefined;
   mcp_servers?: Array<AssistantMCPServerRef$Outbound> | undefined;
   model?: string | undefined;
   name?: string | undefined;
+  reasoning_effort?: string | undefined;
+  runtime_version?: number | undefined;
   status?: string | undefined;
   toolsets?: Array<AssistantToolsetRef$Outbound> | undefined;
   warm_ttl_seconds?: number | undefined;
@@ -93,20 +165,30 @@ export const UpdateAssistantForm$outboundSchema: z.ZodMiniType<
   UpdateAssistantForm
 > = z.pipe(
   z.object({
+    expectedRuntimeVersion: z.optional(ExpectedRuntimeVersion$outboundSchema),
     id: z.string(),
     instructions: z.optional(z.string()),
     maxConcurrency: z.optional(z.int()),
     mcpServers: z.optional(z.array(AssistantMCPServerRef$outboundSchema)),
     model: z.optional(z.string()),
     name: z.optional(z.string()),
+    reasoningEffort: z.optional(
+      UpdateAssistantFormReasoningEffort$outboundSchema,
+    ),
+    runtimeVersion: z.optional(
+      UpdateAssistantFormRuntimeVersion$outboundSchema,
+    ),
     status: z.optional(UpdateAssistantFormStatus$outboundSchema),
     toolsets: z.optional(z.array(AssistantToolsetRef$outboundSchema)),
     warmTtlSeconds: z.optional(z.int()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      expectedRuntimeVersion: "expected_runtime_version",
       maxConcurrency: "max_concurrency",
       mcpServers: "mcp_servers",
+      reasoningEffort: "reasoning_effort",
+      runtimeVersion: "runtime_version",
       warmTtlSeconds: "warm_ttl_seconds",
     });
   }),

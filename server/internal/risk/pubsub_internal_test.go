@@ -2,12 +2,14 @@ package risk
 
 import (
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
@@ -54,6 +56,25 @@ func TestEnforcementFindingsScoreAndDescription(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, wantDescription, converted[0].Description)
 	require.NotEqual(t, gitleaks.AccessKeyIDRuleID, converted[0].Description)
+}
+
+func TestEnforcementFindingsBoundsRemoteDescription(t *testing.T) {
+	t.Parallel()
+
+	description := strings.Repeat("é", enforcereply.MaxFindingDescriptionRunes+1)
+	converted, err := enforcementFindings("x", ra.SourceCustom, []*riskv1.EnforcementFinding{
+		riskv1.EnforcementFinding_builder{
+			RuleId:      new("custom.long-description"),
+			Description: new(description),
+			Score:       new(1.0),
+			StartPos:    new(int32(0)),
+			EndPos:      new(int32(1)),
+		}.Build(),
+	})
+	require.NoError(t, err)
+	require.Len(t, converted, 1)
+	require.Len(t, []rune(converted[0].Description), enforcereply.MaxFindingDescriptionRunes)
+	require.Equal(t, strings.Repeat("é", enforcereply.MaxFindingDescriptionRunes), converted[0].Description)
 }
 
 func TestEnforcementFindingsLLMAnalyzerCarriesRationaleWithoutOffsets(t *testing.T) {

@@ -11,9 +11,8 @@ import (
 )
 
 // ExclusionSet evaluates risk exclusions against findings. It mirrors
-// DisabledRuleSet: the scanner pipeline calls FilterFindings to drop findings
-// an exclusion suppresses before they reach the write path (going-forward
-// suppression). The same matching logic is mirrored in SQL by the retroactive
+// DisabledRuleSet: scanners call FilterFindings to drop findings an exclusion
+// suppresses before they are stored (going-forward suppression). The same matching logic is mirrored in SQL by the retroactive
 // reconcile sweep so existing findings are flagged consistently.
 //
 // An exclusion's rule_id_filter / source_filter narrow which findings it

@@ -233,7 +233,7 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 	if token, source, ok := c.adoptConsentCredential(ctx, logger, req, sel); ok {
 		return release(token, source)
 	}
-	if c.consentAccepted(ctx, req, sel) {
+	if !req.consentNeedsToken && c.consentAccepted(ctx, req, sel) {
 		return release(none, credentialNone)
 	}
 	failureKey := cacheKey("identityChainingFailure", req, sel)
@@ -270,7 +270,7 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 		if token, ok := c.cachedToken(ctx, logger, req, sel); ok {
 			return release(token, credentialCached)
 		}
-		if c.consentAccepted(ctx, req, sel) {
+		if !req.consentNeedsToken && c.consentAccepted(ctx, req, sel) {
 			return release(none, credentialNone)
 		}
 	}
@@ -341,6 +341,11 @@ func (c *Chainer) awaitConcurrentAcquisition(ctx context.Context, logger *slog.L
 				return token, success
 			}
 			if c.consentAccepted(ctx, req, sel) {
+				// The holder's credential was not stored, so a caller that
+				// needs one has nothing to adopt and retries instead.
+				if req.consentNeedsToken {
+					return none, timedOut
+				}
 				return none, success
 			}
 			var result attemptResult

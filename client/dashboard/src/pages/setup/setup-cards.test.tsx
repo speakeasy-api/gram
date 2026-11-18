@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -38,5 +39,13 @@ describe("setup cards", () => {
     expect(setupTaskKeyForSlug("identity-provider")).toBe("identity-provider");
     expect(setupTaskKeyForSlug("nope")).toBeUndefined();
     expect(setupTaskKeyForSlug("toString")).toBeUndefined();
+  });
+
+  it("sends links to the retired marketplace card and its group to Distribute MCP servers", () => {
+    expect(setupTaskKeyForSlug("create-marketplace")).toBe(
+      "distribute-servers",
+    );
+    expect(setupTaskKeyForSlug("mcp-distribution")).toBe("distribute-servers");
+    expect(SETUP_CARDS).not.toHaveProperty("create-marketplace");
   });
 });

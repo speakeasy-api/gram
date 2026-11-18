@@ -1,14 +1,12 @@
 import { cleanup, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { parseFilters } from "@/pages/logs/log-filter-url";
 import { OverviewTab } from "./OverviewTab";
 
-const logs = vi.hoisted(() => ({ canView: true, enabled: true }));
+const logs = vi.hoisted(() => ({ enabled: true }));
 vi.mock("@/contexts/Auth", () => ({ useProject: () => ({ id: "project" }) }));
-vi.mock("@/components/observe/observeDeepLink", () => ({
-  useCanViewToolLogs: () => logs.canView,
-}));
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),
 }));
@@ -20,18 +18,16 @@ vi.mock("@tanstack/react-query", async (original) => ({
     isSuccess: enabled !== false && logs.enabled,
   }),
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({ logs: { href: () => "/example/projects/test/logs" } }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "example", projectSlug: "test" }),
 }));
-vi.mock("@/pages/mcp/overview/PluginStatusBanner", () => ({
-  PluginStatusBanner: () => <div>Marketplace</div>,
-}));
-// The real dashboard renders the marketplace banner unless told not to.
+// Plugin distribution lives in the page header, so the overview only frames
+// the usage dashboard and tunnel status.
 vi.mock("@/pages/mcp/overview/MCPOverviewTab", () => ({
-  MCPOverviewTab: ({ showPluginBanner }: { showPluginBanner?: boolean }) => (
+  MCPOverviewTab: ({ server }: { server: { kind: string; slug: string } }) => (
     <div>
-      {showPluginBanner !== false && <div>Marketplace</div>}
       <div>Shared usage dashboard</div>
+      <div data-testid="scope" data-scope={`${server.kind}:${server.slug}`} />
     </div>
   ),
 }));
@@ -44,7 +40,6 @@ vi.mock("./TunneledMcpConnectionsPanel", () => ({
 }));
 afterEach(() => {
   cleanup();
-  logs.canView = true;
   logs.enabled = true;
 });
 const server = {
@@ -54,14 +49,12 @@ const server = {
   tunneledMcpServerId: "tunnel",
 } as McpServer;
 
-it("places the marketplace above tunnel status and keeps the usage dashboard below it", () => {
+it("places tunnel status above the usage dashboard", () => {
   const { container } = render(
     <OverviewTab mcpServer={server} agentSetupHref="/settings" />,
+    { wrapper: MemoryRouter },
   );
-  expect(container.textContent).toBe(
-    "MarketplaceTunnel statusShared usage dashboard",
-  );
-  expect(screen.getAllByText("Marketplace")).toHaveLength(1);
+  expect(container.textContent).toBe("Tunnel statusShared usage dashboard");
   const url = new URL(
     screen.getByRole("link").getAttribute("href")!,
     "https://example.test",
@@ -72,12 +65,11 @@ it("places the marketplace above tunnel status and keeps the usage dashboard bel
   ]);
 });
 
-it.each([
-  ["the organization does not record logs", { canView: true, enabled: false }],
-  ["the user cannot read logs", { canView: false, enabled: true }],
-])("offers no Tool Logs link when %s", (_, state) => {
-  Object.assign(logs, state);
-  render(<OverviewTab mcpServer={server} agentSetupHref="/settings" />);
+it("offers no Tool Logs link when the organization does not record logs", () => {
+  logs.enabled = false;
+  render(<OverviewTab mcpServer={server} agentSetupHref="/settings" />, {
+    wrapper: MemoryRouter,
+  });
   expect(screen.getByText("Tunnel status")).toBeTruthy();
   expect(screen.queryByRole("link")).toBeNull();
 });
@@ -88,8 +80,9 @@ it("shows the tunnel status without a usage dashboard when the server has no slu
       mcpServer={{ ...server, slug: undefined }}
       agentSetupHref="/settings"
     />,
+    { wrapper: MemoryRouter },
   );
-  expect(container.textContent).toBe("MarketplaceTunnel status");
+  expect(container.textContent).toBe("Tunnel status");
 });
 
 it("retains the shared overview for servers without tunnels", () => {
@@ -98,8 +91,40 @@ it("retains the shared overview for servers without tunnels", () => {
       mcpServer={{ ...server, tunneledMcpServerId: undefined }}
       agentSetupHref="/settings"
     />,
+    { wrapper: MemoryRouter },
   );
   expect(screen.getByText("Shared usage dashboard")).toBeTruthy();
-  expect(screen.getAllByText("Marketplace")).toHaveLength(1);
   expect(screen.queryByText("Tunnel status")).toBeNull();
 });
+
+it.each([
+  ["its canonical wrapper", "toolset-1"],
+  ["a hosting server that is not the canonical wrapper", "host-1"],
+])(
+  "scopes a hosted server's overview to its toolset when it is %s",
+  (_, id) => {
+    render(
+      <OverviewTab
+        mcpServer={
+          {
+            id,
+            slug: "server-slug",
+            name: "Server",
+            toolsetId: "toolset-1",
+            toolset: {
+              id: "toolset-1",
+              slug: "toolset-slug",
+              name: "Tools",
+              hostingMcpServerId: id,
+            },
+          } as McpServer
+        }
+        agentSetupHref="/settings"
+      />,
+      { wrapper: MemoryRouter },
+    );
+    expect(screen.getByTestId("scope").getAttribute("data-scope")).toBe(
+      "toolset:toolset-slug",
+    );
+  },
+);

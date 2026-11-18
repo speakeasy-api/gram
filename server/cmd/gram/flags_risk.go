@@ -8,6 +8,8 @@ import (
 
 	"github.com/urfave/cli/v2"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
 )
@@ -68,6 +70,21 @@ func parseOptionalPepperKeyRing(ctx context.Context, logger *slog.Logger, raw st
 		return fingerprinter, fmt.Errorf("parse risk fingerprint pepper keyring: %w", err)
 	}
 	return fingerprinter, nil
+}
+
+// connectionDeviceKeys derives connection device keys from the keyring. An unset or unusable
+// keyring only leaves device_key empty.
+func connectionDeviceKeys(ctx context.Context, logger *slog.Logger, raw string) mcpconnectionattempts.RecorderOption {
+	var fingerprinter risk.Fingerprinter
+	if raw == "" {
+		logger.WarnContext(ctx, "risk fingerprint pepper keyring not configured; device_key stays empty on connection events")
+		return mcpconnectionattempts.WithDeviceKeys(fingerprinter.DeriveCurrentKey)
+	}
+	fingerprinter, err := risk.ParsePepperKeyRing([]byte(raw))
+	if err != nil {
+		logger.WarnContext(ctx, "risk fingerprint pepper keyring is unusable; device_key stays empty on connection events", attr.SlogError(err))
+	}
+	return mcpconnectionattempts.WithDeviceKeys(fingerprinter.DeriveCurrentKey)
 }
 
 // riskLLMFlags configure the fine-tuned risk model client. The streams

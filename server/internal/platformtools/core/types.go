@@ -14,17 +14,27 @@ import (
 
 var syntheticTimestamp = time.Unix(0, 0).UTC().Format(time.RFC3339)
 
+// ThreadContextPolicy declares when a tool needs an assistant thread.
+type ThreadContextPolicy string
+
+const (
+	ThreadContextRequired  ThreadContextPolicy = "required"
+	ThreadContextWake      ThreadContextPolicy = "wake"
+	ThreadContextSlackSelf ThreadContextPolicy = "slack_self"
+)
+
 type ToolDescriptor struct {
-	SourceSlug  string
-	HandlerName string
-	Name        string
-	Description string
-	InputSchema []byte
-	Variables   map[string]any
-	Annotations *types.ToolAnnotations
-	Managed     bool
-	OwnerKind   *string
-	OwnerID     *string
+	ThreadContext ThreadContextPolicy `exhaustruct:"optional"`
+	SourceSlug    string
+	HandlerName   string
+	Name          string
+	Description   string
+	InputSchema   []byte
+	Variables     map[string]any
+	Annotations   *types.ToolAnnotations
+	Managed       bool
+	OwnerKind     *string
+	OwnerID       *string
 }
 
 func (d ToolDescriptor) ToolURN() urn.Tool {

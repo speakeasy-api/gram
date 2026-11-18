@@ -39,6 +39,7 @@ func (l *Logger) LogInternalSessionIssuerDisable(ctx context.Context, dbtx repo.
 
 func (l *Logger) logInternalSessionIssuer(ctx context.Context, dbtx repo.DBTX, action Action, event LogInternalSessionIssuerEvent) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 

@@ -72,22 +72,23 @@ func (f *fakeOpenRouterUsage) GetCreditsUsed(_ context.Context, _ string, keyTyp
 }
 
 type fakeBillingOperations struct {
-	mu                     sync.Mutex
-	organizationID         string
-	cancel                 *bool
-	actor                  usage.BillingActor
-	subscription           *usage.StripeSubscription
-	customer               *stripeclient.CustomerDetails
-	customerErr            error
-	customerLookups        []string
-	subscriptionByID       *stripeclient.SubscriptionState
-	subscriptionCustomerID string
-	subscriptionErr        error
-	liveSubscriptionErr    error
-	subscriptionLookups    []string
-	customerUsageOrgs      []usage.CustomerUsageOrganization
-	customerUsageInterval  usage.CustomerUsageInterval
-	customerUsageErrs      map[string]error
+	mu                        sync.Mutex
+	organizationID            string
+	cancel                    *bool
+	actor                     usage.BillingActor
+	subscription              *usage.StripeSubscription
+	customer                  *stripeclient.CustomerDetails
+	customerErr               error
+	customerLookups           []string
+	subscriptionByID          *stripeclient.SubscriptionState
+	subscriptionCustomerID    string
+	subscriptionErr           error
+	liveSubscriptionErr       error
+	subscriptionLookups       []string
+	subscriptionLookupOptions [][]stripeclient.GetSubscriptionOption
+	customerUsageOrgs         []usage.CustomerUsageOrganization
+	customerUsageInterval     usage.CustomerUsageInterval
+	customerUsageErrs         map[string]error
 }
 
 func (f *fakeBillingOperations) GetPaygBillingSummaryForOrganization(_ context.Context, organizationID string) (*usage.PaygBillingSummary, error) {
@@ -198,10 +199,11 @@ func (f *fakeBillingOperations) customerLookupCount() int {
 	return len(f.customerLookups)
 }
 
-func (f *fakeBillingOperations) GetStripeSubscriptionByID(_ context.Context, subscriptionID string) (*stripeclient.SubscriptionState, error) {
+func (f *fakeBillingOperations) GetStripeSubscriptionByID(_ context.Context, subscriptionID string, options ...stripeclient.GetSubscriptionOption) (*stripeclient.SubscriptionState, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.subscriptionLookups = append(f.subscriptionLookups, subscriptionID)
+	f.subscriptionLookupOptions = append(f.subscriptionLookupOptions, options)
 	if f.subscriptionErr != nil {
 		return nil, f.subscriptionErr
 	}

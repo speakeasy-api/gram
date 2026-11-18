@@ -91,6 +91,16 @@ describe("stoken calculator route", () => {
     expect(router.state.location.pathname).toBe("/stoken-calculator");
   });
 
+  it("renders method notes without nested paragraphs", async () => {
+    await renderCalculator();
+
+    const methodNotes = screen.getByRole("region", {
+      name: "How this estimate works",
+    });
+    expect(within(methodNotes).getByText("Anthropic example")).not.toBeNull();
+    expect(methodNotes.querySelector("p p")).toBeNull();
+  });
+
   it("names itself in the breadcrumb", async () => {
     await renderCalculator();
 
@@ -201,6 +211,28 @@ describe("stoken calculator worksheet", () => {
     });
     expect(screen.getByText("Tokenizer assumption · 1.20–1.60")).toBeTruthy();
   });
+
+  it.each([
+    ["SpaceXSI", "spacexsi", "1.05", "1.13"],
+    ["Cursor", "cursor", "1.00", "1.00"],
+  ])(
+    "offers the %s preset",
+    async (label, provider, tokenizerMin, tokenizerMax) => {
+      const router = await renderCalculator();
+
+      const select = screen.getByRole("combobox");
+      fireEvent.keyDown(select, { key: "ArrowDown" });
+      fireEvent.click(await screen.findByRole("option", { name: label }));
+
+      await waitFor(() => {
+        expect(currentRows(router)?.[0]).toMatchObject({
+          provider,
+          tokenizerMin,
+          tokenizerMax,
+        });
+      });
+    },
+  );
 
   it("flags a total it cannot parse and counts it as needing attention", async () => {
     await renderCalculator();

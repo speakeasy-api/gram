@@ -95,7 +95,7 @@ var _ = Service("userSessions", func() {
 			Attribute("meta_mcp_server_id", String, "Bind the JWT to this meta MCP server's user_session_issuer audience. Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.", func() {
 				Format(FormatUUID)
 			})
-			Attribute("discovery_mode", String, "An explicit discovery mode for a gateway Inspect connection. Valid only with meta_mcp_server_id. Omit to follow the gateway default.", func() { Enum("progressive", "direct") })
+			Attribute("discovery_mode", String, "An explicit discovery mode for a gateway Inspect connection. Valid only with meta_mcp_server_id. Omit to follow the gateway default.", func() { Enum("progressive", "direct", "code_mode") })
 
 			security.SessionPayload()
 			security.ProjectPayload()
@@ -160,10 +160,10 @@ var UserSession = Type("UserSession", func() {
 	})
 	Attribute("subject_urn", String, "The session's subject URN (user:<id> | apikey:<uuid> | agent:<uuid> | anonymous:<mcp-session-id> | workload:<issuer-id>:<external-subject>).")
 	Attribute("jti", String, "Current access-token JTI; used by the revocation path.")
-	Attribute("refresh_expires_at", String, "Next refresh deadline.", func() {
+	Attribute("refresh_expires_at", String, "Inbound authorization deadline. Refresh is possible until this time only when the session has a refresh grant.", func() {
 		Format(FormatDateTime)
 	})
-	Attribute("expires_at", String, "Terminal session expiry; ceiling on refresh_expires_at.", func() {
+	Attribute("expires_at", String, "Current access-token expiry. Sessions with a refresh grant may refresh before refresh_expires_at; workload and other sessions without a refresh grant cannot.", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("created_at", String, func() {

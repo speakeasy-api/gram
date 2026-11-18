@@ -9,18 +9,23 @@ const knownScopes: ReadonlySet<string> = new Set(Object.values(Scope));
 /**
  * Derive the resource kind from a scope's family prefix.
  * Mirrors the server-side ResourceKindForScope in authz/selector.go.
+ * mcp:auth is not checkable client-side: the server binds the connection owner.
  */
 export function resourceKindForScope(scope: string): string {
+  if (scope === "mcp:auth" || scope === "mcp:blocked_auth")
+    return "mcp_auth_client";
   if (
     scope.startsWith("project:") ||
     scope.startsWith("plugin:") ||
-    scope.startsWith("log:")
+    scope.startsWith("log:") ||
+    scope.startsWith("memory:")
   )
     return "project";
   if (scope.startsWith("remote-mcp:") || scope.startsWith("mcp:")) return "mcp";
   if (scope.startsWith("org:")) return "org";
   if (scope.startsWith("environment:")) return "environment";
   if (scope.startsWith("skill:")) return "skill";
+  if (scope.startsWith("inference:")) return "inference";
   if (scope.startsWith("assistant:")) return "assistant";
   if (scope.startsWith("risk_policy:")) return "risk_policy";
   if (scope.startsWith("chat:")) return "chat";
@@ -69,13 +74,14 @@ const exclusionScopesByScope: Partial<Record<Scope, readonly string[]>> = {
   "org:admin": ["org:blocked_admin", "org:blocked_read"],
   "project:read": ["project:blocked_read"],
   "project:write": ["project:blocked_write", "project:blocked_read"],
-  // The mcp:blocked_* scopes are independent of one another, unlike the
-  // other families: connecting to a server and administering it are
-  // different jobs, so a block on one takes nothing from the others. Mirrors
-  // scopeExpansions in server/internal/authz/scopes.go.
+  // Blocks follow the implication graph in reverse, as in every other
+  // family: a block on read also takes write away. mcp:connect is implied by
+  // neither, so its block stays on its own. Mirrors scopeExpansions in
+  // server/internal/authz/scopes.go.
   "mcp:read": ["mcp:blocked_read"],
-  "mcp:write": ["mcp:blocked_write"],
+  "mcp:write": ["mcp:blocked_write", "mcp:blocked_read"],
   "mcp:connect": ["mcp:blocked_connect"],
+  "mcp:auth": ["mcp:blocked_auth"],
   "environment:read": ["environment:blocked_read"],
   "environment:write": [
     "environment:blocked_write",
@@ -87,6 +93,8 @@ const exclusionScopesByScope: Partial<Record<Scope, readonly string[]>> = {
   "assistant:read": ["assistant:blocked_read"],
   "assistant:write": ["assistant:blocked_write", "assistant:blocked_read"],
   "risk_policy:evaluate": ["risk_policy:bypass"],
+  "workload:read": ["workload:blocked_read"],
+  "workload:write": ["workload:blocked_write", "workload:blocked_read"],
 };
 
 export function exclusionScopesForScope(scope: Scope): readonly string[] {
@@ -103,7 +111,6 @@ interface EffectiveGrant {
    */
   directSelectors?: Array<Record<string, string>>;
   subScopes?: string[];
-  effect?: string;
 }
 
 function grantSelectorsMatch(
@@ -150,6 +157,8 @@ export function hasScopeInGrants(
   projectId?: string,
 ): boolean {
   if (!knownScopes.has(scope)) return false;
+  // Only the server can bind the connection owner of an auth-client check.
+  if (resourceKindForScope(scope) === "mcp_auth_client") return false;
 
   const resourceIds =
     typeof resourceId === "string" || resourceId === undefined
@@ -181,16 +190,8 @@ export function hasScopeInGrants(
   for (const grant of grants) {
     // An unknown parent must not authorize through its known sub-scopes either.
     if (grant.scope === undefined || !knownScopes.has(grant.scope)) continue;
-    const effect = grant.effect || "allow";
-
-    const isLegacyDeny = effect === "deny" && grant.scope === scope;
-    const isExclusion =
-      effect === "allow" &&
-      grant.scope !== undefined &&
-      exclusionScopes.includes(grant.scope);
-    if (isLegacyDeny || isExclusion) {
-      const yields =
-        isExclusion && exclusionYieldsToDirectGrants(grant.scope ?? "");
+    if (exclusionScopes.includes(grant.scope)) {
+      const yields = exclusionYieldsToDirectGrants(grant.scope);
       exclusionChecks.forEach((check, i) => {
         if (!grantSelectorsMatch(grant, check, true)) return;
         if (yields && !directSelectorsMatch(grant, check, true)) {
@@ -203,7 +204,7 @@ export function hasScopeInGrants(
 
     const scopeMatches =
       grant.scope === scope || grant.subScopes?.includes(scope);
-    if (effect === "allow" && scopeMatches) {
+    if (scopeMatches) {
       allowChecks.forEach((check, i) => {
         if (grantSelectorsMatch(grant, check, false)) hasAllow = true;
         if (directSelectorsMatch(grant, check, false)) directAllow[i] = true;
@@ -281,8 +282,8 @@ function useRBACImpl() {
    * project-wide grants (`{ resourceId: "*", projectId }`) cover the resource
    * and keeps grants for other projects from matching.
    *
-   * Uses exclusion-wins semantics: matching internal exclusion grants (and
-   * legacy deny-effect grants) override matching allow grants.
+   * Uses exclusion-wins semantics: matching internal exclusion grants
+   * override matching allow grants.
    *
    * - If grants haven't loaded yet, returns false (safe default).
    * - A grant with `selectors: undefined` (null from the API) means unrestricted.

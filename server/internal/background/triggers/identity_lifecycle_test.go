@@ -27,7 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -114,6 +113,50 @@ func TestRootTriggerPauseKeepsIdentity(t *testing.T) {
 	_, err = f.app.SetStatus(t.Context(), f.projectID, item.ID, triggers.StatusActive)
 	require.NoError(t, err)
 	require.Equal(t, paused, f.resolve(t, f.assistantID, item.ID))
+}
+
+// unavailableAssistantDispatcher stands in for the assistants service on a
+// deployment with the disabled runtime provider.
+type unavailableAssistantDispatcher struct{}
+
+func (unavailableAssistantDispatcher) Kind() string { return triggers.TargetKindAssistant }
+func (unavailableAssistantDispatcher) Dispatch(context.Context, triggers.Task) error {
+	return nil
+}
+func (unavailableAssistantDispatcher) TargetAvailable() bool { return false }
+
+func TestTriggerResumeRefusedWhenTargetUnavailable(t *testing.T) {
+	t.Parallel()
+	f := newIdentityFixture(t)
+	params := f.createParams()
+	params.Status = triggers.StatusPaused
+	item, err := f.app.Create(t.Context(), params)
+	require.NoError(t, err)
+
+	f.app.RegisterDispatcher(unavailableAssistantDispatcher{})
+
+	_, err = f.app.SetStatus(t.Context(), f.projectID, item.ID, triggers.StatusActive)
+	require.ErrorIs(t, err, triggers.ErrTargetUnavailable)
+	stored, err := triggerrepo.New(f.db).GetTriggerInstanceByID(t.Context(), triggerrepo.GetTriggerInstanceByIDParams{ID: item.ID, ProjectID: f.projectID})
+	require.NoError(t, err)
+	require.Equal(t, triggers.StatusPaused, stored.Status)
+
+}
+
+func TestTriggerPauseAllowedWhenTargetUnavailable(t *testing.T) {
+	t.Parallel()
+	f := newIdentityFixture(t)
+	params := f.createParams()
+	params.Status = triggers.StatusActive
+	item, err := f.app.Create(t.Context(), params)
+	require.NoError(t, err)
+
+	f.app.RegisterDispatcher(unavailableAssistantDispatcher{})
+
+	// Pausing stays allowed so triggers can be wound down.
+	paused, err := f.app.SetStatus(t.Context(), f.projectID, item.ID, triggers.StatusPaused)
+	require.NoError(t, err)
+	require.Equal(t, triggers.StatusPaused, paused.Status)
 }
 
 func TestRootTriggerCreateCompensationWithdrawsIdentity(t *testing.T) {
@@ -209,6 +252,11 @@ func TestWakeCapturesRequesterOrOwnerAtCreation(t *testing.T) {
 func TestWakeFromWorkloadCredentialRecordsNoRequester(t *testing.T) {
 	t.Parallel()
 	f := newIdentityFixture(t)
+	root, err := f.app.Create(t.Context(), f.createParams())
+	require.NoError(t, err)
+	resolved := f.resolve(t, f.assistantID, root.ID)
+	require.Equal(t, assistantidentity.Active, resolved.State)
+	require.NotNil(t, resolved.Identity)
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	private, err := x509.MarshalPKCS8PrivateKey(key)
@@ -220,11 +268,13 @@ func TestWakeFromWorkloadCredentialRecordsNoRequester(t *testing.T) {
 	credentials := principalcredential.New(signer, f.db)
 	raw, _, err := credentials.Mint(principalcredential.Credential{
 		OrganizationID: "org-trigger-test", ProjectID: f.projectID, AuthorizerUserID: "",
-		Principal: urn.NewWorkloadPrincipal(uuid.New(), "assistant-trigger:"+uuid.NewString()),
+		Principal: urn.NewWorkloadPrincipal(resolved.Identity.IssuerID, resolved.Identity.Subject),
 	})
 	require.NoError(t, err)
 	ctx, err := credentials.Authenticate(t.Context(), raw)
 	require.NoError(t, err)
+	// Authentication establishes the principal; admission supplies its live agent.
+	ctx = contextvalues.WithWorkloadAgent(ctx, urn.NewPrincipal(urn.PrincipalTypeAgent, resolved.Identity.AgentID.String()))
 	_, err = f.app.CreateWakeInstance(ctx, triggers.CreateWakeInstanceParams{OrganizationID: "org-trigger-test", ProjectID: f.projectID, AssistantID: f.assistantID, Name: "Wake", TargetDisplay: "Assistant", FireAt: time.Now().Add(time.Hour), CorrelationID: "thread"}, func(_ context.Context, _ pgx.Tx, item triggerrepo.TriggerInstance) error {
 		var config map[string]any
 		require.NoError(t, json.Unmarshal(item.ConfigJson, &config))
@@ -237,7 +287,7 @@ func TestWakeFromWorkloadCredentialRecordsNoRequester(t *testing.T) {
 
 func (f identityFixture) provisionTx(t *testing.T, tx pgx.Tx, assistantID uuid.UUID) error {
 	t.Helper()
-	if err := testIdentityService.Provision(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: "org-trigger-test", ProjectID: f.projectID, AssistantID: assistantID, ActorUserID: "trigger-owner", AgentID: uuid.Nil, AgentName: ""}); err != nil {
+	if err := testIdentityService.Provision(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: "org-trigger-test", ProjectID: f.projectID, AssistantID: assistantID, ActorUserID: "trigger-owner", Staff: nil}); err != nil {
 		return fmt.Errorf("provision assistant identity: %w", err)
 	}
 	return nil
@@ -299,13 +349,9 @@ func TestUpgradeDuringTriggerCreateBindsIt(t *testing.T) {
 		require.FailNow(t, "create finished before holding its lock", "error: %v", err)
 	}
 
+	tx := testenv.BeginTx(t, ctx, f.db)
 	var group errgroup.Group
 	group.Go(func() error {
-		tx, err := f.db.Begin(ctx) //nolint:glint // notestingrawsql: transaction boundary only; the upgrade uses the identity service.
-		if err != nil {
-			return fmt.Errorf("begin upgrade: %w", err)
-		}
-		defer o11y.NoLogDefer(func() error { return tx.Rollback(context.Background()) })
 		if err := f.provisionTx(t, tx, legacy); err != nil {
 			return err
 		}

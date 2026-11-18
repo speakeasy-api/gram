@@ -109,6 +109,7 @@ func (l *Logger) logDirectoryReviewItem(ctx context.Context, dbtx repo.DBTX, act
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: e.organizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 

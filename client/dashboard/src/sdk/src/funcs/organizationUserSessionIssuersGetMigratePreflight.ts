@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { encodeJSON, encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * getIssuerMigratePreflight organizationUserSessionIssuers
  *
  * @remarks
- * Report the impact, blockers, and configuration warnings for consolidating one user_session_issuer onto another. Requires org:read.
+ * Report the impact, blockers, and configuration warnings for consolidating one user_session_issuer onto another. When no hard blocker is present, it runs the consolidation in a transaction it rolls back and reports how each affected MCP server's upstream OAuth clients would change. That run takes the same locks a consolidation does, and returns 409 when another writer holds them for too long. Requires org:admin.
  */
 export function organizationUserSessionIssuersGetMigratePreflight(
   client: GramCore,
@@ -110,18 +110,18 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
+  const body = encodeJSON(
+    "body",
+    payload.GetUserSessionIssuerMigratePreflightRequestBody,
+    { explode: true },
+  );
 
   const path = pathToFunc(
     "/rpc/organizationUserSessionIssuers.getMigratePreflight",
   )();
 
-  const query = encodeFormQuery({
-    "source_id": payload.source_id,
-    "target_id": payload.target_id,
-  });
-
   const headers = new Headers(compactMap({
+    "Content-Type": "application/json",
     Accept: "application/json",
     "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
@@ -156,11 +156,10 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "GET",
+    method: "POST",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,

@@ -33,7 +33,6 @@ export type CreateRemoteMcpSourceVariables = {
   name?: string | undefined;
   url: string;
   userSessionIssuerId?: string | undefined;
-  organizationOwnedUserSessionIssuer?: boolean | undefined;
   identityMode: RemoteMcpCreationIdentity;
   agentAuthorization?: string;
 };
@@ -60,7 +59,6 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
       identityMode,
       agentAuthorization,
       userSessionIssuerId,
-      organizationOwnedUserSessionIssuer,
     }) => {
       const { remoteMcpServer, mcpServer } =
         await client.remoteMcp.createServerAndMcpServer({
@@ -78,7 +76,6 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
         mcpServer,
         identityMode,
         agentAuthorization,
-        organizationOwnedUserSessionIssuer,
       });
       const configuredMcpServer =
         identityConfiguration.status === "configured"

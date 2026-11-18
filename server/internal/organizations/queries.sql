@@ -1117,31 +1117,31 @@ ON CONFLICT (organization_id, task_key) DO UPDATE SET
 RETURNING *;
 
 -- name: GetSetupTaskCompletionFacts :one
-WITH default_project AS (
-    SELECT id
-    FROM projects
-    WHERE organization_id = @organization_id
-      AND deleted IS FALSE
-    ORDER BY created_at, id
-    LIMIT 1
-)
 SELECT
     COALESCE(organization_metadata.sso_enabled, FALSE)::boolean AS sso_configured,
     COALESCE(organization_metadata.scim_enabled, FALSE)::boolean AS dsync_configured,
     (COALESCE(cardinality(organization_metadata.verified_domains), 0) > 0)::boolean AS domain_verified,
-    EXISTS (
-        SELECT 1
-        FROM plugin_github_connections
-        JOIN default_project ON default_project.id = plugin_github_connections.project_id
-        WHERE NULLIF(plugin_github_connections.marketplace_token, '') IS NOT NULL
-    ) AS marketplace_published,
     (
         SELECT COUNT(DISTINCT organization_features.feature_name) = 3
         FROM organization_features
         WHERE organization_features.organization_id = @organization_id
           AND organization_features.feature_name IN ('logs', 'tool_io_logs', 'session_capture')
           AND organization_features.deleted IS FALSE
-    )::boolean AS logging_enabled
+    )::boolean AS logging_enabled,
+    -- Any message stored from a Claude transcript upload (Cowork sessions
+    -- shipped on Stop) in one of the organization's projects. Served by the
+    -- partial chat_messages_claude_transcript_project_idx.
+    EXISTS (
+        SELECT 1
+        FROM chat_messages
+        WHERE chat_messages.origin = 'claude-transcript'
+          AND chat_messages.project_id IN (
+              SELECT projects.id
+              FROM projects
+              WHERE projects.organization_id = @organization_id
+                AND projects.deleted IS FALSE
+          )
+    ) AS claude_transcript_captured
 FROM organization_metadata
 WHERE organization_metadata.id = @organization_id;
 
@@ -1391,6 +1391,51 @@ SELECT @playbook_id, s.id, @position
 FROM onboarding_steps s
 WHERE s.slug = @slug AND s.deleted_at IS NULL;
 
+-- name: RepointRetiredOnboardingPlaybookSteps :execrows
+-- Moves each playbook's first step among the retired slugs onto the successor
+-- slug, keeping its position, unless the playbook already lists the
+-- successor. Retired slugs match whether or not they are retired yet.
+WITH successor AS (
+    SELECT onboarding_steps.id
+    FROM onboarding_steps
+    WHERE onboarding_steps.slug = @successor_slug::text
+      AND onboarding_steps.deleted_at IS NULL
+),
+firsts AS (
+    SELECT DISTINCT ON (ps.playbook_id) ps.playbook_id, ps.step_id
+    FROM onboarding_playbook_steps ps
+    JOIN onboarding_steps s ON s.id = ps.step_id
+    WHERE s.slug = ANY(@retired_slugs::text[])
+    ORDER BY ps.playbook_id, ps.position
+)
+UPDATE onboarding_playbook_steps ps
+SET step_id = successor.id, updated_at = clock_timestamp()
+FROM firsts, successor
+WHERE ps.playbook_id = firsts.playbook_id
+  AND ps.step_id = firsts.step_id
+  AND NOT EXISTS (
+      SELECT 1
+      FROM onboarding_playbook_steps listed
+      WHERE listed.playbook_id = ps.playbook_id
+        AND listed.step_id = successor.id
+  );
+
+-- name: DeleteRetiredOnboardingPlaybookSteps :execrows
+-- Drops the retired slugs' steps from every playbook that lists the successor
+-- slug. After the repoint, that is every playbook that listed one.
+DELETE FROM onboarding_playbook_steps ps
+USING onboarding_steps s
+WHERE s.id = ps.step_id
+  AND s.slug = ANY(@retired_slugs::text[])
+  AND EXISTS (
+      SELECT 1
+      FROM onboarding_playbook_steps listed
+      JOIN onboarding_steps successor ON successor.id = listed.step_id
+      WHERE listed.playbook_id = ps.playbook_id
+        AND successor.slug = @successor_slug::text
+        AND successor.deleted_at IS NULL
+  );
+
 -- name: GetOrganizationOnboardingPlaybookID :one
 SELECT om.id AS organization_id, o.playbook_id
 FROM organization_metadata om
@@ -1416,15 +1461,15 @@ ORDER BY ps.position, s.slug;
 -- name: ListOnboardingStepMethodApplicability :many
 SELECT s.slug AS step_slug, m.slug AS method_slug, m.vendor AS method_vendor,
   -- Over the stack's platforms of the method's own vendor, or of every vendor
-  -- for a method that belongs to none, so an unrelated vendor in the stack
-  -- never changes the verdict. A platform the matrix does not map the method
-  -- to is unknown, which is not the same as not applicable.
+  -- for a cross-platform method, so an unrelated vendor in the stack never
+  -- changes the verdict. A platform the matrix does not map the method to is
+  -- unknown, which is not the same as not applicable.
   coalesce((
     SELECT bool_and(mp.platform_id IS NOT NULL AND mp.applicability = 'na')
     FROM support_matrix_platforms p
     LEFT JOIN support_matrix_method_platforms mp ON mp.platform_id = p.id AND mp.integration_method_id = m.id AND mp.deleted_at IS NULL
     WHERE p.deleted_at IS NULL AND p.vendor = ANY(@vendors::text[])
-      AND (m.vendor IN ('Cross-platform', 'Others') OR p.vendor = m.vendor)
+      AND (m.vendor = 'Cross-platform' OR p.vendor = m.vendor)
   ), false)::boolean AS not_applicable_everywhere
 FROM onboarding_step_methods sm
 JOIN onboarding_steps s ON s.id = sm.step_id AND s.deleted_at IS NULL

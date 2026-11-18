@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { GramCore } from "@gram/client/core.js";
 import { describe, expect, it } from "vitest";
 import { buildOrganizationSetupTasksQuery } from "./useOrganizationSetupTasks";

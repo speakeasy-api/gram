@@ -30,7 +30,11 @@ const mocks = vi.hoisted(() => ({
   servicesRefresh: null as Promise<void> | null,
   saveResult: { isDefault: false } as { isDefault: boolean },
   speakeasyIssuer: "https://speakeasy.example.com/issuer" as string | undefined,
-  signIns: [] as { projectId: string; trustedRemoteSessionIssuerId?: string }[],
+  signIns: [] as {
+    projectId: string;
+    trustedRemoteSessionIssuerId?: string;
+    trustedRemoteSessionClientId?: string;
+  }[],
   signInsState: "success" as "success" | "pending" | "error",
   signInsRefetch: vi.fn(),
   issuers: [] as { id: string; name: string; issuer: string }[],
@@ -63,7 +67,6 @@ vi.mock("@/hooks/useFeatureFlag", () => ({
 vi.mock("@/lib/featureFlags", () => ({
   FEATURE_FLAGS: {
     emaProviders: "ema-providers",
-    oktaConnections: "okta-connections",
   },
 }));
 vi.mock("../useEnterpriseIssuer", () => ({
@@ -256,7 +259,13 @@ beforeEach(() => {
   mocks.servicesRefresh = null;
   mocks.saveResult = { isDefault: false };
   mocks.speakeasyIssuer = "https://speakeasy.example.com/issuer";
-  mocks.signIns = [{ projectId: "", trustedRemoteSessionIssuerId: "okta" }];
+  mocks.signIns = [
+    {
+      projectId: "",
+      trustedRemoteSessionIssuerId: "okta",
+      trustedRemoteSessionClientId: "okta-client",
+    },
+  ];
   mocks.signInsState = "success";
   mocks.signInsRefetch.mockReset();
   mocks.issuers = [
@@ -373,6 +382,13 @@ describe("one service", () => {
         },
       },
     });
+  });
+
+  it("doesn't offer a provider trusted for inbound ID-JAGs only", () => {
+    mocks.signIns = [{ projectId: "", trustedRemoteSessionIssuerId: "okta" }];
+    show();
+    fireEvent.click(editButton());
+    expect(checkboxes()).toEqual([{ name: "Speakeasy", checked: true }]);
   });
 
   it("refreshes the services and every server's reading after a save", async () => {
@@ -505,6 +521,7 @@ describe("one service", () => {
     mocks.signIns = ids.map((id) => ({
       projectId: "",
       trustedRemoteSessionIssuerId: id,
+      trustedRemoteSessionClientId: `${id}-client`,
     }));
     mocks.issuers = ids.map((id) => ({
       id,
@@ -909,30 +926,7 @@ describe("one service", () => {
     ).toBeTruthy();
   });
 
-  it("doesn't link to Okta when its view isn't available", () => {
-    mocks.flags = { "okta-connections": "disabled" };
-    mocks.rows = [
-      { ...linear, isDefault: false, providers: [okta, speakeasy] },
-    ];
-    show();
-    expect(within(trustRows()[0]!).queryByRole("link")).toBeNull();
-  });
-
-  it.each([
-    [
-      "the Okta view",
-      "enabled",
-      "Fix in Okta",
-      "/?tab=identity-providers&provider=okta&view=setup",
-    ],
-    [
-      "identity providers without the Okta view",
-      "disabled",
-      "Identity providers",
-      "/?tab=identity-providers",
-    ],
-  ])("links a broken Okta provider's fix to %s", (_name, flag, label, href) => {
-    mocks.flags = { "okta-connections": flag };
+  it("links a broken Okta provider's fix to the Okta view", () => {
     mocks.rows = [
       {
         ...linear,
@@ -951,9 +945,9 @@ describe("one service", () => {
     show();
     expect(
       within(trustRows()[0]!)
-        .getByRole("link", { name: label })
+        .getByRole("link", { name: "Fix in Okta" })
         .getAttribute("href"),
-    ).toBe(href);
+    ).toBe("/?tab=identity-providers&provider=okta&view=setup");
   });
 
   it("says another admin changed the list when Use default is refused", async () => {

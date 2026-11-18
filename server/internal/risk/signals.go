@@ -55,6 +55,26 @@ func signalScore(policyScore float64, category string) float64 {
 	return roundScore(base)
 }
 
+// FindingSeverity is one finding's severity band: its policy's score, or the
+// category's fallback weight when the finding has no scored policy (a policy
+// score <= 0, which is how pre-policy rows read). A deleted policy keeps its
+// score, so a caller must pass 0 to read its findings as the category's band.
+func FindingSeverity(policyScore float64, category string) string {
+	return severityForScore(signalScore(policyScore, category))
+}
+
+// CategoryFallbackSeverities is the band each known category reads as when
+// its finding has no scored policy, and the band an unknown category reads
+// as. Together they are FindingSeverity(0, category) as a table, for a query
+// that has to work the band out in SQL.
+func CategoryFallbackSeverities() (map[string]string, string) {
+	bands := make(map[string]string, len(signalCategoryBaseWeight))
+	for category := range signalCategoryBaseWeight {
+		bands[string(category)] = FindingSeverity(0, string(category))
+	}
+	return bands, severityForScore(roundScore(signalDefaultBaseWeight))
+}
+
 // severityForScore mirrors the dashboard's CVSS-style bands
 // (client/dashboard/src/pages/security/risk-utils.ts): the two must not
 // drift or the badge and the score pill would disagree.

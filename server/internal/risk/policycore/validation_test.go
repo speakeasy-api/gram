@@ -131,10 +131,10 @@ func TestValidateMCPScopeAction(t *testing.T) {
 func TestValidateActionAndSourceCompatibility(t *testing.T) {
 	t.Parallel()
 
-	for _, action := range []string{"flag", "warn", "block", "quarantine"} {
+	for _, action := range []string{"flag", "warn", "block", "quarantine", ActionRequireApproval} {
 		require.NoError(t, ValidateAction(action))
 	}
-	require.EqualError(t, ValidateAction("deny"), "action must be one of: flag, warn, block, quarantine")
+	require.EqualError(t, ValidateAction("deny"), "action must be one of: flag, warn, block, quarantine, require_approval")
 
 	require.NoError(t, ValidateSources([]string{ra.SourceGitleaks, ra.SourcePresidio, shadowmcp.SourceShadowMCP}))
 	require.EqualError(t, ValidateSources([]string{"unknown"}), `source "unknown" is not a recognized policy source`)
@@ -243,4 +243,44 @@ func TestValidateDetectionScopesAcceptsCategoryWithoutRecommendation(t *testing.
 	require.Len(t, got, 1)
 	require.Equal(t, "custom", got[0].Category)
 	require.Equal(t, include, got[0].ScopeInclude)
+}
+
+func TestValidateApprovalPolicy(t *testing.T) {
+	t.Parallel()
+	approvers := &ApprovalConfig{Approvers: []string{"user:user_1", "role:organization:" + uuid.NewString()}}
+
+	require.NoError(t, ValidateApprovalPolicy(ActionRequireApproval, "standard", nil, nil, approvers))
+	require.NoError(t, ValidateApprovalPolicy(ActionRequireApproval, "", []string{}, []string{}, approvers))
+	require.NoError(t, ValidateApprovalPolicy("block", "standard", []string{"gitleaks"}, nil, nil))
+
+	cases := map[string]struct {
+		action, policyType string
+		sources, rules     []string
+		config             *ApprovalConfig
+		message            string
+	}{
+		"config on another action": {action: "block", policyType: "standard", config: approvers, message: "only valid when action is require_approval"},
+		"prompt based":             {action: ActionRequireApproval, policyType: "prompt_based", config: approvers, message: "needs policy_type standard"},
+		"sources":                  {action: ActionRequireApproval, sources: []string{"gitleaks"}, config: approvers, message: "takes no detection sources"},
+		"custom rules":             {action: ActionRequireApproval, rules: []string{uuid.NewString()}, config: approvers, message: "takes no detection sources"},
+		"no config":                {action: ActionRequireApproval, message: "at least one approver"},
+		"no approvers":             {action: ActionRequireApproval, config: &ApprovalConfig{Approvers: []string{}}, message: "at least one approver"},
+		"not a urn":                {action: ActionRequireApproval, config: &ApprovalConfig{Approvers: []string{"alice"}}, message: "not a principal URN"},
+		"agent approver":           {action: ActionRequireApproval, config: &ApprovalConfig{Approvers: []string{"agent:" + uuid.NewString()}}, message: "must be a user or role"},
+		"everyone":                 {action: ActionRequireApproval, config: &ApprovalConfig{Approvers: []string{"role:all"}}, message: "must name a specific user or role"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			err := ValidateApprovalPolicy(tc.action, tc.policyType, tc.sources, tc.rules, tc.config)
+			require.ErrorContains(t, err, tc.message)
+		})
+	}
+}
+
+func TestValidateMCPScopeRequiresScopeForApproval(t *testing.T) {
+	t.Parallel()
+	require.ErrorContains(t, ValidateMCPScope(nil, nil, ActionRequireApproval), "needs an MCP scope")
+	require.NoError(t, ValidateMCPScope(&MCPScope{AllServers: true, ToolAnnotations: nil, Servers: []MCPServerScope{}}, nil, ActionRequireApproval))
+	require.ErrorContains(t, ValidateMCPScope(&MCPScope{AllServers: true, ToolAnnotations: nil, Servers: []MCPServerScope{}}, nil, "warn"), "cannot be used by an MCP-scoped policy")
 }

@@ -1,20 +1,8 @@
-import { Button } from "@/components/ui/Button";
-import { Dialog } from "@/components/ui/Dialog";
-import { Input } from "@/components/ui/Input";
-import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import type { Assistant } from "@gram/client/models/components/assistant.js";
-import { useAssistantsUpgradeIdentityMutation } from "@gram/client/react-query/assistantsUpgradeIdentity.js";
-import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
 import { Link } from "react-router";
-import { toast } from "sonner";
-import { queryKeyAgents } from "@gram/client/react-query/agents.js";
-import { collectPageItems } from "@/components/sessions/collectPageItems";
-import { useSdkClient } from "@/contexts/Sdk";
 import { useAgent } from "@gram/client/react-query/agent.js";
 import { useSlackDirectoryMembers } from "@gram/client/react-query/slackDirectoryMembers.js";
 import { Bot } from "lucide-react";
@@ -22,196 +10,17 @@ import { SESSION_SECURITY } from "@/pages/org/identity-provider/identityProvider
 
 export function AssistantIdentitySettings({
   assistant,
-  onUpdated,
 }: {
   assistant: Assistant;
-  onUpdated?: () => void;
-}): JSX.Element | null {
-  const sdk = useSdkClient();
-  const { hasScope } = useRBAC();
-  const queryClient = useQueryClient();
-  const [confirming, setConfirming] = useState(false);
-  const [selectedIdentity, setSelectedIdentity] = useState("new");
-  const [agentName, setAgentName] = useState(assistant.name);
-  // Drained rather than read a page at a time: the picker has to offer every
-  // agent the assistant could take, and the name check below is only sound
-  // against the whole list.
-  const agentsQuery = useQuery({
-    queryKey: [...queryKeyAgents({}), "all-pages"],
-    queryFn: ({ signal }) =>
-      collectPageItems(sdk.agents.list(undefined, undefined, { signal })),
-    enabled: confirming,
-    throwOnError: false,
-  });
-  const allAgents = agentsQuery.data ?? [];
-  // Only agents the user can authorize, active in the assistant's project, can
-  // back it.
-  const agents = allAgents.filter(
-    (agent) =>
-      agent.projectId === assistant.projectId &&
-      agent.lifecycle === "active" &&
-      agent.permissions.authorize,
-  );
-  const creating = selectedIdentity === "new";
-  const nameTaken = allAgents.some(
-    (agent) => agent.name.toLowerCase() === agentName.trim().toLowerCase(),
-  );
-  const attributionName = creating
-    ? agentName.trim()
-    : agents.find((agent) => agent.id === selectedIdentity)?.name;
-  const validSelection =
-    !agentsQuery.isPending &&
-    !agentsQuery.isError &&
-    (creating ? !!agentName.trim() : !!attributionName);
-
-  const upgrade = useAssistantsUpgradeIdentityMutation({
-    onSuccess: () => {
-      setConfirming(false);
-      void invalidateAllAssistantsList(queryClient);
-      onUpdated?.();
-      toast.success("Agent identity set up");
-    },
-    onError: (error) => {
-      if (error.message.includes("already uses this name")) {
-        toast.error(
-          "An agent already uses this name. Choose a different name.",
-        );
-        void agentsQuery.refetch();
-        return;
-      }
-      if (error.message.includes("already backs another assistant")) {
-        toast.error(
-          "This agent already backs another assistant. Choose a different agent.",
-        );
-        void agentsQuery.refetch();
-        return;
-      }
-      toast.error(
-        "Could not update identity. Refresh and check your permissions and identity health.",
-      );
-    },
-  });
-  const agentIdentityIsNotConfigured =
-    assistant.identityState === "NEVER_CONFIGURED";
-  const canUpgrade =
-    hasScope("project:write", assistant.projectId) &&
-    agentIdentityIsNotConfigured;
-
-  if (!agentIdentityIsNotConfigured)
+}): JSX.Element {
+  if (assistant.identityState !== "NEVER_CONFIGURED")
     return <ConfiguredIdentity assistant={assistant} />;
 
   return (
-    <div className="space-y-4">
-      <Text small muted>
-        This assistant has no agent identity. It acts as the person who messages
-        it in the dashboard, and as its creator everywhere else.
-      </Text>
-      {canUpgrade && (
-        <Button size="sm" onClick={() => setConfirming(true)}>
-          Set up agent identity
-        </Button>
-      )}
-      <Dialog open={confirming} onOpenChange={setConfirming}>
-        <Dialog.Content>
-          <Dialog.Header>
-            <Dialog.Title>Set up agent identity</Dialog.Title>
-            <Dialog.Description>
-              Choose the agent {assistant.name} runs as.
-            </Dialog.Description>
-          </Dialog.Header>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="assistant-agent-selection">Agent</Label>
-              <select
-                id="assistant-agent-selection"
-                value={selectedIdentity}
-                onChange={(event) => setSelectedIdentity(event.target.value)}
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                disabled={upgrade.isPending}
-              >
-                <option value="new">Create a new agent</option>
-                {agents.map((agent) => (
-                  <option key={agent.id} value={agent.id}>
-                    {agent.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {creating && (
-              <div className="space-y-2">
-                <Label htmlFor="assistant-agent-name">Agent name</Label>
-                <Input
-                  id="assistant-agent-name"
-                  value={agentName}
-                  onChange={setAgentName}
-                  maxLength={120}
-                  disabled={upgrade.isPending}
-                  error={nameTaken}
-                  aria-invalid={nameTaken}
-                  aria-describedby={
-                    nameTaken ? "assistant-agent-name-error" : undefined
-                  }
-                />
-                {nameTaken && (
-                  <p
-                    id="assistant-agent-name-error"
-                    className="text-sm text-destructive"
-                  >
-                    An agent already uses this name. Choose a different name or
-                    select the existing agent.
-                  </p>
-                )}
-              </div>
-            )}
-            {agentsQuery.isError && (
-              <Text small muted>
-                Could not load agents. Close this dialog and try again.
-              </Text>
-            )}
-            {attributionName && (
-              <div className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/50 px-3 py-3 text-sm text-muted-foreground">
-                <span>Actions will be attributed to</span>
-                <span className="inline-flex items-center gap-1.5 rounded-md border bg-background px-2 py-1 font-medium text-foreground">
-                  <Bot aria-hidden="true" className="size-4" />
-                  {attributionName}
-                </span>
-              </div>
-            )}
-            <Text small muted>
-              {creating
-                ? "A new agent starts with access to every MCP server and skill in this project and can administer this assistant. You can narrow its access afterwards like any other agent."
-                : "The agent keeps its current access and can also administer this assistant. You can change its access afterwards like any other agent."}
-            </Text>
-          </div>
-          <Dialog.Footer>
-            <Button
-              variant="tertiary"
-              disabled={upgrade.isPending}
-              onClick={() => setConfirming(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={upgrade.isPending || !canUpgrade || !validSelection}
-              onClick={() =>
-                upgrade.mutate({
-                  request: {
-                    upgradeAssistantIdentityRequestBody: {
-                      id: assistant.id,
-                      ...(creating
-                        ? { agentName: agentName.trim() }
-                        : { agentId: selectedIdentity }),
-                    },
-                  },
-                })
-              }
-            >
-              {upgrade.isPending ? "Setting up…" : "Confirm setup"}
-            </Button>
-          </Dialog.Footer>
-        </Dialog.Content>
-      </Dialog>
-    </div>
+    <Text small muted>
+      This assistant has no agent identity. It acts as the person who messages
+      it in the dashboard, and as its creator everywhere else.
+    </Text>
   );
 }
 

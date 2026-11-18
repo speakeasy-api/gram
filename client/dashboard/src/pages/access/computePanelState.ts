@@ -49,6 +49,24 @@ interface ToolsAnnotationPanel {
 
 // --- Pure computation ---
 
+/**
+ * Whether a selector reaches a whole project: it names the project and no
+ * single resource, tool or disposition inside it. A "*" tool constrains
+ * nothing. Reads only the fields a role selector and an agent policy
+ * selector share, so both editors apply the same rule.
+ */
+export function isProjectWideSelector(
+  selector: Pick<Selector, "projectId" | "tool" | "resourceId"> & {
+    resourceKind?: string;
+    disposition?: string | undefined;
+  },
+): boolean {
+  if (!selector.projectId) return false;
+  if (selector.tool && selector.tool !== "*") return false;
+  if (selector.disposition) return false;
+  return !selector.resourceId || selector.resourceId === "*";
+}
+
 export function computePanelState(
   selectors: Selector[] | null,
   resourceType: ResourceType,
@@ -61,11 +79,14 @@ export function computePanelState(
     : projectFiltered
       ? resourceType
       : "server";
-  const allLabel = projectFiltered
-    ? "All assistants"
-    : isProjectScopedResourceType(resourceType)
+  const allLabel =
+    resourceType === "inference"
       ? "All projects"
-      : "All servers";
+      : projectFiltered
+        ? "All assistants"
+        : isProjectScopedResourceType(resourceType)
+          ? "All projects"
+          : "All servers";
 
   // Unrestricted
   if (selectors === null) {
@@ -76,6 +97,13 @@ export function computePanelState(
   }
 
   // Empty — user switched mode but hasn't selected anything yet
+  if (selectors.length === 0 && resourceType === "inference") {
+    return {
+      activePanel: "projects",
+      selectedProjectIds: [],
+      label: "Select...",
+    };
+  }
   if (selectors.length === 0) {
     return {
       activePanel: "servers",
@@ -84,12 +112,12 @@ export function computePanelState(
     };
   }
 
-  // Project-scoped selectors (resource_kind=mcp, resource_id=*, projectId set)
-  const hasProjectId = selectors.some((s) => s.projectId);
-  if (hasProjectId) {
-    const selectedProjectIds = selectors
-      .filter((s) => s.projectId)
-      .map((s) => s.projectId!);
+  // Project-scoped selectors (resource_kind=mcp, resource_id=*, projectId set).
+  // A selector naming one resource can carry its project too, as an agent's
+  // server grants do; that selector is the resource's, not the project's.
+  const projectWide = selectors.filter(isProjectWideSelector);
+  if (projectWide.length > 0) {
+    const selectedProjectIds = projectWide.map((s) => s.projectId!);
     const count = selectedProjectIds.length;
     return {
       activePanel: "projects",

@@ -1,4 +1,6 @@
 import { RequireScope } from "@/components/require-scope";
+import { AIIntegrationCredentialInput } from "./ai-integration-credential-input";
+import { AIIntegrationWorkspaceFields } from "./ai-integration-workspace-fields";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import {
@@ -89,8 +91,14 @@ export function ConfigureSheet({
     form.remove();
   };
 
+  // Every close path, including Cancel, drops a pasted service-account key.
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && provider.apiKeyMultiline) form.setApiKey("");
+    onOpenChange(nextOpen);
+  };
+
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent side="right" className="overflow-y-auto sm:max-w-md">
         <SheetHeader>
           <SheetTitle>
@@ -104,14 +112,12 @@ export function ConfigureSheet({
         <Stack gap={4} className="px-4">
           <Stack gap={2}>
             <Label htmlFor={apiKeyFieldId}>{provider.apiKeyLabel}</Label>
-            <Input
+            <AIIntegrationCredentialInput
               id={apiKeyFieldId}
-              placeholder={
-                form.hasSavedKey ? "•••••• (saved)" : provider.apiKeyPlaceholder
-              }
+              provider={provider}
               value={form.apiKey}
               onChange={form.setApiKey}
-              type="password"
+              hasSavedKey={form.hasSavedKey}
               disabled={form.isLoading || form.isMutating}
             />
             {provider.helpText ? (
@@ -135,6 +141,12 @@ export function ConfigureSheet({
               />
             </Stack>
           ) : null}
+
+          <AIIntegrationWorkspaceFields
+            provider={provider}
+            form={form}
+            active={open}
+          />
 
           <Stack gap={2}>
             <Label htmlFor={billingModeFieldId}>Billing mode</Label>
@@ -178,7 +190,7 @@ export function ConfigureSheet({
             </RequireScope>
           ) : null}
           <div className="ml-auto flex items-center gap-2">
-            <Button variant="secondary" onClick={() => onOpenChange(false)}>
+            <Button variant="secondary" onClick={() => handleOpenChange(false)}>
               <Button.Text>Cancel</Button.Text>
             </Button>
             <RequireScope scope="org:admin" level="component">

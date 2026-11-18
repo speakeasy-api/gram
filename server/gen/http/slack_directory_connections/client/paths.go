@@ -42,6 +42,11 @@ func BeginSlackDirectoryConnectionsPath() string {
 	return "/rpc/slackDirectoryConnections.begin"
 }
 
+// SetDefaultProjectSlackDirectoryConnectionsPath returns the URL path to the slackDirectoryConnections service setDefaultProject HTTP endpoint.
+func SetDefaultProjectSlackDirectoryConnectionsPath() string {
+	return "/rpc/slackDirectoryConnections.setDefaultProject"
+}
+
 // DisconnectSlackDirectoryConnectionsPath returns the URL path to the slackDirectoryConnections service disconnect HTTP endpoint.
 func DisconnectSlackDirectoryConnectionsPath() string {
 	return "/rpc/slackDirectoryConnections.disconnect"

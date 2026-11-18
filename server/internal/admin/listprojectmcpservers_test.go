@@ -14,8 +14,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsRepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	remotemcpRepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 )
 
 func seedMCPEndpoint(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, serverID uuid.UUID, customDomainID uuid.NullUUID, slug string) uuid.UUID {
@@ -119,22 +120,20 @@ func TestListProjectMcpServers_ProjectInAnotherOrganizationIsNotFound(t *testing
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
 
-// Both server models, deduplicated the way the project count is: a toolset
-// with an mcp_servers row appears once, as that row.
-func TestListProjectMcpServers_ListsBothModelsOnce(t *testing.T) {
+// Only mcp_servers rows are listed; a toolset without a canonical wrapper is not hosted.
+func TestListProjectMcpServers_ListsOnlyMCPServerRows(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn := newTestMCPServersService(t)
 	seedOrg(t, ctx, conn, orgFixture{id: "org_one", name: "One", slug: "one"})
 	projectID := seedProject(t, ctx, conn, "org_one", "mixed")
-	migrated := seedToolset(t, ctx, conn, "org_one", projectID, "migrated", true)
+	migrated := seedToolset(t, ctx, conn, "org_one", projectID, "migrated", false)
 	serverID := seedMCPServer(t, ctx, conn, projectID, migrated, "migrated-server")
 	seedMCPEndpoint(t, ctx, conn, projectID, serverID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "one-migrated")
-	legacyID := seedToolset(t, ctx, conn, "org_one", projectID, "legacy", true)
 	seedToolset(t, ctx, conn, "org_one", projectID, "not-served", false)
 
 	got := listMCPServers(t, ctx, svc, "org_one", projectID)
-	require.Len(t, got, 2)
+	require.Len(t, got, 1)
 
 	require.Equal(t, serverID.String(), got[0].ID)
 	require.Equal(t, "migrated-server", got[0].Name)
@@ -142,13 +141,6 @@ func TestListProjectMcpServers_ListsBothModelsOnce(t *testing.T) {
 	require.Equal(t, "disabled", got[0].Visibility)
 	require.NotNil(t, got[0].URL)
 	require.Equal(t, "https://gram.example.com/mcp/one-migrated", *got[0].URL)
-
-	require.Equal(t, legacyID.String(), got[1].ID)
-	require.Equal(t, "legacy", got[1].Name)
-	require.Equal(t, "toolset_only", got[1].Source)
-	require.Equal(t, "private", got[1].Visibility)
-	require.NotNil(t, got[1].URL)
-	require.Equal(t, "https://gram.example.com/mcp/legacy", *got[1].URL)
 }
 
 // A custom-domain endpoint is the address the dashboard shows, so it wins over
@@ -243,46 +235,6 @@ func TestListProjectMcpServers_ServerWithoutEndpointHasNoURL(t *testing.T) {
 	require.Nil(t, got[0].URL)
 }
 
-// Without an mcp_slug a toolset is addressed by project, toolset and default
-// environment slugs on the platform origin, even with a custom domain: that
-// domain only serves an mcp_slug.
-func TestListProjectMcpServers_ToolsetWithoutMCPSlugUsesLegacyPath(t *testing.T) {
-	t.Parallel()
-
-	ctx, svc, conn := newTestMCPServersService(t)
-	seedOrg(t, ctx, conn, orgFixture{id: "org_one", name: "One", slug: "one"})
-	projectID := seedProject(t, ctx, conn, "org_one", "old")
-	toolsets := toolsetsRepo.New(conn)
-	_, err := toolsets.CreateToolset(ctx, toolsetsRepo.CreateToolsetParams{
-		OrganizationID:         "org_one",
-		ProjectID:              projectID,
-		Name:                   "Old",
-		Slug:                   "old-toolset",
-		Description:            pgtype.Text{String: "", Valid: false},
-		DefaultEnvironmentSlug: pgtype.Text{String: "prod", Valid: true},
-		McpSlug:                pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
-	})
-	require.NoError(t, err)
-
-	requireLegacyURL := func() {
-		t.Helper()
-		got := listMCPServers(t, ctx, svc, "org_one", projectID)
-		require.Len(t, got, 1)
-		require.NotNil(t, got[0].URL)
-		require.Equal(t, "https://gram.example.com/mcp/old/old-toolset/prod", *got[0].URL)
-	}
-	requireLegacyURL()
-
-	domainID := seedCustomDomain(t, ctx, conn, "org_one", "mcp.example.org", true)
-	require.NoError(t, toolsets.SetToolsetCustomDomain(ctx, toolsetsRepo.SetToolsetCustomDomainParams{
-		CustomDomainID: uuid.NullUUID{UUID: domainID, Valid: true},
-		Slug:           "old-toolset",
-		ProjectID:      projectID,
-	}))
-	requireLegacyURL()
-}
-
 func TestMcpServerSource(t *testing.T) {
 	t.Parallel()
 
@@ -309,4 +261,82 @@ func TestListProjectMcpServers_IgnoresDeletedServers(t *testing.T) {
 	deleteMCPServer(t, ctx, conn, projectID, serverID)
 
 	require.Empty(t, listMCPServers(t, ctx, svc, "org_one", projectID))
+}
+
+func TestListProjectMcpServers_UpstreamURL(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name         string
+		deleted      bool
+		otherProject bool
+	}{
+		{name: "live remote"},
+		{name: "deleted remote", deleted: true},
+		{name: "cross-project remote", otherProject: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, svc, conn := newTestMCPServersService(t)
+			seedOrg(t, ctx, conn, orgFixture{id: "org_one", name: "One", slug: "one"})
+			projectID := seedProject(t, ctx, conn, "org_one", "upstream")
+			backing := seedToolset(t, ctx, conn, "org_one", projectID, "backing", false)
+			toolsetID := seedMCPServer(t, ctx, conn, projectID, backing, "toolset")
+			remoteProjectID := projectID
+			if tc.otherProject {
+				remoteProjectID = seedProject(t, ctx, conn, "org_one", "other")
+			}
+			remoteID, serverID := uuid.New(), uuid.New()
+			const upstream = "https://upstream.example.test/mcp"
+			_, err := remotemcpRepo.New(conn).CreateServer(ctx, remotemcpRepo.CreateServerParams{
+				ID:            remoteID,
+				ProjectID:     remoteProjectID,
+				Name:          pgtype.Text{String: "remote", Valid: true},
+				Slug:          pgtype.Text{String: "remote", Valid: true},
+				TransportType: "streamable-http",
+				Url:           upstream,
+			})
+			require.NoError(t, err)
+			_, err = mcpserversRepo.New(conn).CreateMCPServer(ctx, mcpserversRepo.CreateMCPServerParams{
+				ID:                    serverID,
+				ProjectID:             projectID,
+				Name:                  pgtype.Text{String: "remote", Valid: true},
+				Slug:                  pgtype.Text{String: "remote", Valid: true},
+				EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				RemoteMcpServerID:     uuid.NullUUID{UUID: remoteID, Valid: true},
+				TunneledMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				ToolsetID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				UnproxiedMcpServerID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				Visibility:            "private",
+				NetworkAccessMode:     pgtype.Text{String: "", Valid: false},
+			})
+			require.NoError(t, err)
+			if tc.deleted {
+				_, err = remotemcpRepo.New(conn).DeleteServer(ctx, remotemcpRepo.DeleteServerParams{
+					ID:        remoteID,
+					ProjectID: remoteProjectID,
+				})
+				require.NoError(t, err)
+			}
+			got := listMCPServers(t, ctx, svc, "org_one", projectID)
+			require.Len(t, got, 2)
+			byID := make(map[string]*gen.AdminMcpServer, len(got))
+			for _, server := range got {
+				byID[server.ID] = server
+			}
+			require.Contains(t, byID, serverID.String())
+			remote := byID[serverID.String()]
+			require.Equal(t, "remote", remote.Source)
+			if tc.deleted || tc.otherProject {
+				require.Nil(t, remote.UpstreamURL)
+			} else {
+				require.NotNil(t, remote.UpstreamURL)
+				require.Equal(t, upstream, *remote.UpstreamURL)
+			}
+			require.Contains(t, byID, toolsetID.String())
+			require.Equal(t, "toolset", byID[toolsetID.String()].Source)
+			require.Nil(t, byID[toolsetID.String()].UpstreamURL)
+		})
+	}
 }

@@ -118,6 +118,7 @@ func (l *Logger) LogOpenRouterAPIKeySetSpendCap(ctx context.Context, dbtx repo.D
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -157,6 +158,7 @@ func (l *Logger) logOpenRouterAPIKeyEvent(ctx context.Context, dbtx repo.DBTX, a
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: fields.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 

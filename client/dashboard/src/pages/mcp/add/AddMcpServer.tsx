@@ -1,11 +1,16 @@
 import { InputDialog } from "@/components/input-dialog";
 import { SettingsPage, SettingsSection } from "@/components/page-templates";
 import { Card } from "@/components/ui/Card";
+import {
+  ReleaseStageBadge,
+  type ReleaseStage,
+} from "@/components/release-stage-badge";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { useRBAC } from "@/hooks/useRBAC";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useIconDither } from "@/components/icon-dither";
 import { Text } from "@/components/ui/Text";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { createDefaultGatewayEndpoint } from "@/lib/mcpEndpoints";
 import { useRoutes } from "@/routes";
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
@@ -20,6 +25,7 @@ import {
   Code,
   FileCode,
   Layers,
+  RefreshCw,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
@@ -35,6 +41,8 @@ export function AddMcpServerRoot(): JSX.Element {
 type AddOption = {
   icon: ReactNode;
   title: string;
+  /** A release stage shown beside the title, for options still rolling out. */
+  stage?: ReleaseStage;
   description: string;
   href?: string;
   onSelect?: () => void;
@@ -45,6 +53,7 @@ function AddOptionCard({
   onSelect,
   icon,
   title,
+  stage,
   description,
 }: AddOption): JSX.Element {
   const { canvasRef, start, stop } = useIconDither();
@@ -68,9 +77,10 @@ function AddOptionCard({
       <Text
         variant="subheading"
         as="div"
-        className="text-md group-hover:text-primary transition-colors"
+        className="text-md group-hover:text-primary flex items-center gap-2 transition-colors"
       >
         {title}
+        {stage ? <ReleaseStageBadge stage={stage} /> : null}
       </Text>
       <Text small muted className="mt-1">
         {description}
@@ -132,11 +142,6 @@ export default function AddMcpServer(): JSX.Element {
   const { orgSlug } = useSlugs();
   const [gatewayDialogOpen, setGatewayDialogOpen] = useState(false);
   const [gatewayName, setGatewayName] = useState("");
-  // Gateways are behind a rollout flag: opt-in, so an unresolved flag keeps the
-  // option hidden. The flag gates discoverability only — the backend enforces
-  // mcp:write regardless.
-  const gatewaysEnabled =
-    useFeatureFlag(FEATURE_FLAGS.gatewayEndpoints).status === "enabled";
 
   // Creation is two calls: the gateway, then its default address. The address
   // is best-effort (createDefaultGatewayEndpoint warns rather than throwing),
@@ -163,6 +168,11 @@ export default function AddMcpServer(): JSX.Element {
     routes.mcp.gateway.overview.goTo(gateway.id);
   };
 
+  const oktaSync = useFeatureFlag(FEATURE_FLAGS.oktaMcpImport);
+  // The Sync from Okta page needs org:admin, so nobody else is offered it.
+  const { hasScope } = useRBAC();
+  const canSyncFromOkta =
+    oktaSync.status === "enabled" && hasScope("org:admin");
   const connectOptions: AddOption[] = [
     {
       href: routes.mcp.catalog.href(),
@@ -185,6 +195,23 @@ export default function AddMcpServer(): JSX.Element {
       description:
         "Connect a server running inside your own network through a tunnel.",
     },
+    ...(canSyncFromOkta
+      ? [
+          {
+            href: routes.mcp.add.okta.href(),
+            icon: (
+              <RefreshCw
+                className="text-foreground size-10"
+                strokeWidth={1.25}
+              />
+            ),
+            title: "Sync from Okta",
+            stage: "preview" as const,
+            description:
+              "Catalog servers for the applications your people already use in Okta.",
+          },
+        ]
+      : []),
   ];
 
   const gatewayOptions: AddOption[] = [
@@ -241,18 +268,16 @@ export default function AddMcpServer(): JSX.Element {
           <AddOptionGrid options={connectOptions} />
         </SettingsSection>
 
-        {gatewaysEnabled && (
-          <SettingsSection>
-            <SettingsSection.Header>
-              <SettingsSection.Title>Group servers</SettingsSection.Title>
-              <SettingsSection.Description>
-                Put several servers behind a single address so people connect
-                once instead of per server.
-              </SettingsSection.Description>
-            </SettingsSection.Header>
-            <AddOptionGrid options={gatewayOptions} />
-          </SettingsSection>
-        )}
+        <SettingsSection>
+          <SettingsSection.Header>
+            <SettingsSection.Title>Group servers</SettingsSection.Title>
+            <SettingsSection.Description>
+              Put several servers behind a single address so people connect once
+              instead of per server.
+            </SettingsSection.Description>
+          </SettingsSection.Header>
+          <AddOptionGrid options={gatewayOptions} />
+        </SettingsSection>
 
         <SettingsSection>
           <SettingsSection.Header>

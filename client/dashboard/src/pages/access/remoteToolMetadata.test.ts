@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { ToolMetadata } from "@gram/client/models/components/toolmetadata.js";
 import {

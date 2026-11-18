@@ -2,6 +2,8 @@
   "browser": {
     "browserName": "chromium",
     "launchOptions": {
+      "channel": "chrome",
+      "chromiumSandbox": true,
       "headless": true
     },
     "contextOptions": {

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
 import { describe, expect, it } from "vitest";
 

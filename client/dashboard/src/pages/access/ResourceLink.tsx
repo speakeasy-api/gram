@@ -83,15 +83,18 @@ export function ResourceLink({
     if (toolset) {
       label = toolset.name;
       const proj = projectMap.get(toolset.projectId);
-      to = proj
-        ? `/${orgSlug}/projects/${proj.slug}/mcp/${toolset.slug}`
-        : null;
+      // The server's own page when its server is known. /toolsets/<slug>
+      // only redirects there, and is kept for a toolset no server serves.
+      const page = toolset.server
+        ? `mcp/${mcpServerRouteParam(toolset.server)}`
+        : `toolsets/${toolset.slug}`;
+      to = proj ? `/${orgSlug}/projects/${proj.slug}/${page}` : null;
     } else if (mcpServer) {
       label = mcpServer.name ?? mcpServer.slug ?? resourceId;
       const proj = projectMap.get(mcpServer.projectId);
       // The route accepts the row id or slug, so a slugless row still links.
       to = proj
-        ? `/${orgSlug}/projects/${proj.slug}/mcp/x/${mcpServerRouteParam({ id: resourceId, slug: mcpServer.slug })}`
+        ? `/${orgSlug}/projects/${proj.slug}/mcp/${mcpServerRouteParam({ id: resourceId, slug: mcpServer.slug })}`
         : null;
     } else {
       label = resourceId;

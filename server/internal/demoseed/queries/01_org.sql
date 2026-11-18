@@ -1,6 +1,17 @@
 -- Preflight isolation asserts, org metadata and onboarding, the scoped purge,
 -- the project, features, users, and memberships.
 
+-- name: OrgDeleteSigintDefinitionSnapshots :exec
+DELETE FROM sigint_definition_snapshots
+WHERE project_id IN (SELECT id FROM projects WHERE organization_id = @org_id::text);
+
+-- name: OrgInsertSigintDefinitionSnapshot :exec
+INSERT INTO sigint_definition_snapshots (project_id, sensor_id, definition_hash, definition)
+VALUES (@project_id::uuid, @sensor_id::uuid, @definition_hash, @definition::jsonb);
+
+-- name: OrgCountSigintDefinitionSnapshots :one
+SELECT count(*) FROM sigint_definition_snapshots WHERE project_id = @project_id::uuid;
+
 -- name: OrgForeignOrgExists :one
 -- workos_id is compared against this tenant's expected link rather than merely
 -- tested for NULL: the shared demo org never links to WorkOS (its constant is
@@ -59,6 +70,9 @@ VALUES
 
 -- name: OrgDeleteKillswitchOperations :exec
 DELETE FROM killswitch_operations WHERE organization_id = @org_id::text;
+
+-- name: OrgDeleteRegistryPromotionCandidates :exec
+DELETE FROM registry_promotion_candidates WHERE organization_id = @org_id::text;
 
 -- name: OrgDeleteKillswitchPrescriptions :exec
 DELETE FROM killswitch_prescriptions WHERE organization_id = @org_id::text;
@@ -320,7 +334,6 @@ INSERT INTO organization_setup_tasks
   (organization_id, task_key, status, assignee_user_id, assignee_email, hidden_at)
 VALUES
   (@org_id::text, 'identity-provider', 'todo', NULL, NULL, NULL),
-  (@org_id::text, 'create-marketplace', 'todo', NULL, NULL, NULL),
   (@org_id::text, 'distribute-servers', 'todo', NULL, NULL, NULL),
   (@org_id::text, 'enable-logging', 'todo', NULL, NULL, NULL),
   (@org_id::text, 'anthropic-observability', 'todo', NULL, NULL, NULL),
@@ -338,6 +351,17 @@ VALUES
 DELETE FROM principal_grants
 WHERE organization_id = @org_id::text
   AND principal_urn LIKE 'agent:%';
+
+-- name: OrgDeleteAuthPermissionProvisions :exec
+-- The default auth permission ledger keeps every grant the backfill ever
+-- provisioned, so it never re-grants one an admin removed. The seed deletes
+-- and recreates agent and custom role grants, so it resets their ledger rows
+-- with them; otherwise a reseed would leave the recreated principals without
+-- their default mcp:auth grants. Human grants survive a reseed, and so do
+-- their ledger rows.
+DELETE FROM auth_permission_provisions
+WHERE organization_id = @org_id::text
+  AND (principal_urn LIKE 'agent:%' OR principal_urn LIKE 'role:organization:%');
 
 -- name: OrgDeleteAgents :exec
 -- Agents RESTRICT owner membership deletion and are not project children.
@@ -371,8 +395,10 @@ VALUES
    'Support triage', now() - interval '2 days', NULL),
   (@agent3::uuid, @org_id::text, @owner3::text,
    'Retired documentation bot', NULL, now() - interval '5 days'),
-  (@agent4::uuid, @org_id::text, @owner1::text,
-   'Release notes assistant', NULL, NULL);
+  (@agent4::uuid, @org_id::text, @owner2::text,
+   'Release notes assistant', NULL, NULL),
+  (@agent5::uuid, @org_id::text, @owner5::text,
+   'Deploy watcher', NULL, NULL);
 
 -- name: OrgGlobalRoleURN :one
 -- Global roles are synced from WorkOS in real envs; tolerate their absence
@@ -387,3 +413,32 @@ DELETE FROM organization_role_assignments WHERE organization_id = @org_id::text;
 INSERT INTO organization_role_assignments
   (organization_id, workos_user_id, user_id, role_urn, workos_updated_at)
 VALUES (@org_id::text, @workos_user_id::text, @user_id::text, @role_urn::text, now());
+
+-- name: OrgSeedCustomDomain :exec
+INSERT INTO custom_domains (id, organization_id, domain, verified, activated, provisioner_kind,
+ dns_target_token, dns_configuration_status, dns_routing_method, dns_checked_at, health_status, health_checked_at)
+VALUES (@id, @org_id, @domain, TRUE, FALSE, 'local', @dns_target_token, 'unconfirmed', 'unknown', statement_timestamp(), 'healthy', statement_timestamp());
+
+-- name: OrgDeleteCustomDomains :exec
+DELETE FROM custom_domains WHERE organization_id = @org_id;
+
+-- name: OrgCountCustomDomainDiagnostics :one
+SELECT count(*) FROM custom_domains WHERE organization_id = @org_id
+ AND domain = @domain AND dns_configuration_status = 'unconfirmed' AND health_status = 'healthy'
+ AND dns_target_token IS NOT NULL AND dns_checked_at = health_checked_at;
+
+-- name: OrgPlantCustomDomainDependents :one
+-- Test fixture: the SET NULL reference must disappear before domain deletion.
+WITH target AS MATERIALIZED (
+  SELECT d.id AS domain_id, m.id AS meta_id, m.project_id, d.organization_id
+  FROM custom_domains d
+  JOIN meta_mcp_servers m ON m.organization_id = d.organization_id
+  WHERE d.organization_id = @org_id::text AND d.deleted IS FALSE
+    AND m.project_id = @project_id::uuid AND m.deleted IS FALSE
+  ORDER BY m.id LIMIT 1
+), endpoint AS (
+  INSERT INTO mcp_endpoints (project_id, custom_domain_id, meta_mcp_server_id, slug, is_domain_root)
+  SELECT project_id, domain_id, meta_id, 'reseed-domain-root', TRUE FROM target
+  RETURNING id
+)
+SELECT (SELECT count(*) FROM endpoint)::integer AS planted;

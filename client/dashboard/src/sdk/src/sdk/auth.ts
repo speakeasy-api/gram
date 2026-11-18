@@ -68,7 +68,7 @@ export class Auth extends ClientSDK {
    * Handles the authentication callback.
    */
   async callback(
-    request: AuthCallbackRequest,
+    request?: AuthCallbackRequest | undefined,
     options?: RequestOptions,
   ): Promise<AuthCallbackResponse | undefined> {
     return unwrapAsync(authCallback(

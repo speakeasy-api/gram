@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
@@ -130,7 +131,7 @@ func (s *Service) ensureHookChat(
 //
 // A human-driven session simply has no agent to record, which is not a failure.
 func (s *Service) linkActingAgent(ctx context.Context, queries *repo.Queries, chatID, projectID uuid.UUID) error {
-	agentID, ok := actingAgentID(ctx)
+	agentID, ok := contextvalues.EffectiveAgentID(ctx)
 	if !ok {
 		return nil
 	}
@@ -488,15 +489,17 @@ func (s *Service) insertMessageWithFallbackUpsertResult(
 	}
 
 	write := chat.MessageWrite{
-		Params:         msgParams,
-		BillingUserID:  metadata.UserID,
-		AssistantID:    uuid.Nil,
-		WorkloadSource: metering.WorkloadSourceHook,
-		UserEmail:      metadata.UserEmail,
-		Provider:       metadata.Provider,
-		HookHostname:   metadata.Hostname,
-		AccountType:    metadata.AccountType,
-		BillingMode:    metadata.BillingMode,
+		Params:            msgParams,
+		BillingUserID:     metadata.UserID,
+		AssistantID:       uuid.Nil,
+		WorkloadSource:    metering.WorkloadSourceHook,
+		UserEmail:         metadata.UserEmail,
+		Provider:          metadata.Provider,
+		InferenceProvider: "",
+		Lineage:           nil,
+		HookHostname:      metadata.Hostname,
+		AccountType:       metadata.AccountType,
+		BillingMode:       metadata.BillingMode,
 	}
 	writeMessage := func() (int64, error) {
 		if msgParams.MessageID.Valid && strings.HasPrefix(msgParams.MessageID.String, agentPromptCorrelationPrefix) {
@@ -616,15 +619,17 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 	}
 
 	writes := []chat.MessageWrite{{
-		Params:         msgParams,
-		BillingUserID:  metadata.UserID,
-		AssistantID:    uuid.Nil,
-		WorkloadSource: metering.WorkloadSourceHook,
-		UserEmail:      metadata.UserEmail,
-		Provider:       metadata.Provider,
-		HookHostname:   metadata.Hostname,
-		AccountType:    metadata.AccountType,
-		BillingMode:    metadata.BillingMode,
+		Params:            msgParams,
+		BillingUserID:     metadata.UserID,
+		AssistantID:       uuid.Nil,
+		WorkloadSource:    metering.WorkloadSourceHook,
+		UserEmail:         metadata.UserEmail,
+		Provider:          metadata.Provider,
+		InferenceProvider: "",
+		Lineage:           nil,
+		HookHostname:      metadata.Hostname,
+		AccountType:       metadata.AccountType,
+		BillingMode:       metadata.BillingMode,
 	}}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {

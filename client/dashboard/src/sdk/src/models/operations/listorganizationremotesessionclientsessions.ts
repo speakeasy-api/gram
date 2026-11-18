@@ -5,6 +5,7 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import {
   ListOrganizationRemoteSessionsResult,
@@ -17,13 +18,60 @@ export type ListOrganizationRemoteSessionClientSessionsSecurity = {
   apikeyHeaderGramKey?: string | undefined;
 };
 
+/**
+ * Filter by effective upstream authorization status. Access expiry alone does not expire a refreshable account.
+ */
+export const QueryParamStatus = {
+  Active: "active",
+  Expired: "expired",
+  All: "all",
+} as const;
+/**
+ * Filter by effective upstream authorization status. Access expiry alone does not expire a refreshable account.
+ */
+export type QueryParamStatus = ClosedEnum<typeof QueryParamStatus>;
+
+/**
+ * Ordering. Authorization expiry is the earliest hard authorization deadline and usable refresh/access deadline. Omit to retain ID ordering and UUID cursors.
+ */
+export const QueryParamSort = {
+  Newest: "newest",
+  Oldest: "oldest",
+  LastUsed: "last_used",
+  Expiry: "expiry",
+} as const;
+/**
+ * Ordering. Authorization expiry is the earliest hard authorization deadline and usable refresh/access deadline. Omit to retain ID ordering and UUID cursors.
+ */
+export type QueryParamSort = ClosedEnum<typeof QueryParamSort>;
+
 export type ListOrganizationRemoteSessionClientSessionsRequest = {
   /**
    * The remote_session_client id.
    */
   clientId: string;
   /**
-   * Pagination cursor.
+   * Case-insensitive literal identity search.
+   */
+  search?: string | undefined;
+  /**
+   * Filter by effective upstream authorization status. Access expiry alone does not expire a refreshable account.
+   */
+  status?: QueryParamStatus | undefined;
+  /**
+   * Inclusive creation lower bound.
+   */
+  createdAfter?: Date | undefined;
+  /**
+   * Exclusive creation upper bound.
+   */
+  createdBefore?: Date | undefined;
+  /**
+   * Ordering. Authorization expiry is the earliest hard authorization deadline and usable refresh/access deadline. Omit to retain ID ordering and UUID cursors.
+   */
+  sort?: QueryParamSort | undefined;
+  /**
+   * Pagination cursor. Preserve the filters and ordering when following it.
    */
   cursor?: string | undefined;
   /**
@@ -80,8 +128,23 @@ export function listOrganizationRemoteSessionClientSessionsSecurityToJSON(
 }
 
 /** @internal */
+export const QueryParamStatus$outboundSchema: z.ZodMiniEnum<
+  typeof QueryParamStatus
+> = z.enum(QueryParamStatus);
+
+/** @internal */
+export const QueryParamSort$outboundSchema: z.ZodMiniEnum<
+  typeof QueryParamSort
+> = z.enum(QueryParamSort);
+
+/** @internal */
 export type ListOrganizationRemoteSessionClientSessionsRequest$Outbound = {
   client_id: string;
+  search?: string | undefined;
+  status?: string | undefined;
+  created_after?: string | undefined;
+  created_before?: string | undefined;
+  sort?: string | undefined;
   cursor?: string | undefined;
   limit?: number | undefined;
   "Gram-Session"?: string | undefined;
@@ -96,6 +159,15 @@ export const ListOrganizationRemoteSessionClientSessionsRequest$outboundSchema:
   > = z.pipe(
     z.object({
       clientId: z.string(),
+      search: z.optional(z.string()),
+      status: z.optional(QueryParamStatus$outboundSchema),
+      createdAfter: z.optional(
+        z.pipe(z.date(), z.transform(v => v.toISOString())),
+      ),
+      createdBefore: z.optional(
+        z.pipe(z.date(), z.transform(v => v.toISOString())),
+      ),
+      sort: z.optional(QueryParamSort$outboundSchema),
       cursor: z.optional(z.string()),
       limit: z.optional(z.int()),
       gramSession: z.optional(z.string()),
@@ -104,6 +176,8 @@ export const ListOrganizationRemoteSessionClientSessionsRequest$outboundSchema:
     z.transform((v) => {
       return remap$(v, {
         clientId: "client_id",
+        createdAfter: "created_after",
+        createdBefore: "created_before",
         gramSession: "Gram-Session",
         gramKey: "Gram-Key",
       });

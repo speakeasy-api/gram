@@ -346,11 +346,19 @@ func TestEnvelopeCursorMCPRedactsRawTransport(t *testing.T) {
 // rewritten wherever a payload carries secret-bearing top-level keys, not only
 // when the structured mcp block was populated.
 func TestScrubRawPayloadRunsOnEveryEvent(t *testing.T) {
-	scrubbed := scrubRawPayload([]byte(`{"hook_event_name":"beforeShellExecution","command":"curl -H authorization: bearer sekrit-1"}`))
+	scrubbed := scrubRawPayload([]byte(`{"hook_event_name":"beforeShellExecution","command":"curl -H authorization: bearer sekrit-1"}`), agenthooks.ProviderCursor)
 	require.NotContains(t, string(scrubbed), "sekrit-1")
 
 	verbatim := []byte(`{"hook_event_name":"stop","final_message":"done",  "spacing":"preserved"}`)
-	require.Equal(t, string(verbatim), string(scrubRawPayload(verbatim)), "payloads needing no rewrite pass through verbatim")
+	require.Equal(t, string(verbatim), string(scrubRawPayload(verbatim, agenthooks.ProviderCursor)), "payloads needing no rewrite pass through verbatim")
+}
+
+// Only the OpenClaw shim's mcpServers list is dropped from the echo; another
+// provider's field of that name is its own and stays.
+func TestScrubRawPayloadDropsOnlyOpenClawMCPServers(t *testing.T) {
+	frame := []byte(`{"hook_event_name":"before_tool_call","mcpServers":[{"name":"speakeasy","url":"https://app.example.com/mcp"}]}`)
+	require.NotContains(t, string(scrubRawPayload(frame, agenthooks.ProviderOpenClaw)), "mcpServers")
+	require.Equal(t, string(frame), string(scrubRawPayload(frame, agenthooks.ProviderCursor)))
 }
 
 // TestSendRetriesTransientConnectionFailure pins the relay-level transport
@@ -423,6 +431,69 @@ func TestIngestDenyBlocksToolCall(t *testing.T) {
 	require.Equal(t, 0, res.ExitCode)
 	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
 	require.Contains(t, string(res.Stdout), "blocked by policy X")
+}
+
+// hookDenyOutput is the deny shape Claude Code and Codex read from a
+// PreToolUse or PermissionRequest hook's stdout.
+type hookDenyOutput struct {
+	SystemMessage      string `json:"systemMessage"`
+	HookSpecificOutput struct {
+		PermissionDecision       string `json:"permissionDecision"`
+		PermissionDecisionReason string `json:"permissionDecisionReason"`
+	} `json:"hookSpecificOutput"`
+}
+
+// TestIngestDenyMirrorsReasonForClaudeUser pins the Claude Code deny shape:
+// Claude shows permissionDecisionReason only to the model, so the reason is
+// mirrored into systemMessage for the user to read.
+func TestIngestDenyMirrorsReasonForClaudeUser(t *testing.T) {
+	const message = "blocked by policy X\nRequest access: https://example.test/request"
+	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+		return http.StatusOK, decision{Decision: "deny", Reason: "policy_denied", Message: message}
+	})
+	cfg := authedConfig(t, fs.URL)
+
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+
+	require.Equal(t, 0, res.ExitCode)
+	var out hookDenyOutput
+	require.NoError(t, json.Unmarshal(res.Stdout, &out))
+	require.Equal(t, "deny", out.HookSpecificOutput.PermissionDecision)
+	require.Equal(t, message, out.HookSpecificOutput.PermissionDecisionReason)
+	require.Equal(t, message, out.SystemMessage)
+}
+
+// TestCodexDenyShowsReasonOnce pins the Codex deny shape. Codex renders the
+// deny reason under "Blocked by hook" and renders systemMessage as a second
+// line beneath it, so a mirrored system message printed the block text (and
+// its request-access and block links) twice. The deny carries the reason
+// once, in permissionDecisionReason.
+func TestCodexDenyShowsReasonOnce(t *testing.T) {
+	const message = "This native MCP server is blocked.\nRequest access: https://example.test/request\nView information about why we blocked this request: https://example.test/blocks/1"
+	cases := map[string][]byte{
+		"PreToolUse":        []byte(`{"session_id":"sess-codex-deny","turn_id":"turn-1","cwd":"/work/repo","hook_event_name":"PreToolUse","permission_mode":"on-request","tool_name":"mcp__docs__read","tool_input":{"repo":"a/b"},"tool_use_id":"call_1"}`),
+		"PermissionRequest": []byte(`{"session_id":"sess-codex-deny","turn_id":"turn-1","cwd":"/work/repo","hook_event_name":"PermissionRequest","permission_mode":"on-request","tool_name":"shell","tool_input":{"command":["bash","-lc","ls"]},"tool_use_id":"call_2"}`),
+	}
+	for name, payload := range cases {
+		t.Run(name, func(t *testing.T) {
+			fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+				return http.StatusOK, decision{Decision: "deny", Reason: "policy_denied", Message: message}
+			})
+			cfg := authedConfig(t, fs.URL)
+			t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+			res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderCodex, payload, "--variant=cli")
+
+			require.Equal(t, 0, res.ExitCode)
+			var out hookDenyOutput
+			require.NoError(t, json.Unmarshal(res.Stdout, &out))
+			require.Equal(t, "deny", out.HookSpecificOutput.PermissionDecision)
+			require.Equal(t, message, out.HookSpecificOutput.PermissionDecisionReason)
+			require.Empty(t, out.SystemMessage, "Codex already shows the deny reason; a system message would repeat it")
+			require.Equal(t, 1, strings.Count(string(res.Stdout), "https://example.test/blocks/1"), "the block link must appear once")
+		})
+	}
 }
 
 func TestIngestDenyBlocksPrompt(t *testing.T) {
@@ -586,6 +657,81 @@ func TestRejectedCacheRetriesThroughOrgKeyWithCachedIdentity(t *testing.T) {
 	require.Equal(t, "developer@example.com", *fs.requests[1].Source.UserEmail)
 	require.NoFileExists(t, authFile)
 	require.FileExists(t, authFile+".reauth-needed")
+}
+
+// TestAgentKeyOutranksCachedSignIn: a plugin installed for an agent records
+// the agent's events under its own key even when a person has signed in on
+// the same machine, while the same cache still wins over a shared org key.
+func TestAgentKeyOutranksCachedSignIn(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
+	require.NoError(t, os.WriteFile(authFile, []byte("server_url="+fs.URL+"\napi_key=personal-key\nproject=default\nemail=developer@example.com\norg=org-1\n"), 0o600))
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+
+	agentCfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "org-1", HooksAPIKey: "agent-key", AgentKey: true, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	res := invoke(t, agentCfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	require.Equal(t, 0, res.ExitCode)
+
+	orgCfg := agentCfg
+	orgCfg.HooksAPIKey = "shared-org-key"
+	orgCfg.AgentKey = false
+	res = invoke(t, orgCfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	require.Equal(t, 0, res.ExitCode)
+
+	require.Equal(t, 2, fs.count())
+	require.Equal(t, "agent-key", fs.headers[0].Get("Gram-Key"), "an agent's key must outrank a cached personal sign-in")
+	require.Equal(t, "personal-key", fs.headers[1].Get("Gram-Key"), "a cached sign-in still outranks the shared org key")
+	require.FileExists(t, authFile, "using the agent's key must leave the person's sign-in in place")
+}
+
+// TestEnvKeyOutranksAgentKey: SPEAKEASY_AI_HOOKS_API_KEY stays the explicit
+// top-priority credential, even over an agent's baked key.
+func TestEnvKeyOutranksAgentKey(t *testing.T) {
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "env-key")
+
+	c, ok := resolveAuth(Config{ServerURL: "https://gram.test", ProjectSlug: "default", OrgID: "org-1", HooksAPIKey: "agent-key", AgentKey: true, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""})
+	require.True(t, ok)
+	require.Equal(t, "env-key", c.APIKey)
+	require.Equal(t, credEnv, c.Source)
+}
+
+// TestAgentKeyReadFromPluginConfig: the agent_key flag in speakeasy.json
+// reaches the relay config, and an env-supplied org key, which is never an
+// agent's, clears it.
+func TestAgentKeyReadFromPluginConfig(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "speakeasy.json")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(`{"server_url":"https://gram.test","project":"default","org":"org-1","hooks_api_key":"agent-key","agent_key":true}`), 0o600))
+
+	cfg, _ := SplitInlineFlags(Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, []string{"--config=" + cfgPath})
+	require.Equal(t, "agent-key", cfg.HooksAPIKey)
+	require.True(t, cfg.AgentKey)
+	t.Setenv("SPEAKEASY_AI_HOOKS_ORG_KEY", "")
+	t.Setenv("GRAM_HOOKS_ORG_KEY", "")
+	require.True(t, LoadConfig(cfg).AgentKey)
+
+	t.Setenv("SPEAKEASY_AI_HOOKS_ORG_KEY", "env-org-key")
+	loaded := LoadConfig(cfg)
+	require.Equal(t, "env-org-key", loaded.HooksAPIKey)
+	require.False(t, loaded.AgentKey)
+}
+
+// TestInstallRouteReadFromPluginConfig: the install_route in speakeasy.json
+// reaches the relay config, and the environment can override it.
+func TestInstallRouteReadFromPluginConfig(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "speakeasy.json")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(`{"server_url":"https://gram.test","project":"default","install_route":"download"}`), 0o600))
+
+	cfg, _ := SplitInlineFlags(Config{}, []string{"--config=" + cfgPath})
+	require.Equal(t, "download", cfg.InstallRoute)
+	t.Setenv("SPEAKEASY_AI_HOOKS_INSTALL_ROUTE", "")
+	t.Setenv("GRAM_HOOKS_INSTALL_ROUTE", "")
+	require.Equal(t, "download", LoadConfig(cfg).InstallRoute)
+
+	t.Setenv("SPEAKEASY_AI_HOOKS_INSTALL_ROUTE", "mdm")
+	require.Equal(t, "mdm", LoadConfig(cfg).InstallRoute)
 }
 
 // TestServerErrorBlocksToolCall pins the non-2xx posture with credentials
@@ -841,6 +987,7 @@ func TestWritePluginMatchesPublishedEventSets(t *testing.T) {
 				ProjectSlug:  "default",
 				OrgID:        "org-1",
 				HooksAPIKey:  "shared-key",
+				AgentKey:     false,
 				BrowserLogin: false,
 				BinaryPath:   "/tmp/speakeasy-hooks",
 			})
@@ -878,6 +1025,7 @@ func TestWritePluginOpenCodeRendersShim(t *testing.T) {
 		ProjectSlug:  "default",
 		OrgID:        "org-1",
 		HooksAPIKey:  "shared-key",
+		AgentKey:     false,
 		BrowserLogin: false,
 		BinaryPath:   "/tmp/speakeasy-hooks",
 	})
@@ -894,6 +1042,84 @@ func TestWritePluginOpenCodeRendersShim(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(b, &cfg))
 	require.Equal(t, "https://gram.test", cfg.ServerURL)
+}
+
+// TestWritePluginMarksAgentKey: a package written for an agent records the
+// agent_key marker, so its key outranks a cached personal sign-in.
+func TestWritePluginMarksAgentKey(t *testing.T) {
+	for _, agent := range []bool{true, false} {
+		dir := t.TempDir()
+		err := WritePlugin(t.Context(), "openclaw", dir, PluginConfig{
+			ServerURL:    "https://gram.test",
+			SiteURL:      "",
+			ProjectSlug:  "default",
+			OrgID:        "org-1",
+			HooksAPIKey:  "install-key",
+			AgentKey:     agent,
+			BrowserLogin: false,
+			BinaryPath:   "/tmp/speakeasy-hooks",
+		})
+		require.NoError(t, err)
+		info, err := os.Stat(filepath.Join(dir, configFileName))
+		require.NoError(t, err)
+		require.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "speakeasy.json carries the key")
+
+		cfg, _ := SplitInlineFlags(Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, []string{"--config=" + filepath.Join(dir, configFileName)})
+		require.Equal(t, "install-key", cfg.HooksAPIKey)
+		require.Equal(t, agent, cfg.AgentKey)
+	}
+}
+
+// TestAgentKeySessionStartSkipsBrowserLogin: an agent's plugin never opens a
+// browser sign-in, even with browser login on and no cached sign-in, because
+// its own key outranks any cache that sign-in would write.
+func TestAgentKeySessionStartSkipsBrowserLogin(t *testing.T) {
+	setSpoolStateHome(t)
+	unsetClaudeLaunch(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("TMPDIR", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	t.Setenv("SPEAKEASY_AI_HOOKS_DISABLE_LOCAL_AUTH", "")
+	t.Setenv("SPEAKEASY_AI_HOOKS_LOGIN_FORCE", "")
+	t.Setenv("SPEAKEASY_AI_HOOKS_LOGIN_TIMEOUT_SECONDS", "1")
+	forceInteractiveEnv(t)
+	var opened atomic.Int32
+	orig := openBrowser
+	t.Cleanup(func() { openBrowser = orig })
+	openBrowser = func(string) { opened.Add(1) }
+
+	fs := newFakeServer(t, nil)
+	cfg := Config{ServerURL: fs.URL, SiteURL: "", ProjectSlug: "default", OrgID: "org-1", HooksAPIKey: "agent-key", AgentKey: true, BrowserLogin: true, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	payload := []byte(`{"session_id":"agent-session","hook_event_name":"SessionStart","source":"startup"}`)
+	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderClaudeCode, payload, "--variant=cli")
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Zero(t, opened.Load(), "an agent's plugin must not start a browser sign-in")
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	require.NotEmpty(t, fs.headers)
+	require.Equal(t, "agent-key", fs.headers[len(fs.headers)-1].Get("Gram-Key"))
+}
+
+// TestAgentKeyPluginSkipsLoginNudge: an agent's plugin with no usable key
+// still fails the prompt open, but never asks the person to sign in.
+func TestAgentKeyPluginSkipsLoginNudge(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_DISABLE_LOCAL_AUTH", "1")
+	t.Setenv("TMPDIR", t.TempDir())
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	cfg := Config{ServerURL: fs.URL, SiteURL: "", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", AgentKey: true, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/user_prompt_submit.json")
+	require.Equal(t, 0, res.ExitCode)
+	require.NotContains(t, string(res.Stdout), "additionalContext")
+	require.NotContains(t, string(res.Stdout), "login")
 }
 
 // unsetClaudeLaunch clears the env a live Claude Code session exports. Launch
@@ -1878,4 +2104,55 @@ func TestMCPInventoryEnvelopeReportsIncompleteSnapshot(t *testing.T) {
 	require.Len(t, payload.Data.McpInventory, 1)
 	require.NotNil(t, payload.Data.McpInventoryCollected)
 	require.False(t, *payload.Data.McpInventoryCollected)
+}
+
+// TestJoinMCPServerCommandPreservesArgBoundaries: flattening argv with raw
+// spaces would let a secret argument containing whitespace leak its remaining
+// words when redactCommand re-tokenizes the command — each argument is
+// shell-quoted, and redaction masks a quoted argument whole.
+func TestJoinMCPServerCommandPreservesArgBoundaries(t *testing.T) {
+	joined := joinMCPServerCommand("npx", []string{"-y", "@example/mcp", "--token", "my secret value"})
+	// shellQuoteArg double-quotes on Windows, so build the expected quoted
+	// argument with it to stay platform-neutral; the redaction assertions
+	// below pin the masking independently of the helper.
+	require.Equal(t, "npx -y @example/mcp --token "+shellQuoteArg("my secret value"), joined)
+	redacted := redactCommand(joined)
+	require.NotContains(t, redacted, "secret")
+	require.NotContains(t, redacted, "value")
+	require.Contains(t, redacted, "--token ***")
+	require.Contains(t, redacted, "@example/mcp", "non-secret arguments keep their identity")
+}
+
+// TestRedactCommandMasksSecretsInsideMultiWordFields: the quote-aware
+// splitter can return a field of several words (an unterminated quote
+// swallows the rest of the line; a quoted argument keeps its spaces), and
+// the masking patterns are anchored at a field's start. A secret that is not
+// at the start of such a field must still be masked — the old word-level pass
+// runs over any multi-word field that matched no pattern.
+func TestRedactCommandMasksSecretsInsideMultiWordFields(t *testing.T) {
+	// An apostrophe in a path leaves the quote open, so the rest of the line
+	// (including the secret flag and value) is one field.
+	got := redactCommand(`node /tmp/o'brien/server.js --api-key sk-live-abc123 serve`)
+	require.NotContains(t, got, "sk-live-abc123")
+	require.Contains(t, got, "***")
+	require.Contains(t, got, "node")
+
+	// An apostrophe inside an argument.
+	got = redactCommand(`npx server --token o'secret-99 tail`)
+	require.NotContains(t, got, "secret-99")
+
+	// A quoted sh -c wrapper argument from joinMCPServerCommand.
+	got = redactCommand(`sh -c 'cd /app && API_KEY=sk-live-zzz9 node server.js'`)
+	require.NotContains(t, got, "sk-live-zzz9")
+	require.Contains(t, got, "API_KEY=***")
+}
+
+// TestRedactCommandMasksNewlineSeparatedSecrets: CR/LF are command
+// whitespace, so a newline-separated sh -c wrapper argument is word-level
+// redacted rather than passing as one field.
+func TestRedactCommandMasksNewlineSeparatedSecrets(t *testing.T) {
+	got := redactCommand("sh -c 'true\nAPI_KEY=sk-live-nl99 node server.js'")
+	require.NotContains(t, got, "sk-live-nl99")
+	require.Contains(t, got, "API_KEY=***")
+	require.Contains(t, got, "node server.js")
 }

@@ -38,3 +38,31 @@ func TestResourceScopesFollowLoginOwnership(t *testing.T) {
 	withoutLogin.UserSessionIssuerID = uuid.NullUUID{}
 	require.Equal(t, []string{"pinned"}, snap.resourceScopes(withoutLogin)(sibling).Pin)
 }
+
+// Typed offers own the server's resource without a legacy login-issuer link.
+func TestResourceScopesFollowTypedOffersUnderEnforcement(t *testing.T) {
+	t.Parallel()
+	project, issuer, offered, legacy := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	const upstream = "https://mcp.example/mcp"
+	server := repo.ListEligibleServersRow{
+		ID: uuid.New(), ProjectID: project, IssuerID: issuer,
+		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+		RemoteUrl:           pgtype.Text{String: upstream, Valid: true},
+		TypedAuthEnforced:   true, OfferedClientIds: []uuid.UUID{offered},
+	}
+	snap := &snapshot{
+		resources: map[resourceKey]repo.ListRemoteProtectedResourceScopesRow{
+			{projectID: project, url: upstream}: {ScopeOverride: []string{"protected:read"}},
+		},
+		owners:         map[uuid.UUID]map[uuid.UUID]bool{server.ID: {legacy: true}},
+		discoverScopes: true, now: time.Now(),
+	}
+	scopes := snap.resourceScopes(server)
+	require.Equal(t, []string{"protected:read"}, scopes(offered).Pin)
+	require.Empty(t, scopes(legacy).Pin, "a legacy link does not grant ownership without an offer")
+	client := repo.ListIssuerClientsRow{ID: offered, RemoteSessionIssuerID: issuer, ClientID: "offered", IssuerScopesSupported: []string{"fallback:write"}}
+	id, requested, state := resolveClient(server, upstream, "", []repo.ListIssuerClientsRow{client}, nil, scopes)
+	require.Equal(t, "offered", id)
+	require.Equal(t, ClientBindingSingle, state)
+	require.Equal(t, []string{"protected:read"}, requested, "XAA confirmation must not fall back to issuer metadata")
+}

@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	goahttp "goa.design/goa/v3/http"
+	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
@@ -41,6 +42,49 @@ import (
 // payload.
 const decodeBodySampleLimit = 1024
 
+// maxHooksRequestBodyBytes bounds both the wire and the decompressed size of
+// every hooks request body. Hooks are reachable before authentication, so a
+// small gzip body must not be able to expand without limit in memory. It
+// matches the OTLP export limit of the otel ingest service, since the hooks
+// logs and metrics routes carry the same payloads. On the wire the listener's
+// constants.MaxRequestBodyBytes is the lower ceiling; this value is what a
+// gzip body may expand to.
+const maxHooksRequestBodyBytes = 20 * constants.MiB
+
+var errHooksRequestBodyTooLarge = errors.New("hooks request body too large")
+
+// readAtMost reads r fully but never buffers more than limit+1 bytes,
+// returning errHooksRequestBodyTooLarge when r holds more than limit bytes.
+func readAtMost(r io.Reader, limit int64) ([]byte, error) {
+	b, err := io.ReadAll(io.LimitReader(r, limit+1))
+	if err != nil {
+		return nil, fmt.Errorf("read body: %w", err)
+	}
+	if int64(len(b)) > limit {
+		return nil, errHooksRequestBodyTooLarge
+	}
+	return b, nil
+}
+
+// hooksErrorFormatter keeps Goa's default error body but answers
+// request_too_large with 413. The hooks design does not declare that error,
+// so Goa would otherwise encode it as 400.
+func hooksErrorFormatter(ctx context.Context, err error) goahttp.Statuser {
+	resp := goahttp.NewErrorResponse(ctx, err)
+	if se, ok := errors.AsType[*goa.ServiceError](err); ok && se.Name == string(oops.CodeRequestTooLarge) {
+		if er, ok := resp.(*goahttp.ErrorResponse); ok {
+			return &requestTooLargeResponse{ErrorResponse: er}
+		}
+	}
+	return resp
+}
+
+type requestTooLargeResponse struct {
+	*goahttp.ErrorResponse
+}
+
+func (*requestTooLargeResponse) StatusCode() int { return http.StatusRequestEntityTooLarge }
+
 const claudeShadowMCPMetadataUnavailableReason = "Speakeasy could not verify this MCP tool call. Try restarting Claude, or running /reload-plugins."
 
 // Diagnostic codes appended to claudeShadowMCPMetadataUnavailableReason. The
@@ -63,6 +107,8 @@ type decoderFunc func(v any) error
 func (f decoderFunc) Decode(v any) error { return f(v) }
 
 // newHooksRequestDecoder returns a Goa request decoder factory that:
+//   - rejects bodies over the route's byte limit, on the wire and after
+//     decompression, without buffering more than the limit,
 //   - transparently decompresses gzip-encoded request bodies (the OTel
 //     Collector otlphttp exporter defaults to compression: gzip),
 //   - dispatches to formDecoder for x-www-form-urlencoded bodies,
@@ -75,18 +121,33 @@ func newHooksRequestDecoder(logger *slog.Logger) func(r *http.Request) goahttp.D
 		contentType := r.Header.Get("Content-Type")
 		contentEncoding := r.Header.Get("Content-Encoding")
 		skillUpload := r.URL.Path == "/rpc/hooks.uploadSkillContent"
+		limit := int64(maxHooksRequestBodyBytes)
+		if skillUpload {
+			limit = maxSkillUploadRequestBodyBytes
+		}
 		logBody := func(body []byte) []byte {
 			if skillUpload {
 				return nil
 			}
 			return body
 		}
-		if skillUpload && r.Body != nil {
-			r.Body = http.MaxBytesReader(nil, r.Body, maxSkillUploadRequestBodyBytes)
+		tooLarge := func(what string) goahttp.Decoder {
+			err := oops.E(oops.CodeRequestTooLarge, errHooksRequestBodyTooLarge, "hooks request %s exceeds %d bytes", what, limit).AsGoa(ctx)
+			return decoderFunc(func(_ any) error {
+				logDecodeFailure(ctx, logger, err, nil, contentType, contentEncoding)
+				return err //nolint:wrapcheck // Goa keeps the 413 status only for an unwrapped service error.
+			})
 		}
 
-		raw, err := io.ReadAll(r.Body)
+		if r.ContentLength > limit {
+			_ = r.Body.Close()
+			return tooLarge("body")
+		}
+		raw, err := readAtMost(r.Body, limit)
 		_ = r.Body.Close()
+		if errors.Is(err, errHooksRequestBodyTooLarge) {
+			return tooLarge("body")
+		}
 		if err != nil {
 			wrapped := fmt.Errorf("read hooks request body: %w", err)
 			return decoderFunc(func(_ any) error {
@@ -105,23 +166,15 @@ func newHooksRequestDecoder(logger *slog.Logger) func(r *http.Request) goahttp.D
 					return wrapped
 				})
 			}
-			var reader io.Reader = gz
-			if skillUpload {
-				reader = io.LimitReader(gz, maxSkillUploadRequestBodyBytes+1)
-			}
-			decompressed, gerr := io.ReadAll(reader)
+			decompressed, gerr := readAtMost(gz, limit)
 			_ = gz.Close()
+			if errors.Is(gerr, errHooksRequestBodyTooLarge) {
+				return tooLarge("decompressed body")
+			}
 			if gerr != nil {
 				wrapped := fmt.Errorf("decompress gzip hooks request body: %w", gerr)
 				return decoderFunc(func(_ any) error {
 					logDecodeFailure(ctx, logger, wrapped, logBody(raw), contentType, contentEncoding)
-					return wrapped
-				})
-			}
-			if skillUpload && len(decompressed) > maxSkillUploadRequestBodyBytes {
-				wrapped := fmt.Errorf("decompressed skill content upload exceeds %d bytes", maxSkillUploadRequestBodyBytes)
-				return decoderFunc(func(_ any) error {
-					logDecodeFailure(ctx, logger, wrapped, nil, contentType, contentEncoding)
 					return wrapped
 				})
 			}
@@ -443,6 +496,10 @@ func (s *Service) handleSessionStart(ctx context.Context, ev *hookevents.Session
 	continueVal := true
 	result := makeHookResult(ev.RawEventType)
 	result.Continue = &continueVal
+	if s.versionPolicy.Latest != nil {
+		notice := legacyHooksNotice
+		result.SystemMessage = &notice
+	}
 	return result, nil
 }
 
@@ -713,17 +770,12 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 		Scopes:         []string{},
 		RequiredScopes: []string{"hooks"},
 	}
-	ctx, err = s.auth.Authorize(ctx, projectSlug, projectScheme)
+	ctx, err = s.authorizeHooksProject(ctx, projectSlug, projectScheme)
 	if err != nil {
 		if isAgentActor(ctx) {
 			return ctx, fmt.Errorf("%w: %w", errAgentHooksDenied, err)
 		}
 		return ctx, fmt.Errorf("authorize hook project slug: %w", err)
-	}
-	// The hooks grant may be bounded to one project, so it is checked only
-	// once the project slug has resolved.
-	if err := s.requireAgentHooksIngest(ctx); err != nil {
-		return ctx, fmt.Errorf("%w: %w", errAgentHooksDenied, err)
 	}
 	return ctx, nil
 }
@@ -1227,6 +1279,28 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	// can't enforce the policy — deny with a retry-or-restart message so the
 	// user knows the guard is fail-closed rather than silently allowing.
 	entries, cacheErr := s.resolveMCPListForEnforcement(ctx, payload, sessionID)
+	// The built-in blocklist (a project without a blocking policy, so no
+	// policy ID) allows servers until an administrator denies one. Without
+	// the list there is no server to match, and failing closed would block
+	// every MCP call in projects that never chose to block anything.
+	if cacheErr != nil && policy.ID == "" {
+		s.logger.With(
+			attr.SlogHookSource("claude"),
+			attr.SlogHookEvent(payload.HookEventName),
+			attr.SlogOrganizationID(metadata.GramOrgID),
+			attr.SlogProjectID(metadata.ProjectID),
+			attr.SlogGenAIConversationID(sessionID),
+			attr.SlogToolName(rawToolName),
+		).InfoContext(ctx, "allowing claude tool call: no cached MCP list under the built-in blocklist",
+			attr.SlogEvent("claude_hook_allowed_no_mcp_list"),
+			attr.SlogError(cacheErr),
+			attr.SlogRiskPolicyName(policy.Name),
+		)
+		if output != nil {
+			output.PermissionDecision = &allow
+		}
+		return result, nil
+	}
 	if cacheErr != nil {
 		auditReason := "missing MCP list snapshot for session"
 		userReason := "Speakeasy blocked this tool call: MCP server configuration is not available yet. Please retry in a moment, or restart Claude Code if the issue persists."
@@ -1288,6 +1362,19 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 			evidence.ServerIdentity = matched.Command
 		}
 	}
+	// Onboarding takes effect at once: a server the project serves an
+	// official version of is blocked for direct use whatever the policy's
+	// default, and no bypass grant on the direct URL lifts it, unless an
+	// administrator kept direct connections working. A Speakeasy-hosted URL
+	// is never the direct connection.
+	hasOfficialServer := false
+	if matched != nil && matched.URL != "" {
+		if official, ok := s.shadowMCPOfficialServer(ctx, metadata.GramOrgID, metadata.ProjectID, matched.URL); ok && !official.DirectAccessAllowed &&
+			!s.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, metadata.GramOrgID) {
+			hasOfficialServer = true
+			detail = shadowMCPOfficialServerDetail(official, matched.URL)
+		}
+	}
 	// A non-empty detail means this call is blocked. Return immediately for
 	// clean allows; otherwise give a URL-scoped bypass grant a chance to allow
 	// the call before recording and returning the block below.
@@ -1300,7 +1387,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 
 	// Bypass grants are a block_all concept: under allow-all the blocked-list
 	// membership above is the whole check.
-	if !policy.IsAllowAll() {
+	if !policy.IsAllowAll() && !hasOfficialServer {
 		if _, allowed := s.canBypassPolicy(ctx, metadata.GramOrgID, metadata.UserID, policy.ID, evidence, mcpToolName); allowed {
 			matchedURL, matchedCommand := "", ""
 			if matched != nil {
@@ -1474,6 +1561,12 @@ func (s *Service) recordShadowMCPBlockFinding(
 	detail string,
 ) (uuid.UUID, uuid.UUID, bool) {
 	if s.repo == nil || policy == nil || payload.SessionID == nil || payload.ToolUseID == nil || s.isHookDuplicate(ctx) || isVerdictSuperseded(ctx) {
+		return uuid.Nil, uuid.Nil, false
+	}
+	// The built-in blocklist has no policy row, so there is no risk result to
+	// attach the block to. The ClickHouse record and the durable block row
+	// still capture it.
+	if policy.ID == "" {
 		return uuid.Nil, uuid.Nil, false
 	}
 

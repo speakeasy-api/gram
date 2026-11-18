@@ -502,7 +502,6 @@ func riskFindingCreatedWebhook(row chrepo.RiskFindingRow) (*RiskFindingCreatedEv
 		return nil, fmt.Errorf("parse finding %s chat message id: %w", row.ID, err)
 	}
 	return &RiskFindingCreatedEvent{
-		ProjectID:      projectID,
 		OrganizationID: row.OrganizationID,
 		Event: outbox.IdentifiedWebhookEvent[events.RiskFindingCreatedPayloadV1]{
 			ID: events.RiskFindingCreatedEventID(row.ID),

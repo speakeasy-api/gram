@@ -121,7 +121,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// is acknowledged. It never reaches transcript storage or policy evaluation.
 	if len(h.keys) == 0 {
 		var probe Frame
-		if json.Unmarshal(body, &probe) == nil && probe.Type == "prompt" && probe.Source.Application == "config-test" {
+		if json.Unmarshal(body, &probe) == nil && probe.Type == frameTypePrompt && probe.Source.Application == "config-test" {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"action":"allow"}`))
 			return
@@ -143,7 +143,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	verdict := allowVerdict()
-	if frame.Type == "prompt" {
+	if frame.Type == frameTypePrompt || frame.Type == frameTypeToolCall {
 		verdict, err = h.processor.Process(r.Context(), h.config, frame)
 		switch {
 		case err == nil:

@@ -36,7 +36,7 @@ func TestScopesCompile(t *testing.T) {
 func TestAllCoversCategoriesExceptCustomWithNoDuplicates(t *testing.T) {
 	t.Parallel()
 
-	seen := map[categories.Category]struct{}{}
+	seen := make(map[categories.Category]struct{})
 	for _, rec := range All() {
 		_, ok := seen[rec.Category]
 		require.Falsef(t, ok, "duplicate category %q", rec.Category)

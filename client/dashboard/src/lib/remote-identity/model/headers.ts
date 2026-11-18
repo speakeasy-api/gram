@@ -9,7 +9,7 @@ import type { IdentityMode } from "./identity";
 export const IdentityErrors = {
   /** No Identity is selected, so nothing may set a static Authorization. */
   NoAuthorization:
-    "Switch to Service Account to use a static Authorization credential.",
+    "Switch to a shared credential to use a static Authorization credential.",
   /** User Identity or a Service Account owns the row, so a hand-written one may not. */
   ManagedAuthorization: "Authorization is managed in the Identity section.",
 } as const;

@@ -53,7 +53,7 @@ export type WorkloadPlatform = {
    */
   key: string;
   /**
-   * The access rule a catalog platform produces.
+   * The access rule a catalog platform produces by default, and the others the operator may choose instead.
    */
   subject: WorkloadPlatformSubject;
   /**

@@ -19,8 +19,17 @@ import (
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
-// attachIssuerToolset creates a toolset in projectID attached to issuerID.
+// attachIssuerToolset creates a toolset in projectID hosted by a canonical MCP server attached to issuerID.
 func attachIssuerToolset(t *testing.T, ctx context.Context, ti *testInstance, projectID, issuerID uuid.UUID, slug string) toolsetsrepo.Toolset {
+	t.Helper()
+
+	toolset := createPlainToolset(t, ctx, ti, projectID, slug)
+	hostToolset(t, ctx, ti, toolset, uuid.NullUUID{UUID: issuerID, Valid: true})
+	return toolset
+}
+
+// createPlainToolset creates a toolset nothing hosts.
+func createPlainToolset(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, slug string) toolsetsrepo.Toolset {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -28,14 +37,23 @@ func attachIssuerToolset(t *testing.T, ctx context.Context, ti *testInstance, pr
 
 	toolset, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectID,
-		Name: slug, Slug: slug, Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{}, McpSlug: pgtype.Text{}, McpEnabled: false,
-	})
-	require.NoError(t, err)
-	_, err = toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true}, Slug: toolset.Slug, ProjectID: projectID,
+		Name: slug, Slug: slug, Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{},
 	})
 	require.NoError(t, err)
 	return toolset
+}
+
+// hostToolset gives a toolset a private canonical MCP server, without endpoints, on issuerID.
+func hostToolset(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsetsrepo.Toolset, issuerID uuid.NullUUID) {
+	t.Helper()
+
+	_, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: toolset.ID, ProjectID: toolset.ProjectID,
+		Name: pgtype.Text{String: toolset.Name, Valid: true}, Slug: pgtype.Text{String: toolset.Slug, Valid: true},
+		EnvironmentID: uuid.NullUUID{}, UserSessionIssuerID: issuerID, RemoteMcpServerID: uuid.NullUUID{},
+		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ToolVariationsGroupID: uuid.NullUUID{}, Visibility: mcpservers.VisibilityPrivate,
+	})
+	require.NoError(t, err)
 }
 
 // attachIssuerMCPServer creates an MCP server in projectID, backed by toolset
@@ -65,8 +83,8 @@ func TestOrganizationUserSessionIssuerListMcpServers(t *testing.T) {
 	otherIssuerID := createOrganizationIssuer(t, ctx, ti, "other-issuer")
 	sibling := seedSiblingProject(t, ctx, ti, "attached-sibling")
 
-	// A toolset served through an MCP server is listed once, as the server.
-	wrapped := attachIssuerToolset(t, ctx, ti, projectID, issuerID, "wrapped-toolset")
+	// A toolset backing an MCP server is listed through that server, and a hosted toolset as its canonical server.
+	wrapped := createPlainToolset(t, ctx, ti, projectID, "wrapped-toolset")
 	serverID := attachIssuerMCPServer(t, ctx, ti, projectID, issuerID, wrapped, "attached-server")
 	toolset := attachIssuerToolset(t, ctx, ti, sibling.projectID, issuerID, "sibling-toolset")
 	meta, err := metamcprepo.New(ti.conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{
@@ -85,7 +103,7 @@ func TestOrganizationUserSessionIssuerListMcpServers(t *testing.T) {
 	project := listedProjectName(t, listed.Items, serverID.String())
 	require.ElementsMatch(t, []*orggen.UserSessionIssuerMcpServer{
 		{Kind: "mcp_server", ID: serverID.String(), Name: "attached-server", Slug: new("attached-server"), ProjectID: projectID.String(), ProjectName: project},
-		{Kind: "toolset", ID: toolset.ID.String(), Name: "sibling-toolset", Slug: new("sibling-toolset"), ProjectID: sibling.projectID.String(), ProjectName: "attached-sibling"},
+		{Kind: "mcp_server", ID: toolset.ID.String(), Name: "sibling-toolset", Slug: new("sibling-toolset"), ProjectID: sibling.projectID.String(), ProjectName: "attached-sibling"},
 		{Kind: "meta_mcp_server", ID: meta.ID.String(), Name: "attached-meta", Slug: nil, ProjectID: projectID.String(), ProjectName: project},
 	}, listed.Items)
 }
@@ -164,6 +182,8 @@ func TestOrganizationUserSessionIssuerListMcpServersHidesDeletedAttachments(t *t
 
 	deleted := attachIssuerToolset(t, ctx, ti, *authCtx.ProjectID, issuerID, "deleted-toolset")
 	_, err := toolsetsrepo.New(ti.conn).DeleteToolset(ctx, toolsetsrepo.DeleteToolsetParams{Slug: deleted.Slug, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	_, err = mcpserversrepo.New(ti.conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: deleted.ID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
 	attachIssuerToolset(t, ctx, ti, sibling.projectID, issuerID, "deleted-project-toolset")
 	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, sibling.projectID)

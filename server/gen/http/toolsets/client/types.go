@@ -48,18 +48,20 @@ type UpdateToolsetRequestBody struct {
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
 	// List of resource URNs to include in the toolset
 	ResourceUrns []string `form:"resource_urns,omitempty" json:"resource_urns,omitempty" xml:"resource_urns,omitempty"`
-	// Deprecated: use mcpServers.update. Whether the toolset is enabled for MCP
+	// Deprecated: rejected; use mcpServers.update. Whether the toolset is enabled
+	// for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
-	// Deprecated: use mcpEndpoints.create or mcpEndpoints.update. The slug of the
-	// MCP to use for the toolset
+	// Deprecated: rejected; use mcpEndpoints.create or mcpEndpoints.update. The
+	// slug of the MCP to use for the toolset
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
-	// Deprecated: use mcpServers.update. Whether the toolset is public in MCP
+	// Deprecated: rejected; use mcpServers.update. Whether the toolset is public
+	// in MCP
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
-	// Deprecated: use mcpServers.update. Where the hosted MCP is accessible:
-	// public_only, dual, or private_only
+	// Deprecated: rejected; use mcpServers.update. Where the hosted MCP is
+	// accessible: public_only, dual, or private_only
 	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
-	// Deprecated: use mcpEndpoints.create or mcpEndpoints.update. The ID of the
-	// custom domain to use for the toolset
+	// Deprecated: rejected; use mcpEndpoints.create or mcpEndpoints.update. The ID
+	// of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
@@ -83,13 +85,6 @@ type UpdateExternalOAuthServerRequestBody struct {
 	// authorization_server_issuer and metadata; clients may need to register or
 	// authenticate again after a mode change.
 	AuthorizationServerIssuer *string `form:"authorization_server_issuer,omitempty" json:"authorization_server_issuer,omitempty" xml:"authorization_server_issuer,omitempty"`
-}
-
-// SetUserSessionIssuerRequestBody is the type of the "toolsets" service
-// "setUserSessionIssuer" endpoint HTTP request body.
-type SetUserSessionIssuerRequestBody struct {
-	// The user_session_issuer id to link, or null to unlink.
-	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 }
 
 // SetToolVariationsGroupRequestBody is the type of the "toolsets" service
@@ -124,8 +119,6 @@ type CreateToolsetResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The metadata surrounding oauth enabled tools within this server
 	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata,omitempty" json:"oauth_enablement_metadata,omitempty" xml:"oauth_enablement_metadata,omitempty"`
 	// The tools in this toolset
@@ -157,8 +150,8 @@ type CreateToolsetResponseBody struct {
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	// The id of the user_session_issuer wired to this toolset's hosted MCP server.
+	// Set via mcpServers.update; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -212,8 +205,6 @@ type UpdateToolsetResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The metadata surrounding oauth enabled tools within this server
 	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata,omitempty" json:"oauth_enablement_metadata,omitempty" xml:"oauth_enablement_metadata,omitempty"`
 	// The tools in this toolset
@@ -245,8 +236,8 @@ type UpdateToolsetResponseBody struct {
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	// The id of the user_session_issuer wired to this toolset's hosted MCP server.
+	// Set via mcpServers.update; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -286,8 +277,6 @@ type GetToolsetResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The metadata surrounding oauth enabled tools within this server
 	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata,omitempty" json:"oauth_enablement_metadata,omitempty" xml:"oauth_enablement_metadata,omitempty"`
 	// The tools in this toolset
@@ -319,8 +308,8 @@ type GetToolsetResponseBody struct {
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	// The id of the user_session_issuer wired to this toolset's hosted MCP server.
+	// Set via mcpServers.update; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -388,8 +377,6 @@ type CloneToolsetResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The metadata surrounding oauth enabled tools within this server
 	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata,omitempty" json:"oauth_enablement_metadata,omitempty" xml:"oauth_enablement_metadata,omitempty"`
 	// The tools in this toolset
@@ -421,8 +408,8 @@ type CloneToolsetResponseBody struct {
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	// The id of the user_session_issuer wired to this toolset's hosted MCP server.
+	// Set via mcpServers.update; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -462,8 +449,6 @@ type AddExternalOAuthServerResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The metadata surrounding oauth enabled tools within this server
 	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata,omitempty" json:"oauth_enablement_metadata,omitempty" xml:"oauth_enablement_metadata,omitempty"`
 	// The tools in this toolset
@@ -495,8 +480,8 @@ type AddExternalOAuthServerResponseBody struct {
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	// The id of the user_session_issuer wired to this toolset's hosted MCP server.
+	// Set via mcpServers.update; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -536,8 +521,6 @@ type UpdateExternalOAuthServerResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The metadata surrounding oauth enabled tools within this server
 	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata,omitempty" json:"oauth_enablement_metadata,omitempty" xml:"oauth_enablement_metadata,omitempty"`
 	// The tools in this toolset
@@ -569,8 +552,8 @@ type UpdateExternalOAuthServerResponseBody struct {
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	// The id of the user_session_issuer wired to this toolset's hosted MCP server.
+	// Set via mcpServers.update; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -610,8 +593,6 @@ type RemoveOAuthServerResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The metadata surrounding oauth enabled tools within this server
 	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata,omitempty" json:"oauth_enablement_metadata,omitempty" xml:"oauth_enablement_metadata,omitempty"`
 	// The tools in this toolset
@@ -643,82 +624,8 @@ type RemoveOAuthServerResponseBody struct {
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
-	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
-	// The slug of the user_session_issuer wired to this toolset; present when
-	// user_session_issuer_id is.
-	UserSessionIssuerSlug *string `form:"user_session_issuer_slug,omitempty" json:"user_session_issuer_slug,omitempty" xml:"user_session_issuer_slug,omitempty"`
-	// The id of the tool variations group enabling MCP tool filtering for this
-	// toolset. Set via toolsets.setToolVariationsGroup; null when filtering is
-	// disabled.
-	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
-	// When the toolset was created.
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// When the toolset was last updated.
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
-}
-
-// SetUserSessionIssuerResponseBody is the type of the "toolsets" service
-// "setUserSessionIssuer" endpoint HTTP response body.
-type SetUserSessionIssuerResponseBody struct {
-	// The ID of the toolset
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The project ID this toolset belongs to
-	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	// The organization ID this toolset belongs to
-	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// The account type of the organization
-	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
-	// The name of the toolset
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The slug of the toolset
-	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	// Description of the toolset
-	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// The slug of the environment to use as the default for the toolset
-	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
-	// The security variables that are relevant to the toolset
-	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
-	// The server variables that are relevant to the toolset
-	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
-	// The function environment variables that are relevant to the toolset
-	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
-	// The metadata surrounding oauth enabled tools within this server
-	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata,omitempty" json:"oauth_enablement_metadata,omitempty" xml:"oauth_enablement_metadata,omitempty"`
-	// The tools in this toolset
-	Tools []*ToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
-	// The tool URNs in this toolset
-	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
-	// The version of the toolset (will be 0 if none exists)
-	ToolsetVersion *int64 `form:"toolset_version,omitempty" json:"toolset_version,omitempty" xml:"toolset_version,omitempty"`
-	// The resources in this toolset
-	Resources []*ResourceResponseBody `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
-	// The resource URNs in this toolset
-	ResourceUrns []string `form:"resource_urns,omitempty" json:"resource_urns,omitempty" xml:"resource_urns,omitempty"`
-	// The prompt templates in this toolset -- Note: these are actual prompts, as
-	// in MCP prompts
-	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates,omitempty" json:"prompt_templates,omitempty" xml:"prompt_templates,omitempty"`
-	// The slug of the MCP to use for the toolset
-	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
-	// Whether the toolset is public in MCP
-	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
-	// Whether the toolset is enabled for MCP
-	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
-	// The hosted MCP network access mode; public_only by default
-	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
-	// The mode to use for tool selection
-	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
-	// The ID of the custom domain to use for the toolset
-	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
-	// The registry lineage for toolsets installed from an external MCP catalog
-	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
-	// The external OAuth server details
-	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	// The id of the user_session_issuer wired to this toolset's hosted MCP server.
+	// Set via mcpServers.update; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -758,8 +665,6 @@ type SetToolVariationsGroupResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The metadata surrounding oauth enabled tools within this server
 	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata,omitempty" json:"oauth_enablement_metadata,omitempty" xml:"oauth_enablement_metadata,omitempty"`
 	// The tools in this toolset
@@ -791,8 +696,8 @@ type SetToolVariationsGroupResponseBody struct {
 	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	// The id of the user_session_issuer wired to this toolset's hosted MCP server.
+	// Set via mcpServers.update; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -2277,196 +2182,6 @@ type ListToolSchemaStaticValuesGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CheckMCPSlugAvailabilityUnauthorizedResponseBody is the type of the
-// "toolsets" service "checkMCPSlugAvailability" endpoint HTTP response body
-// for the "unauthorized" error.
-type CheckMCPSlugAvailabilityUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// CheckMCPSlugAvailabilityForbiddenResponseBody is the type of the "toolsets"
-// service "checkMCPSlugAvailability" endpoint HTTP response body for the
-// "forbidden" error.
-type CheckMCPSlugAvailabilityForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// CheckMCPSlugAvailabilityBadRequestResponseBody is the type of the "toolsets"
-// service "checkMCPSlugAvailability" endpoint HTTP response body for the
-// "bad_request" error.
-type CheckMCPSlugAvailabilityBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// CheckMCPSlugAvailabilityNotFoundResponseBody is the type of the "toolsets"
-// service "checkMCPSlugAvailability" endpoint HTTP response body for the
-// "not_found" error.
-type CheckMCPSlugAvailabilityNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// CheckMCPSlugAvailabilityConflictResponseBody is the type of the "toolsets"
-// service "checkMCPSlugAvailability" endpoint HTTP response body for the
-// "conflict" error.
-type CheckMCPSlugAvailabilityConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// CheckMCPSlugAvailabilityUnsupportedMediaResponseBody is the type of the
-// "toolsets" service "checkMCPSlugAvailability" endpoint HTTP response body
-// for the "unsupported_media" error.
-type CheckMCPSlugAvailabilityUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// CheckMCPSlugAvailabilityInvalidResponseBody is the type of the "toolsets"
-// service "checkMCPSlugAvailability" endpoint HTTP response body for the
-// "invalid" error.
-type CheckMCPSlugAvailabilityInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// CheckMCPSlugAvailabilityInvariantViolationResponseBody is the type of the
-// "toolsets" service "checkMCPSlugAvailability" endpoint HTTP response body
-// for the "invariant_violation" error.
-type CheckMCPSlugAvailabilityInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// CheckMCPSlugAvailabilityUnexpectedResponseBody is the type of the "toolsets"
-// service "checkMCPSlugAvailability" endpoint HTTP response body for the
-// "unexpected" error.
-type CheckMCPSlugAvailabilityUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// CheckMCPSlugAvailabilityGatewayErrorResponseBody is the type of the
-// "toolsets" service "checkMCPSlugAvailability" endpoint HTTP response body
-// for the "gateway_error" error.
-type CheckMCPSlugAvailabilityGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
 // CloneToolsetUnauthorizedResponseBody is the type of the "toolsets" service
 // "cloneToolset" endpoint HTTP response body for the "unauthorized" error.
 type CloneToolsetUnauthorizedResponseBody struct {
@@ -3215,196 +2930,6 @@ type RemoveOAuthServerGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// SetUserSessionIssuerUnauthorizedResponseBody is the type of the "toolsets"
-// service "setUserSessionIssuer" endpoint HTTP response body for the
-// "unauthorized" error.
-type SetUserSessionIssuerUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// SetUserSessionIssuerForbiddenResponseBody is the type of the "toolsets"
-// service "setUserSessionIssuer" endpoint HTTP response body for the
-// "forbidden" error.
-type SetUserSessionIssuerForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// SetUserSessionIssuerBadRequestResponseBody is the type of the "toolsets"
-// service "setUserSessionIssuer" endpoint HTTP response body for the
-// "bad_request" error.
-type SetUserSessionIssuerBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// SetUserSessionIssuerNotFoundResponseBody is the type of the "toolsets"
-// service "setUserSessionIssuer" endpoint HTTP response body for the
-// "not_found" error.
-type SetUserSessionIssuerNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// SetUserSessionIssuerConflictResponseBody is the type of the "toolsets"
-// service "setUserSessionIssuer" endpoint HTTP response body for the
-// "conflict" error.
-type SetUserSessionIssuerConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// SetUserSessionIssuerUnsupportedMediaResponseBody is the type of the
-// "toolsets" service "setUserSessionIssuer" endpoint HTTP response body for
-// the "unsupported_media" error.
-type SetUserSessionIssuerUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// SetUserSessionIssuerInvalidResponseBody is the type of the "toolsets"
-// service "setUserSessionIssuer" endpoint HTTP response body for the "invalid"
-// error.
-type SetUserSessionIssuerInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// SetUserSessionIssuerInvariantViolationResponseBody is the type of the
-// "toolsets" service "setUserSessionIssuer" endpoint HTTP response body for
-// the "invariant_violation" error.
-type SetUserSessionIssuerInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// SetUserSessionIssuerUnexpectedResponseBody is the type of the "toolsets"
-// service "setUserSessionIssuer" endpoint HTTP response body for the
-// "unexpected" error.
-type SetUserSessionIssuerUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// SetUserSessionIssuerGatewayErrorResponseBody is the type of the "toolsets"
-// service "setUserSessionIssuer" endpoint HTTP response body for the
-// "gateway_error" error.
-type SetUserSessionIssuerGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
 // SetToolVariationsGroupUnauthorizedResponseBody is the type of the "toolsets"
 // service "setToolVariationsGroup" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -3645,23 +3170,6 @@ type FunctionEnvironmentVariableResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 }
 
-// ExternalMCPHeaderDefinitionResponseBody is used to define fields on response
-// body types.
-type ExternalMCPHeaderDefinitionResponseBody struct {
-	// The prefixed environment variable name (e.g., SLACK_X_API_KEY)
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The actual HTTP header name to send (e.g., X-Api-Key)
-	HeaderName *string `form:"header_name,omitempty" json:"header_name,omitempty" xml:"header_name,omitempty"`
-	// Description of the header
-	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// Placeholder value for the header
-	Placeholder *string `form:"placeholder,omitempty" json:"placeholder,omitempty" xml:"placeholder,omitempty"`
-	// Whether the header is required
-	Required *bool `form:"required,omitempty" json:"required,omitempty" xml:"required,omitempty"`
-	// Whether the header value is secret
-	Secret *bool `form:"secret,omitempty" json:"secret,omitempty" xml:"secret,omitempty"`
-}
-
 // OAuthEnablementMetadataResponseBody is used to define fields on response
 // body types.
 type OAuthEnablementMetadataResponseBody struct {
@@ -3679,8 +3187,6 @@ type ToolResponseBody struct {
 	PromptTemplate *PromptTemplateResponseBody `form:"prompt_template,omitempty" json:"prompt_template,omitempty" xml:"prompt_template,omitempty"`
 	// The Platform tool definition
 	PlatformToolDefinition *PlatformToolDefinitionResponseBody `form:"platform_tool_definition,omitempty" json:"platform_tool_definition,omitempty" xml:"platform_tool_definition,omitempty"`
-	// The external MCP tool definition
-	ExternalMcpToolDefinition *ExternalMCPToolDefinitionResponseBody `form:"external_mcp_tool_definition,omitempty" json:"external_mcp_tool_definition,omitempty" xml:"external_mcp_tool_definition,omitempty"`
 }
 
 // HTTPToolDefinitionResponseBody is used to define fields on response body
@@ -3974,75 +3480,6 @@ type PlatformToolDefinitionResponseBody struct {
 	Annotations *ToolAnnotationsResponseBody `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
 }
 
-// ExternalMCPToolDefinitionResponseBody is used to define fields on response
-// body types.
-type ExternalMCPToolDefinitionResponseBody struct {
-	// Whether or not the tool is a proxy tool
-	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
-	// The ID of the deployments_external_mcps record
-	DeploymentExternalMcpID *string `form:"deployment_external_mcp_id,omitempty" json:"deployment_external_mcp_id,omitempty" xml:"deployment_external_mcp_id,omitempty"`
-	// The ID of the deployment
-	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
-	// The ID of the MCP registry
-	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
-	// The specifier of the external MCP server (e.g.,
-	// 'io.modelcontextprotocol.anonymous/exa')
-	RegistrySpecifier *string `form:"registry_specifier,omitempty" json:"registry_specifier,omitempty" xml:"registry_specifier,omitempty"`
-	// The name of the external MCP server (e.g., exa)
-	RegistryServerName *string `form:"registry_server_name,omitempty" json:"registry_server_name,omitempty" xml:"registry_server_name,omitempty"`
-	// The slug used for tool prefixing (e.g., github)
-	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	// The URL to connect to the MCP server
-	RemoteURL *string `form:"remote_url,omitempty" json:"remote_url,omitempty" xml:"remote_url,omitempty"`
-	// The transport type used to connect to the MCP server
-	TransportType *string `form:"transport_type,omitempty" json:"transport_type,omitempty" xml:"transport_type,omitempty"`
-	// Whether the external MCP server requires OAuth authentication
-	RequiresOauth *bool `form:"requires_oauth,omitempty" json:"requires_oauth,omitempty" xml:"requires_oauth,omitempty"`
-	// OAuth version: '2.1' (MCP OAuth), '2.0' (legacy), or 'none'
-	OauthVersion *string `form:"oauth_version,omitempty" json:"oauth_version,omitempty" xml:"oauth_version,omitempty"`
-	// The OAuth authorization endpoint URL
-	OauthAuthorizationEndpoint *string `form:"oauth_authorization_endpoint,omitempty" json:"oauth_authorization_endpoint,omitempty" xml:"oauth_authorization_endpoint,omitempty"`
-	// The OAuth token endpoint URL
-	OauthTokenEndpoint *string `form:"oauth_token_endpoint,omitempty" json:"oauth_token_endpoint,omitempty" xml:"oauth_token_endpoint,omitempty"`
-	// The OAuth dynamic client registration endpoint URL
-	OauthRegistrationEndpoint *string `form:"oauth_registration_endpoint,omitempty" json:"oauth_registration_endpoint,omitempty" xml:"oauth_registration_endpoint,omitempty"`
-	// The OAuth scopes supported by the server
-	OauthScopesSupported []string `form:"oauth_scopes_supported,omitempty" json:"oauth_scopes_supported,omitempty" xml:"oauth_scopes_supported,omitempty"`
-	// The creation date of the tool.
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// The last update date of the tool.
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
-	// The ID of the tool
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The URN of this tool
-	ToolUrn *string `form:"tool_urn,omitempty" json:"tool_urn,omitempty" xml:"tool_urn,omitempty"`
-	// The ID of the project
-	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	// The name of the tool
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The canonical name of the tool. Will be the same as the name if there is no
-	// variation.
-	CanonicalName *string `form:"canonical_name,omitempty" json:"canonical_name,omitempty" xml:"canonical_name,omitempty"`
-	// Description of the tool
-	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// Version of the schema
-	SchemaVersion *string `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
-	// JSON schema for the request
-	Schema *string `form:"schema,omitempty" json:"schema,omitempty" xml:"schema,omitempty"`
-	// Confirmation mode for the tool
-	Confirm *string `form:"confirm,omitempty" json:"confirm,omitempty" xml:"confirm,omitempty"`
-	// Prompt for the confirmation
-	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
-	// Summarizer for the tool
-	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
-	// The original details of a tool, excluding any variations
-	Canonical *CanonicalToolAttributesResponseBody `form:"canonical,omitempty" json:"canonical,omitempty" xml:"canonical,omitempty"`
-	// The variation details of a tool. Only includes explicitly varied fields.
-	Variation *ToolVariationResponseBody `form:"variation,omitempty" json:"variation,omitempty" xml:"variation,omitempty"`
-	// MCP tool annotations providing hints about tool behavior
-	Annotations *ToolAnnotationsResponseBody `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
-}
-
 // ResourceResponseBody is used to define fields on response body types.
 type ResourceResponseBody struct {
 	// The function resource definition
@@ -4134,8 +3571,6 @@ type ToolsetEntryResponseBody struct {
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
 	// The tools in this toolset
 	Tools []*ToolEntryResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
@@ -4384,15 +3819,6 @@ func NewUpdateExternalOAuthServerRequestBody(p *toolsets.UpdateExternalOAuthServ
 	return body
 }
 
-// NewSetUserSessionIssuerRequestBody builds the HTTP request body from the
-// payload of the "setUserSessionIssuer" endpoint of the "toolsets" service.
-func NewSetUserSessionIssuerRequestBody(p *toolsets.SetUserSessionIssuerPayload) *SetUserSessionIssuerRequestBody {
-	body := &SetUserSessionIssuerRequestBody{
-		UserSessionIssuerID: p.UserSessionIssuerID,
-	}
-	return body
-}
-
 // NewSetToolVariationsGroupRequestBody builds the HTTP request body from the
 // payload of the "setToolVariationsGroup" endpoint of the "toolsets" service.
 func NewSetToolVariationsGroupRequestBody(p *toolsets.SetToolVariationsGroupPayload) *SetToolVariationsGroupRequestBody {
@@ -4467,16 +3893,6 @@ func NewCreateToolsetToolsetOK(body *CreateToolsetResponseBody) *types.Toolset {
 				continue
 			}
 			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
-		}
-	}
-	if body.ExternalMcpHeaderDefinitions != nil {
-		v.ExternalMcpHeaderDefinitions = make([]*types.ExternalMCPHeaderDefinition, len(body.ExternalMcpHeaderDefinitions))
-		for i, val := range body.ExternalMcpHeaderDefinitions {
-			if val == nil {
-				v.ExternalMcpHeaderDefinitions[i] = nil
-				continue
-			}
-			v.ExternalMcpHeaderDefinitions[i] = unmarshalExternalMCPHeaderDefinitionResponseBodyToTypesExternalMCPHeaderDefinition(val)
 		}
 	}
 	v.OauthEnablementMetadata = unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata(body.OauthEnablementMetadata)
@@ -5071,16 +4487,6 @@ func NewUpdateToolsetToolsetOK(body *UpdateToolsetResponseBody) *types.Toolset {
 			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
 		}
 	}
-	if body.ExternalMcpHeaderDefinitions != nil {
-		v.ExternalMcpHeaderDefinitions = make([]*types.ExternalMCPHeaderDefinition, len(body.ExternalMcpHeaderDefinitions))
-		for i, val := range body.ExternalMcpHeaderDefinitions {
-			if val == nil {
-				v.ExternalMcpHeaderDefinitions[i] = nil
-				continue
-			}
-			v.ExternalMcpHeaderDefinitions[i] = unmarshalExternalMCPHeaderDefinitionResponseBodyToTypesExternalMCPHeaderDefinition(val)
-		}
-	}
 	v.OauthEnablementMetadata = unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata(body.OauthEnablementMetadata)
 	v.Tools = make([]*types.Tool, len(body.Tools))
 	for i, val := range body.Tools {
@@ -5489,16 +4895,6 @@ func NewGetToolsetToolsetOK(body *GetToolsetResponseBody) *types.Toolset {
 				continue
 			}
 			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
-		}
-	}
-	if body.ExternalMcpHeaderDefinitions != nil {
-		v.ExternalMcpHeaderDefinitions = make([]*types.ExternalMCPHeaderDefinition, len(body.ExternalMcpHeaderDefinitions))
-		for i, val := range body.ExternalMcpHeaderDefinitions {
-			if val == nil {
-				v.ExternalMcpHeaderDefinitions[i] = nil
-				continue
-			}
-			v.ExternalMcpHeaderDefinitions[i] = unmarshalExternalMCPHeaderDefinitionResponseBodyToTypesExternalMCPHeaderDefinition(val)
 		}
 	}
 	v.OauthEnablementMetadata = unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata(body.OauthEnablementMetadata)
@@ -6038,156 +5434,6 @@ func NewListToolSchemaStaticValuesGatewayError(body *ListToolSchemaStaticValuesG
 	return v
 }
 
-// NewCheckMCPSlugAvailabilityUnauthorized builds a toolsets service
-// checkMCPSlugAvailability endpoint unauthorized error.
-func NewCheckMCPSlugAvailabilityUnauthorized(body *CheckMCPSlugAvailabilityUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewCheckMCPSlugAvailabilityForbidden builds a toolsets service
-// checkMCPSlugAvailability endpoint forbidden error.
-func NewCheckMCPSlugAvailabilityForbidden(body *CheckMCPSlugAvailabilityForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewCheckMCPSlugAvailabilityBadRequest builds a toolsets service
-// checkMCPSlugAvailability endpoint bad_request error.
-func NewCheckMCPSlugAvailabilityBadRequest(body *CheckMCPSlugAvailabilityBadRequestResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewCheckMCPSlugAvailabilityNotFound builds a toolsets service
-// checkMCPSlugAvailability endpoint not_found error.
-func NewCheckMCPSlugAvailabilityNotFound(body *CheckMCPSlugAvailabilityNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewCheckMCPSlugAvailabilityConflict builds a toolsets service
-// checkMCPSlugAvailability endpoint conflict error.
-func NewCheckMCPSlugAvailabilityConflict(body *CheckMCPSlugAvailabilityConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewCheckMCPSlugAvailabilityUnsupportedMedia builds a toolsets service
-// checkMCPSlugAvailability endpoint unsupported_media error.
-func NewCheckMCPSlugAvailabilityUnsupportedMedia(body *CheckMCPSlugAvailabilityUnsupportedMediaResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewCheckMCPSlugAvailabilityInvalid builds a toolsets service
-// checkMCPSlugAvailability endpoint invalid error.
-func NewCheckMCPSlugAvailabilityInvalid(body *CheckMCPSlugAvailabilityInvalidResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewCheckMCPSlugAvailabilityInvariantViolation builds a toolsets service
-// checkMCPSlugAvailability endpoint invariant_violation error.
-func NewCheckMCPSlugAvailabilityInvariantViolation(body *CheckMCPSlugAvailabilityInvariantViolationResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewCheckMCPSlugAvailabilityUnexpected builds a toolsets service
-// checkMCPSlugAvailability endpoint unexpected error.
-func NewCheckMCPSlugAvailabilityUnexpected(body *CheckMCPSlugAvailabilityUnexpectedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewCheckMCPSlugAvailabilityGatewayError builds a toolsets service
-// checkMCPSlugAvailability endpoint gateway_error error.
-func NewCheckMCPSlugAvailabilityGatewayError(body *CheckMCPSlugAvailabilityGatewayErrorResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
 // NewCloneToolsetToolsetOK builds a "toolsets" service "cloneToolset" endpoint
 // result from a HTTP "OK" response.
 func NewCloneToolsetToolsetOK(body *CloneToolsetResponseBody) *types.Toolset {
@@ -6253,16 +5499,6 @@ func NewCloneToolsetToolsetOK(body *CloneToolsetResponseBody) *types.Toolset {
 				continue
 			}
 			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
-		}
-	}
-	if body.ExternalMcpHeaderDefinitions != nil {
-		v.ExternalMcpHeaderDefinitions = make([]*types.ExternalMCPHeaderDefinition, len(body.ExternalMcpHeaderDefinitions))
-		for i, val := range body.ExternalMcpHeaderDefinitions {
-			if val == nil {
-				v.ExternalMcpHeaderDefinitions[i] = nil
-				continue
-			}
-			v.ExternalMcpHeaderDefinitions[i] = unmarshalExternalMCPHeaderDefinitionResponseBodyToTypesExternalMCPHeaderDefinition(val)
 		}
 	}
 	v.OauthEnablementMetadata = unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata(body.OauthEnablementMetadata)
@@ -6525,16 +5761,6 @@ func NewAddExternalOAuthServerToolsetOK(body *AddExternalOAuthServerResponseBody
 			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
 		}
 	}
-	if body.ExternalMcpHeaderDefinitions != nil {
-		v.ExternalMcpHeaderDefinitions = make([]*types.ExternalMCPHeaderDefinition, len(body.ExternalMcpHeaderDefinitions))
-		for i, val := range body.ExternalMcpHeaderDefinitions {
-			if val == nil {
-				v.ExternalMcpHeaderDefinitions[i] = nil
-				continue
-			}
-			v.ExternalMcpHeaderDefinitions[i] = unmarshalExternalMCPHeaderDefinitionResponseBodyToTypesExternalMCPHeaderDefinition(val)
-		}
-	}
 	v.OauthEnablementMetadata = unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata(body.OauthEnablementMetadata)
 	v.Tools = make([]*types.Tool, len(body.Tools))
 	for i, val := range body.Tools {
@@ -6793,16 +6019,6 @@ func NewUpdateExternalOAuthServerToolsetOK(body *UpdateExternalOAuthServerRespon
 				continue
 			}
 			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
-		}
-	}
-	if body.ExternalMcpHeaderDefinitions != nil {
-		v.ExternalMcpHeaderDefinitions = make([]*types.ExternalMCPHeaderDefinition, len(body.ExternalMcpHeaderDefinitions))
-		for i, val := range body.ExternalMcpHeaderDefinitions {
-			if val == nil {
-				v.ExternalMcpHeaderDefinitions[i] = nil
-				continue
-			}
-			v.ExternalMcpHeaderDefinitions[i] = unmarshalExternalMCPHeaderDefinitionResponseBodyToTypesExternalMCPHeaderDefinition(val)
 		}
 	}
 	v.OauthEnablementMetadata = unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata(body.OauthEnablementMetadata)
@@ -7065,16 +6281,6 @@ func NewRemoveOAuthServerToolsetOK(body *RemoveOAuthServerResponseBody) *types.T
 			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
 		}
 	}
-	if body.ExternalMcpHeaderDefinitions != nil {
-		v.ExternalMcpHeaderDefinitions = make([]*types.ExternalMCPHeaderDefinition, len(body.ExternalMcpHeaderDefinitions))
-		for i, val := range body.ExternalMcpHeaderDefinitions {
-			if val == nil {
-				v.ExternalMcpHeaderDefinitions[i] = nil
-				continue
-			}
-			v.ExternalMcpHeaderDefinitions[i] = unmarshalExternalMCPHeaderDefinitionResponseBodyToTypesExternalMCPHeaderDefinition(val)
-		}
-	}
 	v.OauthEnablementMetadata = unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata(body.OauthEnablementMetadata)
 	v.Tools = make([]*types.Tool, len(body.Tools))
 	for i, val := range body.Tools {
@@ -7268,276 +6474,6 @@ func NewRemoveOAuthServerGatewayError(body *RemoveOAuthServerGatewayErrorRespons
 	return v
 }
 
-// NewSetUserSessionIssuerToolsetOK builds a "toolsets" service
-// "setUserSessionIssuer" endpoint result from a HTTP "OK" response.
-func NewSetUserSessionIssuerToolsetOK(body *SetUserSessionIssuerResponseBody) *types.Toolset {
-	v := &types.Toolset{
-		ID:                    *body.ID,
-		ProjectID:             *body.ProjectID,
-		OrganizationID:        *body.OrganizationID,
-		AccountType:           *body.AccountType,
-		Name:                  *body.Name,
-		Slug:                  types.Slug(*body.Slug),
-		Description:           body.Description,
-		ToolsetVersion:        *body.ToolsetVersion,
-		McpIsPublic:           body.McpIsPublic,
-		McpEnabled:            body.McpEnabled,
-		ToolSelectionMode:     *body.ToolSelectionMode,
-		CustomDomainID:        body.CustomDomainID,
-		UserSessionIssuerID:   body.UserSessionIssuerID,
-		ToolVariationsGroupID: body.ToolVariationsGroupID,
-		CreatedAt:             *body.CreatedAt,
-		UpdatedAt:             *body.UpdatedAt,
-	}
-	if body.DefaultEnvironmentSlug != nil {
-		defaultEnvironmentSlug := types.Slug(*body.DefaultEnvironmentSlug)
-		v.DefaultEnvironmentSlug = &defaultEnvironmentSlug
-	}
-	if body.McpSlug != nil {
-		mcpSlug := types.Slug(*body.McpSlug)
-		v.McpSlug = &mcpSlug
-	}
-	if body.NetworkAccessMode != nil {
-		networkAccessMode := types.NetworkAccessMode(*body.NetworkAccessMode)
-		v.NetworkAccessMode = &networkAccessMode
-	}
-	if body.UserSessionIssuerSlug != nil {
-		userSessionIssuerSlug := types.Slug(*body.UserSessionIssuerSlug)
-		v.UserSessionIssuerSlug = &userSessionIssuerSlug
-	}
-	if body.SecurityVariables != nil {
-		v.SecurityVariables = make([]*types.SecurityVariable, len(body.SecurityVariables))
-		for i, val := range body.SecurityVariables {
-			if val == nil {
-				v.SecurityVariables[i] = nil
-				continue
-			}
-			v.SecurityVariables[i] = unmarshalSecurityVariableResponseBodyToTypesSecurityVariable(val)
-		}
-	}
-	if body.ServerVariables != nil {
-		v.ServerVariables = make([]*types.ServerVariable, len(body.ServerVariables))
-		for i, val := range body.ServerVariables {
-			if val == nil {
-				v.ServerVariables[i] = nil
-				continue
-			}
-			v.ServerVariables[i] = unmarshalServerVariableResponseBodyToTypesServerVariable(val)
-		}
-	}
-	if body.FunctionEnvironmentVariables != nil {
-		v.FunctionEnvironmentVariables = make([]*types.FunctionEnvironmentVariable, len(body.FunctionEnvironmentVariables))
-		for i, val := range body.FunctionEnvironmentVariables {
-			if val == nil {
-				v.FunctionEnvironmentVariables[i] = nil
-				continue
-			}
-			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
-		}
-	}
-	if body.ExternalMcpHeaderDefinitions != nil {
-		v.ExternalMcpHeaderDefinitions = make([]*types.ExternalMCPHeaderDefinition, len(body.ExternalMcpHeaderDefinitions))
-		for i, val := range body.ExternalMcpHeaderDefinitions {
-			if val == nil {
-				v.ExternalMcpHeaderDefinitions[i] = nil
-				continue
-			}
-			v.ExternalMcpHeaderDefinitions[i] = unmarshalExternalMCPHeaderDefinitionResponseBodyToTypesExternalMCPHeaderDefinition(val)
-		}
-	}
-	v.OauthEnablementMetadata = unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata(body.OauthEnablementMetadata)
-	v.Tools = make([]*types.Tool, len(body.Tools))
-	for i, val := range body.Tools {
-		if val == nil {
-			v.Tools[i] = nil
-			continue
-		}
-		v.Tools[i] = unmarshalToolResponseBodyToTypesTool(val)
-	}
-	v.ToolUrns = make([]string, len(body.ToolUrns))
-	for i, val := range body.ToolUrns {
-		v.ToolUrns[i] = val
-	}
-	v.Resources = make([]*types.Resource, len(body.Resources))
-	for i, val := range body.Resources {
-		if val == nil {
-			v.Resources[i] = nil
-			continue
-		}
-		v.Resources[i] = unmarshalResourceResponseBodyToTypesResource(val)
-	}
-	v.ResourceUrns = make([]string, len(body.ResourceUrns))
-	for i, val := range body.ResourceUrns {
-		v.ResourceUrns[i] = val
-	}
-	v.PromptTemplates = make([]*types.PromptTemplate, len(body.PromptTemplates))
-	for i, val := range body.PromptTemplates {
-		if val == nil {
-			v.PromptTemplates[i] = nil
-			continue
-		}
-		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
-	}
-	if body.Origin != nil {
-		v.Origin = unmarshalToolsetOriginResponseBodyToTypesToolsetOrigin(body.Origin)
-	}
-	if body.ExternalOauthServer != nil {
-		v.ExternalOauthServer = unmarshalExternalOAuthServerResponseBodyToTypesExternalOAuthServer(body.ExternalOauthServer)
-	}
-
-	return v
-}
-
-// NewSetUserSessionIssuerUnauthorized builds a toolsets service
-// setUserSessionIssuer endpoint unauthorized error.
-func NewSetUserSessionIssuerUnauthorized(body *SetUserSessionIssuerUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewSetUserSessionIssuerForbidden builds a toolsets service
-// setUserSessionIssuer endpoint forbidden error.
-func NewSetUserSessionIssuerForbidden(body *SetUserSessionIssuerForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewSetUserSessionIssuerBadRequest builds a toolsets service
-// setUserSessionIssuer endpoint bad_request error.
-func NewSetUserSessionIssuerBadRequest(body *SetUserSessionIssuerBadRequestResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewSetUserSessionIssuerNotFound builds a toolsets service
-// setUserSessionIssuer endpoint not_found error.
-func NewSetUserSessionIssuerNotFound(body *SetUserSessionIssuerNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewSetUserSessionIssuerConflict builds a toolsets service
-// setUserSessionIssuer endpoint conflict error.
-func NewSetUserSessionIssuerConflict(body *SetUserSessionIssuerConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewSetUserSessionIssuerUnsupportedMedia builds a toolsets service
-// setUserSessionIssuer endpoint unsupported_media error.
-func NewSetUserSessionIssuerUnsupportedMedia(body *SetUserSessionIssuerUnsupportedMediaResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewSetUserSessionIssuerInvalid builds a toolsets service
-// setUserSessionIssuer endpoint invalid error.
-func NewSetUserSessionIssuerInvalid(body *SetUserSessionIssuerInvalidResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewSetUserSessionIssuerInvariantViolation builds a toolsets service
-// setUserSessionIssuer endpoint invariant_violation error.
-func NewSetUserSessionIssuerInvariantViolation(body *SetUserSessionIssuerInvariantViolationResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewSetUserSessionIssuerUnexpected builds a toolsets service
-// setUserSessionIssuer endpoint unexpected error.
-func NewSetUserSessionIssuerUnexpected(body *SetUserSessionIssuerUnexpectedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewSetUserSessionIssuerGatewayError builds a toolsets service
-// setUserSessionIssuer endpoint gateway_error error.
-func NewSetUserSessionIssuerGatewayError(body *SetUserSessionIssuerGatewayErrorResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
 // NewSetToolVariationsGroupToolsetOK builds a "toolsets" service
 // "setToolVariationsGroup" endpoint result from a HTTP "OK" response.
 func NewSetToolVariationsGroupToolsetOK(body *SetToolVariationsGroupResponseBody) *types.Toolset {
@@ -7603,16 +6539,6 @@ func NewSetToolVariationsGroupToolsetOK(body *SetToolVariationsGroupResponseBody
 				continue
 			}
 			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
-		}
-	}
-	if body.ExternalMcpHeaderDefinitions != nil {
-		v.ExternalMcpHeaderDefinitions = make([]*types.ExternalMCPHeaderDefinition, len(body.ExternalMcpHeaderDefinitions))
-		for i, val := range body.ExternalMcpHeaderDefinitions {
-			if val == nil {
-				v.ExternalMcpHeaderDefinitions[i] = nil
-				continue
-			}
-			v.ExternalMcpHeaderDefinitions[i] = unmarshalExternalMCPHeaderDefinitionResponseBodyToTypesExternalMCPHeaderDefinition(val)
 		}
 	}
 	v.OauthEnablementMetadata = unmarshalOAuthEnablementMetadataResponseBodyToTypesOAuthEnablementMetadata(body.OauthEnablementMetadata)
@@ -7896,13 +6822,6 @@ func ValidateCreateToolsetResponseBody(body *CreateToolsetResponseBody) (err err
 			}
 		}
 	}
-	for _, e := range body.ExternalMcpHeaderDefinitions {
-		if e != nil {
-			if err2 := ValidateExternalMCPHeaderDefinitionResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
 	if body.OauthEnablementMetadata != nil {
 		if err2 := ValidateOAuthEnablementMetadataResponseBody(body.OauthEnablementMetadata); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -8089,13 +7008,6 @@ func ValidateUpdateToolsetResponseBody(body *UpdateToolsetResponseBody) (err err
 			}
 		}
 	}
-	for _, e := range body.ExternalMcpHeaderDefinitions {
-		if e != nil {
-			if err2 := ValidateExternalMCPHeaderDefinitionResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
 	if body.OauthEnablementMetadata != nil {
 		if err2 := ValidateOAuthEnablementMetadataResponseBody(body.OauthEnablementMetadata); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -8246,13 +7158,6 @@ func ValidateGetToolsetResponseBody(body *GetToolsetResponseBody) (err error) {
 	for _, e := range body.FunctionEnvironmentVariables {
 		if e != nil {
 			if err2 := ValidateFunctionEnvironmentVariableResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	for _, e := range body.ExternalMcpHeaderDefinitions {
-		if e != nil {
-			if err2 := ValidateExternalMCPHeaderDefinitionResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -8459,13 +7364,6 @@ func ValidateCloneToolsetResponseBody(body *CloneToolsetResponseBody) (err error
 			}
 		}
 	}
-	for _, e := range body.ExternalMcpHeaderDefinitions {
-		if e != nil {
-			if err2 := ValidateExternalMCPHeaderDefinitionResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
 	if body.OauthEnablementMetadata != nil {
 		if err2 := ValidateOAuthEnablementMetadataResponseBody(body.OauthEnablementMetadata); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -8616,13 +7514,6 @@ func ValidateAddExternalOAuthServerResponseBody(body *AddExternalOAuthServerResp
 	for _, e := range body.FunctionEnvironmentVariables {
 		if e != nil {
 			if err2 := ValidateFunctionEnvironmentVariableResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	for _, e := range body.ExternalMcpHeaderDefinitions {
-		if e != nil {
-			if err2 := ValidateExternalMCPHeaderDefinitionResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -8781,13 +7672,6 @@ func ValidateUpdateExternalOAuthServerResponseBody(body *UpdateExternalOAuthServ
 			}
 		}
 	}
-	for _, e := range body.ExternalMcpHeaderDefinitions {
-		if e != nil {
-			if err2 := ValidateExternalMCPHeaderDefinitionResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
 	if body.OauthEnablementMetadata != nil {
 		if err2 := ValidateOAuthEnablementMetadataResponseBody(body.OauthEnablementMetadata); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -8942,174 +7826,6 @@ func ValidateRemoveOAuthServerResponseBody(body *RemoveOAuthServerResponseBody) 
 			}
 		}
 	}
-	for _, e := range body.ExternalMcpHeaderDefinitions {
-		if e != nil {
-			if err2 := ValidateExternalMCPHeaderDefinitionResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	if body.OauthEnablementMetadata != nil {
-		if err2 := ValidateOAuthEnablementMetadataResponseBody(body.OauthEnablementMetadata); err2 != nil {
-			err = goa.MergeErrors(err, err2)
-		}
-	}
-	for _, e := range body.Tools {
-		if e != nil {
-			if err2 := ValidateToolResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	for _, e := range body.Resources {
-		if e != nil {
-			if err2 := ValidateResourceResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	for _, e := range body.PromptTemplates {
-		if e != nil {
-			if err2 := ValidatePromptTemplateResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	if body.McpSlug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", *body.McpSlug, "^[a-z0-9_-]{1,128}$"))
-	}
-	if body.McpSlug != nil {
-		if utf8.RuneCountInString(*body.McpSlug) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", *body.McpSlug, utf8.RuneCountInString(*body.McpSlug), 40, false))
-		}
-	}
-	if body.NetworkAccessMode != nil {
-		if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
-		}
-	}
-	if body.Origin != nil {
-		if err2 := ValidateToolsetOriginResponseBody(body.Origin); err2 != nil {
-			err = goa.MergeErrors(err, err2)
-		}
-	}
-	if body.ExternalOauthServer != nil {
-		if err2 := ValidateExternalOAuthServerResponseBody(body.ExternalOauthServer); err2 != nil {
-			err = goa.MergeErrors(err, err2)
-		}
-	}
-	if body.UserSessionIssuerSlug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.user_session_issuer_slug", *body.UserSessionIssuerSlug, "^[a-z0-9_-]{1,128}$"))
-	}
-	if body.UserSessionIssuerSlug != nil {
-		if utf8.RuneCountInString(*body.UserSessionIssuerSlug) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.user_session_issuer_slug", *body.UserSessionIssuerSlug, utf8.RuneCountInString(*body.UserSessionIssuerSlug), 40, false))
-		}
-	}
-	if body.CreatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
-	}
-	if body.UpdatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
-	}
-	return
-}
-
-// ValidateSetUserSessionIssuerResponseBody runs the validations defined on
-// SetUserSessionIssuerResponseBody
-func ValidateSetUserSessionIssuerResponseBody(body *SetUserSessionIssuerResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.ProjectID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
-	}
-	if body.OrganizationID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
-	}
-	if body.AccountType == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("account_type", "body"))
-	}
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.Slug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
-	}
-	if body.Tools == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
-	}
-	if body.ToolSelectionMode == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_selection_mode", "body"))
-	}
-	if body.ToolsetVersion == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
-	}
-	if body.PromptTemplates == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_templates", "body"))
-	}
-	if body.ToolUrns == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_urns", "body"))
-	}
-	if body.Resources == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("resources", "body"))
-	}
-	if body.ResourceUrns == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("resource_urns", "body"))
-	}
-	if body.OauthEnablementMetadata == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("oauth_enablement_metadata", "body"))
-	}
-	if body.CreatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
-	}
-	if body.UpdatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
-	}
-	if body.Slug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
-	}
-	if body.Slug != nil {
-		if utf8.RuneCountInString(*body.Slug) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
-		}
-	}
-	if body.DefaultEnvironmentSlug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
-	}
-	if body.DefaultEnvironmentSlug != nil {
-		if utf8.RuneCountInString(*body.DefaultEnvironmentSlug) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.default_environment_slug", *body.DefaultEnvironmentSlug, utf8.RuneCountInString(*body.DefaultEnvironmentSlug), 40, false))
-		}
-	}
-	for _, e := range body.SecurityVariables {
-		if e != nil {
-			if err2 := ValidateSecurityVariableResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	for _, e := range body.ServerVariables {
-		if e != nil {
-			if err2 := ValidateServerVariableResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	for _, e := range body.FunctionEnvironmentVariables {
-		if e != nil {
-			if err2 := ValidateFunctionEnvironmentVariableResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	for _, e := range body.ExternalMcpHeaderDefinitions {
-		if e != nil {
-			if err2 := ValidateExternalMCPHeaderDefinitionResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
 	if body.OauthEnablementMetadata != nil {
 		if err2 := ValidateOAuthEnablementMetadataResponseBody(body.OauthEnablementMetadata); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -9260,13 +7976,6 @@ func ValidateSetToolVariationsGroupResponseBody(body *SetToolVariationsGroupResp
 	for _, e := range body.FunctionEnvironmentVariables {
 		if e != nil {
 			if err2 := ValidateFunctionEnvironmentVariableResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	for _, e := range body.ExternalMcpHeaderDefinitions {
-		if e != nil {
-			if err2 := ValidateExternalMCPHeaderDefinitionResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -11259,248 +9968,6 @@ func ValidateListToolSchemaStaticValuesGatewayErrorResponseBody(body *ListToolSc
 	return
 }
 
-// ValidateCheckMCPSlugAvailabilityUnauthorizedResponseBody runs the
-// validations defined on checkMCPSlugAvailability_unauthorized_response_body
-func ValidateCheckMCPSlugAvailabilityUnauthorizedResponseBody(body *CheckMCPSlugAvailabilityUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateCheckMCPSlugAvailabilityForbiddenResponseBody runs the validations
-// defined on checkMCPSlugAvailability_forbidden_response_body
-func ValidateCheckMCPSlugAvailabilityForbiddenResponseBody(body *CheckMCPSlugAvailabilityForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateCheckMCPSlugAvailabilityBadRequestResponseBody runs the validations
-// defined on checkMCPSlugAvailability_bad_request_response_body
-func ValidateCheckMCPSlugAvailabilityBadRequestResponseBody(body *CheckMCPSlugAvailabilityBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateCheckMCPSlugAvailabilityNotFoundResponseBody runs the validations
-// defined on checkMCPSlugAvailability_not_found_response_body
-func ValidateCheckMCPSlugAvailabilityNotFoundResponseBody(body *CheckMCPSlugAvailabilityNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateCheckMCPSlugAvailabilityConflictResponseBody runs the validations
-// defined on checkMCPSlugAvailability_conflict_response_body
-func ValidateCheckMCPSlugAvailabilityConflictResponseBody(body *CheckMCPSlugAvailabilityConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateCheckMCPSlugAvailabilityUnsupportedMediaResponseBody runs the
-// validations defined on
-// checkMCPSlugAvailability_unsupported_media_response_body
-func ValidateCheckMCPSlugAvailabilityUnsupportedMediaResponseBody(body *CheckMCPSlugAvailabilityUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateCheckMCPSlugAvailabilityInvalidResponseBody runs the validations
-// defined on checkMCPSlugAvailability_invalid_response_body
-func ValidateCheckMCPSlugAvailabilityInvalidResponseBody(body *CheckMCPSlugAvailabilityInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateCheckMCPSlugAvailabilityInvariantViolationResponseBody runs the
-// validations defined on
-// checkMCPSlugAvailability_invariant_violation_response_body
-func ValidateCheckMCPSlugAvailabilityInvariantViolationResponseBody(body *CheckMCPSlugAvailabilityInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateCheckMCPSlugAvailabilityUnexpectedResponseBody runs the validations
-// defined on checkMCPSlugAvailability_unexpected_response_body
-func ValidateCheckMCPSlugAvailabilityUnexpectedResponseBody(body *CheckMCPSlugAvailabilityUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateCheckMCPSlugAvailabilityGatewayErrorResponseBody runs the
-// validations defined on checkMCPSlugAvailability_gateway_error_response_body
-func ValidateCheckMCPSlugAvailabilityGatewayErrorResponseBody(body *CheckMCPSlugAvailabilityGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
 // ValidateCloneToolsetUnauthorizedResponseBody runs the validations defined on
 // cloneToolset_unauthorized_response_body
 func ValidateCloneToolsetUnauthorizedResponseBody(body *CloneToolsetUnauthorizedResponseBody) (err error) {
@@ -12464,246 +10931,6 @@ func ValidateRemoveOAuthServerGatewayErrorResponseBody(body *RemoveOAuthServerGa
 	return
 }
 
-// ValidateSetUserSessionIssuerUnauthorizedResponseBody runs the validations
-// defined on setUserSessionIssuer_unauthorized_response_body
-func ValidateSetUserSessionIssuerUnauthorizedResponseBody(body *SetUserSessionIssuerUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateSetUserSessionIssuerForbiddenResponseBody runs the validations
-// defined on setUserSessionIssuer_forbidden_response_body
-func ValidateSetUserSessionIssuerForbiddenResponseBody(body *SetUserSessionIssuerForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateSetUserSessionIssuerBadRequestResponseBody runs the validations
-// defined on setUserSessionIssuer_bad_request_response_body
-func ValidateSetUserSessionIssuerBadRequestResponseBody(body *SetUserSessionIssuerBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateSetUserSessionIssuerNotFoundResponseBody runs the validations
-// defined on setUserSessionIssuer_not_found_response_body
-func ValidateSetUserSessionIssuerNotFoundResponseBody(body *SetUserSessionIssuerNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateSetUserSessionIssuerConflictResponseBody runs the validations
-// defined on setUserSessionIssuer_conflict_response_body
-func ValidateSetUserSessionIssuerConflictResponseBody(body *SetUserSessionIssuerConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateSetUserSessionIssuerUnsupportedMediaResponseBody runs the
-// validations defined on setUserSessionIssuer_unsupported_media_response_body
-func ValidateSetUserSessionIssuerUnsupportedMediaResponseBody(body *SetUserSessionIssuerUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateSetUserSessionIssuerInvalidResponseBody runs the validations defined
-// on setUserSessionIssuer_invalid_response_body
-func ValidateSetUserSessionIssuerInvalidResponseBody(body *SetUserSessionIssuerInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateSetUserSessionIssuerInvariantViolationResponseBody runs the
-// validations defined on setUserSessionIssuer_invariant_violation_response_body
-func ValidateSetUserSessionIssuerInvariantViolationResponseBody(body *SetUserSessionIssuerInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateSetUserSessionIssuerUnexpectedResponseBody runs the validations
-// defined on setUserSessionIssuer_unexpected_response_body
-func ValidateSetUserSessionIssuerUnexpectedResponseBody(body *SetUserSessionIssuerUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateSetUserSessionIssuerGatewayErrorResponseBody runs the validations
-// defined on setUserSessionIssuer_gateway_error_response_body
-func ValidateSetUserSessionIssuerGatewayErrorResponseBody(body *SetUserSessionIssuerGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
 // ValidateSetToolVariationsGroupUnauthorizedResponseBody runs the validations
 // defined on setToolVariationsGroup_unauthorized_response_body
 func ValidateSetToolVariationsGroupUnauthorizedResponseBody(body *SetToolVariationsGroupUnauthorizedResponseBody) (err error) {
@@ -12987,24 +11214,6 @@ func ValidateFunctionEnvironmentVariableResponseBody(body *FunctionEnvironmentVa
 	return
 }
 
-// ValidateExternalMCPHeaderDefinitionResponseBody runs the validations defined
-// on ExternalMCPHeaderDefinitionResponseBody
-func ValidateExternalMCPHeaderDefinitionResponseBody(body *ExternalMCPHeaderDefinitionResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.HeaderName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("header_name", "body"))
-	}
-	if body.Required == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("required", "body"))
-	}
-	if body.Secret == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("secret", "body"))
-	}
-	return
-}
-
 // ValidateOAuthEnablementMetadataResponseBody runs the validations defined on
 // OAuthEnablementMetadataResponseBody
 func ValidateOAuthEnablementMetadataResponseBody(body *OAuthEnablementMetadataResponseBody) (err error) {
@@ -13033,11 +11242,6 @@ func ValidateToolResponseBody(body *ToolResponseBody) (err error) {
 	}
 	if body.PlatformToolDefinition != nil {
 		if err2 := ValidatePlatformToolDefinitionResponseBody(body.PlatformToolDefinition); err2 != nil {
-			err = goa.MergeErrors(err, err2)
-		}
-	}
-	if body.ExternalMcpToolDefinition != nil {
-		if err2 := ValidateExternalMCPToolDefinitionResponseBody(body.ExternalMcpToolDefinition); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -13366,90 +11570,6 @@ func ValidatePlatformToolDefinitionResponseBody(body *PlatformToolDefinitionResp
 	return
 }
 
-// ValidateExternalMCPToolDefinitionResponseBody runs the validations defined
-// on ExternalMCPToolDefinitionResponseBody
-func ValidateExternalMCPToolDefinitionResponseBody(body *ExternalMCPToolDefinitionResponseBody) (err error) {
-	if body.DeploymentExternalMcpID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("deployment_external_mcp_id", "body"))
-	}
-	if body.DeploymentID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("deployment_id", "body"))
-	}
-	if body.RegistrySpecifier == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("registry_specifier", "body"))
-	}
-	if body.RegistryServerName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("registry_server_name", "body"))
-	}
-	if body.RegistryID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("registry_id", "body"))
-	}
-	if body.Slug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
-	}
-	if body.RemoteURL == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("remote_url", "body"))
-	}
-	if body.TransportType == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("transport_type", "body"))
-	}
-	if body.RequiresOauth == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("requires_oauth", "body"))
-	}
-	if body.OauthVersion == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("oauth_version", "body"))
-	}
-	if body.CreatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
-	}
-	if body.UpdatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.ProjectID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
-	}
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.CanonicalName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("canonical_name", "body"))
-	}
-	if body.Description == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
-	}
-	if body.Schema == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("schema", "body"))
-	}
-	if body.ToolUrn == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_urn", "body"))
-	}
-	if body.TransportType != nil {
-		if !(*body.TransportType == "streamable-http" || *body.TransportType == "sse") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.transport_type", *body.TransportType, []any{"streamable-http", "sse"}))
-		}
-	}
-	if body.CreatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
-	}
-	if body.UpdatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
-	}
-	if body.Canonical != nil {
-		if err2 := ValidateCanonicalToolAttributesResponseBody(body.Canonical); err2 != nil {
-			err = goa.MergeErrors(err, err2)
-		}
-	}
-	if body.Variation != nil {
-		if err2 := ValidateToolVariationResponseBody(body.Variation); err2 != nil {
-			err = goa.MergeErrors(err, err2)
-		}
-	}
-	return
-}
-
 // ValidateResourceResponseBody runs the validations defined on
 // ResourceResponseBody
 func ValidateResourceResponseBody(body *ResourceResponseBody) (err error) {
@@ -13637,13 +11757,6 @@ func ValidateToolsetEntryResponseBody(body *ToolsetEntryResponseBody) (err error
 			}
 		}
 	}
-	for _, e := range body.ExternalMcpHeaderDefinitions {
-		if e != nil {
-			if err2 := ValidateExternalMCPHeaderDefinitionResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
 	for _, e := range body.Tools {
 		if e != nil {
 			if err2 := ValidateToolEntryResponseBody(e); err2 != nil {
@@ -13703,8 +11816,8 @@ func ValidateToolEntryResponseBody(body *ToolEntryResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tool_urn", "body"))
 	}
 	if body.Type != nil {
-		if !(*body.Type == "http" || *body.Type == "prompt" || *body.Type == "function" || *body.Type == "platform" || *body.Type == "externalmcp") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"http", "prompt", "function", "platform", "externalmcp"}))
+		if !(*body.Type == "http" || *body.Type == "prompt" || *body.Type == "function" || *body.Type == "platform") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"http", "prompt", "function", "platform"}))
 		}
 	}
 	return

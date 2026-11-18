@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/widgets"
 	widgetsrepo "github.com/speakeasy-api/gram/server/internal/widgets/repo"
 )
 
@@ -177,9 +178,11 @@ func TestListAndGetDashboards(t *testing.T) {
 	require.Equal(t, second.ID, listed.Dashboards[1].ID)
 	require.Empty(t, listed.Dashboards[1].Widgets)
 
-	// The built-in dashboards come with the list, the same in every project.
-	require.Len(t, listed.BuiltIn, 1)
+	// The built-in dashboards come with the list, the same in every project;
+	// an org admin reads them all.
+	require.Len(t, listed.BuiltIn, 2)
 	require.Equal(t, "mcp-tools", listed.BuiltIn[0].Slug)
+	require.Equal(t, "security-risk", listed.BuiltIn[1].Slug)
 	require.Equal(t, "MCP & Tools", listed.BuiltIn[0].Name)
 	require.NotEmpty(t, listed.BuiltIn[0].Cards)
 	for _, card := range listed.BuiltIn[0].Cards {
@@ -804,7 +807,7 @@ func TestDuplicateBuiltInDashboard(t *testing.T) {
 		require.NoError(t, ti.service.DeleteDashboard(memberCtx, &gen.DeleteDashboardPayload{ID: copied.ID, SessionToken: nil, ProjectSlugInput: nil}))
 		listed, err = ti.service.ListDashboards(ctx, &gen.ListDashboardsPayload{SessionToken: nil, ProjectSlugInput: nil})
 		require.NoError(t, err)
-		require.Len(t, listed.BuiltIn, 1)
+		require.Len(t, listed.BuiltIn, 2)
 	})
 
 	t.Run("it reports an unknown built-in", func(t *testing.T) {
@@ -862,4 +865,40 @@ func TestDeleteDashboard(t *testing.T) {
 		writerCtx := asMember(t, ctx, ti, "user_writer_"+uuid.NewString(), authz.NewGrant(authz.ScopeProjectWrite, ti.projectID.String()))
 		require.NoError(t, ti.service.DeleteDashboard(writerCtx, &gen.DeleteDashboardPayload{ID: created.ID, SessionToken: nil, ProjectSlugInput: nil}))
 	})
+}
+
+// TestSecurityRiskIsForOrgAdmins: the Security & risk built-in asks a dataset
+// only org admins may read, so a member is not shown it, cannot read it and
+// cannot copy it, while MCP & Tools stays theirs.
+func TestSecurityRiskIsForOrgAdmins(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	memberCtx := asMember(t, ctx, ti, "user_member_"+uuid.NewString())
+
+	listed, err := ti.service.ListDashboards(memberCtx, &gen.ListDashboardsPayload{SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Len(t, listed.BuiltIn, 1)
+	require.Equal(t, "mcp-tools", listed.BuiltIn[0].Slug)
+
+	_, err = ti.service.ReadBuiltInDashboard(memberCtx, "security-risk")
+	requireOopsCode(t, err, oops.CodeNotFound)
+	_, err = ti.service.DuplicateBuiltInDashboard(memberCtx, &gen.DuplicateBuiltInDashboardPayload{Slug: "security-risk", SessionToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	page, err := ti.service.ReadBuiltInDashboard(memberCtx, "mcp-tools")
+	require.NoError(t, err)
+	require.Equal(t, "MCP & Tools", page.Name)
+
+	page, err = ti.service.ReadBuiltInDashboard(ctx, "security-risk")
+	require.NoError(t, err)
+	require.Equal(t, "Security & risk", page.Name)
+	copied, err := ti.service.DuplicateBuiltInDashboard(ctx, &gen.DuplicateBuiltInDashboardPayload{Slug: "security-risk", SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Len(t, copied.Widgets, len(page.Cards), "an org admin copies it like any other")
+
+	// The admin's project copy holds risk_findings widgets; a member copying
+	// it would get widgets over a dataset they may not read.
+	_, err = ti.service.DuplicateDashboard(memberCtx, &gen.DuplicateDashboardPayload{ID: copied.ID, SessionToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.ErrorIs(t, err, widgets.ErrDatasetRestricted)
 }

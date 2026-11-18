@@ -3,12 +3,15 @@ package gram
 import (
 	"flag"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
 
 	"github.com/speakeasy-api/gram/server/internal/assistants"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestAssistantRuntimeConfigFromCLIAcceptsGKEProvider(t *testing.T) {
@@ -109,6 +112,105 @@ func TestAssistantRuntimeConfigFromCLIEnablesLocalInLocalEnvironment(t *testing.
 	// Locally created rows stay routable for cleanup even when targeting
 	// another backend.
 	require.True(t, cfg.Local.Enabled)
+}
+
+func TestAssistantRuntimeConfigFromCLIAcceptsDisabledProvider(t *testing.T) {
+	t.Parallel()
+
+	ctx := newAssistantRuntimeCLIContext(t, map[string]string{
+		"assistant-runtime-provider": assistants.RuntimeProviderDisabled,
+	})
+
+	cfg, err := assistantRuntimeConfigFromCLI(ctx, &url.URL{Scheme: "https", Host: "gram.example.com"})
+	require.NoError(t, err)
+	require.Equal(t, assistants.RuntimeProviderDisabled, cfg.Provider)
+	require.False(t, cfg.Local.Enabled)
+}
+
+func TestAssistantRuntimeConfigFromCLIDisabledInLocalEnvironmentWithoutImage(t *testing.T) {
+	t.Parallel()
+
+	ctx := newAssistantRuntimeCLIContext(t, map[string]string{
+		"assistant-runtime-provider":  assistants.RuntimeProviderDisabled,
+		"assistant-runtime-oci-image": "",
+		"environment":                 "local",
+	})
+
+	cfg, err := assistantRuntimeConfigFromCLI(ctx, &url.URL{Scheme: "https", Host: "localhost:8080"})
+	require.NoError(t, err)
+	// Without a runtime image the local backend could not validate, so a
+	// local stack can run disabled without building one.
+	require.False(t, cfg.Local.Enabled)
+}
+
+func TestAssistantRuntimeConfigFromCLIDisabledInLocalEnvironmentWithImage(t *testing.T) {
+	t.Parallel()
+
+	ctx := newAssistantRuntimeCLIContext(t, map[string]string{
+		"assistant-runtime-provider":  assistants.RuntimeProviderDisabled,
+		"assistant-runtime-oci-image": "gram-assistant-runtime",
+		"environment":                 "local",
+	})
+
+	cfg, err := assistantRuntimeConfigFromCLI(ctx, &url.URL{Scheme: "https", Host: "localhost:8080"})
+	require.NoError(t, err)
+	// Locally created rows stay routable for cleanup after switching to
+	// disabled.
+	require.True(t, cfg.Local.Enabled)
+}
+
+func TestNewAssistantRuntimeDisabledNeedsNoClusterOrPublicURL(t *testing.T) {
+	t.Parallel()
+
+	ctx := newAssistantRuntimeCLIContext(t, map[string]string{
+		"assistant-runtime-provider": assistants.RuntimeProviderDisabled,
+	})
+
+	// A loopback server URL fails the GKE public-host check; the disabled
+	// target launches nothing, so it is accepted.
+	backend, err := newAssistantRuntime(t.Context(), testenv.NewLogger(t), testenv.NewTracerProvider(t), ctx, guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), nil, &url.URL{Scheme: "http", Host: "localhost:8080"})
+	require.NoError(t, err)
+	require.Equal(t, assistants.RuntimeProviderDisabled, backend.Backend())
+	require.Empty(t, backend.ImageRef())
+	require.Nil(t, backend.ServerURL())
+	require.False(t, backend.SupportsBackend(assistants.RuntimeProviderGKE))
+	require.False(t, backend.SupportsBackend(assistants.RuntimeProviderLocal))
+}
+
+func TestAssistantRuntimeConfigFromCLIImageTag(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		envTag  string
+		values  map[string]string
+		want    string
+		wantErr bool
+	}{
+		{name: "invalid colon", envTag: "pr:123", wantErr: true},
+		{name: "invalid digest", envTag: "sha256@abc", wantErr: true},
+		{name: "invalid whitespace", envTag: "pr 123", wantErr: true},
+		{name: "invalid leading dash", envTag: "-pr", wantErr: true},
+		{name: "too long", envTag: strings.Repeat("a", 129), wantErr: true},
+		{name: "maximum length", envTag: strings.Repeat("a", 128), want: strings.Repeat("a", 128)},
+		{name: "valid punctuation", envTag: "_Preview.123-abc", want: "_Preview.123-abc"},
+		{name: "default", want: AssistantRuntimeImageHash},
+		{name: "environment override", envTag: "pr-123", want: "pr-123"},
+		{name: "flag override", values: map[string]string{"assistant-runtime-image-tag": "pr-456"}, want: "pr-456"},
+		{name: "flag takes precedence", envTag: "pr-123", values: map[string]string{"assistant-runtime-image-tag": "pr-456"}, want: "pr-456"},
+		{name: "empty flag falls back", envTag: "pr-123", values: map[string]string{"assistant-runtime-image-tag": ""}, want: AssistantRuntimeImageHash},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("GRAM_ASSISTANT_RUNTIME_IMAGE_TAG", tt.envTag)
+			ctx := newAssistantRuntimeCLIContext(t, tt.values)
+			cfg, err := assistantRuntimeConfigFromCLI(ctx, &url.URL{Scheme: "https", Host: "runtime.example.com"})
+			if tt.wantErr {
+				require.ErrorContains(t, err, "invalid assistant runtime image tag")
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, cfg.GKE.ImageTag)
+			require.Equal(t, tt.want, cfg.Local.ImageTag)
+		})
+	}
 }
 
 func newAssistantRuntimeCLIContext(t *testing.T, values map[string]string) *cli.Context {

@@ -36,7 +36,7 @@ func requireUnauthorized(t *testing.T, err error) {
 func TestManagerAuthorize_EmptyToken(t *testing.T) {
 	t.Parallel()
 
-	mgr := newTestManager(t)
+	mgr, _ := newTestManager(t)
 
 	_, err := mgr.Authorize(t.Context(), "")
 	requireUnauthorized(t, err)
@@ -45,7 +45,7 @@ func TestManagerAuthorize_EmptyToken(t *testing.T) {
 func TestManagerAuthorize_MalformedToken(t *testing.T) {
 	t.Parallel()
 
-	mgr := newTestManager(t)
+	mgr, _ := newTestManager(t)
 
 	_, err := mgr.Authorize(t.Context(), "not-a-jwt")
 	requireUnauthorized(t, err)
@@ -55,7 +55,7 @@ func TestManagerAuthorize_ExpiredToken(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	mgr := newTestManager(t)
+	mgr, _ := newTestManager(t)
 
 	token, _, err := mgr.GenerateToken(ctx, testClaims(), "https://example.com", -60)
 	require.NoError(t, err)
@@ -68,7 +68,7 @@ func TestManagerAuthorize_RevokedToken(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	mgr := newTestManager(t)
+	mgr, _ := newTestManager(t)
 
 	token, jti, err := mgr.GenerateToken(ctx, testClaims(), "https://example.com", 3600)
 	require.NoError(t, err)
@@ -93,7 +93,7 @@ func TestManagerAuthorize_RevocationCheckUnavailable(t *testing.T) {
 	t.Cleanup(func() {
 		_ = redisClient.Close()
 	})
-	mgr := chatsessions.NewManager(testenv.NewLogger(t), redisClient, "test-jwt-secret")
+	mgr := chatsessions.NewManager(testenv.NewLogger(t), redisClient, "test-jwt-secret", nil)
 
 	token, _, err := mgr.GenerateToken(ctx, testClaims(), "https://example.com", 3600)
 	require.NoError(t, err)
@@ -109,7 +109,7 @@ func TestManagerAuthorize_ValidToken(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	mgr := newTestManager(t)
+	mgr, _ := newTestManager(t)
 
 	claims := testClaims()
 	token, _, err := mgr.GenerateToken(ctx, claims, "https://example.com", 3600)
@@ -133,7 +133,7 @@ func TestManagerAuthorize_LegacyAPIKeyTokenKeepsExplicitProfile(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	mgr := newTestManager(t)
+	mgr, _ := newTestManager(t)
 	claims := testClaims()
 	claims.APIKeyID = "key_123"
 	token, _, err := mgr.GenerateToken(ctx, claims, "https://example.com", 3600)

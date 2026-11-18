@@ -9,6 +9,7 @@ import {
 import type { CapabilityId, CoverageCell, SurfaceId } from "./coverageApi";
 
 export const surfaces: ReadonlyArray<{ id: SurfaceId; name: string }> = [
+  { id: "mcp_gateway", name: "MCP Gateway" },
   { id: "claude_code", name: "Claude Code" },
   { id: "claude_chat", name: "Claude Chat" },
   { id: "cowork", name: "Cowork" },
@@ -28,7 +29,7 @@ export const capabilities: ReadonlyArray<{
   {
     id: "session",
     name: "Session activity",
-    description: "Aggregate chat-session activity",
+    description: "Sessions observed, or calls served by the gateway",
     unit: "session",
     catalogId: "session",
   },
@@ -42,7 +43,7 @@ export const capabilities: ReadonlyArray<{
   {
     id: "identity",
     name: "Identity attribution",
-    description: "Sessions bound to a named user",
+    description: "Activity bound to a named user",
     unit: "attributed session",
   },
   {
@@ -65,12 +66,28 @@ export const capabilities: ReadonlyArray<{
 // telemetry fold produces. Anything outside these falls into "other".
 const familyToSurface: Readonly<Record<string, SurfaceId>> = {
   "Claude Code": "claude_code",
-  "Claude Chat": "claude_chat",
-  Cowork: "cowork",
+  "Claude Chat (deprecated)": "claude_chat",
+  "Cowork (deprecated)": "cowork",
   Codex: "codex",
   ChatGPT: "codex",
   Cursor: "cursor",
 };
+
+// Unified Chat evidence lands on two columns. The observability plugin's hooks
+// run in the Cowork VM and report as Cowork, while the Compliance API and
+// inference hooks import conversations as Claude Chat.
+const unifiedChatFamily = "Claude · Unified Chat";
+const chatImportMethods: ReadonlySet<string> = new Set([
+  "anthropic-api",
+  "inference",
+]);
+
+function surfaceFor(family: string, methodId: string): SurfaceId {
+  if (family === unifiedChatFamily) {
+    return chatImportMethods.has(methodId) ? "claude_chat" : "cowork";
+  }
+  return familyToSurface[family] ?? "other";
+}
 
 export function cellKey(capability: CapabilityId, surface: SurfaceId): string {
   return `${capability}:${surface}`;
@@ -112,7 +129,7 @@ export function methodFootprints(
   const rows = snapshot.methods.map((method) => {
     const footprint = new Set<string>();
     for (const product of snapshot.products) {
-      const surface = familyToSurface[product.family] ?? "other";
+      const surface = surfaceFor(product.family, method.id);
       const mapping =
         snapshot.draft.mappings[mappingKey(method.id, product.id)] ??
         emptyMapping;

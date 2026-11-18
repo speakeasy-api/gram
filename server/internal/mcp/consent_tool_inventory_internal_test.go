@@ -2,6 +2,9 @@ package mcp
 
 import (
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -212,7 +215,7 @@ func TestChosenToolSelection_UnknownAndDuplicateAnnotationsReject(t *testing.T) 
 func TestChosenToolSelection_RejectsOverCountAndOverlongNames(t *testing.T) {
 	t.Parallel()
 
-	submitted := make([]string, consentToolNameLimit+1)
+	submitted := make([]string, toolfilter.MaxTools+1)
 	for i := range submitted {
 		submitted[i] = fmt.Sprintf("tool-%d", i)
 	}
@@ -232,7 +235,7 @@ func TestChosenToolSelection_RejectsOverCountAndOverlongNames(t *testing.T) {
 func TestConsentPrefillAttr_NilIsEmpty(t *testing.T) {
 	t.Parallel()
 
-	require.Empty(t, consentPrefillAttr(nil))
+	require.Empty(t, consentPrefillAttr(nil, nil))
 }
 
 func TestConsentPrefillAttr_SerializesGrantsAndPicks(t *testing.T) {
@@ -250,7 +253,7 @@ func TestConsentPrefillAttr_SerializesGrantsAndPicks(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t,
 		`{"annotations":[{"name":"read_only","mode":"live"}],"tools":["plain"]}`,
-		consentPrefillAttr(sel),
+		consentPrefillAttr(sel, nil),
 	)
 }
 
@@ -283,6 +286,15 @@ func TestAppendConsentInventoryPage_SinglePageCompletesAndSorts(t *testing.T) {
 	require.Equal(t, []string{}, updated.Tools[0].Annotations)
 	require.Equal(t, "zeta", updated.Tools[1].Name)
 	require.Equal(t, []string{"read_only", "open_world"}, updated.Tools[1].Annotations)
+}
+
+func TestAppendConsentInventoryPage_GatewaySizeCap(t *testing.T) {
+	t.Parallel()
+	s := inventoryServiceForTest(t)
+	draft := emptyDraft()
+	draft.Resource = "meta_mcp_server:" + uuid.NewString()
+	_, err := s.appendConsentInventoryPage(t.Context(), draft, "", []consentInventoryTool{{Name: "source--large", Definition: &toolListEntry{Name: "source--large", Description: strings.Repeat("x", connectionCatalogMaxBytes)}}}, "")
+	require.ErrorIs(t, err, errConnectionCatalogTooLarge, "oversized capture must fail before storing a Redis value")
 }
 
 func TestAppendConsentInventoryPage_MultiPageCursorChain(t *testing.T) {
@@ -372,12 +384,36 @@ func TestAppendConsentInventoryPage_RejectsBlankOverlongAndOverCap(t *testing.T)
 	}, "")
 	require.Error(t, err)
 
-	over := make([]consentInventoryTool, consentInventoryMaxTools+1)
+	over := make([]consentInventoryTool, toolfilter.MaxTools+1)
 	for i := range over {
-		over[i] = consentInventoryTool{Name: strings.Repeat("t", 3) + string(rune('a'+i%26)) + strings.Repeat("x", i/26)}
+		over[i] = consentInventoryTool{Name: fmt.Sprintf("tool_%05d", i)}
 	}
 	_, err = s.appendConsentInventoryPage(t.Context(), emptyDraft(), "", over, "")
-	require.Error(t, err)
+	require.ErrorIs(t, err, errConsentInventoryTooManyTools)
+}
+
+func TestMergeConsentInventoryPage_SharedInventoryCap(t *testing.T) {
+	t.Parallel()
+
+	tools := func(n int) []consentInventoryTool {
+		out := make([]consentInventoryTool, n)
+		for i := range out {
+			out[i] = consentInventoryTool{Name: fmt.Sprintf("member__tool_%05d", i)}
+		}
+		return out
+	}
+
+	draft, err := mergeConsentInventoryPage(emptyDraft(), "", tools(toolfilter.MaxTools), "")
+	require.NoError(t, err)
+	require.True(t, draft.Complete)
+	require.Len(t, draft.Tools, toolfilter.MaxTools)
+
+	_, err = mergeConsentInventoryPage(emptyDraft(), "", tools(toolfilter.MaxTools+1), "")
+	require.ErrorIs(t, err, errConsentInventoryTooManyTools)
+
+	// Even malformed pages must hit the count guard before inspecting entries.
+	_, err = mergeConsentInventoryPage(emptyDraft(), "", make([]consentInventoryTool, toolfilter.MaxTools+1), "")
+	require.ErrorIs(t, err, errConsentInventoryTooManyTools)
 }
 
 func TestConsentRoleHiddenMeta_CapsNamesKeepsCount(t *testing.T) {
@@ -393,4 +429,64 @@ func TestConsentRoleHiddenMeta_CapsNamesKeepsCount(t *testing.T) {
 	capped := consentRoleHiddenMeta(big)
 	require.Equal(t, consentRoleHiddenNamesCap+7, capped["count"])
 	require.Len(t, capped["names"], consentRoleHiddenNamesCap)
+}
+
+func TestConsentFormFitsFullEscapedInventory(t *testing.T) {
+	t.Parallel()
+	form := url.Values{"action": {"approve"}, "state": {"state"}, "csrf_token": {"csrf"}, "tool_filtering": {"on"}}
+	for i := range toolfilter.MaxTools {
+		form.Add("tools", strings.Repeat("%", 190)+fmt.Sprintf("%010d", i))
+	}
+	require.LessOrEqual(t, int64(len(form.Encode())), consentFormMaxBytes)
+	r := httptest.NewRequest(http.MethodPost, "/?query=value", strings.NewReader(form.Encode()))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	require.NoError(t, parseConsentForm(httptest.NewRecorder(), r))
+	require.Equal(t, form, r.PostForm)
+	require.Equal(t, "value", r.Form.Get("query"))
+	require.NoError(t, parseConsentForm(httptest.NewRecorder(), r))
+}
+
+func TestConsentFormRejectsInvalidInput(t *testing.T) {
+	t.Parallel()
+	for name, body := range map[string]string{
+		"invalid escape":     "state=%zz",
+		"semicolon":          "state=x;action=approve",
+		"too many fields":    strings.Repeat("tools=x&", consentFormMaxFields),
+		"too many bytes":     "state=" + strings.Repeat("x", int(consentFormMaxBytes)),
+		"tool name too long": "tools=" + strings.Repeat("x", consentInventoryMaxNameBytes+1),
+		"escaped tool key":   "%74ools=" + strings.Repeat("x", consentInventoryMaxNameBytes+1),
+		"metadata too large": "state=" + strings.Repeat("x", consentFormFixedFieldsMaxBytes/2) + "&csrf_token=" + strings.Repeat("x", consentFormFixedFieldsMaxBytes/2),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			require.Error(t, parseConsentForm(httptest.NewRecorder(), r))
+			require.Nil(t, r.PostForm)
+		})
+	}
+}
+
+func TestConsentFormStopsReadingOversizedField(t *testing.T) {
+	t.Parallel()
+	body := "state=" + strings.Repeat("x", int(consentFormMaxBytes)/2)
+	reader := &io.LimitedReader{R: strings.NewReader(body), N: int64(len(body))}
+	r := httptest.NewRequest(http.MethodPost, "/", reader)
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	require.Error(t, parseConsentForm(httptest.NewRecorder(), r))
+	require.Greater(t, reader.N, int64(len(body)/2), "oversized fields are refused before reading the complete body")
+	require.Nil(t, r.PostForm)
+}
+
+func TestConsentFormPreservesEmptyFieldsAndRepeatedValues(t *testing.T) {
+	t.Parallel()
+	for _, body := range []string{"", "&", "tools=a&&tools=b&", "state=a%26b&%74ools=c+d&tools=%25"} {
+		r := httptest.NewRequest(http.MethodPost, "/?state=query", strings.NewReader(body))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		expected, err := url.ParseQuery(body)
+		require.NoError(t, err)
+		require.NoError(t, parseConsentForm(httptest.NewRecorder(), r))
+		require.Equal(t, expected, r.PostForm)
+		require.Equal(t, append(expected["state"], "query"), r.Form["state"])
+	}
 }

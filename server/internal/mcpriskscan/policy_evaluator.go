@@ -107,6 +107,7 @@ type policyEvaluator struct {
 	flagScans       sync.WaitGroup
 	onFlagDrop      func(context.Context, Event)
 	onFlagOversized func(context.Context, Event)
+	approvals       ApprovalGate
 }
 
 // NewPolicyEvaluator creates an evaluator that enforces block policies inline
@@ -143,6 +144,7 @@ func NewPolicyEvaluator(
 		flagScans:       sync.WaitGroup{},
 		onFlagDrop:      nil,
 		onFlagOversized: nil,
+		approvals:       nil,
 	}
 	for _, option := range options {
 		option(policy)
@@ -183,28 +185,56 @@ func (p *policyEvaluator) evaluate(ctx context.Context, subject Subject) Decisio
 		return Allow()
 	}
 
-	blockPolicies, flagPolicies := partitionPolicies(policies)
+	blockPolicies, approvalPolicies, flagPolicies := partitionPolicies(policies)
+	if event.Phase() != PhaseRequest || event.Method != MethodToolsCall {
+		// Approval holds a tool call before it runs. A response, a prompt or a
+		// resource read has no call to retry.
+		approvalPolicies = nil
+	}
 	payloadSettled := false
 	defer func() { p.scheduleFlagLane(ctx, subject, flagPolicies, payloadSettled) }()
-	if len(blockPolicies) == 0 {
+	if len(blockPolicies) == 0 && len(approvalPolicies) == 0 {
 		return Allow()
 	}
 	if subject.Payload.Availability() != PayloadAvailable {
+		if len(approvalPolicies) > 0 {
+			// Approval never fails open: arguments it cannot read could be
+			// anything an approver would refuse.
+			return approvalUnavailableDecision(approvalPolicies[0], fmt.Sprintf("the call arguments are %s", subject.Payload.Availability()))
+		}
 		return p.resolveIndeterminate(ctx, event.Phase(), fmt.Errorf("MCP payload is %s", subject.Payload.Availability()))
 	}
 
-	request := policyScanRequest(subject, subject.Payload.Bytes())
-	match, scanErr := p.scanBlockPolicies(scanCtx, blockPolicies, request)
-	if match != nil {
-		outcome := riskv1.Finding_ENFORCEMENT_OUTCOME_DENIED
-		if event.Phase() == PhaseResponse {
-			outcome = riskv1.Finding_ENFORCEMENT_OUTCOME_WITHHELD
+	indeterminate := false
+	if len(blockPolicies) > 0 {
+		request := policyScanRequest(subject, subject.Payload.Bytes())
+		match, scanErr := p.scanBlockPolicies(scanCtx, blockPolicies, request)
+		if match != nil {
+			outcome := riskv1.Finding_ENFORCEMENT_OUTCOME_DENIED
+			if event.Phase() == PhaseResponse {
+				outcome = riskv1.Finding_ENFORCEMENT_OUTCOME_WITHHELD
+			}
+			payloadSettled = p.publish(scanCtx, subject.Event, match.policy, match.findings, outcome, request.Text)
+			return deniedDecision(subject.Event.Phase(), match.policy, match.findings[0])
 		}
-		payloadSettled = p.publish(scanCtx, subject.Event, match.policy, match.findings, outcome, request.Text)
-		return deniedDecision(subject.Event.Phase(), match.policy, match.findings[0])
+		if scanErr != nil || scanCtx.Err() != nil {
+			// A block lane that fails open still leaves the call to the
+			// approval lane.
+			decision := p.resolveIndeterminate(ctx, event.Phase(), errors.Join(scanErr, scanCtx.Err()))
+			if decision.Denied() || len(approvalPolicies) == 0 {
+				return decision
+			}
+			indeterminate = true
+		}
 	}
-	if scanErr != nil || scanCtx.Err() != nil {
-		return p.resolveIndeterminate(ctx, event.Phase(), errors.Join(scanErr, scanCtx.Err()))
+	if len(approvalPolicies) > 0 {
+		// The block lane may have used up the shared deadline; the approval
+		// lane gets its own so it can still record the request.
+		approvalCtx, cancelApproval := context.WithTimeout(ctx, p.config.Deadline)
+		defer cancelApproval()
+		decision := p.holdForApproval(approvalCtx, subject, approvalPolicies)
+		decision.Indeterminate = decision.Indeterminate || indeterminate
+		return decision
 	}
 	return Allow()
 }
@@ -432,6 +462,7 @@ func (p *policyEvaluator) resolveIndeterminate(ctx context.Context, phase string
 			Description:   "MCP risk policy evaluation did not complete",
 			UserMessage:   userMessage,
 			Indeterminate: true,
+			ApprovalToken: "",
 		}
 	}
 	decision := Allow()
@@ -439,17 +470,23 @@ func (p *policyEvaluator) resolveIndeterminate(ctx context.Context, phase string
 	return decision
 }
 
-func partitionPolicies(policies []policycore.Policy) (block, flag []policycore.Policy) {
+// partitionPolicies splits policies into the inline block lane, the inline
+// approval lane, and the detached flag lane for every other action.
+func partitionPolicies(policies []policycore.Policy) (block, approval, flag []policycore.Policy) {
 	block = make([]policycore.Policy, 0, len(policies))
+	approval = make([]policycore.Policy, 0, len(policies))
 	flag = make([]policycore.Policy, 0, len(policies))
 	for _, policy := range policies {
-		if policy.Action == "block" {
+		switch policy.Action {
+		case "block":
 			block = append(block, policy)
-			continue
+		case policycore.ActionRequireApproval:
+			approval = append(approval, policy)
+		default:
+			flag = append(flag, policy)
 		}
-		flag = append(flag, policy)
 	}
-	return block, flag
+	return block, approval, flag
 }
 
 func deniedDecision(phase string, policy policycore.Policy, finding scanners.Finding) Decision {
@@ -468,6 +505,7 @@ func deniedDecision(phase string, policy policycore.Policy, finding scanners.Fin
 		Description:   finding.Description,
 		UserMessage:   userMessage,
 		Indeterminate: false,
+		ApprovalToken: "",
 	}
 }
 

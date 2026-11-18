@@ -1,21 +1,64 @@
 -- Queries for managing principal grants (RBAC).
 -- principal_grants is org-scoped (no project_id); every query is scoped to organization_id.
+-- Audience reads and replacements skip api_key rows: a key's policy is owned by the keys service.
+--
+-- A row with a non-NULL expires_at is a temporary grant. Once expires_at has
+-- passed it grants nothing: every read used for authorization or display
+-- filters it out, and a permanent write of the same grant takes the row over
+-- by clearing expires_at. Audience reads and replacements see permanent rows
+-- only, so saving an audience never turns a temporary grant permanent or
+-- removes one.
 
 -- name: ListPrincipalGrantsByOrg :many
--- Returns all grant rows for an organization, optionally filtered by principal URN.
+-- Returns all live grant rows for an organization, optionally filtered by
+-- principal URN.
 SELECT id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at
 FROM principal_grants
 WHERE organization_id = @organization_id
   AND (@principal_urn::text = '' OR principal_urn = @principal_urn)
+  AND (expires_at IS NULL OR expires_at > clock_timestamp())
 ORDER BY principal_urn, scope;
+
+-- name: LockRolePrincipalGrants :exec
+-- Serializes grant writes for one role principal in an organization until the
+-- transaction ends. Role edits and the assistant-role-grants backfill both take
+-- it, so a backfill cannot recheck a role, lose a race with a revocation, and
+-- then write grants back.
+SELECT pg_advisory_xact_lock(hashtextextended('role-grants:' || @organization_id::text || ':' || @principal_urn::text, 0));
 
 -- name: GetPrincipalGrants :many
 -- Returns all grant rows matching a set of principal URNs within an org.
 -- Used by the access resolver to load grants for a user+role in a single query.
-SELECT principal_urn, scope, selectors
-FROM principal_grants
-WHERE organization_id = @organization_id
-  AND principal_urn = ANY(@principal_urns::text[]);
+-- inferred marks a grant the default auth permission backfill wrote that no
+-- explicit write has taken over, so it never outranks an inherited block.
+SELECT g.principal_urn, g.scope, g.selectors,
+  EXISTS (
+    SELECT 1
+    FROM auth_permission_provisions p
+    WHERE p.organization_id = g.organization_id
+      AND p.principal_urn = g.principal_urn
+      AND p.scope = g.scope
+      AND p.selectors = g.selectors
+      AND p.taken_over_at IS NULL
+  )::boolean AS inferred
+FROM principal_grants g
+WHERE g.organization_id = @organization_id
+  AND g.principal_urn = ANY(@principal_urns::text[])
+  -- Grants are loaded per request, so an expired temporary grant stops
+  -- authorizing the next request without a sign-out or role change.
+  AND (g.expires_at IS NULL OR g.expires_at > clock_timestamp());
+
+-- name: HasPermanentPrincipalGrants :one
+-- Reports whether a principal holds any permanent grant. Provisioning uses it
+-- to decide whether default grants were already written, so a temporary grant
+-- given to the principal never stands in for them.
+SELECT EXISTS (
+  SELECT 1
+  FROM principal_grants
+  WHERE organization_id = @organization_id
+    AND principal_urn = @principal_urn
+    AND expires_at IS NULL
+)::boolean AS has_grants;
 
 -- name: ListPrincipalGrantsByResource :many
 -- Returns grant rows for a single resource selector.
@@ -27,6 +70,8 @@ WHERE organization_id = @organization_id
     'resource_kind', sqlc.arg(resource_kind)::text,
     'resource_id', sqlc.arg(resource_id)::text
   )
+  AND principal_type <> 'api_key'
+  AND expires_at IS NULL
 ORDER BY principal_urn;
 
 -- name: ListPrincipalGrantsByResourceIDs :many
@@ -42,24 +87,74 @@ WHERE organization_id = @organization_id
     'resource_kind', sqlc.arg(resource_kind)::text
   )
   AND selectors->>'resource_id' = ANY(@resource_ids::text[])
+  AND principal_type <> 'api_key'
+  AND expires_at IS NULL
 ORDER BY principal_urn;
 
 -- name: UpsertPrincipalGrant :one
--- Creates or updates a single grant row. On conflict (same org/principal/scope/selectors),
--- the existing row is kept and its updated_at is bumped.
+-- Creates or updates a single permanent grant row. On conflict (same
+-- org/principal/scope/selectors), the existing row is kept and its updated_at
+-- is bumped; a temporary row becomes permanent, since this write asks for
+-- access with no deadline.
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES (@organization_id, @principal_urn, @scope, @selectors)
 ON CONFLICT (organization_id, principal_urn, scope, selectors)
 DO UPDATE SET
+  expires_at = NULL,
   updated_at = clock_timestamp()
 RETURNING id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at;
 
+-- name: MarkAuthPermissionTakenOver :exec
+-- An explicit grant write takes the grant over from the default auth
+-- permission backfill: a rollback leaves it, and a rerun still never writes it
+-- again. Run after the write, so a grant provisioned meanwhile is seen.
+UPDATE auth_permission_provisions
+SET taken_over_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND principal_urn = @principal_urn
+  AND scope = @scope
+  AND selectors = @selectors
+  AND taken_over_at IS NULL;
+
+-- name: LockAuthPermissionBackfill :exec
+-- Takes the organization's auth client backfill lock for the transaction's
+-- life; the key must match authclientbackfill's LockOrganizationBackfill.
+SELECT pg_advisory_xact_lock(hashtext('authclientbackfill:' || @organization_id::text));
+
+-- name: MarkPrincipalAuthPermissionsTakenOver :exec
+-- An explicit write of a principal's whole policy takes every grant the
+-- backfill provisioned for it over, including ones since removed.
+UPDATE auth_permission_provisions
+SET taken_over_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND principal_urn = @principal_urn
+  AND taken_over_at IS NULL;
+
+-- name: RecordAuthPermissionPolicyTakeover :exec
+-- Records that an explicit write owns the principal's policy even when it
+-- leaves no grant to mark, so the backfill never treats the principal as
+-- untouched.
+INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind, taken_over_at)
+VALUES (@organization_id, @principal_urn, @scope, @selectors, @kind, clock_timestamp())
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO UPDATE
+SET taken_over_at = COALESCE(auth_permission_provisions.taken_over_at, EXCLUDED.taken_over_at),
+    updated_at = clock_timestamp();
+
+-- name: RecordAuthPermissionDefault :exec
+-- Records a default grant written at organization creation.
+INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind)
+VALUES (@organization_id, @principal_urn, @scope, @selectors, @kind)
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING;
+
 -- name: InsertPrincipalGrantIfAbsent :execrows
--- Creates a single grant row and leaves an existing identical row untouched.
+-- Creates a single permanent grant row and leaves an existing identical
+-- permanent row untouched. An identical temporary row, live or expired, is
+-- made permanent and counts as written: the permanent grant did not exist.
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES (@organization_id, @principal_urn, @scope, @selectors)
 ON CONFLICT (organization_id, principal_urn, scope, selectors)
-DO NOTHING;
+DO UPDATE SET expires_at = NULL, updated_at = clock_timestamp()
+WHERE principal_grants.expires_at IS NOT NULL;
 
 -- name: DeletePrincipalGrant :execrows
 -- Removes a specific grant row by ID, scoped to the organization for safety.
@@ -75,23 +170,43 @@ WHERE organization_id = @organization_id
   AND scope = @scope
   AND selectors = @selectors;
 
+-- name: DeletePrincipalWildcardGrants :execrows
+-- Removes a principal's unrestricted rows for one scope: a selector naming at
+-- most a resource kind and the wildcard resource ID. Older writers stored the
+-- kind as "*" or under another name, or left out resource_id (which the grant
+-- matcher reads as "*"), so matching on the kind the scope implies today would
+-- leave those rows granting access after an administrator removed them.
+DELETE FROM principal_grants
+WHERE organization_id = @organization_id
+  AND principal_urn = @principal_urn
+  AND scope = @scope
+  AND COALESCE(selectors->>'resource_id', '*') = '*'
+  AND (selectors - 'resource_kind' - 'resource_id') = '{}'::jsonb;
+
 -- name: DeletePrincipalGrantsByTarget :execrows
--- Removes every principal row for one exact grant target. Used by audience
--- replacement writes where the caller supplies the full desired principal set.
+-- Removes every permanent principal row for one exact grant target. Used by
+-- audience replacement writes where the caller supplies the full desired
+-- principal set. Temporary grants are not part of an audience and survive.
 DELETE FROM principal_grants
 WHERE organization_id = @organization_id
   AND scope = @scope
-  AND selectors = @selectors;
+  AND selectors = @selectors
+  AND principal_type <> 'api_key'
+  AND expires_at IS NULL;
 
 -- name: DeletePrincipalGrantsByResource :execrows
--- Removes grant rows for a single resource selector.
+-- Removes permanent grant rows for a single resource selector. Used by
+-- audience replacement writes; temporary grants are not part of an audience
+-- and survive.
 DELETE FROM principal_grants
 WHERE organization_id = @organization_id
   AND scope = @scope
   AND selectors @> jsonb_build_object(
     'resource_kind', sqlc.arg(resource_kind)::text,
     'resource_id', sqlc.arg(resource_id)::text
-  );
+  )
+  AND principal_type <> 'api_key'
+  AND expires_at IS NULL;
 
 -- name: DeletePrincipalGrantsByPrincipal :execrows
 -- Removes all grants for a specific principal within an org.
@@ -99,6 +214,75 @@ WHERE organization_id = @organization_id
 DELETE FROM principal_grants
 WHERE organization_id = @organization_id
   AND principal_urn = @principal_urn;
+
+-- Queries for temporary grants: principal_grants rows with a non-NULL
+-- expires_at. One row per org/principal/scope/selectors still holds, so a
+-- temporary grant and a permanent grant for the same target never coexist.
+
+-- name: InsertTemporaryGrant :one
+-- Creates a temporary grant, or restarts an expired one for the same target.
+-- Returns no row when the target is already held permanently or by a live
+-- temporary grant; the caller reports which with GetPrincipalGrantByIdentity.
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors, expires_at)
+VALUES (@organization_id, @principal_urn, @scope, @selectors, @expires_at)
+ON CONFLICT (organization_id, principal_urn, scope, selectors)
+DO UPDATE SET
+  expires_at = EXCLUDED.expires_at,
+  created_at = clock_timestamp(),
+  updated_at = clock_timestamp()
+WHERE principal_grants.expires_at IS NOT NULL
+  AND principal_grants.expires_at <= clock_timestamp()
+RETURNING id, organization_id, principal_urn, scope, selectors, expires_at, created_at, updated_at, clock_timestamp()::timestamptz AS observed_at;
+
+-- name: GetPrincipalGrantByIdentity :one
+SELECT id, expires_at, clock_timestamp()::timestamptz AS observed_at
+FROM principal_grants
+WHERE organization_id = @organization_id
+  AND principal_urn = @principal_urn
+  AND scope = @scope
+  AND selectors = @selectors;
+
+-- name: GetTemporaryGrantForUpdate :one
+-- Locks one temporary grant so a renewal or revocation sees the state it
+-- changes. Permanent rows are never returned.
+SELECT id, organization_id, principal_urn, scope, selectors, expires_at, created_at, updated_at, clock_timestamp()::timestamptz AS observed_at
+FROM principal_grants
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND expires_at IS NOT NULL
+FOR UPDATE;
+
+-- name: ListTemporaryGrants :many
+-- Lists an organization's temporary grants, soonest deadline first, optionally
+-- for one principal. Expired grants are included only on request; revoked
+-- grants are deleted and live on in the audit log.
+SELECT id, organization_id, principal_urn, scope, selectors, expires_at, created_at, updated_at, clock_timestamp()::timestamptz AS observed_at
+FROM principal_grants
+WHERE organization_id = @organization_id
+  AND expires_at IS NOT NULL
+  AND (@principal_urn::text = '' OR principal_urn = @principal_urn)
+  AND (@include_expired::boolean OR expires_at > clock_timestamp())
+ORDER BY expires_at, id
+LIMIT 500;
+
+-- name: RenewTemporaryGrant :one
+-- Moves a live temporary grant's deadline. The caller has locked it.
+UPDATE principal_grants
+SET expires_at = @expires_at, updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND expires_at > clock_timestamp()
+RETURNING id, organization_id, principal_urn, scope, selectors, expires_at, created_at, updated_at, clock_timestamp()::timestamptz AS observed_at;
+
+-- name: RevokeTemporaryGrant :one
+-- Ends a live temporary grant early by deleting it. The expires_at condition
+-- means a permanent grant is never removed this way.
+DELETE FROM principal_grants
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND expires_at IS NOT NULL
+  AND expires_at > clock_timestamp()
+RETURNING id, organization_id, principal_urn, scope, selectors, expires_at, created_at, updated_at, clock_timestamp()::timestamptz AS observed_at;
 
 -- Queries for authz challenge resolutions.
 -- authz_challenge_resolutions is org-scoped (no project_id).
@@ -129,13 +313,25 @@ SELECT pg_advisory_xact_lock(hashtextextended(
 -- Silently skips challenges that are already resolved (ON CONFLICT DO NOTHING).
 INSERT INTO authz_challenge_resolutions (
   organization_id, challenge_id, principal_urn, scope,
-  resource_kind, resource_id, resolution_type, role_slug, resolved_by
+  resource_kind, resource_id, resolution_type, role_slug, temporary_grant_id, resolved_by
 )
 SELECT
   @organization_id, unnest(@challenge_ids::text[]), @principal_urn, @scope,
-  @resource_kind, @resource_id, @resolution_type, @role_slug, @resolved_by
+  @resource_kind, @resource_id, @resolution_type, @role_slug, sqlc.narg(temporary_grant_id)::uuid, @resolved_by
 ON CONFLICT (organization_id, challenge_id) DO NOTHING
 RETURNING *;
+
+-- name: ListChallengeResolutionTemporaryGrants :many
+-- Returns each temporary grant a challenge resolution points at, expired ones
+-- included. A grant that is missing was revoked (revocation deletes the row).
+-- active compares the deadline with the database clock, the same clock
+-- authorization reads grants with. created_at moves when an expired grant is
+-- restarted, which tells a resolution of the earlier grant from the new one.
+SELECT id, expires_at, created_at, (expires_at > clock_timestamp())::boolean AS active
+FROM principal_grants
+WHERE organization_id = @organization_id
+  AND id = ANY(@ids::uuid[])
+  AND expires_at IS NOT NULL;
 
 -- name: GetGlobalRoleBySlug :one
 SELECT *
@@ -811,6 +1007,28 @@ WHERE ora.organization_id = @organization_id
   AND ora.deleted_at IS NULL
 ORDER BY role_slug;
 
+-- name: ListMemberRolePrincipalsByWorkosUsers :many
+-- The roles several members hold, in one read, for a role save that works
+-- out what each member it assigns gains.
+SELECT
+  ora.workos_user_id,
+  ora.role_urn::text AS principal_urn
+FROM organization_role_assignments AS ora
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = @organization_id
+  AND ora.workos_user_id = ANY(@workos_user_ids::text[])
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+  AND ora.deleted_at IS NULL
+ORDER BY ora.workos_user_id, ora.role_urn;
+
 -- name: ListMemberRolePrincipalsByUser :many
 SELECT
   COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,
@@ -1067,32 +1285,63 @@ SELECT project_id FROM (
 ) AS owning
 LIMIT 1;
 
+-- name: FindMCPResourceProjects :many
+-- FindMCPResourceProject for many resources at once; unknown ids are absent.
+SELECT resource_id::uuid AS resource_id, project_id::uuid AS project_id FROM (
+  SELECT toolsets.id AS resource_id, toolsets.project_id AS project_id
+  FROM toolsets
+  JOIN projects ON projects.id = toolsets.project_id
+  WHERE projects.organization_id = @organization_id
+    AND toolsets.id = ANY(sqlc.arg(resource_ids)::uuid[])
+    AND toolsets.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT mcp_servers.id AS resource_id, mcp_servers.project_id AS project_id
+  FROM mcp_servers
+  JOIN projects ON projects.id = mcp_servers.project_id
+  WHERE projects.organization_id = @organization_id
+    AND mcp_servers.id = ANY(sqlc.arg(resource_ids)::uuid[])
+    AND mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT meta_mcp_servers.id AS resource_id, meta_mcp_servers.project_id AS project_id
+  FROM meta_mcp_servers
+  JOIN projects ON projects.id = meta_mcp_servers.project_id
+  WHERE projects.organization_id = @organization_id
+    AND meta_mcp_servers.id = ANY(sqlc.arg(resource_ids)::uuid[])
+    AND meta_mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+) AS owning;
+
 -- name: FindMCPResourceVisibility :one
 -- Resolves who may connect to one MCP resource without an access rule, as the
 -- same three-valued visibility mcp_servers stores: 'public' endpoints skip the
 -- connect check, 'private' ones enforce it, and 'disabled' ones serve nobody.
--- A gateway toolset is public when its MCP endpoint is, and serves nobody
--- while its MCP endpoint is switched off. A hosted wrapper can share its
--- toolset's id; when either row serves nobody, nobody can connect, so
--- 'disabled' wins, and otherwise the wrapper's own visibility does. A gateway
+-- A hosted toolset reads its canonical wrapper's visibility, and one without
+-- a wrapper serves nobody; the wrapper row itself reports the same id, and
+-- 'disabled' wins between them. A gateway
 -- (meta server) is reported as such: it has no connect check of its own, each
 -- member server is checked instead. Resources are found by the same
 -- identifiers and tenancy rules as FindMCPResourceProject.
 SELECT resource_type, visibility FROM (
   SELECT
     'toolset'::text AS resource_type,
-    (CASE
-      WHEN NOT toolsets.mcp_enabled THEN 'disabled'
-      WHEN toolsets.mcp_is_public THEN 'public'
-      ELSE 'private'
-    END)::text AS visibility,
+    COALESCE(cw.visibility, 'disabled')::text AS visibility,
     2 AS source_rank
   FROM toolsets
   JOIN projects ON projects.id = toolsets.project_id
+  -- The canonical wrapper owns a hosted toolset's visibility.
+  LEFT JOIN mcp_servers cw ON cw.id = toolsets.id AND cw.toolset_id = toolsets.id AND cw.project_id = toolsets.project_id AND cw.deleted IS FALSE
   WHERE projects.organization_id = @organization_id
     AND toolsets.id = sqlc.arg(resource_id)::uuid
     AND toolsets.deleted IS FALSE
     AND projects.deleted IS FALSE
+    -- A server that kept the toolset's id after leaving it answers for that id instead.
+    AND NOT EXISTS (
+      SELECT 1 FROM mcp_servers kept
+      WHERE kept.id = toolsets.id AND kept.project_id = toolsets.project_id AND kept.deleted IS FALSE
+        AND kept.toolset_id IS DISTINCT FROM toolsets.id
+    )
   UNION ALL
   SELECT 'mcp_server'::text AS resource_type, mcp_servers.visibility::text AS visibility, 1 AS source_rank
   FROM mcp_servers
@@ -1129,9 +1378,12 @@ SELECT pg_advisory_xact_lock(hashtextextended(@organization_id::text || ':' || s
 -- server, so plugin membership is deliberately not consulted.
 --
 -- The shape mirrors the authorization engine's own: a permission is an allow
--- grant for a scope minus a blocked_ grant for THAT SAME scope proving the same
--- server (see authz/expressions.go). mcp:blocked_connect withdraws
--- mcp:connect; it does not withdraw mcp:read. A grant made directly to the
+-- grant for a scope minus a blocked_ grant proving the same server for that
+-- scope or for one it implies (see authz/expressions.go): mcp:blocked_write
+-- withdraws mcp:write, and mcp:blocked_read withdraws mcp:read and also
+-- mcp:write, because a write check honours a read block (see scopeExpansions
+-- in authz/scopes.go). mcp:blocked_connect withdraws mcp:connect only;
+-- connect is implied by neither read nor write. A grant made directly to the
 -- user that names this server outranks a block inherited from a role or
 -- user:all, while the user's own blocks always apply (authz/precedence.go).
 WITH user_grants AS (
@@ -1142,6 +1394,7 @@ WITH user_grants AS (
   FROM principal_grants pg
   WHERE pg.organization_id = @organization_id
     AND pg.principal_urn = ANY(@principal_urns::text[])
+    AND (pg.expires_at IS NULL OR pg.expires_at > clock_timestamp())
     AND pg.scope IN (
       'mcp:connect', 'mcp:read', 'mcp:write',
       'mcp:blocked_connect', 'mcp:blocked_read', 'mcp:blocked_write'
@@ -1199,7 +1452,10 @@ WHERE NOT EXISTS (
   SELECT 1 FROM grant_matches blocked
   WHERE blocked.server_id = s.id
     AND blocked.strict
-    AND blocked.scope = 'mcp:blocked_' || split_part(allowed.scope, ':', 2)
+    AND (
+      blocked.scope = 'mcp:blocked_' || split_part(allowed.scope, ':', 2)
+      OR (allowed.scope = 'mcp:write' AND blocked.scope = 'mcp:blocked_read')
+    )
     AND (blocked.direct OR NOT (allowed.direct AND allowed.concrete))
 )
 ORDER BY s.name;
@@ -1212,6 +1468,16 @@ ORDER BY s.name;
 -- distributed to a plugin the user holds is still unreachable if RBAC does not
 -- allow it, so distribution is not consulted. Principal precedence also
 -- matches: a direct grant naming the skill outranks an inherited block.
+--
+-- Blocks pair with allows by scope: skill:blocked_read withdraws skill:read and
+-- also skill:write, because a write check honours a read block (see
+-- scopeExpansions in authz/scopes.go), and skill:blocked_write withdraws
+-- skill:write. Callers read the result as "skills this user can reach", which
+-- is the skill:read check, and the engine does not withdraw that on
+-- skill:blocked_write. So a user whose only grant is skill:write, blocked by
+-- skill:blocked_write, is left out here although the engine lets them read the
+-- skill. That case is kept as it was until list and single-skill access are
+-- reconciled.
 WITH user_grants AS (
   SELECT
     pg.scope,
@@ -1220,6 +1486,7 @@ WITH user_grants AS (
   FROM principal_grants pg
   WHERE pg.organization_id = @organization_id
     AND pg.principal_urn = ANY(@principal_urns::text[])
+    AND (pg.expires_at IS NULL OR pg.expires_at > clock_timestamp())
     AND pg.scope IN (
       'skill:read', 'skill:write',
       'skill:blocked_read', 'skill:blocked_write'
@@ -1259,7 +1526,10 @@ JOIN grant_matches allowed
 WHERE NOT EXISTS (
   SELECT 1 FROM grant_matches blocked
   WHERE blocked.skill_id = cs.id
-    AND blocked.scope = 'skill:blocked_' || split_part(allowed.scope, ':', 2)
+    AND (
+      blocked.scope = 'skill:blocked_read'
+      OR (blocked.scope = 'skill:blocked_write' AND allowed.scope = 'skill:write')
+    )
     AND (blocked.direct OR NOT (allowed.direct AND allowed.concrete))
 )
 -- SELECT DISTINCT only permits ORDER BY over selected columns, and
@@ -1849,3 +2119,34 @@ SET deleted_at = clock_timestamp(),
 WHERE id = @id
   AND organization_id = @organization_id
   AND deleted IS FALSE;
+
+-- name: GetRemoteSessionRowDigestFixture :one
+-- Test fixture: a digest of the whole stored row, so a test can prove it was
+-- not touched without reading any credential value.
+SELECT md5(row_to_json(s)::text) AS row_digest FROM remote_sessions s WHERE s.id = @id;
+-- name: ListManagedAssistantAgentIDs :many
+-- The requested agents that are currently bound to a project's managed
+-- assistant. Only these agents may hold organization-wide read policy; every
+-- other agent has org:read filtered out of its runtime policy.
+SELECT aab.agent_id::uuid AS agent_id
+FROM assistant_agent_bindings AS aab
+JOIN project_managed_assistants AS pma
+  ON pma.project_id = aab.project_id
+  AND pma.assistant_id = aab.assistant_id
+JOIN assistants
+  ON assistants.id = aab.assistant_id
+  AND assistants.project_id = aab.project_id
+  AND assistants.organization_id = aab.organization_id
+  AND assistants.deleted IS FALSE
+JOIN projects
+  ON projects.id = aab.project_id
+  AND projects.organization_id = aab.organization_id
+  AND projects.deleted IS FALSE
+JOIN agents
+  ON agents.id = aab.agent_id
+  AND agents.organization_id = aab.organization_id
+  AND agents.project_id = aab.project_id
+  AND agents.deleted IS FALSE
+WHERE aab.organization_id = @organization_id
+  AND aab.deleted IS FALSE
+  AND aab.agent_id = ANY(@agent_ids::uuid[]);

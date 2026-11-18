@@ -35,7 +35,7 @@ import { WriteReportProvider } from "./OrganizationActions";
 import { PeekPanel } from "./PeekPanel";
 import { PEEK_TRIGGER_SELECTOR, PeekProvider } from "./PeekTrigger";
 import { FiltersApplied, type ApplyOptions } from "./applyFilters";
-import { useOpenOrganization } from "./rowActions";
+import { useOpenOrganization } from "./useOpenOrganization";
 import { StatStrip } from "./StatStrip";
 import { TableActionBar, Toolbar } from "./Toolbar";
 

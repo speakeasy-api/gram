@@ -4,19 +4,20 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { Switch } from "@/components/ui/Switch";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
+import { SplashScreen } from "@/components/ui/LogoLoader";
 import type { DeviceIntegrationCoverage } from "@gram/client/models/components/deviceintegrationcoverage.js";
 import type { DeviceIntegrationProvider } from "@gram/client/models/components/deviceintegrationprovider.js";
 import { buildDeviceIntegrationCoverageQuery } from "@gram/client/react-query/deviceIntegrationCoverage.js";
 import { useDeviceIntegrationCoverage } from "@gram/client/react-query/deviceIntegrationCoverage.js";
 import { useDeviceIntegrationProviders } from "@gram/client/react-query/deviceIntegrationProviders.js";
-import { useManagedDevicesInfinite } from "@gram/client/react-query/managedDevices.js";
+import { useFleetDevicesInfinite } from "@gram/client/react-query/fleetDevices.js";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { useQueries } from "@tanstack/react-query";
 import { PlugZap } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, Navigate, useParams } from "react-router";
-import { CoverageSummaryTiles, ManagedDeviceTable } from "./coverage-widgets";
+import { CoverageSummaryTiles, DeviceTable } from "./coverage-widgets";
 import {
   isProviderVisible,
   isSink,
@@ -54,7 +55,7 @@ export default function MdmIntegrationDetail(): JSX.Element | null {
   );
 
   const provider = data?.providers.find((p) => p.id === providerID);
-  if (isLoading) return null;
+  if (isLoading) return <SplashScreen />;
   // Hidden providers 404 to the list even by direct URL, so a not-yet-supported
   // integration can't be reached out of band.
   if (!provider || !isProviderVisible(provider)) {
@@ -105,7 +106,9 @@ function MdmIntegrationDetailInner({
     );
   // Only sources own a device inventory; a sink has none of its own, so the
   // query never runs on a sink page.
-  const devicesQuery = useManagedDevicesInfinite(
+  // The fleet read scoped to one provider is exactly its inventory, so this
+  // page and the Devices tab share one table and one device panel.
+  const devicesQuery = useFleetDevicesInfinite(
     { provider: provider.id, limit: 200 },
     undefined,
     { throwOnError: false, staleTime: COVERAGE_STALE_TIME, enabled: !sink },
@@ -238,7 +241,7 @@ function MdmIntegrationDetailInner({
             device's agent coverage.
           </Page.Section.Description>
           <Page.Section.Body>
-            <ManagedDeviceTable
+            <DeviceTable
               devices={devices}
               isLoading={devicesQuery.isLoading}
               isError={devicesQuery.isError}

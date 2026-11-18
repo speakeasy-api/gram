@@ -19,6 +19,7 @@ func TestNewProxyMetrics(t *testing.T) {
 	require.NotNil(t, m)
 	require.NotNil(t, m.mcpToolCallCounter)
 	require.NotNil(t, m.identityCoverage)
+	require.NotNil(t, m.lookupSkipped)
 }
 
 func TestProxyMetrics_RecordMCPToolCall_RecordsWithValidCounter(t *testing.T) {

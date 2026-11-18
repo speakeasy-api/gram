@@ -23,6 +23,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -198,6 +199,18 @@ var allowList = map[string]bool{
 	"mistralai/mistral-medium-3.1":  true,
 }
 
+// AllowedModels returns a sorted copy of the models supported by the proxy.
+func AllowedModels() []string {
+	models := make([]string, 0, len(allowList))
+	for model, allowed := range allowList {
+		if allowed {
+			models = append(models, model)
+		}
+	}
+	slices.Sort(models)
+	return models
+}
+
 // IsModelAllowed checks if a model is in the allowlist
 func IsModelAllowed(model string) bool {
 	return allowList[model]
@@ -325,7 +338,7 @@ func ResolveDefaultCreditLimit(
 const trialCreditLimit = 50
 
 var specialLimitOrgs = []string{
-	"5a25158b-24dc-4d49-b03d-e85acfbea59c", // speakeasy-team
+	constants.SpeakeasyTeamOrganizationID,
 }
 
 // IsSpecialLimitOrg reports whether the org bypasses standard credit limits.

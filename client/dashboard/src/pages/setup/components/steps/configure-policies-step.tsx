@@ -972,6 +972,7 @@ const ACTION_PILL_VARIANT: Record<
   quarantine: "destructive",
   warn: "warning",
   flag: "neutral",
+  require_approval: "warning",
   off: "neutral",
 };
 
@@ -980,6 +981,7 @@ const ACTION_PILL_LABEL: Record<ActionPillKind, string> = {
   quarantine: "Quarantine",
   warn: "Warn",
   flag: "Flag",
+  require_approval: "Require approval",
   off: "Off",
 };
 

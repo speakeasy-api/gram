@@ -119,6 +119,9 @@ func ReplaceGrantAudience(ctx context.Context, db repo.DBTX, resource ResourceGr
 	if err := resource.Validate(); err != nil {
 		return err
 	}
+	if err := RequireUpstreamSelectorWrites(ctx, resource.OrganizationID, resource.selector()); err != nil {
+		return err
+	}
 
 	if err := resource.ValidateAudience(); err != nil {
 		return err
@@ -140,7 +143,7 @@ func ReplaceGrantAudience(ctx context.Context, db repo.DBTX, resource ResourceGr
 	}
 
 	for _, principal := range resource.uniquePrincipals() {
-		if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
+		if err := upsertGrant(ctx, q, repo.UpsertPrincipalGrantParams{
 			OrganizationID: resource.OrganizationID,
 			PrincipalUrn:   principal,
 			Scope:          string(resource.Scope),
@@ -188,6 +191,9 @@ func ReplaceResourceAudience(ctx context.Context, db repo.DBTX, resource Resourc
 			if err := ValidateSelector(resource.Scope, selector); err != nil {
 				return fmt.Errorf("invalid selector for scope %q: %w", resource.Scope, err)
 			}
+			if err := RequireUpstreamSelectorWrites(ctx, resource.OrganizationID, selector); err != nil {
+				return err
+			}
 			selectorBytes, err := selector.MarshalJSON()
 			if err != nil {
 				return fmt.Errorf("marshal grant selector: %w", err)
@@ -207,7 +213,7 @@ func ReplaceResourceAudience(ctx context.Context, db repo.DBTX, resource Resourc
 	}
 
 	for _, grant := range pending {
-		if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
+		if err := upsertGrant(ctx, q, repo.UpsertPrincipalGrantParams{
 			OrganizationID: resource.OrganizationID,
 			PrincipalUrn:   grant.principal,
 			Scope:          string(resource.Scope),
@@ -223,6 +229,9 @@ func ReplaceResourceAudience(ctx context.Context, db repo.DBTX, resource Resourc
 // Replace replaces allow grants for one resource-scoped permission.
 func ReplaceGrantsForResource(ctx context.Context, db repo.DBTX, resource ResourceGrant) error {
 	if err := resource.Validate(); err != nil {
+		return err
+	}
+	if err := RequireUpstreamSelectorWrites(ctx, resource.OrganizationID, resource.selector()); err != nil {
 		return err
 	}
 	selector := resource.selector()
@@ -244,7 +253,7 @@ func ReplaceGrantsForResource(ctx context.Context, db repo.DBTX, resource Resour
 	}
 
 	for _, principal := range principals {
-		if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
+		if err := upsertGrant(ctx, q, repo.UpsertPrincipalGrantParams{
 			OrganizationID: resource.OrganizationID,
 			PrincipalUrn:   principal,
 			Scope:          string(resource.Scope),
@@ -261,6 +270,9 @@ func ReplaceGrantsForResource(ctx context.Context, db repo.DBTX, resource Resour
 // grants for the same resource.
 func GrantResourceToPrincipals(ctx context.Context, db repo.DBTX, resource ResourceGrant) error {
 	if err := resource.Validate(); err != nil {
+		return err
+	}
+	if err := RequireUpstreamSelectorWrites(ctx, resource.OrganizationID, resource.selector()); err != nil {
 		return err
 	}
 	if err := resource.ValidatePrincipals(); err != nil {
@@ -329,6 +341,7 @@ func ListGrantsForResource(ctx context.Context, db repo.DBTX, resource Resource)
 			PrincipalUrn: row.PrincipalUrn.String(),
 			Scope:        Scope(row.Scope),
 			Selector:     selector,
+			Inferred:     false,
 		})
 	}
 
@@ -374,6 +387,7 @@ func ListGrantsForResourceIDs(ctx context.Context, db repo.DBTX, organizationID 
 			PrincipalUrn: row.PrincipalUrn.String(),
 			Scope:        Scope(row.Scope),
 			Selector:     selector,
+			Inferred:     false,
 		})
 	}
 

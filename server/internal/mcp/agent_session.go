@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -33,6 +33,7 @@ func encodeAgentSessionPolicy(target AgentAuthorizationTarget, version runtimepo
 			authz.SelectorKeyResourceID:   target.MCPResourceID.String(),
 			authz.SelectorKeyProjectID:    target.ProjectID.String(),
 		},
+		Inferred: false,
 	}})
 	if err != nil {
 		return nil, fmt.Errorf("construct agent session policy: %w", err)
@@ -45,7 +46,7 @@ func encodeAgentSessionPolicy(target AgentAuthorizationTarget, version runtimepo
 }
 
 func newAgentSessionCredential(target AgentAuthorizationTarget, authorizerUserID string) (agentSessionCredential, error) {
-	version := runtimepolicy.CurrentDelegatedPolicyVersion
+	version := runtimepolicy.IssuedDelegatedPolicyVersion
 	encoded, err := encodeAgentSessionPolicy(target, version)
 	if err != nil {
 		return agentSessionCredential{}, err
@@ -60,6 +61,11 @@ func newAgentSessionCredential(target AgentAuthorizationTarget, authorizerUserID
 	}, nil
 }
 
+// agentCredentialRejected marks a stored agent credential that cannot be honoured, not a setup fault.
+func agentCredentialRejected() error {
+	return oops.E(oops.CodeUnauthorized, errCredentialRejected, "%s", oops.CodeUnauthorized.UserMessage())
+}
+
 func loadAgentSessionCredential(
 	endpoint *ResolvedMcpEndpoint,
 	subject urn.SessionSubject,
@@ -69,31 +75,37 @@ func loadAgentSessionCredential(
 	delegatedGrants []byte,
 	delegatedGrantsVersion pgtype.Int4,
 ) (agentSessionCredential, error) {
-	if subject.Kind != urn.SessionSubjectKindAgent || subject.String() != storedSubject.String() ||
-		!organizationID.Valid || organizationID.String != endpoint.OrganizationID ||
-		!authorizerUserID.Valid || authorizerUserID.String == "" || delegatedGrants == nil || !delegatedGrantsVersion.Valid {
+	if subject.Kind != urn.SessionSubjectKindAgent {
 		return agentSessionCredential{}, oops.C(oops.CodeUnauthorized)
 	}
+	if subject.String() != storedSubject.String() ||
+		!organizationID.Valid || organizationID.String != endpoint.OrganizationID ||
+		!authorizerUserID.Valid || authorizerUserID.String == "" || delegatedGrants == nil || !delegatedGrantsVersion.Valid {
+		return agentSessionCredential{}, agentCredentialRejected()
+	}
 	if _, err := uuid.Parse(subject.ID); err != nil {
-		return agentSessionCredential{}, oops.C(oops.CodeUnauthorized)
+		return agentSessionCredential{}, agentCredentialRejected()
 	}
 
 	version := runtimepolicy.DelegatedPolicyVersion(delegatedGrantsVersion.Int32)
 	decoded, err := runtimepolicy.DecodeDelegatedPolicy(version, delegatedGrants)
 	if err != nil {
-		return agentSessionCredential{}, oops.C(oops.CodeUnauthorized)
+		return agentSessionCredential{}, agentCredentialRejected()
 	}
 	normalized, err := runtimepolicy.EncodeDelegatedPolicy(version, decoded)
 	if err != nil {
-		return agentSessionCredential{}, oops.C(oops.CodeUnauthorized)
+		return agentSessionCredential{}, agentCredentialRejected()
 	}
 	target, ok := agentAuthorizationTarget(endpoint)
 	if !ok {
 		return agentSessionCredential{}, oops.C(oops.CodeUnauthorized)
 	}
 	expected, err := encodeAgentSessionPolicy(*target, version)
-	if err != nil || !bytes.Equal(normalized, expected) {
+	if err != nil {
 		return agentSessionCredential{}, oops.C(oops.CodeUnauthorized)
+	}
+	if !bytes.Equal(normalized, expected) {
+		return agentSessionCredential{}, agentCredentialRejected()
 	}
 
 	return agentSessionCredential{

@@ -124,6 +124,68 @@ func TestGetMCPOutcomeBreakdown_ClassifiesDirectCallsByStatus(t *testing.T) {
 	require.Equal(t, uint64(3), outcomeCounts(all)[telemetryRepo.MCPOutcomeServerError])
 }
 
+func TestGetMCPOutcomeBreakdown_ClassifiesIsErrorInside200AsFailed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	for _, p := range []struct {
+		email   string
+		status  int
+		outcome string
+	}{
+		{email: "ok@example.com", status: 200, outcome: "ok"},
+		{email: "ok@example.com", status: 200, outcome: ""},
+		{email: "tool-error@example.com", status: 200, outcome: "error"},
+		{email: "tool-error@example.com", status: 200, outcome: "error"},
+		// A redirect answered as isError is a tool error too.
+		{email: "tool-error@example.com", status: 302, outcome: "error"},
+		// Transport failures stay classified by their status.
+		{email: "ok@example.com", status: 500, outcome: "error"},
+		{email: "ok@example.com", status: 401, outcome: "error"},
+		{email: "ok@example.com", status: 404, outcome: "error"},
+	} {
+		insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+			projectID:   projectID,
+			timestamp:   now.Add(-10 * time.Minute),
+			toolsetSlug: "docs",
+			toolName:    "read_doc",
+			userEmail:   p.email,
+			statusCode:  p.status,
+			outcome:     p.outcome,
+		})
+	}
+
+	params := telemetryRepo.GetMCPOutcomeBreakdownParams{
+		GramProjectIDs: []string{projectID},
+		ToolsetSlugs:   []string{"docs"},
+		TimeStart:      now.Add(-time.Hour).UnixNano(),
+		TimeEnd:        now.UnixNano(),
+	}
+	rows, err := ti.chClient.GetMCPOutcomeBreakdown(ctx, params)
+	require.NoError(t, err)
+	require.Equal(t, map[string]uint64{
+		telemetryRepo.MCPOutcomeSuccess:      2,
+		telemetryRepo.MCPOutcomeFailed:       3,
+		telemetryRepo.MCPOutcomeServerError:  1,
+		telemetryRepo.MCPOutcomeUnauthorized: 1,
+		telemetryRepo.MCPOutcomeClientError:  1,
+	}, outcomeCounts(rows))
+
+	users, err := ti.chClient.ListMCPUsageUsers(ctx, params)
+	require.NoError(t, err)
+	byEmail := map[string]telemetryRepo.MCPUsageUserRow{}
+	for _, u := range users {
+		byEmail[u.Identifier] = u
+	}
+	require.Contains(t, byEmail, "tool-error@example.com")
+	require.True(t, byEmail["tool-error@example.com"].HasError)
+	require.False(t, byEmail["tool-error@example.com"].HasSuccess)
+}
+
 func TestGetMCPOutcomeBreakdown_AttributesHookObservedCallsToTheirClient(t *testing.T) {
 	t.Parallel()
 

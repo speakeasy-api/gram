@@ -8,9 +8,10 @@ import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { TagsVariationEditor } from "@/components/tool-variation-tags-editor";
 import { useCommandPalette } from "@/contexts/CommandPalette";
 import { useLatestDeployment } from "@/hooks/toolTypes";
-import { ToolUpdateFields } from "@/hooks/useToolUpdate";
+import type { ToolUpdateFields } from "@/hooks/useToolUpdate";
 import { TOOL_NAME_REGEX } from "@/lib/constants";
-import { Tool, Toolset, isHttpTool } from "@/lib/toolTypes";
+import type { Tool, Toolset } from "@/lib/toolTypes";
+import { isHttpTool } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/Label";
 import { Switch } from "@/components/ui/Switch";
@@ -56,7 +57,7 @@ interface ToolListProps {
 }
 
 interface ToolGroup {
-  type: "package" | "function" | "custom" | "higher_order" | "external-mcp";
+  type: "package" | "function" | "custom" | "higher_order";
   icon:
     | "file-code"
     | "square-function"
@@ -128,7 +129,6 @@ function groupTools(
   const groups: ToolGroup[] = [];
   const packageMap = new Map<string, Tool[]>();
   const functionMap = new Map<string, Tool[]>();
-  const registryServerNameToTools = new Map<string, Tool[]>();
   const functionTools: Tool[] = [];
   const customTools: Tool[] = [];
   const higherOrderTools: Tool[] = [];
@@ -166,10 +166,6 @@ function groupTools(
         // Function tools without a source go to the generic functions group
         functionTools.push(tool);
       }
-    } else if (tool.type === "external-mcp") {
-      const groupKey = tool.registryServerName;
-      const existing = registryServerNameToTools.get(groupKey) || [];
-      registryServerNameToTools.set(groupKey, [...existing, tool]);
     } else {
       // Everything else (prompts without higher order, etc.)
       customTools.push(tool);
@@ -207,16 +203,6 @@ function groupTools(
       tools: functionTools,
     });
   }
-
-  // Add external MCP tools group
-  registryServerNameToTools.forEach((tools, registryServerName) => {
-    groups.push({
-      type: "external-mcp",
-      icon: "mcp",
-      title: registryServerName,
-      tools: sortToolsByMethod(tools),
-    });
-  });
 
   // Add custom tools group with sorted tools
   if (customTools.length > 0) {
@@ -698,40 +684,41 @@ function ToolGroupHeader({
         !isFirstGroup && "border-neutral-softest border-t",
       )}
     >
-      <button
-        onClick={onToggle}
-        aria-expanded={isExpanded}
-        aria-label={`${isExpanded ? "Collapse" : "Expand"} ${group.title} group`}
-        className="flex items-center gap-4 transition-opacity hover:opacity-70"
-      >
-        <div className="relative size-4 shrink-0">
-          <Icon
-            className={cn(
-              "absolute inset-0 size-4 transition-opacity",
-              !readOnly && "group-hover/header:opacity-0",
-            )}
-            strokeWidth={1.5}
-          />
-          {!readOnly && (
-            <SimpleTooltip
-              tooltip={`${allSelected ? "Deselect" : "Select"} ${group.tools.length} tools`}
-            >
-              <Checkbox
-                checked={allSelected}
-                onCheckedChange={onSelectAll}
-                onClick={(e) => {
-                  e.stopPropagation();
-                }}
-                className={cn(
-                  "absolute inset-0 opacity-0 transition-opacity",
-                  "group-hover/header:opacity-100",
-                )}
-              />
-            </SimpleTooltip>
-          )}
-        </div>
-        <p className="text-foreground text-sm leading-6">{group.title}</p>
-      </button>
+      <div className="relative flex items-center transition-opacity hover:opacity-70">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={isExpanded}
+          aria-label={`${isExpanded ? "Collapse" : "Expand"} ${group.title} group`}
+          className="flex items-center gap-4"
+        >
+          <div className="relative size-4 shrink-0">
+            <Icon
+              className={cn(
+                "absolute inset-0 size-4 transition-opacity",
+                !readOnly && "group-hover/header:opacity-0",
+              )}
+              strokeWidth={1.5}
+            />
+          </div>
+          <p className="text-foreground text-sm leading-6">{group.title}</p>
+        </button>
+        {!readOnly && (
+          <SimpleTooltip
+            tooltip={`${allSelected ? "Deselect" : "Select"} ${group.tools.length} tools`}
+          >
+            <Checkbox
+              checked={allSelected}
+              onCheckedChange={onSelectAll}
+              aria-label={`${allSelected ? "Deselect" : "Select"} ${group.title} tools`}
+              className={cn(
+                "absolute top-1/2 left-0 -translate-y-1/2 opacity-0 transition-opacity",
+                "group-hover/header:opacity-100 focus-visible:opacity-100",
+              )}
+            />
+          </SimpleTooltip>
+        )}
+      </div>
       <button
         onClick={onToggle}
         aria-expanded={isExpanded}

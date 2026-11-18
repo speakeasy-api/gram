@@ -1,10 +1,11 @@
 import { ResourceListPage } from "@/components/page-templates";
 import { CardContextMenu } from "@/components/card-context-menu";
 import { Card, Cards } from "@/components/ui/Card";
-import { Action, MoreActions } from "@/components/ui/MoreActions";
+import type { Action } from "@/components/ui/MoreActions";
+import { MoreActions } from "@/components/ui/MoreActions";
 import { UpdatedAt } from "@/components/updated-at";
 import { useRoutes } from "@/routes";
-import { PromptTemplate } from "@gram/client/models/components/prompttemplate.js";
+import type { PromptTemplate } from "@gram/client/models/components/prompttemplate.js";
 import { useDeleteTemplateMutation } from "@gram/client/react-query/deleteTemplate.js";
 import { invalidateAllTemplates } from "@gram/client/react-query/templates.js";
 import { usePrompts } from "./usePrompts";

@@ -96,7 +96,7 @@ func TestAuthenticationHostSharedAuthorizationServer_CORS(t *testing.T) {
 		{"/.well-known/oauth-authorization-server" + base, http.MethodGet, http.StatusOK, "*"},
 		{base + "/.well-known/oauth-authorization-server", http.MethodGet, http.StatusOK, "*"},
 		{base + "/token", http.MethodPost, http.StatusBadRequest, "*"},
-		{base + "/revoke", http.MethodPost, http.StatusUnauthorized, "*"},
+		{base + "/revoke", http.MethodPost, http.StatusBadRequest, "*"},
 		{base + "/register", http.MethodPost, http.StatusBadRequest, "*"},
 		{base + "/authorize", http.MethodGet, http.StatusBadRequest, ""},
 		{base + "/connect", http.MethodGet, http.StatusBadRequest, ""},

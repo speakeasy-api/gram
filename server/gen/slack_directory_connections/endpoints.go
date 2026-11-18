@@ -23,6 +23,7 @@ type Endpoints struct {
 	GetMember          goa.Endpoint
 	SetMapping         goa.Endpoint
 	Begin              goa.Endpoint
+	SetDefaultProject  goa.Endpoint
 	Disconnect         goa.Endpoint
 }
 
@@ -39,6 +40,7 @@ func NewEndpoints(s Service) *Endpoints {
 		GetMember:          NewGetMemberEndpoint(s, a.APIKeyAuth),
 		SetMapping:         NewSetMappingEndpoint(s, a.APIKeyAuth),
 		Begin:              NewBeginEndpoint(s, a.APIKeyAuth),
+		SetDefaultProject:  NewSetDefaultProjectEndpoint(s, a.APIKeyAuth),
 		Disconnect:         NewDisconnectEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -53,6 +55,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetMember = m(e.GetMember)
 	e.SetMapping = m(e.SetMapping)
 	e.Begin = m(e.Begin)
+	e.SetDefaultProject = m(e.SetDefaultProject)
 	e.Disconnect = m(e.Disconnect)
 }
 
@@ -214,6 +217,29 @@ func NewBeginEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpo
 			return nil, err
 		}
 		return s.Begin(ctx, p)
+	}
+}
+
+// NewSetDefaultProjectEndpoint returns an endpoint function that calls the
+// method "setDefaultProject" of service "slackDirectoryConnections".
+func NewSetDefaultProjectEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetDefaultProjectPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetDefaultProject(ctx, p)
 	}
 }
 

@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/chat/chattitle"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -116,6 +117,13 @@ func (s *Service) resolveOrgQueryScope(ctx context.Context, from, to string, pro
 // pre-aggregated attribute_metrics_summaries view; skill_version queries use
 // session-level raw telemetry joined to asynchronously reconciled mappings.
 func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*telem_gen.QueryResult, error) {
+	return s.query(ctx, payload, true)
+}
+
+// query runs Query. In-process callers that read only the table pass
+// withTimeseries=false to skip the per-group timeseries read; the result then
+// still carries a gap-filled zero series per group, which callers may drop.
+func (s *Service) query(ctx context.Context, payload *telem_gen.QueryPayload, withTimeseries bool) (*telem_gen.QueryResult, error) {
 	scope, err := s.resolveOrgQueryScope(ctx, payload.From, payload.To, nil)
 	if err != nil {
 		return nil, err
@@ -152,27 +160,9 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 	}
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 
-	// Fold mode: canonical serves folded identities from the identity_map;
-	// shadow serves literal results and logs how the folded variant would
-	// differ; off keeps the Postgres-side per-request identity expansion.
-	var foldIdentities, shadowFold bool
-	if queryTouchesEmail(groupBy, filters) {
-		foldIdentities, shadowFold = s.canonicalIdentityMode(ctx, authCtx.ActiveOrganizationID)
-	}
-	// Shadow must replay the exact query fold mode would run: the original
-	// request filters, folded in-query. Cloned before the Postgres expansion
-	// below mutates the elements — feeding already-expanded aliases into the
-	// fold would mask Postgres-ahead/map-lag divergence.
-	var shadowFilters []repo.AttributeMetricsFilter
-	if shadowFold {
-		shadowFilters = slices.Clone(filters)
-	}
-	if !foldIdentities {
-		filters = s.expandEmployeeEmailFilters(ctx, authCtx.ActiveOrganizationID, filters)
-	}
-
+	// Email filters and group-bys serve folded identities from the identity_map.
 	canonicalOrg := ""
-	if foldIdentities {
+	if queryTouchesEmail(groupBy, filters) {
 		canonicalOrg = authCtx.ActiveOrganizationID
 	}
 	// IncludeDimensionValues defaults to true only via HTTP decoding; in-process
@@ -221,6 +211,9 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 		return nil
 	})
 	eg.Go(func() error {
+		if !withTimeseries {
+			return nil
+		}
 		var egErr error
 		if useSkillVersions {
 			tsRows, egErr = s.chRepo.QuerySkillVersionMetricsTimeseries(egCtx, params)
@@ -234,14 +227,6 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 	})
 	if err := eg.Wait(); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error running analytics query")
-	}
-
-	// The skill-version path reads raw telemetry through its own builders;
-	// shadow only validates the aggregate fold it will actually replace.
-	if shadowFold && !useSkillVersions {
-		shadowParams := params
-		shadowParams.Filters = shadowFilters
-		s.shadowCompareCanonicalFold(ctx, authCtx.ActiveOrganizationID, shadowParams, tableRows)
 	}
 
 	return buildQueryResult(groupBy, interval, timeStart, timeEnd, topN, tableRows, tsRows), nil
@@ -308,11 +293,11 @@ func (s *Service) QueryTumDetails(ctx context.Context, payload *telem_gen.QueryT
 		dayRows []repo.TumBreakdownDayBucket
 		dimRows = make([][]repo.TumBreakdownDimDayBucket, len(tumBreakdownDims))
 	)
-	// The email breakdown folds to canonical identities when the org is on
-	// the fold; every other dimension and all totals are unaffected.
+	// The email breakdown folds to canonical identities; every other
+	// dimension and all totals are unaffected.
 	canonicalOrg := ""
 	if authCtx, _ := contextvalues.GetAuthContext(ctx); authCtx != nil {
-		canonicalOrg = s.canonicalOrgFor(ctx, authCtx.ActiveOrganizationID)
+		canonicalOrg = authCtx.ActiveOrganizationID
 	}
 
 	eg, egCtx := errgroup.WithContext(ctx)
@@ -497,6 +482,14 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 		projectIDs = append(projectIDs, p.ID.String())
 	}
 
+	// org:read covers the slice's totals; a session row names its user and
+	// title, so rows come only from projects the caller holds chat:read on.
+	rowProjectIDs, err := s.chatReadableProjects(ctx, authCtx.ActiveOrganizationID, projectIDs)
+	if err != nil {
+		return nil, err
+	}
+	scoped := len(rowProjectIDs) < len(projectIDs)
+
 	var cursorSortValue *float64
 	var cursorGramChatID string
 	if payload.Cursor != nil && *payload.Cursor != "" {
@@ -515,20 +508,12 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 		}
 		filters = append(filters, repo.AttributeMetricsFilter{Dimension: f.Dimension, Values: f.Values})
 	}
-	var foldIdentities bool
-	if queryTouchesEmail("", filters) {
-		foldIdentities, _ = s.canonicalIdentityMode(ctx, authCtx.ActiveOrganizationID)
-	}
-	if !foldIdentities {
-		filters = s.expandEmployeeEmailFilters(ctx, authCtx.ActiveOrganizationID, filters)
-	}
-
 	canonicalOrg := ""
-	if foldIdentities {
+	if queryTouchesEmail("", filters) {
 		canonicalOrg = authCtx.ActiveOrganizationID
 	}
 	params := repo.ListSessionsParams{
-		ProjectIDs:           projectIDs,
+		ProjectIDs:           rowProjectIDs,
 		TimeStart:            timeStart,
 		TimeEnd:              timeEnd,
 		Filters:              filters,
@@ -545,6 +530,24 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing sessions")
 	}
 
+	var totals *telem_gen.SessionTotals
+	if scoped {
+		params.ProjectIDs = projectIDs
+		sums, err := s.chRepo.GetSessionTotals(ctx, params)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error totalling sessions")
+		}
+		totals = &telem_gen.SessionTotals{
+			SessionCount:      sums.SessionCount,
+			MessageCount:      sums.MessageCount,
+			ToolCallCount:     sums.ToolCallCount,
+			TotalInputTokens:  sums.TotalInputTokens,
+			TotalOutputTokens: sums.TotalOutputTokens,
+			TotalTokens:       sums.TotalTokens,
+			TotalCost:         sanitizeFloat64(sums.TotalCost),
+		}
+	}
+
 	var nextCursor *string
 	if len(items) > limit {
 		next := encodeListSessionsCursor(items[limit-1].SortValue, items[limit-1].GramChatID)
@@ -554,7 +557,7 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 
 	// Chat titles live in Postgres, not the ClickHouse telemetry the session
 	// metrics come from, so resolve them in a single batch and stitch them on.
-	titlesByChatID := s.chatTitlesForSessions(ctx, items, projectIDs)
+	titlesByChatID := s.chatTitlesForSessions(ctx, items, rowProjectIDs)
 
 	sessions := make([]*telem_gen.SessionSummary, len(items))
 	for i, item := range items {
@@ -585,7 +588,35 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 	return &telem_gen.ListSessionsResult{
 		Sessions:   sessions,
 		NextCursor: nextCursor,
+		Scoped:     scoped,
+		Totals:     totals,
 	}, nil
+}
+
+// chatReadableProjects returns the projects whose session rows the caller may
+// see. Evaluate rather than Require: an org reader without chat:read is the
+// expected case, not a denial to record, and RBAC off keeps every project.
+func (s *Service) chatReadableProjects(ctx context.Context, orgID string, projectIDs []string) ([]string, error) {
+	// An organization-wide grant reads every project at once.
+	allowed, err := s.authz.Evaluate(ctx, authz.ChatReadCheck(orgID))
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "evaluate chat read access")
+	}
+	if allowed {
+		return projectIDs, nil
+	}
+
+	readable := make([]string, 0, len(projectIDs))
+	for _, projectID := range projectIDs {
+		allowed, err := s.authz.Evaluate(ctx, authz.ChatReadCheck(projectID))
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "evaluate chat read access")
+		}
+		if allowed {
+			readable = append(readable, projectID)
+		}
+	}
+	return readable, nil
 }
 
 // chatTitlesForSessions resolves the Postgres chat title for each session,
@@ -631,7 +662,7 @@ func (s *Service) chatTitlesForSessions(ctx context.Context, items []repo.Sessio
 	titles := make(map[string]string, len(rows))
 	for _, row := range rows {
 		if row.Title.Valid && row.Title.String != "" {
-			titles[row.ID.String()] = row.Title.String
+			titles[row.ID.String()] = chattitle.Display(row.Title.String, row.TitleManuallySet)
 		}
 	}
 	return titles

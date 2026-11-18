@@ -9,6 +9,10 @@ export type UpdateOnboardingPlaybookRequestBody = {
   description?: string | undefined;
   isDefault?: boolean | undefined;
   name: string;
+  /**
+   * When provided, require the playbook to belong to this organization. Omit for global library edits.
+   */
+  organizationId?: string | undefined;
   playbookId: string;
   stepSlugs: Array<string>;
 };
@@ -18,6 +22,7 @@ export type UpdateOnboardingPlaybookRequestBody$Outbound = {
   description?: string | undefined;
   is_default?: boolean | undefined;
   name: string;
+  organization_id?: string | undefined;
   playbook_id: string;
   step_slugs: Array<string>;
 };
@@ -31,12 +36,14 @@ export const UpdateOnboardingPlaybookRequestBody$outboundSchema: z.ZodMiniType<
     description: z.optional(z.string()),
     isDefault: z.optional(z.boolean()),
     name: z.string(),
+    organizationId: z.optional(z.string()),
     playbookId: z.string(),
     stepSlugs: z.array(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       isDefault: "is_default",
+      organizationId: "organization_id",
       playbookId: "playbook_id",
       stepSlugs: "step_slugs",
     });

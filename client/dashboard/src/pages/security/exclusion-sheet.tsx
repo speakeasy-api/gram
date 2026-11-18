@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { Label } from "@/components/ui/Label";
 import {
   Select,
@@ -26,7 +27,7 @@ import type { RiskExclusion } from "@gram/client/models/components/riskexclusion
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import type { JSX, ReactNode } from "react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -49,6 +50,7 @@ import {
   getRuleTitleFallback,
   isRationaleSource,
 } from "./risk-utils";
+import { useRiskContentRestricted } from "./use-risk-content-restricted";
 import { useRBAC } from "@/hooks/useRBAC";
 import { invalidateExclusionSurfaces } from "./exclusion-invalidation";
 import type { DetectorMode } from "./policy-data";
@@ -264,21 +266,28 @@ function ExclusionForm({
   // operator who picks "any finding from this rule" should not leave an audit
   // entry for a value they never looked at.
   const { hasScope } = useRBAC();
+  const restricted = useRiskContentRestricted();
   // Entity-type exclusions only mean something to the Presidio engine; under
   // the LLM analyzer they are not applied, so the sheet stops offering them.
   const mode = useDetectorMode();
   const reveals = useUnmaskedMatch(single?.id ?? "");
-  const exact = exactCandidate(
-    single,
-    reveals.value,
-    hasScope(REVEAL_SCOPE, single?.chatId) &&
-      hasRevealableEvent(single?.matchRedacted),
-  );
+  const exact = restricted
+    ? undefined
+    : exactCandidate(
+        single,
+        reveals.value,
+        hasScope(REVEAL_SCOPE, single?.chatId) &&
+          hasRevealableEvent(single?.matchRedacted),
+      );
 
   // Ready-made rules for the selection. Always at least ["custom"], so an
   // edit or a no-finding create renders no picker and opens on the DSL box.
   // A pre-targeted rule is on offer even before any findings load.
-  const options = exclusionOptions(results, exact, presetRuleId, mode);
+  // The options helper also accepts plaintext already present on chat findings.
+  // Filter that fallback too, not only the audited-reveal candidate above.
+  const options = exclusionOptions(results, exact, presetRuleId, mode).filter(
+    (option) => !restricted || option.value !== "exact",
+  );
   const [choice, setChoice] = useState<ExclusionOption["value"]>(() => {
     // A pre-targeted create opens on the rule option: the flow began as "stop
     // flagging this signal", which is the whole rule cluster, not any one
@@ -488,7 +497,7 @@ function ExclusionForm({
                 >
                   <Button.LeftIcon>
                     {suggestMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <Spinner className="mr-0" />
                     ) : (
                       <Sparkles className="h-4 w-4" />
                     )}
@@ -540,7 +549,7 @@ function ExclusionForm({
         >
           {(submitting || reveals.isLoading) && (
             <Button.LeftIcon>
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Spinner className="mr-0" />
             </Button.LeftIcon>
           )}
           <Button.Text>

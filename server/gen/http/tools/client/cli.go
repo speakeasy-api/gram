@@ -59,8 +59,8 @@ func BuildListToolsPayload(toolsListToolsCursor string, toolsListToolsLimit stri
 				return nil, fmt.Errorf("invalid JSON for toolTypes, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"prompt\"\n   ]'")
 			}
 			for _, e := range toolTypes {
-				if !(e == "http" || e == "prompt" || e == "function" || e == "platform" || e == "externalmcp") {
-					err = goa.MergeErrors(err, goa.InvalidEnumValueError("tool_types[*]", e, []any{"http", "prompt", "function", "platform", "externalmcp"}))
+				if !(e == "http" || e == "prompt" || e == "function" || e == "platform") {
+					err = goa.MergeErrors(err, goa.InvalidEnumValueError("tool_types[*]", e, []any{"http", "prompt", "function", "platform"}))
 				}
 			}
 			if err != nil {

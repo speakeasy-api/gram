@@ -63,3 +63,113 @@ func (q *Queries) GetAssistantTokenRevocation(ctx context.Context, arg GetAssist
 	err := row.Scan(&i.ThreadDeleted, &i.AssistantDeleted, &i.AssistantStatus)
 	return i, err
 }
+
+const listKitInferenceSessionBindings = `-- name: ListKitInferenceSessionBindings :many
+SELECT s.acp_session_id, t.id AS thread_id, t.chat_id
+FROM assistant_kit_sessions s
+JOIN assistant_runtimes r ON r.id = s.runtime_id AND r.project_id = s.project_id AND r.assistant_id = s.assistant_id
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+JOIN assistant_threads t ON t.id = s.assistant_thread_id AND t.project_id = s.project_id AND t.assistant_id = s.assistant_id
+JOIN chats c ON c.id = t.chat_id AND c.project_id = t.project_id
+WHERE s.runtime_id = $1 AND s.project_id = $2 AND s.assistant_id = $3
+  AND r.runtime_version = 3 AND a.runtime_version = 3
+  AND NOT r.deleted AND NOT r.ended AND r.state IN ('starting', 'active') AND NOT a.deleted AND a.status = 'active'
+  AND NOT t.deleted AND NOT c.deleted
+  AND r.backend_metadata_json->'workload' = $4::jsonb
+`
+
+type ListKitInferenceSessionBindingsParams struct {
+	RuntimeID       uuid.NullUUID
+	ProjectID       uuid.NullUUID
+	AssistantID     uuid.NullUUID
+	WorkloadBinding []byte
+}
+
+type ListKitInferenceSessionBindingsRow struct {
+	AcpSessionID string
+	ThreadID     uuid.UUID
+	ChatID       uuid.UUID
+}
+
+// Resolve provider session attribution only inside the authenticated runtime.
+func (q *Queries) ListKitInferenceSessionBindings(ctx context.Context, arg ListKitInferenceSessionBindingsParams) ([]ListKitInferenceSessionBindingsRow, error) {
+	rows, err := q.db.Query(ctx, listKitInferenceSessionBindings,
+		arg.RuntimeID,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.WorkloadBinding,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListKitInferenceSessionBindingsRow
+	for rows.Next() {
+		var i ListKitInferenceSessionBindingsRow
+		if err := rows.Scan(&i.AcpSessionID, &i.ThreadID, &i.ChatID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listKitWorkloadBindings = `-- name: ListKitWorkloadBindings :many
+SELECT r.id AS runtime_id, r.assistant_id, r.backend_metadata_json,
+  (r.runtime_version = 3 AND a.runtime_version = 3
+   AND NOT r.deleted AND NOT r.ended AND r.state IN ('starting', 'active')
+   AND NOT a.deleted AND a.status = 'active')::boolean AS active
+FROM assistant_runtimes r
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+WHERE r.project_id = $1 AND a.organization_id = $2
+  AND r.backend_metadata_json->'workload'->>'issuer_id' = $3::text
+  AND r.backend_metadata_json->'workload'->>'subject' = $4::text
+`
+
+type ListKitWorkloadBindingsParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	IssuerID       string
+	Subject        string
+}
+
+type ListKitWorkloadBindingsRow struct {
+	RuntimeID           uuid.UUID
+	AssistantID         uuid.UUID
+	BackendMetadataJson []byte
+	Active              bool
+}
+
+// The workload subject is unique to one runtime generation, not a guest claim.
+func (q *Queries) ListKitWorkloadBindings(ctx context.Context, arg ListKitWorkloadBindingsParams) ([]ListKitWorkloadBindingsRow, error) {
+	rows, err := q.db.Query(ctx, listKitWorkloadBindings,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.IssuerID,
+		arg.Subject,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListKitWorkloadBindingsRow
+	for rows.Next() {
+		var i ListKitWorkloadBindingsRow
+		if err := rows.Scan(
+			&i.RuntimeID,
+			&i.AssistantID,
+			&i.BackendMetadataJson,
+			&i.Active,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

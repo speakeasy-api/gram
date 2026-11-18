@@ -1417,6 +1417,243 @@ func DecodeDeleteConfigResponse(decoder func(*http.Response) goahttp.Decoder, re
 	}
 }
 
+// BuildListOrgUnitsRequest instantiates a HTTP request object with method and
+// path set to call the "aiIntegrations" service "listOrgUnits" endpoint
+func (c *Client) BuildListOrgUnitsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListOrgUnitsAiIntegrationsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("aiIntegrations", "listOrgUnits", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListOrgUnitsRequest returns an encoder for requests sent to the
+// aiIntegrations listOrgUnits server.
+func EncodeListOrgUnitsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*aiintegrations.ListOrgUnitsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("aiIntegrations", "listOrgUnits", "*aiintegrations.ListOrgUnitsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("provider", p.Provider)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListOrgUnitsResponse returns a decoder for responses returned by the
+// aiIntegrations listOrgUnits endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListOrgUnitsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListOrgUnitsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListOrgUnitsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "listOrgUnits", err)
+			}
+			err = ValidateListOrgUnitsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "listOrgUnits", err)
+			}
+			res := NewListOrgUnitsListAIIntegrationOrgUnitsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListOrgUnitsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "listOrgUnits", err)
+			}
+			err = ValidateListOrgUnitsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "listOrgUnits", err)
+			}
+			return nil, NewListOrgUnitsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListOrgUnitsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "listOrgUnits", err)
+			}
+			err = ValidateListOrgUnitsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "listOrgUnits", err)
+			}
+			return nil, NewListOrgUnitsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListOrgUnitsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "listOrgUnits", err)
+			}
+			err = ValidateListOrgUnitsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "listOrgUnits", err)
+			}
+			return nil, NewListOrgUnitsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListOrgUnitsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "listOrgUnits", err)
+			}
+			err = ValidateListOrgUnitsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "listOrgUnits", err)
+			}
+			return nil, NewListOrgUnitsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListOrgUnitsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "listOrgUnits", err)
+			}
+			err = ValidateListOrgUnitsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "listOrgUnits", err)
+			}
+			return nil, NewListOrgUnitsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListOrgUnitsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "listOrgUnits", err)
+			}
+			err = ValidateListOrgUnitsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "listOrgUnits", err)
+			}
+			return nil, NewListOrgUnitsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListOrgUnitsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "listOrgUnits", err)
+			}
+			err = ValidateListOrgUnitsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "listOrgUnits", err)
+			}
+			return nil, NewListOrgUnitsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListOrgUnitsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("aiIntegrations", "listOrgUnits", err)
+				}
+				err = ValidateListOrgUnitsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("aiIntegrations", "listOrgUnits", err)
+				}
+				return nil, NewListOrgUnitsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListOrgUnitsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("aiIntegrations", "listOrgUnits", err)
+				}
+				err = ValidateListOrgUnitsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("aiIntegrations", "listOrgUnits", err)
+				}
+				return nil, NewListOrgUnitsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("aiIntegrations", "listOrgUnits", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListOrgUnitsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "listOrgUnits", err)
+			}
+			err = ValidateListOrgUnitsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "listOrgUnits", err)
+			}
+			return nil, NewListOrgUnitsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("aiIntegrations", "listOrgUnits", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListSchedulesRequest instantiates a HTTP request object with method and
 // path set to call the "aiIntegrations" service "listSchedules" endpoint
 func (c *Client) BuildListSchedulesRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -2129,6 +2366,20 @@ func DecodeRetryScheduleResponse(decoder func(*http.Response) goahttp.Decoder, r
 			return nil, goahttp.ErrInvalidResponse("aiIntegrations", "retrySchedule", resp.StatusCode, string(body))
 		}
 	}
+}
+
+// unmarshalAIIntegrationOrgUnitResponseBodyToAiintegrationsAIIntegrationOrgUnit
+// builds a value of type *aiintegrations.AIIntegrationOrgUnit from a value of
+// type *AIIntegrationOrgUnitResponseBody.
+func unmarshalAIIntegrationOrgUnitResponseBodyToAiintegrationsAIIntegrationOrgUnit(v *AIIntegrationOrgUnitResponseBody) *aiintegrations.AIIntegrationOrgUnit {
+	res := &aiintegrations.AIIntegrationOrgUnit{
+		ID:          *v.ID,
+		Path:        *v.Path,
+		Name:        *v.Name,
+		Description: v.Description,
+	}
+
+	return res
 }
 
 // unmarshalAIIntegrationScheduleStateResponseBodyToAiintegrationsAIIntegrationScheduleState

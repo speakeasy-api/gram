@@ -10,6 +10,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestDelegationAmbiguousResponseAfterRotationNeverResubmits(t *testing.T) {
@@ -20,7 +22,6 @@ func TestDelegationAmbiguousResponseAfterRotationNeverResubmits(t *testing.T) {
 		body   string
 	}{
 		{"gateway timeout", http.StatusGatewayTimeout, "gateway timeout"},
-		{"rate limit", http.StatusTooManyRequests, "rate limited"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -37,7 +38,7 @@ func TestDelegationAmbiguousResponseAfterRotationNeverResubmits(t *testing.T) {
 				require.Equal(t, "submitted-refresh", token)
 				req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://idp.example.test/token", nil)
 				require.NoError(t, err)
-				_, _, err = postFederatedRefresh(doer, req)
+				_, _, err = postFederatedRefresh(testenv.NewLogger(t), doer, req)
 				return nil, err
 			}
 			assertion, err := s.Resolve(t.Context(), b, allow)
@@ -48,7 +49,7 @@ func TestDelegationAmbiguousResponseAfterRotationNeverResubmits(t *testing.T) {
 			s.now = func() time.Time { return later }
 			for range 3 {
 				assertion, err = s.Resolve(t.Context(), b, allow)
-				require.ErrorIs(t, err, ErrDelegationTemporary)
+				require.ErrorIs(t, err, ErrDelegationReauthentication)
 				require.Empty(t, assertion.Value())
 			}
 			require.Equal(t, 1, posts)

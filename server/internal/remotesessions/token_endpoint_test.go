@@ -2,9 +2,11 @@ package remotesessions
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +18,7 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -267,4 +270,35 @@ func TestTokenEndpointErrorCode_DropsUnsafeCodes(t *testing.T) {
 	require.Empty(t, tokenEndpointErrorCode("bad\ncode"), "control characters never reach logs")
 	require.Empty(t, tokenEndpointErrorCode(`quoted"code`))
 	require.Empty(t, tokenEndpointErrorCode(strings.Repeat("x", maxTokenEndpointErrorCodeBytes+1)), "oversized codes are dropped")
+}
+
+type failingAssertionSigner struct{ err error }
+
+func (s failingAssertionSigner) SignClientAssertion(context.Context, ClientAssertionRequest) (string, error) {
+	return "", s.err
+}
+
+func TestTokenEndpointPost_SigningFailures(t *testing.T) {
+	t.Parallel()
+	post := func(t *testing.T, signErr error) error {
+		t.Helper()
+		endpoint := &TokenEndpoint{endpoint: "https://as.resource.example.test/token", auth: TokenEndpointClientAuth{Method: TokenEndpointAuthMethodPrivateKeyJWT, AssertionSigner: failingAssertionSigner{signErr}}}
+		_, err := endpoint.Post(t.Context(), url.Values{})
+		return err
+	}
+	for name, cause := range map[string]error{
+		"no key set":         fmt.Errorf("no key set: %w", errClientAssertionKeyUnconfigured),
+		"active key deleted": fmt.Errorf("read active key: %w", pgx.ErrNoRows),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			require.ErrorIs(t, post(t, cause), ErrTokenEndpointConfiguration, "this fails every attempt, so it isn't worth retrying")
+		})
+	}
+	t.Run("signing outage stays temporary", func(t *testing.T) {
+		t.Parallel()
+		failure, ok := errors.AsType[*TokenEndpointError](post(t, errors.New("kms unavailable")))
+		require.True(t, ok)
+		require.True(t, failure.Signing)
+	})
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -91,13 +92,8 @@ func (c *Chainer) exchangeGrant(ctx context.Context, logger *slog.Logger, req Re
 	var none issuedGrant
 	binding := remotesessions.DelegationBinding{OrganizationID: req.OrganizationID, IssuerID: sel.trustedIssuerID, ClientID: sel.trustedClientID, HumanID: req.UserID}
 	assertion, err := c.delegation.Resolve(ctx, binding, authority{db: c.db, req: req})
-	switch {
-	case errors.Is(err, remotesessions.ErrDelegationReauthentication):
-		return none, newOutcome(StageDelegation, ReasonReauthenticationRequired, ConfidenceVerified, false)
-	case errors.Is(err, remotesessions.ErrDelegationConfiguration):
-		return none, newOutcome(StageDelegation, ReasonConfigurationRequired, ConfidenceVerified, false)
-	case err != nil:
-		return none, newOutcome(StageDelegation, ReasonTransientFailure, ConfidenceVerified, true)
+	if outcome := delegationOutcome(err); !outcome.Succeeded() {
+		return none, outcome
 	}
 	// Subject continuity needs the verified upstream subject the assertion
 	// was retained with; a retained row without one predates that record.
@@ -106,11 +102,8 @@ func (c *Chainer) exchangeGrant(ctx context.Context, logger *slog.Logger, req Re
 	}
 
 	idp, err := c.challenges.LoadIdentityProviderEndpoint(ctx, c.keys, req.OrganizationID, sel.trustedIssuerID, sel.trustedClientID)
-	switch {
-	case errors.Is(err, remotesessions.ErrFederatedConfiguration), errors.Is(err, remotesessions.ErrFederatedSigning):
-		return none, newOutcome(StageExchange, ReasonConfigurationRequired, ConfidenceVerified, false)
-	case err != nil:
-		return none, newOutcome(StageExchange, ReasonTransientFailure, ConfidenceVerified, true)
+	if err != nil {
+		return none, identityProviderLoadOutcome(err)
 	}
 	if outcome := ready(); !outcome.Succeeded() {
 		return none, outcome
@@ -233,6 +226,13 @@ func (c *Chainer) redeem(ctx context.Context, logger *slog.Logger, resourceAS to
 // classifyEndpointError maps a token endpoint failure to an outcome.
 // invalid_grant stays ambiguous: it does not prove expiry or missing trust.
 func classifyEndpointError(stage Stage, err error) Outcome {
+	// Our own route store failing is retryable, and nothing reached the provider.
+	if errors.Is(err, tunnelrouting.ErrRouteStoreUnavailable) {
+		return newOutcome(stage, ReasonTransientFailure, ConfidenceUnknown, true)
+	}
+	if errors.Is(err, remotesessions.ErrTokenEndpointConfiguration) {
+		return newOutcome(stage, ReasonConfigurationRequired, ConfidenceVerified, false)
+	}
 	failure, ok := errors.AsType[*remotesessions.TokenEndpointError](err)
 	if !ok {
 		return newOutcome(stage, ReasonMalformedResponse, ConfidenceVerified, false)
@@ -265,4 +265,15 @@ func classifyEndpointFailure(stage Stage, failure *remotesessions.TokenEndpointE
 		return newOutcome(stage, ReasonInvalidGrant, ConfidenceUnknown, false)
 	}
 	return newOutcome(stage, ReasonUnknownRejection, ConfidenceUnknown, false)
+}
+
+func identityProviderLoadOutcome(err error) Outcome {
+	switch {
+	// Must precede the signing case: a signer outage joins both errors and stays retryable.
+	case errors.Is(err, remotesessions.ErrFederatedUnavailable):
+		return newOutcome(StageExchange, ReasonTransientFailure, ConfidenceVerified, true)
+	case errors.Is(err, remotesessions.ErrFederatedConfiguration), errors.Is(err, remotesessions.ErrFederatedSigning):
+		return newOutcome(StageExchange, ReasonConfigurationRequired, ConfidenceVerified, false)
+	}
+	return newOutcome(StageExchange, ReasonTransientFailure, ConfidenceVerified, true)
 }

@@ -101,7 +101,8 @@ type MCPAccessRuleSummary struct {
 	// AccessLevel is the use, view, or manage decision this rule affects.
 	AccessLevel string `json:"access_level"`
 
-	// SourceKind distinguishes direct, everyone, role, and unknown grants.
+	// SourceKind distinguishes direct, everyone, role, agent, and unknown
+	// grants.
 	SourceKind string `json:"source_kind"`
 
 	// SourceName names a role or describes a non-identifying grant source.
@@ -145,6 +146,10 @@ func SummarizeMCPAccessRules(grants []authz.Grant, resourceID, projectID string,
 			kind, name = "everyone", "Everyone"
 		case authz.IsDirectGrant(grant):
 			kind, name = "user", "Direct grant"
+		case strings.HasPrefix(grant.PrincipalUrn, string(urn.PrincipalTypeAgent)+":"):
+			// An agent's own policy; unlike a direct grant to a member it
+			// never outranks a block.
+			kind, name = "agent", "Agent grant"
 		case strings.HasPrefix(grant.PrincipalUrn, string(urn.PrincipalTypeRole)+":"):
 			kind, name = "role", "Deleted role"
 			if roleName, ok := roleNames[grant.PrincipalUrn]; ok {
@@ -170,8 +175,14 @@ func SummarizeMCPAccessRules(grants []authz.Grant, resourceID, projectID string,
 			effective.CanManage = explained.Allowed
 		}
 		for _, rule := range explained.Rules {
+			// The dashboard explanation knows no agent kind, so the source
+			// kind comes from the names above.
+			kind := rule.Kind
+			if named, ok := names[rule.PrincipalUrn]; ok {
+				kind = named.kind
+			}
 			rules = append(rules, MCPAccessRuleSummary{
-				AccessLevel: level.level, SourceKind: rule.Kind, SourceName: rule.DisplayName,
+				AccessLevel: level.level, SourceKind: kind, SourceName: rule.DisplayName,
 				Effect: rule.Effect, AppliesTo: rule.AppliesTo, Tools: rule.Tools,
 				Dispositions: rule.Dispositions, Reason: rule.Reason,
 			})

@@ -116,3 +116,61 @@ func TestPosthogFlagVariantNilProvider(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, variant)
 }
+
+func TestPosthogFlagVariantLocal(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		result          *posthoggo.FeatureFlagResult
+		err             error
+		localEvaluation bool
+		want            feature.Variant
+		wantCalled      bool
+		isErr           bool
+	}{
+		{name: "variant", localEvaluation: true, result: &posthoggo.FeatureFlagResult{Enabled: true, Variant: new("code_mode")}, want: "code_mode", wantCalled: true},
+		{name: "disabled", localEvaluation: true, result: &posthoggo.FeatureFlagResult{Enabled: false, Variant: new("code_mode")}, want: "", wantCalled: true},
+		{name: "boolean flag", localEvaluation: true, result: &posthoggo.FeatureFlagResult{Enabled: true}, want: "", wantCalled: true},
+		{name: "nil result", localEvaluation: true, want: "", wantCalled: true},
+		{name: "missing", localEvaluation: true, err: fmt.Errorf("lookup: %w", posthoggo.ErrFlagNotFound), want: "", wantCalled: true},
+		{name: "inconclusive", localEvaluation: true, err: &posthoggo.InconclusiveMatchError{}, want: "", wantCalled: true},
+		{name: "provider failure", localEvaluation: true, err: errors.New("unavailable"), want: "", wantCalled: true, isErr: true},
+		// Without local evaluation every lookup would call PostHog, so the
+		// hot path answers "no variant" instead.
+		{name: "remote only", localEvaluation: false, result: &posthoggo.FeatureFlagResult{Enabled: true, Variant: new("code_mode")}, want: "", wantCalled: false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			client := &evaluationClient{result: test.result, err: test.err}
+			provider := &Posthog{
+				client:          client,
+				localEvaluation: test.localEvaluation,
+				logger:          slog.New(slog.DiscardHandler), //nolint:forbidigo // importing testenv would create an import cycle through thirdparty/posthog
+			}
+
+			got, err := provider.FlagVariantLocal(t.Context(), testFeatureFlag, "organization-id", nil, map[string]string{"harness": "codex"})
+
+			if test.isErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, test.want, got)
+			require.Equal(t, test.wantCalled, client.called)
+			if test.wantCalled {
+				require.True(t, client.payload.OnlyEvaluateLocally)
+				require.False(t, *client.payload.SendFeatureFlagEvents)
+				require.Equal(t, "codex", client.payload.PersonProperties["harness"])
+			}
+		})
+	}
+
+	var nilProvider *Posthog
+	variant, err := nilProvider.FlagVariantLocal(t.Context(), testFeatureFlag, "organization-id", nil, nil)
+	require.NoError(t, err)
+	require.Empty(t, variant)
+}

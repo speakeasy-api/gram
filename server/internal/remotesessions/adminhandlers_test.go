@@ -2,14 +2,20 @@ package remotesessions_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	adminrsgen "github.com/speakeasy-api/gram/server/gen/admin_remote_sessions"
+	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
+	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // createGlobalIssuer builds a CreateGlobalIssuer payload for the given slug. The
@@ -524,6 +530,40 @@ func TestAdminRemoteSessions_UpdateGlobalClient(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
+// Global clients serve every org, so no org or project update can opt one into
+// forwarding the client name.
+func TestAdminRemoteSessions_GlobalClientCannotForwardClientName(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withAdmin(t, ctx)
+
+	issuer, err := ti.service.CreateGlobalIssuer(ctx, createGlobalIssuer(t, "forward-name-global-host"))
+	require.NoError(t, err)
+
+	created, err := ti.service.CreateGlobalClient(ctx, &adminrsgen.CreateGlobalClientPayload{
+		SessionToken:            nil,
+		RemoteSessionIssuerID:   issuer.ID,
+		ClientID:                "client-forward-name-global",
+		ClientSecret:            nil,
+		TokenEndpointAuthMethod: nil,
+		Scope:                   nil,
+		Audience:                nil,
+	})
+	require.NoError(t, err)
+	require.False(t, created.ForwardClientName)
+
+	on := true
+	_, err = ti.service.UpdateClient(ctx, &orgclientsgen.UpdateClientPayload{ID: created.ID, ForwardClientName: &on})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	_, err = ti.service.UpdateRemoteSessionClient(ctx, &clientsgen.UpdateRemoteSessionClientPayload{ID: created.ID, ForwardClientName: &on})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	stored, err := ti.service.GetGlobalClient(ctx, &adminrsgen.GetGlobalClientPayload{ID: created.ID, SessionToken: nil})
+	require.NoError(t, err)
+	require.False(t, stored.ForwardClientName)
+}
+
 func TestAdminRemoteSessions_UpdateGlobalClient_NotFound(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -675,4 +715,83 @@ func TestDeleteGlobalIssuer_BlockedByGlobalClientOnly(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeConflict)
 	require.Contains(t, err.Error(), "delete them here first")
 	require.NotContains(t, err.Error(), "tenant-owned")
+}
+
+// TestDeleteGlobalClient_StopsServersOfferingItPerOrganization proves the staff
+// deletion stops every consuming organization's servers offering it that
+// reached the client, not only the one the request runs in.
+func TestDeleteGlobalClient_StopsServersOfferingItPerOrganization(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	adminCtx := withAdmin(t, ctx)
+	issuer, err := ti.service.CreateGlobalIssuer(adminCtx, createGlobalIssuer(t, "global-typed"))
+	require.NoError(t, err)
+	client, err := ti.service.CreateGlobalClient(adminCtx, &adminrsgen.CreateGlobalClientPayload{
+		SessionToken:            nil,
+		RemoteSessionIssuerID:   issuer.ID,
+		ClientID:                "global-typed-client",
+		ClientSecret:            nil,
+		TokenEndpointAuthMethod: nil,
+		Scope:                   nil,
+		Audience:                nil,
+	})
+	require.NoError(t, err)
+	clientID, err := uuid.Parse(client.ID)
+	require.NoError(t, err)
+
+	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-global-typed")
+	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "global-typed-server")
+	associate(t, ctx, ti.conn, orgID, projectID, serverID, clientID)
+	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: clientID,
+		UserSessionIssuerID:   userIssuerID,
+	}))
+
+	// A second organization reaching the same platform-global client: the
+	// grouping is what this test is for, so one organization is not enough.
+	otherOrgID := "org-global-typed-" + uuid.NewString()[:8]
+	fixtures := testrepo.New(ti.conn)
+	require.NoError(t, fixtures.CreateOrganizationMetadataFixture(ctx, testrepo.CreateOrganizationMetadataFixtureParams{
+		ID: otherOrgID, Name: "Second consumer", Slug: otherOrgID,
+		GramAccountType: "enterprise", WorkosID: pgtype.Text{}, Whitelisted: true,
+		FreeTrialStartedAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+		FreeTrialEndsAt:    pgtype.Timestamptz{Time: time.Now().UTC().Add(24 * time.Hour), Valid: true},
+		DisabledAt:         pgtype.Timestamptz{},
+		CreatedAt:          pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+	}))
+	otherProjectID, err := fixtures.CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{
+		ID: uuid.New(), Name: "Second project", Slug: otherOrgID + "-project", OrganizationID: otherOrgID,
+	})
+	require.NoError(t, err)
+	otherIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProjectID, "usi-global-typed-second")
+	otherServerID := seedServerOnIssuer(t, ctx, ti.conn, otherProjectID, otherIssuerID, "global-typed-server-second")
+	associate(t, ctx, ti.conn, otherOrgID, otherProjectID, otherServerID, clientID)
+
+	recordTypedClients(t, ctx, ti.conn, orgID, serverID)
+	recordTypedClients(t, ctx, ti.conn, otherOrgID, otherServerID)
+	require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, serverID),
+		"the association must be offered through a link to retire")
+	require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, otherServerID),
+		"the second organization's association must be offered too")
+
+	require.NoError(t, ti.service.DeleteGlobalClient(adminCtx, &adminrsgen.DeleteGlobalClientPayload{
+		ID:           client.ID,
+		SessionToken: nil,
+	}))
+
+	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, serverID))
+	require.Empty(t, offeredAuthClients(t, ctx, ti.conn, serverID),
+		"the consuming organization's link goes with the global client")
+	require.Empty(t, associatedClients(t, ctx, ti.conn, otherProjectID, otherServerID))
+	require.Empty(t, offeredAuthClients(t, ctx, ti.conn, otherServerID),
+		"a second organization on the same global client is reconciled too")
+	bindings, err := fixtures.CountRemoteSessionClientBindingsFixture(ctx, clientID)
+	require.NoError(t, err)
+	require.Zero(t, bindings, "a deleted global client keeps no user session issuer binding")
 }

@@ -22,6 +22,9 @@ const mock = vi.hoisted(() => ({
   change: null as null | ((value: string) => void),
   options: {} as unknown,
   dom: null as HTMLElement | null,
+  contentHeight: 0,
+  resize: null as null | (() => void),
+  resizeDispose: vi.fn(),
 }));
 vi.mock("monaco-editor/internal/common/workers.js", () => ({}));
 vi.mock("monaco-editor/editor/editor.api", () => ({
@@ -74,6 +77,11 @@ vi.mock("@monaco-editor/react", () => ({
         pushUndoStop: mock.undoStop,
         executeEdits: mock.edits,
         onDidDispose: () => ({ dispose: vi.fn() }),
+        getContentHeight: () => mock.contentHeight,
+        onDidContentSizeChange: (callback: () => void) => {
+          mock.resize = callback;
+          return { dispose: mock.resizeDispose };
+        },
         onDidPaste: (callback: () => void) => {
           mock.paste = callback;
           return { dispose: mock.dispose };
@@ -108,8 +116,11 @@ afterEach(() => {
   mock.dom = null;
   mock.language = "json";
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   vi.clearAllMocks();
   mock.value = '{"n":9007199254740993}';
+  mock.contentHeight = 0;
+  mock.resize = null;
 });
 
 it("uses one undoable whitespace edit for format and paste", () => {
@@ -240,9 +251,12 @@ it.each([false, true])(
   },
 );
 
-it("fills its bounded editor surface and separates the label and format toolbar", () => {
+it("fills its sized editor surface and separates the label and format toolbar", () => {
   render(<RegistryJsonEditor {...props} />);
   expect(screen.getByTestId("monaco").getAttribute("data-height")).toBe("100%");
+  expect(mock.options).toMatchObject({
+    scrollbar: { alwaysConsumeMouseWheel: false },
+  });
   const toolbar = screen.getByText("Record JSON").parentElement;
   expect(
     toolbar?.contains(screen.getByRole("button", { name: "Format JSON" })),
@@ -288,4 +302,84 @@ it("clears stale markers and suspends only this model's JSON language above the 
   expect(screen.getByTestId("monaco")).toBe(editor);
   expect(mock.edits).not.toHaveBeenCalled();
   expect(mock.dispose).not.toHaveBeenCalled();
+});
+
+it("sizes Monaco to its content as it grows and shrinks, with a floor", () => {
+  mock.contentHeight = 600;
+  const { unmount } = render(<RegistryJsonEditor {...props} />);
+  const surface = screen.getByTestId("monaco").parentElement!;
+  expect(surface.style.height).toBe("600px");
+  act(() => {
+    mock.contentHeight = 1400;
+    mock.resize!();
+  });
+  expect(surface.style.height).toBe("1400px");
+  act(() => {
+    mock.contentHeight = 19;
+    mock.resize!();
+  });
+  expect(surface.style.height).toBe("128px");
+  unmount();
+  expect(mock.resizeDispose).toHaveBeenCalledTimes(1);
+});
+
+it("sizes the large-record textarea to its content on mount and on edits", () => {
+  const lines = (count: number) =>
+    "x".repeat(1024 * 1024 + 1) + "\n".repeat(count);
+  vi.spyOn(
+    HTMLTextAreaElement.prototype,
+    "scrollHeight",
+    "get",
+  ).mockImplementation(function (this: HTMLTextAreaElement) {
+    return this.value.split("\n").length * 20;
+  });
+  const { rerender } = render(
+    <RegistryJsonEditor {...props} value={lines(49)} />,
+  );
+  const textarea = screen.getByLabelText("Record JSON") as HTMLTextAreaElement;
+  expect(textarea.style.height).toBe("1000px");
+  rerender(<RegistryJsonEditor {...props} value={lines(99)} />);
+  expect(textarea.style.height).toBe("2000px");
+  rerender(<RegistryJsonEditor {...props} value={lines(0)} />);
+  expect(textarea.style.height).toBe("128px");
+  expect(textarea.parentElement!.style.minHeight).toBe("");
+});
+
+it("refits the large-record textarea when its width changes, not its height", () => {
+  let observed: ResizeObserverCallback | null = null;
+  const disconnect = vi.fn();
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(callback: ResizeObserverCallback) {
+        observed = callback;
+      }
+      observe = vi.fn();
+      disconnect = disconnect;
+    },
+  );
+  let wrapped = 50;
+  vi.spyOn(
+    HTMLTextAreaElement.prototype,
+    "scrollHeight",
+    "get",
+  ).mockImplementation(() => wrapped * 20);
+  const value = "x".repeat(1024 * 1024 + 1);
+  const { unmount } = render(<RegistryJsonEditor {...props} value={value} />);
+  const textarea = screen.getByLabelText("Record JSON") as HTMLTextAreaElement;
+  expect(textarea.style.height).toBe("1000px");
+  const resize = (width: number) =>
+    observed!(
+      [{ contentRect: { width } } as ResizeObserverEntry],
+      {} as ResizeObserver,
+    );
+  resize(800);
+  wrapped = 100;
+  resize(400);
+  expect(textarea.style.height).toBe("2000px");
+  wrapped = 10;
+  resize(400);
+  expect(textarea.style.height).toBe("2000px");
+  unmount();
+  expect(disconnect).toHaveBeenCalledTimes(1);
 });

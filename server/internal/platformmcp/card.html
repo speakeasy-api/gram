@@ -1,0 +1,609 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Speakeasy</title>
+    <style>
+      /* One shared shell: a dotted panel with the resource's tile, a coloured
+   eyebrow, a serif title, up to two lines, optional rows, tags and one action,
+   over a Speakeasy footer. Catalog results show a sideways row of smaller cards
+   in the same style. Square corners and hairline borders throughout. */
+      :root {
+        color-scheme: light dark;
+        --surface: light-dark(hsl(0 0% 100%), hsl(0 0% 9%));
+        --line: light-dark(hsl(0 0% 80%), hsl(0 0% 26%));
+        --hair: light-dark(hsl(0 0% 88%), hsl(0 0% 20%));
+        --dots: light-dark(hsl(0 0% 82%), hsl(0 0% 24%));
+        --fg: light-dark(hsl(0 0% 9%), hsl(0 0% 96%));
+        --muted: light-dark(hsl(0 0% 40%), hsl(0 0% 64%));
+        --tile: light-dark(hsl(0 0% 96%), hsl(0 0% 15%));
+        --tile-icon: light-dark(hsl(0 0% 27%), hsl(0 0% 75%));
+        --tag: light-dark(hsl(0 0% 95%), hsl(0 0% 16%));
+        --tag-fg: light-dark(hsl(0 0% 25%), hsl(0 0% 78%));
+        --solid: light-dark(hsl(0 0% 9%), hsl(0 0% 96%));
+        --solid-fg: light-dark(hsl(0 0% 100%), hsl(0 0% 7%));
+        --done: light-dark(hsl(142 70% 30%), hsl(142 60% 55%));
+        --action: light-dark(hsl(24 90% 40%), hsl(28 95% 60%));
+        --sans:
+          -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, "Segoe UI",
+          Roboto, Helvetica, Arial, sans-serif;
+        --serif:
+          "Tiempos Headline", "Iowan Old Style", Charter, "Source Serif Pro",
+          Georgia, ui-serif, serif;
+        --mono:
+          "IBM Plex Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+          Consolas, monospace;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: transparent;
+        color: var(--fg);
+        font: 14px/1.45 var(--sans);
+        -webkit-font-smoothing: antialiased;
+      }
+      p,
+      h1,
+      ul {
+        margin: 0;
+        padding: 0;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--line);
+      }
+      .body {
+        display: flex;
+      }
+      .panel {
+        flex: none;
+        width: 30%;
+        min-width: 112px;
+        max-width: 200px;
+        display: grid;
+        place-items: center;
+        padding: 20px 0;
+        border-right: 1px solid var(--hair);
+        background-image: radial-gradient(var(--dots) 1px, transparent 1.2px);
+        background-size: 8px 8px;
+        background-position: 4px 4px;
+      }
+      .tile {
+        width: 72px;
+        height: 72px;
+        display: grid;
+        place-items: center;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        color: var(--tile-icon);
+        font: 500 22px/1 var(--mono);
+      }
+      .tile-logo {
+        background: var(--tile);
+        border-color: transparent;
+      }
+      .logo {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
+      .icon {
+        width: 28px;
+        height: 28px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.75;
+      }
+      .text {
+        flex: 1;
+        min-width: 0;
+        padding: 22px 24px 20px;
+      }
+      .eyebrow {
+        font: 500 10.5px/1.4 var(--mono);
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .eyebrow-done {
+        color: var(--done);
+      }
+      .eyebrow-action {
+        color: var(--action);
+      }
+      h1 {
+        margin-top: 6px;
+        font: 400 26px/1.15 var(--serif);
+        letter-spacing: -0.01em;
+        overflow-wrap: anywhere;
+      }
+      .line {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 13px;
+        overflow-wrap: anywhere;
+      }
+      code {
+        margin-left: 4px;
+        color: var(--fg);
+        font: 13px/1.4 var(--mono);
+      }
+      .foot {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 22px;
+      }
+      .tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        list-style: none;
+      }
+      .tags li {
+        padding: 1px 7px;
+        background: var(--tag);
+        border: 1px solid var(--hair);
+        color: var(--tag-fg);
+        font: 11px/1.5 var(--mono);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      .rows {
+        margin-top: 14px;
+        list-style: none;
+        border-top: 1px solid var(--hair);
+      }
+      .rows li {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 7px 0;
+        border-bottom: 1px solid var(--hair);
+        font-size: 13px;
+      }
+      .row-label {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .row-meta {
+        flex: none;
+        color: var(--muted);
+        font: 11px/1.5 var(--mono);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      .button {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 34px;
+        padding: 0 14px;
+        background: var(--solid);
+        color: var(--solid-fg);
+        font-weight: 500;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+      .button:focus-visible {
+        outline: 2px solid var(--fg);
+        outline-offset: 2px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 14px;
+        border-top: 1px solid var(--hair);
+        font-weight: 500;
+        font-size: 13px;
+        letter-spacing: -0.03em;
+      }
+      .mark {
+        width: 14px;
+        height: 14px;
+        fill: currentColor;
+      }
+      /* Catalog results: a row of small cards that scrolls sideways and
+   snaps to each card. */
+      .carousel {
+        background: var(--surface);
+        border: 1px solid var(--line);
+      }
+      .track {
+        display: flex;
+        gap: 12px;
+        margin: 0;
+        padding: 14px;
+        list-style: none;
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        scroll-padding: 14px;
+        overscroll-behavior-x: contain;
+        background-image: radial-gradient(var(--dots) 1px, transparent 1.2px);
+        background-size: 8px 8px;
+        background-position: 4px 4px;
+      }
+      /* Arrows sit over the track's edges on a translucent backdrop, so it
+   reads as scrollable. Each shows only while there is more to scroll that
+   way. */
+      .viewport {
+        position: relative;
+      }
+      .nav {
+        position: absolute;
+        top: 50%;
+        z-index: 1;
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        margin-top: -17px;
+        padding: 0;
+        border: 1px solid var(--line);
+        background: color-mix(in srgb, var(--surface) 70%, transparent);
+        -webkit-backdrop-filter: blur(6px);
+        backdrop-filter: blur(6px);
+        color: var(--fg);
+        cursor: pointer;
+      }
+      .nav[hidden] {
+        display: none;
+      }
+      .nav:hover {
+        background: color-mix(in srgb, var(--surface) 90%, transparent);
+      }
+      .nav:focus-visible {
+        outline: 2px solid var(--fg);
+        outline-offset: 2px;
+      }
+      .nav svg {
+        width: 16px;
+        height: 16px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+      }
+      .nav-prev {
+        left: 8px;
+      }
+      .nav-prev svg {
+        transform: scaleX(-1);
+      }
+      .nav-next {
+        right: 8px;
+      }
+      .track:focus-visible {
+        outline: 2px solid var(--fg);
+        outline-offset: -2px;
+      }
+      .slide {
+        flex: none;
+        width: min(260px, calc(100% - 40px));
+        scroll-snap-align: start;
+      }
+      .mini {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        padding: 16px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+      }
+      .mini-head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .mini .tile {
+        flex: none;
+        width: 44px;
+        height: 44px;
+        font-size: 15px;
+      }
+      .mini .icon {
+        width: 20px;
+        height: 20px;
+      }
+      .mini-title {
+        min-width: 0;
+      }
+      h2 {
+        margin: 2px 0 0;
+        font: 400 19px/1.2 var(--serif);
+        letter-spacing: -0.01em;
+        overflow-wrap: anywhere;
+      }
+      .clamp {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+      }
+      .mini .foot {
+        margin-top: auto;
+        padding-top: 16px;
+      }
+      button.button {
+        border: 0;
+        font: inherit;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      .empty,
+      .more {
+        padding: 16px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .more {
+        padding-top: 0;
+        padding-bottom: 12px;
+      }
+      /* A narrow card puts the panel above the text so the text keeps the
+   card's full width. */
+      @media (max-width: 480px) {
+        .body {
+          flex-direction: column;
+        }
+        .panel {
+          width: auto;
+          max-width: none;
+          padding: 16px 0;
+          border-right: 0;
+          border-bottom: 1px solid var(--hair);
+        }
+        .tile {
+          width: 56px;
+          height: 56px;
+        }
+        .text {
+          padding: 18px 18px 18px;
+        }
+        h1 {
+          font-size: 23px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="frame" hidden>
+      <main id="card"></main>
+    </div>
+    <script>
+      (function () {
+        "use strict";
+        // The card arrives already rendered and escaped by the server, in the tool
+        // result's _meta. This shell only places it, follows the host theme, and
+        // opens the card's one link through the host.
+        var CARD_KEY = "com.speakeasy/card";
+        var frame = document.getElementById("frame");
+        var root = document.getElementById("card");
+        var nextId = 1;
+        var initializeId = 0;
+
+        function post(message) {
+          message.jsonrpc = "2.0";
+          window.parent.postMessage(message, "*");
+        }
+        function request(method, params) {
+          var id = nextId++;
+          post({ id: id, method: method, params: params });
+          return id;
+        }
+        function notify(method, params) {
+          post({ method: method, params: params });
+        }
+        function setTheme(theme) {
+          if (theme === "light" || theme === "dark") {
+            document.documentElement.style.colorScheme = theme;
+          }
+        }
+        // MCP Apps hosts may send their own style variables; the card's neutrals
+        // read them, so it matches the host's surfaces.
+        function applyHostContext(context) {
+          if (!context) {
+            return;
+          }
+          setTheme(context.theme);
+          var variables = context.styles && context.styles.variables;
+          for (var name in variables || {}) {
+            if (
+              /^--[a-z0-9-]+$/.test(name) &&
+              typeof variables[name] === "string"
+            ) {
+              document.documentElement.style.setProperty(name, variables[name]);
+            }
+          }
+        }
+        // Each carousel shows an arrow only while it can scroll that way, and
+        // an arrow scrolls by most of a view so one card stays in sight.
+        // One resize listener for the page: each render replaces the
+        // carousels, so it only updates the ones on screen now.
+        var carouselUpdates = [];
+        window.addEventListener("resize", function () {
+          for (var i = 0; i < carouselUpdates.length; i++) {
+            carouselUpdates[i]();
+          }
+        });
+        function setupCarousels() {
+          carouselUpdates = [];
+          var viewports = root.querySelectorAll(".viewport");
+          for (var i = 0; i < viewports.length; i++) {
+            (function (viewport) {
+              var track = viewport.querySelector(".track");
+              var prev = viewport.querySelector(".nav-prev");
+              var next = viewport.querySelector(".nav-next");
+              if (!track || !prev || !next) {
+                return;
+              }
+              function update() {
+                var max = track.scrollWidth - track.clientWidth;
+                prev.hidden = track.scrollLeft <= 1;
+                next.hidden = track.scrollLeft >= max - 1;
+              }
+              function scrollBy(direction) {
+                track.scrollBy({
+                  left: direction * Math.max(track.clientWidth * 0.8, 200),
+                  behavior: "smooth",
+                });
+              }
+              prev.addEventListener("click", function () {
+                scrollBy(-1);
+              });
+              next.addEventListener("click", function () {
+                scrollBy(1);
+              });
+              track.addEventListener("scroll", update, { passive: true });
+              carouselUpdates.push(update);
+              update();
+            })(viewports[i]);
+          }
+        }
+        // A result without a card, such as a text-only tool's, clears any earlier card,
+        // hides the frame and reports a one-pixel height so the host can
+        // collapse it.
+        //
+        // Neither MCP Apps nor ChatGPT lets a result opt out of the view: the
+        // view is linked on the tool, fixed at tools/list. call_platform_tool
+        // and execute link it because they reach card tools, so their
+        // text-only and failed results still get a frame. Whether a one-pixel
+        // frame collapses is up to the host. ChatGPT can be asked to drop the
+        // widget, so done=true (a result has arrived) with no card does that.
+        function render(meta, done) {
+          var card = meta && meta[CARD_KEY];
+          root.innerHTML = typeof card === "string" ? card : "";
+          frame.hidden = root.innerHTML === "";
+          setupCarousels();
+          // Hosts read a zero height as unknown and keep a default-sized
+          // frame, so an empty result reports one pixel instead.
+          notify("ui/notifications/size-changed", {
+            width: document.documentElement.scrollWidth,
+            height: frame.hidden ? 1 : frame.offsetHeight,
+          });
+          if (
+            done &&
+            frame.hidden &&
+            window.openai &&
+            typeof window.openai.requestClose === "function"
+          ) {
+            window.openai.requestClose();
+          }
+        }
+
+        window.addEventListener("message", function (event) {
+          var message = event.data;
+          if (
+            event.source !== window.parent ||
+            !message ||
+            message.jsonrpc !== "2.0"
+          ) {
+            return;
+          }
+          if (message.id === initializeId && message.result) {
+            applyHostContext(message.result.hostContext);
+            notify("ui/notifications/initialized", {});
+          } else if (message.method === "ui/notifications/tool-result") {
+            render(message.params && message.params._meta, true);
+          } else if (
+            message.method === "ui/notifications/host-context-changed"
+          ) {
+            applyHostContext(message.params);
+          }
+        });
+
+        root.addEventListener("click", function (event) {
+          // A catalog card's Add button sends its request to the chat as the
+          // user's message; the agent then adds the server with its usual
+          // confirmation. The text is read as text and never parsed as markup.
+          var ask =
+            event.target.closest &&
+            event.target.closest("button[data-message]");
+          if (ask) {
+            event.preventDefault();
+            var text = ask.getAttribute("data-message");
+            if (!text) {
+              return;
+            }
+            if (
+              window.openai &&
+              typeof window.openai.sendFollowUpMessage === "function"
+            ) {
+              window.openai.sendFollowUpMessage({ prompt: text });
+            } else {
+              request("ui/message", {
+                role: "user",
+                content: [{ type: "text", text: text }],
+              });
+            }
+            return;
+          }
+          var link = event.target.closest && event.target.closest("a[href]");
+          if (!link) {
+            return;
+          }
+          var url = link.href;
+          if (!/^https?:\/\//i.test(url)) {
+            event.preventDefault();
+            return;
+          }
+          // A sandboxed view cannot open a window itself; the host opens the link.
+          event.preventDefault();
+          if (
+            window.openai &&
+            typeof window.openai.openExternal === "function"
+          ) {
+            window.openai.openExternal({ href: url });
+          } else {
+            request("ui/open-link", { url: url });
+          }
+        });
+
+        initializeId = request("ui/initialize", {
+          appInfo: { name: "speakeasy-platform-card", version: "1" },
+          appCapabilities: {},
+          protocolVersion: "2026-01-26",
+        });
+
+        // ChatGPT also exposes the result directly on window.openai. The
+        // widget can mount before the result lands, with both globals still
+        // null; that is not an empty result, so it does not close the widget.
+        // toolResponseMetadata can be the result's _meta itself or an
+        // envelope that keeps the MCP result, with its _meta, inside.
+        function openAIMeta(metadata) {
+          if (!metadata || metadata[CARD_KEY] !== undefined) {
+            return metadata;
+          }
+          var results = [metadata.mcp_tool_result, metadata.call_tool_result];
+          for (var i = 0; i < results.length; i++) {
+            if (results[i] && results[i]._meta) {
+              return results[i]._meta;
+            }
+          }
+          return metadata;
+        }
+        function renderFromOpenAI() {
+          setTheme(window.openai.theme);
+          render(
+            openAIMeta(window.openai.toolResponseMetadata),
+            window.openai.toolOutput != null ||
+              window.openai.toolResponseMetadata != null,
+          );
+        }
+        if (window.openai) {
+          renderFromOpenAI();
+          window.addEventListener("openai:set_globals", renderFromOpenAI);
+        }
+      })();
+    </script>
+  </body>
+</html>

@@ -10,14 +10,15 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * Whether the local hook should allow or deny the action.
+ * Whether the local hook should allow or deny the action. "ask" (tool calls from Claude Cowork only) asks the person to allow the call in the agent's own permission prompt; a client that does not support it must deny.
  */
 export const IngestHookResultDecision = {
   Allow: "allow",
   Deny: "deny",
+  Ask: "ask",
 } as const;
 /**
- * Whether the local hook should allow or deny the action.
+ * Whether the local hook should allow or deny the action. "ask" (tool calls from Claude Cowork only) asks the person to allow the call in the agent's own permission prompt; a client that does not support it must deny.
  */
 export type IngestHookResultDecision = OpenEnum<
   typeof IngestHookResultDecision
@@ -28,7 +29,7 @@ export type IngestHookResultDecision = OpenEnum<
  */
 export type IngestHookResult = {
   /**
-   * Whether the local hook should allow or deny the action.
+   * Whether the local hook should allow or deny the action. "ask" (tool calls from Claude Cowork only) asks the person to allow the call in the agent's own permission prompt; a client that does not support it must deny.
    */
   decision: IngestHookResultDecision;
   /**

@@ -2194,10 +2194,11 @@ func marshalHooksHookIngestSessionToHookIngestSessionRequestBody(v *hooks.HookIn
 		return nil
 	}
 	res := &HookIngestSessionRequestBody{
-		ID:     v.ID,
-		TurnID: v.TurnID,
-		Cwd:    v.Cwd,
-		Model:  v.Model,
+		ID:      v.ID,
+		TurnID:  v.TurnID,
+		Cwd:     v.Cwd,
+		Model:   v.Model,
+		Surface: v.Surface,
 	}
 
 	return res
@@ -2273,6 +2274,12 @@ func marshalHooksHookIngestDataToHookIngestDataRequestBody(v *hooks.HookIngestDa
 			}
 			res.PromptAttachments[i] = marshalHooksHookPromptAttachmentEntryToHookPromptAttachmentEntryRequestBody(val)
 		}
+	}
+	if v.DeliveryFailure != nil {
+		res.DeliveryFailure = marshalHooksHookDeliveryFailureDataToHookDeliveryFailureDataRequestBody(v.DeliveryFailure)
+	}
+	if v.InstallFailure != nil {
+		res.InstallFailure = marshalHooksHookInstallFailureDataToHookInstallFailureDataRequestBody(v.InstallFailure)
 	}
 
 	return res
@@ -2437,6 +2444,55 @@ func marshalHooksHookPromptAttachmentEntryToHookPromptAttachmentEntryRequestBody
 	return res
 }
 
+// marshalHooksHookDeliveryFailureDataToHookDeliveryFailureDataRequestBody
+// builds a value of type *HookDeliveryFailureDataRequestBody from a value of
+// type *hooks.HookDeliveryFailureData.
+func marshalHooksHookDeliveryFailureDataToHookDeliveryFailureDataRequestBody(v *hooks.HookDeliveryFailureData) *HookDeliveryFailureDataRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &HookDeliveryFailureDataRequestBody{
+		FailedEventType:      string(v.FailedEventType),
+		DeliveryPhase:        string(v.DeliveryPhase),
+		Cause:                string(v.Cause),
+		StatusCode:           v.StatusCode,
+		ElapsedMs:            v.ElapsedMs,
+		Attempts:             v.Attempts,
+		Gating:               v.Gating,
+		AttemptedAt:          v.AttemptedAt,
+		BinaryVersion:        v.BinaryVersion,
+		Os:                   v.Os,
+		Arch:                 v.Arch,
+		Harness:              v.Harness,
+		HarnessVariant:       v.HarnessVariant,
+		HarnessVersion:       v.HarnessVersion,
+		FailedIdempotencyKey: v.FailedIdempotencyKey,
+		SessionID:            v.SessionID,
+		SpoolDepth:           v.SpoolDepth,
+	}
+
+	return res
+}
+
+// marshalHooksHookInstallFailureDataToHookInstallFailureDataRequestBody builds
+// a value of type *HookInstallFailureDataRequestBody from a value of type
+// *hooks.HookInstallFailureData.
+func marshalHooksHookInstallFailureDataToHookInstallFailureDataRequestBody(v *hooks.HookInstallFailureData) *HookInstallFailureDataRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &HookInstallFailureDataRequestBody{
+		Cause:       string(v.Cause),
+		AttemptedAt: v.AttemptedAt,
+		Version:     v.Version,
+		Os:          v.Os,
+		Arch:        v.Arch,
+		Harness:     v.Harness,
+	}
+
+	return res
+}
+
 // marshalHookIngestSourceRequestBodyToHooksHookIngestSource builds a value of
 // type *hooks.HookIngestSource from a value of type
 // *HookIngestSourceRequestBody.
@@ -2460,10 +2516,11 @@ func marshalHookIngestSessionRequestBodyToHooksHookIngestSession(v *HookIngestSe
 		return nil
 	}
 	res := &hooks.HookIngestSession{
-		ID:     v.ID,
-		TurnID: v.TurnID,
-		Cwd:    v.Cwd,
-		Model:  v.Model,
+		ID:      v.ID,
+		TurnID:  v.TurnID,
+		Cwd:     v.Cwd,
+		Model:   v.Model,
+		Surface: v.Surface,
 	}
 
 	return res
@@ -2539,6 +2596,12 @@ func marshalHookIngestDataRequestBodyToHooksHookIngestData(v *HookIngestDataRequ
 			}
 			res.PromptAttachments[i] = marshalHookPromptAttachmentEntryRequestBodyToHooksHookPromptAttachmentEntry(val)
 		}
+	}
+	if v.DeliveryFailure != nil {
+		res.DeliveryFailure = marshalHookDeliveryFailureDataRequestBodyToHooksHookDeliveryFailureData(v.DeliveryFailure)
+	}
+	if v.InstallFailure != nil {
+		res.InstallFailure = marshalHookInstallFailureDataRequestBodyToHooksHookInstallFailureData(v.InstallFailure)
 	}
 
 	return res
@@ -2698,6 +2761,55 @@ func marshalHookPromptAttachmentEntryRequestBodyToHooksHookPromptAttachmentEntry
 		TotalLines:     v.TotalLines,
 		StartLine:      v.StartLine,
 		Timestamp:      v.Timestamp,
+	}
+
+	return res
+}
+
+// marshalHookDeliveryFailureDataRequestBodyToHooksHookDeliveryFailureData
+// builds a value of type *hooks.HookDeliveryFailureData from a value of type
+// *HookDeliveryFailureDataRequestBody.
+func marshalHookDeliveryFailureDataRequestBodyToHooksHookDeliveryFailureData(v *HookDeliveryFailureDataRequestBody) *hooks.HookDeliveryFailureData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookDeliveryFailureData{
+		FailedEventType:      hooks.HookDeliveryFailedEventType(v.FailedEventType),
+		DeliveryPhase:        hooks.HookDeliveryPhase(v.DeliveryPhase),
+		Cause:                hooks.HookDeliveryCause(v.Cause),
+		StatusCode:           v.StatusCode,
+		ElapsedMs:            v.ElapsedMs,
+		Attempts:             v.Attempts,
+		Gating:               v.Gating,
+		AttemptedAt:          v.AttemptedAt,
+		BinaryVersion:        v.BinaryVersion,
+		Os:                   v.Os,
+		Arch:                 v.Arch,
+		Harness:              v.Harness,
+		HarnessVariant:       v.HarnessVariant,
+		HarnessVersion:       v.HarnessVersion,
+		FailedIdempotencyKey: v.FailedIdempotencyKey,
+		SessionID:            v.SessionID,
+		SpoolDepth:           v.SpoolDepth,
+	}
+
+	return res
+}
+
+// marshalHookInstallFailureDataRequestBodyToHooksHookInstallFailureData builds
+// a value of type *hooks.HookInstallFailureData from a value of type
+// *HookInstallFailureDataRequestBody.
+func marshalHookInstallFailureDataRequestBodyToHooksHookInstallFailureData(v *HookInstallFailureDataRequestBody) *hooks.HookInstallFailureData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookInstallFailureData{
+		Cause:       hooks.HookInstallFailureCause(v.Cause),
+		AttemptedAt: v.AttemptedAt,
+		Version:     v.Version,
+		Os:          v.Os,
+		Arch:        v.Arch,
+		Harness:     v.Harness,
 	}
 
 	return res

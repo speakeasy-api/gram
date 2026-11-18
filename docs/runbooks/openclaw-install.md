@@ -11,10 +11,11 @@ packages are generated and published.
 OpenClaw coverage is **not** uniform — it depends on how the customer's models
 authenticate. Establish this first, because it changes what you promise them.
 
-| Model auth mode                                       | What OpenClaw runs                                        | Hooks that fire                                                                                                   | Speakeasy coverage                                                                                                                                                              |
-| ----------------------------------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Embedded runtime (`agentRuntime: { id: "openclaw" }`) | Model + tool loop in-process                              | Full set: `before_agent_run`, `before_tool_call`, `after_tool_call`, `llm_output`, `agent_end`, session lifecycle | Full — capture **and** real-time tool blocking                                                                                                                                  |
-| Claude CLI harness (`agentRuntime: claude-cli`)       | Delegates the loop to the Claude Code CLI, out-of-process | Only `agent_turn_prepare`, `before_prompt_build`, `before_message_write`                                          | Partial from OpenClaw. Tool and LLM activity is captured **only if Claude Code hooks are separately deployed on the same machine**; without that, these sessions are unobserved |
+| Model auth mode                                                    | What OpenClaw runs                                        | Hooks that fire                                                                                                   | Speakeasy coverage                                                                                                                                                              |
+| ------------------------------------------------------------------ | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Embedded runtime (`agentRuntime: { id: "openclaw" }`)              | Model + tool loop in-process                              | Full set: `before_agent_run`, `before_tool_call`, `after_tool_call`, `llm_output`, `agent_end`, session lifecycle | Full: capture **and** real-time tool blocking                                                                                                                                   |
+| Claude CLI harness (`agentRuntime: claude-cli`)                    | Delegates the loop to the Claude Code CLI, out-of-process | Only `agent_turn_prepare`, `before_prompt_build`, `before_message_write`                                          | Partial from OpenClaw. Tool and LLM activity is captured **only if Claude Code hooks are separately deployed on the same machine**; without that, these sessions are unobserved |
+| Codex app-server harness (`openai/*` models after a Codex sign-in) | Runs the turn on the Codex app server                     | `llm_input`, the tool hooks, `llm_output`, `agent_end`. **No `before_agent_run`**                                 | Prompt, tool calls and assistant reply are captured. The prompt comes from `llm_input`, which OpenClaw does not await, so **prompt policies cannot block these turns**          |
 
 The trap: `openclaw models auth login` writes `agentRuntime: {id: "claude-cli"}`
 **by default for every model** when a claude-cli profile exists on the machine.
@@ -71,13 +72,14 @@ customer whose models all route through the Claude CLI.
 
    **This step is not optional.** Without `allowConversationAccess`, the
    conversation-scope hooks the plugin subscribes (`before_agent_run`,
-   `llm_output`, `agent_end`) silently never fire — no error, no warning, just
-   no prompts, no assistant responses and no usage. Tool hooks still fire, so a
+   `llm_input`, `llm_output`, `agent_end`) silently never fire. There is no
+   error and no warning, just no prompts, no assistant responses and no usage.
+   Tool hooks still fire, so a
    half-configured install looks _partly_ working, which is the most confusing
    failure mode we have here.
 
-   OpenClaw gates further conversation hooks behind the same flag (`llm_input`
-   and `before_agent_finalize` among them), but the plugin does not subscribe
+   OpenClaw gates further conversation hooks behind the same flag
+   (`before_agent_finalize` among them), but the plugin does not subscribe
    those and never reports them.
 
 4. Restart the Gateway. Plugin changes are not hot-loaded.
@@ -135,6 +137,71 @@ releases read both and prefer the `SPEAKEASY_AI_HOOKS_*` name.
 
 Sessions from a shared gateway attribute to the org, not to an individual.
 Per-user attribution on shared gateways is tracked separately in DNO-971.
+
+## Install for an agent (one command)
+
+An agent's page in the dashboard issues a single-use install command,
+`curl -fsSL https://<server>/agent-mcp/install/<code> | sh`. Run it yourself in a
+trusted shell on the OpenClaw machine. Until redeemed or expired after 15
+minutes, the code can retrieve the key: do not paste the command into chat.
+The separate follow-up message contains no code or credential.
+
+When `openclaw` is on `PATH` the script:
+
+1. Saves the agent gateway as the `speakeasy` MCP server using
+   `openclaw config set --batch-file` and a temporary owner-only file. It
+   removes the older `gram` entry only after the replacement is accepted.
+   Releases without `--batch-file` get update guidance, while hooks setup
+   continues. A failed gateway update leaves existing entries in place.
+2. If the agent has a live project, installs the observability plugin with
+   the agent's key and project in `speakeasy.json`. It uses `--force` and
+   `--accept-capabilities` only when the installed CLI advertises each flag.
+   An agent with no project or a deleted project gets the gateway only and
+   an explanation that its sessions cannot be recorded.
+3. Sets `allowConversationAccess`.
+4. Sends one `before_tool_call` frame through the hooks binary and prints
+   `Speakeasy hooks: PASS` or `FAIL: <reason>`. A permission denial can mean
+   the agent lacks `org:hooks_ingest` on its project or `project:read`.
+   PASS tests the embedded key; it does not prove runtime attribution:
+   Gateway-level `SPEAKEASY_AI_HOOKS_API_KEY` or `SPEAKEASY_AI_HOOKS_ORG_KEY`
+   (including their `GRAM_*` aliases) can take precedence. Remove those explicit
+   overrides to use the agent credential. The generated plugin marks its key
+   as an agent key. With a hooks binary that supports this mode, a cached
+   personal sign-in no longer takes precedence.
+   If the installed plugin cannot be located, the check tests the archive
+   copy instead, requiring `unzip`, `bsdtar` or `python3`.
+5. Prints a reminder to restart the OpenClaw Gateway. Until restart the
+   plugin is not loaded. The installer never restarts a running Gateway.
+
+**Release dependency:** agent-key precedence requires a published hooks binary
+containing the credential-order change and an updated server release pin. The
+current `hooksBinaryVersion` is `0.3.37`, which predates that change; its runtime
+can still prefer a cached sign-in. Do not claim agent attribution from an
+installer PASS until the release and pin are updated.
+
+The key is stored in plaintext in the plugin's `speakeasy.json` and in
+OpenClaw's MCP configuration. Plugin ZIPs mark the key file `0600`; the
+installer also protects the installed file when found, including named
+profiles and explicit state/config paths. A failure to protect it is reported.
+OpenClaw writes its own config permissions; keep the config owner-only.
+Neither file is a secret store. Revoking the key invalidates both copies.
+
+OpenClaw 2026.10.6 accepts scalar MCP headers, not structured SecretRefs.
+The proposed [MCP SecretRef support](https://github.com/openclaw/openclaw/pull/69417)
+was closed without merging; do not put a SecretRef object in these headers.
+For supported credential surfaces, see the upstream
+[SecretRef contract](https://docs.openclaw.ai/gateway/secrets/secretref-contract).
+The installer uses the CLI's private batch-file input to keep the key out of
+process arguments. Claude Code and Codex use `SPEAKEASY_AGENT_KEY` from their
+launch environment. The installer only exports it for its own process; it
+does not save a key file for these clients. Store the key yourself when the
+dashboard shows it, and supply it when launching either client. If a client
+rejects a gateway update, the installer keeps its existing entry; review that
+entry in the client before retrying.
+
+The coverage caveat in [Before you start](#before-you-start) applies: models
+routed through the Claude CLI harness bypass these hooks, so the PASS line
+covers only the embedded runtime.
 
 ## Verify
 

@@ -187,7 +187,7 @@ func (h *SpanRelayHandler) handleBatch(ctx context.Context, messages []spanRelay
 	exportGroup.SetLimit(spanRelayExportConcurrency)
 	for _, item := range deliveries {
 		exportGroup.Go(func() error {
-			if err := item.destination.export(ctx, item.request); err != nil {
+			if _, err := item.destination.export(ctx, item.request, 0); err != nil {
 				reason := relayReasonNetworkError
 				retryable := true
 				if exportErr, ok := errors.AsType[*relayExportError](err); ok && exportErr != nil {

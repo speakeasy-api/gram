@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -13,6 +14,21 @@ type Client struct {
 }
 
 var _ openrouter.CompletionClient = (*Client)(nil)
+var _ openrouter.ModelCatalogClient = (*Client)(nil)
+
+// ListModels preserves the provider catalog and its supported-model policy
+// through the agentic wrapper used by the chat service.
+func (c *Client) ListModels(ctx context.Context) (map[string]json.RawMessage, error) {
+	catalogClient, ok := c.completionClient.(openrouter.ModelCatalogClient)
+	if !ok {
+		return nil, fmt.Errorf("completion provider does not support model discovery")
+	}
+	catalog, err := catalogClient.ListModels(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list agent client models: %w", err)
+	}
+	return catalog, nil
+}
 
 func (c *Client) GetCompletion(ctx context.Context, request openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
 	resp, err := c.completionClient.GetCompletion(ctx, request)

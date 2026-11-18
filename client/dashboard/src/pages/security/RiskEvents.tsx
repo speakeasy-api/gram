@@ -1,4 +1,5 @@
 import { RiskSetupEmptyState } from "@/components/setup-empty-state";
+import { customDateRangeBounds } from "@/components/filters/filter-schema";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { IdentityLink } from "@/components/identity-link";
 import { identityRefForUserKey } from "@/lib/identity-urn";
@@ -35,6 +36,7 @@ import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { useRiskListMcpPlatformToolsets } from "@gram/client/react-query/riskListMcpPlatformToolsets.js";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { History } from "lucide-react";
@@ -210,7 +212,8 @@ export default function RiskEvents(): JSX.Element {
   // range means "all time" (no from/to sent) — Risk Events' previous behavior.
   const { from, to } = useMemo(() => {
     const d = values.date;
-    if (d.customRange) return d.customRange;
+    const customRange = customDateRangeBounds(d);
+    if (customRange) return customRange;
     if (d.preset) return getPresetRange(d.preset);
     return { from: undefined, to: undefined };
   }, [values.date]);
@@ -824,9 +827,14 @@ function RiskEventsRows({
 
   if (isLoading) {
     return (
-      <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
-        <Icon name="loader-circle" className="size-5 animate-spin" />
-        <span>Loading risk events...</span>
+      <div className="p-4">
+        <Skeleton label="Loading risk events">
+          <div className="h-14 w-full" />
+          <div className="h-14 w-full" />
+          <div className="h-14 w-full" />
+          <div className="h-14 w-full" />
+          <div className="h-14 w-full" />
+        </Skeleton>
       </div>
     );
   }

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Check, ChevronDown, ExternalLink, Loader2 } from "lucide-react";
+import { Check, ChevronDown, ExternalLink } from "lucide-react";
 import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
@@ -15,6 +15,7 @@ import { StepContainer } from "../step-container";
 import { StepSection } from "../step-section";
 import { IDP_PROVIDERS } from "../../providers";
 import type { IdpProvider } from "../../types";
+import { Spinner } from "@/components/ui/Spinner";
 
 const INITIAL_VISIBLE = 6;
 
@@ -498,7 +499,7 @@ function SingleSignOnSection({
                       {p.name}
                     </span>
                     {selectedProvider === p.id && isPending && (
-                      <Loader2 className="text-muted-foreground h-3.5 w-3.5 animate-spin" />
+                      <Spinner className="text-muted-foreground mr-0 h-3.5 w-3.5" />
                     )}
                   </div>
                   <span className="text-muted-foreground text-xs">

@@ -3,11 +3,11 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
+import { Spinner } from "@/components/ui/Spinner";
 import { Text } from "@/components/ui/Text";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
-import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -29,6 +29,8 @@ export type RemoveMcpSourceDialogContentProps = {
   onSuccess: () => void;
   /** Performs the deletion; rejects on failure. */
   onConfirm: () => Promise<void>;
+  /** Who the deletion cuts off, shown above the typed confirmation. */
+  usage?: React.ReactNode;
 };
 
 function endpointSummary(
@@ -100,6 +102,7 @@ export function RemoveMcpSourceDialogContent({
   onClose,
   onSuccess,
   onConfirm,
+  usage,
 }: RemoveMcpSourceDialogContentProps): JSX.Element {
   const [confirmation, setConfirmation] = useState("");
   const inputMatches = confirmation === confirmValue;
@@ -158,6 +161,8 @@ export function RemoveMcpSourceDialogContent({
         </div>
       )}
 
+      {usage}
+
       <div className="grid gap-2">
         <Text small>
           To confirm, type {confirmLabel}: <strong>{confirmValue}</strong>
@@ -192,7 +197,7 @@ export function RemoveMcpSourceDialogContent({
         >
           {isPending && (
             <Button.LeftIcon>
-              <Loader2 className="size-4 animate-spin" />
+              <Spinner className="mr-0 size-4" />
             </Button.LeftIcon>
           )}
           <Button.Text>{isPending ? "Deleting" : "Delete"}</Button.Text>

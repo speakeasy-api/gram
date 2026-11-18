@@ -58,17 +58,9 @@ func (c presentedClientCredentials) clientless(r *http.Request) bool {
 	return !c.presented() && len(r.Header.Values("Authorization")) == 0
 }
 
-// extractClientCredentials reads every client authentication parameter a
-// request can carry. HTTP Basic still wins for the client_id and secret when
-// both it and form parameters are present, so existing clients keep their
-// behavior; the "multiple" label surfaces the misconfiguration in logs.
-//
-// "multiple" is decided on values, not on which keys the form carried. A
-// parameter sent empty alongside a real credential is not a second
-// authentication method under RFC 6749 section 2.3, and refusing it would
-// turn a client that pads its form into a failed exchange. Dispatch still
-// reads key presence, through presented, because a caller that names any
-// client is one that has to authenticate.
+// extractClientCredentials reads client authentication after request validation.
+// Empty form credentials are treated as omitted; client_id alone is not a
+// second authentication method alongside Basic.
 func extractClientCredentials(r *http.Request) presentedClientCredentials {
 	formID := r.PostForm.Get(oauthwire.ParamClientID)
 	formSecret := r.PostForm.Get(oauthwire.ParamClientSecret)
@@ -76,7 +68,7 @@ func extractClientCredentials(r *http.Request) presentedClientCredentials {
 		Value: r.PostForm.Get(oauthwire.ParamClientAssertion),
 		Type:  r.PostForm.Get(oauthwire.ParamClientAssertionType),
 	}
-	hasFormCredentials := formID != "" || formSecret != ""
+	hasFormCredentials := formSecret != ""
 	hasClientAuthParameters := slices.ContainsFunc(clientAuthFormParameters, func(key string) bool {
 		_, ok := r.PostForm[key]
 		return ok

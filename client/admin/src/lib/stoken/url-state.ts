@@ -7,7 +7,13 @@
 // route's `validateSearch` runs, which is how every other admin list keeps its
 // state in the URL.
 
-export type ProviderKey = "openai" | "anthropic" | "gemini" | "other";
+export type ProviderKey =
+  | "openai"
+  | "anthropic"
+  | "gemini"
+  | "spacexsi"
+  | "cursor"
+  | "other";
 
 export type ProviderRow = {
   id: string;
@@ -33,6 +39,8 @@ const PROVIDER_KEYS: Record<ProviderKey, true> = {
   openai: true,
   anthropic: true,
   gemini: true,
+  spacexsi: true,
+  cursor: true,
   other: true,
 };
 const ROW_ID_PATTERN = /^row-\d+$/;

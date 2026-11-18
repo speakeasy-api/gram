@@ -86,9 +86,11 @@ var MethodNames = [10]string{"callback", "login", "switchScopes", "enterDemo", "
 // CallbackPayload is the payload type of the auth service callback method.
 type CallbackPayload struct {
 	// The auth code for authentication from the speakeasy system
-	Code string
+	Code *string
 	// The opaque state string optionally provided during initialization.
 	State *string
+	// The identity provider error, when sign-in was not completed.
+	Error *string
 }
 
 // CallbackResult is the result type of the auth service callback method.
@@ -169,6 +171,18 @@ type LoginPayload struct {
 	Email *string
 	// Opaque, one-time organization support handoff. Never included in OAuth state.
 	SupportHandoff *string
+	// Optional sign-up attribution: UTM source.
+	UtmSource *string
+	// Optional sign-up attribution: UTM medium.
+	UtmMedium *string
+	// Optional sign-up attribution: UTM campaign.
+	UtmCampaign *string
+	// Optional sign-up attribution: UTM term.
+	UtmTerm *string
+	// Optional sign-up attribution: UTM content.
+	UtmContent *string
+	// Optional sign-up attribution: the browser's product analytics session id.
+	AnalyticsSessionID *string
 }
 
 // LoginResult is the result type of the auth service login method.

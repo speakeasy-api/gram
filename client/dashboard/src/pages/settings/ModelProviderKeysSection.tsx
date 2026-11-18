@@ -25,7 +25,8 @@ import {
 } from "@/components/ui/Dropdown";
 import { Input } from "@/components/ui/Input";
 import { Stack } from "@/components/ui/Stack";
-import { Column, Table } from "@/components/ui/Table";
+import type { Column } from "@/components/ui/Table";
+import { Table } from "@/components/ui/Table";
 import { Check, MoreHorizontal } from "lucide-react";
 import { type ComponentProps, useMemo, useState } from "react";
 import { toast } from "sonner";

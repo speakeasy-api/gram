@@ -1,4 +1,6 @@
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { ServerUsageConfirmation } from "@/components/mcp-server-usage/ServerUsageConfirmation";
+import { useServerUsageConfirmation } from "@/components/mcp-server-usage/useServerUsageConfirmation";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { useUserSessionIssuerAttachImpact } from "@gram/client/react-query/userSessionIssuerAttachImpact.js";
 import type { AuthTarget } from "./authTarget";
@@ -21,10 +23,10 @@ export function ChangeIssuerConfirmDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  target: AuthTarget;
+  target: Pick<AuthTarget, "attachImpactTarget" | "mcpServerId" | "slug">;
   /** Whether the server has an issuer now, which the candidate replaces. */
   replacing: boolean;
-  candidate: UserSessionIssuer;
+  candidate: Pick<UserSessionIssuer, "id" | "slug">;
   onConfirm: () => void;
   isPending: boolean;
   error: Error | null;
@@ -35,11 +37,20 @@ export function ChangeIssuerConfirmDialog({
     { enabled: open, throwOnError: false, retry: false },
   );
 
+  // Who loses their connection. Only MCP server targets have a usage
+  // preview; toolset and gateway targets keep the plain confirmation.
+  const usage = useServerUsageConfirmation({
+    mcpServerId: target.mcpServerId,
+    serverName: target.slug,
+    open,
+    requireTyping: !!target.mcpServerId,
+  });
+
   const candidateIssuerUrl = impact.data?.candidateIssuer?.issuerUrl;
   let summary: string;
   if (impact.isError) {
     summary = replacing
-      ? "Couldn't check whether the authorization server changes too. You can still change the issuer."
+      ? "Couldn't check whether the authorization server changes too. You can still change the MCP Authentication Provider."
       : "Couldn't check where clients will sign in. You can still require sign-in.";
   } else if (!replacing) {
     summary = candidateIssuerUrl
@@ -59,15 +70,17 @@ export function ChangeIssuerConfirmDialog({
       onOpenChange={onOpenChange}
       title={
         replacing
-          ? "Change user session issuer?"
+          ? "Change MCP Authentication Provider?"
           : "Require sign-in for this server?"
       }
       description={
         replacing
-          ? `Everyone connected to this server will need to sign in again. Their sessions belong to the current issuer and stop working once the server uses ${candidate.slug}.`
+          ? `Everyone connected to this server will need to sign in again. Their sessions belong to the current MCP Authentication Provider and stop working once the server uses ${candidate.slug}.`
           : `Clients connected to this server will need to sign in through ${candidate.slug} before they can use it again.`
       }
-      confirmLabel={replacing ? "Change issuer" : "Require sign-in"}
+      confirmLabel={
+        replacing ? "Change MCP Authentication Provider" : "Require sign-in"
+      }
       pendingLabel="Saving…"
       confirmVariant="primary"
       onConfirm={onConfirm}
@@ -76,6 +89,11 @@ export function ChangeIssuerConfirmDialog({
       // and confirming must wait for the current one.
       impact={{ summary, isLoading: impact.isFetching }}
       error={error?.message}
-    />
+      confirmDisabled={!usage.canConfirm}
+    >
+      {target.mcpServerId && (
+        <ServerUsageConfirmation state={usage} disabled={isPending} />
+      )}
+    </ConfirmDialog>
   );
 }

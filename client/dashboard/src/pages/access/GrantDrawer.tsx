@@ -18,16 +18,10 @@ import {
 import { useResolveChallengeMutation } from "@gram/client/react-query/resolveChallenge.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { Button } from "@/components/ui/Button";
+import { Spinner } from "@/components/ui/Spinner";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  ArrowLeft,
-  Check,
-  ChevronRight,
-  Loader2,
-  Plus,
-  Users,
-} from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, Plus, Users } from "lucide-react";
 import { useState } from "react";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { invalidateAllChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
@@ -36,6 +30,7 @@ import {
   principalDisplayName,
 } from "./challengeHelpers";
 import { rolesCoveringChallengeScopes } from "./roleSuggestions";
+import { useScopeCatalogue } from "@/hooks/useScopeCatalogue";
 import { visiblePermissionCount } from "./roleDialogState";
 
 type Step = "choose" | "select-role" | "confirm";
@@ -62,6 +57,14 @@ export function GrantDrawer({
   const [roleAssignmentConfirmed, setRoleAssignmentConfirmed] = useState(false);
   const queryClient = useQueryClient();
   const { data: rolesData } = useRoles();
+  // Role matching reads inclusions off the catalogue, so until it loads a
+  // mcp:write role would look unable to grant mcp:connect, and after a
+  // failed fetch it would look the same for good.
+  const {
+    catalogue,
+    isLoading: catalogueLoading,
+    isError: catalogueFailed,
+  } = useScopeCatalogue();
   const allRoles = rolesData?.roles ?? [];
   const canAssignRole = challenge ? canAssignChallengeRole(challenge) : false;
   const challengeIds = challengeIdsProp ?? (challenge ? [challenge.id] : []);
@@ -87,6 +90,7 @@ export function GrantDrawer({
       ? rolesCoveringChallengeScopes(
           allRoles.filter((role) => !role.isSystem),
           challengeData.challenges,
+          catalogue,
         )
       : [];
 
@@ -273,9 +277,9 @@ export function GrantDrawer({
                     </Button.Text>
                   </Button>
                 </div>
-              ) : areChallengesPending ? (
+              ) : areChallengesPending || catalogueLoading ? (
                 <div className="border-border flex w-full items-center gap-3 border p-4 text-left">
-                  <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+                  <Spinner className="text-muted-foreground mr-0 h-5 w-5" />
                   <Text
                     variant="body"
                     className="text-muted-foreground text-sm"
@@ -283,10 +287,14 @@ export function GrantDrawer({
                     Checking roles against the denied access…
                   </Text>
                 </div>
-              ) : challengesFailed || !hasAllChallengeDetails ? (
+              ) : challengesFailed ||
+                catalogueFailed ||
+                !hasAllChallengeDetails ? (
                 <div className="border-border space-y-2 border p-4 text-left">
                   <Text variant="body" className="font-medium">
-                    Challenge details are unavailable
+                    {catalogueFailed
+                      ? "Permission details are unavailable"
+                      : "Challenge details are unavailable"}
                   </Text>
                   <Text
                     variant="body"

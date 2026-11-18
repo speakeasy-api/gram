@@ -71,6 +71,7 @@ func runHeaders(ctx context.Context, tx pgx.Tx, opts Options, pageSize int32, re
 		rows, err := q.ListCredentialSources(ctx, ListCredentialSourcesParams{
 			OrganizationID: opts.OrganizationID,
 			Cursor:         cursor,
+			OnlySourceID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			PageSize:       pageSize,
 		})
 		if err != nil {
@@ -150,11 +151,12 @@ func decideSource(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, row 
 		id = HeaderClientID(opts.OrganizationID, row.SourceKind, row.SourceID, row.AuthorizationHeaderID, clientType)
 	} else {
 		// Without an Authorization header, a server with an upstream OAuth
-		// client or an EMA client gets the credential headers on that client
-		// instead.
+		// client or an EMA client serving its direct route gets the credential
+		// headers on that client instead. One reached only through the
+		// gateways keeps this client for its direct route.
 		linked = nil
 		for _, server := range servers {
-			if !server.hasOAuth && !ema.reaches(server.id) {
+			if !server.hasOAuth && !ema.reachesDirectly(server.id) {
 				linked = append(linked, server)
 			}
 		}
@@ -303,10 +305,20 @@ func sourceServers(ctx context.Context, q *Queries, organizationID, sourceKind s
 // onto, and any copies on it are retired, as are copies no source names any
 // more.
 func copyOntoOAuthClients(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, report *Report) error {
-	rows, err := q.ListOAuthClientSources(ctx, opts.OrganizationID)
+	rows, err := q.ListOAuthClientSources(ctx, ListOAuthClientSourcesParams{
+		OrganizationID: opts.OrganizationID,
+		OnlyClientIds:  nil,
+	})
 	if err != nil {
 		return fmt.Errorf("list upstream OAuth client sources: %w", err)
 	}
+	return copyOntoGroupedOAuthClients(ctx, tx, q, opts, report, rows)
+}
+
+// copyOntoGroupedOAuthClients decides each upstream OAuth client named by
+// rows. rows must carry every source of each client it names, since the rule
+// refusing a client shared across sources reads them all.
+func copyOntoGroupedOAuthClients(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, report *Report, rows []ListOAuthClientSourcesRow) error {
 	var order []uuid.UUID
 	sources := map[uuid.UUID][]ListOAuthClientSourcesRow{}
 	for _, row := range rows {
@@ -316,87 +328,98 @@ func copyOntoOAuthClients(ctx context.Context, tx pgx.Tx, q *Queries, opts Optio
 		sources[row.RemoteSessionClientID] = append(sources[row.RemoteSessionClientID], row)
 	}
 	for _, clientID := range order {
-		used := sources[clientID]
-		result := Result{
-			Kind:                  KindOAuth,
-			SubjectID:             clientID,
-			AssociationID:         uuid.Nil,
-			MCPServerID:           uuid.Nil,
-			ProjectID:             uuid.Nil,
-			RemoteSessionClientID: clientID,
-			BindingIDs:            nil,
-			SourceIDs:             nil,
-			ServerIDs:             nil,
-			AuthClientID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			Outcome:               OutcomeExisting,
-			Reason:                "",
+		if err := copyOntoOAuthClient(ctx, tx, q, opts, report, clientID, sources[clientID]); err != nil {
+			return err
 		}
-		withHeaders := false
+	}
+	return nil
+}
+
+// copyOntoOAuthClient decides the credential header copies on one upstream
+// OAuth client's auth clients from the sources its servers sit on.
+func copyOntoOAuthClient(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, report *Report, clientID uuid.UUID, used []ListOAuthClientSourcesRow) error {
+	if len(used) == 0 {
+		return nil
+	}
+	result := Result{
+		Kind:                  KindOAuth,
+		SubjectID:             clientID,
+		AssociationID:         uuid.Nil,
+		MCPServerID:           uuid.Nil,
+		ProjectID:             uuid.Nil,
+		RemoteSessionClientID: clientID,
+		BindingIDs:            nil,
+		SourceIDs:             nil,
+		ServerIDs:             nil,
+		AuthClientID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Outcome:               OutcomeExisting,
+		Reason:                "",
+	}
+	withHeaders := false
+	for _, src := range used {
+		withHeaders = withHeaders || len(src.HeaderIds) > 0
+	}
+	srcKind, desired := "remote", []uuid.UUID(nil)
+	shared := len(used) > 1 && withHeaders
+	switch {
+	case shared:
+		result.Outcome, result.Reason = OutcomeAmbiguous, ReasonOAuthClientSharedAcrossSources
 		for _, src := range used {
-			withHeaders = withHeaders || len(src.HeaderIds) > 0
+			result.SourceIDs = append(result.SourceIDs, src.SourceID)
+			result.ServerIDs = append(result.ServerIDs, src.ServerIds...)
 		}
-		srcKind, desired := "remote", []uuid.UUID(nil)
-		shared := len(used) > 1 && withHeaders
-		switch {
-		case shared:
-			result.Outcome, result.Reason = OutcomeAmbiguous, ReasonOAuthClientSharedAcrossSources
-			for _, src := range used {
-				result.SourceIDs = append(result.SourceIDs, src.SourceID)
-				result.ServerIDs = append(result.ServerIDs, src.ServerIds...)
-			}
-		case len(used) == 1 && used[0].HasDuplicateNames:
-			result.Outcome, result.Reason = OutcomeAmbiguous, ReasonDuplicateHeaderNames
-			result.SourceIDs = []uuid.UUID{used[0].SourceID}
-			result.ServerIDs = used[0].ServerIds
-		case len(used) == 1 && refusesASource(used[0].ForwardedSources):
-			result.Outcome, result.Reason = OutcomeAmbiguous, ReasonDeniedSource
-			result.SourceIDs = []uuid.UUID{used[0].SourceID}
-			result.ServerIDs = used[0].ServerIds
-		case len(used) == 1:
-			srcKind, desired = used[0].SourceKind, used[0].HeaderIds
-		}
-		ambiguous := result.Outcome == OutcomeAmbiguous
-		authClients, err := q.FindOAuthAuthClients(ctx, FindOAuthAuthClientsParams{OrganizationID: opts.OrganizationID, RemoteSessionClientID: clientID})
-		if err != nil {
-			return fmt.Errorf("find auth clients of upstream OAuth client %s: %w", clientID, err)
-		}
-		if len(authClients) == 0 {
-			// Recorded by the OAuth phase on apply; a dry run counts the copies
-			// of a client that phase would record.
-			_, recordable := Type(used[0].CredentialOwner)
-			switch {
-			case ambiguous:
-				report.add(result)
-			case len(desired) > 0 && !opts.Apply && recordable:
-				result.Outcome = OutcomeUpdated
-				for range desired {
-					report.pendingHeader(KindOAuth)
-				}
-				report.add(result)
-			}
-			continue
-		}
-		changedAny, racedAny := false, false
-		for _, authClientID := range authClients {
-			changed, raced, err := syncHeaders(ctx, tx, q, opts, report, KindOAuth, authClientID, true, uuid.NullUUID{UUID: clientID, Valid: true}, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, srcKind, desired)
-			if err != nil {
-				return err
-			}
-			changedAny = changedAny || changed
-			racedAny = racedAny || raced
-			result.AuthClientID = uuid.NullUUID{UUID: authClientID, Valid: true}
-		}
+	case len(used) == 1 && used[0].HasDuplicateNames:
+		result.Outcome, result.Reason = OutcomeAmbiguous, ReasonDuplicateHeaderNames
+		result.SourceIDs = []uuid.UUID{used[0].SourceID}
+		result.ServerIDs = used[0].ServerIds
+	case len(used) == 1 && refusesASource(used[0].ForwardedSources):
+		result.Outcome, result.Reason = OutcomeAmbiguous, ReasonDeniedSource
+		result.SourceIDs = []uuid.UUID{used[0].SourceID}
+		result.ServerIDs = used[0].ServerIds
+	case len(used) == 1:
+		srcKind, desired = used[0].SourceKind, used[0].HeaderIds
+	}
+	ambiguous := result.Outcome == OutcomeAmbiguous
+	authClients, err := q.FindOAuthAuthClients(ctx, FindOAuthAuthClientsParams{OrganizationID: opts.OrganizationID, RemoteSessionClientID: clientID})
+	if err != nil {
+		return fmt.Errorf("find auth clients of upstream OAuth client %s: %w", clientID, err)
+	}
+	if len(authClients) == 0 {
+		// Recorded by the OAuth phase on apply; a dry run counts the copies
+		// of a client that phase would record.
+		_, recordable := Type(used[0].CredentialOwner)
 		switch {
 		case ambiguous:
-		case racedAny:
-			result.Outcome = OutcomeSkippedRace
-		case changedAny:
+			report.add(result)
+		case len(desired) > 0 && !opts.Apply && recordable:
 			result.Outcome = OutcomeUpdated
-		case len(desired) == 0:
-			continue
+			for range desired {
+				report.pendingHeader(KindOAuth)
+			}
+			report.add(result)
 		}
-		report.add(result)
+		return nil
 	}
+	changedAny, racedAny := false, false
+	for _, authClientID := range authClients {
+		changed, raced, err := syncHeaders(ctx, tx, q, opts, report, KindOAuth, authClientID, true, uuid.NullUUID{UUID: clientID, Valid: true}, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, srcKind, desired)
+		if err != nil {
+			return err
+		}
+		changedAny = changedAny || changed
+		racedAny = racedAny || raced
+		result.AuthClientID = uuid.NullUUID{UUID: authClientID, Valid: true}
+	}
+	switch {
+	case ambiguous:
+	case racedAny:
+		result.Outcome = OutcomeSkippedRace
+	case changedAny:
+		result.Outcome = OutcomeUpdated
+	case len(desired) == 0:
+		return nil
+	}
+	report.add(result)
 	return nil
 }
 
@@ -413,70 +436,122 @@ func copyOntoEMAClients(ctx context.Context, tx pgx.Tx, q *Queries, opts Options
 		if len(target.servers) == 0 {
 			continue
 		}
-		used, err := q.ListServerCredentialSources(ctx, ListServerCredentialSourcesParams{OrganizationID: opts.OrganizationID, McpServerIds: target.servers})
-		if err != nil {
-			return fmt.Errorf("list credential sources of ema auth client %s: %w", target.clientID, err)
+		if err := copyOntoEMAClient(ctx, tx, q, opts, report, target.clientID, target.recorded, target.servers); err != nil {
+			return err
 		}
-		if len(used) == 0 {
-			continue
-		}
-		result := Result{
-			Kind:                  KindEMA,
-			SubjectID:             target.clientID,
-			AssociationID:         uuid.Nil,
-			MCPServerID:           uuid.Nil,
-			ProjectID:             uuid.Nil,
-			RemoteSessionClientID: uuid.Nil,
-			BindingIDs:            nil,
-			SourceIDs:             nil,
-			ServerIDs:             nil,
-			AuthClientID:          uuid.NullUUID{UUID: target.clientID, Valid: target.clientID != uuid.Nil},
-			Outcome:               OutcomeExisting,
-			Reason:                "",
-		}
-		withHeaders := false
-		for _, src := range used {
-			withHeaders = withHeaders || len(src.HeaderIds) > 0
-		}
-		srcKind, desired := "remote", []uuid.UUID(nil)
-		switch {
-		case len(used) > 1 && withHeaders:
-			result.Outcome, result.Reason = OutcomeAmbiguous, ReasonEMAClientSharedAcrossSources
-			for _, src := range used {
-				result.SourceIDs = append(result.SourceIDs, src.SourceID)
-				result.ServerIDs = append(result.ServerIDs, src.ServerIds...)
-			}
-		case len(used) == 1 && used[0].HasDuplicateNames:
-			result.Outcome, result.Reason = OutcomeAmbiguous, ReasonDuplicateHeaderNames
-			result.SourceIDs, result.ServerIDs = []uuid.UUID{used[0].SourceID}, used[0].ServerIds
-		case len(used) == 1 && refusesASource(used[0].ForwardedSources):
-			result.Outcome, result.Reason = OutcomeAmbiguous, ReasonDeniedSource
-			result.SourceIDs, result.ServerIDs = []uuid.UUID{used[0].SourceID}, used[0].ServerIds
-		case len(used) == 1:
-			srcKind, desired = used[0].SourceKind, used[0].HeaderIds
-		}
-		ambiguous := result.Outcome == OutcomeAmbiguous
-		changed, raced := false, false
-		if target.clientID != uuid.Nil || len(desired) > 0 {
-			// A client a dry run would record has no copies yet: they all count
-			// as pending.
-			changed, raced, err = syncHeaders(ctx, tx, q, opts, report, KindEMA, target.clientID, target.recorded, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.NullUUID{UUID: target.clientID, Valid: target.clientID != uuid.Nil}, srcKind, desired)
-			if err != nil {
-				return err
-			}
-		}
-		switch {
-		case ambiguous:
-		case raced:
-			result.Outcome = OutcomeSkippedRace
-		case changed:
-			result.Outcome = OutcomeUpdated
-		default:
-			continue
-		}
-		report.add(result)
 	}
 	return nil
+}
+
+// copyOntoEMAClient decides the credential header copies on one ema auth
+// client from the sources of every server that offers it. servers must be all
+// of them, since the rule refusing a client shared across sources reads them
+// all.
+func copyOntoEMAClient(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, report *Report, clientID uuid.UUID, recorded bool, servers []uuid.UUID) error {
+	if opts.Apply && recorded {
+		if _, err := q.LockEMARegistrationForSync(ctx, LockEMARegistrationForSyncParams{
+			OrganizationID: opts.OrganizationID,
+			AuthClientID:   uuid.NullUUID{UUID: clientID, Valid: true},
+			BindingID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		}); err != nil {
+			return fmt.Errorf("lock EMA credential registration: %w", err)
+		}
+		if err := q.LockEMACopyClient(ctx, LockEMACopyClientParams{
+			OrganizationID: opts.OrganizationID, AuthClientID: clientID,
+		}); err != nil {
+			return fmt.Errorf("lock EMA credential client: %w", err)
+		}
+		// Serialize link retirement/detach before rereading the owner set. A
+		// registration lock alone does not protect administrator link mutations.
+		if err := q.LockEMALifecycleLinks(ctx, LockEMALifecycleLinksParams{
+			OrganizationID: opts.OrganizationID, AuthClientIds: []uuid.UUID{clientID},
+		}); err != nil {
+			return fmt.Errorf("lock EMA credential links: %w", err)
+		}
+		// The caller's link snapshot can precede a concurrent binding writer.
+		var err error
+		servers, err = q.ListEMAClientLiveServers(ctx, ListEMAClientLiveServersParams{
+			OrganizationID: opts.OrganizationID, AuthClientID: clientID,
+		})
+		if err != nil {
+			return fmt.Errorf("reload EMA credential owners: %w", err)
+		}
+		if len(servers) == 0 {
+			return retireClientCopies(ctx, tx, q, opts, report, KindEMA, clientID,
+				uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.NullUUID{UUID: clientID, Valid: true})
+		}
+	}
+	used, err := q.ListServerCredentialSources(ctx, ListServerCredentialSourcesParams{OrganizationID: opts.OrganizationID, McpServerIds: servers})
+	if err != nil {
+		return fmt.Errorf("list credential sources of ema auth client %s: %w", clientID, err)
+	}
+	if len(used) == 0 {
+		return nil
+	}
+	result := Result{
+		Kind:                  KindEMA,
+		SubjectID:             clientID,
+		AssociationID:         uuid.Nil,
+		MCPServerID:           uuid.Nil,
+		ProjectID:             uuid.Nil,
+		RemoteSessionClientID: uuid.Nil,
+		BindingIDs:            nil,
+		SourceIDs:             nil,
+		ServerIDs:             nil,
+		AuthClientID:          uuid.NullUUID{UUID: clientID, Valid: clientID != uuid.Nil},
+		Outcome:               OutcomeExisting,
+		Reason:                "",
+	}
+	withHeaders := false
+	for _, src := range used {
+		withHeaders = withHeaders || len(src.HeaderIds) > 0
+	}
+	srcKind, desired := "remote", []uuid.UUID(nil)
+	switch {
+	case len(used) > 1 && withHeaders:
+		result.Outcome, result.Reason = OutcomeAmbiguous, ReasonEMAClientSharedAcrossSources
+		for _, src := range used {
+			result.SourceIDs = append(result.SourceIDs, src.SourceID)
+			result.ServerIDs = append(result.ServerIDs, src.ServerIds...)
+		}
+	case len(used) == 1 && used[0].HasDuplicateNames:
+		result.Outcome, result.Reason = OutcomeAmbiguous, ReasonDuplicateHeaderNames
+		result.SourceIDs, result.ServerIDs = []uuid.UUID{used[0].SourceID}, used[0].ServerIds
+	case len(used) == 1 && refusesASource(used[0].ForwardedSources):
+		result.Outcome, result.Reason = OutcomeAmbiguous, ReasonDeniedSource
+		result.SourceIDs, result.ServerIDs = []uuid.UUID{used[0].SourceID}, used[0].ServerIds
+	case len(used) == 1:
+		srcKind, desired = used[0].SourceKind, used[0].HeaderIds
+	}
+	ambiguous := result.Outcome == OutcomeAmbiguous
+	changed, raced := false, false
+	if clientID != uuid.Nil || len(desired) > 0 {
+		// A client a dry run would record has no copies yet: they all count
+		// as pending.
+		changed, raced, err = syncHeaders(ctx, tx, q, opts, report, KindEMA, clientID, recorded, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.NullUUID{UUID: clientID, Valid: clientID != uuid.Nil}, srcKind, desired)
+		if err != nil {
+			return err
+		}
+	}
+	switch {
+	case ambiguous:
+	case raced:
+		result.Outcome = OutcomeSkippedRace
+	case changed:
+		result.Outcome = OutcomeUpdated
+	default:
+		return nil
+	}
+	report.add(result)
+	return nil
+}
+
+type atomicHeaderSyncKey struct{}
+
+// withAtomicHeaderSync makes normal writers roll back when a copy write loses
+// its ownership evidence. Backfill retains its report-and-retry behavior.
+func withAtomicHeaderSync(ctx context.Context) context.Context {
+	return context.WithValue(ctx, atomicHeaderSyncKey{}, true)
 }
 
 // syncHeaders brings an auth client's header copies in line with the given
@@ -559,6 +634,9 @@ func syncHeaders(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, repor
 			return changed, raced, fmt.Errorf("sync a header copy of auth client %s: %w", authClientID, err)
 		}
 		if n == 0 {
+			if atomic, _ := ctx.Value(atomicHeaderSyncKey{}).(bool); atomic {
+				return changed, true, fmt.Errorf("credential copy ownership changed concurrently; retry transaction")
+			}
 			raced = true
 			continue
 		}

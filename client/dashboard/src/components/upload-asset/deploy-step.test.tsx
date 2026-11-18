@@ -8,13 +8,16 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import DeployStep from "./deploy-step";
 const render = (children: ReactNode) => {
   const client = new QueryClient();
   return renderView(children, {
     wrapper: ({ children }) => (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      <QueryClientProvider client={client}>
+        <MemoryRouter>{children}</MemoryRouter>
+      </QueryClientProvider>
     ),
   });
 };
@@ -49,6 +52,7 @@ const state = vi.hoisted(() => ({
   },
 }));
 vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
   useSdkClient: () => ({
     deployments: {
       evolveDeployment: state.evolve,
@@ -85,9 +89,6 @@ vi.mock("./step/use-step", () => ({
 }));
 vi.mock("./stepper/use-stepper", () => ({
   useStepper: () => ({ meta: state.meta, setState: state.setStepper }),
-}));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({ deployments: { deployment: { Link: () => null } } }),
 }));
 afterEach(() => {
   cleanup();

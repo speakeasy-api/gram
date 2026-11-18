@@ -14,6 +14,7 @@ import {
   safeBase64Encode,
 } from "./observeFilterUtils";
 import { DEFAULT_HOOK_TYPES, VALID_HOOK_TYPES } from "./observeFilterConstants";
+import { minuteAlignedRange } from "./useDateRangeFilter";
 import type {
   ObserveStatusFilterValue,
   ObserveTypeFilterValue,
@@ -199,14 +200,10 @@ function useObserveFiltersImpl<
   // every mount — and therefore a different react-query key, so a drill-down
   // from Insights into Logs would refetch what the other page already holds.
   // Quantizing to the minute is what makes the two pages agree.
-  const { from, to } = useMemo(() => {
-    if (customRange) return customRange;
-    const range = getPresetRange(dateRange);
-    return {
-      from: new Date(Math.floor(range.from.getTime() / 60_000) * 60_000),
-      to: new Date(Math.ceil(range.to.getTime() / 60_000) * 60_000),
-    };
-  }, [customRange, dateRange]);
+  const { from, to } = useMemo(
+    () => customRange ?? minuteAlignedRange(getPresetRange(dateRange)),
+    [customRange, dateRange],
+  );
 
   const logFilters = useMemo(
     () => buildLogFilters(activeFilters, roleEmails),

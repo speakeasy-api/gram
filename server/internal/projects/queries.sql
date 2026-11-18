@@ -25,6 +25,15 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 ORDER BY id ASC;
 
+-- name: ListProjectNamesIncludingDeleted :many
+-- Every project of an organization, deleted ones included, for labelling
+-- records written while they existed. The deleted flag says whether the
+-- project still has a page to link to.
+SELECT id, name, slug, deleted
+FROM projects
+WHERE organization_id = @organization_id
+ORDER BY deleted ASC, created_at DESC;
+
 -- name: ListProjectsByOrganizationLimited :many
 SELECT *
 FROM projects

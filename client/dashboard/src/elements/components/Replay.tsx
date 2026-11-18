@@ -36,7 +36,8 @@ import type { ElementsConfig } from "@/elements/types";
 import { AssistantRuntimeProvider, useAui } from "@assistant-ui/react";
 import { useChatRuntime } from "@assistant-ui/react-ai-sdk";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ReactNode, useEffect, useMemo, useRef } from "react";
+import type { ReactNode } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 // ---------------------------------------------------------------------------
 // Replay component

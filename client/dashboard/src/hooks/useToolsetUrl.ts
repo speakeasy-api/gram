@@ -2,8 +2,8 @@ import { useProject } from "@/contexts/Auth";
 import { getServerURL } from "@/lib/utils";
 import type { CustomDomain } from "@gram/client/models/components/customdomain.js";
 import type { DomainDNSConfig } from "@gram/client/models/components/domaindnsconfig.js";
-import { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
-import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
+import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
+import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { useListDomains } from "@gram/client/react-query/listDomains.js";
 import { useCallback, useMemo, useState } from "react";
 import { buildGetMcpServerQuery } from "@gram/client/react-query/getMcpServer.js";
@@ -35,16 +35,21 @@ export function useCustomDomain(enabled = true): {
 export function useCustomDomains(enabled = true): {
   domains: CustomDomain[];
   isLoading: boolean;
+  isError: boolean;
   refetch: ReturnType<typeof useListDomains>["refetch"];
 } {
-  const { data, isLoading, refetch } = useListDomains(undefined, undefined, {
-    refetchOnWindowFocus: false,
-    retry: false,
-    throwOnError: false,
-    enabled,
-  });
+  const { data, isLoading, isError, refetch } = useListDomains(
+    undefined,
+    undefined,
+    {
+      refetchOnWindowFocus: false,
+      retry: false,
+      throwOnError: false,
+      enabled,
+    },
+  );
 
-  return { domains: data?.domains ?? [], isLoading, refetch };
+  return { domains: data?.domains ?? [], isLoading, isError, refetch };
 }
 
 // useMcpEndpointUrl resolves the runtime install URL for a single mcp_endpoint
@@ -320,4 +325,51 @@ export function customDomainMcpEndpointUrl(
   slug: string,
 ): string {
   return `https://${domain}/mcp/${slug}`;
+}
+
+/** One address a server answers on, and what kind it is. */
+export interface McpServerAddress {
+  url: string;
+  label: string;
+}
+
+/**
+ * Every public address a server's endpoints give it: its custom domains
+ * first, then the Speakeasy one. A custom domain still resolving is left out
+ * rather than shown on the wrong host.
+ */
+export function useMcpEndpointAddresses(
+  endpoints: McpEndpoint[],
+): McpServerAddress[] {
+  const hasCustom = endpoints.some((endpoint) => endpoint.customDomainId);
+  const { domains } = useCustomDomains(hasCustom);
+  return useMemo(() => {
+    const custom: McpServerAddress[] = [];
+    const platform: McpServerAddress[] = [];
+    for (const endpoint of endpoints) {
+      if (!endpoint.slug) continue;
+      if (endpoint.customDomainId) {
+        const match = domains.find((d) => d?.id === endpoint.customDomainId);
+        if (match) {
+          // A domain-root endpoint also answers at the domain itself.
+          if (endpoint.isDomainRoot) {
+            custom.push({
+              url: `https://${match.domain}/`,
+              label: "Custom domain",
+            });
+          }
+          custom.push({
+            url: customDomainMcpEndpointUrl(match.domain, endpoint.slug),
+            label: "Custom domain",
+          });
+        }
+      } else {
+        platform.push({
+          url: `${getServerURL()}/mcp/${endpoint.slug}`,
+          label: "Speakeasy URL",
+        });
+      }
+    }
+    return [...custom, ...platform];
+  }, [endpoints, domains]);
 }

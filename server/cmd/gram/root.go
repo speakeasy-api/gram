@@ -43,6 +43,8 @@ func newApp() *cli.App {
 			newMCPCommand(),
 			newNetworkIngressServerCommand(),
 			newNetingressAttestorCommand(),
+			newTailnetGatewayCommand(),
+			newNetingressLocalTokenCommand(),
 			newNetworkIngressWorkerCommand(),
 			newWorkerCommand(),
 			newAdminCommand(),
@@ -55,6 +57,7 @@ func newApp() *cli.App {
 			newAdminSeedCommand(),
 			newCustomerUsageSeedCommand(),
 			newAccountStateCommand(),
+			newCodeRuntimeSmokeCommand(),
 			newVersionCommand(),
 		},
 		Before: func(c *cli.Context) error {

@@ -2,7 +2,7 @@ package mcp
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"log/slog"
 	"strconv"
 	"time"
@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
+	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 )
 
 const (
@@ -87,8 +88,14 @@ func (c toolCall) record(end time.Time, statusCode int, resultIsError bool, fail
 		}
 	}
 	if failure != nil {
-		// A shareable error's text is what the client was told.
-		attrs = append(attrs, attr.ErrorMessage(failure.Error()))
+		// The same text the call's Tool logs row records.
+		attrs = append(attrs, attr.ErrorMessage(toolCallFailureMessage(failure)))
+		// A call abandoned at shutdown failed because of a deploy, not the
+		// tool, so the record names the interrupt the way the telemetry log
+		// does.
+		if errors.Is(failure, shutdowndrain.ErrInterrupted) {
+			attrs = append(attrs, attr.ToolCallInterruptReason(string(oops.MCPErrorDataReasonServerShutdown)))
+		}
 	}
 
 	var record log.Record
@@ -112,7 +119,7 @@ func publishToolCallRecord(ctx context.Context, logger *otelpub.Logger, slogger 
 // toolCallErrorType is empty for a call the client read as a success.
 func toolCallErrorType(statusCode int, resultIsError bool, failure *oops.ShareableError) string {
 	switch {
-	case toolCallOutcome(statusCode, resultIsError) == dialect.OutcomeOK:
+	case dialect.ToolCallOutcome(statusCode, resultIsError) == dialect.OutcomeOK:
 		return ""
 	case failure != nil && failure.Code != "":
 		return string(failure.Code)
@@ -121,22 +128,6 @@ func toolCallErrorType(statusCode int, resultIsError bool, failure *oops.Shareab
 	default:
 		return strconv.Itoa(statusCode)
 	}
-}
-
-// toolCallOutcome follows the verdict the client reads as isError.
-func toolCallOutcome(statusCode int, resultIsError bool) string {
-	if resultIsError || statusCode < 200 || statusCode >= 300 {
-		return dialect.OutcomeError
-	}
-	return dialect.OutcomeOK
-}
-
-// mcpResultIsError reads isError off a forwarded tool result document.
-func mcpResultIsError(body []byte) bool {
-	var result struct {
-		IsError bool `json:"isError"`
-	}
-	return json.Unmarshal(body, &result) == nil && result.IsError
 }
 
 // toolCallCaller names the caller only when they belong to the tool's

@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { RequireScope } from "@/components/require-scope";
 import {
   Collapsible,
@@ -25,7 +26,6 @@ import { Stack } from "@/components/ui/Stack";
 import {
   CheckCircle2,
   ChevronRight,
-  Loader2,
   PauseCircle,
   PlugZap,
   Trash2,
@@ -312,7 +312,7 @@ function TestConnectionRow({ form }: { form: DeviceIntegrationConfigForm }) {
         >
           <Button.LeftIcon>
             {form.isTesting ? (
-              <Loader2 className="size-3.5 animate-spin" />
+              <Spinner className="mr-0 size-3.5" />
             ) : (
               <PlugZap className="size-3.5" />
             )}

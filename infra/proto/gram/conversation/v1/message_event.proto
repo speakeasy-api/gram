@@ -80,8 +80,12 @@ message MessageEvent {
     // Historical source import/replay marker, not Pub/Sub redelivery.
     bool replayed = 10;
 
-    // Customer-defined string labels observed by ingestion. Consumers preserve
-    // this snapshot rather than resolving labels from current configuration.
+    // String labels snapshotted when the message is created. model_name is the
+    // message's model identifier, model_family its recognized vendor, and
+    // inference_provider its reported inference service. department is the actor's
+    // active organization-scoped directory department at capture time, not the
+    // billing user's. Unknown values are omitted. Consumers preserve this
+    // snapshot across retries rather than resolving current directory state.
     map<string, string> attributes = 11;
   }
 
@@ -119,6 +123,14 @@ message MessageEvent {
   // Consumers fetch these within project_id and message_id. Unparented
   // attachments cannot emit a message event until associated with a message.
   repeated string attachment_ids = 11;
+
+  // Transcript position at capture, independent of later generations.
+  int32 generation = 12;
+  int64 sequence = 13;
+  // original, reobserved, synthetic or unknown. Independent of historical imports.
+  string capture_kind = 14;
+  // Original persisted target when this row is an exact transcript copy.
+  string original_message_id = 15;
 
   option (gcp.pubsub.v1.topic) = {
     retention_hint: { seconds: 345600 /* 4 days */ }

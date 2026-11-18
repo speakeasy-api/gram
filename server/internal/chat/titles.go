@@ -5,6 +5,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/speakeasy-api/gram/server/internal/chat/chattitle"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
@@ -45,7 +48,7 @@ var placeholderTitles = []string{
 // MaxDerivedTitleRunes bounds a title derived from message content. Titles
 // render in dense lists, so a long first prompt is cut rather than allowed to
 // dominate the row.
-const MaxDerivedTitleRunes = 80
+const MaxDerivedTitleRunes = chattitle.MaxRunes
 
 // IsPlaceholderTitle reports whether a title is one of the fixed stand-ins a
 // capture path seeds a chat with, rather than a name that carries meaning.
@@ -82,4 +85,20 @@ func IsDerivedTitle(title string, contents ...string) bool {
 		}
 	}
 	return false
+}
+
+// displayTitlePtr is chattitle.Display for a nullable title column, which
+// stays nil when the column is NULL.
+func displayTitlePtr(title pgtype.Text, manuallySet bool) *string {
+	if !title.Valid {
+		return nil
+	}
+	display := chattitle.Display(title.String, manuallySet)
+	return &display
+}
+
+// CronJobTitle is chattitle.CronJobTitle, for capture paths that already
+// derive titles through this package.
+func CronJobTitle(content string) (string, bool) {
+	return chattitle.CronJobTitle(content)
 }

@@ -230,3 +230,25 @@ func TestRegistryProjectionBoundsAndSafeCategories(t *testing.T) {
 	require.Equal(t, `path\name`, boundedText(`path\name continues`, 9))
 	require.Equal(t, "éé", boundedText("ééé", 5))
 }
+
+func TestRegistryIconsLegacyProjectionFailsClosed(t *testing.T) {
+	t.Parallel()
+	for _, src := range []string{"private-value", "https://user:password@assets.example/rpc/assets.serveImage?id=" + testRegistryID, "https://external.example/icon.svg", "https://assets.example/rpc/assets.serveImage?id=" + testRegistryID} {
+		t.Run(src, func(t *testing.T) {
+			t.Parallel()
+			for _, record := range []string{`{}`, `{"server":{"name":"test","description":"test","version":"1"}}`} {
+				var root map[string]any
+				require.NoError(t, json.Unmarshal([]byte(record), &root))
+				root["_meta"] = map[string]any{"private": "unrelated-secret", "com.speakeasy.ai/icons": map[string]any{"default": map[string]any{"src": src, "mimeType": "image/svg+xml", "sizes": []string{"any"}}}}
+				raw, err := json.Marshal(root)
+				require.NoError(t, err)
+				reader := &recordingRegistryReader{entry: &gen.AdminRegistryEntry{ID: testRegistryID, DataJSON: string(raw)}}
+				body, data := registryToolCall(t, reader, "get_registry_entry", `{"id":"`+testRegistryID+`"}`, true)
+				var output RegistryEntryDetail
+				require.NoError(t, json.Unmarshal(data, &output))
+				require.Nil(t, output.CuratedIcons.Default)
+				require.NotContains(t, body, "unrelated-secret")
+			}
+		})
+	}
+}

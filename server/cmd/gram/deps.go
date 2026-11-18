@@ -13,6 +13,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -71,7 +73,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
@@ -85,6 +86,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
@@ -92,6 +95,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/resend"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	sv "github.com/speakeasy-api/gram/server/internal/thirdparty/svix"
@@ -107,6 +111,27 @@ import (
 func noopShutdown(context.Context) error { return nil }
 
 func newEmailService(ctx context.Context, c *cli.Context, logger *slog.Logger, guardianPolicy *guardian.Policy) (*email.Service, error) {
+	provider := c.String("email-provider")
+	switch provider {
+	case "", "loops":
+	case "resend":
+		enabled := loops.IsConfigured(c.String("resend-api-key"))
+		if !enabled && c.String("environment") != "local" {
+			return nil, fmt.Errorf("RESEND_API_KEY is required when email provider is resend outside local development")
+		}
+		from, replyTo := c.String("email-from"), c.String("email-reply-to")
+		if enabled && (from == "" || replyTo == "") {
+			return nil, fmt.Errorf("email-from and email-reply-to are required for Resend delivery")
+		}
+		if !enabled {
+			return email.NewResendService(logger, resend.NewNoop(), nil, from, replyTo, false), nil
+		}
+		sender := resend.New(guardianPolicy.PooledClient(), c.String("resend-api-key"))
+		contacts := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
+		return email.NewResendService(logger, sender, contacts, from, replyTo, true), nil
+	default:
+		return nil, fmt.Errorf("unsupported email provider %q (expected loops or resend)", provider)
+	}
 	ids, err := email.ParseTemplateIDs(c.String("email-template-ids"))
 	if err != nil {
 		return nil, fmt.Errorf("load email template IDs: %w", err)
@@ -178,6 +203,16 @@ func newGuardianPolicy(c *cli.Context, logger *slog.Logger, tracerProvider trace
 	return policy, nil
 }
 
+const (
+	// clickhousePoolMaxOpenConns bounds one ClickHouse pool. Ingest and
+	// dashboard reads run on separate pools, so each gets the whole budget
+	// the primary pool has always had rather than a share of one.
+	clickhousePoolMaxOpenConns = 32
+
+	// clickhousePoolMaxIdleConns keeps half the pool warm between bursts.
+	clickhousePoolMaxIdleConns = 16
+)
+
 type clickhouseClientOptions struct {
 	component    string
 	host         string
@@ -200,8 +235,8 @@ func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Contex
 		password:     c.String("clickhouse-password"),
 		nativePort:   c.String("clickhouse-native-port"),
 		insecure:     c.Bool("clickhouse-insecure"),
-		maxOpenConns: 32,
-		maxIdleConns: 16,
+		maxOpenConns: clickhousePoolMaxOpenConns,
+		maxIdleConns: clickhousePoolMaxIdleConns,
 		rootCAFile:   "",
 	})
 }
@@ -215,8 +250,8 @@ func newClickhouseReadClient(ctx context.Context, logger *slog.Logger, c *cli.Co
 		password:     c.String("clickhouse-read-password"),
 		nativePort:   c.String("clickhouse-read-native-port"),
 		rootCAFile:   c.Path("clickhouse-read-ca-file"),
-		maxOpenConns: 8,
-		maxIdleConns: 4,
+		maxOpenConns: clickhousePoolMaxOpenConns,
+		maxIdleConns: clickhousePoolMaxIdleConns,
 		insecure:     false,
 	})
 }
@@ -538,6 +573,11 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 	inmem.SetFlag(feature.FlagRiskEnforcementPubsub, feature.AnyDistinctID, true)
 	// The issuer kill switch fails closed when unset, so local dev sets it off.
 	inmem.SetFlag(feature.FlagInternalSessionIssuerSigningPaused, feature.AnyDistinctID, false)
+	// The dashboard shows every flag on in local dev, so the server lets local
+	// orgs create tool approval policies too. A CSV row can still turn it off.
+	inmem.SetFlag(feature.FlagToolApprovals, feature.AnyDistinctID, true)
+	// Local development runs the tailnet gateway, not the operator.
+	inmem.SetFlag(feature.FlagPrivateNetworkGateway, feature.AnyDistinctID, true)
 
 	if csvPath == "" {
 		logger.DebugContext(ctx, "newLocalFeatureFlags: no csv path provided, using empty in-memory feature flag provider")
@@ -662,13 +702,26 @@ func newBillingProvider(
 	}
 }
 
+var stripePublishableKeyPattern = regexp.MustCompile(`^pk_(test|live)_[A-Za-z0-9]+$`)
+
 func newStripeClient(
 	ctx context.Context,
 	logger *slog.Logger,
 	guardianPolicy *guardian.Policy,
 	c *cli.Context,
 ) (stripeclient.Client, error) {
+	publishableKey := c.String("stripe-publishable-key")
+	if stripeclient.IsConfigured(publishableKey) && !stripePublishableKeyPattern.MatchString(publishableKey) {
+		return nil, errors.New("invalid Stripe publishable key format")
+	}
 	apiKey := c.String("stripe-api-key")
+	apiKeyParts := strings.SplitN(apiKey, "_", 3)
+	if stripeclient.IsConfigured(publishableKey) && len(apiKeyParts) == 3 &&
+		(apiKeyParts[0] == "sk" || apiKeyParts[0] == "rk") &&
+		(apiKeyParts[1] == "test" || apiKeyParts[1] == "live") &&
+		!strings.HasPrefix(publishableKey, "pk_"+apiKeyParts[1]+"_") {
+		return nil, errors.New("mismatched Stripe API and publishable key modes")
+	}
 	if !stripeclient.IsConfigured(apiKey) {
 		if c.String("environment") == "local" {
 			logger.WarnContext(ctx, "using stub Stripe client: Stripe not configured")
@@ -693,6 +746,7 @@ func newStripeClient(
 		guardianPolicy,
 		apiKey,
 		c.String("stripe-webhook-secret"),
+		publishableKey,
 		catalog,
 	), nil
 }
@@ -1111,23 +1165,6 @@ func newFunctionOrchestrator(
 	default:
 		return nil, nilShutdown, fmt.Errorf("unrecognized functions provider: %s", provider)
 	}
-}
-
-type mcpRegistryClientOptions struct {
-	pulseTenantID string
-	pulseAPIKey   conv.Secret
-	cacheImpl     cache.Cache
-}
-
-func newMCPRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, opts mcpRegistryClientOptions) (*externalmcp.RegistryClient, error) {
-	pulseURL, err := url.Parse("https://api.pulsemcp.com")
-	if err != nil {
-		return nil, fmt.Errorf("parse pulse registry url: %w", err)
-	}
-
-	backend := externalmcp.NewPulseBackend(pulseURL, opts.pulseTenantID, opts.pulseAPIKey)
-
-	return externalmcp.NewRegistryClient(logger, tracerProvider, guardianPolicy, backend, opts.cacheImpl), nil
 }
 
 func newFeatureChecker(logger *slog.Logger, pf *productfeatures.Client, feat productfeatures.Feature) telemetry.FeatureChecker {
@@ -1850,4 +1887,143 @@ func issuerKeySweeper(provisioner *identityproviderconnections.Provisioner) back
 		return nil
 	}
 	return provisioner
+}
+
+// newKMSEncryptionClients returns the symmetric KMS client factories. Locally
+// both hand out one persistent in-process client, so data wrapped in one run
+// stays readable in the next and the server and worker agree on keys. Disabling
+// a key is per process locally: a key the worker's sweep disables stays usable
+// in the server until it restarts. Database state still records the disable,
+// so this only weakens the KMS half of the check in local development.
+func newKMSEncryptionClients(ctx context.Context, logger *slog.Logger, c *cli.Context) (gcpkms.EncryptionClientFactory, gcpkms.EncryptionProvisioningClientFactory, error) {
+	if c.String("environment") != "local" {
+		return gcpkms.NewEncryptionClient, gcpkms.NewEncryptionProvisioningClient, nil
+	}
+
+	logger.WarnContext(ctx, "using in-process kms encryption client: local development has no cloud kms to reach")
+
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return nil, nil, fmt.Errorf("resolve local kms encryption key directory: %w", err)
+	}
+	client, err := gcpkms.NewPersistentLocalEncryptionClient(filepath.Join(configDir, "gram", "local-kms", "encryption.pem"))
+	if err != nil {
+		return nil, nil, fmt.Errorf("load local kms encryption key: %w", err)
+	}
+
+	return func(_ context.Context, _ oauth2.TokenSource) (gcpkms.EncryptionClient, error) {
+			return client, nil
+		}, func(_ context.Context, _ oauth2.TokenSource) (gcpkms.EncryptionProvisioningClient, error) {
+			return client, nil
+		}, nil
+}
+
+// orgEncryptionOptionalEnvironments are the only environments where a process
+// may start without organization encryption configured. Everywhere else, every
+// process that reads or writes organization-encrypted data requires it: a
+// process without it cannot open data sealed under an organization key, so it
+// fails at startup instead of at the first request. Listing the exemptions
+// means a new or misspelled environment fails safe. Previews run with
+// environment dev and opt out explicitly.
+var orgEncryptionOptionalEnvironments = []string{"local", "test"}
+
+// orgEncryptionDeps is a process's organization encryption. Both fields are nil
+// when organization encryption is off, and every consumer then fails closed.
+type orgEncryptionDeps struct {
+	// Service encrypts and decrypts organization data.
+	Service *orgencryption.Service
+
+	// Provisioner mints, switches and retires organization keys.
+	Provisioner *orgencryption.Provisioner
+}
+
+// newOrgEncryption builds the organization encryption service and
+// provisioner. It returns the zero value when organization encryption is off,
+// and an error when it is misconfigured or required but not configured.
+func newOrgEncryption(ctx context.Context, logger *slog.Logger, c *cli.Context, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity, auditLogger *audit.Logger) (orgEncryptionDeps, error) {
+	environment := c.String("environment")
+	rawCredentialID := strings.TrimSpace(c.String(orgEncryptionCredentialIDFlag))
+
+	if c.Bool(orgEncryptionDisabledFlag) {
+		if rawCredentialID != "" {
+			return orgEncryptionDeps{}, errors.New("organization encryption is disabled but a platform credential is configured: unset GRAM_ORG_ENCRYPTION_DISABLED or GRAM_ORG_ENCRYPTION_CREDENTIAL_ID")
+		}
+		logger.WarnContext(ctx, "organization encryption is disabled by configuration")
+		return orgEncryptionDeps{Service: nil, Provisioner: nil}, nil
+	}
+
+	if rawCredentialID == "" {
+		if !slices.Contains(orgEncryptionOptionalEnvironments, environment) {
+			return orgEncryptionDeps{}, fmt.Errorf("organization encryption is required in the %q environment: set GRAM_ORG_ENCRYPTION_CREDENTIAL_ID, or set GRAM_ORG_ENCRYPTION_DISABLED to run without it", environment)
+		}
+		logger.WarnContext(ctx, "organization encryption is unavailable: no platform credential configured")
+		return orgEncryptionDeps{Service: nil, Provisioner: nil}, nil
+	}
+
+	credentialID, err := uuid.Parse(rawCredentialID)
+	if err != nil {
+		return orgEncryptionDeps{}, fmt.Errorf("parse organization encryption credential id: %w", err)
+	}
+
+	keyRing := strings.TrimSpace(c.String(orgEncryptionKMSKeyRingFlag))
+	if keyRing == "" {
+		if environment != "local" {
+			return orgEncryptionDeps{}, errors.New("organization encryption kms key ring is required when a credential is configured")
+		}
+		keyRing = orgEncryptionKMSKeyRingLocalDefault
+	}
+
+	keys := orgencryption.KeyConfig{
+		KeyRing:                keyRing,
+		PlatformCredentialID:   credentialID,
+		PlatformServiceAccount: strings.TrimSpace(c.String(orgEncryptionServiceAccountFlag)),
+	}
+
+	clients, provisioning, err := newKMSEncryptionClients(ctx, logger, c)
+	if err != nil {
+		return orgEncryptionDeps{}, err
+	}
+
+	service, err := orgencryption.NewService(logger, db, gcpIdentity, clients, keys)
+	if err != nil {
+		return orgEncryptionDeps{}, fmt.Errorf("build organization encryption service: %w", err)
+	}
+
+	provisioner, err := orgencryption.NewProvisioner(logger, db, gcpIdentity, clients, provisioning, auditLogger, service, orgencryption.ProvisionerConfig{
+		Keys:                keys,
+		SwitchGracePeriod:   c.Duration(orgEncryptionSwitchGracePeriodFlag),
+		ManagedKeyRetention: c.Duration(orgEncryptionManagedKeyRetention),
+	})
+	if err != nil {
+		return orgEncryptionDeps{}, fmt.Errorf("build organization encryption provisioner: %w", err)
+	}
+
+	logger.InfoContext(ctx, "organization encryption is enabled")
+
+	return orgEncryptionDeps{Service: service, Provisioner: provisioner}, nil
+}
+
+// orgEncryptionSweeper keeps a nil provisioner a nil interface.
+func orgEncryptionSweeper(provisioner *orgencryption.Provisioner) background.OrganizationEncryptionSweeper {
+	if provisioner == nil {
+		return nil
+	}
+	return provisioner
+}
+
+// newHookFleetMetrics returns nil when the gauges cannot be set up, which
+// leaves their schedule off rather than failing worker startup. The query
+// runs on the read replica; its reader needs SELECT on hook_install_summaries.
+func newHookFleetMetrics(ctx context.Context, logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, chRead clickhouse.Conn) background.HookFleetMetricsEmitter {
+	policy, err := plugins.HooksVersionPolicy()
+	if err != nil {
+		logger.ErrorContext(ctx, "hook fleet metrics disabled: hooks version policy", attr.SlogError(err))
+		return nil
+	}
+	m, err := admin.NewHookFleetMetrics(logger, meterProvider, db, telemetry.NewHookFleet(chRead), policy)
+	if err != nil {
+		logger.ErrorContext(ctx, "hook fleet metrics disabled", attr.SlogError(err))
+		return nil
+	}
+	return m
 }

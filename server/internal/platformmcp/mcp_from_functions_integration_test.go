@@ -26,7 +26,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -34,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -110,12 +112,10 @@ func TestCreateMCPFromFunctionsCreatesAServerExposingExactlyTheRequestedTools(t 
 	require.NoError(t, err)
 	require.Equal(t, fixture.project.ID, toolset.ProjectID)
 
-	// The index trigger ran for the toolset this creation wrote. This
-	// organization already has a server, so the new toolset is not
-	// MCP-enabled, and the real trigger answers not_required for that state.
-	// GRW-245: a server record serves the toolset regardless, so that answer
-	// is a bug; once it is fixed this assertion becomes "requested".
-	require.Equal(t, "not_required", created.IndexSignal)
+	// The index trigger ran for the toolset this creation wrote. Every new
+	// toolset is a private MCP server, so the real trigger requests the index
+	// even though this organization already has a server.
+	require.Equal(t, "requested", created.IndexSignal)
 	require.Equal(t, []uuid.UUID{toolsetID}, *fixture.indexed)
 
 	// The audit trail is the dashboard's: one toolset create, plus the
@@ -346,21 +346,10 @@ func TestCreateMCPFromFunctionsReportsTheFirstServerJoiningTheDefaultPlugin(t *t
 	require.Equal(t, "not_requested", second.PublicationRequest)
 }
 
-// disableFixtureServer disables the fixture's server through the hosted mirror, as the dashboard does.
+// disableFixtureServer disables the fixture's canonical hosted server, as the dashboard does.
 func disableFixtureServer(t *testing.T, ctx context.Context, fixture toolExposureFixture) {
 	t.Helper()
-	tx, err := fixture.conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction for the hosted mirror write.
-	require.NoError(t, err)
-	defer func() { _ = tx.Rollback(ctx) }()
-	q := toolsetsrepo.New(tx)
-	require.NoError(t, q.SetToolsetMCPEnabledByID(ctx, toolsetsrepo.SetToolsetMCPEnabledByIDParams{
-		McpEnabled: false, ID: fixture.toolsetID, ProjectID: fixture.project.ID,
-	}))
-	toolset, err := q.GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: fixture.toolsetID, ProjectID: fixture.project.ID})
-	require.NoError(t, err)
-	_, err = hostedmcp.Sync(ctx, tx, audit.NewLogger(), hostedmcp.SystemActor("test"), toolset, nil)
-	require.NoError(t, err)
-	require.NoError(t, tx.Commit(ctx))
+	testenv.SetHostedMCP(t, ctx, fixture.conn, fixture.project.ID, fixture.toolsetID, testenv.HostedMCP{Visibility: "disabled"})
 }
 
 type recordingPublishSignaler struct{ projects []uuid.UUID }
@@ -414,13 +403,14 @@ func TestCreateMCPFromFunctionsNeverReturnsDatabaseErrorText(t *testing.T) {
 	broken.Close()
 
 	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "create-from-functions-db-failure", Version: "0.0.1"}, nil))
+	registrar.withProjects(&RegistrationStore{db: fixture.conn, icons: nil})
 	registerCreateMCPFromFunctionsTool(registrar, service)
 	descriptor := registrar.Descriptors()[0]
 	ctx = ContextWithPrincipal(ctx, fixture.principal)
 
 	for _, confirmed := range []bool{true, false} {
 		arguments, err := json.Marshal(map[string]any{
-			"project_id": fixture.project.ID.String(), "name": "Order Desk", "tool_urns": []string{fixture.tools[0]},
+			"project_slug": fixture.project.Slug, "name": "Order Desk", "tool_urns": []string{fixture.tools[0]},
 			"idempotency_key": uuid.NewString(), "confirmed": confirmed,
 		})
 		require.NoError(t, err)
@@ -532,7 +522,10 @@ func TestCreateMCPFromFunctionsMatchesTheDashboardSequence(t *testing.T) {
 	require.NoError(t, err)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, fixture.conn, redisClient, cache.Suffix("gram-local"), billing.NewStubClient(logger, tracerProvider))
 	engine := authz.NewEngine(logger, fixture.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	toolsetService := toolsets.NewService(logger, tracerProvider, nil, fixture.conn, sessionManager, nil, engine, audit.NewLogger(), nil, false)
+	revokerPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), fixture.conn, testenv.NewEncryptionClient(t), revokerPolicy, nil)
+	toolsetService := toolsets.NewService(logger, tracerProvider, nil, fixture.conn, sessionManager, nil, engine, audit.NewLogger(), nil, false, revoker)
 	serverService := mcpservers.NewService(logger, tracerProvider, fixture.conn, sessionManager, engine, audit.NewLogger(), nil, nil, false, nil, nil, networkaccess.DenyAllChecker{})
 	orgSlug := projectOrganizationSlug(ctx, fixture.conn, fixture.principal.OrganizationID)
 	dashboardCtx := contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
@@ -572,11 +565,18 @@ func TestCreateMCPFromFunctionsMatchesTheDashboardSequence(t *testing.T) {
 	require.NoError(t, err)
 	dashboardToolset, err := toolsetRows.GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: dashboardToolsetID, ProjectID: fixture.project.ID})
 	require.NoError(t, err)
-	require.Equal(t, dashboardToolset.McpEnabled, toolToolset.McpEnabled)
+	toolCanonical, err := servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: toolToolset.ID, ProjectID: fixture.project.ID})
+	require.NoError(t, err)
+	dashboardCanonical, err := servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: dashboardToolset.ID, ProjectID: fixture.project.ID})
+	require.NoError(t, err)
+	require.Equal(t, dashboardCanonical.Visibility, toolCanonical.Visibility, "the toolsets' canonical servers are hosted alike")
 	require.Equal(t, dashboardToolset.DefaultEnvironmentSlug, toolToolset.DefaultEnvironmentSlug)
 	require.Equal(t, dashboardToolset.Description, toolToolset.Description)
 	require.Equal(t, dashboardToolset.ToolSelectionMode, toolToolset.ToolSelectionMode)
-	require.Regexp(t, "^"+orgSlug+"-", toolToolset.McpSlug.String)
+	toolEndpoints, err := mcpendpointsrepo.New(fixture.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: fixture.project.ID, McpServerID: toolToolset.ID})
+	require.NoError(t, err)
+	require.Len(t, toolEndpoints, 1, "the canonical server gets one platform endpoint")
+	require.Regexp(t, "^"+orgSlug+"-", toolEndpoints[0].Slug)
 
 	toolExposure, err := fixture.service.Exposure(ctx, fixture.principal, fixture.project.ID, toolRow.ID)
 	require.NoError(t, err)
@@ -600,6 +600,7 @@ func TestCreateMCPFromFunctionsUnavailableRegistrationMatchesLiveManifest(t *tes
 
 	describe := func(service *MCPToolExposureService) Descriptor {
 		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "create-from-functions-manifest", Version: "0.0.1"}, nil))
+		registrar.withProjects(&RegistrationStore{db: fixture.conn, icons: nil})
 		registerCreateMCPFromFunctionsTool(registrar, service)
 		descriptors := registrar.Descriptors()
 		require.Len(t, descriptors, 1)
@@ -619,8 +620,8 @@ func TestCreateMCPFromFunctionsUnavailableRegistrationMatchesLiveManifest(t *tes
 	require.Contains(t, unavailable.Description, "everyone holding that plugin receives it", "the first-server exception is named")
 	require.Contains(t, unavailable.Description, "requested, not confirmed delivered")
 
-	refusal := invokeUnavailable(t, unavailable, map[string]any{
-		"project_id": fixture.project.ID.String(), "name": "Order Desk", "tool_urns": []string{fixture.tools[0]},
+	refusal := invokeUnavailable(t, ContextWithPrincipal(t.Context(), fixture.principal), unavailable, map[string]any{
+		"project_slug": fixture.project.Slug, "name": "Order Desk", "tool_urns": []string{fixture.tools[0]},
 		"idempotency_key": uuid.NewString(), "confirmed": true,
 	})
 	require.Contains(t, refusal, "Creating an MCP server from a project's functions")

@@ -155,7 +155,7 @@ WHERE
   AND project_id = @project_id::uuid;
 
 -- name: GetChatAttachmentAssetURL :one
-SELECT url, content_type, content_length, updated_at
+SELECT name, url, content_type, content_length, updated_at
 FROM assets
 WHERE
   id = @id AND kind = 'chat_attachment'

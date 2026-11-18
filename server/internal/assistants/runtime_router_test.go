@@ -141,3 +141,69 @@ func TestNewRuntimeRouterRequiresTargetConfigured(t *testing.T) {
 	_, err = newRuntimeRouter(runtimeBackendLocal, map[string]RuntimeBackend{})
 	require.ErrorContains(t, err, "at least one backend")
 }
+
+func TestNewRuntimeRouterDisabledTargetNeedsNoBackend(t *testing.T) {
+	t.Parallel()
+
+	router, err := newRuntimeRouter(RuntimeProviderDisabled, map[string]RuntimeBackend{})
+	require.NoError(t, err)
+	require.Equal(t, RuntimeProviderDisabled, router.Backend())
+	require.Nil(t, router.ServerURL())
+	require.Empty(t, router.ImageRef())
+	require.False(t, router.SupportsBackend(runtimeBackendGKE))
+
+	err = router.Stop(t.Context(), testRuntimeRecord(runtimeBackendGKE))
+	require.ErrorContains(t, err, `backend "gke" is not configured`)
+}
+
+func TestRuntimeRouterDisabledTargetKeepsConfiguredBackendsReachable(t *testing.T) {
+	t.Parallel()
+
+	router, _, gke := newTestRouter(t, RuntimeProviderDisabled)
+	require.Equal(t, RuntimeProviderDisabled, router.Backend())
+	require.Nil(t, router.ServerURL())
+	require.Empty(t, router.ImageRef())
+
+	// Rows created before the switch still drain through their backend.
+	require.NoError(t, router.Reap(t.Context(), testRuntimeRecord(runtimeBackendGKE)))
+	require.Equal(t, 1, gke.reapCount)
+}
+
+func TestRuntimeBackendForVersionRejectsDisabledTarget(t *testing.T) {
+	t.Parallel()
+
+	router, err := newRuntimeRouter(RuntimeProviderDisabled, map[string]RuntimeBackend{})
+	require.NoError(t, err)
+	for _, version := range []int16{1, 2} {
+		_, err := runtimeBackendForVersion(router, version)
+		require.ErrorIs(t, err, ErrRuntimeDisabled)
+	}
+}
+
+func TestDisabledRuntimeBackendRefusesKitRowsOnLegacyGKE(t *testing.T) {
+	t.Parallel()
+
+	gke := &stubRuntimeBackend{name: runtimeBackendGKE}
+	backend, err := newDisabledRuntimeBackend(map[string]RuntimeBackend{runtimeBackendGKE: gke})
+	require.NoError(t, err)
+	require.Equal(t, RuntimeProviderDisabled, backend.Backend())
+	require.True(t, backend.SupportsBackend(runtimeBackendGKE))
+
+	// Legacy rows still drain through the configured GKE backend.
+	legacy := testRuntimeRecord(runtimeBackendGKE)
+	legacy.RuntimeVersion = 2
+	require.NoError(t, backend.Reap(t.Context(), legacy))
+	require.Equal(t, 1, gke.reapCount)
+
+	// Kit rows share the backend name but not the teardown, so they are
+	// refused rather than reaped by the legacy backend.
+	kit := testRuntimeRecord(runtimeBackendGKE)
+	kit.RuntimeVersion = 3
+	require.ErrorContains(t, backend.Reap(t.Context(), kit), "version 3 is not configured")
+	require.Equal(t, 1, gke.reapCount)
+
+	for _, version := range []int16{1, 2} {
+		_, err := runtimeBackendForVersion(backend, version)
+		require.ErrorIs(t, err, ErrRuntimeDisabled)
+	}
+}

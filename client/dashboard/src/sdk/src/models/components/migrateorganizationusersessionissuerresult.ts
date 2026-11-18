@@ -11,6 +11,14 @@ import {
   UserSessionIssuer,
   UserSessionIssuer$inboundSchema,
 } from "./usersessionissuer.js";
+import {
+  UserSessionIssuerMigrationClient,
+  UserSessionIssuerMigrationClient$inboundSchema,
+} from "./usersessionissuermigrationclient.js";
+import {
+  UserSessionIssuerMigrationServerImpact,
+  UserSessionIssuerMigrationServerImpact$inboundSchema,
+} from "./usersessionissuermigrationserverimpact.js";
 
 /**
  * Outcome of consolidating a source user_session_issuer onto a target issuer.
@@ -29,6 +37,10 @@ export type MigrateOrganizationUserSessionIssuerResult = {
    */
   consentsMigrated: number;
   /**
+   * Clients the source bound that consolidation did not carry to the target.
+   */
+  droppedClientLinks: Array<UserSessionIssuerMigrationClient>;
+  /**
    * A user_session_issuer record.
    */
   issuer: UserSessionIssuer;
@@ -36,6 +48,10 @@ export type MigrateOrganizationUserSessionIssuerResult = {
    * Remote-session credentials whose provenance moved.
    */
   remoteSessionsMigrated: number;
+  /**
+   * How consolidation changed each affected MCP server's upstream OAuth clients, read in its transaction just before it committed.
+   */
+  serverImpacts: Array<UserSessionIssuerMigrationServerImpact>;
   /**
    * User sessions re-pointed to the target.
    */
@@ -53,8 +69,14 @@ export const MigrateOrganizationUserSessionIssuerResult$inboundSchema:
       cimd_clients_migrated: z.int(),
       clients_migrated: z.int(),
       consents_migrated: z.int(),
+      dropped_client_links: z.array(
+        UserSessionIssuerMigrationClient$inboundSchema,
+      ),
       issuer: UserSessionIssuer$inboundSchema,
       remote_sessions_migrated: z.int(),
+      server_impacts: z.array(
+        UserSessionIssuerMigrationServerImpact$inboundSchema,
+      ),
       sessions_migrated: z.int(),
       source_deleted: z.boolean(),
     }),
@@ -63,7 +85,9 @@ export const MigrateOrganizationUserSessionIssuerResult$inboundSchema:
         "cimd_clients_migrated": "cimdClientsMigrated",
         "clients_migrated": "clientsMigrated",
         "consents_migrated": "consentsMigrated",
+        "dropped_client_links": "droppedClientLinks",
         "remote_sessions_migrated": "remoteSessionsMigrated",
+        "server_impacts": "serverImpacts",
         "sessions_migrated": "sessionsMigrated",
         "source_deleted": "sourceDeleted",
       });

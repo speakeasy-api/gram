@@ -211,13 +211,18 @@ func TestExplainGrantCheckScopeExpansionAllows(t *testing.T) {
 		heldBy(precedenceRole, NewGrant(ScopeMCPWrite, "server-1")),
 	}
 
-	for _, scope := range []Scope{ScopeMCPConnect, ScopeMCPRead, ScopeMCPWrite} {
+	for _, scope := range []Scope{ScopeMCPRead, ScopeMCPWrite} {
 		explanation := requireConsistentExplanation(t, grants, MCPCheck(scope, "server-1", "project-1"))
 		require.True(t, explanation.Allowed, scope)
 		require.Equal(t, []explainedGrant{
 			{principal: precedenceRole, scope: ScopeMCPWrite, effect: GrantEffectAllows, reason: BlockedReasonNone},
 		}, explainedGrants(explanation), scope)
 	}
+
+	// mcp:write does not reach mcp:connect.
+	explanation := requireConsistentExplanation(t, grants, MCPCheck(ScopeMCPConnect, "server-1", "project-1"))
+	require.False(t, explanation.Allowed)
+	require.Empty(t, explainedGrants(explanation))
 }
 
 func TestExplainGrantCheckNoMatchingGrant(t *testing.T) {

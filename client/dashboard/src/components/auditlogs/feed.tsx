@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { Button } from "@/components/ui/Button";
 import {
   Select,
@@ -14,7 +15,6 @@ import {
   type TimestampMode,
 } from "@/lib/audit-log-feed";
 import { cn } from "@/lib/utils";
-import { Icon } from "@/components/ui/Icon";
 import React from "react";
 
 export function DateGroupHeader({
@@ -157,7 +157,7 @@ export function AuditFeedFooter({
         >
           {isFetchingNextPage ? (
             <>
-              <Icon name="loader-circle" className="size-4 animate-spin" />
+              <Spinner className="mr-0 size-4" />
               Loading...
             </>
           ) : (

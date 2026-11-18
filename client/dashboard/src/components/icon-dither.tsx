@@ -140,7 +140,28 @@ export const SPEAKEASY_RAINBOW = [
  */
 export function useIconDither({
   palette,
-}: { palette?: readonly string[] } = {}): {
+  speed = 1,
+  stillWhenReduced = false,
+  exclusive = true,
+}: {
+  palette?: readonly string[];
+  /**
+   * How far the sea moves per tick; below 1 slows it into a drifting swell,
+   * as on the detail page header.
+   */
+  speed?: number;
+  /**
+   * Under reduced motion, draw one still frame instead of nothing. For places
+   * where the pattern is the background, not a hover response.
+   */
+  stillWhenReduced?: boolean;
+  /**
+   * Hover seas stop every other hover sea when they start. A background sea
+   * (a page header, an illustration) opts out, so it neither stops others nor
+   * is stopped by them.
+   */
+  exclusive?: boolean;
+} = {}): {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   start: () => void;
   stop: () => void;
@@ -172,13 +193,13 @@ export function useIconDither({
   }
 
   useEffect(() => {
-    const handle = handleRef.current;
+    const handle = exclusive ? handleRef.current : null;
     if (handle) instances.add(handle);
     return () => {
       halt();
       if (handle) instances.delete(handle);
     };
-  }, [halt]);
+  }, [halt, exclusive]);
 
   const stop = useCallback(() => {
     hoveringRef.current = false;
@@ -188,10 +209,15 @@ export function useIconDither({
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const reduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    if (reduced && !stillWhenReduced) return;
 
-    for (const other of instances) {
-      if (other !== handleRef.current) other.clear();
+    if (exclusive) {
+      for (const other of instances) {
+        if (other !== handleRef.current) other.clear();
+      }
     }
 
     if (canvas.clientWidth === 0 || canvas.clientHeight === 0) return;
@@ -233,13 +259,15 @@ export function useIconDither({
       sea.cy = rows / 2;
     };
     const sea = rollSea();
+    // A still frame is drawn at full strength, once.
+    if (reduced) fadeRef.current = FADE_TICKS;
 
     const loop = (now: number) => {
       rafRef.current = requestAnimationFrame(loop);
       if (now - lastTickRef.current < TICK_MS) return;
       lastTickRef.current = now;
 
-      timeRef.current++;
+      timeRef.current += speed;
       fadeRef.current = Math.min(
         FADE_TICKS,
         Math.max(0, fadeRef.current + (hoveringRef.current ? 1 : -1)),
@@ -275,9 +303,13 @@ export function useIconDither({
         ctx.fillStyle = colors[i]!;
         ctx.fill(path);
       });
+      if (reduced && rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
     };
     rafRef.current = requestAnimationFrame(loop);
-  }, [halt, palette]);
+  }, [halt, palette, speed, stillWhenReduced, exclusive]);
 
   return { canvasRef, start, stop };
 }

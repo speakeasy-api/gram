@@ -30,6 +30,7 @@ export const FeatureName = {
   NetworkIngress: "network_ingress",
   SignalsIntelligence: "signals_intelligence",
   OrganizationGatewayDisabled: "organization_gateway_disabled",
+  CodeMode: "code_mode",
 } as const;
 /**
  * Name of the feature to update

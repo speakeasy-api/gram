@@ -22,12 +22,24 @@ import (
 // subject has resolved, so a transient directory failure remains retryable.
 type Validator struct {
 	keys  assertioncore.VerificationKeys
-	guard assertioncore.ReplayGuard
+	guard ReplayGuard
 	store Store
 }
 
+// ReplayGuard is the single-use store an ID-JAG exchange can give an identifier back to.
+type ReplayGuard interface {
+	// MaxHold is the longest the guard keeps a reservation.
+	MaxHold() time.Duration
+
+	// ReserveOwned claims key for owner and reports whether owner holds it.
+	ReserveOwned(ctx context.Context, key replay.Key, holdUntil time.Time, owner string) (bool, error)
+
+	// Release gives up owner's reservation on key.
+	Release(ctx context.Context, key replay.Key, owner string) error
+}
+
 // NewValidator binds the verification, replay, and subject dependencies.
-func NewValidator(keys assertioncore.VerificationKeys, guard assertioncore.ReplayGuard, store Store) (*Validator, error) {
+func NewValidator(keys assertioncore.VerificationKeys, guard ReplayGuard, store Store) (*Validator, error) {
 	if keys == nil || guard == nil || store == nil {
 		return nil, errors.New("idjag: keys, replay guard, and store are required")
 	}
@@ -78,10 +90,17 @@ func (v *Validator) Validate(ctx context.Context, raw string, request Request) (
 	var payload json.RawMessage
 	if err := assertioncore.VerifiedClaims(ctx, v.keys, source, token, &payload); err != nil {
 		if verificationErr, ok := errors.AsType[*assertioncore.VerificationError](err); ok && verificationErr.Stage == assertioncore.VerificationKeyResolution {
-			if errors.Is(err, jwks.ErrKeyNotFound) || errors.Is(err, jwks.ErrRefreshRateLimited) || errors.Is(err, jwks.ErrFetchRateLimited) {
+			switch {
+			case errors.Is(err, jwks.ErrKeyNotFound), errors.Is(err, jwks.ErrRefreshRateLimited):
 				return nil, reject(ReasonKeyUnknown, err)
+			case errors.Is(err, jwks.ErrKeySetUnavailable):
+				return nil, reject(ReasonKeyUnresolvable, err)
+			case errors.Is(err, jwks.ErrFetchRateLimited):
+				return nil, reject(ReasonKeyBudgetExhausted, err)
+			case errors.Is(err, jwks.ErrFetchLimiterUnavailable), errors.Is(err, jwks.ErrKeyStoreUnavailable):
+				return nil, reject(ReasonKeyStoreUnavailable, err)
 			}
-			return nil, reject(ReasonKeyUnresolvable, err)
+			return nil, reject(ReasonKeyUnusable, err)
 		}
 		return nil, reject(ReasonSignatureInvalid, err)
 	}
@@ -102,7 +121,14 @@ func (v *Validator) Validate(ctx context.Context, raw string, request Request) (
 	if len(claims.Audience) != 1 || claims.Audience[0] != request.Audience {
 		return nil, reject(ReasonAudienceMismatch, errors.New("aud must be only the authorization server issuer"))
 	}
-	if extra.Resource == "" || extra.Resource != request.Resource {
+	// The resource claim is optional (ID-JAG draft; MCP EMA §4.3 constrains it only if present).
+	resource, hasResource, err := parseResourceClaim(extra.Resource)
+	switch {
+	case err != nil:
+		return nil, reject(ReasonResourceMismatch, err)
+	case !hasResource && !request.ResourceIndicated:
+		return nil, reject(ReasonResourceNotIndicated, errors.New("assertion has no resource and the request names none"))
+	case hasResource && resource != request.Resource:
 		return nil, reject(ReasonResourceMismatch, errors.New("resource does not name this MCP server"))
 	}
 	if extra.ClientID == "" || extra.ClientID != request.ClientID {
@@ -149,9 +175,11 @@ func (v *Validator) Validate(ctx context.Context, raw string, request Request) (
 	if userID == "" {
 		return nil, reject(ReasonNotProvisioned, ErrNotProvisioned)
 	}
-	claimed, err := assertioncore.Reserve(ctx, v.guard, replay.Key{
+	replayKey := replay.Key{
 		Issuer: request.UserSessionIssuerID.String(), Party: trusted.ID.String(), Subject: "", ID: claims.ID,
-	}, expiresAt)
+	}
+	owner := uuid.NewString()
+	claimed, err := v.guard.ReserveOwned(ctx, replayKey, expiresAt.Add(assertioncore.MaxSkew), owner)
 	if err != nil {
 		return nil, reject(ReasonReplayStoreUnavailable, err)
 	}
@@ -160,6 +188,13 @@ func (v *Validator) Validate(ctx context.Context, raw string, request Request) (
 	}
 	return &Result{
 		Subject: urn.NewUserSubject(userID), TrustedIssuerID: trusted.ID,
-		Claims: Claims{Issuer: claims.Issuer, ExternalSubject: claims.Subject, Email: email, Resource: extra.Resource, ClientID: extra.ClientID, JTI: claims.ID, Scope: extra.Scope, ExpiresAt: expiresAt},
+		Claims:    Claims{Issuer: claims.Issuer, ExternalSubject: claims.Subject, Email: email, Resource: resource, ClientID: extra.ClientID, JTI: claims.ID, Scope: extra.Scope, ExpiresAt: expiresAt},
+		replayKey: replayKey,
+		owner:     owner,
 	}, nil
+}
+
+// Release returns result's assertion to unused after a failure that issued no credential.
+func (v *Validator) Release(ctx context.Context, result *Result) error {
+	return v.guard.Release(ctx, result.replayKey, result.owner) //nolint:wrapcheck // the guard names the operation.
 }

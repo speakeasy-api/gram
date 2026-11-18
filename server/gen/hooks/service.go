@@ -290,6 +290,64 @@ type GetStatusPayload struct {
 	ProjectSlugInput *string
 }
 
+// Failure class the hook sender observed. http means the control plane
+// answered with a retryable status.
+type HookDeliveryCause string
+
+// Canonical type of the event whose delivery failed. Bounded to the hook
+// activity event vocabulary because it is a metric dimension; a report never
+// describes another report.
+type HookDeliveryFailedEventType string
+
+// Device-side delivery failure report, sent with event type
+// client.delivery_failed and a required Idempotency-Key so each failure counts
+// once. The speakeasy-hooks binary writes one when an event could not reach
+// the control plane and redelivers it from the offline spool once connectivity
+// returns, so the record describes the original attempt rather than the
+// request that carried it. It is diagnostic only and never counts as agent
+// activity.
+type HookDeliveryFailureData struct {
+	// Canonical type of the event whose delivery failed.
+	FailedEventType HookDeliveryFailedEventType
+	// Whether the failed send was a live hook or a spool-drain replay.
+	DeliveryPhase HookDeliveryPhase
+	// Failure class the client observed.
+	Cause HookDeliveryCause
+	// HTTP status of the final attempt, 0 when no response arrived.
+	StatusCode *int
+	// Wall time the client spent on the send across its attempts, in milliseconds.
+	ElapsedMs *int
+	// Number of send attempts the client made.
+	Attempts *int
+	// Whether the send gated an agent action (a verdict was awaited) rather than
+	// observing one.
+	Gating *bool
+	// RFC3339 time the failed send started, on the device clock.
+	AttemptedAt string
+	// speakeasy-hooks binary version that made the attempt.
+	BinaryVersion *string
+	// Operating system of the device.
+	Os *string
+	// CPU architecture of the device.
+	Arch *string
+	// Coding agent harness the hook ran under.
+	Harness *string
+	// Harness variant, when the harness distinguishes one.
+	HarnessVariant *string
+	// Harness version, when known.
+	HarnessVersion *string
+	// Idempotency key of the event that failed, so the report joins to the row its
+	// eventual replay produces.
+	FailedIdempotencyKey *string
+	// Session id of the event that failed.
+	SessionID *string
+	// Events waiting in the device's offline spool when the report was written.
+	SpoolDepth *int
+}
+
+// Whether a failed send was a live hook or a spool-drain replay.
+type HookDeliveryPhase string
+
 // Feature-specific payloads. Hooks populate only the blocks needed for the
 // event.
 type HookIngestData struct {
@@ -315,6 +373,14 @@ type HookIngestData struct {
 	// Transcript-derived prompt attachment content (Claude
 	// Stop/SubagentStop/SessionEnd).
 	PromptAttachments []*HookPromptAttachmentEntry
+	// Device-side delivery failure report. Required on client.delivery_failed,
+	// where it must be the only block and the payload carries no session; rejected
+	// on every other event type.
+	DeliveryFailure *HookDeliveryFailureData
+	// Bootstrap install failure report. Required on client.install_failed, where
+	// it must be the only block and the payload carries no session; rejected on
+	// every other event type.
+	InstallFailure *HookInstallFailureData
 }
 
 // Canonical Speakeasy feature event.
@@ -335,6 +401,14 @@ type HookIngestSession struct {
 	Cwd *string
 	// Model identifier reported by the local agent.
 	Model *string
+	// Product surface that sent the event, set when it changes how the server
+	// handles the event. "cowork" is Claude Cowork. Its Stop hook also ships the
+	// session transcript, so the server keys the event's conversation row by the
+	// id the transcript shares (the prompt id in turn_id, or the tool call id) and
+	// each prompt and tool call is stored once. Cowork cannot show the
+	// acknowledgement link, so a warned prompt there is confirmed by sending the
+	// same message again. Unknown values are ignored.
+	Surface *string
 }
 
 // Metadata about the local hook adapter that translated a provider event into
@@ -352,6 +426,28 @@ type HookIngestSource struct {
 	// or provider account), used for attribution when the API key is shared
 	// org-wide.
 	UserEmail *string
+}
+
+// Why a bootstrap script could not install the hooks binary.
+type HookInstallFailureCause string
+
+// Bootstrap install failure report, sent with event type
+// client.install_failed. A plugin's bootstrap script sends one, best effort,
+// when it cannot download the hooks binary or the download fails its checksum.
+// It is diagnostic only and never counts as agent activity.
+type HookInstallFailureData struct {
+	// Why the install failed.
+	Cause HookInstallFailureCause
+	// RFC3339 time of the failed install, on the device clock.
+	AttemptedAt string
+	// speakeasy-hooks version the script tried to install.
+	Version *string
+	// Operating system of the device.
+	Os *string
+	// CPU architecture of the device.
+	Arch *string
+	// Coding agent harness the hook ran under.
+	Harness *string
 }
 
 // Transcript-derived MCP attribution for one model API request. Claude redacts
@@ -504,7 +600,9 @@ type HooksStatus struct {
 
 // IngestHookResult is the result type of the hooks service ingest method.
 type IngestHookResult struct {
-	// Whether the local hook should allow or deny the action.
+	// Whether the local hook should allow or deny the action. "ask" (tool calls
+	// from Claude Cowork only) asks the person to allow the call in the agent's
+	// own permission prompt; a client that does not support it must deny.
 	Decision string
 	// Machine-readable decision reason.
 	Reason *string

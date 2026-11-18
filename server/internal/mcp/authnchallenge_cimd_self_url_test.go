@@ -2,7 +2,6 @@ package mcp_test
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
@@ -50,11 +50,10 @@ func doCIMDAuthorizeAtOrigin(t *testing.T, ti *testInstance, baseURL, mcpSlug, c
 func requireClientIDNamesEndpoint(t *testing.T, w *httptest.ResponseRecorder) {
 	t.Helper()
 
-	require.Equal(t, http.StatusUnauthorized, w.Code)
-	var body map[string]string
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-	require.Equal(t, "invalid_client", body["error"])
-	require.Equal(t, clientIDNamesEndpointDescription, body["error_description"])
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	body := oauthtest.RequireAuthorizationErrorPage(t, w, http.StatusBadRequest)
+	require.Equal(t, "invalid_client", body.Code)
+	require.Equal(t, clientIDNamesEndpointDescription, body.Description)
 }
 
 // TestOAuthCIMD_ClientIDNamingEndpointRejected serves the endpoint from the
@@ -151,5 +150,7 @@ func TestOAuthCIMD_TokenJWTBearerClientIDNamingEndpointRejected(t *testing.T) {
 
 	ctx := withPlatformOrigin(t.Context(), ds.srv.URL)
 	w := postIDJAGToken(t, ctx, ti, mcpSlug, ds.srv.URL+"/mcp/"+mcpSlug+"/", "unused-assertion")
-	requireClientIDNamesEndpoint(t, w)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	requireTokenOAuthError(t, w, "invalid_client")
+	requireTokenErrorDescription(t, w, clientIDNamesEndpointDescription)
 }

@@ -22,8 +22,9 @@ import (
 )
 
 // seedTunneledMCPServerForIssuer binds one tunneled MCP server to the user
-// session issuer, recording resourceIdentifier (empty records none).
-func seedTunneledMCPServerForIssuer(t *testing.T, ctx context.Context, ti *testInstance, userIssuerID uuid.UUID, slug, resourceIdentifier string) {
+// session issuer, recording resourceIdentifier (empty records none), and
+// returns the server's id.
+func seedTunneledMCPServerForIssuer(t *testing.T, ctx context.Context, ti *testInstance, userIssuerID uuid.UUID, slug, resourceIdentifier string) uuid.UUID {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -40,7 +41,7 @@ func seedTunneledMCPServerForIssuer(t *testing.T, ctx context.Context, ti *testI
 	})
 	require.NoError(t, err)
 
-	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+	server, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID:                  uuid.New(),
 		ProjectID:           *authCtx.ProjectID,
 		Name:                conv.ToPGText(slug),
@@ -50,6 +51,7 @@ func seedTunneledMCPServerForIssuer(t *testing.T, ctx context.Context, ti *testI
 		UserSessionIssuerID: conv.ToNullUUID(userIssuerID),
 	})
 	require.NoError(t, err)
+	return server.ID
 }
 
 func TestFallbackResourceForClient_TunneledServerDerivesNothing(t *testing.T) {
@@ -68,7 +70,7 @@ func TestFallbackResourceForClient_TunneledServerDerivesNothing(t *testing.T) {
 
 	// The grant stays unqualified, which is what the tunneled routing path
 	// accepts under the server's own issuer key.
-	resource, err := mgr.FallbackResourceForClient(ctx, clientID)
+	resource, err := mgr.FallbackResourceForClient(ctx, authCtx.ActiveOrganizationID, clientID)
 	require.NoError(t, err)
 	require.Empty(t, resource)
 }
@@ -91,7 +93,7 @@ func TestFallbackResourceForClient_TunneledIdentifierLeavesRemoteSiblingQualifie
 	seedRemoteMCPServerForIssuer(t, ctx, ti, userIssuerID, "mixed-remote-mcp", "https://remote.example.com/mcp")
 	seedTunneledMCPServerForIssuer(t, ctx, ti, userIssuerID, "mixed-tunnel-mcp", "https://tunneled.internal/mcp")
 
-	resource, err := mgr.FallbackResourceForClient(ctx, clientID)
+	resource, err := mgr.FallbackResourceForClient(ctx, authCtx.ActiveOrganizationID, clientID)
 	require.NoError(t, err)
 	require.Equal(t, "https://remote.example.com/mcp", resource,
 		"a tunneled sibling's identifier must not make the derivation ambiguous")

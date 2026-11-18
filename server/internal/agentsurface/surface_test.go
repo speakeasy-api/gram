@@ -24,6 +24,7 @@ func TestForHookSource(t *testing.T) {
 		{name: "it folds mixed case and padding", source: "  Claude-Desktop  ", variant: "", want: agentsurface.SurfaceClaudeChat, known: true},
 		{name: "it folds chatgpt onto codex", source: "chatgpt", variant: "", want: agentsurface.SurfaceCodex, known: true},
 		{name: "it folds third-party agents onto other", source: "opencode", variant: "", want: agentsurface.SurfaceOther, known: true},
+		{name: "it folds vibe onto other", source: "vibe", variant: "", want: agentsurface.SurfaceOther, known: true},
 		{name: "it folds claude code desktop", source: "claude-code-desktop", variant: "", want: agentsurface.SurfaceClaudeCode, known: true},
 		{name: "it folds claude tag onto claude code", source: "claude-tag", variant: "", want: agentsurface.SurfaceClaudeCode, known: true},
 		{name: "it folds claude chat web", source: "claude-chat-web", variant: "", want: agentsurface.SurfaceClaudeChat, known: true},
@@ -63,4 +64,25 @@ func TestAllOmitsUnknown(t *testing.T) {
 		agentsurface.SurfaceOther,
 	}, agentsurface.All)
 	require.NotContains(t, agentsurface.All, agentsurface.SurfaceUnknown)
+
+	// The gateway is a column but not a fold target: leaving it in All would
+	// make every hook-source loop try to attribute agent activity to Speakeasy.
+	require.NotContains(t, agentsurface.All, agentsurface.SurfaceMCPGateway)
+}
+
+func TestColumnsLeadWithTheGateway(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, append([]agentsurface.Surface{agentsurface.SurfaceMCPGateway}, agentsurface.All...), agentsurface.Columns)
+}
+
+func TestForHookSourceNeverReturnsTheGateway(t *testing.T) {
+	t.Parallel()
+
+	// Gateway traffic reaches Speakeasy as MCP requests, never as a hook report,
+	// so no spelling of it may fold onto the gateway column and inflate it.
+	for _, source := range []string{"mcp_gateway", "mcp-gateway", "gram", "gateway", "gram-gateway"} {
+		surface, _ := agentsurface.ForHookSource(source, "")
+		require.NotEqual(t, agentsurface.SurfaceMCPGateway, surface, "source %q", source)
+	}
 }

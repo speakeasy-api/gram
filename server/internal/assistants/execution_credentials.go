@@ -3,13 +3,17 @@ package assistants
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/executionprofiles"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -48,14 +52,27 @@ func (s *ServiceCore) mintTurnCredential(ctx context.Context, assistant assistan
 	}
 	workload := *resolution.Identity
 	credential := principalcredential.Credential{
-		OrganizationID:   assistant.OrganizationID,
-		ProjectID:        assistant.ProjectID,
-		Principal:        urn.NewWorkloadPrincipal(workload.IssuerID, workload.Subject),
-		AuthorizerUserID: "",
+		OrganizationID:            assistant.OrganizationID,
+		ProjectID:                 assistant.ProjectID,
+		Principal:                 urn.NewWorkloadPrincipal(workload.IssuerID, workload.Subject),
+		AuthorizerUserID:          "",
+		SelectionProfileVersionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	}
+	execCtx := executionprofiles.ContextUserless
 	if identity.HumanKnown {
 		credential.Principal = urn.NewPrincipal(urn.PrincipalTypeAgent, workload.AgentID.String())
 		credential.AuthorizerUserID = identity.UserID
+		execCtx = executionprofiles.ContextUserBacked
+	}
+	credential.SelectionProfileVersionID, err = s.bindExecutionProfile(ctx, executionprofiles.Target{
+		OrganizationID: assistant.OrganizationID,
+		ProjectID:      assistant.ProjectID,
+		AssistantID:    assistant.ID,
+		TriggerID:      trigger,
+		Context:        execCtx,
+	})
+	if err != nil {
+		return "", err
 	}
 	token, err := s.assistantTokens.MintTurnCredential(ctx, credential, assistanttokens.RuntimeBinding{
 		OrganizationID: assistant.OrganizationID, ProjectID: assistant.ProjectID,
@@ -65,4 +82,34 @@ func (s *ServiceCore) mintTurnCredential(ctx context.Context, assistant assistan
 		return "", fmt.Errorf("mint turn credential: %w", err)
 	}
 	return token, nil
+}
+
+// bindExecutionProfile returns the execution-selection profile version a turn
+// under target binds. An organization enforcing upstream auth serves every
+// proxied server from that version's choices, so a turn that cannot bind one
+// fails. Elsewhere the upstream client choice stays authoritative and a turn
+// does not depend on the version, so a failure is logged and the turn runs
+// unbound.
+func (s *ServiceCore) bindExecutionProfile(ctx context.Context, target executionprofiles.Target) (uuid.NullUUID, error) {
+	unbound := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	logger := s.logger.With(attr.SlogOrganizationID(target.OrganizationID), attr.SlogAssistantID(target.AssistantID.String()))
+	binding, err := executionprofiles.Bind(ctx, s.db, target, executionprofiles.SourceIssuance)
+	if err != nil {
+		logger.ErrorContext(ctx, "bind execution selection profile", attr.SlogError(err))
+		enforced, readErr := authenforcement.ReadEnforced(ctx, s.db, target.OrganizationID)
+		if readErr != nil {
+			return unbound, fmt.Errorf("bind execution selection profile: %w", errors.Join(err, readErr))
+		}
+		if enforced {
+			return unbound, fmt.Errorf("bind execution selection profile: %w", err)
+		}
+		return unbound, nil
+	}
+	if len(binding.Gaps) > 0 {
+		logger.InfoContext(ctx, "execution selection profile has servers without a choice",
+			attr.SlogExecutionProfileVersion(binding.Version),
+			attr.SlogExecutionProfileGaps(len(binding.Gaps)),
+		)
+	}
+	return uuid.NullUUID{UUID: binding.VersionID, Valid: true}, nil
 }

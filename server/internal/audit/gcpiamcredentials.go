@@ -42,6 +42,7 @@ type LogGcpIamCredentialCreateEvent struct {
 
 func (l *Logger) LogGcpIamCredentialCreate(ctx context.Context, dbtx repo.DBTX, event LogGcpIamCredentialCreateEvent) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 
@@ -94,6 +95,7 @@ func (l *Logger) LogGcpIamCredentialUpdate(ctx context.Context, dbtx repo.DBTX, 
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 
@@ -131,6 +133,7 @@ type LogGcpIamCredentialDeleteEvent struct {
 
 func (l *Logger) LogGcpIamCredentialDelete(ctx context.Context, dbtx repo.DBTX, event LogGcpIamCredentialDeleteEvent) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 
