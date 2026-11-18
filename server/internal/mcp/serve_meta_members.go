@@ -275,7 +275,10 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 	}
 	if err == nil && gate.catalog != nil {
 		members, gate.unapprovedMembers = gate.catalog.approvedMembers(members)
-		gate.hiddenMembers, _ = gate.catalog.approvedMembers(gate.hiddenMembers)
+		// A hidden member stays reported as hidden whether or not the
+		// catalog approved it; approved ones take their approved slug.
+		approvedHidden, unapprovedHidden := gate.catalog.approvedMembers(gate.hiddenMembers)
+		gate.hiddenMembers = append(approvedHidden, unapprovedHidden...)
 	}
 	if err == nil && gate.catalog != nil {
 		ids := make([]uuid.UUID, 0, len(members))

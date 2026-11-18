@@ -44,16 +44,16 @@ func (s *Service) handleMetaConnectionStatusCall(
 		withStatusReference(memberCtx, &row)
 		servers = append(servers, row)
 	}
-	// A cached connection reports members its consent did not approve,
-	// whether unavailable at consent or added since, so the person knows
-	// renewed consent would add them.
-	if gate.catalog != nil && gate.catalogRef != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
+	// A connection with a stored approval reports members it did not
+	// approve, whether left out at consent or added since, in either catalog
+	// mode, so the person knows renewed consent would add them.
+	if gate.catalog != nil {
 		for _, member := range gate.unapprovedMembers {
 			servers = append(servers, metamcp.ConnectionStatusServer{
 				Slug:      member.slug,
 				Name:      member.name,
 				Status:    metamcp.SignInNeedsConsent,
-				Detail:    catalogMemberNotApproved,
+				Detail:    gate.catalog.notApprovedMessage(member.serverID),
 				Reconnect: false,
 				Outage:    nil,
 			})
