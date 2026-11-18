@@ -992,6 +992,8 @@ func idJAGAssertionHappened(ctx context.Context, err error) (mcpconnectionattemp
 		return mcpconnectionattempts.CodeSubjectNotProvisioned, detail, ""
 	case reason == idjag.ReasonSubjectMissing, reason == idjag.ReasonEmailMissing:
 		return mcpconnectionattempts.CodeInvalidIdentity, detail, ""
+	case reason == idjag.ReasonResourceMismatch && errors.Is(err, idjag.ErrResourceClaimInvalid):
+		return mcpconnectionattempts.CodeMalformedAssertion, mcpconnectionattempts.Detail("assertion_resource_claim_invalid"), ""
 	case reason == idjag.ReasonResourceMismatch:
 		return mcpconnectionattempts.CodeResourceMismatch, detail, ""
 	case reason == idjag.ReasonResourceNotIndicated:
