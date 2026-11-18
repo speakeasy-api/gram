@@ -17,6 +17,7 @@ import {
 import { scrollWithinPage } from "@/lib/scroll-within-page";
 import { cn } from "@/lib/utils";
 import {
+  ArrowLeft,
   Check,
   ChevronDown,
   ChevronRight,
@@ -55,12 +56,7 @@ export function McpDetailFrame({
   contentRef?: React.Ref<HTMLDivElement>;
 }): JSX.Element {
   const { pathname } = useLocation();
-  // The Setup modal opens over Overview, which stays the active tab.
-  const activeTab =
-    chrome?.items.find((item) => item.active)?.key ??
-    (chrome?.setupHref && pathname === chrome.setupHref
-      ? "overview"
-      : undefined);
+  const activeTab = chrome?.items.find((item) => item.active)?.key;
   useHighlightLinkedSection();
 
   return (
@@ -102,6 +98,63 @@ export function McpDetailFrame({
         ) : null}
         {children}
       </ReadinessIssuesProvider>
+    </DetailFrame>
+  );
+}
+
+/**
+ * Setup's own page: the detail frame's header, so it reads as the same
+ * server, but no tabs. Setup is something an admin finishes once, usually
+ * straight after adding the server, so in place of the tabs it points back to
+ * the server's Overview, where they land once it is done.
+ */
+export function McpSetupFrame({
+  chrome,
+  overviewHref,
+  breadcrumbs,
+  children,
+}: {
+  /** Null while the server loads. */
+  chrome: McpDetailChrome | null;
+  overviewHref: string;
+  breadcrumbs: {
+    substitutions: Record<string, string>;
+    skipSegments: string[];
+  };
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <DetailFrame
+      breadcrumbs={breadcrumbs}
+      tabsLabel="Setup"
+      tabs={[]}
+      activeTab={undefined}
+      strip={
+        <Link
+          to={overviewHref}
+          className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-sm transition-colors hover:no-underline"
+        >
+          <ArrowLeft className="size-3.5" aria-hidden />
+          {chrome ? `Back to ${chrome.name}` : "Back to server"}
+        </Link>
+      }
+      header={
+        <DetailHeaderLayout
+          title={
+            chrome ? (
+              <DetailHeaderTitle
+                icon={chrome.icon("size-10 shrink-0 object-contain")}
+                eyebrow="Connect · Setup"
+                name={`Set up ${chrome.name}`}
+              />
+            ) : (
+              <DetailHeaderTitleSkeleton />
+            )
+          }
+        />
+      }
+    >
+      {children}
     </DetailFrame>
   );
 }

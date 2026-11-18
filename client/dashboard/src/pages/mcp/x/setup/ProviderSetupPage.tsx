@@ -278,9 +278,9 @@ function RetainedProviderSetup({
     if (s.screen === "success")
       void navigate(completionHref, { replace: true });
   }, [storageKey, s, completionHref, navigate]);
-  // Each step starts at the top of the Setup modal, which is what scrolls.
+  // Each step starts at the top of the Setup page, whose body is what scrolls.
   useEffect(() => {
-    document.querySelector("[data-setup-scroll]")?.scrollTo?.(0, 0);
+    document.querySelector("[data-page-bound]")?.scrollTo?.(0, 0);
   }, [s.step, s.screen]);
   if (s.screen === "success") return <></>;
   return (

@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
-import { McpDetailFrame } from "./McpDetailFrame";
+import { McpDetailFrame, McpSetupFrame } from "./McpDetailFrame";
 import type { McpDetailChrome, McpReadinessCheck } from "./mcpDetailChrome";
 
 vi.mock("@/components/page-layout", () => {
@@ -133,4 +133,44 @@ it("counts several broken checks as issues", () => {
 it("is not Ready while a broken check is still undetermined", () => {
   renderChip([check("url", true), check("tunnel", null, false, true)]);
   expect(screen.getByText("Checking…")).toBeTruthy();
+});
+
+it("gives Setup the server's header and a way back instead of tabs", () => {
+  const chrome: McpDetailChrome = {
+    name: "Example",
+    icon: () => null,
+    kindLabel: undefined,
+    statusControl: <span>Status control</span>,
+    primaryUrl: undefined,
+    readinessChecks: [],
+    installLinks: [],
+    items: [
+      {
+        key: "overview",
+        title: "Overview",
+        Icon: () => null,
+        href: "/overview",
+        active: false,
+      },
+    ],
+  };
+  render(
+    <MemoryRouter>
+      <McpSetupFrame
+        chrome={chrome}
+        overviewHref="/servers/example"
+        breadcrumbs={{ substitutions: {}, skipSegments: [] }}
+      >
+        <p>Setup steps</p>
+      </McpSetupFrame>
+    </MemoryRouter>,
+  );
+  expect(screen.getByRole("heading", { name: "Set up Example" })).toBeTruthy();
+  expect(
+    screen.getByRole("link", { name: "Back to Example" }).getAttribute("href"),
+  ).toBe("/servers/example");
+  expect(screen.getByText("Setup steps")).toBeTruthy();
+  // Setup is not a tab: the server's tabs and header controls stay off it.
+  expect(screen.queryByRole("link", { name: "Overview" })).toBeNull();
+  expect(screen.queryByText("Status control")).toBeNull();
 });

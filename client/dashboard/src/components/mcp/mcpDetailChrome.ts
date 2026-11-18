@@ -30,7 +30,7 @@ export interface McpDetailChrome {
     tone?: StatusDotTone;
   };
   readinessChecks: McpReadinessCheck[];
-  /** Opens the Setup modal over Overview, when this server offers Setup. */
+  /** The Setup page, when this server offers Setup. */
   setupHref?: string;
   /** Install pages to hand to teammates. */
   installLinks: { url: string; label: string }[];
