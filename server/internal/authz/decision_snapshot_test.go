@@ -132,7 +132,7 @@ func encodeDecisionSnapshot(snapshot snapshotFile) ([]byte, error) {
 	line := func(prefix string, v any, last bool) error {
 		data, err := json.Marshal(v)
 		if err != nil {
-			return err
+			return fmt.Errorf("encode snapshot line: %w", err)
 		}
 		out.WriteString(prefix)
 		out.Write(data)
@@ -161,7 +161,7 @@ func encodeDecisionSnapshot(snapshot snapshotFile) ([]byte, error) {
 			Checks []int  `json:"checks"`
 		}{group.Name, group.Checks})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("encode snapshot group %q: %w", group.Name, err)
 		}
 		out.Write(header[:len(header)-1])
 		out.WriteString(",\"sets\": [\n")
