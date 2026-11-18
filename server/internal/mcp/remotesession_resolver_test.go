@@ -178,7 +178,7 @@ func createRemoteSessionResolverFixture(
 	})
 	require.NoError(t, err)
 
-	remoteClient, err := remoteRepo.CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
+	remoteClient, err := remoteRepo.CreateRemoteSessionClientFixture(ctx, remotesessions_repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
 		RemoteSessionIssuerID: remoteIssuer.ID,
 		ClientID:              "resolver-client-" + suffix,

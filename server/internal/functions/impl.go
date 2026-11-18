@@ -25,10 +25,13 @@ import (
 )
 
 type Service struct {
-	tracer      trace.Tracer
-	logger      *slog.Logger
-	db          *pgxpool.Pool
-	enc         *encryption.Client
+	tracer trace.Tracer
+	logger *slog.Logger
+	db     *pgxpool.Pool
+	enc    *encryption.Client
+
+	// tigrisStore holds function code for Fly.io runners. It is nil when the
+	// deployment runs with the disabled Functions provider.
 	tigrisStore *assets.TigrisStore
 }
 
@@ -99,6 +102,12 @@ func (s *Service) GetSignedAssetURL(ctx context.Context, p *gen.GetSignedAssetUR
 	parsed, err := url.Parse(tu)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse function asset url").LogError(ctx, logger)
+	}
+
+	// Checked after authentication and the asset lookup, so only an
+	// authenticated runner learns how the deployment is configured.
+	if s.tigrisStore == nil {
+		return nil, oops.E(oops.CodeNotImplemented, ErrFunctionsDisabled, "%s", ErrFunctionsDisabled.Error()).LogWarn(ctx, logger)
 	}
 
 	signed, err := s.tigrisStore.PresignRead(ctx, parsed.Path, 10*time.Minute)
