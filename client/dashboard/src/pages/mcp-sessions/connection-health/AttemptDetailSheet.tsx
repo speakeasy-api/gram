@@ -65,6 +65,7 @@ export function AttemptDetailSheet({
             attempt={attempt}
             providerId={providerId}
             providerName={providerName}
+            onClose={onClose}
           />
         ) : (
           <>
@@ -128,10 +129,12 @@ function AttemptDetailBody({
   attempt,
   providerId,
   providerName,
+  onClose,
 }: {
   attempt: AttemptDetail;
   providerId: string;
   providerName?: string;
+  onClose: () => void;
 }): JSX.Element {
   const routes = useRoutes();
   const who = personLabel(attempt);
@@ -260,7 +263,10 @@ function AttemptDetailBody({
 
       <SheetFooter className="bg-card sticky bottom-0 border-t px-6 py-4">
         <div className="flex">
-          <AskAiButton investigation={investigationFor(attempt)} />
+          <AskAiButton
+            investigation={investigationFor(attempt)}
+            onLaunched={onClose}
+          />
         </div>
       </SheetFooter>
     </div>

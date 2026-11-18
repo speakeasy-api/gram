@@ -46,8 +46,11 @@ function useInvestigate(): (investigation: Investigation) => void {
 /** "Ask AI to investigate", shown only to people who can use the assistant. */
 export function AskAiButton({
   investigation,
+  onLaunched,
 }: {
   investigation: Investigation;
+  /** Called once the question is sent, e.g. to close the sheet over the dock. */
+  onLaunched?: () => void;
 }): JSX.Element | null {
   const project = useProject();
   const { hasScope } = useRBAC();
@@ -59,7 +62,13 @@ export function AskAiButton({
   )
     return null;
   return (
-    <Button variant="secondary" onClick={() => investigate(investigation)}>
+    <Button
+      variant="secondary"
+      onClick={() => {
+        investigate(investigation);
+        onLaunched?.();
+      }}
+    >
       <Button.LeftIcon>
         <Icon name="sparkles" className="size-4" />
       </Button.LeftIcon>

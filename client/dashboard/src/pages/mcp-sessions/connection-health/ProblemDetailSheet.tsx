@@ -55,7 +55,12 @@ export function ProblemDetailSheet({
     >
       <SheetContent className="bg-card w-full gap-0 overflow-y-auto p-0 sm:max-w-[600px]">
         {problem ? (
-          <ProblemBody problem={problem} providerId={providerId} now={now} />
+          <ProblemBody
+            problem={problem}
+            providerId={providerId}
+            now={now}
+            onClose={onClose}
+          />
         ) : (
           <>
             <SheetHeader className="border-b px-6 py-5">
@@ -113,10 +118,12 @@ function ProblemBody({
   problem,
   providerId,
   now,
+  onClose,
 }: {
   problem: SuspectedProblemDetail;
   providerId: string;
   now: Date;
+  onClose: () => void;
 }): JSX.Element {
   const routes = useRoutes();
   const failed = problem.failedPer10Minutes.reduce(
@@ -256,7 +263,10 @@ function ProblemBody({
       </div>
 
       <SheetFooter className="bg-card sticky bottom-0 flex-row justify-between border-t px-6 py-4">
-        <AskAiButton investigation={investigationFor(problem)} />
+        <AskAiButton
+          investigation={investigationFor(problem)}
+          onLaunched={onClose}
+        />
         <Button asChild>
           <Link to={logsHref}>Open in Connection Logs</Link>
         </Button>
