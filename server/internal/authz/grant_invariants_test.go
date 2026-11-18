@@ -6,6 +6,10 @@ import (
 	"maps"
 	"slices"
 	"testing"
+
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 // These tests build every small world of MCP grants and ask the real
@@ -20,10 +24,13 @@ import (
 // ValidateSelector would refuse is left out, so the world is exactly the set
 // of grants that can be stored.
 //
-// Property numbers follow the typed checks page (step 5). Not covered here:
-// P12 (probes), P13 (agents and delegation, which live in runtimepolicy) and
-// P14 (organization isolation, which the grant loader enforces before the
-// evaluator runs).
+// P numbers follow the typed checks page (step 5). A to D are the gaps added
+// after it: agents and several policies (A), any-of requests (B), precedence
+// (C) and every API giving the same answer (D). The engine tests (B, D) run on
+// grants with no tool or disposition limit to keep them fast. Not covered
+// here: how agent policies are stored and delegated (runtimepolicy) and
+// organization isolation, which the grant loader enforces before the
+// evaluator runs.
 
 func TestGrantInvariants_WorldSize(t *testing.T) {
 	t.Parallel()
@@ -298,6 +305,322 @@ func TestGrantInvariants_OrderDoesNotMatter(t *testing.T) {
 	failures.done()
 }
 
+// A1: a request that carries several policies, such as an agent's credential,
+// the agent and its owner, is allowed only what every policy allows on its
+// own. A block in any one of them takes the check away.
+func TestGrantInvariants_EveryPolicyMustAllow(t *testing.T) {
+	t.Parallel()
+	failures := &failureReport{t: t}
+	checks := everyCheck()
+	policies := append([][]Grant{nil}, singleGrantPolicies(userGrants(storableGrants()))...)
+	for _, first := range policies {
+		for _, second := range policies {
+			both := grantAuthorization{policies: [][]Grant{first, second}, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false}
+			for _, c := range checks {
+				want := isAllowed(t, first, c.check) && isAllowed(t, second, c.check)
+				if got := policiesAllow(t, both, c.check); got != want {
+					failures.add("A1: policies [%s] and [%s] answer %s on %s with %v, each alone says %v", describeGrants(first), describeGrants(second), c.name, c.server.id, got, want)
+				}
+			}
+		}
+	}
+	failures.done()
+}
+
+// A2: an agent never gets more than the user would with the same grants, and
+// an agent's grant never outranks a block from a role or everyone, even when it
+// names the server. An agent's owner can write its policy without being an
+// administrator, so letting it outrank a block would let owners lift one.
+func TestGrantInvariants_AgentGrantsNeverOutrankBlocks(t *testing.T) {
+	t.Parallel()
+	failures := &failureReport{t: t}
+	checks := everyCheck()
+	forEachGrantSet(storableGrants(), func(grants []Grant) {
+		asAgent := slices.Clone(grants)
+		for i := range asAgent {
+			if asAgent[i].PrincipalUrn == principalUser {
+				asAgent[i].PrincipalUrn = principalAgent
+			}
+		}
+		for _, c := range checks {
+			if isAllowed(t, asAgent, c.check) && !isAllowed(t, grants, c.check) {
+				failures.add("A2: [%s] allows %s on %s for the agent but not for the user", describeGrants(asAgent), c.name, c.server.id)
+			}
+			blockScope, ok := ExclusionScopeFor(c.check.Scope)
+			if !ok {
+				continue
+			}
+			for _, holder := range []string{principalRole, principalEveryone} {
+				block := NewGrant(blockScope, c.server.id)
+				block.PrincipalUrn = holder
+				if isAllowed(t, append(slices.Clone(asAgent), block), c.check) {
+					failures.add("A2: agent grants [%s] outrank %s for %s on %s", describeGrants(asAgent), describeGrant(block), c.name, c.server.id)
+				}
+			}
+		}
+	})
+	failures.done()
+}
+
+// A3: a grant on personal auth clients for "$represented_user" covers only the
+// connection of the user the request acts for. A request that acts for nobody
+// covers no personal connection, and a binding the caller sets is replaced.
+// An agent acting for a user needs that user's own policy to allow it too.
+func TestGrantInvariants_PersonalConnectionsBindToRepresentedUser(t *testing.T) {
+	t.Parallel()
+	personal := NewGrantWithSelector(ScopeMCPAuth, PersonalAuthClientSelector())
+	personal.PrincipalUrn = principalEveryone
+	for _, represented := range []string{"", "u1", "u2"} {
+		for _, owner := range []string{"u1", "u2"} {
+			for _, callerBinding := range []string{"", "u1", "u2"} {
+				for _, userAllows := range []bool{true, false} {
+					check := MCPAuthClientCheck("client1", MCPAuthClientDimensions{ClientType: AuthClientTypeRemoteSession, ProjectID: projectA, ConnectionOwner: owner, UpstreamClient: "upstream1"})
+					check.representedUser = callerBinding
+					authorization := grantAuthorization{policies: [][]Grant{{personal}}, representedUser: represented, representedPolicies: nil, legacyAuthCeiling: false}
+					if represented != "" {
+						userPolicy := []Grant{}
+						if userAllows {
+							userPolicy = []Grant{personal}
+						}
+						authorization.representedPolicies = [][]Grant{userPolicy}
+					}
+					want := represented != "" && owner == represented && userAllows
+					if got := policiesAllow(t, authorization, check); got != want {
+						t.Errorf("A3: acting for %q (user policy allows: %v), caller binding %q, connection of %q: got %v, want %v", represented, userAllows, callerBinding, owner, got, want)
+					}
+				}
+			}
+		}
+	}
+}
+
+// B1: RequireAny allows when one alternative is allowed on its own, and
+// refuses when none is. A block on one alternative only takes that one away.
+// B2: the order of the alternatives never changes the answer.
+// B3: Require(AnyOf(...)) and Can(AnyOf(...)) answer as RequireAnyUnblocked.
+func TestGrantInvariants_AnyOf(t *testing.T) {
+	t.Parallel()
+	engine := newInvariantEngine(t)
+	failures := &failureReport{t: t}
+	checks := serverChecks()
+	forEachGrantSet(serverLevelGrants(), func(grants []Grant) {
+		ctx := GrantsToContext(enterpriseSessionCtx(t), grants)
+		alone := make([]bool, len(checks))
+		for i, c := range checks {
+			alone[i] = engineAllows(t, engine.Require(ctx, c.check))
+		}
+		for i, a := range checks {
+			for j, b := range checks {
+				if i == j {
+					continue
+				}
+				anyAllowed := engineAllows(t, engine.RequireAny(ctx, a.check, b.check))
+				if anyAllowed != (alone[i] || alone[j]) {
+					failures.add("B1: [%s] RequireAny(%s on %s, %s on %s) = %v, alone %v and %v", describeGrants(grants), a.name, a.server.id, b.name, b.server.id, anyAllowed, alone[i], alone[j])
+				}
+				unblocked := engineAllows(t, engine.RequireAnyUnblocked(ctx, a.check, b.check))
+				if unblocked != engineAllows(t, engine.RequireAnyUnblocked(ctx, b.check, a.check)) {
+					failures.add("B2: [%s] RequireAnyUnblocked(%s on %s, %s on %s) depends on order", describeGrants(grants), a.name, a.server.id, b.name, b.server.id)
+				}
+				if engineAllows(t, engine.Require(ctx, AnyOf(a.check, b.check))) != unblocked {
+					failures.add("B3: [%s] Require(AnyOf(%s on %s, %s on %s)) differs from RequireAnyUnblocked", describeGrants(grants), a.name, a.server.id, b.name, b.server.id)
+				}
+				can, err := engine.Can(ctx, AnyOf(a.check, b.check))
+				if err != nil {
+					t.Fatalf("Can(AnyOf) errored: %v", err)
+				}
+				if can != unblocked {
+					failures.add("B3: [%s] Can(AnyOf(%s on %s, %s on %s)) = %v, RequireAnyUnblocked = %v", describeGrants(grants), a.name, a.server.id, b.name, b.server.id, can, unblocked)
+				}
+			}
+		}
+	})
+	failures.done()
+}
+
+// B4: RequireAnyUnblocked refuses when a block covers any one alternative,
+// even if the other alternative is allowed. The P7 exception still holds: a
+// grant made to the user by name for that server outranks a block from a role
+// or everyone.
+func TestGrantInvariants_AnyOfUnblockedRefusesEveryBlock(t *testing.T) {
+	t.Parallel()
+	engine := newInvariantEngine(t)
+	failures := &failureReport{t: t}
+	checks := serverChecks()
+	forEachGrantSet(serverLevelGrants(), func(grants []Grant) {
+		for i, a := range checks {
+			blockScope, _ := ExclusionScopeFor(a.check.Scope)
+			namesServer := slices.ContainsFunc(grants, func(g Grant) bool {
+				return !IsBlocklistScope(g.Scope) && IsDirectGrant(g) && g.Selector.ResourceID() == a.server.id
+			})
+			for _, holder := range allPrincipals {
+				if holder != principalUser && namesServer {
+					continue
+				}
+				block := NewGrant(blockScope, a.server.id)
+				block.PrincipalUrn = holder
+				ctx := GrantsToContext(enterpriseSessionCtx(t), append(slices.Clone(grants), block))
+				for j, b := range checks {
+					if i == j {
+						continue
+					}
+					if engineAllows(t, engine.RequireAnyUnblocked(ctx, b.check, a.check)) {
+						failures.add("B4: [%s] plus %s still allows RequireAnyUnblocked(%s on %s, %s on %s)", describeGrants(grants), describeGrant(block), b.name, b.server.id, a.name, a.server.id)
+					}
+				}
+			}
+		}
+	})
+	failures.done()
+}
+
+// C1: a grant made to the user by name for every server ("*") never outranks
+// a block from a role or everyone. Only a grant naming the one server does
+// (P7). Grants the default access backfill created (Inferred) never outrank a
+// block either, even when they name the server.
+func TestGrantInvariants_OnlyNamedServerGrantsOutrankBlocks(t *testing.T) {
+	t.Parallel()
+	failures := &failureReport{t: t}
+	checks := everyCheck()
+	forEachGrantSet(storableGrants(), func(grants []Grant) {
+		inferred := slices.Clone(grants)
+		for i := range inferred {
+			inferred[i].Inferred = true
+		}
+		for _, c := range checks {
+			blockScope, ok := ExclusionScopeFor(c.check.Scope)
+			if !ok {
+				continue
+			}
+			namesServer := slices.ContainsFunc(grants, func(g Grant) bool {
+				return !IsBlocklistScope(g.Scope) && IsDirectGrant(g) && g.Selector.ResourceID() == c.server.id
+			})
+			for _, holder := range []string{principalRole, principalEveryone} {
+				block := NewGrant(blockScope, c.server.id)
+				block.PrincipalUrn = holder
+				if !namesServer && isAllowed(t, append(slices.Clone(grants), block), c.check) {
+					failures.add("C1: [%s] outranks %s for %s on %s without naming the server", describeGrants(grants), describeGrant(block), c.name, c.server.id)
+				}
+				if isAllowed(t, append(slices.Clone(inferred), block), c.check) {
+					failures.add("C1: backfilled [%s] outranks %s for %s on %s", describeGrants(inferred), describeGrant(block), c.name, c.server.id)
+				}
+			}
+		}
+	})
+	failures.done()
+}
+
+// C2: wider covers narrower and never the other way round. A root grant
+// covers every server in every project, a grant on every server covers each
+// one, and a grant naming one server covers no other.
+func TestGrantInvariants_WiderCoversNarrower(t *testing.T) {
+	t.Parallel()
+	failures := &failureReport{t: t}
+	root := NewGrant(ScopeRoot, WildcardResource)
+	root.PrincipalUrn = principalUser
+	for _, c := range everyCheck() {
+		if !isAllowed(t, []Grant{root}, c.check) {
+			failures.add("C2: root does not allow %s on %s", c.name, c.server.id)
+		}
+	}
+	for _, g := range storableGrants() {
+		if IsBlocklistScope(g.Scope) {
+			continue
+		}
+		for _, c := range everyCheck() {
+			if !isAllowed(t, []Grant{g}, c.check) {
+				continue
+			}
+			if g.Selector.ResourceID() != WildcardResource && g.Selector.ResourceID() != c.server.id {
+				failures.add("C2: %s allows %s on %s", describeGrant(g), c.name, c.server.id)
+			}
+			everyServer := g
+			everyServer.Selector = maps.Clone(g.Selector)
+			everyServer.Selector[SelectorKeyResourceID] = WildcardResource
+			if !isAllowed(t, []Grant{everyServer}, c.check) {
+				failures.add("C2: %s allows %s on %s but %s does not", describeGrant(g), c.name, c.server.id, describeGrant(everyServer))
+			}
+		}
+	}
+	failures.done()
+}
+
+// D1: every way of asking gives the same answer. Require, Evaluate, Can,
+// Filter and FindMatched agree with GrantsAuthorize on every check.
+func TestGrantInvariants_SameAnswerEverywhere(t *testing.T) {
+	t.Parallel()
+	engine := newInvariantEngine(t)
+	failures := &failureReport{t: t}
+	checks := everyCheck()
+	all := make([]Check, len(checks))
+	for i, c := range checks {
+		all[i] = c.check
+	}
+	forEachGrantSet(serverLevelGrants(), func(grants []Grant) {
+		ctx := GrantsToContext(enterpriseSessionCtx(t), grants)
+		matched, err := engine.FindMatched(ctx, all)
+		if err != nil {
+			t.Fatalf("FindMatched errored: %v", err)
+		}
+		for i, c := range checks {
+			want := isAllowed(t, grants, c.check)
+			evaluated, err := engine.Evaluate(ctx, c.check)
+			if err != nil {
+				t.Fatalf("Evaluate errored: %v", err)
+			}
+			can, err := engine.Can(ctx, c.check)
+			if err != nil {
+				t.Fatalf("Can errored: %v", err)
+			}
+			filtered, err := engine.Filter(ctx, []Check{c.check})
+			if err != nil {
+				t.Fatalf("Filter errored: %v", err)
+			}
+			answers := map[string]bool{
+				"Require":     engineAllows(t, engine.Require(ctx, c.check)),
+				"Evaluate":    evaluated,
+				"Can":         can,
+				"Filter":      len(filtered) == 1,
+				"FindMatched": matched[i],
+			}
+			for name, got := range answers {
+				if got != want {
+					failures.add("D1: [%s] %s says %v for %s on %s, GrantsAuthorize says %v", describeGrants(grants), name, got, c.name, c.server.id, want)
+				}
+			}
+		}
+	})
+	failures.done()
+}
+
+// D2: a probe never claims access no concrete call has. A tool call probe that
+// leaves out the tool or the disposition is allowed only when some call with
+// those values filled in is allowed. The reverse need not hold: a block on one
+// tool also covers a probe that names no tool.
+func TestGrantInvariants_ProbesClaimNoMoreThanCalls(t *testing.T) {
+	t.Parallel()
+	failures := &failureReport{t: t}
+	forEachGrantSet(storableGrants(), func(grants []Grant) {
+		for _, server := range mcpServers {
+			ref := MCPServer(MCPServerIDFrom(server.id), ProjectIDFrom(server.project))
+			for _, tool := range append([]string{""}, toolNames...) {
+				for _, disposition := range append([]string{""}, allDispositions...) {
+					if tool != "" && disposition != "" {
+						continue
+					}
+					if !isAllowed(t, grants, ref.ToolCall(tool, disposition).Probe()) {
+						continue
+					}
+					if !someCallAllowed(t, grants, ref, tool, disposition) {
+						failures.add("D2: [%s] allows a probe of %q (%q) on %s but no call", describeGrants(grants), tool, disposition, server.id)
+					}
+				}
+			}
+		}
+	})
+	failures.done()
+}
+
 const (
 	principalUser     = "user:u1"
 	principalRole     = "role:organization:r1"
@@ -496,4 +819,90 @@ func widenings(g Grant) []Grant {
 		widen(func(s Selector) { delete(s, key) })
 	}
 	return out
+}
+
+// principalAgent is an agent principal. Agent grants combine like a user's,
+// but never outrank a block.
+const principalAgent = "agent:018f8d7b-58d7-7cc4-bb16-9f8c6b99a001"
+
+// userGrants keeps the grants made to the user by name, which is all a
+// policy needs to hold for A1.
+func userGrants(grants []Grant) []Grant {
+	return slices.DeleteFunc(slices.Clone(grants), func(g Grant) bool { return g.PrincipalUrn != principalUser })
+}
+
+func singleGrantPolicies(grants []Grant) [][]Grant {
+	policies := make([][]Grant, len(grants))
+	for i, g := range grants {
+		policies[i] = []Grant{g}
+	}
+	return policies
+}
+
+// policiesAllow asks the evaluator a request with several policies uses.
+func policiesAllow(t *testing.T, authorization grantAuthorization, check Check) bool {
+	t.Helper()
+	evaluation, err := authorization.evaluate(check)
+	if err != nil {
+		t.Fatalf("valid check %+v errored: %v", check, err)
+	}
+	return evaluation.Grant != nil && !evaluation.Denied
+}
+
+// serverLevelGrants is the storable grants with no tool or disposition limit.
+// The engine tests run every API on every set, so they use this smaller world.
+func serverLevelGrants() []Grant {
+	return slices.DeleteFunc(storableGrants(), func(g Grant) bool {
+		_, tool := g.Selector[SelectorKeyTool]
+		_, disposition := g.Selector[SelectorKeyDisposition]
+		return tool || disposition
+	})
+}
+
+// serverChecks is read, write and connect on every server.
+func serverChecks() []namedCheck {
+	var checks []namedCheck
+	for _, server := range mcpServers {
+		checks = append(checks, checksOnServer(server)[:3]...)
+	}
+	return checks
+}
+
+func newInvariantEngine(t *testing.T) *Engine {
+	t.Helper()
+	return NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+}
+
+// engineAllows reads an engine answer: nil is an allow, forbidden a refusal,
+// and anything else fails the test.
+func engineAllows(t *testing.T, err error) bool {
+	t.Helper()
+	if err == nil {
+		return true
+	}
+	var shareable *oops.ShareableError
+	if !errors.As(err, &shareable) || shareable.Code != oops.CodeForbidden {
+		t.Fatalf("engine errored: %v", err)
+	}
+	return false
+}
+
+// someCallAllowed reports whether a call on ref with the probe's missing tool
+// or disposition filled in is allowed.
+func someCallAllowed(t *testing.T, grants []Grant, ref MCPServerRef, tool, disposition string) bool {
+	tools, dispositions := []string{tool}, []string{disposition}
+	if tool == "" {
+		tools = toolNames
+	}
+	if disposition == "" {
+		dispositions = allDispositions
+	}
+	for _, tool := range tools {
+		for _, disposition := range dispositions {
+			if isAllowed(t, grants, ref.ToolCall(tool, disposition)) {
+				return true
+			}
+		}
+	}
+	return false
 }
