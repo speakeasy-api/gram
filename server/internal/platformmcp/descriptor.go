@@ -365,8 +365,8 @@ func grantsAuthorizeAnyResource(grants []authz.Grant, organizationID string, sco
 				continue
 			}
 			server := authz.MCPServer(authz.MCPServerIDFrom(resourceID), authz.ProjectIDFrom(dimensions[authz.SelectorKeyProjectID]))
-			// A call that leaves the tool or the disposition out meets every
-			// block limited to one, so the probe names both. A grant that
+			// Every block limited to a tool or a disposition covers a call
+			// that leaves that value out, so the probe names both. A grant that
 			// names no tool reaches tools no block names, so it is probed
 			// with a placeholder tool. A grant that names no disposition
 			// reaches its tools whatever their annotations, so each
