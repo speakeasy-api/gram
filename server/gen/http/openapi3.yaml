@@ -41853,6 +41853,784 @@ paths:
             x-speakeasy-name-override: verify
             x-speakeasy-react-hook:
                 name: VerifyIdentityProviderConnection
+    /rpc/inferenceProfiles.createProfile:
+        post:
+            description: Create an inference profile. A profile names where inference goes and never carries a credential.
+            operationId: createInferenceProfile
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateProfileRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/InferenceProfile'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: createProfile inferenceProfiles
+            tags:
+                - inferenceProfiles
+            x-speakeasy-name-override: createProfile
+            x-speakeasy-react-hook:
+                name: CreateInferenceProfile
+                type: mutation
+    /rpc/inferenceProfiles.createRule:
+        post:
+            description: Bind an inference profile to a principal, for one harness or all of them.
+            operationId: createInferenceProfileRule
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateRuleRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/InferenceProfileRule'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: createRule inferenceProfiles
+            tags:
+                - inferenceProfiles
+            x-speakeasy-name-override: createRule
+            x-speakeasy-react-hook:
+                name: CreateInferenceProfileRule
+                type: mutation
+    /rpc/inferenceProfiles.deleteProfile:
+        delete:
+            description: Delete an inference profile and every rule that uses it.
+            operationId: deleteInferenceProfile
+            parameters:
+                - allowEmptyValue: true
+                  description: The profile ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The profile ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: deleteProfile inferenceProfiles
+            tags:
+                - inferenceProfiles
+            x-speakeasy-name-override: deleteProfile
+            x-speakeasy-react-hook:
+                name: DeleteInferenceProfile
+                type: mutation
+    /rpc/inferenceProfiles.deleteRule:
+        delete:
+            description: Delete an inference profile rule.
+            operationId: deleteInferenceProfileRule
+            parameters:
+                - allowEmptyValue: true
+                  description: The rule ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The rule ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: deleteRule inferenceProfiles
+            tags:
+                - inferenceProfiles
+            x-speakeasy-name-override: deleteRule
+            x-speakeasy-react-hook:
+                name: DeleteInferenceProfileRule
+                type: mutation
+    /rpc/inferenceProfiles.listProfiles:
+        get:
+            description: List the organization's inference profiles, by name.
+            operationId: listInferenceProfiles
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListInferenceProfilesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listProfiles inferenceProfiles
+            tags:
+                - inferenceProfiles
+            x-speakeasy-name-override: listProfiles
+            x-speakeasy-react-hook:
+                name: InferenceProfiles
+    /rpc/inferenceProfiles.listRules:
+        get:
+            description: List the organization's inference profile rules, by position.
+            operationId: listInferenceProfileRules
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListInferenceProfileRulesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listRules inferenceProfiles
+            tags:
+                - inferenceProfiles
+            x-speakeasy-name-override: listRules
+            x-speakeasy-react-hook:
+                name: InferenceProfileRules
+    /rpc/inferenceProfiles.preview:
+        get:
+            description: Show which profile each harness resolves to for a person, the rule that decided it, and the settings the device agent would receive.
+            operationId: previewInferenceProfiles
+            parameters:
+                - allowEmptyValue: true
+                  description: The person's email address.
+                  in: query
+                  name: email
+                  required: true
+                  schema:
+                    description: The person's email address.
+                    format: email
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PreviewInferenceProfilesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: preview inferenceProfiles
+            tags:
+                - inferenceProfiles
+            x-speakeasy-name-override: preview
+            x-speakeasy-react-hook:
+                name: PreviewInferenceProfiles
+    /rpc/inferenceProfiles.updateProfile:
+        post:
+            description: Replace an inference profile's name, provider and settings.
+            operationId: updateInferenceProfile
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateProfileRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/InferenceProfile'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: updateProfile inferenceProfiles
+            tags:
+                - inferenceProfiles
+            x-speakeasy-name-override: updateProfile
+            x-speakeasy-react-hook:
+                name: UpdateInferenceProfile
+                type: mutation
+    /rpc/inferenceProfiles.updateRule:
+        post:
+            description: Replace a rule's profile, principal, harness and position. Reorder rules by updating their positions.
+            operationId: updateInferenceProfileRule
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateRuleRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/InferenceProfileRule'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: updateRule inferenceProfiles
+            tags:
+                - inferenceProfiles
+            x-speakeasy-name-override: updateRule
+            x-speakeasy-react-hook:
+                name: UpdateInferenceProfileRule
+                type: mutation
     /rpc/instances.get:
         get:
             description: Load all relevant data for an instance of a toolset and environment
@@ -108896,6 +109674,27 @@ components:
             required:
                 - url
                 - token
+        CreateProfileRequestBody:
+            type: object
+            properties:
+                name:
+                    type: string
+                    description: Display name, unique within the organization.
+                    minLength: 1
+                    maxLength: 100
+                provider:
+                    type: string
+                    description: Where inference goes.
+                    enum:
+                        - bedrock
+                        - vertex
+                        - gateway
+                settings:
+                    $ref: '#/components/schemas/InferenceProfileSettings'
+            required:
+                - name
+                - provider
+                - settings
         CreateProjectForm:
             type: object
             properties:
@@ -109449,6 +110248,31 @@ components:
             required:
                 - name
                 - grants
+        CreateRuleRequestBody:
+            type: object
+            properties:
+                harness:
+                    type: string
+                    description: The harness the rule applies to. Absent applies it to every harness that supports the profile's provider.
+                    enum:
+                        - claude_code
+                        - codex
+                position:
+                    type: integer
+                    description: Breaks ties between matching rules at the same level; lower wins.
+                    default: 0
+                    format: int64
+                    minimum: 0
+                principal_urn:
+                    type: string
+                    description: 'Who the rule applies to: `user:<id>`, `user:all`, `email:<address>`, `role:<kind>:<id>`, `directory_group:<id>` or `directory_attribute:<key>:<value>`.'
+                profile_id:
+                    type: string
+                    description: The profile the rule applies.
+                    format: uuid
+            required:
+                - profile_id
+                - principal_urn
         CreateServerAndMcpServerResult:
             type: object
             properties:
@@ -114472,7 +115296,7 @@ components:
                     $ref: '#/components/schemas/DeviceAgentConfiguration'
                 etag:
                     type: string
-                    description: Opaque revision identifier covering the marketplace, plugin, MCP server (including each server's token endpoint, audience and resource), remote-configuration, and organization-gateway set. The agent stores this to detect changes between polls.
+                    description: Opaque revision identifier covering the marketplace, plugin, MCP server (including each server's token endpoint, audience and resource), remote-configuration, organization-gateway, and tool-configuration set. The agent stores this to detect changes between polls.
                 marketplaces:
                     type: array
                     items:
@@ -114494,6 +115318,10 @@ components:
                     description: 'Plugins for the caller: the observability plugin of each listed marketplace, when enabled, and the plugins assigned to the caller. Each entry''s install_mode says whether the agent installs it (`required`, `default`) or only offers it for the user to turn on (`available`). Each entry references one of the marketplaces above by name.'
                 principal:
                     $ref: '#/components/schemas/AgentPollingPrincipal'
+                tool_config:
+                    type: object
+                    description: Tool-native settings keyed by stable tool ID (`claude_code`, `codex`), which each tool's syncer merges into that tool's own configuration with leaf ownership. Carries the inference endpoint the caller's inference profile rules resolve to; never a credential. Absent when nothing applies, which tells the agent to remove the settings it wrote earlier.
+                    additionalProperties: true
             required:
                 - etag
                 - marketplaces
@@ -116443,6 +117271,124 @@ components:
                 - assignments_removed
                 - skipped_app_ids
                 - truncated
+        InferenceProfile:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    format: date-time
+                id:
+                    type: string
+                    description: The profile ID.
+                    format: uuid
+                name:
+                    type: string
+                    description: Display name.
+                provider:
+                    type: string
+                    description: Where inference goes.
+                    enum:
+                        - bedrock
+                        - vertex
+                        - gateway
+                settings:
+                    $ref: '#/components/schemas/InferenceProfileSettings'
+                updated_at:
+                    type: string
+                    format: date-time
+            required:
+                - id
+                - name
+                - provider
+                - settings
+                - created_at
+                - updated_at
+        InferenceProfileModels:
+            type: object
+            properties:
+                default:
+                    type: string
+                    description: The model the harness uses by default.
+                haiku:
+                    type: string
+                    description: The model Claude Code uses for its Haiku tier.
+                opus:
+                    type: string
+                    description: The model Claude Code uses for its Opus tier.
+                sonnet:
+                    type: string
+                    description: The model Claude Code uses for its Sonnet tier.
+            description: Model IDs to pin, in the provider's own naming. Each is optional.
+        InferenceProfileResolution:
+            type: object
+            properties:
+                harness:
+                    type: string
+                    enum:
+                        - claude_code
+                        - codex
+                profile:
+                    $ref: '#/components/schemas/InferenceProfile'
+                rule:
+                    $ref: '#/components/schemas/InferenceProfileRule'
+            required:
+                - harness
+        InferenceProfileRule:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    format: date-time
+                harness:
+                    type: string
+                    description: The harness the rule applies to. Absent means every harness.
+                    enum:
+                        - claude_code
+                        - codex
+                id:
+                    type: string
+                    description: The rule ID.
+                    format: uuid
+                position:
+                    type: integer
+                    description: Tiebreak within a level; lower wins.
+                    format: int64
+                principal_urn:
+                    type: string
+                    description: Who the rule applies to.
+                profile_id:
+                    type: string
+                    description: The profile the rule applies.
+                    format: uuid
+                updated_at:
+                    type: string
+                    format: date-time
+            required:
+                - id
+                - profile_id
+                - principal_urn
+                - position
+                - created_at
+                - updated_at
+        InferenceProfileSettings:
+            type: object
+            properties:
+                aws_profile:
+                    type: string
+                    description: AWS profile name developers sign in with, for example an IAM Identity Center profile. Bedrock only.
+                base_url:
+                    type: string
+                    description: HTTPS endpoint. Required for a gateway; optional for Bedrock and Vertex.
+                    format: uri
+                gcp_project_id:
+                    type: string
+                    description: Google Cloud project ID. Vertex only.
+                models:
+                    $ref: '#/components/schemas/InferenceProfileModels'
+                region:
+                    type: string
+                    description: Cloud region, for example `us-west-2` (Bedrock) or `us-east5` (Vertex).
+            description: Provider settings. Bedrock requires region; Vertex requires region and gcp_project_id; a gateway requires base_url. Never a credential.
         InferenceSpendCap:
             type: object
             properties:
@@ -118625,6 +119571,24 @@ components:
             required:
                 - applications
                 - sync
+        ListInferenceProfileRulesResult:
+            type: object
+            properties:
+                rules:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/InferenceProfileRule'
+            required:
+                - rules
+        ListInferenceProfilesResult:
+            type: object
+            properties:
+                profiles:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/InferenceProfile'
+            required:
+                - profiles
         ListInstancesResponseBody:
             type: object
             properties:
@@ -124584,6 +125548,21 @@ components:
                 - user_session_issuer_id
                 - remote_session_issuer_id
                 - resource
+        PreviewInferenceProfilesResult:
+            type: object
+            properties:
+                resolutions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/InferenceProfileResolution'
+                    description: One entry per supported harness.
+                tool_config:
+                    type: object
+                    description: The tool_config the device agent would receive, keyed by harness.
+                    additionalProperties: true
+            required:
+                - resolutions
+                - tool_config
         PreviewSpendRuleRequestBody:
             type: object
             properties:
@@ -139365,6 +140344,32 @@ components:
                 - id
                 - plugin_id
                 - display_name
+        UpdateProfileRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The profile ID.
+                    format: uuid
+                name:
+                    type: string
+                    description: Display name, unique within the organization.
+                    minLength: 1
+                    maxLength: 100
+                provider:
+                    type: string
+                    description: Where inference goes.
+                    enum:
+                        - bedrock
+                        - vertex
+                        - gateway
+                settings:
+                    $ref: '#/components/schemas/InferenceProfileSettings'
+            required:
+                - id
+                - name
+                - provider
+                - settings
         UpdateProjectForm:
             type: object
             properties:
@@ -139827,6 +140832,36 @@ components:
             required:
                 - data_source
                 - enabled
+        UpdateRuleRequestBody:
+            type: object
+            properties:
+                harness:
+                    type: string
+                    description: The harness the rule applies to. Absent applies it to every harness that supports the profile's provider.
+                    enum:
+                        - claude_code
+                        - codex
+                id:
+                    type: string
+                    description: The rule ID.
+                    format: uuid
+                position:
+                    type: integer
+                    description: Breaks ties between matching rules at the same level; lower wins.
+                    default: 0
+                    format: int64
+                    minimum: 0
+                principal_urn:
+                    type: string
+                    description: 'Who the rule applies to: `user:<id>`, `user:all`, `email:<address>`, `role:<kind>:<id>`, `directory_group:<id>` or `directory_attribute:<key>:<value>`.'
+                profile_id:
+                    type: string
+                    description: The profile the rule applies.
+                    format: uuid
+            required:
+                - id
+                - profile_id
+                - principal_urn
         UpdateSecurityVariableDisplayNameForm:
             type: object
             properties:
@@ -142740,6 +143775,8 @@ tags:
       description: Resolves the identifiers Speakeasy records activity under into a single identity.
     - name: identityProviderConnections
       description: 'Manage the organization''s Okta connection: provision the private_key_jwt credential, submit the Okta client ID, verify granted scopes, and revoke.'
+    - name: inferenceProfiles
+      description: Manage the inference endpoints (Amazon Bedrock, Google Vertex AI, or a gateway) the device agent points each person's AI harnesses at. Requires an organization administrator session.
     - name: instances
       description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
     - name: integrations

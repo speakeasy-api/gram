@@ -320,6 +320,26 @@ func attachOrganizationGatewayURL(result *gen.GetPluginsResult, gatewayURL *stri
 	result.Etag = hex.EncodeToString(hash.Sum(nil))
 }
 
+// attachToolConfig sets the poll's tool_config and folds it into the ETag. An
+// empty config leaves both untouched, so organizations without inference
+// profiles keep their existing ETag.
+func attachToolConfig(result *gen.GetPluginsResult, toolConfig map[string]any) error {
+	if len(toolConfig) == 0 {
+		result.ToolConfig = nil
+		return nil
+	}
+	// encoding/json sorts map keys, so equal configs hash equally.
+	encoded, err := json.Marshal(toolConfig)
+	if err != nil {
+		return fmt.Errorf("encode tool config: %w", err)
+	}
+	result.ToolConfig = toolConfig
+	hash := sha256.New()
+	_, _ = fmt.Fprintf(hash, "policy=%s\ntool_config=%s\n", result.Etag, encoded)
+	result.Etag = hex.EncodeToString(hash.Sum(nil))
+	return nil
+}
+
 // Any payloads decoded by Goa use map[string]any and []any. Direct service tests
 // may use typed slices, so normalize those before validation without weakening
 // the HTTP contract.

@@ -86,6 +86,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/httpstream"
 	"github.com/speakeasy-api/gram/server/internal/identityapi"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
+	"github.com/speakeasy-api/gram/server/internal/inferenceprofiles"
 	"github.com/speakeasy-api/gram/server/internal/instances"
 	"github.com/speakeasy-api/gram/server/internal/integrations"
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
@@ -1825,6 +1826,7 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("build customer killswitch service: %w", err)
 			}
 			killswitchapi.Attach(mux, killswitchService)
+			inferenceprofiles.Attach(mux, inferenceprofiles.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			skillsService := skills.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger,
 				&background.TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0}, skillsPublishSignaler, siteURL).
 				WithFeatureProvider(featureFlags)

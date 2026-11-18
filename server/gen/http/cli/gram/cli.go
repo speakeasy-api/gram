@@ -52,6 +52,7 @@ import (
 	hooksservernamesc "github.com/speakeasy-api/gram/server/gen/http/hooks_server_names/client"
 	identityc "github.com/speakeasy-api/gram/server/gen/http/identity/client"
 	identityproviderconnectionsc "github.com/speakeasy-api/gram/server/gen/http/identity_provider_connections/client"
+	inferenceprofilesc "github.com/speakeasy-api/gram/server/gen/http/inference_profiles/client"
 	instancesc "github.com/speakeasy-api/gram/server/gen/http/instances/client"
 	integrationsc "github.com/speakeasy-api/gram/server/gen/http/integrations/client"
 	internalsessionissuersc "github.com/speakeasy-api/gram/server/gen/http/internal_session_issuers/client"
@@ -154,6 +155,7 @@ func UsageCommands() []string {
 		"hooks (claude|cursor|codex|ingest|upload-skill-content|skill-feedback|logs|metrics|get-status)",
 		"identity resolve",
 		"identity-provider-connections (create|submit-client-id|replace-client-secret|set-setup-method|verify|get|record-agent|revoke|sync-applications|list-applications)",
+		"inference-profiles (list-profiles|create-profile|update-profile|delete-profile|list-rules|create-rule|update-rule|delete-rule|preview)",
 		"instances get-instance",
 		"integrations (get|list)",
 		"internal-session-issuers (get|set-enabled|rotate)",
@@ -1673,6 +1675,42 @@ func ParseEndpoint(
 		identityProviderConnectionsListApplicationsIDFlag             = identityProviderConnectionsListApplicationsFlags.String("id", "REQUIRED", "")
 		identityProviderConnectionsListApplicationsIncludeRemovedFlag = identityProviderConnectionsListApplicationsFlags.String("include-removed", "", "")
 		identityProviderConnectionsListApplicationsSessionTokenFlag   = identityProviderConnectionsListApplicationsFlags.String("session-token", "", "")
+
+		inferenceProfilesFlags = flag.NewFlagSet("inference-profiles", flag.ContinueOnError)
+
+		inferenceProfilesListProfilesFlags            = flag.NewFlagSet("list-profiles", flag.ExitOnError)
+		inferenceProfilesListProfilesSessionTokenFlag = inferenceProfilesListProfilesFlags.String("session-token", "", "")
+
+		inferenceProfilesCreateProfileFlags            = flag.NewFlagSet("create-profile", flag.ExitOnError)
+		inferenceProfilesCreateProfileBodyFlag         = inferenceProfilesCreateProfileFlags.String("body", "REQUIRED", "")
+		inferenceProfilesCreateProfileSessionTokenFlag = inferenceProfilesCreateProfileFlags.String("session-token", "", "")
+
+		inferenceProfilesUpdateProfileFlags            = flag.NewFlagSet("update-profile", flag.ExitOnError)
+		inferenceProfilesUpdateProfileBodyFlag         = inferenceProfilesUpdateProfileFlags.String("body", "REQUIRED", "")
+		inferenceProfilesUpdateProfileSessionTokenFlag = inferenceProfilesUpdateProfileFlags.String("session-token", "", "")
+
+		inferenceProfilesDeleteProfileFlags            = flag.NewFlagSet("delete-profile", flag.ExitOnError)
+		inferenceProfilesDeleteProfileIDFlag           = inferenceProfilesDeleteProfileFlags.String("id", "REQUIRED", "")
+		inferenceProfilesDeleteProfileSessionTokenFlag = inferenceProfilesDeleteProfileFlags.String("session-token", "", "")
+
+		inferenceProfilesListRulesFlags            = flag.NewFlagSet("list-rules", flag.ExitOnError)
+		inferenceProfilesListRulesSessionTokenFlag = inferenceProfilesListRulesFlags.String("session-token", "", "")
+
+		inferenceProfilesCreateRuleFlags            = flag.NewFlagSet("create-rule", flag.ExitOnError)
+		inferenceProfilesCreateRuleBodyFlag         = inferenceProfilesCreateRuleFlags.String("body", "REQUIRED", "")
+		inferenceProfilesCreateRuleSessionTokenFlag = inferenceProfilesCreateRuleFlags.String("session-token", "", "")
+
+		inferenceProfilesUpdateRuleFlags            = flag.NewFlagSet("update-rule", flag.ExitOnError)
+		inferenceProfilesUpdateRuleBodyFlag         = inferenceProfilesUpdateRuleFlags.String("body", "REQUIRED", "")
+		inferenceProfilesUpdateRuleSessionTokenFlag = inferenceProfilesUpdateRuleFlags.String("session-token", "", "")
+
+		inferenceProfilesDeleteRuleFlags            = flag.NewFlagSet("delete-rule", flag.ExitOnError)
+		inferenceProfilesDeleteRuleIDFlag           = inferenceProfilesDeleteRuleFlags.String("id", "REQUIRED", "")
+		inferenceProfilesDeleteRuleSessionTokenFlag = inferenceProfilesDeleteRuleFlags.String("session-token", "", "")
+
+		inferenceProfilesPreviewFlags            = flag.NewFlagSet("preview", flag.ExitOnError)
+		inferenceProfilesPreviewEmailFlag        = inferenceProfilesPreviewFlags.String("email", "REQUIRED", "")
+		inferenceProfilesPreviewSessionTokenFlag = inferenceProfilesPreviewFlags.String("session-token", "", "")
 
 		instancesFlags = flag.NewFlagSet("instances", flag.ContinueOnError)
 
@@ -6008,6 +6046,17 @@ func ParseEndpoint(
 	identityProviderConnectionsSyncApplicationsFlags.Usage = identityProviderConnectionsSyncApplicationsUsage
 	identityProviderConnectionsListApplicationsFlags.Usage = identityProviderConnectionsListApplicationsUsage
 
+	inferenceProfilesFlags.Usage = inferenceProfilesUsage
+	inferenceProfilesListProfilesFlags.Usage = inferenceProfilesListProfilesUsage
+	inferenceProfilesCreateProfileFlags.Usage = inferenceProfilesCreateProfileUsage
+	inferenceProfilesUpdateProfileFlags.Usage = inferenceProfilesUpdateProfileUsage
+	inferenceProfilesDeleteProfileFlags.Usage = inferenceProfilesDeleteProfileUsage
+	inferenceProfilesListRulesFlags.Usage = inferenceProfilesListRulesUsage
+	inferenceProfilesCreateRuleFlags.Usage = inferenceProfilesCreateRuleUsage
+	inferenceProfilesUpdateRuleFlags.Usage = inferenceProfilesUpdateRuleUsage
+	inferenceProfilesDeleteRuleFlags.Usage = inferenceProfilesDeleteRuleUsage
+	inferenceProfilesPreviewFlags.Usage = inferenceProfilesPreviewUsage
+
 	instancesFlags.Usage = instancesUsage
 	instancesGetInstanceFlags.Usage = instancesGetInstanceUsage
 
@@ -6959,6 +7008,8 @@ func ParseEndpoint(
 			svcf = identityFlags
 		case "identity-provider-connections":
 			svcf = identityProviderConnectionsFlags
+		case "inference-profiles":
+			svcf = inferenceProfilesFlags
 		case "instances":
 			svcf = instancesFlags
 		case "integrations":
@@ -8024,6 +8075,37 @@ func ParseEndpoint(
 
 			case "list-applications":
 				epf = identityProviderConnectionsListApplicationsFlags
+
+			}
+
+		case "inference-profiles":
+			switch epn {
+			case "list-profiles":
+				epf = inferenceProfilesListProfilesFlags
+
+			case "create-profile":
+				epf = inferenceProfilesCreateProfileFlags
+
+			case "update-profile":
+				epf = inferenceProfilesUpdateProfileFlags
+
+			case "delete-profile":
+				epf = inferenceProfilesDeleteProfileFlags
+
+			case "list-rules":
+				epf = inferenceProfilesListRulesFlags
+
+			case "create-rule":
+				epf = inferenceProfilesCreateRuleFlags
+
+			case "update-rule":
+				epf = inferenceProfilesUpdateRuleFlags
+
+			case "delete-rule":
+				epf = inferenceProfilesDeleteRuleFlags
+
+			case "preview":
+				epf = inferenceProfilesPreviewFlags
 
 			}
 
@@ -11464,6 +11546,37 @@ func ParseEndpoint(
 			case "list-applications":
 				endpoint = c.ListApplications()
 				data, err = identityproviderconnectionsc.BuildListApplicationsPayload(*identityProviderConnectionsListApplicationsIDFlag, *identityProviderConnectionsListApplicationsIncludeRemovedFlag, *identityProviderConnectionsListApplicationsSessionTokenFlag)
+			}
+		case "inference-profiles":
+			c := inferenceprofilesc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-profiles":
+				endpoint = c.ListProfiles()
+				data, err = inferenceprofilesc.BuildListProfilesPayload(*inferenceProfilesListProfilesSessionTokenFlag)
+			case "create-profile":
+				endpoint = c.CreateProfile()
+				data, err = inferenceprofilesc.BuildCreateProfilePayload(*inferenceProfilesCreateProfileBodyFlag, *inferenceProfilesCreateProfileSessionTokenFlag)
+			case "update-profile":
+				endpoint = c.UpdateProfile()
+				data, err = inferenceprofilesc.BuildUpdateProfilePayload(*inferenceProfilesUpdateProfileBodyFlag, *inferenceProfilesUpdateProfileSessionTokenFlag)
+			case "delete-profile":
+				endpoint = c.DeleteProfile()
+				data, err = inferenceprofilesc.BuildDeleteProfilePayload(*inferenceProfilesDeleteProfileIDFlag, *inferenceProfilesDeleteProfileSessionTokenFlag)
+			case "list-rules":
+				endpoint = c.ListRules()
+				data, err = inferenceprofilesc.BuildListRulesPayload(*inferenceProfilesListRulesSessionTokenFlag)
+			case "create-rule":
+				endpoint = c.CreateRule()
+				data, err = inferenceprofilesc.BuildCreateRulePayload(*inferenceProfilesCreateRuleBodyFlag, *inferenceProfilesCreateRuleSessionTokenFlag)
+			case "update-rule":
+				endpoint = c.UpdateRule()
+				data, err = inferenceprofilesc.BuildUpdateRulePayload(*inferenceProfilesUpdateRuleBodyFlag, *inferenceProfilesUpdateRuleSessionTokenFlag)
+			case "delete-rule":
+				endpoint = c.DeleteRule()
+				data, err = inferenceprofilesc.BuildDeleteRulePayload(*inferenceProfilesDeleteRuleIDFlag, *inferenceProfilesDeleteRuleSessionTokenFlag)
+			case "preview":
+				endpoint = c.Preview()
+				data, err = inferenceprofilesc.BuildPreviewPayload(*inferenceProfilesPreviewEmailFlag, *inferenceProfilesPreviewSessionTokenFlag)
 			}
 		case "instances":
 			c := instancesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -20444,6 +20557,201 @@ func identityProviderConnectionsListApplicationsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections list-applications --id \"550e8400-e29b-41d4-a716-446655440000\" --include-removed false --session-token \"abc123\"")
+}
+
+// inferenceProfilesUsage displays the usage of the inference-profiles command
+// and its subcommands.
+func inferenceProfilesUsage() {
+	fmt.Fprintln(os.Stderr, `Manage the inference endpoints (Amazon Bedrock, Google Vertex AI, or a gateway) the device agent points each person's AI harnesses at. Requires an organization administrator session.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] inference-profiles COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-profiles: List the organization's inference profiles, by name.`)
+	fmt.Fprintln(os.Stderr, `    create-profile: Create an inference profile. A profile names where inference goes and never carries a credential.`)
+	fmt.Fprintln(os.Stderr, `    update-profile: Replace an inference profile's name, provider and settings.`)
+	fmt.Fprintln(os.Stderr, `    delete-profile: Delete an inference profile and every rule that uses it.`)
+	fmt.Fprintln(os.Stderr, `    list-rules: List the organization's inference profile rules, by position.`)
+	fmt.Fprintln(os.Stderr, `    create-rule: Bind an inference profile to a principal, for one harness or all of them.`)
+	fmt.Fprintln(os.Stderr, `    update-rule: Replace a rule's profile, principal, harness and position. Reorder rules by updating their positions.`)
+	fmt.Fprintln(os.Stderr, `    delete-rule: Delete an inference profile rule.`)
+	fmt.Fprintln(os.Stderr, `    preview: Show which profile each harness resolves to for a person, the rule that decided it, and the settings the device agent would receive.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s inference-profiles COMMAND --help\n", os.Args[0])
+}
+func inferenceProfilesListProfilesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] inference-profiles list-profiles", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the organization's inference profiles, by name.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "inference-profiles list-profiles --session-token \"abc123\"")
+}
+
+func inferenceProfilesCreateProfileUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] inference-profiles create-profile", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create an inference profile. A profile names where inference goes and never carries a credential.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "inference-profiles create-profile --body '{\n      \"name\": \"aa\",\n      \"provider\": \"vertex\",\n      \"settings\": {\n         \"aws_profile\": \"abc123\",\n         \"base_url\": \"https://example.com/foo\",\n         \"gcp_project_id\": \"abc123\",\n         \"models\": {\n            \"default\": \"abc123\",\n            \"haiku\": \"abc123\",\n            \"opus\": \"abc123\",\n            \"sonnet\": \"abc123\"\n         },\n         \"region\": \"abc123\"\n      }\n   }' --session-token \"abc123\"")
+}
+
+func inferenceProfilesUpdateProfileUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] inference-profiles update-profile", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace an inference profile's name, provider and settings.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "inference-profiles update-profile --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\",\n      \"provider\": \"vertex\",\n      \"settings\": {\n         \"aws_profile\": \"abc123\",\n         \"base_url\": \"https://example.com/foo\",\n         \"gcp_project_id\": \"abc123\",\n         \"models\": {\n            \"default\": \"abc123\",\n            \"haiku\": \"abc123\",\n            \"opus\": \"abc123\",\n            \"sonnet\": \"abc123\"\n         },\n         \"region\": \"abc123\"\n      }\n   }' --session-token \"abc123\"")
+}
+
+func inferenceProfilesDeleteProfileUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] inference-profiles delete-profile", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete an inference profile and every rule that uses it.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "inference-profiles delete-profile --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func inferenceProfilesListRulesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] inference-profiles list-rules", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the organization's inference profile rules, by position.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "inference-profiles list-rules --session-token \"abc123\"")
+}
+
+func inferenceProfilesCreateRuleUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] inference-profiles create-rule", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Bind an inference profile to a principal, for one harness or all of them.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "inference-profiles create-rule --body '{\n      \"harness\": \"codex\",\n      \"position\": 1,\n      \"principal_urn\": \"abc123\",\n      \"profile_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func inferenceProfilesUpdateRuleUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] inference-profiles update-rule", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace a rule's profile, principal, harness and position. Reorder rules by updating their positions.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "inference-profiles update-rule --body '{\n      \"harness\": \"codex\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"position\": 1,\n      \"principal_urn\": \"abc123\",\n      \"profile_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func inferenceProfilesDeleteRuleUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] inference-profiles delete-rule", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete an inference profile rule.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "inference-profiles delete-rule --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func inferenceProfilesPreviewUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] inference-profiles preview", os.Args[0])
+	fmt.Fprint(os.Stderr, " -email STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Show which profile each harness resolves to for a person, the rule that decided it, and the settings the device agent would receive.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -email STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "inference-profiles preview --email \"alice@example.com\" --session-token \"abc123\"")
 }
 
 // instancesUsage displays the usage of the instances command and its

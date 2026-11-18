@@ -45,6 +45,8 @@ const (
 	subjectTypeIdentityProviderConnection       subjectType = "identity_provider_connection"
 	subjectTypeJsonWebKey                       subjectType = "json_web_key"
 	subjectTypeJsonWebKeySet                    subjectType = "json_web_key_set"
+	subjectTypeInferenceProfile                 subjectType = "inference_profile"
+	subjectTypeInferenceProfileRule             subjectType = "inference_profile_rule"
 	subjectTypeInternalSessionIssuer            subjectType = "internal_session_issuer"
 	subjectTypeIssuanceSelectionProfile         subjectType = "issuance_selection_profile"
 	subjectTypeKillswitchPrescription           subjectType = "killswitch_prescription"

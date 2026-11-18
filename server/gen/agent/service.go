@@ -681,8 +681,8 @@ type GetPluginsPayload struct {
 type GetPluginsResult struct {
 	// Opaque revision identifier covering the marketplace, plugin, MCP server
 	// (including each server's token endpoint, audience and resource),
-	// remote-configuration, and organization-gateway set. The agent stores this to
-	// detect changes between polls.
+	// remote-configuration, organization-gateway, and tool-configuration set. The
+	// agent stores this to detect changes between polls.
 	Etag string
 	// Plugin marketplaces the agent should register with the tools it manages.
 	// Sorted by name.
@@ -703,6 +703,12 @@ type GetPluginsResult struct {
 	// The non-human principal the plugin set was resolved for. Present only when
 	// the caller authenticated with an agent API key.
 	Principal *AgentPollingPrincipal
+	// Tool-native settings keyed by stable tool ID (`claude_code`, `codex`), which
+	// each tool's syncer merges into that tool's own configuration with leaf
+	// ownership. Carries the inference endpoint the caller's inference profile
+	// rules resolve to; never a credential. Absent when nothing applies, which
+	// tells the agent to remove the settings it wrote earlier.
+	ToolConfig map[string]any
 	// Speakeasy-hosted MCP servers the agent registers directly in each managed
 	// tool's configuration, authorized by the device's own mcp:connect credential.
 	// Populated only when the caller polls as an agent (an agent API key, or a

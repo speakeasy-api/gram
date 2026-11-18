@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deviceagentversions"
 	"github.com/speakeasy-api/gram/server/internal/deviceidentity"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
+	"github.com/speakeasy-api/gram/server/internal/inferenceprofiles"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -408,6 +409,19 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 	result, _, err := s.pluginSetFor(ctx, authCtx, principals)
 	if err != nil {
 		return nil, err
+	}
+
+	// Inference profiles resolve from the same principals as plugin delivery
+	// (device-agent ADR-0032). Unlike the display metadata above this fails
+	// the poll: an absent tool_config tells the agent to remove the settings
+	// it wrote, so omitting it on a read error would knock every harness off
+	// its configured endpoint. A failed poll leaves the agent's last policy.
+	resolutions, err := inferenceprofiles.ResolveForPrincipals(ctx, s.db, authCtx.ActiveOrganizationID, principals)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error resolving inference profiles").LogError(ctx, s.logger)
+	}
+	if err := attachToolConfig(result, inferenceprofiles.ToolConfig(resolutions)); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error rendering tool configuration").LogError(ctx, s.logger)
 	}
 
 	// Device attestation compares an agent's reported applied etag against

@@ -355,6 +355,15 @@ trackedFiles:
   src/funcs/identityProviderConnectionsSyncApplications.ts: {}
   src/funcs/identityProviderConnectionsVerify.ts: {}
   src/funcs/identityResolve.ts: {}
+  src/funcs/inferenceProfilesCreateProfile.ts: {}
+  src/funcs/inferenceProfilesCreateRule.ts: {}
+  src/funcs/inferenceProfilesDeleteProfile.ts: {}
+  src/funcs/inferenceProfilesDeleteRule.ts: {}
+  src/funcs/inferenceProfilesListProfiles.ts: {}
+  src/funcs/inferenceProfilesListRules.ts: {}
+  src/funcs/inferenceProfilesPreview.ts: {}
+  src/funcs/inferenceProfilesUpdateProfile.ts: {}
+  src/funcs/inferenceProfilesUpdateRule.ts: {}
   src/funcs/instancesGetBySlug.ts: {}
   src/funcs/integrationsIntegrationsNumberGet.ts: {}
   src/funcs/integrationsList.ts: {}
@@ -1150,6 +1159,7 @@ trackedFiles:
   src/models/components/createpackageresult.ts: {}
   src/models/components/createpluginform.ts: {}
   src/models/components/createportalsessionresult.ts: {}
+  src/models/components/createprofilerequestbody.ts: {}
   src/models/components/createprojectrequestbody.ts: {}
   src/models/components/createprojectresult.ts: {}
   src/models/components/createprompttemplateform.ts: {}
@@ -1163,6 +1173,7 @@ trackedFiles:
   src/models/components/createriskpolicybypassrequestrequestbody.ts: {}
   src/models/components/createriskpolicyrequestbody.ts: {}
   src/models/components/createroleform.ts: {}
+  src/models/components/createrulerequestbody.ts: {}
   src/models/components/createserverandmcpserverresult.ts: {}
   src/models/components/createserverform.ts: {}
   src/models/components/createserverheaderform.ts: {}
@@ -1413,6 +1424,11 @@ trackedFiles:
   src/models/components/identityproviderconnectionapplicationssync.ts: {}
   src/models/components/identityproviderconnectionchecklistitem.ts: {}
   src/models/components/identityproviderconnectionreconcilerun.ts: {}
+  src/models/components/inferenceprofile.ts: {}
+  src/models/components/inferenceprofilemodels.ts: {}
+  src/models/components/inferenceprofileresolution.ts: {}
+  src/models/components/inferenceprofilerule.ts: {}
+  src/models/components/inferenceprofilesettings.ts: {}
   src/models/components/inferencespendcap.ts: {}
   src/models/components/inforesponsebody.ts: {}
   src/models/components/ingesthookresult.ts: {}
@@ -1528,6 +1544,8 @@ trackedFiles:
   src/models/components/listhookstracesresult.ts: {}
   src/models/components/listidentityaccessresult.ts: {}
   src/models/components/listidentityproviderconnectionapplicationsresult.ts: {}
+  src/models/components/listinferenceprofilerulesresult.ts: {}
+  src/models/components/listinferenceprofilesresult.ts: {}
   src/models/components/listinstancesresponsebody.ts: {}
   src/models/components/listintegrationsresult.ts: {}
   src/models/components/listinvitesresult.ts: {}
@@ -1762,6 +1780,7 @@ trackedFiles:
   src/models/components/pluginskilldistribution.ts: {}
   src/models/components/policybypassredemption.ts: {}
   src/models/components/prepareemarequestbody.ts: {}
+  src/models/components/previewinferenceprofilesresult.ts: {}
   src/models/components/previewspendrulerequestbody.ts: {}
   src/models/components/previewspendruleresult.ts: {}
   src/models/components/principalremotesessionbinding.ts: {}
@@ -2208,6 +2227,7 @@ trackedFiles:
   src/models/components/updatepackageresult.ts: {}
   src/models/components/updatepluginform.ts: {}
   src/models/components/updatepluginserverform.ts: {}
+  src/models/components/updateprofilerequestbody.ts: {}
   src/models/components/updateprojectform.ts: {}
   src/models/components/updateprojectresult.ts: {}
   src/models/components/updateprompttemplateform.ts: {}
@@ -2218,6 +2238,7 @@ trackedFiles:
   src/models/components/updateriskpolicyrequestbody.ts: {}
   src/models/components/updateroleform.ts: {}
   src/models/components/updaterouterequestbody.ts: {}
+  src/models/components/updaterulerequestbody.ts: {}
   src/models/components/updateserverform.ts: {}
   src/models/components/updateserverheaderform.ts: {}
   src/models/components/updatesetuptaskrequestbody.ts: {}
@@ -2391,6 +2412,8 @@ trackedFiles:
   src/models/operations/createglobalremotesessionissuer.ts: {}
   src/models/operations/createglobaltoolvariationgroup.ts: {}
   src/models/operations/createidentityproviderconnection.ts: {}
+  src/models/operations/createinferenceprofile.ts: {}
+  src/models/operations/createinferenceprofilerule.ts: {}
   src/models/operations/createjsonwebkeyset.ts: {}
   src/models/operations/createlitellminstance.ts: {}
   src/models/operations/createmcpapprovalrequest.ts: {}
@@ -2460,6 +2483,8 @@ trackedFiles:
   src/models/operations/deleteglobalremotesessionclient.ts: {}
   src/models/operations/deleteglobalremotesessionissuer.ts: {}
   src/models/operations/deleteglobalvariation.ts: {}
+  src/models/operations/deleteinferenceprofile.ts: {}
+  src/models/operations/deleteinferenceprofilerule.ts: {}
   src/models/operations/deleteissuanceprofile.ts: {}
   src/models/operations/deletejsonwebkeyset.ts: {}
   src/models/operations/deletemcpendpoint.ts: {}
@@ -2791,6 +2816,8 @@ trackedFiles:
   src/models/operations/listhookstraces.ts: {}
   src/models/operations/listidentityaccess.ts: {}
   src/models/operations/listidentityproviderconnectionapplications.ts: {}
+  src/models/operations/listinferenceprofilerules.ts: {}
+  src/models/operations/listinferenceprofiles.ts: {}
   src/models/operations/listintegrations.ts: {}
   src/models/operations/listinvites.ts: {}
   src/models/operations/listissuanceprofiles.ts: {}
@@ -2921,6 +2948,7 @@ trackedFiles:
   src/models/operations/platformkillswitchesnumberlistprescriptions.ts: {}
   src/models/operations/prepareema.ts: {}
   src/models/operations/previewdirectoryrolesetup.ts: {}
+  src/models/operations/previewinferenceprofiles.ts: {}
   src/models/operations/previewspendrule.ts: {}
   src/models/operations/proberemotemcpurl.ts: {}
   src/models/operations/promotemcpapprovalrequest.ts: {}
@@ -3121,6 +3149,8 @@ trackedFiles:
   src/models/operations/updategcpkmskey.ts: {}
   src/models/operations/updateglobalremotesessionclient.ts: {}
   src/models/operations/updateglobalremotesessionissuer.ts: {}
+  src/models/operations/updateinferenceprofile.ts: {}
+  src/models/operations/updateinferenceprofilerule.ts: {}
   src/models/operations/updateinviterole.ts: {}
   src/models/operations/updatejsonwebkeyset.ts: {}
   src/models/operations/updatemarketplacesettings.ts: {}
@@ -3343,6 +3373,8 @@ trackedFiles:
   src/react-query/createGlobalRemoteSessionIssuer.ts: {}
   src/react-query/createGlobalToolVariationGroup.ts: {}
   src/react-query/createIdentityProviderConnection.ts: {}
+  src/react-query/createInferenceProfile.ts: {}
+  src/react-query/createInferenceProfileRule.ts: {}
   src/react-query/createJsonWebKeySet.ts: {}
   src/react-query/createKillswitch.ts: {}
   src/react-query/createLiteLLMInstance.ts: {}
@@ -3409,6 +3441,8 @@ trackedFiles:
   src/react-query/deleteGlobalRemoteSessionClient.ts: {}
   src/react-query/deleteGlobalRemoteSessionIssuer.ts: {}
   src/react-query/deleteGlobalVariation.ts: {}
+  src/react-query/deleteInferenceProfile.ts: {}
+  src/react-query/deleteInferenceProfileRule.ts: {}
   src/react-query/deleteIssuanceProfile.ts: {}
   src/react-query/deleteJsonWebKeySet.ts: {}
   src/react-query/deleteMcpEndpoint.ts: {}
@@ -3691,6 +3725,10 @@ trackedFiles:
   src/react-query/index.ts:
     id: 9e975471aa65
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
+  src/react-query/inferenceProfileRules.core.ts: {}
+  src/react-query/inferenceProfileRules.ts: {}
+  src/react-query/inferenceProfiles.core.ts: {}
+  src/react-query/inferenceProfiles.ts: {}
   src/react-query/ingestHookEvent.ts: {}
   src/react-query/instance.core.ts: {}
   src/react-query/instance.ts: {}
@@ -3942,6 +3980,8 @@ trackedFiles:
   src/react-query/pluginsDownloadObservabilityPlugin.ts: {}
   src/react-query/pluginsDownloadPluginPackage.core.ts: {}
   src/react-query/pluginsDownloadPluginPackage.ts: {}
+  src/react-query/previewInferenceProfiles.core.ts: {}
+  src/react-query/previewInferenceProfiles.ts: {}
   src/react-query/previewKillswitchOverlaps.ts: {}
   src/react-query/probeRemoteMcpURL.ts: {}
   src/react-query/productFeatures.core.ts: {}
@@ -4347,6 +4387,8 @@ trackedFiles:
   src/react-query/updateGcpKmsKey.ts: {}
   src/react-query/updateGlobalRemoteSessionClient.ts: {}
   src/react-query/updateGlobalRemoteSessionIssuer.ts: {}
+  src/react-query/updateInferenceProfile.ts: {}
+  src/react-query/updateInferenceProfileRule.ts: {}
   src/react-query/updateInviteRole.ts: {}
   src/react-query/updateJsonWebKeySet.ts: {}
   src/react-query/updateMarketplaceSettings.ts: {}
@@ -4494,6 +4536,7 @@ trackedFiles:
   src/sdk/hooksservernames.ts: {}
   src/sdk/identity.ts: {}
   src/sdk/identityproviderconnections.ts: {}
+  src/sdk/inferenceprofiles.ts: {}
   src/sdk/instances.ts: {}
   src/sdk/integrations.ts: {}
   src/sdk/internalsessionissuers.ts: {}
@@ -5578,6 +5621,28 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  createInferenceProfile:
+    speakeasy-default-create-inference-profile:
+      requestBody:
+        application/json: {"name": "<value>", "provider": "vertex", "settings": {}}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-03-15T11:47:50.072Z", "id": "abc921d1-050b-4caa-9618-a4441535df85", "name": "<value>", "provider": "gateway", "settings": {}, "updated_at": "2024-03-10T13:47:15.464Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  createInferenceProfileRule:
+    speakeasy-default-create-inference-profile-rule:
+      requestBody:
+        application/json: {"position": 0, "principal_urn": "<value>", "profile_id": "53efec12-8abd-468d-8299-6cdc0699b672"}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-09-07T20:13:34.942Z", "id": "b284e05d-3d53-415d-8786-d3ba6969baff", "position": 911201, "principal_urn": "<value>", "profile_id": "5dc60148-6514-40f7-850d-93b2388685d4", "updated_at": "2026-06-10T15:13:13.737Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   createJsonWebKeySet:
     speakeasy-default-create-json-web-key-set:
       requestBody:
@@ -6398,6 +6463,26 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  deleteInferenceProfile:
+    speakeasy-default-delete-inference-profile:
+      parameters:
+        query:
+          id: "b699dd6d-0c59-4f9c-ae2a-9ba07ebaecbf"
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  deleteInferenceProfileRule:
+    speakeasy-default-delete-inference-profile-rule:
+      parameters:
+        query:
+          id: "b04c88e4-ea88-4cc5-b5f4-33a687bdf699"
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   deleteIssuanceProfile:
     speakeasy-default-delete-issuance-profile:
       requestBody:
@@ -10493,6 +10578,24 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listInferenceProfileRules:
+    speakeasy-default-list-inference-profile-rules:
+      responses:
+        "200":
+          application/json: {"rules": [{"created_at": "2024-04-09T01:05:14.380Z", "id": "91c8fb8c-831a-4928-b894-d6ea2ec50950", "position": 694449, "principal_urn": "<value>", "profile_id": "6e3d4009-bb51-45b4-8bc3-52bed56901c1", "updated_at": "2024-01-15T19:30:37.906Z"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listInferenceProfiles:
+    speakeasy-default-list-inference-profiles:
+      responses:
+        "200":
+          application/json: {"profiles": [{"created_at": "2025-06-08T12:13:29.944Z", "id": "1299a1f7-2ea6-4cef-90a9-dedfcd5bc99d", "name": "<value>", "provider": "gateway", "settings": {}, "updated_at": "2025-11-23T05:55:31.494Z"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listIntegrations:
     speakeasy-default-list-integrations:
       responses:
@@ -12025,6 +12128,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  previewInferenceProfiles:
+    speakeasy-default-preview-inference-profiles:
+      parameters:
+        query:
+          email: "Tad.Kilback85@hotmail.com"
+      responses:
+        "200":
+          application/json: {"resolutions": [], "tool_config": {"key": "<value>", "key1": "<value>", "key2": "<value>"}}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   previewSpendRule:
     speakeasy-default-preview-spend-rule:
       requestBody:
@@ -14375,6 +14490,28 @@ examples:
       responses:
         "200":
           application/json: {"client_id_metadata_document_supported": false, "created_at": "2025-06-03T19:56:54.872Z", "id": "c1a38808-eb95-4644-9fb5-bed65587fae7", "issuer": "american_express", "oidc": true, "organization_id": "<id>", "passthrough": false, "project_id": "<id>", "slug": "<value>", "updated_at": "2025-02-16T23:38:16.474Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  updateInferenceProfile:
+    speakeasy-default-update-inference-profile:
+      requestBody:
+        application/json: {"id": "d29fa498-8ce9-417e-9bdd-6ed9aa5f46a4", "name": "<value>", "provider": "vertex", "settings": {}}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-11-19T04:52:15.848Z", "id": "1e2d17a5-9f8f-4f72-af0b-536ed2773439", "name": "<value>", "provider": "vertex", "settings": {}, "updated_at": "2026-03-18T10:14:02.829Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  updateInferenceProfileRule:
+    speakeasy-default-update-inference-profile-rule:
+      requestBody:
+        application/json: {"id": "674d3ca5-f0d5-48d9-909b-c65ca57bf44d", "position": 0, "principal_urn": "<value>", "profile_id": "75e0eaf5-4343-439f-8664-19d02e496e74"}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-11-28T09:30:50.050Z", "id": "724bb9b3-ac85-46b0-9838-b448fe0a1aff", "position": 733548, "principal_urn": "<value>", "profile_id": "a6028ddc-40a2-46f0-9710-96f6b7de2013", "updated_at": "2025-05-30T21:49:20.490Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
