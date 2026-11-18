@@ -1,0 +1,23 @@
+server/internal/chat/queries.sql
+  s_5d8afeea7d7532::t_3ede778c29fec2 1992-1999
+server/internal/telemetry/project_overview_chat_metrics_internal_test.go
+  s_5d8afeea7d7532::t_3ede778c29fec2 49-61
+server/internal/chat/repo/queries.sql.go
+  s_5d8afeea7d7532::t_184ee3aa386bcd 1214-1221
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0983894f4ef03d5f1a0a09b93103c87132ad3eef",
+  "prompts": {},
+  "sessions": {
+    "s_5d8afeea7d7532": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f553444d-a6f3-494d-8475-5cd56f07da4c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
