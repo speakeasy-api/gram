@@ -2453,9 +2453,9 @@ FROM device_integration_configs
 WHERE id = $1
 `
 
-func (q *Queries) GetDeviceIntegrationCredentialsCiphertext(ctx context.Context, id uuid.UUID) (string, error) {
+func (q *Queries) GetDeviceIntegrationCredentialsCiphertext(ctx context.Context, id uuid.UUID) (pgtype.Text, error) {
 	row := q.db.QueryRow(ctx, getDeviceIntegrationCredentialsCiphertext, id)
-	var credentials_encrypted string
+	var credentials_encrypted pgtype.Text
 	err := row.Scan(&credentials_encrypted)
 	return credentials_encrypted, err
 }

@@ -1,5 +1,5 @@
 -- Modify "device_integration_configs" table
-ALTER TABLE "device_integration_configs" ADD COLUMN "credentials_org_encrypted" text NULL;
+ALTER TABLE "device_integration_configs" ALTER COLUMN "credentials_encrypted" DROP NOT NULL, ADD COLUMN "credentials_org_encrypted" text NULL;
 -- Set comment to column: "credentials_org_encrypted" on table: "device_integration_configs"
 COMMENT ON COLUMN "device_integration_configs"."credentials_org_encrypted" IS '@access: secret-restricted';
 -- Modify "network_ingresses" table

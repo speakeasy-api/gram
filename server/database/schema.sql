@@ -13901,8 +13901,8 @@ CREATE TABLE IF NOT EXISTS device_integration_configs (
   -- Secret credential material only (API keys, OAuth client secrets),
   -- encrypted as a JSON document whose fields are provider-specific. Write
   -- only: the management API never returns the value, only whether one is
-  -- set.
-  credentials_encrypted TEXT NOT NULL,
+  -- set. NULL once the organization's platform-key copies are cleared.
+  credentials_encrypted TEXT,
   -- The same credential document sealed under the organization's own
   -- encryption key. Written alongside credentials_encrypted while
   -- organizations move to organization encryption.

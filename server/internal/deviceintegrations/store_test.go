@@ -120,7 +120,8 @@ func TestCredentialsStoredEncryptedAndNeverReadable(t *testing.T) {
 
 	stored, err := testrepo.New(conn).GetDeviceIntegrationCredentialsCiphertext(ctx, result.Config.ID)
 	require.NoError(t, err)
-	require.NotContains(t, stored, "secret-token", "credentials must be encrypted at rest")
+	require.True(t, stored.Valid)
+	require.NotContains(t, stored.String, "secret-token", "credentials must be encrypted at rest")
 
 	cfg, err := store.LoadConfig(ctx, orgID, testProviderID)
 	require.NoError(t, err)

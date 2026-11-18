@@ -1099,7 +1099,7 @@ type GetSyncTargetRow struct {
 	ConfigID             uuid.UUID
 	OrganizationID       string
 	Provider             string
-	CredentialsEncrypted string
+	CredentialsEncrypted pgtype.Text
 	Settings             []byte
 	Enabled              bool
 	Deleted              bool
@@ -1148,7 +1148,7 @@ INSERT INTO device_integration_configs (
 ) VALUES (
     $1
   , $2
-  , $3
+  , $3::text
   , $4
   , $5
 )
@@ -2631,7 +2631,7 @@ func (q *Queries) SoftDeleteConfig(ctx context.Context, arg SoftDeleteConfigPara
 const updateConfigCredentials = `-- name: UpdateConfigCredentials :one
 
 UPDATE device_integration_configs
-SET credentials_encrypted = $1,
+SET credentials_encrypted = $1::text,
     settings = $2,
     enabled = $3,
     updated_at = clock_timestamp()

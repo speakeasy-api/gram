@@ -17,7 +17,7 @@ type DeviceIntegrationConfig struct {
 	// @access: confidential
 	Provider string
 	// @access: secret-restricted
-	CredentialsEncrypted string
+	CredentialsEncrypted pgtype.Text
 	// @access: secret-restricted
 	CredentialsOrgEncrypted pgtype.Text
 	// @access: opaque-restricted
