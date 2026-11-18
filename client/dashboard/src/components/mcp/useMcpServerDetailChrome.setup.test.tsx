@@ -456,3 +456,48 @@ it("keeps a guided server's configured credentials", () => {
   expect(screen.getByText("1 credential configured")).toBeDefined();
   expect(screen.queryByText("Setup pending")).toBeNull();
 });
+
+function OverviewPrompt() {
+  const chrome = useMcpServerDetailChrome();
+  return <div>{chrome?.overviewSetup}</div>;
+}
+function renderOverviewPrompt() {
+  render(
+    <MemoryRouter
+      initialEntries={["/example/projects/default/mcp/slack/overview"]}
+    >
+      <Routes>
+        <Route
+          path="/example/projects/default/mcp/:mcpServerSlug/:tab"
+          element={<OverviewPrompt />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+it("prompts to finish guided setup that isn't marked done, even with working credentials", () => {
+  state.upstreamAuth = "enforced";
+  state.upstreamAuthQuery = {
+    data: { status: "configured", clients: [credential(true)] },
+    isPending: false,
+    isError: false,
+  };
+  renderOverviewPrompt();
+  expect(screen.getByText("Finish setting up Slack")).toBeDefined();
+});
+
+it("stops prompting once guided setup is marked done, even without credentials", () => {
+  state.server = { ...REMOTE_SERVER, setupGuideCompletedAt: new Date() };
+  state.upstreamAuth = "enforced";
+  state.upstreamAuthQuery = {
+    data: { status: "setup_incomplete", clients: [] },
+    isPending: false,
+    isError: false,
+  };
+  renderOverviewPrompt();
+  expect(screen.queryByText("Finish setting up Slack")).toBeNull();
+  cleanup();
+  renderIdentity();
+  expect(screen.queryByText("Setup pending")).toBeNull();
+});

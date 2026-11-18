@@ -20,6 +20,7 @@ import {
 } from "./useMcpServerReachability";
 import {
   type SetupProvider,
+  guidedSetupStatus,
   setupProviderForUrl,
 } from "@/pages/mcp/x/setup/provider-setup";
 import { useOrganization, useProject } from "@/contexts/Auth";
@@ -75,6 +76,7 @@ import {
   Database,
   MessageSquareText,
   ShieldCheck,
+  WandSparkles,
   Wrench,
 } from "lucide-react";
 import {
@@ -323,13 +325,10 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
     (!!setupProvider || !!setupGuide) &&
     hasScope("mcp:write", mcpServer.id);
   // A provider with a guided setup is set up there, not in Settings: until
-  // Speakeasy can sign in to it, the Authentication step and Overview send
-  // the admin to the Setup tab.
+  // someone completes it (or after Settings restarts it), Overview and the
+  // header send the admin to the Setup page.
   const needsSetup =
-    showSetup &&
-    !!setupProvider &&
-    !authReadiness.loading &&
-    !authReadiness.ready;
+    showSetup && guidedSetupStatus(mcpServer, upstreamUrl) === "pending";
   const setupHref = mcpServerTabHref(routes, idOrSlug, "setup");
   const setupName = setupProvider ? SETUP_PROVIDER_NAME[setupProvider] : "";
   const checks: McpReadinessCheck[] = mcpServer
@@ -555,7 +554,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
     // with no upstream has no guide to point at.
     installLinks: effectiveInstallPageLinks,
     overviewSetup: needsSetup ? (
-      <SetupPrompt name={setupName} href={setupHref} />
+      <SetupPrompt name={setupName} href={setupHref} icon={WandSparkles} />
     ) : (
       overviewSetupGuide
     ),
