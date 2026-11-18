@@ -387,7 +387,7 @@ func TestCatalog_EveryCodeHasAnAdministratorSentenceInTheThirdPerson(t *testing.
 		require.NotEmpty(t, meaning.WhatHappenedForAdmin, code)
 		for _, text := range []string{meaning.WhatHappenedForAdmin, meaning.Technical} {
 			for _, word := range strings.FieldsFunc(strings.ToLower(text), func(r rune) bool { return r < 'a' || r > 'z' }) {
-				require.NotContains(t, []string{"you", "your", "yours", "yourself"}, word, code)
+				require.NotContains(t, []string{"i", "me", "my", "mine", "myself", "we", "us", "our", "ours", "ourselves", "you", "your", "yours", "yourself", "yourselves"}, word, code)
 			}
 		}
 	}

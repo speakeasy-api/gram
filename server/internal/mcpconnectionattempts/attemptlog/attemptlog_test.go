@@ -213,6 +213,12 @@ func TestList_AttributesAttemptsToTheProvider(t *testing.T) {
 		ids = append(ids, r.ID)
 	}
 	require.ElementsMatch(t, []uuid.UUID{onServer.ID(), named.ID()}, ids)
+
+	locked := f.scope()
+	locked.ServerID = f.other.String()
+	rows = list(t, f, locked, attemptlog.Filters{})
+	require.Len(t, rows, 1)
+	require.Equal(t, named.ID(), rows[0].ID)
 }
 
 func TestList_DerivesOutcomesWithoutAFinalStep(t *testing.T) {
