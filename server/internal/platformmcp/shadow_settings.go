@@ -20,6 +20,7 @@ import (
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -687,6 +688,8 @@ func mapShadowSettingPolicyError(err error) error {
 	var decisions *policycore.DecisionConflictError
 	var validation *policycore.ValidationError
 	switch {
+	case errors.Is(err, mcpapproval.ErrNarrowDenialUnderEveryoneBlockAll):
+		return shadowDecisionInvalid("This project has standing denials for specific people, and blocking by default for everyone would block those servers for everyone. Re-decide those servers as denied for everyone with decide_shadow_mcp_access, or block by default only for specific roles.")
 	case errors.As(err, &blocking):
 		return shadowDecisionError("conflict", "Another policy that blocks Shadow MCP servers was turned on in this project. Read the default access again before retrying.", ErrShadowDecisionConflict)
 	case errors.As(err, &stale), errors.As(err, &decisions), errors.Is(err, policycore.ErrLoadPolicy):

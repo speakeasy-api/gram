@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -248,4 +249,12 @@ func liveShadowSettingsServiceStub(t *testing.T) *ShadowMCPSettingsService {
 	service := NewShadowMCPSettingsService(nil, shadow, testPluginTargets(nil), policycore.New(nil), officiallink.NewWriter(audit.NewLogger()), &feature.InMemory{}, NewPostgresOrganizationSlugResolver(nil), testOperationBudget())
 	service.db = new(pgxpool.Pool)
 	return service
+}
+
+func TestShadowSettingPolicyErrorsNameTheFixForNarrowStandingDenials(t *testing.T) {
+	t.Parallel()
+
+	err := mapShadowSettingPolicyError(&policycore.MutationError{Message: "honor standing approval decisions on policy create", Cause: mcpapproval.ErrNarrowDenialUnderEveryoneBlockAll})
+	require.ErrorIs(t, err, ErrShadowDecisionInvalid)
+	require.Contains(t, err.Error(), "decide_shadow_mcp_access")
 }
