@@ -77,10 +77,14 @@ func hooksRolloutPin(pin *gen.AdminHooksRolloutPin) *HooksRolloutPin {
 
 func registerHooksRolloutTools(server *mcp.Server, organizations OrganizationReader, rollout HooksRolloutReader) {
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "get_hooks_rollout",
-		Title:       "Get Hooks Version Rollout",
-		Description: "Read the platform-wide hooks version rollout: the hooks generator version this server build publishes, the default pin every non-canary organization without an override follows, canary organizations, organization overrides and recent pin changes. An organization's hooks plugin moves to the current version on the next hourly rollout sweep once its pin reaches it. Does not change pins.",
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+		Name:         "get_hooks_rollout",
+		Title:        "Get Hooks Version Rollout",
+		Description:  "Read the platform-wide hooks version rollout: the hooks generator version this server build publishes, the default pin every non-canary organization without an override follows, canary organizations, organization overrides and recent pin changes. An organization's hooks plugin moves to the current version on the next hourly rollout sweep once its pin reaches it. Does not change pins.",
+		Annotations:  readOnlyAnnotations(),
+		Meta:         nil,
+		InputSchema:  nil,
+		OutputSchema: nil,
+		Icons:        nil,
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, HooksRollout, error) {
 		if rollout == nil {
 			return nil, HooksRollout{}, errHooksRolloutUnavailable
@@ -106,7 +110,7 @@ func registerHooksRolloutTools(server *mcp.Server, organizations OrganizationRea
 			if change == nil {
 				continue
 			}
-			item := HooksRolloutChange{Version: change.Version, SetBy: change.SetBy, SetAt: change.SetAt}
+			item := HooksRolloutChange{OrganizationID: "", OrganizationSlug: "", Version: change.Version, SetBy: change.SetBy, SetAt: change.SetAt}
 			if change.OrganizationID != nil {
 				item.OrganizationID = *change.OrganizationID
 			}
@@ -127,10 +131,14 @@ func registerHooksRolloutTools(server *mcp.Server, organizations OrganizationRea
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "get_organization_hooks_rollout",
-		Title:       "Get Organization Hooks Version Rollout",
-		Description: "Read which hooks version an exact organization ID is cleared for and why: canary, its own override, the default pin, or legacy_flag when no pin applies yet and the legacy PostHog flag decides (eligibility is then unknown here). eligible reports whether its next publish moves its hooks plugin to current_version. Does not change pins.",
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+		Name:         "get_organization_hooks_rollout",
+		Title:        "Get Organization Hooks Version Rollout",
+		Description:  "Read which hooks version an exact organization ID is cleared for and why: canary, its own override, the default pin, or legacy_flag when no pin applies yet and the legacy PostHog flag decides (eligibility is then unknown here). eligible reports whether its next publish moves its hooks plugin to current_version. Does not change pins.",
+		Annotations:  readOnlyAnnotations(),
+		Meta:         nil,
+		InputSchema:  nil,
+		OutputSchema: nil,
+		Icons:        nil,
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input OrganizationIDInput) (*mcp.CallToolResult, OrganizationHooksRollout, error) {
 		org, err := readExactOrganization(ctx, organizations, input.OrganizationID)
 		if err != nil {
@@ -153,4 +161,14 @@ func registerHooksRolloutTools(server *mcp.Server, organizations OrganizationRea
 			DefaultPin:       hooksRolloutPin(result.DefaultPin),
 		}, nil
 	})
+}
+
+func readOnlyAnnotations() *mcp.ToolAnnotations {
+	return &mcp.ToolAnnotations{
+		DestructiveHint: nil,
+		IdempotentHint:  false,
+		OpenWorldHint:   nil,
+		ReadOnlyHint:    true,
+		Title:           "",
+	}
 }
