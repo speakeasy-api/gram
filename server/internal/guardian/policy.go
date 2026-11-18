@@ -278,6 +278,19 @@ func WithResolver(resolver dns.Resolver) func(*Policy) {
 	}
 }
 
+// WithBlockedCIDRBlocks adds refused blocks for tests; invalid CIDRs are ignored.
+func WithBlockedCIDRBlocks(cidrs ...string) func(*Policy) {
+	return func(p *Policy) {
+		blocks := slices.Clone(p.blockedCIDRBlocks)
+		for _, cidr := range cidrs {
+			if block, err := parseCIDR(cidr); err == nil {
+				blocks = append(blocks, block)
+			}
+		}
+		p.blockedCIDRBlocks = blocks
+	}
+}
+
 // WithTLSRootCAs is a functional option that replaces the root CA pool used
 // by clients built from this Policy. This is intended for tests that fetch
 // from httptest.NewTLSServer instances (whose certificates are self-signed);
@@ -428,9 +441,9 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	// The annotator sits inside otelhttp, where the request context carries
 	// the outbound HTTP span, and stamps the gram.resilience.* dimensions
 	// derived per request by the resilience transport.
-	var base http.RoundTripper = transport
+	var base http.RoundTripper = redirectHopMarker{next: transport}
 	if opts.resilience != nil {
-		base = &resilienceSpanAnnotator{next: transport}
+		base = &resilienceSpanAnnotator{next: base}
 	}
 
 	// Retries sit outside the resilience layer so every attempt is admitted

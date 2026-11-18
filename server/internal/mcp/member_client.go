@@ -425,6 +425,14 @@ type memberDiscoveryError struct {
 
 func (e memberDiscoveryError) Unwrap() error { return e.metaMemberError }
 
+// memberNoAnswerMessage says why a member call got no answer: its setup stops it, or no reply came.
+func memberNoAnswerMessage(slug string, address guardian.AddressFailure) string {
+	if address == guardian.AddressFine {
+		return fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", slug)
+	}
+	return address.EndUserMessage(fmt.Sprintf("server %q", slug), guardian.OwnAddress)
+}
+
 // memberUpstreamFailedError is a member call that reached its upstream at host, which failed it.
 type memberUpstreamFailedError struct {
 	error
@@ -444,7 +452,8 @@ func memberUpstreamHost(err error) mcpconnectionattempts.Option {
 func (d memberDial) upstreamFailed(failure error, code mcpconnectionattempts.Code) error {
 	switch code {
 	case mcpconnectionattempts.CodeProviderRejected, mcpconnectionattempts.CodeSharedCredentialRejected, mcpconnectionattempts.CodeStaticKeyRejected,
-		mcpconnectionattempts.CodeProviderRateLimited, mcpconnectionattempts.CodeProviderServerError, mcpconnectionattempts.CodeProviderUnreachable:
+		mcpconnectionattempts.CodeProviderRateLimited, mcpconnectionattempts.CodeProviderServerError, mcpconnectionattempts.CodeProviderUnreachable,
+		mcpconnectionattempts.CodeAddressNotAllowed, mcpconnectionattempts.CodeAddressNotFound:
 		if d.provider != "" {
 			return memberUpstreamFailedError{error: failure, host: d.provider}
 		}
@@ -549,11 +558,11 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		netErr, isNetErr := errors.AsType[net.Error](exchangeErr)
 		spent := (isNetErr && netErr.Timeout()) || errors.Is(exchangeErr, context.DeadlineExceeded) || errors.Is(exchangeErr, context.Canceled)
 		_, untrusted := errors.AsType[*tls.CertificateVerificationError](exchangeErr)
-		refused := untrusted || errors.Is(exchangeErr, guardian.ErrBlockedIP) || errors.Is(exchangeErr, guardian.ErrBadHost)
 		code, _ := remotemcp.UpstreamFailureHappened(0, false, dial.upstreamCredential(), dial.tunneled, "", errors.Join(err, exchangeErr))
-		failure := upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), !spent && !refused)
-		// Egress refusing the address, or a name that did not resolve, never reached the upstream.
-		if !errors.Is(exchangeErr, guardian.ErrBlockedIP) && !errors.Is(exchangeErr, guardian.ErrBadHost) {
+		refused := untrusted || errors.Is(exchangeErr, guardian.ErrBlockedIP) || errors.Is(exchangeErr, guardian.ErrBadHost) || mcpconnectionattempts.AddressOf(code) != guardian.AddressFine
+		failure := upstreamFailure(memberNoAnswerMessage(member.slug, mcpconnectionattempts.AddressOf(code)), !spent && !refused)
+		// A refused or missing address the upstream redirected to is not the member's own, so it names no host.
+		if mcpconnectionattempts.AddressOf(code) != guardian.AddressFine || (!errors.Is(exchangeErr, guardian.ErrBlockedIP) && !errors.Is(exchangeErr, guardian.ErrBadHost)) {
 			failure = dial.upstreamFailed(failure, code)
 		}
 		return memberConnectionError{failure, code}

@@ -18,6 +18,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
@@ -300,6 +301,10 @@ func gatewayMemberStatus(gateway *gatewayConsentView, server gatewayServer) (mem
 		}
 	}
 	what, detail := gatewayServerHappened(server.Status, authClient)
+	// The card names an address problem, so the row does too.
+	if code, ok := mcpconnectionattempts.AddressCode(server.address); ok && server.Status == gatewayServerUnavailable {
+		what = code
+	}
 	opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Member(serverID), mcpconnectionattempts.Detail(detail)}
 	status := fmt.Sprint(what) + "|" + detail
 	if authClient != nil {
@@ -824,6 +829,9 @@ func verdictHappened(verdict remotesessions.ValidationOutcome, tunneled bool, fa
 	if tunneled {
 		return tunneledProbeHappened(failure)
 	}
+	if code, ok := mcpconnectionattempts.AddressHappened(failure.err, tunneled); ok {
+		return code
+	}
 	return mcpconnectionattempts.CodeProviderUnavailable
 }
 
@@ -871,10 +879,24 @@ func listingFailureHappened(err error) (mcpconnectionattempts.Code, bool) {
 	if failure, ok := errors.AsType[memberConnectionError](err); ok && failure.code == mcpconnectionattempts.CodeIneligibleIdentity {
 		return failure.code, true
 	}
+	if address, _ := memberAddressCause(err); address != guardian.AddressFine {
+		return mcpconnectionattempts.AddressCode(address)
+	}
 	if denied, ok := errors.AsType[*oops.ShareableError](err); ok && (denied.Code == oops.CodeForbidden || denied.Code == oops.CodeNotFound) {
 		return mcpconnectionattempts.CodeNoServerAccess, true
 	}
 	return mcpconnectionattempts.CodeMemberToolsMissing, true
+}
+
+// memberAddressCause is the address Speakeasy did not dial that stopped a member, and whether it is its sign-in provider's.
+func memberAddressCause(err error) (guardian.AddressFailure, bool) {
+	if outage, ok := errors.AsType[memberUnavailableError](err); ok && outage.address != guardian.AddressFine {
+		return outage.address, true
+	}
+	if failure, ok := errors.AsType[memberConnectionError](err); ok {
+		return mcpconnectionattempts.AddressOf(failure.code), false
+	}
+	return guardian.AddressFine, false
 }
 
 // recordIDPAuthorityRefusal keeps dependency outages retryable but ends a revoked authority once.

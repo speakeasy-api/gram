@@ -757,7 +757,11 @@ func httpToolRejectionHappened(status int, report *toolconfig.CredentialReport, 
 		return mcpconnectionattempts.CodeSharedCredentialRejected
 	case toolconfig.ClientGrantUnavailable:
 		return mcpconnectionattempts.CodeRemoteSessionUnavailable
-	case toolconfig.ClientGrantBlocked, toolconfig.ClientGrantMisconfigured:
+	case toolconfig.ClientGrantBlocked:
+		return mcpconnectionattempts.CodeAddressNotAllowed
+	case toolconfig.ClientGrantAddressNotFound:
+		return mcpconnectionattempts.CodeAddressNotFound
+	case toolconfig.ClientGrantMisconfigured:
 		return mcpconnectionattempts.CodeCredentialMisconfigured
 	}
 	code, _ := remotemcp.UpstreamFailureHappened(status, true, sent, false, "")
