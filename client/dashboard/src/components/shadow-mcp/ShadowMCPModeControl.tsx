@@ -27,6 +27,7 @@ import { toast } from "sonner";
 import {
   SHADOW_MCP_BLOCKED_BY_DEFAULT_POLICY,
   type ShadowMCPMode,
+  type ShadowMCPModeState,
   shadowMCPAudienceSummary,
   shadowMCPModeOf,
 } from "./shadowMCPMode";
@@ -42,7 +43,7 @@ const COPY: Record<
   blocked: {
     title: "Block servers by default?",
     description:
-      "Every MCP server nobody approved is blocked, including servers people use today. Approve a server to let it through.",
+      "Every MCP server nobody approved is blocked for everyone, including servers people use today, unless you narrow it under Advanced. Approve a server to let it through.",
     confirm: "Block by default",
     done: "MCP servers are now blocked by default.",
   },
@@ -61,6 +62,11 @@ const COPY: Record<
     done: "Saved who is blocked by default.",
   },
 };
+
+/** The "blocked by default" dialog once Advanced names people or roles: it
+ *  no longer applies to everyone, so the copy says who it does apply to. */
+const BLOCKED_FOR_CHOSEN_DESCRIPTION =
+  "Every MCP server nobody approved is blocked for the people and roles you chose, including servers they use today. Everyone else is still allowed by default. Approve a server to let it through.";
 
 /**
  * The one setting the Shadow MCP page needs: what happens to a server nobody
@@ -155,6 +161,14 @@ export function ShadowMCPModeControl(): JSX.Element | null {
   };
 
   const copy = pending ? COPY[pending] : null;
+  const description =
+    pending === "blocked" && principals.length > 0
+      ? BLOCKED_FOR_CHOSEN_DESCRIPTION
+      : (copy?.description ?? "");
+  // A Guardrails policy that also scans for other risks decides the mode:
+  // switching here would delete or rewrite it, so it changes in Guardrails.
+  const heldByGuardrails = state.heldBy === "guardrails";
+  const guardrailsTooltip = `Your ${state.policy?.name ?? "Guardrails"} policy sets this because it also scans for other risks. Change it in Guardrails.`;
   const picksAudience = pending === "blocked" || pending === "audience";
   return (
     <div className="flex flex-col items-end gap-1.5">
@@ -164,23 +178,23 @@ export function ShadowMCPModeControl(): JSX.Element | null {
         busy={saving}
         disabled={saving}
         onChange={(next) => {
-          if (next === state.mode) return;
+          if (next === state.mode || heldByGuardrails) return;
           open(next);
         }}
         options={[
           {
             value: "allowed",
             label: "Allowed by default",
-            tooltip:
-              "Servers connect unless you deny them. Linked servers send agents to their official version.",
+            disabled: heldByGuardrails,
+            tooltip: heldByGuardrails
+              ? guardrailsTooltip
+              : "Servers connect unless you deny them. Linked servers send agents to their official version.",
           },
           {
             value: "blocked",
             label: "Blocked by default",
-            disabled: state.heldByShadowAI,
-            tooltip: state.heldByShadowAI
-              ? "Your Shadow AI policy in Guardrails allows servers by default. Change it there."
-              : "Servers are blocked until you approve them.",
+            disabled: state.heldBy !== null,
+            tooltip: tooltipForBlocked(state.heldBy, guardrailsTooltip),
           },
         ]}
       />
@@ -189,14 +203,16 @@ export function ShadowMCPModeControl(): JSX.Element | null {
           <Text muted small>
             {shadowMCPAudienceSummary(state.policy, groups)}
           </Text>
-          <Button
-            variant="tertiary"
-            size="sm"
-            disabled={saving}
-            onClick={() => open("audience")}
-          >
-            <Button.Text>Edit</Button.Text>
-          </Button>
+          {heldByGuardrails ? null : (
+            <Button
+              variant="tertiary"
+              size="sm"
+              disabled={saving}
+              onClick={() => open("audience")}
+            >
+              <Button.Text>Edit</Button.Text>
+            </Button>
+          )}
         </div>
       ) : null}
       <ConfirmDialog
@@ -205,7 +221,7 @@ export function ShadowMCPModeControl(): JSX.Element | null {
           if (!isOpen && !saving) setPending(null);
         }}
         title={copy?.title ?? ""}
-        description={copy?.description ?? ""}
+        description={description}
         confirmLabel={copy?.confirm ?? ""}
         pendingLabel="Saving…"
         confirmVariant={
@@ -228,6 +244,17 @@ export function ShadowMCPModeControl(): JSX.Element | null {
       </ConfirmDialog>
     </div>
   );
+}
+
+function tooltipForBlocked(
+  heldBy: ShadowMCPModeState["heldBy"],
+  guardrailsTooltip: string,
+): string {
+  if (heldBy === "shadow_ai") {
+    return "Your Shadow AI policy in Guardrails allows servers by default. Change it there.";
+  }
+  if (heldBy === "guardrails") return guardrailsTooltip;
+  return "Servers are blocked until you approve them.";
 }
 
 /** Who "blocked by default" applies to. Everyone unless the admin opens

@@ -1563,14 +1563,29 @@ describe("usePolicyCandidates", () => {
     {
       id: "p-1",
       name: "Block secrets",
+      enabled: true,
+      sources: ["gitleaks"],
       action: "block",
       policyType: "standard",
     },
     {
       id: "p-2",
       name: "No customer data",
+      enabled: true,
+      sources: [],
       action: "flag",
       policyType: "prompt_based",
+    },
+    // The policy behind the Shadow MCP page's "blocked by default" setting.
+    // Guardrails does not list it, so the palette does not either.
+    {
+      id: "p-3",
+      name: "Shadow MCP",
+      enabled: true,
+      sources: ["shadow_mcp"],
+      action: "block",
+      policyType: "standard",
+      shadowMcpDisposition: "block_all",
     },
   ];
 

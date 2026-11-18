@@ -19,7 +19,7 @@ describe("shadowMCPModeOf", () => {
     expect(shadowMCPModeOf([])).toEqual({
       mode: "allowed",
       policy: undefined,
-      heldByShadowAI: false,
+      heldBy: null,
     });
     expect(shadowMCPModeOf([policy({ action: "flag" })]).mode).toBe("allowed");
     expect(shadowMCPModeOf([policy({ enabled: false })]).mode).toBe("allowed");
@@ -30,7 +30,7 @@ describe("shadowMCPModeOf", () => {
     expect(shadowMCPModeOf([blocking])).toEqual({
       mode: "blocked",
       policy: blocking,
-      heldByShadowAI: false,
+      heldBy: null,
     });
     // A policy from before dispositions existed blocks by default.
     expect(shadowMCPModeOf([policy({})]).mode).toBe("blocked");
@@ -41,7 +41,27 @@ describe("shadowMCPModeOf", () => {
     expect(shadowMCPModeOf([shadowAI])).toEqual({
       mode: "allowed",
       policy: shadowAI,
-      heldByShadowAI: true,
+      heldBy: "shadow_ai",
+    });
+  });
+
+  it("leaves a blocking policy that also scans for other risks to Guardrails", () => {
+    // Switching the mode here would delete or rewrite a policy that also
+    // scans for secrets, so the page reads its mode but does not own it.
+    const scansSecrets = policy({ sources: ["shadow_mcp", "gitleaks"] });
+    expect(shadowMCPModeOf([scansSecrets])).toEqual({
+      mode: "blocked",
+      policy: scansSecrets,
+      heldBy: "guardrails",
+    });
+    const allowsSecretsScan = policy({
+      sources: ["shadow_mcp", "gitleaks"],
+      shadowMcpDisposition: "allow_all",
+    });
+    expect(shadowMCPModeOf([allowsSecretsScan])).toEqual({
+      mode: "allowed",
+      policy: allowsSecretsScan,
+      heldBy: "guardrails",
     });
   });
 });
@@ -56,6 +76,8 @@ describe("isShadowMCPModePolicy", () => {
       isShadowMCPModePolicy(policy({ shadowMcpDisposition: "allow_all" })),
     ).toBe(false);
     expect(isShadowMCPModePolicy(policy({ action: "flag" }))).toBe(false);
+    // A disabled one stays in Guardrails, where it can be turned back on.
+    expect(isShadowMCPModePolicy(policy({ enabled: false }))).toBe(false);
     expect(
       isShadowMCPModePolicy(policy({ sources: ["shadow_mcp", "gitleaks"] })),
     ).toBe(false);
@@ -96,5 +118,11 @@ describe("shadowMCPAudienceSummary", () => {
         groups,
       ),
     ).toBe("Applies to 1 role and 2 people");
+    expect(
+      shadowMCPAudienceSummary(
+        { audienceType: "targeted", audiencePrincipalUrns: [] },
+        groups,
+      ),
+    ).toBe("Applies to nobody");
   });
 });

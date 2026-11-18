@@ -1,5 +1,8 @@
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
-import { findBlockingShadowMCPPolicy } from "@/pages/security/policy-type";
+import {
+  findBlockingShadowMCPPolicy,
+  isShadowAIPolicy,
+} from "@/pages/security/policy-type";
 
 /**
  * How a project treats an MCP server nobody has decided on. "allowed" is the
@@ -9,28 +12,41 @@ import { findBlockingShadowMCPPolicy } from "@/pages/security/policy-type";
  */
 export type ShadowMCPMode = "allowed" | "blocked";
 
+/**
+ * Who sets the mode when this page cannot change it:
+ * - "shadow_ai": a Shadow AI policy from Guardrails holds the project's one
+ *   blocking Shadow MCP slot and allows servers by default, so "blocked by
+ *   default" cannot be turned on here without replacing it.
+ * - "guardrails": a Guardrails policy that also scans for other risks, such
+ *   as secrets or PII, holds the slot. Its disposition sets the mode, and
+ *   switching here would delete or rewrite that policy, so it is changed in
+ *   Guardrails only.
+ */
+export type ShadowMCPModeHolder = "shadow_ai" | "guardrails";
+
 export type ShadowMCPModeState = {
   mode: ShadowMCPMode;
   /** The enabled blocking Shadow MCP policy, when there is one. */
   policy: RiskPolicy | undefined;
-  /**
-   * A Shadow AI policy from Guardrails holds the project's one blocking
-   * Shadow MCP slot and allows servers by default, so "blocked by default"
-   * cannot be turned on here without replacing it.
-   */
-  heldByShadowAI: boolean;
+  /** Set when a Guardrails policy decides the mode instead of this page. */
+  heldBy: ShadowMCPModeHolder | null;
 };
 
 export function shadowMCPModeOf(
   policies: readonly RiskPolicy[],
 ): ShadowMCPModeState {
   const policy = findBlockingShadowMCPPolicy(policies);
-  if (!policy)
-    return { mode: "allowed", policy: undefined, heldByShadowAI: false };
-  if (policy.shadowMcpDisposition === "allow_all") {
-    return { mode: "allowed", policy, heldByShadowAI: true };
+  if (!policy) return { mode: "allowed", policy: undefined, heldBy: null };
+  const allowsByDefault = policy.shadowMcpDisposition === "allow_all";
+  if (!isShadowAIPolicy(policy)) {
+    return {
+      mode: allowsByDefault ? "allowed" : "blocked",
+      policy,
+      heldBy: "guardrails",
+    };
   }
-  return { mode: "blocked", policy, heldByShadowAI: false };
+  if (allowsByDefault) return { mode: "allowed", policy, heldBy: "shadow_ai" };
+  return { mode: "blocked", policy, heldBy: null };
 }
 
 /** The managed policy "blocked by default" creates. */

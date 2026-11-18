@@ -45,29 +45,45 @@ vi.mock("@gram/client/react-query/roles.js", () => ({
     },
   }),
 }));
-vi.mock("@/components/ui/MultiSelect", () => ({
-  MultiSelect: ({
-    onValueChange,
-    options,
-  }: {
-    onValueChange: (value: string[]) => void;
-    options: Array<{ options: Array<{ label: string; value: string }> }>;
-  }) => (
-    <div>
-      {options
-        .flatMap((group) => group.options)
-        .map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => onValueChange([option.value])}
-          >
-            {`pick ${option.label}`}
-          </button>
-        ))}
-    </div>
-  ),
-}));
+// Mirrors the real picker: it starts from defaultValue, toggles the clicked
+// option within the current selection, and emits the whole array.
+vi.mock("@/components/ui/MultiSelect", async () => {
+  const { useState } = await import("react");
+  return {
+    MultiSelect: ({
+      defaultValue,
+      onValueChange,
+      options,
+    }: {
+      defaultValue?: string[];
+      onValueChange: (value: string[]) => void;
+      options: Array<{ options: Array<{ label: string; value: string }> }>;
+    }) => {
+      const [selected, setSelected] = useState<string[]>(defaultValue ?? []);
+      return (
+        <div>
+          {options
+            .flatMap((group) => group.options)
+            .map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => {
+                  const next = selected.includes(option.value)
+                    ? selected.filter((value) => value !== option.value)
+                    : [...selected, option.value];
+                  setSelected(next);
+                  onValueChange(next);
+                }}
+              >
+                {`pick ${option.label}`}
+              </button>
+            ))}
+        </div>
+      );
+    },
+  };
+});
 vi.mock("@gram/client/react-query/riskPoliciesDelete.js", () => ({
   useRiskPoliciesDeleteMutation: () => ({
     mutateAsync: mocks.remove,
@@ -171,6 +187,26 @@ describe("ShadowMCPModeControl", () => {
     expect(screen.queryByText("Block servers by default?")).toBeNull();
   });
 
+  it("leaves a policy that also scans for other risks to Guardrails", () => {
+    mocks.policies = [
+      {
+        id: "secrets-and-servers",
+        name: "Block secrets and servers",
+        enabled: true,
+        sources: ["shadow_mcp", "gitleaks"],
+        action: "block",
+      },
+    ];
+    renderControl();
+
+    const allowed = screen.getByRole("button", { name: "Allowed by default" });
+    expect(allowed.getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(allowed);
+    expect(screen.queryByText("Allow servers by default?")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
+
   it("blocks by default for one role only, chosen under Advanced", async () => {
     renderControl();
 
@@ -179,6 +215,10 @@ describe("ShadowMCPModeControl", () => {
     expect(screen.queryByText("pick Contractors")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
     fireEvent.click(screen.getByRole("button", { name: "pick Contractors" }));
+    // The dialog no longer says it applies to everyone.
+    expect(
+      screen.getByText(/blocked for the people and roles you chose/),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Block by default" }));
 
     await vi.waitFor(() =>
@@ -222,7 +262,7 @@ describe("ShadowMCPModeControl", () => {
           updateRiskPolicyRequestBody: expect.objectContaining({
             id: "policy-1",
             audienceType: "targeted",
-            audiencePrincipalUrns: ["user:priya"],
+            audiencePrincipalUrns: ["role:contractors", "user:priya"],
           }),
         },
       }),

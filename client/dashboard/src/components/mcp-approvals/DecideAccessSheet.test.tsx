@@ -437,6 +437,22 @@ describe("DecideAccessSheet", () => {
     });
   });
 
+  it("reopens Advanced on a decision that already names people or roles", () => {
+    renderSheet({ disposition: null });
+
+    fireEvent.click(screen.getByRole("radio", { name: /Deny/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    fireEvent.click(screen.getByTestId("audience-select"));
+    fireEvent.click(screen.getByRole("radio", { name: /Approve/ }));
+    // The approval names nobody, so its section starts collapsed.
+    expect(screen.queryAllByText("Who the approval covers")).toHaveLength(0);
+    fireEvent.click(screen.getByRole("radio", { name: /Deny/ }));
+    // The narrowed denial is about to be sent, so it is shown.
+    expect(screen.getAllByText("Who the denial covers").length).toBeGreaterThan(
+      0,
+    );
+  });
+
   it("offers no denial audience when servers are blocked by default", () => {
     renderSheet({ disposition: "block_all" });
 

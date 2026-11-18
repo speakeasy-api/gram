@@ -350,7 +350,15 @@ export function DecideAccessSheet({
             </RadioGroup>
 
             {pickerShown && (
-              <Collapsible>
+              // Keyed by decision and open whenever that decision already
+              // names people or roles, so a narrowed audience that will be
+              // sent is never hidden behind a collapsed section.
+              <Collapsible
+                key={decision}
+                defaultOpen={
+                  (decision === "approved" ? audience : denyAudience).length > 0
+                }
+              >
                 <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm transition-colors [&[data-state=open]>svg]:rotate-90">
                   <Icon name="chevron-right" className="size-3.5" aria-hidden />
                   Advanced
