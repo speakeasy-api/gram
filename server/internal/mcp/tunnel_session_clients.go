@@ -163,7 +163,7 @@ func (s *tunnelSessionClients) RecordInitialize(ctx context.Context, sessionID s
 
 	ctx, cancel := context.WithTimeout(ctx, tunnelClientStoreTimeout)
 	defer cancel()
-	storeSessionClientInfo(ctx, s.logger, s.families.store, &mcpInputs{ //nolint:exhaustruct // only the record's identity fields matter here
+	storeSessionClientInfo(ctx, s.logger, s.families.store, &mcpInputs{ //nolint:exhaustruct_v5 // only the record's identity fields matter here
 		projectID:       s.projectID,
 		sessionID:       sessionID,
 		clientInfoScope: s.scope,

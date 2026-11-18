@@ -99,7 +99,7 @@ func TestDeleteMcpServer_RevokesOrphanedClientSessions(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	client, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+	client, err := q.CreateRemoteSessionClientFixture(ctx, remotesessionsrepo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   remoteIssuer.ID,

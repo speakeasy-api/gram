@@ -800,6 +800,7 @@ sql:
   - schema: [schema.sql, sqlc_retired_columns.sql]
     queries:
       - ../internal/remotesessions/queries.sql
+      - ../internal/remotesessions/clientsecret_queries.sql
       - ../internal/remotesessions/preparation_fixture_queries.sql
       - ../internal/remotesessions/locking_fixture_queries.sql
     engine: postgresql

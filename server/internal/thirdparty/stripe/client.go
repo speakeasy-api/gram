@@ -823,7 +823,7 @@ func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckout
 	params := new(stripesdk.CheckoutSessionCreateParams)
 	if input.PromotionCodeID != "" {
 		params.Discounts = []*stripesdk.CheckoutSessionCreateDiscountParams{
-			{PromotionCode: stripesdk.String(input.PromotionCodeID)},
+			{PromotionCode: stripesdk.String(input.PromotionCodeID), Coupon: nil},
 		}
 	} else {
 		params.AllowPromotionCodes = new(true)
@@ -866,16 +866,31 @@ func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckout
 	params.ExpiresAt = new(input.ExpiresAt.Unix())
 	params.LineItems = []*stripesdk.CheckoutSessionCreateLineItemParams{
 		{
-			Price:    stripesdk.String(c.catalog.PriceIDTUM),
-			Quantity: nil,
+			Price:              stripesdk.String(c.catalog.PriceIDTUM),
+			Quantity:           nil,
+			AdjustableQuantity: nil,
+			DynamicTaxRates:    nil,
+			Metadata:           nil,
+			PriceData:          nil,
+			TaxRates:           nil,
 		},
 		{
-			Price:    stripesdk.String(c.catalog.PriceIDMCPEgress),
-			Quantity: nil,
+			Price:              stripesdk.String(c.catalog.PriceIDMCPEgress),
+			Quantity:           nil,
+			AdjustableQuantity: nil,
+			DynamicTaxRates:    nil,
+			Metadata:           nil,
+			PriceData:          nil,
+			TaxRates:           nil,
 		},
 		{
-			Price:    stripesdk.String(c.catalog.PriceIDRiskScans),
-			Quantity: nil,
+			Price:              stripesdk.String(c.catalog.PriceIDRiskScans),
+			Quantity:           nil,
+			AdjustableQuantity: nil,
+			DynamicTaxRates:    nil,
+			Metadata:           nil,
+			PriceData:          nil,
+			TaxRates:           nil,
 		},
 	}
 	identity := organizationIdentity{

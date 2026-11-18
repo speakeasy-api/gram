@@ -93,7 +93,7 @@ func (s *Service) Create(ctx context.Context, p *gen.CreatePayload) (*gen.Create
 		UserID:           authCtx.UserID,
 		SessionID:        sessionID,
 		AccountType:      authCtx.AccountType,
-		RegisteredClaims: jwt.RegisteredClaims{}, //nolint:exhaustruct // to be populated by chatSessionsManager
+		RegisteredClaims: jwt.RegisteredClaims{}, //nolint:exhaustruct_v5 // to be populated by chatSessionsManager
 	}
 
 	token, _, err := s.chatSessionsManager.GenerateToken(

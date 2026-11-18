@@ -75,7 +75,7 @@ func seedActiveClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, pro
 	})
 	require.NoError(t, err)
 
-	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+	client, err := q.CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:               conv.ToNullUUID(projectID),
 		OrganizationID:          conv.ToPGTextEmpty(organizationID),
 		RemoteSessionIssuerID:   issuer.ID,

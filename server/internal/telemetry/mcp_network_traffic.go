@@ -16,7 +16,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/telemetryerrs"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+// MCPNetworkRequestEventURN identifies the telemetry row the MCP serve path
+// writes once per resolved inbound MCP HTTP request. The
+// mcp_network_traffic_hourly_summaries materialized view behind
+// GetMcpNetworkTraffic filters on this exact value.
+var MCPNetworkRequestEventURN = urn.NewTelemetryEvent(urn.TelemetryEventOriginGramService, urn.TelemetryEventKindLog, "mcp_network_request").String()
 
 const (
 	mcpNetworkTrafficSurfacePublic  = "public"

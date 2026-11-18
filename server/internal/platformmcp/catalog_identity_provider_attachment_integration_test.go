@@ -32,6 +32,7 @@ import (
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -82,7 +83,7 @@ func attachmentTestResource(resourceURL, name, policyURL string) wellknown.OAuth
 
 func attachmentTestService(t *testing.T, conn *pgxpool.Pool) *CatalogIdentityProviderAttachmentService {
 	t.Helper()
-	return &CatalogIdentityProviderAttachmentService{db: conn, identity: remotesessions.NewIdentityCommitter(testenv.NewLogger(t), conn, nil, audit.NewLogger(), nil, nil, nil, nil), policy: nil, serverURL: nil}
+	return &CatalogIdentityProviderAttachmentService{db: conn, identity: remotesessions.NewIdentityCommitter(testenv.NewLogger(t), conn, nil, clientsecretstest.New(t, conn, nil), audit.NewLogger(), nil, nil, nil, nil), policy: nil, serverURL: nil}
 }
 
 func attachmentTestUserSessionIssuer(t *testing.T, conn *pgxpool.Pool, projectID uuid.UUID) uuid.UUID {
@@ -390,7 +391,7 @@ func attachmentTestRegister(t *testing.T, service *CatalogIdentityProviderAttach
 func attachmentTestCIMDService(t *testing.T, conn *pgxpool.Pool) *CatalogIdentityProviderAttachmentService {
 	t.Helper()
 	serverURL := &url.URL{Scheme: "https", Host: "app.example.com"}
-	return &CatalogIdentityProviderAttachmentService{db: conn, identity: remotesessions.NewIdentityCommitter(testenv.NewLogger(t), conn, nil, audit.NewLogger(), serverURL, nil, nil, nil), policy: nil, serverURL: serverURL}
+	return &CatalogIdentityProviderAttachmentService{db: conn, identity: remotesessions.NewIdentityCommitter(testenv.NewLogger(t), conn, nil, clientsecretstest.New(t, conn, nil), audit.NewLogger(), serverURL, nil, nil, nil), policy: nil, serverURL: serverURL}
 }
 
 // A provider without dynamic registration that supports Client ID Metadata
@@ -414,7 +415,10 @@ func TestAttachmentUsesClientIDMetadataDocumentWithoutDynamicRegistration(t *tes
 	clients := attachmentTestClients(t, conn, principal, project, usi)
 	require.Len(t, clients, 1)
 	require.True(t, strings.HasPrefix(clients[0].ExternalClientID, "https://app.example.com/.well-known/oauth-client/"), clients[0].ExternalClientID)
-	require.False(t, clients[0].ClientSecretEncrypted.Valid)
+	stored, err := remotesessionsrepo.New(conn).GetRemoteSessionClientRowFixture(ctx, clients[0].ClientID)
+	require.NoError(t, err)
+	require.False(t, stored.ClientSecretEncrypted.Valid)
+	require.False(t, stored.ClientSecretOrgEncrypted.Valid)
 	require.Empty(t, clients[0].ClientScope, "the resource's advertised scopes are not copied onto the client")
 
 	issuer, reuse, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
@@ -497,7 +501,7 @@ func TestAttachmentRegistersDiscoveredScopesWithoutStoringThem(t *testing.T) {
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
 	serverURL := &url.URL{Scheme: "https", Host: "app.example.com"}
-	service := &CatalogIdentityProviderAttachmentService{db: conn, identity: remotesessions.NewIdentityCommitter(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), audit.NewLogger(), serverURL, policy, nil, nil), policy: policy, serverURL: serverURL}
+	service := &CatalogIdentityProviderAttachmentService{db: conn, identity: remotesessions.NewIdentityCommitter(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), clientsecretstest.New(t, conn, testenv.NewEncryptionClient(t)), audit.NewLogger(), serverURL, policy, nil, nil), policy: policy, serverURL: serverURL}
 	metadata := attachmentTestIssuerMetadata(registration.URL)
 	metadata.ScopesSupported = []string{"read", "openid"}
 	usi := attachmentTestUserSessionIssuer(t, conn, project.ID)

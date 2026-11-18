@@ -2,6 +2,7 @@ import { InlineEmptyState } from "@/components/inline-empty-state";
 import { mcpServerTabHref } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import { SETTINGS_GROUPS } from "@/components/detail/settings-groups";
 import { AUTHORIZATION_SERVERS_FIELD_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/RemoteIdentityProvidersField";
+import { useFunctionsAvailable } from "@/hooks/useFunctionsAvailability";
 import { Spinner } from "@/components/ui/Spinner";
 import { Page } from "@/components/page-layout";
 import { SourceMcpIcon } from "@/components/sources/SourceCard";
@@ -743,6 +744,7 @@ export function AddServersSheet({
   const { hasScope, isLoading: permissionsLoading } = useRBAC();
   const canWrite = !permissionsLoading && hasScope("mcp:write", gatewayId);
   const canCreate = !permissionsLoading && hasScope("mcp:write", projectId);
+  const functionsAvailable = useFunctionsAvailable();
   const canWriteProject =
     !permissionsLoading && hasScope("project:write", projectId);
   // Match the Catalog page's browse permission; installation checks stay there.
@@ -853,8 +855,9 @@ export function AddServersSheet({
     },
     {
       label: "From an existing source",
-      description:
-        "Build a server from an OpenAPI document or function this project already has.",
+      description: functionsAvailable
+        ? "Build a server from an OpenAPI document or function this project already has."
+        : "Build a server from an OpenAPI document this project already has.",
       Icon: Boxes,
       group: "Advanced",
       href:
@@ -863,17 +866,23 @@ export function AddServersSheet({
         encodeURIComponent(gatewayId),
       allowed: canCreate,
     },
-    {
-      label: "Write custom code",
-      description: "Create tools with TypeScript functions.",
-      Icon: Code,
-      group: "Advanced",
-      href:
-        routes.mcp.add.function.href() +
-        "?attachToGateway=" +
-        encodeURIComponent(gatewayId),
-      allowed: canWriteProject && canCreate,
-    },
+    // Hidden, not disabled, on a deployment without Functions: there is
+    // nothing the user could do to make it available.
+    ...(functionsAvailable
+      ? [
+          {
+            label: "Write custom code",
+            description: "Create tools with TypeScript functions.",
+            Icon: Code,
+            group: "Advanced",
+            href:
+              routes.mcp.add.function.href() +
+              "?attachToGateway=" +
+              encodeURIComponent(gatewayId),
+            allowed: canWriteProject && canCreate,
+          },
+        ]
+      : []),
   ];
   const creationAllowed = creationOptions.some((option) => option.allowed);
   return (
