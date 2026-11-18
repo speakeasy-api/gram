@@ -94,6 +94,9 @@ type ConnectionStatusOutage struct {
 
 	// ReconnectURL is set when reconnecting could get past the outage.
 	ReconnectURL string `json:"reconnectUrl,omitempty"`
+
+	// NeedsAdmin marks a stop waiting won't clear: an administrator has to fix an address.
+	NeedsAdmin bool `json:"needsAdmin,omitempty"`
 }
 
 // ConnectionStatusAudience is who opens a connection_status result's
@@ -193,6 +196,10 @@ func (r ConnectionStatusResult) Text() string {
 			}
 			fmt.Fprintf(&b, "- %s: hidden by the user\n", label)
 		case SignInUnavailable:
+			if s.Outage != nil && s.Outage.NeedsAdmin {
+				fmt.Fprintf(&b, "- %s: can't connect (%s)\n", label, s.Detail)
+				continue
+			}
 			fmt.Fprintf(&b, "- %s: temporarily unavailable (%s)\n", label, s.Detail)
 		default:
 			needsConnect = true

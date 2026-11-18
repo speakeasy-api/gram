@@ -9,15 +9,13 @@ import { ClosedEnum } from "../../types/enums.js";
 /**
  * The template engine
  */
-export const CreatePromptTemplateFormEngine = {
+export const Engine = {
   Mustache: "mustache",
 } as const;
 /**
  * The template engine
  */
-export type CreatePromptTemplateFormEngine = ClosedEnum<
-  typeof CreatePromptTemplateFormEngine
->;
+export type Engine = ClosedEnum<typeof Engine>;
 
 /**
  * The kind of prompt the template is used for
@@ -44,7 +42,7 @@ export type CreatePromptTemplateForm = {
   /**
    * The template engine
    */
-  engine: CreatePromptTemplateFormEngine;
+  engine: Engine;
   /**
    * The kind of prompt the template is used for
    */
@@ -68,9 +66,9 @@ export type CreatePromptTemplateForm = {
 };
 
 /** @internal */
-export const CreatePromptTemplateFormEngine$outboundSchema: z.ZodMiniEnum<
-  typeof CreatePromptTemplateFormEngine
-> = z.enum(CreatePromptTemplateFormEngine);
+export const Engine$outboundSchema: z.ZodMiniEnum<typeof Engine> = z.enum(
+  Engine,
+);
 
 /** @internal */
 export const CreatePromptTemplateFormKind$outboundSchema: z.ZodMiniEnum<
@@ -97,7 +95,7 @@ export const CreatePromptTemplateForm$outboundSchema: z.ZodMiniType<
   z.object({
     arguments: z.optional(z.string()),
     description: z.optional(z.string()),
-    engine: CreatePromptTemplateFormEngine$outboundSchema,
+    engine: Engine$outboundSchema,
     kind: CreatePromptTemplateFormKind$outboundSchema,
     name: z.string(),
     prompt: z.string(),

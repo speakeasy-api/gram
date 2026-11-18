@@ -45,7 +45,8 @@ type Counts struct {
 	// Total is weighted attempts matching every filter.
 	Total uint64
 
-	// Facets hold each filter's values; each ignores its own filter.
+	// Facets hold each filter's values; each ignores its own filter. Each keeps
+	// its MaxFacetValues values with the most attempts, which Truncated does not report.
 	Facets map[Facet][]FacetValue
 
 	// Truncated says the combinations were cut at the cap, so counts are lower bounds.

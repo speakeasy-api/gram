@@ -70,7 +70,8 @@ WITH days AS (
   FROM generate_series(@from_day::timestamptz, @last_day::timestamptz, '1 day'::interval) AS day_start
 ),
 endpoints AS (
-  SELECT endpoint.project_id, endpoint.slug, domain.domain AS host, COALESCE(endpoint.is_domain_root, FALSE) AS is_root
+  SELECT endpoint.project_id, endpoint.slug, domain.domain AS host, COALESCE(endpoint.is_domain_root, FALSE) AS is_root,
+         LEAST(COALESCE(endpoint.deleted_at, 'infinity'::timestamptz), COALESCE(domain.deleted_at, 'infinity'::timestamptz)) AS gone_at
   FROM mcp_endpoints AS endpoint
   JOIN projects AS project ON project.id = endpoint.project_id
   LEFT JOIN custom_domains AS domain ON domain.id = endpoint.custom_domain_id AND domain.organization_id = @organization_id::text
@@ -97,11 +98,11 @@ scoped AS (
           OR EXISTS (SELECT 1 FROM user_session_clients AS client
                      WHERE client.id = session.user_session_client_id AND client.organization_id = @organization_id::text
                        AND client.project_id <> @project_id)
-          OR (EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id <> @project_id
+          OR (EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id <> @project_id AND endpoint.gone_at > session.created_at
                         AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
                         AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
                                  ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)
-              AND NOT EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id = @project_id
+              AND NOT EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id = @project_id AND endpoint.gone_at > session.created_at
                         AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
                         AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
                                  ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)),
@@ -119,7 +120,8 @@ ORDER BY days.day_start;
 
 -- name: CountActiveSessionsNow :one
 WITH endpoints AS (
-  SELECT endpoint.project_id, endpoint.slug, domain.domain AS host, COALESCE(endpoint.is_domain_root, FALSE) AS is_root
+  SELECT endpoint.project_id, endpoint.slug, domain.domain AS host, COALESCE(endpoint.is_domain_root, FALSE) AS is_root,
+         LEAST(COALESCE(endpoint.deleted_at, 'infinity'::timestamptz), COALESCE(domain.deleted_at, 'infinity'::timestamptz)) AS gone_at
   FROM mcp_endpoints AS endpoint
   JOIN projects AS project ON project.id = endpoint.project_id
   LEFT JOIN custom_domains AS domain ON domain.id = endpoint.custom_domain_id AND domain.organization_id = @organization_id::text
@@ -146,11 +148,11 @@ scoped AS (
           OR EXISTS (SELECT 1 FROM user_session_clients AS client
                      WHERE client.id = session.user_session_client_id AND client.organization_id = @organization_id::text
                        AND client.project_id <> @project_id)
-          OR (EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id <> @project_id
+          OR (EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id <> @project_id AND endpoint.gone_at > session.created_at
                         AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
                         AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
                                  ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)
-              AND NOT EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id = @project_id
+              AND NOT EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id = @project_id AND endpoint.gone_at > session.created_at
                         AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
                         AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
                                  ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)),
@@ -163,9 +165,11 @@ WHERE scoped.deleted IS FALSE
 
 -- name: AverageEndedSessionSeconds :one
 -- Mean length, first sign-in to expiry or revocation, of sessions that ended
--- in the range and have no live row.
+-- in the range and have no live row. Only credentials with a row ending after
+-- live_since are read, all of their rows included.
 WITH endpoints AS (
-  SELECT endpoint.project_id, endpoint.slug, domain.domain AS host, COALESCE(endpoint.is_domain_root, FALSE) AS is_root
+  SELECT endpoint.project_id, endpoint.slug, domain.domain AS host, COALESCE(endpoint.is_domain_root, FALSE) AS is_root,
+         LEAST(COALESCE(endpoint.deleted_at, 'infinity'::timestamptz), COALESCE(domain.deleted_at, 'infinity'::timestamptz)) AS gone_at
   FROM mcp_endpoints AS endpoint
   JOIN projects AS project ON project.id = endpoint.project_id
   LEFT JOIN custom_domains AS domain ON domain.id = endpoint.custom_domain_id AND domain.organization_id = @organization_id::text
@@ -178,7 +182,12 @@ candidates AS (
   FROM user_sessions AS session
   WHERE session.user_session_issuer_id = @issuer_id
     AND (session.project_id = @project_id OR (session.project_id IS NULL AND session.organization_id = @organization_id::text))
-    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE @dashboard_mint_pattern::text THEN session.expires_at ELSE session.refresh_expires_at END) >= @live_since::timestamptz
+    AND COALESCE(session.credential_id, session.id) IN (
+      SELECT COALESCE(recent.credential_id, recent.id)
+      FROM user_sessions AS recent
+      WHERE recent.user_session_issuer_id = @issuer_id
+        AND LEAST(COALESCE(recent.deleted_at, 'infinity'::timestamptz), CASE WHEN recent.refresh_token_hash LIKE @dashboard_mint_pattern::text THEN recent.expires_at ELSE recent.refresh_expires_at END) >= @live_since::timestamptz
+    )
 ),
 scoped AS (
   SELECT COALESCE(session.credential_id, session.id) AS credential,
@@ -192,11 +201,11 @@ scoped AS (
           OR EXISTS (SELECT 1 FROM user_session_clients AS client
                      WHERE client.id = session.user_session_client_id AND client.organization_id = @organization_id::text
                        AND client.project_id <> @project_id)
-          OR (EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id <> @project_id
+          OR (EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id <> @project_id AND endpoint.gone_at > session.created_at
                         AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
                         AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
                                  ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)
-              AND NOT EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id = @project_id
+              AND NOT EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id = @project_id AND endpoint.gone_at > session.created_at
                         AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
                         AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
                                  ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)),

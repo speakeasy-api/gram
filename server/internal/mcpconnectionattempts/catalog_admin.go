@@ -49,7 +49,7 @@ var adminMeanings = map[Code]adminMeaning{
 	CodeProviderOAuthInvalidClient:       {"The service did not accept Speakeasy's app registration for it.", "The service returned OAuth error invalid_client (or, during the code exchange, HTTP 401 without a usable OAuth error code)."},
 	CodeProviderOAuthInvalidScope:        {"The service refused the access Speakeasy asked for.", "The service returned OAuth error invalid_scope, unauthorized_client, or invalid_target."},
 	CodeProviderOAuthInvalidGrant:        {"The service did not accept the sign-in when Speakeasy tried to finish it.", "The service's token endpoint refused the code exchange with OAuth error invalid_grant, or with a provider-specific code Speakeasy treats the same way (for example GitHub's bad_verification_code)."},
-	CodeProviderDenied:                   {"The sign-in was declined, by the person or by the sign-in service or the service.", "The sign-in returned OAuth error access_denied."},
+	CodeProviderDenied:                   {"The sign-in was declined by the person, the sign-in service, or the service.", "The sign-in returned OAuth error access_denied."},
 	CodeIssuerMismatch:                   {"Speakeasy could not verify which sign-in server sent the sign-in answer.", "The authorization response's issuer (iss) was missing, repeated, or did not match the expected issuer."},
 	CodeConnectionChanged:                {"The sign-in no longer matched the server's current connection setup, for example because the setup changed or was removed during sign-in.", ""},
 	CodeUnrenewableToken:                 {"The service gave a sign-in that could not be renewed and was already expired or about to expire.", "The token response had no refresh token, and the access token expired within the refresh margin."},
@@ -122,4 +122,6 @@ var adminMeanings = map[Code]adminMeaning{
 	CodeUpstreamCredentialNotChosen:      {"The server has more than one sign-in for the service, and the request did not name one.", ""},
 	CodeSignInMethodNotAccepted:          {"This server does not accept assistant sign-ins of this kind.", "Assistant client-credentials tokens are not issued for this endpoint (an organization gateway, or assistant tokens not enabled)."},
 	CodeCredentialChoiceInvalid:          {"The sign-in the request chose does not fit this server.", ""},
+	CodeAddressNotAllowed:                {"This server or its sign-in uses a private or internal address that Speakeasy does not connect to.", ""},
+	CodeAddressNotFound:                  {"The address for this server or its sign-in does not exist.", ""},
 }

@@ -17,7 +17,6 @@ const MaxPayloadBytes = 50 * 1024
 const (
 	SurfaceHostedMCP   = "hosted_mcp"
 	SurfacePlatformMCP = "platform_mcp"
-	SurfaceInstances   = "instances"
 	SurfaceRemoteMCP   = "remote_mcp"
 
 	MethodToolsCall     = "tools/call"
@@ -166,7 +165,7 @@ func ownsRequestEvaluation(surface, method string) bool {
 	switch surface {
 	case SurfaceHostedMCP:
 		return method == MethodToolsCall || method == MethodResourcesRead || method == MethodPromptsGet
-	case SurfacePlatformMCP, SurfaceInstances, SurfaceRemoteMCP:
+	case SurfacePlatformMCP, SurfaceRemoteMCP:
 		return method == MethodToolsCall
 	default:
 		return false
