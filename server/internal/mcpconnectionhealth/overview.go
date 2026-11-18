@@ -123,6 +123,7 @@ func (s *Service) GetSessionActivity(ctx context.Context, payload *gen.GetSessio
 		ProjectID:                project,
 		OrganizationID:           c.organizationID,
 		ToDay:                    timestamptz(lastDay.AddDate(0, 0, 1)),
+		LiveSince:                timestamptz(firstDay),
 		DashboardMintPattern:     dashboardMintPattern,
 		InferenceResourcePattern: inferenceResourcePattern,
 		ProjectInferenceResource: mcp.InferenceResource + ":" + c.projectID.String(),
@@ -130,7 +131,7 @@ func (s *Service) GetSessionActivity(ctx context.Context, payload *gen.GetSessio
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count active sessions").LogError(ctx, s.logger)
 	}
-	activeNow, err := queries.CountActiveSessionsNow(ctx, repo.CountActiveSessionsNowParams{IssuerID: issuer.ID, ProjectID: project, OrganizationID: c.organizationID, DashboardMintPattern: dashboardMintPattern, InferenceResourcePattern: inferenceResourcePattern, ProjectInferenceResource: mcp.InferenceResource + ":" + c.projectID.String()})
+	activeNow, err := queries.CountActiveSessionsNow(ctx, repo.CountActiveSessionsNowParams{IssuerID: issuer.ID, ProjectID: project, OrganizationID: c.organizationID, DashboardMintPattern: dashboardMintPattern, InferenceResourcePattern: inferenceResourcePattern, ProjectInferenceResource: mcp.InferenceResource + ":" + c.projectID.String(), LiveSince: timestamptz(now)})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count active sessions now").LogError(ctx, s.logger)
 	}
@@ -144,6 +145,7 @@ func (s *Service) GetSessionActivity(ctx context.Context, payload *gen.GetSessio
 		DashboardMintPattern:     dashboardMintPattern,
 		InferenceResourcePattern: inferenceResourcePattern,
 		ProjectInferenceResource: mcp.InferenceResource + ":" + c.projectID.String(),
+		LiveSince:                pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.NegativeInfinity, Valid: true},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "average session length").LogError(ctx, s.logger)

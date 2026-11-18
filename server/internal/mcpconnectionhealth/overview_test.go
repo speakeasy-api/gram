@@ -148,7 +148,11 @@ func TestGetSessionActivity_AnOrganizationSessionTiedToAnotherProjectIsNotCounte
 		SessionDuration: pgtype.Interval{Microseconds: 0, Days: 14, Months: 0, Valid: true}, TrustedRemoteSessionIssuerID: uuid.NullUUID{}, TrustedRemoteSessionClientID: uuid.NullUUID{},
 	})
 	require.NoError(t, err)
-	for _, resource := range []string{"", "https://example.com/mcp/" + ownSlug, "https://example.com/mcp/" + otherSlug, "urn:speakeasy:inference:" + other.ID.String()} {
+	resources := []string{
+		"", "https://example.com/mcp/" + ownSlug + "/", "urn:speakeasy:inference:" + ti.project.String(),
+		"https://example.com/mcp/" + otherSlug, "https://example.com/mcp/" + otherSlug + "?x=1", "urn:speakeasy:inference:" + other.ID.String(),
+	}
+	for _, resource := range resources {
 		_, err := sessions.CreateUserSession(ctx, usersessionsrepo.CreateUserSessionParams{
 			SubjectUrn:          urn.NewUserSubject(ti.userID),
 			Jti:                 uuid.NewString(),
@@ -166,6 +170,6 @@ func TestGetSessionActivity_AnOrganizationSessionTiedToAnotherProjectIsNotCounte
 		To:                  ti.now.Add(time.Minute).Format(time.RFC3339),
 	})
 	require.NoError(t, err)
-	require.Equal(t, int64(2), res.ActiveNow)
-	require.Equal(t, int64(2), res.Days[len(res.Days)-1].ActiveSessions)
+	require.Equal(t, int64(3), res.ActiveNow)
+	require.Equal(t, int64(3), res.Days[len(res.Days)-1].ActiveSessions)
 }
