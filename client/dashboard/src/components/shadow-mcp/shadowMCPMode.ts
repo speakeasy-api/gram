@@ -22,7 +22,7 @@ export type ShadowMCPMode = "allowed" | "blocked";
  *   switching here would delete or rewrite that policy, so it is changed in
  *   Guardrails only.
  */
-export type ShadowMCPModeHolder = "shadow_ai" | "guardrails";
+type ShadowMCPModeHolder = "shadow_ai" | "guardrails";
 
 export type ShadowMCPModeState = {
   mode: ShadowMCPMode;
