@@ -317,9 +317,12 @@ func (s *Service) probeRemoteSession(
 				if remotesessions.RefreshBusy(candidate.ClientCredentialErr) {
 					return errValidationRateLimited
 				}
-				if remotesessions.OutageKindOf(candidate.ClientCredentialErr) == remotesessions.RefreshOutageNone && remotesessions.OutageAddress(candidate.ClientCredentialErr) == guardian.AddressFine {
+				switch {
+				case remotesessions.OutageAddress(candidate.ClientCredentialErr) != guardian.AddressFine:
+					logger.WarnContext(ctx, "verify stopped by a sign-in address problem", attr.SlogError(candidate.ClientCredentialErr))
+				case remotesessions.OutageKindOf(candidate.ClientCredentialErr) == remotesessions.RefreshOutageNone:
 					logger.ErrorContext(ctx, "verify stopped by a refresh failure", attr.SlogError(candidate.ClientCredentialErr))
-				} else {
+				default:
 					logger.WarnContext(ctx, "verify stopped by an outage", attr.SlogError(candidate.ClientCredentialErr))
 				}
 				return fmt.Errorf("%w: %w", errValidationUnfinished, candidate.ClientCredentialErr)
