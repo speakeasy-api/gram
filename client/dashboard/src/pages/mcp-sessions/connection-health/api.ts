@@ -41,7 +41,8 @@ interface Scope {
   serverId?: string;
 }
 
-const ROOT = "mcpConnectionHealth";
+export const CONNECTION_HEALTH_QUERY_ROOT = "mcpConnectionHealth";
+const ROOT = CONNECTION_HEALTH_QUERY_ROOT;
 
 function useClient() {
   const client = useGramContext();
@@ -185,6 +186,9 @@ export function useDeniedClients(
     retry,
   });
 }
+
+/** Suspected problems are made-up sample data until their API ships. */
+export const SUSPECTED_PROBLEMS_ARE_SAMPLE = true;
 
 /** FIXTURES: suspected problems have no detector or API yet. */
 export function useSuspectedProblems(

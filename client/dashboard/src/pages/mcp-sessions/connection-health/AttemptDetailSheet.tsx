@@ -116,6 +116,9 @@ function investigationFor(attempt: AttemptDetail): Investigation {
       `Person: ${who}; app: ${appLabel(attempt.app)}; server: ${where}`,
       attempt.service ? `Service: ${attempt.service}` : null,
       attempt.message ? `Message: ${attempt.message}` : null,
+      attempt.technicalMessage
+        ? `Technical detail: ${attempt.technicalMessage}`
+        : null,
       attempt.reason ? `Reason code: ${attempt.reason}` : null,
       attempt.source ? `Source: ${SOURCE_LABELS[attempt.source]}` : null,
       attempt.count > 1 ? `Repeated ${attempt.count} times` : null,

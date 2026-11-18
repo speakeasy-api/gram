@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { Lock, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import {
   Popover,
@@ -63,6 +63,7 @@ export function FilterChip({
   onClick,
   onRemove,
   ariaLabel,
+  locked = false,
 }: {
   label: string;
   ariaLabel?: string;
@@ -80,7 +81,21 @@ export function FilterChip({
   active?: boolean;
   onClick?: () => void;
   onRemove?: () => void;
+  /** A fixed filter the page sets: a padlock, and nothing to open or clear. */
+  locked?: boolean;
 }): JSX.Element {
+  if (locked) {
+    return (
+      <span
+        role="note"
+        aria-label={ariaLabel ?? label}
+        className="bg-card border-foreground text-foreground inline-flex h-10 shrink-0 items-center gap-2 border px-3"
+      >
+        <Lock className="size-3.5 shrink-0" aria-hidden />
+        <span className="text-eyebrow">{label}</span>
+      </span>
+    );
+  }
   return (
     <span
       // Colour is set here and inherited, never merged onto the label beside

@@ -39,6 +39,7 @@ import {
   type TimeRangePreset,
 } from "./filters";
 import {
+  appKeyLabel,
   formatDayMonth,
   formatLast,
   formatSessionLength,
@@ -62,6 +63,13 @@ const RANGES: { value: TimeRangePreset; label: string; days: number }[] = [
 const DEFAULT_RANGE: TimeRangePreset = "7d";
 const RANGE_PARAM = "range";
 const CHART_PARAM = "chart";
+
+/** The client-admission refusals the API lists as denied clients. */
+const DENIED_CLIENT_REASONS = [
+  "cimd_admission_denied",
+  "ai_tool_blocked",
+  "client_not_cimd",
+] as const;
 
 const SIGN_IN_ACTIVITY_FILTERS: AttemptFilters = {
   steps: [...SIGN_IN_STEPS],
@@ -178,7 +186,7 @@ export function OverviewTab({
                   {
                     range: range.value,
                     outcomes: ["blocked"],
-                    steps: ["connect", "sign_in", "sign_in_renewal"],
+                    reasons: [...DENIED_CLIENT_REASONS],
                   },
                   now,
                 ),
@@ -332,7 +340,7 @@ function KillswitchesInForce({
   return (
     <OverviewSection
       title={`Killswitches in force · ${killswitches.length}`}
-      description="Tool calls they block right now."
+      description="Across this organization, not only this provider. They block tool calls right now."
       action={<ArrowLink to={orgRoutes.killswitch.href()}>View all</ArrowLink>}
     >
       <Table columns={columns} data={killswitches} rowKey={(k) => k.id} />
@@ -359,7 +367,15 @@ function DeniedClients({
         width: "1.2fr",
         render: (c) => (
           <div>
-            <div>{c.app.name}</div>
+            <div>
+              {c.app.name}
+              {!c.app.family && appKeyLabel(c.app) ? (
+                <span className="text-muted-foreground">
+                  {" "}
+                  · {appKeyLabel(c.app)}
+                </span>
+              ) : null}
+            </div>
             <div className="text-muted-foreground text-xs">
               {plural(c.attempts, "time")}
               {c.networks > 0 ? `, from ${plural(c.networks, "network")}` : ""}
@@ -371,7 +387,16 @@ function DeniedClients({
         key: "reason",
         header: "Reason",
         width: "1.4fr",
-        render: (c) => c.message,
+        render: (c) => (
+          <div>
+            <div>{c.message}</div>
+            {c.technicalMessage ? (
+              <div className="text-muted-foreground text-xs">
+                {c.technicalMessage}
+              </div>
+            ) : null}
+          </div>
+        ),
       },
       {
         key: "last",
@@ -391,7 +416,7 @@ function DeniedClients({
       <Table
         columns={columns}
         data={clients}
-        rowKey={(c) => `${c.app.family}|${c.reason}`}
+        rowKey={(c) => `${c.app.family}|${c.app.appKey ?? ""}|${c.reason}`}
       />
     </OverviewSection>
   );

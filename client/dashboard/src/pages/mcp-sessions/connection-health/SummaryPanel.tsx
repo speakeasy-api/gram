@@ -116,7 +116,9 @@ export function SummaryPanel({
           {metric === "sign-ins" ? (
             signIns.isPending ? (
               <Skeleton className="h-full w-full" />
-            ) : !signIns.data?.loggingEnabled ? (
+            ) : signIns.isError || !signIns.data ? (
+              <ChartMessage>Couldn&apos;t load sign-in attempts.</ChartMessage>
+            ) : !signIns.data.loggingEnabled ? (
               <ChartMessage>Sign-in attempts need logging.</ChartMessage>
             ) : (
               <SignInBars data={signIns.data} dayLabels={days > 1} />

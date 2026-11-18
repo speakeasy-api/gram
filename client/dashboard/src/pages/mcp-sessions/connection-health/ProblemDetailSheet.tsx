@@ -2,6 +2,7 @@ import { OUTCOME } from "@/components/chart/palette";
 import { StackedTimeBarChart } from "@/components/chart/StackedTimeBarChart";
 import { IdentityAvatar } from "@/components/identity-avatar";
 import { InlineEmptyState } from "@/components/inline-empty-state";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import {
   Sheet,
@@ -16,7 +17,7 @@ import { useRoutes } from "@/routes";
 import { ArrowRight } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router";
-import { useSuspectedProblem } from "./api";
+import { SUSPECTED_PROBLEMS_ARE_SAMPLE, useSuspectedProblem } from "./api";
 import { AskAiButton, type Investigation } from "./AskAiButton";
 import { logsSearch } from "./filters";
 import {
@@ -98,6 +99,9 @@ function investigationFor(problem: SuspectedProblemDetail): Investigation {
         : `these ${problem.people.length} people`
     } connect, and is there anything I should change?`,
     context: [
+      SUSPECTED_PROBLEMS_ARE_SAMPLE
+        ? "This suspected problem is sample data: its people, servers and times are made up."
+        : null,
       `Suspected problem · ${problem.headline}`,
       `Since ${problem.since}`,
       problem.fact,
@@ -139,6 +143,9 @@ function ProblemBody({
         <div className="text-eyebrow flex items-center gap-2">
           <span className="bg-destructive size-2 rounded-full" aria-hidden />
           Suspected problem
+          {SUSPECTED_PROBLEMS_ARE_SAMPLE ? (
+            <Badge variant="warning">Sample data</Badge>
+          ) : null}
         </div>
         <SheetTitle className="font-mono text-lg font-normal">
           {problem.headline}
@@ -190,7 +197,7 @@ function ProblemBody({
         <Block title={`People · ${peopleCount}`} aside="Attempts">
           <div className="divide-y border">
             {problem.people.map((p) => (
-              <Link
+              <PersonRow
                 key={`${p.person?.subjectUrn ?? p.network?.key}-${p.server?.id}`}
                 to={`${routes.mcpSessions.provider.connectionLogs.href(providerId)}${logsSearch(
                   {
@@ -201,7 +208,6 @@ function ProblemBody({
                   },
                   now,
                 )}`}
-                className="hover:bg-muted/40 grid grid-cols-[1fr_auto_40px_16px] items-center gap-3 px-4 py-2.5"
               >
                 <div className="flex min-w-0 items-center gap-2">
                   <IdentityAvatar label={personLabel(p)} />
@@ -220,11 +226,7 @@ function ProblemBody({
                   {formatClockMinutes(p.firstFailedAt)}
                 </span>
                 <span className="text-right text-sm">{p.attempts}</span>
-                <ArrowRight
-                  className="text-muted-foreground size-4"
-                  aria-hidden
-                />
-              </Link>
+              </PersonRow>
             ))}
           </div>
         </Block>
@@ -285,11 +287,44 @@ function ProblemBody({
           investigation={investigationFor(problem)}
           onLaunched={onClose}
         />
-        <Button asChild>
-          <Link to={logsHref}>Open in Connection Logs</Link>
-        </Button>
+        {SUSPECTED_PROBLEMS_ARE_SAMPLE ? (
+          <span className="text-muted-foreground self-center text-sm">
+            Sample data has no rows in Connection Logs.
+          </span>
+        ) : (
+          <Button asChild>
+            <Link to={logsHref}>Open in Connection Logs</Link>
+          </Button>
+        )}
       </SheetFooter>
     </div>
+  );
+}
+
+const PERSON_ROW =
+  "grid grid-cols-[1fr_auto_40px_16px] items-center gap-3 px-4 py-2.5";
+
+/** Links to the person's rows; sample people have none, so they do not link. */
+function PersonRow({
+  to,
+  children,
+}: {
+  to: string;
+  children: ReactNode;
+}): JSX.Element {
+  if (SUSPECTED_PROBLEMS_ARE_SAMPLE) {
+    return (
+      <div className={PERSON_ROW}>
+        {children}
+        <span />
+      </div>
+    );
+  }
+  return (
+    <Link to={to} className={`hover:bg-muted/40 ${PERSON_ROW}`}>
+      {children}
+      <ArrowRight className="text-muted-foreground size-4" aria-hidden />
+    </Link>
   );
 }
 

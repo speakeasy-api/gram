@@ -9,13 +9,19 @@ import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/Button";
 import type { Action } from "@/components/ui/MoreActions";
 import { SkeletonTable } from "@/components/ui/Skeleton";
-import { useOrgRoutes, useRoutes } from "@/routes";
+import { useRoutes } from "@/routes";
 import { FilterChip } from "@/components/filters/FilterChip";
 import { ArrowRight, RefreshCw } from "lucide-react";
+import { RequireScope } from "@/components/require-scope";
+import { useOrganization } from "@/contexts/Auth";
+import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
+import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
+  CONNECTION_HEALTH_QUERY_ROOT,
   connectionHealthNow,
   useAttempt,
   useAttemptCounts,
@@ -64,10 +70,10 @@ const OUTCOME_SENTENCE: Partial<Record<string, string>> = {
   didnt_finish: "was left unfinished",
 };
 
-function facetOptions(values: FacetValue[] | undefined) {
+function facetOptions(values: FacetValue[] | undefined, unnamed?: string) {
   return (values ?? []).map((v) => ({
     value: v.value,
-    label: v.label ?? (v.value || "Unlisted app"),
+    label: v.label ?? unnamed ?? v.value,
   }));
 }
 
@@ -78,10 +84,18 @@ function optionsFrom(facets: AttemptFacets | undefined): OptionsById {
       label: OUTCOME_LABELS[o],
     })),
     step: FILTER_STEPS.map((s) => ({ value: s, label: STEP_LABELS[s] })),
-    server: facetOptions(facets?.servers),
-    person: facetOptions(facets?.people),
+    server: facetOptions(facets?.servers, "Removed server"),
+    person: facetOptions(
+      facets?.people.map((v) =>
+        v.value === "" ? { ...v, label: "No known person" } : v,
+      ),
+    ),
     service: facetOptions(facets?.services),
-    app: facetOptions(facets?.apps),
+    app: facetOptions(
+      facets?.apps.map((v) =>
+        v.value === "" ? { ...v, label: v.label ?? "Unlisted app" } : v,
+      ),
+    ),
     appVersion: facetOptions(facets?.appVersions),
     message: facetOptions(facets?.reasons),
     network: facetOptions(facets?.networks),
@@ -125,7 +139,6 @@ export function ConnectionLogsView({
   /** Locks the view to one server (a server's own tab). */
   lockedServer?: { id: string; name: string };
 }): JSX.Element {
-  const orgRoutes = useOrgRoutes();
   const routes = useRoutes();
   const { providers } = useProjectProviders();
   const filters = useFilterState(LOG_FILTERS);
@@ -297,11 +310,7 @@ export function ConnectionLogsView({
         icon="file-x"
         heading="Connection Logs needs logging"
         description="Logging is off for this organization, so attempts are not kept. Turning it on starts the log from that moment."
-        action={
-          <Button asChild>
-            <Link to={orgRoutes.logs.href()}>Enable logging</Link>
-          </Button>
-        }
+        action={<EnableLoggingAction />}
       />
     );
   } else if (beforeRetention) {
@@ -465,8 +474,9 @@ export function ConnectionLogsView({
                 lockedServer ? (
                   <FilterChip
                     label={`Server: ${lockedServer.name}`}
-                    ariaLabel={`Locked to ${lockedServer.name}`}
+                    ariaLabel={`Fixed to ${lockedServer.name}`}
                     active
+                    locked
                   />
                 ) : undefined
               }
@@ -516,6 +526,49 @@ function noMatchSentence(
   return verb
     ? `Nothing ${verb}${on} in ${range}.`
     : `No attempt matches${on} in ${range}.`;
+}
+
+/** Turns logging on for an organization admin; others are told who can. */
+function EnableLoggingAction(): JSX.Element {
+  const organization = useOrganization();
+  const queryClient = useQueryClient();
+  const enable = useFeaturesSetMutation({
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: [CONNECTION_HEALTH_QUERY_ROOT],
+      }),
+    onError: () => toast.error("Couldn't turn on logging. Try again."),
+  });
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <RequireScope
+        scope="org:admin"
+        level="section"
+        fallback={
+          <p className="text-muted-foreground text-sm">
+            An organization admin can turn it on.
+          </p>
+        }
+      >
+        <Button
+          disabled={enable.isPending}
+          onClick={() =>
+            enable.mutate({
+              request: {
+                setProductFeatureRequestBody: {
+                  organizationId: organization.id,
+                  featureName: FeatureName.Logs,
+                  enabled: true,
+                },
+              },
+            })
+          }
+        >
+          {enable.isPending ? "Enabling..." : "Enable logging"}
+        </Button>
+      </RequireScope>
+    </div>
+  );
 }
 
 /** Said once wherever the API reads only the viewer's own attempts. */

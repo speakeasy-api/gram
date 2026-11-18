@@ -77,6 +77,23 @@ export function appLabel(app: App): string {
   return app.version ? `${app.name} ${app.version}` : app.name;
 }
 
+const APP_KINDS: Record<string, string> = {
+  dcr: "Registered itself",
+  first_party: "Speakeasy dashboard",
+  unverified_client: "Not checked yet",
+  other_metadata_url: "Has its own metadata URL",
+  workload: "Workload",
+  code_mode: "Code mode link",
+  recovery_link: "Link given to an assistant",
+  background: "Speakeasy background work",
+};
+
+/** What tells two unlisted apps apart: their host or kind, when known. */
+export function appKeyLabel(app: App): string | undefined {
+  if (!app.appKey || app.appKey === "other") return undefined;
+  return APP_KINDS[app.appKey] ?? app.appKey;
+}
+
 const UNNAMED_PERSON: Record<string, string> = {
   user: "Unnamed person",
   agent: "Unnamed agent",

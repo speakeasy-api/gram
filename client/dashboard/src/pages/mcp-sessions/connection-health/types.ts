@@ -128,9 +128,11 @@ export interface AttemptRow {
   outcome: Outcome;
   step: StepGroup;
   reason?: string;
+  /** What happened, for an administrator. */
   message?: string;
-  /** Reserved: a sentence for administrators; not returned yet. */
+  /** The precise technical fact, when every cause of the reason shares one. */
   technicalMessage?: string;
+  /** Absent on success, in progress, person-caused and multi-party reasons. */
   source?: Source;
   /** Absent: no known person. */
   person?: Person;

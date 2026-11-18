@@ -168,7 +168,12 @@ export function AttemptsTable({
         header: "Message",
         width: "1.6fr",
         render: (row) => (
-          <span className="line-clamp-2" title={row.message}>
+          <span
+            className="line-clamp-2"
+            title={[row.message, row.technicalMessage]
+              .filter(Boolean)
+              .join("\n")}
+          >
             {row.message ?? ""}
           </span>
         ),

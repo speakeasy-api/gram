@@ -95,14 +95,9 @@ export function resolveWindow(value: DateRangeValue, now: Date): Window {
   );
 }
 
-// The server rejects a `from` older than 30 days by its own clock, so the
-// oldest start sent is a minute inside that.
-const RETENTION_MARGIN_MS = 60_000;
-
 export function presetWindow(preset: TimeRangePreset, now: Date): Window {
-  const span = Math.min(PRESET_MS[preset], RETENTION_MS - RETENTION_MARGIN_MS);
   return {
-    from: new Date(now.getTime() - span).toISOString(),
+    from: new Date(now.getTime() - PRESET_MS[preset]).toISOString(),
     to: now.toISOString(),
   };
 }
