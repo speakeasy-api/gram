@@ -17,7 +17,7 @@ plugin rollout sweep republishes an organization's hooks plugin once its pin
 reaches the current version. Lowering a pin holds back later versions; it never
 downgrades a hooks plugin that is already published.
 
-An organization's pin is:
+The version an organization can receive is decided, in this order, by:
 
 1. **Canary**: canary organizations (`speakeasy-team`) always receive the
    current version. The list lives in code (`server/internal/hooksrollout`).

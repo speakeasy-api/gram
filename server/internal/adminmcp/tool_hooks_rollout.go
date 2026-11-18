@@ -79,7 +79,7 @@ func registerHooksRolloutTools(server *mcp.Server, organizations OrganizationRea
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_hooks_rollout",
 		Title:       "Get Hooks Version Rollout",
-		Description: "Read the platform-wide hooks version rollout: the hooks generator version this server build publishes, the default pin every organization without an override follows, canary organizations, organization overrides and recent pin changes. An organization's hooks plugin moves to the current version on the next hourly rollout sweep once its pin reaches it. Does not change pins.",
+		Description: "Read the platform-wide hooks version rollout: the hooks generator version this server build publishes, the default pin every non-canary organization without an override follows, canary organizations, organization overrides and recent pin changes. An organization's hooks plugin moves to the current version on the next hourly rollout sweep once its pin reaches it. Does not change pins.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, HooksRollout, error) {
 		if rollout == nil {

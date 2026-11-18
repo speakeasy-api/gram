@@ -517,6 +517,8 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.ListMemoryEvalRuns = service.preauthorizeAdmin(server.ListMemoryEvalRuns)
 	server.GetMemoryEvalRun = service.preauthorizeAdmin(server.GetMemoryEvalRun)
 	server.StartMemoryEvalRun = service.strictAdminJSON(server.StartMemoryEvalRun, func() any { return new(adminserver.StartMemoryEvalRunRequestBody) })
+	server.GetHooksRollout = service.preauthorizeAdmin(server.GetHooksRollout)
+	server.GetOrganizationHooksRollout = service.preauthorizeAdmin(server.GetOrganizationHooksRollout)
 	server.SetHooksRolloutDefault = service.strictAdminJSON(server.SetHooksRolloutDefault, func() any { return new(adminserver.SetHooksRolloutDefaultRequestBody) })
 	server.SetOrganizationHooksRollout = service.strictAdminJSON(server.SetOrganizationHooksRollout, func() any { return new(adminserver.SetOrganizationHooksRolloutRequestBody) })
 	server.ClearOrganizationHooksRollout = service.strictAdminJSON(server.ClearOrganizationHooksRollout, func() any { return new(adminserver.ClearOrganizationHooksRolloutRequestBody) })

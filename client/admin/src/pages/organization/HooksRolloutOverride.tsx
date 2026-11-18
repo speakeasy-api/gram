@@ -53,7 +53,7 @@ export function HooksRolloutOverride({
   org: AdminOrganization;
 }): JSX.Element {
   const query = organizationHooksRolloutQuery(org.id);
-  const { data, isPending, isError } = useQuery({
+  const { data, isPending, isError, refetch } = useQuery({
     ...query,
     enabled: !!org.id,
   });
@@ -67,9 +67,14 @@ export function HooksRolloutOverride({
   }
   if (!data) {
     return (
-      <span className="text-muted-foreground text-sm">
-        Unable to load hooks rollout
-      </span>
+      <div className="flex items-center gap-2">
+        <span className="text-muted-foreground text-sm">
+          Unable to load hooks rollout
+        </span>
+        <Button size="sm" variant="outline" onClick={() => void refetch()}>
+          Retry
+        </Button>
+      </div>
     );
   }
   return (
