@@ -27,23 +27,27 @@ WHERE gateway.project_id = @project_id
 SELECT server.id, COALESCE(server.name, server.slug, '')::text AS name, 'mcp'::text AS kind
 FROM mcp_servers AS server
 WHERE server.project_id = @project_id
+  AND server.deleted IS FALSE
   AND server.id = ANY(@ids::uuid[])
 UNION ALL
 SELECT gateway.id, gateway.name, 'gateway'::text AS kind
 FROM meta_mcp_servers AS gateway
 WHERE gateway.project_id = @project_id
   AND gateway.organization_id = @organization_id::text
+  AND gateway.deleted IS FALSE
   AND gateway.id = ANY(@ids::uuid[])
 UNION ALL
 SELECT toolset.id, toolset.name, 'toolset'::text AS kind
 FROM toolsets AS toolset
 WHERE toolset.project_id = @project_id
   AND toolset.organization_id = @organization_id::text
+  AND toolset.deleted IS FALSE
   AND toolset.id = ANY(@ids::uuid[])
 UNION ALL
 SELECT issuer.id, issuer.slug, 'authorization_server'::text AS kind
 FROM user_session_issuers AS issuer
 WHERE (issuer.project_id = @project_id OR (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text))
+  AND issuer.deleted IS FALSE
   AND issuer.id = ANY(@ids::uuid[]);
 
 -- name: ListMemberNames :many
@@ -58,7 +62,7 @@ WHERE relationship.organization_id = @organization_id::text
 
 -- name: CountActiveSessionsByDay :many
 -- A credential keeps its id across refresh rotation, so it is one session.
--- A row lives from its creation until it is deleted or reaches its deadline.
+-- A row lives from its creation until it is deleted or reaches its deadline; a dashboard mint has no refresh, so its access token's.
 WITH days AS (
   SELECT day_start::timestamptz AS day_start
   FROM generate_series(@from_day::timestamptz, @last_day::timestamptz, '1 day'::interval) AS day_start
@@ -66,12 +70,12 @@ WITH days AS (
 lives AS (
   SELECT COALESCE(session.credential_id, session.id) AS credential,
          session.created_at AS started_at,
-         LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), session.refresh_expires_at) AS ended_at
+         LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE @dashboard_mint_pattern::text THEN session.expires_at ELSE session.refresh_expires_at END) AS ended_at
   FROM user_sessions AS session
   WHERE session.user_session_issuer_id = @issuer_id
     AND (session.project_id = @project_id OR (session.project_id IS NULL AND session.organization_id = @organization_id::text))
     AND session.created_at < @to_day::timestamptz
-    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), session.refresh_expires_at) > @from_day::timestamptz
+    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE @dashboard_mint_pattern::text THEN session.expires_at ELSE session.refresh_expires_at END) > @from_day::timestamptz
 )
 SELECT days.day_start, COUNT(DISTINCT lives.credential)::bigint AS active_sessions
 FROM days
@@ -87,7 +91,7 @@ FROM user_sessions AS session
 WHERE session.user_session_issuer_id = @issuer_id
   AND (session.project_id = @project_id OR (session.project_id IS NULL AND session.organization_id = @organization_id::text))
   AND session.deleted IS FALSE
-  AND session.refresh_expires_at > clock_timestamp();
+  AND CASE WHEN session.refresh_token_hash LIKE @dashboard_mint_pattern::text THEN session.expires_at ELSE session.refresh_expires_at END > clock_timestamp();
 
 -- name: AverageEndedSessionSeconds :one
 -- Mean length, first sign-in to expiry or revocation, of sessions that ended
@@ -97,14 +101,14 @@ WITH ended AS (
   FROM user_sessions AS session
   WHERE session.user_session_issuer_id = @issuer_id
     AND (session.project_id = @project_id OR (session.project_id IS NULL AND session.organization_id = @organization_id::text))
-    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), session.refresh_expires_at) >= @from_time::timestamptz
-    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), session.refresh_expires_at) < @to_time::timestamptz
-    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), session.refresh_expires_at) <= clock_timestamp()
+    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE @dashboard_mint_pattern::text THEN session.expires_at ELSE session.refresh_expires_at END) >= @from_time::timestamptz
+    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE @dashboard_mint_pattern::text THEN session.expires_at ELSE session.refresh_expires_at END) < @to_time::timestamptz
+    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE @dashboard_mint_pattern::text THEN session.expires_at ELSE session.refresh_expires_at END) <= clock_timestamp()
 ),
 lives AS (
   SELECT COALESCE(session.credential_id, session.id) AS credential,
          MIN(session.created_at) AS started_at,
-         MAX(LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), session.refresh_expires_at)) AS ended_at
+         MAX(LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE @dashboard_mint_pattern::text THEN session.expires_at ELSE session.refresh_expires_at END)) AS ended_at
   FROM user_sessions AS session
   WHERE session.user_session_issuer_id = @issuer_id
     AND (session.project_id = @project_id OR (session.project_id IS NULL AND session.organization_id = @organization_id::text))

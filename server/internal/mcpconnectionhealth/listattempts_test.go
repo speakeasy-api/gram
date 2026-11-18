@@ -155,3 +155,21 @@ func TestGetAttemptCounts_CountsEachFilterValue(t *testing.T) {
 	require.Equal(t, "invalid_bearer_token", res.Facets.Reasons[0].Value)
 	require.NotEmpty(t, *res.Facets.Reasons[0].Label)
 }
+
+func TestListAttempts_AServerLockAndAnotherServerFilterMatchNothing(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+	ti.insert(t, ti.org, ti.project, ti.now.Add(-time.Hour), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderUnavailable)
+
+	payload := ti.listPayload()
+	payload.ServerID = new(ti.server.String())
+	res, err := ti.service.ListAttempts(ctx, payload)
+	require.NoError(t, err)
+	require.Len(t, res.Attempts, 1)
+
+	payload.Filters = &gen.ConnectionAttemptFilters{ServerIds: []string{uuid.NewString()}}
+	res, err = ti.service.ListAttempts(ctx, payload)
+	require.NoError(t, err)
+	require.Empty(t, res.Attempts)
+}

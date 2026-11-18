@@ -31,7 +31,8 @@ type person struct {
 
 // names resolves ids on attempt rows to what the pages show. Ids not found keep no name.
 type names struct {
-	servers map[string]repo.ListServerNamesRow
+	// servers holds every named row per id: a hosted server shares its id with its toolset.
+	servers map[string][]repo.ListServerNamesRow
 	people  map[string]person
 }
 
@@ -65,7 +66,7 @@ func (c *collector) row(r attemptlog.Row) {
 
 // resolve loads names from Postgres, scoped to the caller's organization and project.
 func (s *Service) resolve(ctx context.Context, c caller, ids *collector) (names, error) {
-	out := names{servers: map[string]repo.ListServerNamesRow{}, people: map[string]person{}}
+	out := names{servers: map[string][]repo.ListServerNamesRow{}, people: map[string]person{}}
 	queries := repo.New(s.db)
 	if len(ids.servers) > 0 {
 		serverIDs := make([]uuid.UUID, 0, len(ids.servers))
@@ -77,7 +78,7 @@ func (s *Service) resolve(ctx context.Context, c caller, ids *collector) (names,
 			return out, oops.E(oops.CodeUnexpected, err, "load server names").LogError(ctx, s.logger)
 		}
 		for _, row := range rows {
-			out.servers[row.ID.String()] = row
+			out.servers[row.ID.String()] = append(out.servers[row.ID.String()], row)
 		}
 	}
 	if len(ids.users) > 0 {
@@ -102,11 +103,28 @@ func (n names) server(id, storedKind string) *gen.ConnectionServer {
 		return nil
 	}
 	view := &gen.ConnectionServer{ID: id, Kind: kind, Name: nil}
-	if row, found := n.servers[id]; found && row.Name != "" {
+	if row, found := n.lookup(id, kind); found {
 		view.Name = &row.Name
-		view.Kind = row.Kind
 	}
 	return view
+}
+
+// lookup finds the named row of id, preferring kind, then an MCP server or gateway over its toolset.
+func (n names) lookup(id, kind string) (repo.ListServerNamesRow, bool) {
+	var best repo.ListServerNamesRow
+	found := false
+	for _, row := range n.servers[id] {
+		if row.Name == "" {
+			continue
+		}
+		if row.Kind == kind {
+			return row, true
+		}
+		if !found || best.Kind == "toolset" {
+			best, found = row, true
+		}
+	}
+	return best, found
 }
 
 func (n names) member(id string) *gen.ConnectionServer {
@@ -114,7 +132,7 @@ func (n names) member(id string) *gen.ConnectionServer {
 		return nil
 	}
 	view := &gen.ConnectionServer{ID: id, Kind: "mcp", Name: nil}
-	if row, found := n.servers[id]; found && row.Name != "" {
+	if row, found := n.lookup(id, "mcp"); found {
 		view.Name = &row.Name
 		view.Kind = row.Kind
 	}
@@ -122,7 +140,7 @@ func (n names) member(id string) *gen.ConnectionServer {
 }
 
 func (n names) serverName(id string) *string {
-	if row, found := n.servers[id]; found && row.Name != "" {
+	if row, found := n.lookup(id, "mcp"); found {
 		return &row.Name
 	}
 	return nil

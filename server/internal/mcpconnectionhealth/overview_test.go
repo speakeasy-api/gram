@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -67,7 +68,19 @@ func TestGetSessionActivity_CountsSessionsPerDay(t *testing.T) {
 	}
 	create()
 	revoked := create()
-	_, err := sessions.RevokeUserSession(ctx, usersessionsrepo.RevokeUserSessionParams{ID: revoked, ProjectID: ti.project, OrganizationID: ti.org})
+	// A dashboard mint ended with its access token, whatever its refresh deadline says.
+	mint, err := sessions.CreateUserSession(ctx, usersessionsrepo.CreateUserSessionParams{
+		SubjectUrn:          urn.NewUserSubject(ti.userID),
+		Jti:                 uuid.NewString(),
+		RefreshTokenHash:    pgtype.Text{String: sessiontokens.DashboardMintRefreshTokenHashPrefix + ":" + uuid.NewString(), Valid: true},
+		RefreshExpiresAt:    pgtype.Timestamptz{Time: ti.now.Add(14 * 24 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		ExpiresAt:           pgtype.Timestamptz{Time: ti.now.Add(-time.Minute), InfinityModifier: pgtype.Finite, Valid: true},
+		UserSessionIssuerID: ti.issuer,
+	})
+	require.NoError(t, err)
+	_, err = ti.conn.Exec(ctx, "UPDATE user_sessions SET created_at = $1 WHERE id = $2", ti.now.Add(-time.Hour), mint.ID)
+	require.NoError(t, err)
+	_, err = sessions.RevokeUserSession(ctx, usersessionsrepo.RevokeUserSessionParams{ID: revoked, ProjectID: ti.project, OrganizationID: ti.org})
 	require.NoError(t, err)
 
 	res, err := ti.service.GetSessionActivity(ctx, &gen.GetSessionActivityPayload{
@@ -78,7 +91,7 @@ func TestGetSessionActivity_CountsSessionsPerDay(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1), res.ActiveNow)
 	require.Equal(t, int64(14*24*60*60), res.ConfiguredSessionSeconds)
-	require.Equal(t, int64(2), res.Days[len(res.Days)-1].ActiveSessions)
+	require.Equal(t, int64(3), res.Days[len(res.Days)-1].ActiveSessions)
 	require.Equal(t, int64(0), res.Days[0].ActiveSessions)
 	require.NotNil(t, res.AverageSessionSeconds)
 

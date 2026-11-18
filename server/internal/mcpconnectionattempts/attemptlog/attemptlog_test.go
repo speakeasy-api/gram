@@ -459,3 +459,17 @@ func TestDenied_LeavesOutRefusalsOfThePerson(t *testing.T) {
 	require.Len(t, clients, 1)
 	require.Equal(t, mcpconnectionattempts.CodeCIMDAdmissionDenied.String(), clients[0].Reason)
 }
+
+func TestList_ASignInAndARenewalWithTheSameReasonNeverFold(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	for i, grant := range []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken} {
+		a := f.attempt(f.org, f.project, f.server, f.now.Add(-time.Hour+time.Duration(i)*time.Minute))
+		f.row(a, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeResourceMismatch, true, time.Second, person("u1"), mcpconnectionattempts.Grant(grant))
+	}
+	f.insert()
+
+	rows := list(t, f, f.scope(), attemptlog.Filters{})
+	require.Len(t, rows, 2)
+	require.ElementsMatch(t, []string{string(attemptlog.StepSignIn), string(attemptlog.StepSignInRenewal)}, []string{rows[0].Step, rows[1].Step})
+}

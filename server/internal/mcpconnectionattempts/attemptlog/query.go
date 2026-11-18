@@ -237,7 +237,7 @@ func attemptsSQL(s Scope, now time.Time) (string, []any, error) {
 	if s.AttemptID != uuid.Nil {
 		conds, args = append(conds, "attempt_id = ?"), append(args, s.AttemptID)
 	}
-	if s.OwnSubjects != nil {
+	if s.OwnSubjects != nil && s.AttemptID == uuid.Nil {
 		conds = append(conds, `attempt_id IN (
 			SELECT attempt_id FROM `+mcpconnectionattempts.EventsTable+` WHERE `+strings.Join(base, " AND ")+` AND has(?, subject_urn))`)
 		args = append(args, baseArgs...)
@@ -391,7 +391,7 @@ func List(ctx context.Context, ch driver.Conn, s Scope, f Filters, after *Cursor
 				SELECT *, if(a_started > lagInFrame(d_at, 1, toDateTime64(0, 9, 'UTC')) OVER (PARTITION BY fold_key ORDER BY a_started, a_id ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) + toIntervalSecond(?), 1, 0) AS new_run
 				FROM (
 					SELECT *, if(d_outcome IN ` + failing + `,
-						cityHash64(multiIf(a_subject != '', a_subject, a_device != '', concat('network:', a_device), concat('attempt:', toString(a_id))), a_server, d_member, d_stored_step, d_outcome, d_reason, d_app, d_version, d_service),
+						cityHash64(multiIf(a_subject != '', a_subject, a_device != '', concat('network:', a_device), concat('attempt:', toString(a_id))), a_server, d_member, d_step, d_stored_step, d_outcome, d_reason, d_app, d_version, d_service),
 						cityHash64(toString(a_id))) AS fold_key
 					FROM attempts
 				)

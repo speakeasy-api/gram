@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/attemptlog"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionhealth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 )
 
 func (s *Service) GetSignInSummary(ctx context.Context, payload *gen.GetSignInSummaryPayload) (*gen.ConnectionSignInSummaryResult, error) {
@@ -119,12 +120,13 @@ func (s *Service) GetSessionActivity(ctx context.Context, payload *gen.GetSessio
 		IssuerID:       issuer.ID,
 		ProjectID:      project,
 		OrganizationID: c.organizationID,
-		ToDay:          timestamptz(lastDay.AddDate(0, 0, 1)),
+		ToDay:                timestamptz(lastDay.AddDate(0, 0, 1)),
+		DashboardMintPattern: dashboardMintPattern,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count active sessions").LogError(ctx, s.logger)
 	}
-	activeNow, err := queries.CountActiveSessionsNow(ctx, repo.CountActiveSessionsNowParams{IssuerID: issuer.ID, ProjectID: project, OrganizationID: c.organizationID})
+	activeNow, err := queries.CountActiveSessionsNow(ctx, repo.CountActiveSessionsNowParams{IssuerID: issuer.ID, ProjectID: project, OrganizationID: c.organizationID, DashboardMintPattern: dashboardMintPattern})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count active sessions now").LogError(ctx, s.logger)
 	}
@@ -134,7 +136,8 @@ func (s *Service) GetSessionActivity(ctx context.Context, payload *gen.GetSessio
 		ToTime:         timestamptz(now.Add(clockSkewAllowance)),
 		IssuerID:       issuer.ID,
 		ProjectID:      project,
-		OrganizationID: c.organizationID,
+		OrganizationID:       c.organizationID,
+		DashboardMintPattern: dashboardMintPattern,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "average session length").LogError(ctx, s.logger)
@@ -156,6 +159,9 @@ func (s *Service) GetSessionActivity(ctx context.Context, payload *gen.GetSessio
 	}
 	return result, nil
 }
+
+// dashboardMintPattern matches dashboard-minted sessions, which end with their access token.
+var dashboardMintPattern = sessiontokens.DashboardMintRefreshTokenHashPrefix + ":%"
 
 // averageSessionWindow is how far back the average session length looks. It is
 // fixed so the readout does not swing with the chart's range.
