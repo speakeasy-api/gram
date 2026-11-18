@@ -1,4 +1,4 @@
-//nolint:exhaustruct,wrapcheck // Readiness probes intentionally omit documented optional fields and preserve typed errors.
+//nolint:exhaustruct_v5,wrapcheck // Readiness probes intentionally omit documented optional fields and preserve typed errors.
 package platformmcp
 
 import (

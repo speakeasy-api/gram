@@ -1,6 +1,6 @@
 // Package hostedmcp writes a toolset's canonical wrapper (mcp_servers.id = toolset id), which owns its hosting state.
 //
-//nolint:exhaustruct // Hosted policy, endpoint, and audit literals omit optional fields intentionally.
+//nolint:exhaustruct_v5 // Hosted policy, endpoint, and audit literals omit optional fields intentionally.
 package hostedmcp
 
 import (

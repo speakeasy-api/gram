@@ -135,7 +135,7 @@ func CreateIssuerGatedToolset(
 	encSecret, err := enc.Encrypt([]byte(clientSecret))
 	require.NoError(t, err)
 
-	rsc, err := remoteRepo.CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
+	rsc, err := remoteRepo.CreateRemoteSessionClientFixture(ctx, remotesessions_repo.CreateRemoteSessionClientFixtureParams{
 		ForwardClientName:     false,
 		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:        conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),

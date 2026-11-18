@@ -1,4 +1,4 @@
-package oops
+package oops_test
 
 import (
 	"bytes"
@@ -15,6 +15,7 @@ import (
 	goa "goa.design/goa/v3/pkg"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 type logEntry struct {
@@ -54,7 +55,7 @@ func TestErrHandle_NoError(t *testing.T) {
 	t.Parallel()
 	logger, logBuf := captureLogger()
 
-	handler := ErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+	handler := oops.ErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("success"))
 		return nil
@@ -74,9 +75,9 @@ func TestErrHandle_ShareableError(t *testing.T) {
 	t.Parallel()
 	logger, logBuf := captureLogger()
 
-	testErr := E(CodeNotFound, nil, "resource not found")
+	testErr := oops.E(oops.CodeNotFound, nil, "resource not found")
 
-	handler := ErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+	handler := oops.ErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
 		return testErr
 	})
 
@@ -91,7 +92,7 @@ func TestErrHandle_ShareableError(t *testing.T) {
 	var response goa.ServiceError
 	err := json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err)
-	require.Equal(t, string(CodeNotFound), response.Name)
+	require.Equal(t, string(oops.CodeNotFound), response.Name)
 	require.Equal(t, "resource not found", response.Message)
 
 	require.Empty(t, logBuf.String(), "ShareableError should not log in ErrHandle")
@@ -103,7 +104,7 @@ func TestErrHandle_UnexpectedError(t *testing.T) {
 
 	testErr := errors.New("database connection failed")
 
-	handler := ErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+	handler := oops.ErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
 		return testErr
 	})
 
@@ -118,7 +119,7 @@ func TestErrHandle_UnexpectedError(t *testing.T) {
 	var response goa.ServiceError
 	err := json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err)
-	require.Equal(t, string(CodeUnexpected), response.Name)
+	require.Equal(t, string(oops.CodeUnexpected), response.Name)
 	require.NotEmpty(t, response.ID)
 
 	entries := parseLogEntries(t, logBuf)
@@ -137,10 +138,10 @@ func TestErrHandle_WrappedShareableError(t *testing.T) {
 	t.Parallel()
 	logger, logBuf := captureLogger()
 
-	innerErr := E(CodeBadRequest, nil, "invalid input")
+	innerErr := oops.E(oops.CodeBadRequest, nil, "invalid input")
 	wrappedErr := errors.Join(errors.New("wrapper"), innerErr)
 
-	handler := ErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+	handler := oops.ErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
 		return wrappedErr
 	})
 
@@ -154,7 +155,7 @@ func TestErrHandle_WrappedShareableError(t *testing.T) {
 	var response goa.ServiceError
 	err := json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err)
-	require.Equal(t, string(CodeBadRequest), response.Name)
+	require.Equal(t, string(oops.CodeBadRequest), response.Name)
 	require.Equal(t, "invalid input", response.Message)
 
 	require.Empty(t, logBuf.String(), "ShareableError should not log even when wrapped")
@@ -163,8 +164,8 @@ func TestErrHandle_WrappedShareableError(t *testing.T) {
 func TestErrHandle_FailedPrecondition(t *testing.T) {
 	t.Parallel()
 	logger, _ := captureLogger()
-	handler := ErrHandle(logger, func(http.ResponseWriter, *http.Request) error {
-		return E(CodeFailedPrecondition, nil, "operation cannot be completed")
+	handler := oops.ErrHandle(logger, func(http.ResponseWriter, *http.Request) error {
+		return oops.E(oops.CodeFailedPrecondition, nil, "operation cannot be completed")
 	})
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
@@ -182,7 +183,7 @@ func TestErrHandle_ContextPropagation(t *testing.T) {
 	ctxValue := "test-value"
 
 	var ctxValueReceived string
-	handler := ErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+	handler := oops.ErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
 		val := r.Context().Value(ctxKey)
 		if v, ok := val.(string); ok {
 			ctxValueReceived = v
@@ -205,9 +206,9 @@ func TestErrHandle_ConnectionReferenceAddsALineAndKeepsTheStatus(t *testing.T) {
 	t.Parallel()
 	logger, _ := captureLogger()
 
-	handler := ErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+	handler := oops.ErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
 		contextvalues.SetConnectionReference(r.Context(), "ref-1")
-		return E(CodeForbidden, nil, "Ask an admin")
+		return oops.E(oops.CodeForbidden, nil, "Ask an admin")
 	})
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))

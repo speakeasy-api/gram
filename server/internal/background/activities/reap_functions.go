@@ -2,6 +2,7 @@ package activities
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -104,11 +105,18 @@ func (r *ReapFlyApps) Do(ctx context.Context, req ReapFlyAppsRequest) (*ReapFlyA
 			attr.SlogDeploymentFunctionsID(app.FunctionID.String()),
 		)
 
-		if err := r.deployer.Reap(ctx, functions.ReapRequest{
+		err := r.deployer.Reap(ctx, functions.ReapRequest{
 			ProjectID:    app.ProjectID,
 			DeploymentID: app.DeploymentID,
 			FunctionID:   app.FunctionID,
-		}); err != nil {
+		})
+		// A deployment switched to the disabled provider has no client to tear
+		// these apps down with, so every remaining app would fail the same way.
+		if errors.Is(err, functions.ErrFunctionsDisabled) {
+			logger.WarnContext(ctx, "skipping fly app reaping: the functions provider is disabled", attr.SlogError(err))
+			return result, nil
+		}
+		if err != nil {
 			appLogger.ErrorContext(ctx, "failed to reap app", attr.SlogError(err))
 			result.Errors++
 			continue

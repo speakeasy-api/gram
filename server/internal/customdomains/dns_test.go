@@ -1,4 +1,4 @@
-package customdomains
+package customdomains_test
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/dns"
 )
 
@@ -19,21 +20,21 @@ func TestObserveDNS(t *testing.T) {
 		aliases   map[string]string
 		lookupErr error
 		foreign   bool
-		status    DNSConfigurationStatus
-		method    DNSRoutingMethod
+		status    customdomains.DNSConfigurationStatus
+		method    customdomains.DNSRoutingMethod
 		wantErr   bool
 	}{
-		{name: "direct shared target", aliases: map[string]string{"domain.example.": "SHARED.EXAMPLE."}, status: DNSConfigurationMatched, method: DNSRoutingMethodSharedCNAME},
-		{name: "customer intermediate", aliases: map[string]string{"domain.example.": "alias.example.", "alias.example.": "shared.example."}, status: DNSConfigurationMatched, method: DNSRoutingMethodSharedCNAME},
-		{name: "apex addresses", status: DNSConfigurationMatched, method: DNSRoutingMethodARecord},
-		{name: "proxy addresses", foreign: true, status: DNSConfigurationUnconfirmed, method: DNSRoutingMethodUnknown},
-		{name: "shared alias with different address snapshots", aliases: map[string]string{"domain.example.": "shared.example."}, foreign: true, status: DNSConfigurationMatched, method: DNSRoutingMethodSharedCNAME},
-		{name: "own target without trailing dot", aliases: map[string]string{"domain.example.": "abcdefghij.domains.example"}, foreign: true, status: DNSConfigurationMatched, method: DNSRoutingMethodPerDomainCNAME},
-		{name: "own target through intermediate", aliases: map[string]string{"domain.example.": "alias.example.", "alias.example.": "ABCDEFGHIJ.DOMAINS.EXAMPLE."}, foreign: true, status: DNSConfigurationMatched, method: DNSRoutingMethodPerDomainCNAME},
-		{name: "other target before shared", aliases: map[string]string{"domain.example.": "klmnopqrst.domains.example.", "klmnopqrst.domains.example.": "shared.example."}, status: DNSConfigurationWrongTarget, method: DNSRoutingMethodUnknown},
-		{name: "NXDOMAIN", lookupErr: &net.DNSError{Err: "no such host", IsNotFound: true}, status: DNSConfigurationNotFound, method: DNSRoutingMethodUnknown},
-		{name: "timeout", lookupErr: context.DeadlineExceeded, status: DNSConfigurationCheckFailed, method: DNSRoutingMethodUnknown, wantErr: true},
-		{name: "loop", aliases: map[string]string{"domain.example.": "alias.example.", "alias.example.": "domain.example."}, status: DNSConfigurationCheckFailed, method: DNSRoutingMethodUnknown, wantErr: true},
+		{name: "direct shared target", aliases: map[string]string{"domain.example.": "SHARED.EXAMPLE."}, status: customdomains.DNSConfigurationMatched, method: customdomains.DNSRoutingMethodSharedCNAME},
+		{name: "customer intermediate", aliases: map[string]string{"domain.example.": "alias.example.", "alias.example.": "shared.example."}, status: customdomains.DNSConfigurationMatched, method: customdomains.DNSRoutingMethodSharedCNAME},
+		{name: "apex addresses", status: customdomains.DNSConfigurationMatched, method: customdomains.DNSRoutingMethodARecord},
+		{name: "proxy addresses", foreign: true, status: customdomains.DNSConfigurationUnconfirmed, method: customdomains.DNSRoutingMethodUnknown},
+		{name: "shared alias with different address snapshots", aliases: map[string]string{"domain.example.": "shared.example."}, foreign: true, status: customdomains.DNSConfigurationMatched, method: customdomains.DNSRoutingMethodSharedCNAME},
+		{name: "own target without trailing dot", aliases: map[string]string{"domain.example.": "abcdefghij.domains.example"}, foreign: true, status: customdomains.DNSConfigurationMatched, method: customdomains.DNSRoutingMethodPerDomainCNAME},
+		{name: "own target through intermediate", aliases: map[string]string{"domain.example.": "alias.example.", "alias.example.": "ABCDEFGHIJ.DOMAINS.EXAMPLE."}, foreign: true, status: customdomains.DNSConfigurationMatched, method: customdomains.DNSRoutingMethodPerDomainCNAME},
+		{name: "other target before shared", aliases: map[string]string{"domain.example.": "klmnopqrst.domains.example.", "klmnopqrst.domains.example.": "shared.example."}, status: customdomains.DNSConfigurationWrongTarget, method: customdomains.DNSRoutingMethodUnknown},
+		{name: "NXDOMAIN", lookupErr: &net.DNSError{Err: "no such host", IsNotFound: true}, status: customdomains.DNSConfigurationNotFound, method: customdomains.DNSRoutingMethodUnknown},
+		{name: "timeout", lookupErr: context.DeadlineExceeded, status: customdomains.DNSConfigurationCheckFailed, method: customdomains.DNSRoutingMethodUnknown, wantErr: true},
+		{name: "loop", aliases: map[string]string{"domain.example.": "alias.example.", "alias.example.": "domain.example."}, status: customdomains.DNSConfigurationCheckFailed, method: customdomains.DNSRoutingMethodUnknown, wantErr: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -43,7 +44,7 @@ func TestObserveDNS(t *testing.T) {
 					return "", errors.New("canonical name lookup must not be used")
 				},
 				LookupNetIPFunc: func(_ context.Context, _, host string) ([]netip.Addr, error) {
-					require.NotContains(t, []DNSRoutingMethod{DNSRoutingMethodSharedCNAME, DNSRoutingMethodPerDomainCNAME}, tc.method, "a recognized alias must not depend on address snapshots")
+					require.NotContains(t, []customdomains.DNSRoutingMethod{customdomains.DNSRoutingMethodSharedCNAME, customdomains.DNSRoutingMethodPerDomainCNAME}, tc.method, "a recognized alias must not depend on address snapshots")
 					ip := "192.0.2.1"
 					if host == "domain.example." && tc.foreign {
 						ip = "192.0.2.2"
@@ -51,13 +52,13 @@ func TestObserveDNS(t *testing.T) {
 					return []netip.Addr{netip.MustParseAddr(ip)}, nil
 				},
 			})
-			got, err := ObserveDNS(t.Context(), resolver, "domain.example", DNSRoutingTargets{SharedCNAME: "shared.example", DomainTarget: "abcdefghij.domains.example", TargetSuffix: "domains.example", ARecords: nil})
+			got, err := customdomains.ObserveDNS(t.Context(), resolver, "domain.example", customdomains.DNSRoutingTargets{SharedCNAME: "shared.example", DomainTarget: "abcdefghij.domains.example", TargetSuffix: "domains.example", ARecords: nil})
 			if tc.wantErr {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
 			}
-			require.Equal(t, DNSObservation{Status: tc.status, Method: tc.method}, got)
+			require.Equal(t, customdomains.DNSObservation{Status: tc.status, Method: tc.method}, got)
 		})
 	}
 }
@@ -94,9 +95,9 @@ func TestObserveDNSHostnameWithoutAddresses(t *testing.T) {
 				},
 			})
 
-			got, err := ObserveDNS(t.Context(), resolver, "domain.example", DNSRoutingTargets{SharedCNAME: "shared.example", DomainTarget: "abcdefghij.domains.example", TargetSuffix: "domains.example", ARecords: nil})
+			got, err := customdomains.ObserveDNS(t.Context(), resolver, "domain.example", customdomains.DNSRoutingTargets{SharedCNAME: "shared.example", DomainTarget: "abcdefghij.domains.example", TargetSuffix: "domains.example", ARecords: nil})
 			require.NoError(t, err)
-			require.Equal(t, DNSObservation{Status: DNSConfigurationNotFound, Method: DNSRoutingMethodUnknown}, got)
+			require.Equal(t, customdomains.DNSObservation{Status: customdomains.DNSConfigurationNotFound, Method: customdomains.DNSRoutingMethodUnknown}, got)
 		})
 	}
 }
@@ -115,11 +116,11 @@ func TestObserveDNSWithoutTargetSuffix(t *testing.T) {
 			resolver := dns.NewMockResolver(dns.MockResolverConfig{
 				LookupCNAMERecordFunc: func(_ context.Context, host string) (string, error) { return tc.aliases[host], nil },
 			})
-			got, err := ObserveDNS(t.Context(), resolver, "domain.example", DNSRoutingTargets{
+			got, err := customdomains.ObserveDNS(t.Context(), resolver, "domain.example", customdomains.DNSRoutingTargets{
 				SharedCNAME: "shared.example", DomainTarget: "", TargetSuffix: "", ARecords: nil,
 			})
 			require.NoError(t, err)
-			require.Equal(t, DNSObservation{Status: DNSConfigurationMatched, Method: DNSRoutingMethodSharedCNAME}, got)
+			require.Equal(t, customdomains.DNSObservation{Status: customdomains.DNSConfigurationMatched, Method: customdomains.DNSRoutingMethodSharedCNAME}, got)
 		})
 	}
 }
@@ -137,38 +138,38 @@ func TestObserveDNSTargetAddressFailures(t *testing.T) {
 		staticAddresses []netip.Addr
 		targetAddresses map[string][]netip.Addr
 		targetErrors    map[string]error
-		status          DNSConfigurationStatus
+		status          customdomains.DNSConfigurationStatus
 		wantErrors      []error
 	}{
 		{
 			name:            "static address matches despite differing live targets",
 			staticAddresses: []netip.Addr{matchingIP},
 			targetAddresses: map[string][]netip.Addr{sharedTarget: {otherIP}, domainTarget: {otherIP}},
-			status:          DNSConfigurationMatched,
+			status:          customdomains.DNSConfigurationMatched,
 		},
 		{
 			name:            "static address matches despite failed live targets",
 			staticAddresses: []netip.Addr{matchingIP},
 			targetErrors:    map[string]error{sharedTarget: sharedErr, domainTarget: domainErr},
-			status:          DNSConfigurationMatched,
+			status:          customdomains.DNSConfigurationMatched,
 		},
 		{
 			name:            "other live target proves a match",
 			targetAddresses: map[string][]netip.Addr{domainTarget: {matchingIP}},
 			targetErrors:    map[string]error{sharedTarget: sharedErr},
-			status:          DNSConfigurationMatched,
+			status:          customdomains.DNSConfigurationMatched,
 		},
 		{
 			name:            "unmatched static addresses cannot exclude failed target",
 			staticAddresses: []netip.Addr{otherIP},
 			targetErrors:    map[string]error{sharedTarget: sharedErr, domainTarget: domainErr},
-			status:          DNSConfigurationCheckFailed, wantErrors: []error{sharedErr, domainErr},
+			status:          customdomains.DNSConfigurationCheckFailed, wantErrors: []error{sharedErr, domainErr},
 		},
 		{
 			name:            "unmatched live target cannot exclude failed target",
 			targetAddresses: map[string][]netip.Addr{sharedTarget: {otherIP}},
 			targetErrors:    map[string]error{domainTarget: domainErr},
-			status:          DNSConfigurationCheckFailed, wantErrors: []error{domainErr},
+			status:          customdomains.DNSConfigurationCheckFailed, wantErrors: []error{domainErr},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -182,7 +183,7 @@ func TestObserveDNSTargetAddressFailures(t *testing.T) {
 					return tc.targetAddresses[host], tc.targetErrors[host]
 				},
 			})
-			got, err := ObserveDNS(t.Context(), resolver, "domain.example", DNSRoutingTargets{
+			got, err := customdomains.ObserveDNS(t.Context(), resolver, "domain.example", customdomains.DNSRoutingTargets{
 				SharedCNAME: sharedTarget, DomainTarget: domainTarget, TargetSuffix: "domains.example", ARecords: tc.staticAddresses,
 			})
 			if len(tc.wantErrors) == 0 {
@@ -192,11 +193,11 @@ func TestObserveDNSTargetAddressFailures(t *testing.T) {
 					require.ErrorIs(t, err, wantErr)
 				}
 			}
-			wantMethod := DNSRoutingMethodUnknown
-			if tc.status == DNSConfigurationMatched {
-				wantMethod = DNSRoutingMethodARecord
+			wantMethod := customdomains.DNSRoutingMethodUnknown
+			if tc.status == customdomains.DNSConfigurationMatched {
+				wantMethod = customdomains.DNSRoutingMethodARecord
 			}
-			require.Equal(t, DNSObservation{Status: tc.status, Method: wantMethod}, got)
+			require.Equal(t, customdomains.DNSObservation{Status: tc.status, Method: wantMethod}, got)
 		})
 	}
 }

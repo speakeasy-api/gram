@@ -2,6 +2,7 @@ package dialect
 
 import (
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
@@ -86,6 +87,16 @@ func (HookLog) Provider(record *otelv1.InboundLogRecord) (string, string, error)
 	default:
 		return "", "", nil
 	}
+}
+
+// Identity is the product the hook source names.
+func (HookLog) Identity(record *otelv1.InboundLogRecord) (string, aivendors.Identity, error) {
+	key, source := getOneLogAttr(record, hookSourceKey)
+	identity, ok := aivendors.Identify(source)
+	if !ok {
+		return "", identity, nil
+	}
+	return key, identity, nil
 }
 
 // Surface is the hook source the endpoint resolved.

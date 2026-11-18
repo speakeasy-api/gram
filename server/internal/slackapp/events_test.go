@@ -132,6 +132,24 @@ func TestEventsIgnoresUnroutedWorkspace(t *testing.T) {
 	require.Empty(t, poster.calls)
 }
 
+func TestEventsTellsLinkedSenderAssistantsAreUnavailable(t *testing.T) {
+	t.Parallel()
+	router := &fakeRouter{workspaces: []slackdirectoryconnections.RoutingWorkspace{{
+		ConnectionID: uuid.New(), OrganizationID: "org-1", TeamID: "T1", ProjectID: uuid.New(), Token: "xoxb-test",
+	}}}
+	dispatcher := &fakeDispatcher{}
+	poster := &fakePoster{}
+	// The refusal comes before managed-assistant lookup or trigger creation.
+	events := newTestEvents(t, router, dispatcher, poster, "user-1").WithAssistantsDisabled(true)
+	rec := httptest.NewRecorder()
+	events.ServeHTTP(rec, signedRequest(t, mentionBody, testSecret))
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Zero(t, dispatcher.calls)
+	require.Len(t, poster.calls, 1)
+	require.Equal(t, "chat.postEphemeral", poster.calls[0].method)
+	require.Equal(t, UnavailableReply, poster.calls[0].payload["text"])
+}
+
 func TestEventsRefusesUnlinkedSender(t *testing.T) {
 	t.Parallel()
 	router := &fakeRouter{workspaces: []slackdirectoryconnections.RoutingWorkspace{{

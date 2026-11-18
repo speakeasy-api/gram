@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Endpoint commands set only applicable optional fields.
+//nolint:exhaustruct_v5 // Endpoint commands set only applicable optional fields.
 package mcpendpoints
 
 import (

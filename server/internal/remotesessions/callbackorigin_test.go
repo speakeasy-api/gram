@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -308,7 +309,7 @@ func TestIdentityCommit_DynamicRegistrationRecordsRegistrationOrigin(t *testing.
 
 			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 			require.NoError(t, err)
-			committer := remotesessions.NewIdentityCommitter(testenv.NewLogger(t), ti.conn, testenv.NewEncryptionClient(t), audit.NewLogger(), mustURL(t, movedOrigin), policy, nil, nil)
+			committer := remotesessions.NewIdentityCommitter(testenv.NewLogger(t), ti.conn, testenv.NewEncryptionClient(t), clientsecretstest.New(t, ti.conn, testenv.NewEncryptionClient(t)), audit.NewLogger(), mustURL(t, movedOrigin), policy, nil, nil)
 			committer.SetCallbackOrigins(pinnedCallbackOrigins(t, tc.registration))
 
 			userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "dcr-origin-usi")

@@ -244,14 +244,26 @@ func (s *productTelemetryTestSource) traceRequest(ctx context.Context, destinati
 		ScopeSpans: []*tracev1.ScopeSpans{{
 			Scope: nil,
 			Spans: []*tracev1.Span{{
-				TraceId:           traceID,
-				SpanId:            spanID,
-				Name:              TestEventName,
-				Kind:              tracev1.Span_SPAN_KIND_INTERNAL,
-				StartTimeUnixNano: uint64(now.UnixNano()),
-				EndTimeUnixNano:   uint64(now.UnixNano()),
+				TraceId:                traceID,
+				SpanId:                 spanID,
+				Name:                   TestEventName,
+				Kind:                   tracev1.Span_SPAN_KIND_INTERNAL,
+				StartTimeUnixNano:      uint64(now.UnixNano()),
+				EndTimeUnixNano:        uint64(now.UnixNano()),
+				TraceState:             "",
+				ParentSpanId:           nil,
+				Flags:                  0,
+				Attributes:             nil,
+				DroppedAttributesCount: 0,
+				Events:                 nil,
+				DroppedEventsCount:     0,
+				Links:                  nil,
+				DroppedLinksCount:      0,
+				Status:                 nil,
 			}},
+			SchemaUrl: "",
 		}},
+		SchemaUrl: "",
 	}}}
 	raw, err := proto.Marshal(export)
 	if err != nil {
@@ -291,11 +303,20 @@ func (s *productTelemetryTestSource) metricRequest(ctx context.Context, destinat
 			Metrics: []*metricsv1.Metric{{
 				Name: TestEventName,
 				Data: &metricsv1.Metric_Gauge{Gauge: &metricsv1.Gauge{DataPoints: []*metricsv1.NumberDataPoint{{
-					TimeUnixNano: uint64(now.UnixNano()),
-					Value:        &metricsv1.NumberDataPoint_AsInt{AsInt: 1},
+					TimeUnixNano:      uint64(now.UnixNano()),
+					Value:             &metricsv1.NumberDataPoint_AsInt{AsInt: 1},
+					Attributes:        nil,
+					StartTimeUnixNano: 0,
+					Exemplars:         nil,
+					Flags:             0,
 				}}}},
+				Description: "",
+				Unit:        "",
+				Metadata:    nil,
 			}},
+			SchemaUrl: "",
 		}},
+		SchemaUrl: "",
 	}}}
 	provenance := (&otelv1.InboundMetric_Provenance_builder{
 		Source:         new(ProvenanceSource),

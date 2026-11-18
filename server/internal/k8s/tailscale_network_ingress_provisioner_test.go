@@ -218,6 +218,21 @@ func TestTailscaleNetworkIngressProvisionerWritesOAuthSecretWithoutReadOrPatch(t
 	require.Equal(t, []byte("second-secret"), secret.Data["client_secret"])
 }
 
+func TestDeleteWithoutReadConfirmationDeletesInTheBackground(t *testing.T) {
+	t.Parallel()
+
+	var policies []metav1.DeletionPropagation
+	err := deleteWithoutReadConfirmation(t.Context(), "owned-oauth", "OAuth Secret", func(_ context.Context, _ string, options metav1.DeleteOptions) error {
+		policies = append(policies, *options.PropagationPolicy)
+		if len(policies) == 1 {
+			return nil
+		}
+		return k8serrors.NewNotFound(corev1.Resource("secrets"), "owned-oauth")
+	})
+	require.NoError(t, err)
+	require.Equal(t, []metav1.DeletionPropagation{metav1.DeletePropagationBackground, metav1.DeletePropagationBackground}, policies)
+}
+
 func TestDeleteWithoutReadConfirmationWaitsForPersistingSecret(t *testing.T) {
 	t.Parallel()
 

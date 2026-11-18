@@ -8,7 +8,7 @@ import (
 )
 
 func registerFindMCPTool(reg *Registrar, reader Reader, cursorKeyMaterial string) {
-	//nolint:exhaustruct // MCP SDK manifest intentionally relies on documented optional zero values.
+	//nolint:exhaustruct_v5 // MCP SDK manifest intentionally relies on documented optional zero values.
 	addTool(reg, &mcp.Tool{
 		Name:        "find_mcp",
 		Title:       "Find MCP Servers",

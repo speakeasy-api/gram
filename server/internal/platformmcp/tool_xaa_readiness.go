@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP manifests and service payloads use optional zero values.
+//nolint:exhaustruct_v5 // MCP manifests and service payloads use optional zero values.
 package platformmcp
 
 import (

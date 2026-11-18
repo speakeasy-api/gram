@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Optional MCP manifest and management payload fields use their zero values.
+//nolint:exhaustruct_v5 // Optional MCP manifest and management payload fields use their zero values.
 package platformmcp
 
 import (

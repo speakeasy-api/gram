@@ -110,6 +110,7 @@ func newTestAssetsServiceWithPolicy(t *testing.T, guardianPolicy *guardian.Polic
 			workos.NewStubClient()),
 
 		auditLogger,
+		true,
 	)
 	repository := repo.New(conn)
 

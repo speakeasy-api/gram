@@ -101593,6 +101593,8 @@ components:
       properties:
         delivery_failure:
           $ref: '#/components/schemas/HookDeliveryFailureData'
+        install_failure:
+          $ref: '#/components/schemas/HookInstallFailureData'
         mcp:
           $ref: '#/components/schemas/HookMCPData'
         mcp_attribution:
@@ -101651,6 +101653,7 @@ components:
             - skill.activated
             - notification.reported
             - client.delivery_failed
+            - client.install_failed
       description: Canonical Speakeasy feature event.
       required:
         - type
@@ -101694,6 +101697,39 @@ components:
       description: Metadata about the local hook adapter that translated a provider event into the Speakeasy hook contract.
       required:
         - adapter
+    HookInstallFailureData:
+      type: object
+      properties:
+        arch:
+          type: string
+          description: CPU architecture of the device.
+          maxLength: 32
+        attempted_at:
+          type: string
+          description: RFC3339 time of the failed install, on the device clock.
+          format: date-time
+        cause:
+          type: string
+          description: Why a bootstrap script could not install the hooks binary.
+          enum:
+            - download
+            - checksum_mismatch
+        harness:
+          type: string
+          description: Coding agent harness the hook ran under.
+          maxLength: 64
+        os:
+          type: string
+          description: Operating system of the device.
+          maxLength: 32
+        version:
+          type: string
+          description: speakeasy-hooks version the script tried to install.
+          maxLength: 64
+      description: Bootstrap install failure report, sent with event type client.install_failed. A plugin's bootstrap script sends one, best effort, when it cannot download the hooks binary or the download fails its checksum. It is diagnostic only and never counts as agent activity.
+      required:
+        - cause
+        - attempted_at
     HookMCPAttributionEntry:
       type: object
       properties:
@@ -110378,6 +110414,9 @@ components:
         ai_platform_push_integrations_enabled:
           type: boolean
           description: Whether the organization can provision push integrations for AI platforms
+        assistants_available:
+          type: boolean
+          description: 'Whether this deployment can run assistants. A deployment-wide setting, not an organization entitlement: false when the deployment runs with the disabled assistant runtime provider. Absent from staff admin responses.'
         authz_challenge_logging_enabled:
           type: boolean
           description: Whether authz challenge logging to ClickHouse is enabled
@@ -110393,6 +110432,9 @@ components:
         device_agent:
           type: boolean
           description: Whether the organization uses the device agent (any device has polled agent.getPlugins). Derived from device-agent syncs, not an admin-settable feature.
+        functions_available:
+          type: boolean
+          description: 'Whether this deployment can run Speakeasy Functions. A deployment-wide setting, not an organization entitlement: false when the deployment runs with the disabled Functions provider. Absent from staff admin responses.'
         hooks_browser_login_enabled:
           type: boolean
           description: Whether generated hook plugins may mint per-user keys via the interactive browser login
