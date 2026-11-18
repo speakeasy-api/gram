@@ -100,7 +100,7 @@ func groupSQL(step, grant string) string {
 type Source string
 
 const (
-	SourceService          Source = "service"
+	SourceService Source = "service"
 
 	// SourceServer is the MCP server itself, rejecting a credential Speakeasy sent it.
 	SourceServer           Source = "server"
