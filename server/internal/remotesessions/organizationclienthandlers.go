@@ -930,6 +930,8 @@ func (s *Service) RotateClient(ctx context.Context, payload *orgclientsgen.Rotat
 			return nil, oops.E(oops.CodeBadRequest, err, "identity provider rejected the client registration: %s", registrationErr.ProviderMessage).LogWarn(ctx, logger)
 		case errors.As(err, &registrationErr):
 			return nil, oops.E(oops.CodeGatewayError, err, "failed to re-register the client with the identity provider").LogError(ctx, logger)
+		case errors.Is(err, clientsecrets.ErrUnattributed):
+			return nil, oops.E(oops.CodeFailedPrecondition, err, "this client was stored without its organization, so its secret cannot be stored while the organization moves to its own encryption key; backfill the client's organization first").LogWarn(ctx, logger)
 		case clientsecrets.IsKeyProblem(err):
 			return nil, oops.E(oops.CodeUnavailable, err, "the organization's encryption key is unavailable, so the client could not be rotated; try again shortly").LogError(ctx, logger)
 		default:

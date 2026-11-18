@@ -370,6 +370,8 @@ func identityOopsError(err error, message string) *oops.ShareableError {
 	var refusal *IdentityError
 	if !errors.As(err, &refusal) {
 		switch {
+		case errors.Is(err, clientsecrets.ErrUnattributed):
+			return oops.E(oops.CodeFailedPrecondition, err, "this client was stored without its organization, so its secret cannot be stored while the organization moves to its own encryption key; backfill the client's organization first")
 		case clientsecrets.IsKeyProblem(err):
 			return oops.E(oops.CodeUnavailable, err, "the organization's encryption key is unavailable, so the client secret could not be stored; try again shortly")
 		case clientsecrets.IsUnreadable(err):

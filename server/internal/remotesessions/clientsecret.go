@@ -19,6 +19,8 @@ func clientSecretWriteError(ctx context.Context, logger *slog.Logger, err error)
 		return oops.E(oops.CodeUnavailable, err, "the organization's encryption key is unavailable, so the client secret could not be stored; try again shortly").LogError(ctx, logger)
 	case errors.Is(err, clientsecrets.ErrClientNotFound):
 		return oops.E(oops.CodeNotFound, err, "remote session client not found").LogWarn(ctx, logger)
+	case errors.Is(err, clientsecrets.ErrUnattributed):
+		return oops.E(oops.CodeFailedPrecondition, err, "this client was stored without its organization, so its secret cannot be stored while the organization moves to its own encryption key; backfill the client's organization first").LogWarn(ctx, logger)
 	case clientsecrets.IsUnreadable(err):
 		// Only a copy opens a stored secret: the source client's no longer
 		// decrypts.

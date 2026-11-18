@@ -200,12 +200,11 @@ func TestProjectClientWithoutOrganizationStaysOnThePlatformKeyAndBlocksFinalize(
 	t.Parallel()
 
 	ti := newTestInstance(t)
-	ti.enroll(t)
 	owner := clientsecrets.OwnerOf(pgtype.Text{String: "", Valid: false}, uuid.NullUUID{UUID: ti.projectID, Valid: true})
 	client := ti.createClient(t, owner)
 
 	row, err := ti.secrets.Set(t.Context(), ti.conn, client.ID, owner, []byte("s3cret"), noExpiry())
-	require.NoError(t, err)
+	require.NoError(t, err, "while the project's organization is in platform_key the secret is stored as before")
 	require.True(t, row.ClientSecretEncrypted.Valid)
 	require.False(t, row.ClientSecretOrgEncrypted.Valid, "a row without an organization cannot be sealed for one")
 
@@ -213,9 +212,34 @@ func TestProjectClientWithoutOrganizationStaysOnThePlatformKeyAndBlocksFinalize(
 	require.NoError(t, err)
 	require.Equal(t, "s3cret", opened)
 
+	ti.enroll(t)
 	counts, err := clientsecrets.NewCopyStore(ti.conn).Count(t.Context(), ti.orgID)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), counts.Unattributed, "the project's organization cannot finalize past it")
+
+	_, err = ti.secrets.Set(t.Context(), ti.conn, client.ID, owner, []byte("replaced"), noExpiry())
+	require.ErrorIs(t, err, clientsecrets.ErrUnattributed, "once enrolled, the secret is not replaced on the platform key")
+	require.False(t, clientsecrets.IsKeyProblem(err))
+}
+
+func TestFirstSecretForAProjectClientWithoutOrganizationIsRefusedAfterFinalize(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	owner := clientsecrets.OwnerOf(pgtype.Text{String: "", Valid: false}, uuid.NullUUID{UUID: ti.projectID, Valid: true})
+	client := ti.createClient(t, owner)
+
+	// A client without a secret never blocks finalize.
+	ti.enroll(t)
+	ti.finalize(t)
+
+	_, err := ti.secrets.Set(t.Context(), ti.conn, client.ID, owner, []byte("s3cret"), noExpiry())
+	require.ErrorIs(t, err, clientsecrets.ErrUnattributed)
+	require.ErrorIs(t, ti.secrets.RequireUsable(t.Context(), ti.conn, owner), clientsecrets.ErrUnattributed, "a registration for it is refused before the provider is asked")
+
+	stored := ti.stored(t, client.ID)
+	require.False(t, stored.ClientSecretEncrypted.Valid, "no platform-key copy appears after finalize")
+	require.False(t, stored.ClientSecretOrgEncrypted.Valid)
 }
 
 func TestBackfillVerifyAndFinalizeMoveSecretsToTheOrganizationKey(t *testing.T) {

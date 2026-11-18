@@ -154,6 +154,12 @@ WHERE c.id IN (
     FOR KEY SHARE
   ), 0) = @decided_generation;
 
+-- name: GetRemoteSessionClientProjectOrganization :one
+-- The organization of a project client stored without its own
+-- organization_id, whose transition state decides whether its secret may
+-- still be written on the platform key.
+SELECT p.organization_id FROM projects AS p WHERE p.id = @project_id;
+
 -- name: GetRemoteSessionClientRowFixture :one
 -- Test fixture: the client row as stored, soft-deleted or not.
 SELECT * FROM remote_session_clients WHERE id = @id;

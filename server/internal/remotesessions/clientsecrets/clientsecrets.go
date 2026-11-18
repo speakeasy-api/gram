@@ -19,9 +19,12 @@
 // client, which has neither a project nor an organization, and a project
 // client stored before project clients carried their organization. Every
 // write fences on the row's own organization column, so a row without one can
-// only be written under generation 0. The CopyStore counts such project
-// clients as unattributed, which keeps their organization from finalizing
-// until their organization_id is backfilled.
+// only be written under generation 0. Such a project client's secret is
+// written only while its project's organization is in platform_key; once that
+// organization is enrolled, Set refuses it with ErrUnattributed until the
+// client's organization_id is backfilled, so no platform-key copy appears
+// after finalize. The CopyStore counts such project clients holding a secret
+// as unattributed, which keeps their organization from finalizing.
 //
 // Clearing the platform-key copies after finalize is not a new revision,
 // including for a secret recorded as unreadable, whose only stored copy that
@@ -66,9 +69,16 @@ var Columns = orgencryption.CopyColumns{
 // life, so a third consecutive move means something is wrong.
 const maxWriteAttempts = 3
 
-// ErrClientNotFound means the client to write does not exist, is deleted, or
-// belongs to another organization.
-var ErrClientNotFound = errors.New("clientsecrets: remote session client not found")
+var (
+	// ErrClientNotFound means the client to write does not exist, is deleted,
+	// or belongs to another organization.
+	ErrClientNotFound = errors.New("clientsecrets: remote session client not found")
+
+	// ErrUnattributed means a project client stored without its organization
+	// cannot have its secret written because its project's organization is
+	// past platform_key. Its organization_id has to be backfilled first.
+	ErrUnattributed = errors.New("clientsecrets: project client is stored without its organization")
+)
 
 // Owner is who a client belongs to, which decides the key its secret is
 // sealed with.
@@ -208,7 +218,7 @@ func (s *Secrets) Open(ctx context.Context, db repo.DBTX, owner Owner, stored or
 // when it fails. db is whatever the caller already holds, or nil.
 func (s *Secrets) RequireUsable(ctx context.Context, db repo.DBTX, owner Owner) error {
 	if owner.platformOnly() {
-		return nil
+		return s.requireUnattributedWritable(ctx, db, owner)
 	}
 
 	decision, err := s.decide(ctx, db, owner)
@@ -218,6 +228,34 @@ func (s *Secrets) RequireUsable(ctx context.Context, db repo.DBTX, owner Owner) 
 
 	if err := s.cipher.RequireUsable(ctx, decision); err != nil {
 		return fmt.Errorf("client secret key: %w", err)
+	}
+
+	return nil
+}
+
+// requireUnattributedWritable refuses a write to a project client stored
+// without its organization once the project's organization is past
+// platform_key: the write would land on the platform key, which the
+// organization no longer uses or is moving off. Global clients always pass.
+func (s *Secrets) requireUnattributedWritable(ctx context.Context, db repo.DBTX, owner Owner) error {
+	if !owner.ProjectID.Valid {
+		return nil
+	}
+	if db == nil {
+		return fmt.Errorf("%w: no database handle to resolve its project's organization", ErrUnattributed)
+	}
+
+	organizationID, err := repo.New(db).GetRemoteSessionClientProjectOrganization(ctx, owner.ProjectID.UUID)
+	if err != nil {
+		return fmt.Errorf("read client project organization: %w", err)
+	}
+
+	decision, err := s.decide(ctx, db, OwnerOf(conv.ToPGText(organizationID), uuid.NullUUID{UUID: uuid.Nil, Valid: false}))
+	if err != nil {
+		return err
+	}
+	if decision.State != orgencryption.TransitionStatePlatformKey {
+		return ErrUnattributed
 	}
 
 	return nil
@@ -252,6 +290,10 @@ func (s *Secrets) Set(ctx context.Context, dbtx repo.DBTX, clientID uuid.UUID, o
 	q := repo.New(dbtx)
 
 	if owner.platformOnly() {
+		if err := s.requireUnattributedWritable(ctx, dbtx, owner); err != nil {
+			return repo.RemoteSessionClient{}, err
+		}
+
 		platform, err := s.platform.Encrypt(plaintext)
 		if err != nil {
 			return repo.RemoteSessionClient{}, fmt.Errorf("encrypt client secret with platform key: %w", err)

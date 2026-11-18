@@ -174,6 +174,20 @@ func (q *Queries) CountRemoteSessionClientSecretCopies(ctx context.Context, orga
 	return i, err
 }
 
+const getRemoteSessionClientProjectOrganization = `-- name: GetRemoteSessionClientProjectOrganization :one
+SELECT p.organization_id FROM projects AS p WHERE p.id = $1
+`
+
+// The organization of a project client stored without its own
+// organization_id, whose transition state decides whether its secret may
+// still be written on the platform key.
+func (q *Queries) GetRemoteSessionClientProjectOrganization(ctx context.Context, projectID uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getRemoteSessionClientProjectOrganization, projectID)
+	var organization_id string
+	err := row.Scan(&organization_id)
+	return organization_id, err
+}
+
 const getRemoteSessionClientRowFixture = `-- name: GetRemoteSessionClientRowFixture :one
 SELECT id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted FROM remote_session_clients WHERE id = $1
 `
