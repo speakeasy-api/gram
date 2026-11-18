@@ -107,6 +107,19 @@ export function providerProgressKey(
 ): string {
   return `provider-setup:${provider}:v1:${[userId, orgId, projectId, serverId].map(encodeURIComponent).join(":")}`;
 }
+/** Forget this tab's saved Setup progress for a server, for every provider. */
+export function clearProviderProgress(serverId: string): void {
+  const suffix = `:${encodeURIComponent(serverId)}`;
+  try {
+    for (let i = sessionStorage.length - 1; i >= 0; i--) {
+      const key = sessionStorage.key(i);
+      if (key?.startsWith("provider-setup:") && key.endsWith(suffix))
+        sessionStorage.removeItem(key);
+    }
+  } catch {
+    // Storage can be unavailable; Setup then has nothing saved to restore.
+  }
+}
 export function saveProviderProgress(key: string, state: State): void {
   try {
     sessionStorage.setItem(

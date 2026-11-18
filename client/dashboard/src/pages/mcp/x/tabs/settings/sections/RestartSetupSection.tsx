@@ -7,14 +7,15 @@ import { Button } from "@/components/ui/Button";
 import { FieldError } from "@/components/ui/Field";
 import { useSdkClient } from "@/contexts/Sdk";
 import { invalidateMcpServerQueries } from "@/lib/mcp-server-visibility";
+import { clearProviderProgress } from "@/pages/mcp/x/setup/provider-setup";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 
 /**
- * Reopens guided setup on a server whose setup is marked done. Saved
- * credentials and the connection stay as they are; only the done mark clears,
- * which brings the Setup tab back to every teammate. The Settings page decides
- * when it shows: guided setup marked done, for people who can edit the server.
+ * Reopens guided setup on a server whose setup is marked done, at its first
+ * step. Saved credentials and the connection stay as they are; the done mark
+ * and this tab's saved Setup progress clear. The Settings page decides when it
+ * shows: guided setup marked done, for people who can edit the server.
  */
 export function RestartSetupSection({
   mcpServer,
@@ -43,6 +44,8 @@ export function RestartSetupSection({
       setPending(false);
       return;
     }
+    // Setup restores the last step it saved; start again from the first.
+    clearProviderProgress(mcpServer.id);
     // Setup reads the done mark when it opens, so refresh it before going.
     await invalidateMcpServerQueries(queryClient);
     await navigate(
