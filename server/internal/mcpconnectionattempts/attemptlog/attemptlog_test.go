@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
@@ -396,10 +397,21 @@ func TestSourceOf_NoneForSuccessLiveAttemptsOrThePersonsOwnDoing(t *testing.T) {
 	require.Equal(t, attemptlog.Source(""), attemptlog.SourceOf(mcpconnectionattempts.CodeRefreshedUnverified.String(), attemptlog.OutcomeConnected))
 	require.Equal(t, attemptlog.Source(""), attemptlog.SourceOf(mcpconnectionattempts.CodeProviderUnavailable.String(), attemptlog.OutcomeInProgress))
 	require.Equal(t, attemptlog.Source(""), attemptlog.SourceOf(mcpconnectionattempts.CodeCanceled.String(), attemptlog.OutcomeDeclined))
+	// Recorded for more than one party, so they name none.
+	unattributed := []string{
+		mcpconnectionattempts.CodeSharedCredentialRejected.String(),
+		mcpconnectionattempts.CodeSignInProviderError.String(),
+		mcpconnectionattempts.CodeProviderDenied.String(),
+		mcpconnectionattempts.CodeIssuerMismatch.String(),
+		mcpconnectionattempts.CodeProviderRateLimited.String(),
+	}
+	for _, code := range unattributed {
+		require.Empty(t, attemptlog.SourceOf(code, attemptlog.OutcomeFailed), code)
+	}
 	for _, code := range mcpconnectionattempts.Codes() {
 		meaning, ok := mcpconnectionattempts.MeaningOf(code)
 		require.True(t, ok)
-		if meaning.WhoFixes != mcpconnectionattempts.WhoPerson && meaning.WhoFixes != mcpconnectionattempts.WhoNobody {
+		if meaning.WhoFixes != mcpconnectionattempts.WhoPerson && meaning.WhoFixes != mcpconnectionattempts.WhoNobody && !slices.Contains(unattributed, code) {
 			require.NotEmpty(t, attemptlog.SourceOf(code, attemptlog.OutcomeFailed), code)
 		}
 	}

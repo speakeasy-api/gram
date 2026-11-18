@@ -117,16 +117,23 @@ const (
 	SourceSpeakeasy        Source = "speakeasy"
 )
 
+// unattributedReasons are recorded for more than one party, so they name none.
+var unattributedReasons = []string{
+	mcpconnectionattempts.CodeSharedCredentialRejected.String(),
+	mcpconnectionattempts.CodeSignInProviderError.String(),
+	mcpconnectionattempts.CodeProviderDenied.String(),
+	mcpconnectionattempts.CodeIssuerMismatch.String(),
+	mcpconnectionattempts.CodeProviderRateLimited.String(),
+}
+
 // serverReasons come back from the MCP server Speakeasy connected to.
 var serverReasons = []string{
 	mcpconnectionattempts.CodeRejectedByMember.String(),
-	mcpconnectionattempts.CodeSharedCredentialRejected.String(),
 	mcpconnectionattempts.CodeStaticKeyRejected.String(),
 }
 
 // identityProviderReasons come back from the organization's sign-in service.
 var identityProviderReasons = []string{
-	mcpconnectionattempts.CodeSignInProviderError.String(),
 	mcpconnectionattempts.CodeIDPUnavailable.String(),
 	mcpconnectionattempts.CodeAccessDenied.String(),
 	mcpconnectionattempts.CodeScopePolicyDenied.String(),
@@ -144,10 +151,7 @@ var serviceReasons = []string{
 	mcpconnectionattempts.CodeProviderOAuthInvalidClient.String(),
 	mcpconnectionattempts.CodeProviderOAuthInvalidScope.String(),
 	mcpconnectionattempts.CodeProviderOAuthInvalidGrant.String(),
-	mcpconnectionattempts.CodeProviderDenied.String(),
-	mcpconnectionattempts.CodeIssuerMismatch.String(),
 	mcpconnectionattempts.CodeUnrenewableToken.String(),
-	mcpconnectionattempts.CodeProviderRateLimited.String(),
 	mcpconnectionattempts.CodeProviderUnavailable.String(),
 	mcpconnectionattempts.CodeProviderServerError.String(),
 	mcpconnectionattempts.CodeProviderUnreachable.String(),
@@ -165,6 +169,9 @@ var serviceReasons = []string{
 // since rows do not store it. Successes, live attempts and the person's own doing have none.
 func SourceOf(reason string, outcome Outcome) Source {
 	if reason == "" || outcome == OutcomeConnected || outcome == OutcomeInProgress {
+		return ""
+	}
+	if slices.Contains(unattributedReasons, reason) {
 		return ""
 	}
 	if slices.Contains(identityProviderReasons, reason) {
