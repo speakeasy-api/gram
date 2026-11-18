@@ -257,6 +257,20 @@ func (q *Queries) CorruptDeviceIntegrationCredentialsFixture(ctx context.Context
 	return err
 }
 
+const countActivePrincipalRemoteSessionBindingsForSessionFixture = `-- name: CountActivePrincipalRemoteSessionBindingsForSessionFixture :one
+SELECT COUNT(*)::int
+FROM principal_remote_session_bindings
+WHERE remote_session_id = $1
+  AND revoked_at IS NULL
+`
+
+func (q *Queries) CountActivePrincipalRemoteSessionBindingsForSessionFixture(ctx context.Context, remoteSessionID uuid.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, countActivePrincipalRemoteSessionBindingsForSessionFixture, remoteSessionID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const countAdvisoryLockWaitersFixture = `-- name: CountAdvisoryLockWaitersFixture :one
 SELECT count(*)::integer FROM pg_catalog.pg_locks AS locks
 WHERE locks.locktype = 'advisory' AND NOT locks.granted
@@ -2865,6 +2879,19 @@ func (q *Queries) GetPrincipalRemoteSessionBindingIssuerFixture(ctx context.Cont
 	var user_session_issuer_id uuid.UUID
 	err := row.Scan(&user_session_issuer_id)
 	return user_session_issuer_id, err
+}
+
+const getPrincipalRemoteSessionBindingSessionFixture = `-- name: GetPrincipalRemoteSessionBindingSessionFixture :one
+SELECT remote_session_id
+FROM principal_remote_session_bindings
+WHERE id = $1
+`
+
+func (q *Queries) GetPrincipalRemoteSessionBindingSessionFixture(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getPrincipalRemoteSessionBindingSessionFixture, id)
+	var remote_session_id uuid.UUID
+	err := row.Scan(&remote_session_id)
+	return remote_session_id, err
 }
 
 const getPublishOutboxDeadLetter = `-- name: GetPublishOutboxDeadLetter :one

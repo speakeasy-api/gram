@@ -1509,6 +1509,17 @@ SELECT user_session_issuer_id
 FROM principal_remote_session_bindings
 WHERE id = @id;
 
+-- name: GetPrincipalRemoteSessionBindingSessionFixture :one
+SELECT remote_session_id
+FROM principal_remote_session_bindings
+WHERE id = @id;
+
+-- name: CountActivePrincipalRemoteSessionBindingsForSessionFixture :one
+SELECT COUNT(*)::int
+FROM principal_remote_session_bindings
+WHERE remote_session_id = @remote_session_id
+  AND revoked_at IS NULL;
+
 -- name: InsertRemoteSessionEMABindingFixture :one
 INSERT INTO remote_session_ema_bindings (
   project_id,

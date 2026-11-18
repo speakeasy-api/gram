@@ -798,9 +798,9 @@ func TestOrganizationUserSessionIssuerMigrateKeepsOneAttachmentForSameLogin(t *t
 	requireMigrationAttachment(t, ctx, ti, bindingIDs[targetID], targetID, login)
 	_, err = testrepo.New(ti.conn).GetPrincipalRemoteSessionBindingIssuerFixture(ctx, bindingIDs[sourceID])
 	require.ErrorIs(t, err, pgx.ErrNoRows, "the source's duplicate leaves with the source")
-	var active int
-	require.NoError(t, ti.conn.QueryRow(ctx, "SELECT COUNT(*) FROM principal_remote_session_bindings WHERE remote_session_id = $1 AND revoked_at IS NULL", login).Scan(&active))
-	require.Equal(t, 1, active)
+	active, err := testrepo.New(ti.conn).CountActivePrincipalRemoteSessionBindingsForSessionFixture(ctx, login)
+	require.NoError(t, err)
+	require.Equal(t, int32(1), active)
 }
 
 // seedMigrationAttachments makes one person's login through loginIssuerID and
@@ -847,8 +847,8 @@ func requireMigrationAttachment(t *testing.T, ctx context.Context, ti *testInsta
 	bindingIssuerID, err := testrepo.New(ti.conn).GetPrincipalRemoteSessionBindingIssuerFixture(ctx, bindingID)
 	require.NoError(t, err, "the merge keeps the attachment")
 	require.Equal(t, issuerID, bindingIssuerID)
-	var bindingLoginID uuid.UUID
-	require.NoError(t, ti.conn.QueryRow(ctx, "SELECT remote_session_id FROM principal_remote_session_bindings WHERE id = $1", bindingID).Scan(&bindingLoginID))
+	bindingLoginID, err := testrepo.New(ti.conn).GetPrincipalRemoteSessionBindingSessionFixture(ctx, bindingID)
+	require.NoError(t, err)
 	require.Equal(t, loginID, bindingLoginID, "the attachment keeps its login")
 }
 
