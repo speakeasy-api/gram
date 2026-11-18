@@ -138,20 +138,20 @@ type DeniedClient struct {
 	LastAt time.Time `ch:"x_last"`
 }
 
-// Denied lists apps refused at sign-in, most recent first.
+// Denied lists apps refused at sign-in for being the app they are, most recent first.
 func Denied(ctx context.Context, ch driver.Conn, s Scope, now time.Time) ([]DeniedClient, error) {
 	attempts, args, err := attemptsSQL(s, now)
 	if err != nil {
 		return nil, err
 	}
-	args = append(args, string(OutcomeBlocked), groupStrings(deniedGroups), maxDeniedClients)
+	args = append(args, string(OutcomeBlocked), groupStrings(deniedGroups), deniedReasons, maxDeniedClients)
 	query := `
 	SELECT d_app AS x_app, any(a_app_key) AS x_app_key, d_reason AS x_reason, sum(a_weight) AS x_attempts,
 		toUInt64(uniqExactIf(a_subject, a_subject != '')) AS x_people,
 		toUInt64(uniqExactIf(a_device, a_subject = '' AND a_device != '')) AS x_networks,
 		max(d_at) AS x_last
 	FROM (` + attempts + `)
-	WHERE d_outcome = ? AND has(?, d_step)
+	WHERE d_outcome = ? AND has(?, d_step) AND has(?, d_reason)
 	GROUP BY x_app, x_reason
 	ORDER BY x_last DESC
 	LIMIT ?` + readSettings

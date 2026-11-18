@@ -54,6 +54,13 @@ var renewalGroups = []StepGroup{StepSignInRenewal, StepServiceRenewal}
 // deniedGroups are the steps where refusing an app counts as denying a client.
 var deniedGroups = []StepGroup{StepConnect, StepSignIn, StepSignInRenewal}
 
+// deniedReasons are the refusals of the app itself, by client access rules or an AI app block.
+var deniedReasons = []string{
+	mcpconnectionattempts.CodeCIMDAdmissionDenied.String(),
+	mcpconnectionattempts.CodeAIToolBlocked.String(),
+	mcpconnectionattempts.CodeClientNotCIMD.String(),
+}
+
 // GroupOf names the group of a stored step. A token step with a refresh grant renews a sign-in.
 func GroupOf(step, grantType string) StepGroup {
 	switch step {

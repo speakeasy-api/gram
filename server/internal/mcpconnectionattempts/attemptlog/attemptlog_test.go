@@ -444,3 +444,18 @@ func TestList_FailuresWithNoPersonOrNetworkNeverFold(t *testing.T) {
 		require.Equal(t, uint64(1), row.Count)
 	}
 }
+
+func TestDenied_LeavesOutRefusalsOfThePerson(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	for i, code := range []mcpconnectionattempts.Code{mcpconnectionattempts.CodeNotOrgMember, mcpconnectionattempts.CodeSignInRevokedByAdmin, mcpconnectionattempts.CodeCIMDAdmissionDenied} {
+		a := f.attempt(f.org, f.project, f.server, f.now.Add(-time.Duration(i+1)*time.Hour))
+		f.row(a, mcpconnectionattempts.StepInboundAuthorize, code, true, 0, person("u1"))
+	}
+	f.insert()
+
+	clients, err := attemptlog.Denied(t.Context(), f.ch, f.scope(), f.now)
+	require.NoError(t, err)
+	require.Len(t, clients, 1)
+	require.Equal(t, mcpconnectionattempts.CodeCIMDAdmissionDenied.String(), clients[0].Reason)
+}
