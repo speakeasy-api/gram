@@ -2,9 +2,11 @@ package dialect
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/genaiconv"
 )
 
@@ -103,6 +105,7 @@ const (
 	claudeCodeAccountUUIDKey   = "user.account_uuid"
 	claudeCodeLegacyBodyPrefix = "claude_code."
 	claudeCodeToolParamsKey    = "tool_parameters"
+	claudeCodeTerminalTypeKey  = "terminal.type"
 )
 
 // Producer knowledge: the scope name identified Claude Code, so it is the key.
@@ -113,6 +116,36 @@ func (ClaudeCodeLog) Provider(*otelv1.InboundLogRecord) (string, string, error) 
 
 func (ClaudeCodeLog) Surface(*otelv1.InboundLogRecord) (string, string, error) {
 	return scopeNameKey, claudeCodeSurface, nil
+}
+
+func (ClaudeCodeLog) Identity(record *otelv1.InboundLogRecord) (string, aivendors.Identity, error) {
+	serviceKey, serviceName := getLogResourceAttr(record, serviceNameKey)
+	terminalKey, terminal := getOneLogAttr(record, claudeCodeTerminalTypeKey)
+	key, identity := claudeCodeIdentity(serviceKey, serviceName, terminalKey, terminal)
+	return key, identity, nil
+}
+
+// claudeCodeProducts are the products the Claude Code runtime serves; a
+// service.name naming anything else is not trusted to say which one.
+var claudeCodeProducts = []string{"claude-code", "cowork"}
+
+// claudeCodeIdentity reads the product from service.name, which tells the CLI,
+// the desktop app and Cowork apart, and the client from the same name or else
+// from terminal.type. Without a usable service.name it is Claude Code.
+func claudeCodeIdentity(serviceKey, serviceName, terminalKey, terminal string) (string, aivendors.Identity) {
+	key := scopeNameKey
+	identity, _ := aivendors.Identify(claudeCodeSurface)
+	if byService, ok := aivendors.Identify(serviceName); ok && slices.Contains(claudeCodeProducts, byService.ProductID) {
+		key, identity = serviceKey, byService
+	}
+	if identity.Client != aivendors.ClientUnknown {
+		return key, identity
+	}
+	if client := aivendors.ClientFromTerminal(terminal); client != aivendors.ClientUnknown {
+		identity.Client = client
+		return terminalKey, identity
+	}
+	return key, identity
 }
 
 // claudeCodeEventName is the producer's own name for the event: the OTLP

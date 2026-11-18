@@ -25,10 +25,10 @@ const (
 	// target (<token>.<suffix>) short enough to type.
 	DNSTargetTokenLength = 10
 
-	// maxDNSTargetTokenAttempts bounds how many tokens ensureDNSTargetToken
-	// tries before giving up. A collision is already negligible at 50 bits,
-	// so needing a third attempt points at a broken token source rather than
-	// bad luck.
+	// maxDNSTargetTokenAttempts bounds how many tokens
+	// EnsureDNSTargetTokenWithSource tries before giving up. A collision is
+	// already negligible at 50 bits, so needing a third attempt points at a
+	// broken token source rather than bad luck.
 	maxDNSTargetTokenAttempts = 3
 
 	// maxDNSNameLength is the longest DNS name in presentation form, without
@@ -144,12 +144,13 @@ func isDNSTargetToken(label string) bool {
 // the live-row unique index is retried with a new token without aborting a
 // caller's enclosing transaction.
 func EnsureDNSTargetToken(ctx context.Context, db TxBeginner, organizationID string, id uuid.UUID) (string, error) {
-	return ensureDNSTargetToken(ctx, db, organizationID, id, NewDNSTargetToken)
+	return EnsureDNSTargetTokenWithSource(ctx, db, organizationID, id, NewDNSTargetToken)
 }
 
-// ensureDNSTargetToken is EnsureDNSTargetToken with the token source as a
-// parameter, so tests can force collisions.
-func ensureDNSTargetToken(ctx context.Context, db TxBeginner, organizationID string, id uuid.UUID, newToken func() string) (string, error) {
+// EnsureDNSTargetTokenWithSource is EnsureDNSTargetToken with the token source
+// as a parameter, so callers can control which tokens are tried (tests use it
+// to force collisions). newToken is called once per attempt.
+func EnsureDNSTargetTokenWithSource(ctx context.Context, db TxBeginner, organizationID string, id uuid.UUID, newToken func() string) (string, error) {
 	for range maxDNSTargetTokenAttempts {
 		token, err := assignDNSTargetToken(ctx, db, organizationID, id, newToken())
 		var pgErr *pgconn.PgError

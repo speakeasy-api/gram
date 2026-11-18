@@ -56,7 +56,7 @@ func seedTrustedRemoteSessionIssuerTargetWithJWKS(t *testing.T, ctx context.Cont
 func seedTrustedRemoteSessionClientTarget(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID, clientID string, projectID uuid.NullUUID, organizationID pgtype.Text, scope []string) uuid.UUID {
 	t.Helper()
 
-	client, err := remotesessionsrepo.New(ti.conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+	client, err := remotesessionsrepo.New(ti.conn).CreateRemoteSessionClientFixture(ctx, remotesessionsrepo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:                       projectID,
 		OrganizationID:                  organizationID,
 		RemoteSessionIssuerID:           issuerID,
