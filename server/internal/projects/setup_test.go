@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/projects"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -104,6 +105,7 @@ func newTestProjectsService(t *testing.T) (context.Context, *testInstance) {
 		auditLogger,
 		nil,
 		false,
+		staff.Organization{},
 	)
 
 	return ctx, &testInstance{

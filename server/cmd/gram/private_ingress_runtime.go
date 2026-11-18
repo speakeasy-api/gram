@@ -135,6 +135,13 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	billingRepo, billingTracker := identityDeps.Billing, identityDeps.BillingTracker
 	productFeatures, siteURL := identityDeps.ProductFeatures, identityDeps.SiteURL
 	identityResolver, sessionManager, chatSessions := identityDeps.Identity, identityDeps.Sessions, identityDeps.ChatSessions
+	staffOrg, err := staffOrganizationFromCLI(c)
+	if err != nil {
+		return nil, err
+	}
+	if err := verifyStaffOrganization(ctx, db, staffOrg); err != nil {
+		return nil, err
+	}
 	serverURL, err := url.Parse(c.String("server-url"))
 	if err != nil {
 		return nil, fmt.Errorf("parse server URL: %w", err)
@@ -172,7 +179,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	if c.String("environment") == "local" {
 		openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 	} else {
-		openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, enc)
+		openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, enc, staffOrg)
 	}
 	tigrisStore, stop, err := newTigrisStore(ctx, c, logger)
 	if err != nil {

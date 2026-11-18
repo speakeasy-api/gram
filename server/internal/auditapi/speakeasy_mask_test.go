@@ -9,13 +9,15 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/auditlogs"
 
+	"github.com/speakeasy-api/gram/server/internal/auditapi"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/staff"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-// Mirrors the unexported constant in the auditapi package so tests fail if the
-// hardcoded Speakeasy org id ever drifts.
-const speakeasyTeamOrganizationID = "5a25158b-24dc-4d49-b03d-e85acfbea59c"
+// staffOrganizationID is the staff organization newTestAuditService configures.
+const staffOrganizationID = "6f1c2a3e-9d4b-4c7a-8e21-3b5f0d9a7c14"
 
 // seedSpeakeasyMember creates the Speakeasy org (if needed) and enrolls the
 // given Speakeasy user id as an active member.
@@ -24,7 +26,7 @@ func seedSpeakeasyMember(t *testing.T, ctx context.Context, ti *testInstance, us
 
 	queries := orgrepo.New(ti.conn)
 	_, err := queries.UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
-		ID:          speakeasyTeamOrganizationID,
+		ID:          staffOrganizationID,
 		Name:        "Speakeasy Team",
 		Slug:        "speakeasy-team",
 		WorkosID:    conv.ToPGTextEmpty(""),
@@ -33,7 +35,7 @@ func seedSpeakeasyMember(t *testing.T, ctx context.Context, ti *testInstance, us
 	require.NoError(t, err)
 
 	_, err = queries.UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
-		OrganizationID: speakeasyTeamOrganizationID,
+		OrganizationID: staffOrganizationID,
 		UserID:         conv.ToPGText(userID),
 	})
 	require.NoError(t, err)
@@ -224,6 +226,48 @@ func TestAuditService_List_MasksSpeakeasyOrgActors(t *testing.T) {
 	require.Equal(t, "customer", *customerLog.ActorSlug)
 }
 
+// A deployment without a staff organization masks no organization members:
+// there is no staff organization to be a member of.
+func TestAuditService_List_UnconfiguredStaffOrganizationMasksNoMembers(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAuditService(t)
+	authCtx := testAuthContext(t, ctx)
+
+	staffUserID := uuid.NewString()
+	seedSpeakeasyMember(t, ctx, ti, staffUserID)
+
+	insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID:   authCtx.ActiveOrganizationID,
+		projectID:        uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		actorID:          staffUserID,
+		actorType:        "user",
+		actorDisplayName: new("david@speakeasy.com"),
+		actorSlug:        new("david"),
+		action:           "project:update",
+		subjectID:        "project-1",
+		subjectType:      "project",
+	})
+
+	service := auditapi.NewService(testenv.NewLogger(t), testenv.NewTracerProvider(t), ti.conn, ti.sessionManager, ti.authzEngine, staff.Organization{})
+	result, err := service.List(ctx, &gen.ListPayload{
+		ApikeyToken:  nil,
+		SessionToken: nil,
+		Cursor:       nil,
+		ProjectSlug:  nil,
+		ActorID:      nil,
+		Action:       nil,
+		SubjectType:  nil,
+		SubjectID:    nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Logs, 1)
+	require.NotNil(t, result.Logs[0].ActorDisplayName)
+	require.Equal(t, "david@speakeasy.com", *result.Logs[0].ActorDisplayName)
+	require.NotNil(t, result.Logs[0].ActorSlug)
+	require.Equal(t, "david", *result.Logs[0].ActorSlug)
+}
+
 // Non-user actor types are never masked, even if their id happens to collide
 // with a Speakeasy member's user id.
 func TestAuditService_List_MaskSkipsNonUserActors(t *testing.T) {
@@ -274,23 +318,23 @@ func TestAuditService_List_DoesNotMaskSpeakeasyOrgViewingItself(t *testing.T) {
 	seedSpeakeasyMember(t, ctx, ti, staffUserID)
 
 	// Re-scope the session to the Speakeasy org as the active org.
-	authCtx.ActiveOrganizationID = speakeasyTeamOrganizationID
+	authCtx.ActiveOrganizationID = staffOrganizationID
 
 	staffLogID := insertAuditLog(t, ctx, ti, auditLogSeed{
-		organizationID:   speakeasyTeamOrganizationID,
+		organizationID:   staffOrganizationID,
 		projectID:        uuid.NullUUID{},
 		actorID:          staffUserID,
 		actorType:        "user",
 		actorDisplayName: new("david@speakeasy.com"),
 		actorSlug:        new("david"),
 		action:           "organization:update",
-		subjectID:        speakeasyTeamOrganizationID,
+		subjectID:        staffOrganizationID,
 		subjectType:      "organization",
 	})
 
 	adminSurface := "admin"
 	adminLogID := insertAuditLog(t, ctx, ti, auditLogSeed{
-		organizationID:   speakeasyTeamOrganizationID,
+		organizationID:   staffOrganizationID,
 		projectID:        uuid.NullUUID{},
 		actorID:          "oidc|test-operator",
 		actorType:        "user",
@@ -298,7 +342,7 @@ func TestAuditService_List_DoesNotMaskSpeakeasyOrgViewingItself(t *testing.T) {
 		actorSlug:        new("test-operator"),
 		actingSurface:    &adminSurface,
 		action:           "organization:update",
-		subjectID:        speakeasyTeamOrganizationID,
+		subjectID:        staffOrganizationID,
 		subjectType:      "organization",
 	})
 

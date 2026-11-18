@@ -45,7 +45,7 @@ const (
 	// benchOrgID/benchProjectID label the judge calls. The judge needs an
 	// org/project for the request shape; these are inert identifiers (the
 	// dev-key provisioner ignores the org, projectID must parse as a UUID).
-	benchOrgID     = constants.SpeakeasyTeamOrganizationID
+	benchOrgID     = constants.USSpeakeasyTeamOrganizationID
 	benchProjectID = "00000000-0000-0000-0000-000000000001"
 
 	// viewCommand names the command that shows the cached runs.

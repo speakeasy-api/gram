@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -97,7 +98,7 @@ func (s *Service) convertEnterpriseTrialForCheckoutTx(ctx context.Context, tx pg
 		return false, errors.New("model provider key lifecycle is unavailable")
 	}
 	label := "System"
-	return ConvertEnterpriseTrialToPaygTx(ctx, tx, organizationID, trial, provisioner, s.auditLogger, s.checkoutNow(), BillingActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, "system"), DisplayName: &label}, "stripe_checkout")
+	return ConvertEnterpriseTrialToPaygTx(ctx, tx, organizationID, trial, provisioner, s.auditLogger, s.checkoutNow(), BillingActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, "system"), DisplayName: &label}, "stripe_checkout", s.staffOrg)
 }
 
 // ConvertEnterpriseTrialToPaygTx shares the local conversion policy between
@@ -106,7 +107,7 @@ func (s *Service) convertEnterpriseTrialForCheckoutTx(ctx context.Context, tx pg
 // and commit subscription identity and PAYG activation in the same transaction.
 func ConvertEnterpriseTrialToPaygTx(ctx context.Context, tx pgx.Tx, organizationID string, trial trialsrepo.Trial, provisioner interface {
 	PrepareEnterpriseTrialConversionKeyWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, int64) (openrouter.EnterpriseTrialConversionKeyChange, error)
-}, auditLogger *audit.Logger, now time.Time, actor BillingActor, source string) (bool, error) {
+}, auditLogger *audit.Logger, now time.Time, actor BillingActor, source string, staffOrg staff.Organization) (bool, error) {
 	if trial.ConvertedAt.Valid || trial.Tier != "enterprise" {
 		return false, nil
 	}
@@ -122,7 +123,7 @@ func ConvertEnterpriseTrialToPaygTx(ctx context.Context, tx pgx.Tx, organization
 		return false, errors.New("enterprise trial has incompatible organization access")
 	}
 
-	enterpriseFloor, ok := openrouter.DefaultCreditLimit(organizationID, billing.TierEnterprise, false)
+	enterpriseFloor, ok := openrouter.DefaultCreditLimit(staffOrg, organizationID, billing.TierEnterprise, false)
 	if !ok || enterpriseFloor <= 0 {
 		return false, errors.New("enterprise tier has no OpenRouter credit policy")
 	}

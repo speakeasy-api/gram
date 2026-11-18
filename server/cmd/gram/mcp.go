@@ -203,6 +203,13 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	productFeatures, siteURL := identityDeps.ProductFeatures, identityDeps.SiteURL
 	identityResolver, sessionManager, chatSessions := identityDeps.Identity, identityDeps.Sessions, identityDeps.ChatSessions
 
+	staffOrg, err := staffOrganizationFromCLI(c)
+	if err != nil {
+		return err
+	}
+	if err := verifyStaffOrganization(ctx, db, staffOrg); err != nil {
+		return err
+	}
 	serverURL, err := url.Parse(c.String("server-url"))
 	if err != nil {
 		return fmt.Errorf("parse server url: %w", err)
@@ -247,7 +254,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if serviceEnv == "local" {
 		openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 	} else {
-		openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, serviceEnv, c.String("openrouter-provisioning-key"), productFeatures, billingTracker, enc)
+		openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, serviceEnv, c.String("openrouter-provisioning-key"), productFeatures, billingTracker, enc, staffOrg)
 	}
 
 	tigrisStore, stop, err := newTigrisStore(ctx, c, logger)

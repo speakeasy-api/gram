@@ -1,19 +1,13 @@
 package dailyoutcomes
 
 import (
-	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 )
 
 // minOrgsPerLabel is how many organizations must share a row's provider, app and
 // client family for those names to be kept, so no stored row points to one customer.
 const minOrgsPerLabel = 3
-
-// uncountedOrganizations are Speakeasy's own. Their attempts are kept but do not count
-// toward minOrgsPerLabel, so they cannot make one customer's vendor look shared.
-var uncountedOrganizations = map[string]struct{}{
-	constants.SpeakeasyTeamOrganizationID: {},
-}
 
 // DayRow is one row of mcp_connection_outcomes_daily, without its day.
 type DayRow struct {
@@ -61,10 +55,14 @@ type tally struct {
 
 	// unknown counts values outside the known steps, outcomes, reasons and fixes, by column.
 	unknown map[string]int
+
+	// staffOrg is Speakeasy's own organization. Its attempts are kept but do not count
+	// toward minOrgsPerLabel, so they cannot make one customer's vendor look shared.
+	staffOrg staff.Organization
 }
 
-func newTally() *tally {
-	return &tally{attempts: map[rowKey]map[string]uint64{}, unknown: map[string]int{}}
+func newTally(staffOrg staff.Organization) *tally {
+	return &tally{attempts: map[rowKey]map[string]uint64{}, unknown: map[string]int{}, staffOrg: staffOrg}
 }
 
 // known returns label, counting it when it replaced a value outside the known set.
@@ -101,7 +99,7 @@ func (t *tally) rows() []DayRow {
 		orgs := map[rowKey]map[string]struct{}{}
 		for key, byOrg := range byKey {
 			for org := range byOrg {
-				if _, skip := uncountedOrganizations[org]; !skip {
+				if !t.staffOrg.Is(org) {
 					addOrg(orgs, named(key), org)
 				}
 			}

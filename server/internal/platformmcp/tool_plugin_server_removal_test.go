@@ -17,6 +17,7 @@ import (
 	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -79,7 +80,7 @@ func TestRemovePluginServerThroughMCP(t *testing.T) {
 	membershipID := add(plugin.ID)
 	otherMembershipID := add(otherPlugin.ID)
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	delivery := plugindelivery.NewService(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, &sessions.Manager{}, nil, engine, audit.NewLogger(), nil, "test", "https://example.test", nil, nil)
+	delivery := plugindelivery.NewService(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, &sessions.Manager{}, nil, engine, audit.NewLogger(), nil, "test", "https://example.test", nil, nil, staff.Organization{})
 	service := testPluginTargets(conn).WithAuthorization(engine).WithServerRemoval(delivery)
 
 	admin := newPluginRemovalSession(t, service, principal, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID)}, nil)

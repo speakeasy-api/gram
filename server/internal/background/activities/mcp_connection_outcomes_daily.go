@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/dailyoutcomes"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 )
 
 // MCPConnectionOutcomesDaily plans and builds days of mcp_connection_outcomes_daily.
@@ -20,8 +21,8 @@ type MCPConnectionOutcomesDaily struct {
 	builder *dailyoutcomes.Builder
 }
 
-func NewMCPConnectionOutcomesDaily(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, chConn clickhouse.Conn) *MCPConnectionOutcomesDaily {
-	return &MCPConnectionOutcomesDaily{builder: dailyoutcomes.NewBuilder(logger, meterProvider, db, chConn)}
+func NewMCPConnectionOutcomesDaily(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, chConn clickhouse.Conn, staffOrg staff.Organization) *MCPConnectionOutcomesDaily {
+	return &MCPConnectionOutcomesDaily{builder: dailyoutcomes.NewBuilder(logger, meterProvider, db, chConn, staffOrg)}
 }
 
 // PlanMCPConnectionOutcomeDaysArgs carries the workflow's clock.

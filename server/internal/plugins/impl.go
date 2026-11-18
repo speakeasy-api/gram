@@ -61,6 +61,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -187,6 +188,10 @@ type Service struct {
 	// host, which generated plugins use for server routes and MCP addresses.
 	// Nil, or an organization without a stored platform host, uses serverURL.
 	orgHosts *orghost.Resolver
+
+	// staffOrg is the deployment's Speakeasy staff organization, which always
+	// receives the current hooksGeneratorVersion immediately.
+	staffOrg staff.Organization
 }
 
 var (
@@ -207,6 +212,7 @@ func NewService(
 	serverURL string,
 	features feature.Provider,
 	publisher PluginPublishSignaler,
+	staffOrg staff.Organization,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("plugins"))
 
@@ -231,6 +237,7 @@ func NewService(
 		publicationRequests:   PublicationRequests{Enabled: false},
 		distributionAdmission: admission.NewGuard(),
 		orgHosts:              nil,
+		staffOrg:              staffOrg,
 	}
 }
 
@@ -247,6 +254,7 @@ func NewPublisher(
 	env string,
 	serverURL string,
 	features feature.Provider,
+	staffOrg staff.Organization,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("plugins"))
 
@@ -268,6 +276,7 @@ func NewPublisher(
 		publicationRequests:   PublicationRequests{Enabled: false},
 		distributionAdmission: admission.NewGuard(),
 		orgHosts:              nil,
+		staffOrg:              staffOrg,
 	}
 }
 
@@ -2293,27 +2302,18 @@ type publishProjectInput struct {
 	HooksKeyCandidate *pluginAPIKeyCandidate
 }
 
-// publishOutcome is the internal result of publishProject. Skipped is true when
-// SkipIfUnchanged was set and the fingerprint matched, in which case no GitHub
-// commit was made and RepoURL points at the existing repo (or is empty if the
-// project has no connection yet).
-// canaryHooksOrgSlugs always receive the current hooksGeneratorVersion
-// immediately, bypassing the FlagHooksRollout payload. This is a code-side
-// allowlist rather than PostHog group targeting on purpose: the provider
-// returns no payload when PostHog is disabled or unreachable, and we never want
-// such an outage to strand our own team on a stale hooks version.
-var canaryHooksOrgSlugs = map[string]bool{
-	"speakeasy-team": true,
-}
-
 // hooksRolloutEligible reports whether the org is cleared to receive the current
-// hooksGeneratorVersion. Canary orgs always are. Otherwise the FlagHooksRollout
+// hooksGeneratorVersion. The staff organization always is, bypassing the
+// FlagHooksRollout payload. That is configuration rather than PostHog group
+// targeting on purpose: the provider returns no payload when PostHog is
+// disabled or unreachable, and we never want such an outage to strand our own
+// team on a stale hooks version. Otherwise the FlagHooksRollout
 // payload — JSON {"version": N} naming the highest hooks version cleared for the
 // org — must reach the current version. It fails closed: a missing provider,
 // payload, parse error, or resolve error all mean "not eligible", so the org
 // keeps its published hooks rather than rolling forward on an incomplete signal.
 func (s *Service) hooksRolloutEligible(ctx context.Context, orgID, orgSlug string) bool {
-	if canaryHooksOrgSlugs[orgSlug] {
+	if s.staffOrg.Is(orgID) {
 		return true
 	}
 	if s.features == nil {

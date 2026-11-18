@@ -45,8 +45,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -109,7 +111,7 @@ func init() {
 		},
 		NewInventorySource: nil,
 		NewEvidenceSink: func(deps providers.Deps) providers.EvidenceSink {
-			return newSink(deps.Client, defaultBaseURL)
+			return newSink(deps.Client, defaultBaseURL, serverOrigin(deps.ServerURL))
 		},
 	})
 }
@@ -124,6 +126,11 @@ type sink struct {
 	// unit tests.
 	baseURL string
 
+	// externalURL is the externalUrl every pushed resource carries: the
+	// deployment's server origin. Empty when the process has no server URL,
+	// which fails the push.
+	externalURL string
+
 	mu          sync.Mutex
 	token       string
 	tokenExpiry time.Time
@@ -134,8 +141,8 @@ var _ providers.EvidenceSink = (*sink)(nil)
 // newSink is the one construction site for both production wiring and unit
 // tests, so a future sink field cannot be zero-valued in tests only
 // (test files are exempt from exhaustruct).
-func newSink(client *guardian.HTTPClient, baseURL string) *sink {
-	return &sink{client: client, baseURL: baseURL, mu: sync.Mutex{}, token: "", tokenExpiry: time.Time{}}
+func newSink(client *guardian.HTTPClient, baseURL string, externalURL string) *sink {
+	return &sink{client: client, baseURL: baseURL, externalURL: externalURL, mu: sync.Mutex{}, token: "", tokenExpiry: time.Time{}}
 }
 
 // bearerToken returns a cached OAuth token, minting one via the
@@ -237,13 +244,19 @@ func (s *sink) TestConnection(ctx context.Context, creds providers.Credentials, 
 	return nil
 }
 
-// externalURL is the required base-field link on every pushed resource.
-// Vanta's CustomResource base schema mandates uniqueId, displayName, AND
-// externalUrl — an omitted externalUrl is rejected with 400 "must have
+// serverOrigin returns the required base-field link on every pushed resource:
+// the deployment's server origin, or empty when serverURL is nil. Vanta's
+// CustomResource base schema mandates uniqueId, displayName, AND externalUrl
+// (an HTTPS URL) — an omitted externalUrl is rejected with 400 "must have
 // property 'externalUrl'". There is no per-device dashboard deep link
 // available in the snapshot (no org slug), so every record carries the same
 // product URL; uniqueId, not this field, is the dedup key.
-const externalURL = "https://app.getgram.ai"
+func serverOrigin(serverURL *url.URL) string {
+	if serverURL == nil {
+		return ""
+	}
+	return (&url.URL{Scheme: serverURL.Scheme, Host: serverURL.Host}).String()
+}
 
 // coverageResource is one device in the pushed full-state set. Base fields
 // (uniqueId, displayName, externalUrl) sit at the top level per Vanta's
@@ -276,7 +289,10 @@ type coverageProperty struct {
 	AgentLastSeenAt string `json:"agent_last_seen_at"`
 }
 
-func buildResources(snapshot providers.CoverageSnapshot) ([]coverageResource, error) {
+func buildResources(snapshot providers.CoverageSnapshot, externalURL string) ([]coverageResource, error) {
+	if externalURL == "" {
+		return nil, errors.New("no server URL configured for the resources' externalUrl")
+	}
 	resources := make([]coverageResource, 0, len(snapshot.Devices))
 	seen := make(map[string]bool, len(snapshot.Devices))
 	for _, d := range snapshot.Devices {
@@ -389,7 +405,7 @@ func (s *sink) PushCoverage(ctx context.Context, creds providers.Credentials, se
 	if err != nil {
 		return err
 	}
-	resources, err := buildResources(snapshot)
+	resources, err := buildResources(snapshot, s.externalURL)
 	if err != nil {
 		return err
 	}

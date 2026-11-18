@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
@@ -110,7 +111,7 @@ func newTestAdminMeterService(t *testing.T) (context.Context, *Service, *pgxpool
 	ctx, svc, db := newTestAdminService(t)
 	meterConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	svc.billing = usage.NewBillingOperations(svc.logger, db, nil, nil, svc.audit, meterConn)
+	svc.billing = usage.NewBillingOperations(svc.logger, db, nil, nil, svc.audit, meterConn, staff.Organization{})
 	return ctx, svc, db, meterConn
 }
 

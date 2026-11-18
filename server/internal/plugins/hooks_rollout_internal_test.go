@@ -8,25 +8,34 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-// eligibilityService builds a publisher wired to features but with no database:
-// hooksRolloutEligible touches neither, so nil deps are safe here.
+// eligibilityService builds a publisher wired to features, with "org-staff" as
+// its staff organization, but with no database: hooksRolloutEligible touches
+// neither, so nil deps are safe here.
 func eligibilityService(t *testing.T, features feature.Provider) *Service {
 	t.Helper()
-	return NewPublisher(testenv.NewLogger(t), nil, nil, nil, "local", "", features)
+	return NewPublisher(testenv.NewLogger(t), nil, nil, nil, "local", "", features, staff.NewOrganization("org-staff"))
 }
 
-func TestHooksRolloutEligible_CanaryBypassesProvider(t *testing.T) {
+func TestHooksRolloutEligible_StaffOrganizationBypassesProvider(t *testing.T) {
 	t.Parallel()
 
-	// nil provider proves the canary decision never consults PostHog — a canary
-	// org is eligible even during a provider outage.
+	// nil provider proves the staff organization decision never consults
+	// PostHog — it is eligible even during a provider outage.
 	svc := eligibilityService(t, nil)
-	for slug := range canaryHooksOrgSlugs {
-		require.True(t, svc.hooksRolloutEligible(t.Context(), "org-any", slug), "canary slug %q must be eligible", slug)
-	}
+	require.True(t, svc.hooksRolloutEligible(t.Context(), "org-staff", "speakeasy-team"))
+}
+
+func TestHooksRolloutEligible_StaffSlugIsNotEnough(t *testing.T) {
+	t.Parallel()
+
+	// Eligibility follows the staff organization ID, not a slug that another
+	// partition's organization could also hold.
+	svc := eligibilityService(t, nil)
+	require.False(t, svc.hooksRolloutEligible(t.Context(), "org-other", "speakeasy-team"))
 }
 
 func TestHooksRolloutEligible_NilProviderFailsClosed(t *testing.T) {

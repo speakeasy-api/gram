@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	endpointrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
@@ -68,7 +69,7 @@ func TestService_UpdateRole_DeliversServerToExistingAudiencePlugin(t *testing.T)
 	}
 	require.True(t, refreshRequested, "content delivery requests a refresh of the affected marketplace")
 	// Invoke the public publisher directly; this does not exercise outbox consumption.
-	publisher := plugins.NewPublisher(testenv.NewLogger(t), f.ti.conn, f.ti.service.audit, f.githubConfig, "test", "https://example.com", nil)
+	publisher := plugins.NewPublisher(testenv.NewLogger(t), f.ti.conn, f.ti.service.audit, f.githubConfig, "test", "https://example.com", nil, staff.Organization{})
 	result, err := publisher.PublishProject(ctx, plugins.PublishProjectInput{ProjectID: *f.ac.ProjectID, CreatedByUserID: f.ac.UserID, CommitMessage: "Refresh role delivery", SkipIfUnchanged: true})
 	require.NoError(t, err)
 	require.False(t, result.Skipped)
@@ -267,7 +268,7 @@ func newRoleDeliveryFixture(t *testing.T) (context.Context, *roleDeliveryFixture
 	github.Test(t)
 	t.Cleanup(func() { github.AssertExpectations(t) })
 	githubConfig := &plugins.GitHubConfig{Client: github, Org: "test-org", InstallationID: 12345}
-	pluginService := plugins.NewService(logger, tracer, ti.conn, sessions, cache.NewRedisCacheAdapter(redis), ti.service.authz, ti.service.audit, githubConfig, "test", "https://example.com", nil, nil)
+	pluginService := plugins.NewService(logger, tracer, ti.conn, sessions, cache.NewRedisCacheAdapter(redis), ti.service.authz, ti.service.audit, githubConfig, "test", "https://example.com", nil, nil, staff.Organization{})
 	signals := &recordingPublishSignaler{}
 	ti.service.roleMgr = NewRoleManager(logger, ti.conn, ti.roles, ti.service.audit, plugins.PublicationRequests{Enabled: true}, nil).WithPluginPublisher(signals)
 	plugin, err := pluginService.CreatePlugin(ctx, &plugingen.CreatePluginPayload{Name: "Delivery audience"})

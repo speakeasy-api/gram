@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -23,7 +24,7 @@ import (
 func TestPlatformMCPPublicationEvidenceRefusesPublisherAsReader(t *testing.T) {
 	t.Parallel()
 	logger := testenv.NewLogger(t)
-	publisher := plugins.NewPublisher(logger, nil, nil, nil, "test", "https://api.example.test", nil)
+	publisher := plugins.NewPublisher(logger, nil, nil, nil, "test", "https://api.example.test", nil, staff.Organization{})
 	inventory := platformmcp.NewPluginsService(nil, platformmcp.OperationBudget{}, "test-key")
 	for _, management := range []*plugins.Service{nil, publisher} {
 		err := withPlatformMCPPublicationEvidence(inventory, platformMCPConfig{PluginPublisher: publisher, PluginManagement: management})
@@ -54,8 +55,8 @@ func TestPlatformMCPGetPluginUsesAuthorizedPublicationEvidence(t *testing.T) {
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{{PrincipalUrn: "role:admin", Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, organizationID)}})
 	logger := testenv.NewLogger(t)
 	engine := authz.NewEngine(logger, pool, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	management := plugins.NewService(logger, testenv.NewTracerProvider(t), pool, &sessions.Manager{}, nil, engine, nil, nil, "test", "https://api.example.test", nil, nil)
-	publisher := plugins.NewPublisher(logger, pool, nil, nil, "test", "https://api.example.test", nil)
+	management := plugins.NewService(logger, testenv.NewTracerProvider(t), pool, &sessions.Manager{}, nil, engine, nil, nil, "test", "https://api.example.test", nil, nil, staff.Organization{})
+	publisher := plugins.NewPublisher(logger, pool, nil, nil, "test", "https://api.example.test", nil, staff.Organization{})
 	limiter := allowingPlatformMCPBudget{}
 	inventory := platformmcp.NewPluginsService(pool, platformmcp.OperationBudget{Connection: limiter, Organization: limiter}, "test-key")
 	require.NoError(t, withPlatformMCPPublicationEvidence(inventory, platformMCPConfig{PluginPublisher: publisher, PluginManagement: management}))

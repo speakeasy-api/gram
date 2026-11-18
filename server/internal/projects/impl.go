@@ -23,7 +23,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/management/readmodel"
@@ -31,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -45,6 +45,10 @@ type Service struct {
 	auth     *auth.Auth
 	authz    *authz.Engine
 	audit    *audit.Logger
+
+	// staffOrg is the deployment's Speakeasy staff organization, the only
+	// organization whose API keys may set organization whitelist status.
+	staffOrg staff.Organization
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -58,6 +62,7 @@ func NewService(
 	auditLogger *audit.Logger,
 	temporalEnv *tenv.Environment,
 	pluginsGitHubEnabled bool,
+	staffOrg staff.Organization,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("projects"))
 
@@ -71,6 +76,7 @@ func NewService(
 		auth:     auth.New(logger, db, sessions, authzEngine),
 		authz:    authzEngine,
 		audit:    auditLogger,
+		staffOrg: staffOrg,
 	}
 }
 
@@ -530,9 +536,9 @@ func (s *Service) SetOrganizationWhitelist(ctx context.Context, payload *gen.Set
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	// Check that the API key is from the speakeasy-team organization
-	if authCtx.ActiveOrganizationID != constants.SpeakeasyTeamOrganizationID {
-		return oops.E(oops.CodeUnauthorized, nil, "only speakeasy-team can set organization whitelist status").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+	// Check that the API key is from the staff organization
+	if !s.staffOrg.Is(authCtx.ActiveOrganizationID) {
+		return oops.E(oops.CodeUnauthorized, nil, "only the Speakeasy staff organization can set organization whitelist status").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: payload.OrganizationID, Dimensions: nil}); err != nil {

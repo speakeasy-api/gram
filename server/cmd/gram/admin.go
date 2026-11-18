@@ -343,6 +343,7 @@ func newAdminCommand() *cli.Command {
 	flags = append(flags, posthogFlags()...)
 	flags = append(flags, customDomainTargetSuffixFlag())
 	flags = append(flags, orgEncryptionFlags()...)
+	flags = append(flags, staffFlags()...)
 
 	return &cli.Command{
 		Name:  "admin",
@@ -355,6 +356,10 @@ func newAdminCommand() *cli.Command {
 			}
 			if c.String("environment") == "prod" && siteURL.Scheme != "https" {
 				return fmt.Errorf("invalid site-url: HTTPS is required in production")
+			}
+			staffOrg, err := staffOrganizationFromCLI(c)
+			if err != nil {
+				return err
 			}
 
 			serviceName := "gram-admin"
@@ -414,6 +419,9 @@ func newAdminCommand() *cli.Command {
 				return fmt.Errorf("failed to connect to database: %w", err)
 			}
 			defer db.Close()
+			if err := verifyStaffOrganization(ctx, db, staffOrg); err != nil {
+				return err
+			}
 
 			err = o11y.StartObservers(meterProvider, db)
 			if err != nil {
@@ -495,7 +503,7 @@ func newAdminCommand() *cli.Command {
 			mux.Use(admin.SessionMiddleware)
 
 			adminWorkOSClient := newAdminWorkOSOrganizationCreator(ctx, logger, guardianPolicy, c)
-			adminOpenRouter := newAdminOpenRouter(ctx, logger, tracerProvider, guardianPolicy, db, redisClient, c)
+			adminOpenRouter := newAdminOpenRouter(ctx, logger, tracerProvider, guardianPolicy, db, redisClient, c, staffOrg)
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
 			authz.SetUpstreamSelectorWriteGate(newAdminUpstreamSelectorWriteGate(ctx, c, logger, posthogClient))
@@ -520,7 +528,7 @@ func newAdminCommand() *cli.Command {
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
 			trialNotifier := trialemails.NewService(db, loopsWorkflowClient, logger, orgHosts)
 
-			billingOperations := usage.NewBillingOperations(logger, db, stripeClient, billingTelemetry, audit.NewLogger(), chReadDB)
+			billingOperations := usage.NewBillingOperations(logger, db, stripeClient, billingTelemetry, audit.NewLogger(), chReadDB, staffOrg)
 			if err := admin.SeedSupportMatrix(ctx, db); err != nil {
 				return fmt.Errorf("initialize support matrix: %w", err)
 			}
@@ -535,7 +543,7 @@ func newAdminCommand() *cli.Command {
 			if err := organizations.SyncOnboardingSteps(ctx, db); err != nil {
 				return fmt.Errorf("sync onboarding steps: %w", err)
 			}
-			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, telemetry.NewSupportCoverage(db, chReadDB), telemetry.NewMCPServerHealth(db, chReadDB), siteURL, registryService)
+			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, telemetry.NewSupportCoverage(db, chReadDB), telemetry.NewMCPServerHealth(db, chReadDB), siteURL, registryService, staffOrg)
 			adminService.SetProviderHealth(mcpconnectionattempts.NewProviderHealth(logger, chDB))
 			var projectRedeployer admin.ProjectRedeployer
 			if temporalEnv != nil {

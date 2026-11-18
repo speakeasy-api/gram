@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	orrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
@@ -255,7 +256,7 @@ func TestMarkEnterpriseTrialConverted_EligibilityAndIdempotencyBoundary(t *testi
 			if tc.seedKey {
 				if tc.wantConverted {
 					key := readOpenRouterKey(t, ctx, conn, orgID, openrouter.KeyTypeChat)
-					floor, ok := openrouter.DefaultCreditLimit(orgID, "enterprise", false)
+					floor, ok := openrouter.DefaultCreditLimit(staff.Organization{}, orgID, "enterprise", false)
 					require.True(t, ok)
 					require.GreaterOrEqual(t, key.MonthlyCredits, int64(floor))
 					require.Empty(t, key.DisableCauses)

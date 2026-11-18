@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
 	orgmetarepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
@@ -260,7 +261,7 @@ func (s *stubProvisioner) removeAPIKeyDisableCause(ctx context.Context, db openr
 		if orgErr != nil {
 			return 0, openrouter.DisableCauseChange{}, fmt.Errorf("stub remove disable cause organization read: %w", orgErr)
 		}
-		keyLimit, _ = openrouter.ResolveDefaultCreditLimit(ctx, s.logger, db, org.ID, billing.Tier(org.GramAccountType))
+		keyLimit, _ = openrouter.ResolveDefaultCreditLimit(ctx, s.logger, db, staff.Organization{}, org.ID, billing.Tier(org.GramAccountType))
 	}
 	if _, err := queries.RemoveOpenRouterAPIKeyDisableCause(ctx, orgrepo.RemoveOpenRouterAPIKeyDisableCauseParams{
 		OrganizationID: orgID, KeyType: string(keyType), KeyHash: key.KeyHash, DisableCause: string(cause),

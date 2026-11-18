@@ -5,8 +5,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 )
 
 func TestTallyRowsFoldsNamesSharedByTooFewOrganizations(t *testing.T) {
@@ -79,7 +79,7 @@ func TestTallyRowsFoldsNamesSharedByTooFewOrganizations(t *testing.T) {
 		{
 			name: "Speakeasy's own organization does not count but its attempts are kept",
 			attempts: []attempt{
-				{"a", google, "", ""}, {"b", google, "", ""}, {constants.SpeakeasyTeamOrganizationID, google, "", ""},
+				{"a", google, "", ""}, {"b", google, "", ""}, {"org-staff", google, "", ""},
 			},
 			want: map[string]uint64{key(other, "", ""): 3},
 		},
@@ -94,7 +94,7 @@ func TestTallyRowsFoldsNamesSharedByTooFewOrganizations(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			counts := newTally()
+			counts := newTally(staff.NewOrganization("org-staff"))
 			ended := mcpconnectionattempts.Ending{Step: "inbound_token", Outcome: mcpconnectionattempts.OutcomeConnected, Reason: "", At: BackfillStart}
 			for _, a := range tt.attempts {
 				summary := mcpconnectionattempts.AttemptSummary{OrganizationID: a.org, ProviderHost: a.provider, AppKey: a.app, ClientFamily: a.client, Weight: 1}

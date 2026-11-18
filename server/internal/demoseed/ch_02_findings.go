@@ -1026,12 +1026,12 @@ func (s *seeder) chfGatewayGoneCalls(ctx context.Context, ch driver.Conn) error 
 
 // chfGatewayHooks: what the Claude Code hooks record when an agent calls the
 // gateway itself — hook rows whose gram.mcp.server_url is the gateway endpoint
-// URL. The tool usage classifier matches that URL to the gateway, so Tool Logs
-// and Insights show them as the gateway rather than as an unknown (shadow) MCP
-// server.
+// URL on this deployment's own host. The tool usage classifier matches that URL
+// to the gateway, so Tool Logs and Insights show them as the gateway rather
+// than as an unknown (shadow) MCP server.
 func (s *seeder) chfGatewayHooks(ctx context.Context, ch driver.Conn) error {
 	gatewaySlug := s.spec.OrgSlug + "-gateway"
-	gatewayURL := "https://app.getgram.ai/mcp/" + gatewaySlug
+	gatewayURL := s.serverURL.JoinPath("mcp", gatewaySlug).String()
 	rows := make([]chfTelemetryRow, 0, 40)
 	for n := range 40 {
 		i := n + 1

@@ -22,6 +22,7 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -99,7 +100,7 @@ func TestWorkloadInference_ManagedCompletion(t *testing.T) {
 		return &openrouter.CompletionResponse{Message: &message, Model: "test/model"}, nil
 	}}
 	logger, tracer := testenv.NewLogger(t), testenv.NewTracerProvider(t)
-	svc := chat.NewService(logger, tracer, f.ti.conn, f.ti.sessionManager, f.ti.chatSessionsManager, nil, client, nil, posthog.New(ctx, logger, "", "", ""), nil, nil, f.ti.authzEngine, manager, billing.NewStubClient(logger, tracer), f.ti.audit).WithWorkloadInference(f.ti.service)
+	svc := chat.NewService(logger, tracer, f.ti.conn, f.ti.sessionManager, f.ti.chatSessionsManager, nil, client, nil, posthog.New(ctx, logger, "", "", ""), nil, nil, f.ti.authzEngine, manager, billing.NewStubClient(logger, tracer), f.ti.audit, staff.Organization{}).WithWorkloadInference(f.ti.service)
 	request := func(user string) *http.Request {
 		body, err := json.Marshal(map[string]any{"model": "test/model", "messages": []any{}, "user": user})
 		require.NoError(t, err)

@@ -349,6 +349,7 @@ func newStreamsCommand() *cli.Command {
 		},
 	}
 
+	flags = append(flags, staffFlags()...)
 	flags = append(flags, stripeFlags()...)
 	flags = append(flags, networkIngressQueueFlags()...)
 	flags = append(flags, pluginPublicationEmitFlag())
@@ -368,6 +369,10 @@ func newStreamsCommand() *cli.Command {
 			serviceName := "gram-streams"
 			serviceEnv := c.String("environment")
 			if err := checkPystreamsStub(serviceEnv, c.Bool("pystreams-stub")); err != nil {
+				return err
+			}
+			staffOrg, err := staffOrganizationFromCLI(c)
+			if err != nil {
 				return err
 			}
 			appinfo := o11y.PullAppInfo(c.Context)
@@ -428,6 +433,9 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to connect to database: %w", err)
 			}
 			defer db.Close()
+			if err := verifyStaffOrganization(ctx, db, staffOrg); err != nil {
+				return err
+			}
 
 			encryptionClient, err := encryption.New(c.String("encryption-key"))
 			if err != nil {
@@ -485,7 +493,7 @@ func newStreamsCommand() *cli.Command {
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, encryptionClient)
+				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, encryptionClient, staffOrg)
 			}
 
 			completionsClient := openrouter.NewUnifiedClient(

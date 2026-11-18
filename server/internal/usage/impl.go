@@ -31,6 +31,7 @@ import (
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -66,6 +67,10 @@ type Service struct {
 	productFeatures productFeatureCacheUpdater
 	trial           trialemails.Notifier
 	now             func() time.Time
+
+	// staffOrg is the deployment's Speakeasy staff organization, whose
+	// OpenRouter keys bypass the tier credit limits.
+	staffOrg staff.Organization
 }
 
 type productFeatureCacheUpdater interface {
@@ -85,7 +90,7 @@ type openRouterBillingDBProvisioner interface {
 	RefreshAPIKeyLimitWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, *int) (int, error)
 }
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL, siteURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, keyRefresher openRouterKeyRefreshScheduler, stripeClient stripeclient.Client, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, productFeatures *productfeatures.Client, trialNotifier trialemails.Notifier, meterReadConn clickhouse.Conn) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL, siteURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, keyRefresher openRouterKeyRefreshScheduler, stripeClient stripeclient.Client, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, productFeatures *productfeatures.Client, trialNotifier trialemails.Notifier, meterReadConn clickhouse.Conn, staffOrg staff.Organization) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
 
 	if trialNotifier == nil {
@@ -115,6 +120,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		productFeatures: productFeatures,
 		trial:           trialNotifier,
 		now:             time.Now,
+		staffOrg:        staffOrg,
 	}
 	service.stripeHandler = service.serviceStripeWebhookHandler
 	return service
@@ -122,7 +128,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 
 // NewBillingOperations builds the narrow usage service used by trusted server
 // surfaces that authorize independently and pass canonical organization IDs.
-func NewBillingOperations(logger *slog.Logger, db *pgxpool.Pool, stripeClient stripeclient.Client, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, meterReadConn clickhouse.Conn) *Service {
+func NewBillingOperations(logger *slog.Logger, db *pgxpool.Pool, stripeClient stripeclient.Client, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, meterReadConn clickhouse.Conn, staffOrg staff.Organization) *Service {
 	return &Service{
 		tracer:          nil,
 		logger:          logger.With(attr.SlogComponent("usage-billing")),
@@ -146,6 +152,7 @@ func NewBillingOperations(logger *slog.Logger, db *pgxpool.Pool, stripeClient st
 		productFeatures: nil,
 		trial:           nil,
 		now:             time.Now,
+		staffOrg:        staffOrg,
 	}
 }
 

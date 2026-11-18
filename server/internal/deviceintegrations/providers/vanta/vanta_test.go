@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -170,10 +171,13 @@ func (f *fakeVanta) settings() providers.Settings {
 	return providers.Settings{fieldResourceID: testResourceID}
 }
 
+// testExternalURL is the externalUrl the fake's sink stamps on resources.
+const testExternalURL = "https://speakeasy.example.test"
+
 // newSink returns a sink wired to the fake's TLS client (unit tests use the
 // httptest client directly; production wiring goes through guardian).
 func (f *fakeVanta) newSink() *sink {
-	return newSink(f.server.Client(), f.server.URL)
+	return newSink(f.server.Client(), f.server.URL, testExternalURL)
 }
 
 func snapshotOf(deviceCount int) providers.CoverageSnapshot {
@@ -209,7 +213,7 @@ func TestPushCoverageFullStateReplace(t *testing.T) {
 	first := fake.resources[0]
 	require.Equal(t, "dev-0001", first["uniqueId"])
 	require.Equal(t, "mac-0001", first["displayName"])
-	require.Equal(t, "https://app.getgram.ai", first["externalUrl"], "Vanta's base schema requires externalUrl on every resource")
+	require.Equal(t, testExternalURL, first["externalUrl"], "Vanta's base schema requires externalUrl on every resource")
 	props, ok := first["customProperties"].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, "SER0001", props["serial_number"])
@@ -394,7 +398,7 @@ func TestUnassignedDeviceResource(t *testing.T) {
 	require.True(t, ok)
 	require.Empty(t, props["assigned_user_email"])
 	require.Equal(t, false, props["agent_active"])
-	require.Equal(t, "https://app.getgram.ai", resource["externalUrl"])
+	require.Equal(t, testExternalURL, resource["externalUrl"])
 	lastSeen, present := props["agent_last_seen_at"]
 	require.True(t, present, "the property is always present — Vanta's console cannot mark it optional, so an omitted field is rejected")
 	require.Empty(t, lastSeen, "a never-seen agent sends an empty string — honestly unknown, not a fabricated timestamp")
@@ -407,7 +411,7 @@ func TestPushCoverageEmitsAttestationPerResource(t *testing.T) {
 	t.Parallel()
 
 	fake := newFakeVanta(t)
-	s := newSink(fake.server.Client(), fake.server.URL)
+	s := fake.newSink()
 
 	seen := time.Date(2026, 7, 29, 9, 0, 0, 0, time.UTC)
 	snapshot := providers.CoverageSnapshot{
@@ -452,4 +456,40 @@ func TestPushCoverageEmitsAttestationPerResource(t *testing.T) {
 		require.NotContains(t, props, "assigned_user_agent_active")
 		require.NotContains(t, props, "assigned_user_agent_last_seen_at")
 	}
+}
+
+func TestPushCoverageWithoutServerURLFailsBeforeSending(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeVanta(t)
+	s := newSink(fake.server.Client(), fake.server.URL, serverOrigin(nil))
+
+	err := s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshotOf(1))
+	require.ErrorContains(t, err, "no server URL configured")
+	require.Zero(t, fake.putRequests, "nothing reaches Vanta without a valid externalUrl")
+}
+
+func TestServerOriginDropsPathQueryAndUserinfo(t *testing.T) {
+	t.Parallel()
+
+	serverURL, err := url.Parse("https://user:pass@ai.example.test:8443/base/path?q=1#frag")
+	require.NoError(t, err)
+
+	require.Equal(t, "https://ai.example.test:8443", serverOrigin(serverURL))
+	require.Empty(t, serverOrigin(nil))
+}
+
+// The registered factory turns the deployment's server URL into the sink's
+// externalUrl, so production pushes never carry a hardcoded host.
+func TestEvidenceSinkFactoryUsesDeploymentServerURL(t *testing.T) {
+	t.Parallel()
+
+	desc, ok := providers.Lookup(ProviderID)
+	require.True(t, ok)
+	serverURL, err := url.Parse("https://ai.example.test/")
+	require.NoError(t, err)
+
+	s, ok := desc.NewEvidenceSink(providers.Deps{Client: nil, ServerURL: serverURL}).(*sink)
+	require.True(t, ok)
+	require.Equal(t, "https://ai.example.test", s.externalURL)
 }

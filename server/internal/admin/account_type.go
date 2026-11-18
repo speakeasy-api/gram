@@ -113,7 +113,7 @@ func (s *Service) changeAccountTypeTx(ctx context.Context, tx pgx.Tx, id, target
 	}
 	// An unconverted, undemoted trial continues to use the provider trial limit.
 	activeTrial := hasTrial && !trial.ConvertedAt.Valid && !trial.DemotedAt.Valid
-	credits, ok := openrouter.DefaultCreditLimit(id, billing.Tier(target), activeTrial)
+	credits, ok := openrouter.DefaultCreditLimit(s.staffOrg, id, billing.Tier(target), activeTrial)
 	if !ok {
 		return oops.E(oops.CodeConflict, nil, "target tier has no provider credit policy")
 	}
