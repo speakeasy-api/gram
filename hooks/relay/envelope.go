@@ -284,6 +284,15 @@ func applyToolCall(data *components.HookIngestData, base *agenthooks.Event, tool
 		} else {
 			m.ServerIdentity = optStr(mcp.Server)
 		}
+		// Cursor reports neither URL nor command for its own servers and for
+		// some it loads from plugins. Its per-workspace server metadata tells
+		// them apart, so the backend can allow Cursor's servers and still
+		// govern the ones the user installed.
+		if base.Provider == agenthooks.ProviderCursor && m.URL == nil && m.Command == nil {
+			if identifier := cursorServerIdentifier(cursorProjectsDir(), base.Session, mcp.Server, mcp.Tool); isCursorServerIdentifier(identifier) {
+				m.ServerIdentity = &identifier
+			}
+		}
 		if len(output) > 0 {
 			m.ResultJSON = new(string(output))
 		}

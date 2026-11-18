@@ -386,7 +386,7 @@ func TestIngest_CanonicalAcknowledgedPermissionWarn_StillRunsShadowMCPGuard(t *t
 	// permission block runs first and control must still reach the MCP guard.
 	toolName := "mcp__filesystem__remove"
 	permissionType := "exec"
-	serverIdentity := "filesystem"
+	command := "npx @acme/filesystem-mcp"
 	payload := canonicalIngestPayload("claude", "tool.requested", "perm-warn-shadow-"+uuid.NewString())
 	payload.Data = &gen.HookIngestData{
 		ToolCall: &gen.HookToolCallData{
@@ -394,7 +394,9 @@ func TestIngest_CanonicalAcknowledgedPermissionWarn_StillRunsShadowMCPGuard(t *t
 			Input:          map[string]any{"command": "rm -rf /tmp/warn"},
 			PermissionType: &permissionType,
 		},
-		Mcp: &gen.HookMCPData{ServerIdentity: &serverIdentity},
+		// A user-installed stdio server, so the guard has a Shadow MCP server
+		// to deny once control reaches it.
+		Mcp: &gen.HookMCPData{ServerIdentity: &command, Command: &command},
 	}
 
 	result, err := ti.service.Ingest(ctx, payload)

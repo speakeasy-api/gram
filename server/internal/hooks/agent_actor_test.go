@@ -600,7 +600,8 @@ func TestSessionAgentVariant_OtherProjectCannotSetIt(t *testing.T) {
 	otherCtx := otherProjectContext(t, ctx)
 
 	sessionID := uuid.NewString()
-	require.True(t, ti.service.cacheMCPListSnapshot(otherCtx, testProjectID(t, otherCtx), sessionID, nil, agentVariantCowork))
+	owned, _ := ti.service.cacheMCPListSnapshot(otherCtx, testProjectID(t, otherCtx), sessionID, nil, agentVariantCowork)
+	require.True(t, owned)
 
 	require.Empty(t, ti.service.sessionAgentVariant(ctx, sessionID))
 	require.Equal(t, agentVariantCowork, ti.service.sessionAgentVariant(otherCtx, sessionID))
@@ -646,7 +647,7 @@ func TestGetCachedMCPList_OwnerReadErrorFailsClosed(t *testing.T) {
 	require.Error(t, err)
 	require.NotErrorIs(t, err, redisCache.ErrCacheMiss, "an owner decode failure is not a miss")
 
-	_, err = ti.service.resolveMCPListForEnforcement(agentCtx, &gen.ClaudePayload{HookEventName: "PreToolUse", SessionID: &sessionID}, sessionID)
+	_, err = ti.service.resolveMCPListForEnforcement(agentCtx, &gen.ClaudePayload{HookEventName: "PreToolUse", SessionID: &sessionID}, sessionID, deviceMCPListScope{})
 	require.Error(t, err, "enforcement fails closed on an owner read failure")
 }
 

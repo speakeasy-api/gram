@@ -214,7 +214,9 @@ func TestClaude_PreToolUse_UsesAuthContextWhenNoCachedMetadata(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID, "test setup should populate ProjectID")
 
 	sessionID := uuid.NewString()
-	toolName := "mcp__gram__do_thing"
+	// A connector UUID server: its URL needs the inventory, so it is the one
+	// server shape the guard still holds back while no inventory has loaded.
+	toolName := "mcp__1c55c87d-ac7c-4dfc-95f1-69e84cb5f92c__do_thing"
 	toolUseID := "toolu_pretooluse_authctx"
 	userEmail := "claude-authctx@example.com"
 
@@ -241,9 +243,10 @@ func TestClaude_PreToolUse_UsesAuthContextWhenNoCachedMetadata(t *testing.T) {
 }
 
 // When the MCP list snapshot is missing from the cache (SessionStart hasn't
-// finished yet, or the 12h inactivity TTL elapsed), the guard fails closed
-// and surfaces a retry/restart hint to the user. Failing open would let a
-// shadow MCP server slip past during the snapshot-population window.
+// finished yet, or the 12h inactivity TTL elapsed), a connector named by its
+// UUID cannot be resolved to a URL, so the guard fails closed for it and
+// surfaces a retry/restart hint to the user. Any other server without an
+// inventory is treated as a coding agent built-in.
 func TestClaude_PreToolUse_DeniesWhenMCPListNotCached(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
@@ -251,7 +254,7 @@ func TestClaude_PreToolUse_DeniesWhenMCPListNotCached(t *testing.T) {
 	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
-	toolName := "mcp__gram__do_thing"
+	toolName := "mcp__1c55c87d-ac7c-4dfc-95f1-69e84cb5f92c__do_thing"
 	toolUseID := "toolu_no_mcp_list"
 	userEmail := "claude-no-mcp-list@example.com"
 
@@ -629,11 +632,12 @@ func (c mcpGetErrorCache) Get(ctx context.Context, key string, value any) error 
 	return c.Cache.Get(ctx, key, value)
 }
 
-// A Redis transport error (not a cache miss) must fail closed even when the
-// payload carries a non-fresh replayed inventory. A genuine miss legitimately
-// falls back to the replay (DNO-286), but on a transport error we cannot
-// establish cache-authoritative ordering, so enforcing against a possibly-stale
-// replay is unsafe — deny with the retry/restart message instead.
+// A Redis transport error (not a cache miss) must not fall back to a non-fresh
+// replayed inventory. A genuine miss legitimately falls back to the replay
+// (DNO-286), but on a transport error we cannot establish cache-authoritative
+// ordering, so enforcing against a possibly-stale replay is unsafe. A
+// connector, which needs the inventory for its URL, is denied with the
+// retry/restart message instead.
 func TestClaude_PreToolUse_CacheTransportErrorFailsClosedDespiteReplay(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
@@ -641,7 +645,7 @@ func TestClaude_PreToolUse_CacheTransportErrorFailsClosedDespiteReplay(t *testin
 	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
-	toolName := "mcp__gram__do_thing"
+	toolName := "mcp__1c55c87d-ac7c-4dfc-95f1-69e84cb5f92c__do_thing"
 	toolUseID := "toolu_cache_transport_err"
 	userEmail := "claude-cache-transport-err@example.com"
 

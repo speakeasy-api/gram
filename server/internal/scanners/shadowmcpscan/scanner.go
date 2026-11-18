@@ -10,6 +10,11 @@
 // flagged. This is the same question the realtime hook guard answers, so the
 // two paths agree on a call by construction.
 //
+// A coding agent's own built-in servers are never flagged: a launch command
+// that runs from an agent's own bundle, a row on which ingest recorded
+// built-in evidence (`gram.mcp.builtin_evidence`), and a name on the known
+// built-in list all yield no finding.
+//
 // When provenance does not resolve — the hook log has not landed yet, the
 // sender never resolved a server, or the sender's recorded tool-call id is not
 // what its trace id derives from — the scanner falls back to the legacy
@@ -60,6 +65,7 @@ const (
 	ResolutionHosted     = "hosted"
 	ResolutionShadow     = "shadow"
 	ResolutionUnresolved = "unresolved"
+	ResolutionBuiltin    = "builtin"
 )
 
 // Validator enforces that a Speakeasy-hosted tool call carries a valid
@@ -210,7 +216,8 @@ func (s *Scanner) Scan(ctx context.Context, orgID string, projectID uuid.UUID, p
 	requests := make([]BypassRequest, 0)
 	for i, message := range messages {
 		for _, call := range message.ToolCalls {
-			if candidate := s.scanCall(ctx, orgID, message.UserID, call, provenance[call.ID], trustedHosts); candidate != nil {
+			prov, provFound := provenance[call.ID]
+			if candidate := s.scanCall(ctx, orgID, message.UserID, call, prov, provFound, trustedHosts); candidate != nil {
 				candidates[i] = append(candidates[i], *candidate)
 				if candidate.bypassRequest != nil {
 					if _, ok := uniqueRequests[*candidate.bypassRequest]; !ok {
@@ -277,8 +284,9 @@ func (s *Scanner) lookupProvenance(ctx context.Context, projectID uuid.UUID, ids
 }
 
 // scanCall decides a single tool call, returning nil when the call is clean or
-// is not an MCP call at all.
-func (s *Scanner) scanCall(ctx context.Context, orgID string, userID string, call ToolCall, prov telemetryrepo.MCPProvenance, trustedHosts []string) *findingCandidate {
+// is not an MCP call at all. provFound reports whether the provenance lookup
+// returned a row for the call.
+func (s *Scanner) scanCall(ctx context.Context, orgID string, userID string, call ToolCall, prov telemetryrepo.MCPProvenance, provFound bool, trustedHosts []string) *findingCandidate {
 	if call.Name == "" || !toolref.IsMCPToolName(call.Name) {
 		return nil
 	}
@@ -291,12 +299,27 @@ func (s *Scanner) scanCall(ctx context.Context, orgID string, userID string, cal
 			s.recordResolution(ctx, orgID, senderOf(prov, call), ResolutionHosted)
 			return nil
 		}
+		// A launch command that runs an executable from a coding agent's own
+		// bundle is a built-in, not a server the user installed.
+		if strings.TrimSpace(prov.ServerURL) == "" && shadowmcp.IsVendorBundleCommand(match) {
+			s.recordResolution(ctx, orgID, senderOf(prov, call), ResolutionBuiltin)
+			return nil
+		}
 		// A resolved non-Speakeasy URL, or a stdio server that does not front a
 		// Speakeasy URL. Both are shadow MCP by the same rule the realtime guard
 		// applies.
 		s.recordResolution(ctx, orgID, senderOf(prov, call), ResolutionShadow)
 		finding := s.finding(call, match)
 		return candidateForFinding(finding, userID, resolvedAccessEvidence(prov, match), call.Name, true)
+	}
+
+	// A coding agent's own built-in servers are never reported. Ingest records
+	// why it classified the server as one; a name on the known built-in list
+	// is trusted even without a row, since no URL or command was recorded for
+	// it either.
+	if isBuiltinServer(prov, provFound, call.Name, serverPrefix) {
+		s.recordResolution(ctx, orgID, senderOf(prov, call), ResolutionBuiltin)
+		return nil
 	}
 
 	s.recordResolution(ctx, orgID, senderOf(prov, call), ResolutionUnresolved)
@@ -431,6 +454,23 @@ func resolvedServerIdentity(prov telemetryrepo.MCPProvenance, serverPrefix strin
 		return "", false
 	}
 	return match, true
+}
+
+// isBuiltinServer reports whether an unresolved MCP call targets a coding
+// agent built-in: ingest recorded built-in evidence for it, or its
+// mcp__<server>__ name is on the known built-in list. A connector UUID name,
+// or a claude.ai connector or plugin server prefix, is never a built-in,
+// whatever the row says.
+func isBuiltinServer(prov telemetryrepo.MCPProvenance, provFound bool, toolName, serverPrefix string) bool {
+	if serverPrefix == "" || shadowmcp.IsConnectorUUID(serverPrefix) || shadowmcp.HasInstalledServerNamePrefix(serverPrefix) {
+		return false
+	}
+	if provFound {
+		if _, ok := shadowmcp.ParseBuiltinEvidence(prov.BuiltinEvidence); ok {
+			return true
+		}
+	}
+	return strings.HasPrefix(toolName, "mcp__") && shadowmcp.IsKnownAgentBuiltinServerName(serverPrefix)
 }
 
 // isHostedIdentity reports whether a resolved server identity points at Speakeasy.
