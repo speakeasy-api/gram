@@ -146,7 +146,7 @@ function ProviderPage(): JSX.Element {
       />
     );
   if (isHealthSegment && !healthOn)
-    return <Navigate to={tabHref("connections")} replace />;
+    return <Navigate to={`${tabHref("connections")}${search}`} replace />;
   // A provider this project can't use, or one since consolidated away:
   // the index picks another.
   if (!isLoading && !provider) {
@@ -205,8 +205,12 @@ function ProviderPage(): JSX.Element {
       {/* Keyed, so switching project or provider starts each tab afresh:
           a search for one project's connections never carries over. */}
       <div key={`${project.id}:${issuerId}`} className="contents">
-        {segment === "overview" && provider ? (
-          <OverviewTab provider={provider} />
+        {segment === "overview" ? (
+          provider ? (
+            <OverviewTab provider={provider} />
+          ) : (
+            <SkeletonTable label="Loading Overview" />
+          )
         ) : segment === "connection-logs" ? (
           <ConnectionsViews view="logs" providerId={issuerId} />
         ) : activeTab === "connections" ? (

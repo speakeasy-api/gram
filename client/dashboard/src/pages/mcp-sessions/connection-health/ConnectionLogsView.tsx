@@ -34,6 +34,7 @@ import {
   ATTEMPT_PARAM,
   LOG_FILTERS,
   LOG_FILTERS_WITHOUT_SERVER,
+  LOG_PARAMS,
   resolveWindow,
   RETENTION_MS,
   SEARCH_PARAM,
@@ -122,6 +123,35 @@ function searchFilters(
   return "no-match";
 }
 
+/** Search narrows a filter it shares a field with, never widens it. */
+function narrow(
+  base: AttemptFilters,
+  text: AttemptFilters | "no-match" | null,
+): AttemptFilters | "no-match" | null {
+  if (!text || text === "no-match") return text;
+  const next: AttemptFilters = {};
+  for (const key of ["people", "serverIds", "memberIds"] as const) {
+    const hits = text[key];
+    if (!hits) continue;
+    const set = base[key];
+    const kept = set ? hits.filter((v) => set.includes(v)) : hits;
+    if (kept.length === 0) return "no-match";
+    next[key] = kept;
+  }
+  return next;
+}
+
+/** The current filters, with the server set, for the provider's own view. */
+function withServer(params: URLSearchParams, serverId: string): string {
+  const next = new URLSearchParams();
+  for (const key of LOG_PARAMS) {
+    const value = params.get(key);
+    if (value !== null) next.set(key, value);
+  }
+  next.set("server", serverId);
+  return next.toString();
+}
+
 function rangePhrase(values: LogFilterValues, options: OptionsById): string {
   const dim = LOG_FILTERS[0];
   const label = chipLabel(dim, values.date, options.date);
@@ -171,22 +201,42 @@ export function ConnectionLogsView({
     enabled: !beforeRetention,
   });
   const facets = optionCounts.data?.facets ?? counts.data?.facets;
-  const textFilters = isReference ? null : searchFilters(search, facets);
+  const facetsReady = !!facets;
+  const textFilters =
+    isReference || !search.trim()
+      ? null
+      : facetsReady
+        ? narrow(baseFilters, searchFilters(search, facets))
+        : "pending";
   const listFilters = useMemo<AttemptFilters>(
     () =>
-      textFilters && textFilters !== "no-match"
+      textFilters && typeof textFilters === "object"
         ? { ...baseFilters, ...textFilters }
         : baseFilters,
     [baseFilters, textFilters],
   );
   const searchedCounts = useAttemptCounts(scope, window, listFilters, {
-    enabled: !beforeRetention && !!textFilters && textFilters !== "no-match",
+    enabled:
+      !beforeRetention && typeof textFilters === "object" && !!textFilters,
   });
 
   const list = useConnectionAttempts(scope, window, listFilters, {
-    enabled: !beforeRetention && !isReference && textFilters !== "no-match",
+    enabled:
+      !beforeRetention &&
+      !isReference &&
+      textFilters !== "no-match" &&
+      textFilters !== "pending",
   });
   const reference = useAttempt(isReference ? search.trim() : null);
+  // A reference is looked up project-wide; keep it only if it belongs here.
+  const referenced = reference.data?.attempt;
+  const referenceHere =
+    referenced &&
+    (!referenced.userSessionIssuerId ||
+      referenced.userSessionIssuerId === providerId) &&
+    (!lockedServer || referenced.server?.id === lockedServer.id)
+      ? referenced
+      : undefined;
 
   const optionsById = useMemo(() => optionsFrom(facets), [facets]);
 
@@ -199,11 +249,22 @@ export function ConnectionLogsView({
           else next.delete(key);
           return next;
         },
-        { replace: key === SEARCH_PARAM },
+        // Opening an attempt is a step Back undoes; closing one is not.
+        { replace: key === SEARCH_PARAM || !value },
       );
     },
     [setSearchParams],
   );
+
+  const resetAll = () =>
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        for (const key of [...LOG_PARAMS, "af"]) next.delete(key);
+        return next;
+      },
+      { replace: true },
+    );
 
   const rowActions = useCallback(
     (row: AttemptRow): Action[] => {
@@ -254,13 +315,10 @@ export function ConnectionLogsView({
     counts.data?.loggingEnabled ??
     true;
   const rows: AttemptRow[] = useMemo(() => {
-    if (isReference) {
-      const attempt = reference.data?.attempt;
-      return attempt ? [attempt] : [];
-    }
+    if (isReference) return referenceHere ? [referenceHere] : [];
     if (textFilters === "no-match") return [];
     return list.data?.pages.flatMap((p) => p.attempts ?? []) ?? [];
-  }, [isReference, reference.data, list.data, textFilters]);
+  }, [isReference, referenceHere, list.data, textFilters]);
 
   const total = isReference
     ? rows.length
@@ -359,7 +417,11 @@ export function ConnectionLogsView({
         }
       />
     );
-  } else if (isPending && rows.length === 0) {
+  } else if (
+    (isPending || textFilters === "pending") &&
+    textFilters !== "no-match" &&
+    rows.length === 0
+  ) {
     body = (
       <SkeletonTable
         label="Loading Connection Logs"
@@ -372,7 +434,11 @@ export function ConnectionLogsView({
         icon="search"
         orientation="horizontal"
         heading="No attempt with this reference"
-        description="Reference search covers the last 30 days of this project."
+        description={
+          lockedServer
+            ? "Reference search covers the last 30 days of this server."
+            : "Reference search covers the last 30 days of this provider."
+        }
       />
     ) : filtersActive || search ? (
       <InlineEmptyState
@@ -384,8 +450,7 @@ export function ConnectionLogsView({
           <Button
             variant="secondary"
             onClick={() => {
-              filters.clearAll();
-              setParam(SEARCH_PARAM, null);
+              resetAll();
             }}
           >
             Reset filters
@@ -422,6 +487,9 @@ export function ConnectionLogsView({
     const hasMore = !isReference && !!list.hasNextPage;
     body = (
       <AttemptsTable
+        className={
+          list.isPlaceholderData && !isReference ? "opacity-60" : undefined
+        }
         rows={rows}
         now={now}
         onOpen={(row) => setParam(ATTEMPT_PARAM, row.id)}
@@ -456,7 +524,7 @@ export function ConnectionLogsView({
           {lockedServer ? (
             <Page.Toolbar.Actions>
               <Link
-                to={`${routes.mcpSessions.provider.connectionLogs.href(providerId)}?server=${encodeURIComponent(lockedServer.id)}`}
+                to={`${routes.mcpSessions.provider.connectionLogs.href(providerId)}?${withServer(searchParams, lockedServer.id)}`}
                 className="inline-flex items-center gap-1 text-sm whitespace-nowrap hover:underline"
               >
                 Open in MCP Sessions with this server
@@ -474,7 +542,7 @@ export function ConnectionLogsView({
                 lockedServer ? (
                   <FilterChip
                     label={`Server: ${lockedServer.name}`}
-                    ariaLabel={`Fixed to ${lockedServer.name}`}
+                    ariaLabel={`Server: ${lockedServer.name}, fixed on this tab`}
                     active
                     locked
                   />

@@ -1,9 +1,7 @@
 import { DETAIL_HEADER_CONTROL_BUTTON } from "@/components/detail/detail-frame";
 import { ChevronRight } from "lucide-react";
-import { useMemo } from "react";
 import { Link } from "react-router";
-import { connectionHealthNow, useSessionActivity } from "./api";
-import { presetWindow } from "./filters";
+import { useSessionAverage } from "./api";
 import { formatSessionLength } from "./format";
 
 /** The header's one Session duration readout: the 30-day average and the setting. */
@@ -16,9 +14,7 @@ export function SessionDurationControl({
   configuredHours: number;
   href: string;
 }): JSX.Element {
-  const window = useMemo(() => presetWindow("30d", connectionHealthNow()), []);
-  const activity = useSessionActivity(providerId, window);
-  const average = activity.data?.averageSessionSeconds;
+  const average = useSessionAverage(providerId).data;
   const setTo = formatSessionLength(configuredHours * 3_600);
   const label =
     average === undefined

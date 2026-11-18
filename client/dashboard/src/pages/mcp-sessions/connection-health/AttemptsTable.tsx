@@ -52,11 +52,9 @@ export function OutcomeLabel({
       <Icon className="text-muted-foreground size-3.5 shrink-0" aria-hidden />
       <span>{OUTCOME_LABELS[outcome]}</span>
       {count > 1 ? (
-        <span
-          className="border-destructive text-destructive border px-1 font-mono text-[11px] leading-4"
-          aria-label={`${count} times`}
-        >
-          ×{formatCount(count)}
+        <span className="border-destructive text-destructive border px-1 font-mono text-[11px] leading-4">
+          <span aria-hidden>×{formatCount(count)}</span>
+          <span className="sr-only">{formatCount(count)} times</span>
         </span>
       ) : null}
     </span>
@@ -126,7 +124,12 @@ export function AttemptsTable({
     const base: Column<AttemptRow>[] = [
       {
         key: "time",
-        header: "Time ↓",
+        header: (
+          <span>
+            Time <span aria-hidden>↓</span>
+            <span className="sr-only">, newest first</span>
+          </span>
+        ),
         width: "130px",
         render: (row) => (
           <div className="font-mono text-xs leading-5 whitespace-nowrap">
@@ -214,7 +217,10 @@ export function AttemptsTable({
           return (
             <Fragment key={row.id}>
               <tr className="bg-muted/40 [grid-column:1/-1] border-b">
-                <td className="text-eyebrow flex items-center justify-between px-4 py-2">
+                <td
+                  colSpan={columns.length}
+                  className="text-eyebrow flex items-center justify-between px-4 py-2"
+                >
                   <span>{heading}</span>
                   {row.id === firstId ? <span>Times are local</span> : null}
                 </td>

@@ -43,7 +43,7 @@ export function ServerConnectionHealth({
         else next.delete(key);
         return next;
       },
-      { replace: key === VIEW_PARAM },
+      { replace: key === VIEW_PARAM || !value },
     );
   };
 

@@ -25,7 +25,7 @@ import {
   useActiveKillswitches,
   useConnectionAttempts,
   useDeniedClients,
-  useSessionActivity,
+  useSessionAverage,
   useSuspectedProblems,
 } from "./api";
 import { AttemptDetailSheet } from "./AttemptDetailSheet";
@@ -105,7 +105,8 @@ export function OverviewTab({
         else next.delete(key);
         return next;
       },
-      { replace: key !== ATTEMPT_PARAM && key !== PROBLEM_PARAM },
+      // Opening a sheet is a step Back undoes; closing one is not.
+      { replace: !value || (key !== ATTEMPT_PARAM && key !== PROBLEM_PARAM) },
     );
   };
 
@@ -128,7 +129,7 @@ export function OverviewTab({
 
   return (
     <div className="space-y-10 pb-8">
-      {problems.isPending ? (
+      {activityPage?.loggingEnabled === false ? null : problems.isPending ? (
         <Skeleton className="h-40 w-full" />
       ) : (
         <SuspectedProblems
@@ -202,7 +203,7 @@ export function OverviewTab({
         action={
           <ArrowLink
             to={logsHref(
-              logsSearch({ steps: [...SIGN_IN_STEPS], range: "1d" }, now),
+              logsSearch({ steps: [...SIGN_IN_STEPS], range: "30d" }, now),
             )}
           >
             Open in Connection Logs
@@ -430,12 +431,7 @@ function Configuration({
   settingsHref: string;
 }): JSX.Element {
   const duration = splitIntoUnit(provider.sessionDurationHours);
-  const averageWindow = useMemo(
-    () => presetWindow("30d", connectionHealthNow()),
-    [],
-  );
-  const average = useSessionActivity(provider.id, averageWindow).data
-    ?.averageSessionSeconds;
+  const average = useSessionAverage(provider.id).data;
   const facts: [string, string, string?][] = [
     [
       "Session duration",

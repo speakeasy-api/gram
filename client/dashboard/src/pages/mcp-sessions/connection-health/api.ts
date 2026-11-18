@@ -93,6 +93,7 @@ export function useConnectionAttempts(
     placeholderData: keepPreviousData,
     enabled: options.enabled ?? true,
     retry,
+    throwOnError: false,
   });
 }
 
@@ -115,6 +116,7 @@ export function useAttemptCounts(
     placeholderData: keepPreviousData,
     enabled: options.enabled ?? true,
     retry,
+    throwOnError: false,
   });
 }
 
@@ -127,6 +129,7 @@ export function useAttempt(
     queryFn: () => sdk.getAttempt(client, gramProject, reference ?? ""),
     enabled: !!reference,
     retry,
+    throwOnError: false,
   });
 }
 
@@ -147,6 +150,7 @@ export function useSignInSummary(
       }),
     placeholderData: keepPreviousData,
     retry,
+    throwOnError: false,
   });
 }
 
@@ -166,6 +170,30 @@ export function useSessionActivity(
     placeholderData: keepPreviousData,
     enabled: options.enabled ?? true,
     retry,
+    throwOnError: false,
+  });
+}
+
+/** The 30-day average session length; the API ignores the range for it. */
+export function useSessionAverage(
+  providerId: string,
+): UseQueryResult<number | undefined> {
+  const { client, gramProject, projectId } = useClient();
+  return useQuery({
+    queryKey: [ROOT, projectId, "sessionAverage", providerId],
+    queryFn: async () => {
+      const now = connectionHealthNow();
+      const result = await sdk.getSessionActivity(client, gramProject, {
+        userSessionIssuerId: providerId,
+        from: new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(),
+        to: now.toISOString(),
+      });
+      return result.averageSessionSeconds ?? null;
+    },
+    select: (value) => value ?? undefined,
+    staleTime: 5 * 60 * 1000,
+    retry,
+    throwOnError: false,
   });
 }
 
@@ -184,6 +212,7 @@ export function useDeniedClients(
       }),
     placeholderData: keepPreviousData,
     retry,
+    throwOnError: false,
   });
 }
 
@@ -202,6 +231,7 @@ export function useSuspectedProblems(
         userSessionIssuerId: scope.providerId,
         serverId: scope.serverId,
       }),
+    throwOnError: false,
   });
 }
 
@@ -214,6 +244,7 @@ export function useSuspectedProblem(
     queryKey: [ROOT, projectId, "getSuspectedProblem", id],
     queryFn: () => fixtureGetSuspectedProblem({ id: id ?? "" }),
     enabled: !!id,
+    throwOnError: false,
   });
 }
 

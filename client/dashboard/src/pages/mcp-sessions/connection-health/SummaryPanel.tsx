@@ -121,7 +121,10 @@ export function SummaryPanel({
             ) : !signIns.data.loggingEnabled ? (
               <ChartMessage>Sign-in attempts need logging.</ChartMessage>
             ) : (
-              <SignInBars data={signIns.data} dayLabels={days > 1} />
+              <SignInBars
+                data={signIns.data}
+                dayLabels={signIns.data.bucket !== "hour"}
+              />
             )
           ) : sessions.isPending ? (
             <Skeleton className="h-full w-full" />

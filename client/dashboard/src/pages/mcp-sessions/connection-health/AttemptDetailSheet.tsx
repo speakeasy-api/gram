@@ -88,12 +88,16 @@ export function AttemptDetailSheet({
                   heading={
                     query.isError
                       ? "Couldn't load this attempt"
-                      : "No attempt with this reference"
+                      : query.data?.loggingEnabled === false
+                        ? "Logging is off"
+                        : "No attempt with this reference"
                   }
                   description={
                     query.isError
                       ? "Close and open it again to retry."
-                      : "Connection Logs keep the last 30 days of this project."
+                      : query.data?.loggingEnabled === false
+                        ? "Attempts are not kept while logging is off for this organization."
+                        : "Connection Logs keep the last 30 days of this project."
                   }
                 />
               )}

@@ -57,8 +57,9 @@ export function AskAiButton({
     <Button
       variant="secondary"
       onClick={() => {
-        investigate(investigation);
+        // Close first: a later close would navigate back from the chat.
         onLaunched?.();
+        investigate(investigation);
       }}
     >
       <Button.LeftIcon>
