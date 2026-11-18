@@ -405,8 +405,8 @@ func (s *Service) changedMemberStatuses(ctx context.Context, logger *slog.Logger
 	return changed
 }
 
-func refusedConsentKey(attempt mcpconnectionattempts.Attempt, clientID uuid.UUID) string {
-	return "connectionAttemptIneligible:" + attempt.ID().String() + ":" + clientID.String()
+func refusedConsentKey(attempt mcpconnectionattempts.Attempt, clientID uuid.UUID, code mcpconnectionattempts.Code) string {
+	return "connectionAttemptIneligible:" + attempt.ID().String() + ":" + clientID.String() + ":" + code.String()
 }
 
 // chainingRefusalCode is the row for a sign-in Speakeasy won't vouch for, naming who fixes it.
@@ -426,7 +426,7 @@ func (s *Service) recordRefusedConsent(ctx context.Context, logger *slog.Logger,
 	if attempt.IsZero() {
 		return
 	}
-	key := refusedConsentKey(attempt, clientID)
+	key := refusedConsentKey(attempt, clientID, code)
 	marked := false
 	if s.userSessionRefreshReplayCoordination != nil {
 		cacheCtx, cancel := context.WithTimeout(ctx, memberStatusTimeout)
