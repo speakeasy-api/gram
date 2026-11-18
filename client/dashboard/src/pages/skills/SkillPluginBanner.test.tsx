@@ -21,9 +21,6 @@ const permissions = vi.hoisted(() => ({
 vi.mock("@/hooks/usePluginWriteAccess", () => ({
   usePluginWriteAccess: () => permissions.hasScope("plugin:write", "project-a"),
 }));
-vi.mock("@/pages/mcp/overview/PluginStatusBanner", () => ({
-  ClientIconFan: () => null,
-}));
 vi.mock("@/hooks/useDrainInfiniteQuery", () => ({
   useDrainInfiniteQuery: () => undefined,
 }));
