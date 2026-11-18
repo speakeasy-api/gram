@@ -4939,7 +4939,7 @@ func TestHooksBootstrapRejectsUnsafeReportURL(t *testing.T) {
 func TestHooksBootstrapReportsInstallFailureWithWget(t *testing.T) {
 	t.Parallel()
 	if _, err := exec.LookPath("wget"); err != nil {
-		t.Skip("wget not installed")
+		t.Skip("wget not installed") //nolint:forbidigo // Stock macOS has no wget.
 	}
 	target := currentHooksBootstrapTarget(t)
 	archive := hooksBootstrapArchive(t, []byte("#!/bin/sh\nexit 0\n"))
