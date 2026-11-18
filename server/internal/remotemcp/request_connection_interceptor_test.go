@@ -394,13 +394,13 @@ func TestRefusalHappened(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			code, ok := refusalHappened(tc.err)
+			code, ok := refusalHappened(tc.err, false)
 			require.True(t, ok)
 			require.Equal(t, tc.want, code)
 		})
 	}
 
-	_, ok := refusalHappened(&proxy.ToolResultError{Message: "needs approval"})
+	_, ok := refusalHappened(&proxy.ToolResultError{Message: "needs approval"}, false)
 	require.False(t, ok, "a call held for approval is not an end state")
 }
 

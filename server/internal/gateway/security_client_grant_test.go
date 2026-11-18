@@ -1,12 +1,15 @@
 package gateway
 
 import (
+	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/dns"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -54,12 +57,23 @@ func TestClientGrantFailureIsReported(t *testing.T) {
 	down := httptest.NewServer(http.NotFoundHandler())
 	down.Close()
 
+	redirectToBlocked := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://192.0.2.10/token", http.StatusFound)
+	}))
+	t.Cleanup(redirectToBlocked.Close)
+	missingHost := dns.NewMockResolver(dns.MockResolverConfig{LookupIPFunc: func(_ context.Context, _, host string) ([]net.IP, error) {
+		return nil, &net.DNSError{Err: "no such host", Name: host, IsNotFound: true}
+	}})
+
 	for _, tc := range []struct {
 		name     string
 		tokenURL string
 		blocking bool
+		options  []func(*guardian.Policy)
 		want     toolconfig.ClientGrantFailure
 	}{
+		{name: "missing host", tokenURL: "http://token.example.invalid/token", options: []func(*guardian.Policy){guardian.WithResolver(missingHost)}, want: toolconfig.ClientGrantAddressNotFound},
+		{name: "redirect to a blocked address keeps its old reading", tokenURL: redirectToBlocked.URL, options: []func(*guardian.Policy){guardian.WithBlockedCIDRBlocks("192.0.2.0/24")}, want: toolconfig.ClientGrantMisconfigured},
 		{name: "refused", tokenURL: answering(http.StatusUnauthorized), want: toolconfig.ClientGrantRejected},
 		{name: "server error", tokenURL: answering(http.StatusInternalServerError), want: toolconfig.ClientGrantUnavailable},
 		{name: "down", tokenURL: down.URL, want: toolconfig.ClientGrantUnavailable},
@@ -71,7 +85,9 @@ func TestClientGrantFailureIsReported(t *testing.T) {
 
 			policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
 			if !tc.blocking {
-				policy = unsafePolicy(t)
+				var err error
+				policy, err = guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{}, tc.options...)
+				require.NoError(t, err)
 			}
 			ok, status, w, report := runSecurity(t, policy, []*HTTPToolSecurity{machineSecurity},
 				map[string]string{"MACHINE_CLIENT_ID": "id", "MACHINE_CLIENT_SECRET": "secret", "MACHINE_TOKEN_URL": tc.tokenURL}, nil)

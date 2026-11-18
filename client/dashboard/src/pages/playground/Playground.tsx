@@ -25,7 +25,6 @@ import type { Tool } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { useHideInsightsDock } from "@/components/insights-context";
 import type { Confirm } from "@gram/client/models/components/upsertglobaltoolvariationform.js";
-import { queryKeyInstance } from "@gram/client/react-query/instance.js";
 import {
   queryKeyListToolsets,
   useListToolsets,
@@ -447,9 +446,6 @@ function ToolsetPanel({
 
   const invalidateToolset = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeyListToolsets({}) });
-    void queryClient.invalidateQueries({
-      queryKey: queryKeyInstance({ toolsetSlug }),
-    });
   };
 
   // Handler for adding tools to the toolset
@@ -533,7 +529,7 @@ function ToolsetPanel({
       });
     }
 
-    await invalidatePlaygroundToolQueries(queryClient, toolsetSlug);
+    await invalidatePlaygroundToolQueries(queryClient);
   };
 
   return (
