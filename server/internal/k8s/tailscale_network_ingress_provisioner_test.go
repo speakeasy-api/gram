@@ -5,8 +5,11 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -513,6 +516,84 @@ func TestTailscaleNetworkIngressDeletePreservesFinalizerDependencies(t *testing.
 	require.NoError(t, provisioner.Delete(t.Context(), desired.Resources))
 	_, err = typed.CoreV1().Secrets("tailscale").Get(t.Context(), desired.Resources.CredentialsSecret, metav1.GetOptions{})
 	require.True(t, k8serrors.IsNotFound(err))
+}
+
+// markTerminatingWithFinalizer leaves the ProxyGroup and Tailnet the way the
+// Tailscale operator does while it removes their devices: deleting, but held
+// by its finalizer.
+func markTerminatingWithFinalizer(t *testing.T, dynamicClient *dynamicfake.FakeDynamicClient, desired NetworkIngressDesired) {
+	t.Helper()
+	now := metav1.Now()
+	for _, gvr := range []schema.GroupVersionResource{proxyGroupGVR, tailnetGVR} {
+		object, err := dynamicClient.Resource(gvr).Get(t.Context(), desired.Resources.Tailnet, metav1.GetOptions{})
+		require.NoError(t, err)
+		object.SetDeletionTimestamp(&now)
+		object.SetFinalizers([]string{"tailscale.com/finalizer"})
+		_, err = dynamicClient.Resource(gvr).Update(t.Context(), object, metav1.UpdateOptions{})
+		require.NoError(t, err)
+	}
+}
+
+func TestTailscaleNetworkIngressDeleteWaitsForFinalizersWithinOneCall(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		provisioner, typed, dynamicClient, desired := newTestTailscaleProvisioner(t)
+		provisioner.config.DeletionWait = time.Minute
+		_, err := provisioner.Apply(t.Context(), desired)
+		require.NoError(t, err)
+		markTerminatingWithFinalizer(t, dynamicClient, desired)
+
+		started := time.Now()
+		// The operator releases each finalizer a few seconds after the delete.
+		time.AfterFunc(5*time.Second, func() {
+			assert.NoError(t, dynamicClient.Tracker().Delete(proxyGroupGVR, "", desired.Resources.ProxyGroup))
+		})
+		time.AfterFunc(10*time.Second, func() {
+			assert.NoError(t, dynamicClient.Tracker().Delete(tailnetGVR, "", desired.Resources.Tailnet))
+		})
+
+		require.NoError(t, provisioner.Delete(t.Context(), desired.Resources))
+		require.Less(t, time.Since(started), 15*time.Second)
+		_, err = typed.CoreV1().Secrets("tailscale").Get(t.Context(), desired.Resources.CredentialsSecret, metav1.GetOptions{})
+		require.True(t, k8serrors.IsNotFound(err))
+		_, err = typed.CoreV1().Namespaces().Get(t.Context(), desired.Resources.Namespace, metav1.GetOptions{})
+		require.True(t, k8serrors.IsNotFound(err))
+	})
+}
+
+func TestTailscaleNetworkIngressDeleteReportsPendingWhenTheWaitRunsOut(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		provisioner, typed, dynamicClient, desired := newTestTailscaleProvisioner(t)
+		provisioner.config.DeletionWait = 10 * time.Second
+		_, err := provisioner.Apply(t.Context(), desired)
+		require.NoError(t, err)
+		markTerminatingWithFinalizer(t, dynamicClient, desired)
+
+		started := time.Now()
+		require.ErrorIs(t, provisioner.Delete(t.Context(), desired.Resources), ErrNetworkIngressDeletionPending)
+		require.GreaterOrEqual(t, time.Since(started), 9*time.Second)
+		require.LessOrEqual(t, time.Since(started), 10*time.Second)
+		_, err = typed.CoreV1().Secrets("tailscale").Get(t.Context(), desired.Resources.CredentialsSecret, metav1.GetOptions{})
+		require.NoError(t, err)
+	})
+}
+
+func TestTailscaleNetworkIngressDeleteStopsWaitingWhenCanceled(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		provisioner, _, dynamicClient, desired := newTestTailscaleProvisioner(t)
+		provisioner.config.DeletionWait = time.Minute
+		_, err := provisioner.Apply(t.Context(), desired)
+		require.NoError(t, err)
+		markTerminatingWithFinalizer(t, dynamicClient, desired)
+
+		ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+		defer cancel()
+		started := time.Now()
+		require.ErrorIs(t, provisioner.Delete(ctx, desired.Resources), ErrNetworkIngressDeletionPending)
+		require.LessOrEqual(t, time.Since(started), 3*time.Second)
+	})
 }
 
 func TestTailscaleNetworkIngressDeleteReportsRejectedTailnetCredentials(t *testing.T) {
