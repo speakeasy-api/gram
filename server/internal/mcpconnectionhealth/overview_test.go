@@ -68,19 +68,7 @@ func TestGetSessionActivity_CountsSessionsPerDay(t *testing.T) {
 	}
 	create()
 	revoked := create()
-	// A dashboard mint ended with its access token, whatever its refresh deadline says.
-	mint, err := sessions.CreateUserSession(ctx, usersessionsrepo.CreateUserSessionParams{
-		SubjectUrn:          urn.NewUserSubject(ti.userID),
-		Jti:                 uuid.NewString(),
-		RefreshTokenHash:    pgtype.Text{String: sessiontokens.DashboardMintRefreshTokenHashPrefix + ":" + uuid.NewString(), Valid: true},
-		RefreshExpiresAt:    pgtype.Timestamptz{Time: ti.now.Add(14 * 24 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
-		ExpiresAt:           pgtype.Timestamptz{Time: ti.now.Add(-time.Minute), InfinityModifier: pgtype.Finite, Valid: true},
-		UserSessionIssuerID: ti.issuer,
-	})
-	require.NoError(t, err)
-	_, err = ti.conn.Exec(ctx, "UPDATE user_sessions SET created_at = $1 WHERE id = $2", ti.now.Add(-time.Hour), mint.ID)
-	require.NoError(t, err)
-	_, err = sessions.RevokeUserSession(ctx, usersessionsrepo.RevokeUserSessionParams{ID: revoked, ProjectID: ti.project, OrganizationID: ti.org})
+	_, err := sessions.RevokeUserSession(ctx, usersessionsrepo.RevokeUserSessionParams{ID: revoked, ProjectID: ti.project, OrganizationID: ti.org})
 	require.NoError(t, err)
 
 	res, err := ti.service.GetSessionActivity(ctx, &gen.GetSessionActivityPayload{
@@ -91,7 +79,7 @@ func TestGetSessionActivity_CountsSessionsPerDay(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1), res.ActiveNow)
 	require.Equal(t, int64(14*24*60*60), res.ConfiguredSessionSeconds)
-	require.Equal(t, int64(3), res.Days[len(res.Days)-1].ActiveSessions)
+	require.Equal(t, int64(2), res.Days[len(res.Days)-1].ActiveSessions)
 	require.Equal(t, int64(0), res.Days[0].ActiveSessions)
 	require.NotNil(t, res.AverageSessionSeconds)
 
@@ -109,4 +97,27 @@ func TestGetSessionActivity_CountsSessionsPerDay(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 30*24*time.Hour, to.Sub(from))
 	require.WithinDuration(t, time.Now(), to, time.Minute)
+}
+
+func TestGetSessionActivity_ADashboardMintEndsWithItsAccessToken(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead)
+	_, err := usersessionsrepo.New(ti.conn).CreateUserSession(ctx, usersessionsrepo.CreateUserSessionParams{
+		SubjectUrn:          urn.NewUserSubject(ti.userID),
+		Jti:                 uuid.NewString(),
+		RefreshTokenHash:    pgtype.Text{String: sessiontokens.DashboardMintRefreshTokenHashPrefix + ":" + uuid.NewString(), Valid: true},
+		RefreshExpiresAt:    pgtype.Timestamptz{Time: ti.now.Add(14 * 24 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		ExpiresAt:           pgtype.Timestamptz{Time: ti.now.Add(-time.Minute), InfinityModifier: pgtype.Finite, Valid: true},
+		UserSessionIssuerID: ti.issuer,
+	})
+	require.NoError(t, err)
+
+	res, err := ti.service.GetSessionActivity(ctx, &gen.GetSessionActivityPayload{
+		UserSessionIssuerID: ti.issuer.String(),
+		From:                ti.now.Add(-24 * time.Hour).Format(time.RFC3339),
+		To:                  ti.now.Add(time.Minute).Format(time.RFC3339),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(0), res.ActiveNow)
 }
