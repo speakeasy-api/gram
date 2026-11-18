@@ -1,13 +1,13 @@
-name: GRW-468 matched dashboard benchmark
+name: GRW-468 full-suite comparison
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   benchmark:
-    name: Matched dashboard benchmark
+    name: Full dashboard suite before and after
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 75
+    timeout-minutes: 25
     env:
       NODE_OPTIONS: --max-old-space-size=8192
       NODE_DISABLE_COMPILE_CACHE: '1'
@@ -36,177 +36,23 @@ jobs:
           path: ${{ env.AUBE_STORE_PATH }}
       - name: Install identical dependencies once
         run: aube install --frozen-lockfile
-      - name: Prepare benchmark harness
+      - name: Full dashboard suite - before
         run: |
-          cat > "$RUNNER_TEMP/grw468-benchmark.mjs" <<'BENCHMARK'
-          import { spawnSync } from 'node:child_process';
-          import { createHash } from 'node:crypto';
-          import { performance } from 'node:perf_hooks';
-          import fs from 'node:fs';
-          import path from 'node:path';
-
-          const root = process.env.GITHUB_WORKSPACE;
-          const app = path.join(root, 'client/dashboard');
-          const out = path.join(process.env.RUNNER_TEMP, 'grw468-results');
-          const active = path.join(process.env.RUNNER_TEMP, 'grw468-active-modules');
-          const snapshots = path.join(process.env.RUNNER_TEMP, 'grw468-warm-snapshots');
-          const revisions = {
-            before: '0aae37a1b459a7b5697286fe29c4eafa5b3c23ff',
-            after: '6e4fea31b6a12e9dfaccf8e504326546c3a34b69',
-          };
-          fs.mkdirSync(out, { recursive: true });
-          fs.mkdirSync(snapshots, { recursive: true });
-          function command(bin, args, cwd = root) {
-            const r = spawnSync(bin, args, { cwd, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
-            if (r.error || r.status !== 0) throw new Error(`${bin} failed: ${r.error || r.stderr || r.stdout}`);
-            return r.stdout.trim();
-          }
-          const changed = command('git', ['diff', '--name-only', revisions.before, revisions.after]).split('\n');
-          if (changed.some(file => !file.startsWith('client/dashboard/src/'))) {
-            throw new Error('Revisions differ outside dashboard sources; dependency/config equivalence is not established');
-          }
-          const tests = command('git', ['ls-tree', '-r', '--name-only', revisions.before, '--', 'client/dashboard/src'])
-            .split('\n').filter(file => /\.test\.tsx?$/.test(file))
-            .map(file => file.slice('client/dashboard/'.length)).sort();
-          if (tests.length !== 915) throw new Error(`Unexpected base test inventory: ${tests.length}`);
-          const inventoryHash = createHash('sha256').update(JSON.stringify(tests)).digest('hex');
-          fs.writeFileSync(path.join(out, 'test-files.json'), JSON.stringify(tests, null, 2));
-          const environment = {
-            revisions, inventoryHash, testFiles: tests.length, maxWorkers: 4,
-            runner: 'blacksmith-4vcpu-ubuntu-2404', platform: process.platform,
-            node: process.version, vitest: command('aube', ['exec', 'vitest', '--', '--version'], app),
-            aube: command('aube', ['--version']),
-            lockfile: command('git', ['rev-parse', `${revisions.before}:pnpm-lock.yaml`]),
-            nodeOptions: process.env.NODE_OPTIONS,
-            compileCacheDisabled: process.env.NODE_DISABLE_COMPILE_CACHE === '1',
-            resultCache: false, moduleCache: 'private snapshot warmed with one complete run per revision',
-            caseTitleNormalization: 'Runtime ISO timestamps in two byte-identical test files only',
-            fileShuffleSeed: 468, pairs: [['before','after'], ['after','before'], ['after','before'], ['before','after']],
-          };
-          fs.writeFileSync(path.join(out, 'environment.json'), JSON.stringify(environment, null, 2));
-          console.log(JSON.stringify({ type: 'environment', ...environment }));
-          if (process.env.GRW468_SETUP_ONLY === '1') { console.log('Setup validated: ' + tests.length + ' base test files'); process.exit(0); }
-          const dynamicTitleFiles = new Set(['src/components/billing/use-billing-state.test.tsx', 'src/lib/trial-status.test.ts']);
-          for (const file of dynamicTitleFiles) {
-            const repoFile = `client/dashboard/${file}`;
-            if (command('git', ['rev-parse', `${revisions.before}:${repoFile}`]) !== command('git', ['rev-parse', `${revisions.after}:${repoFile}`])) {
-              throw new Error(`Runtime-date title normalization is permitted only for unchanged tests: ${file}`);
-            }
-          }
-          const normalizeTitle = (file, title) => dynamicTitleFiles.has(file)
-            ? title.replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/g, '<runtime-date>') : title;
-          const casesPath = path.join(out, 'case-inventory.json');
-          let expectedCases = fs.existsSync(casesPath) ? JSON.parse(fs.readFileSync(casesPath, 'utf8')) : undefined;
-          const resultsPath = path.join(out, 'results.json');
-          const results = fs.existsSync(resultsPath) ? JSON.parse(fs.readFileSync(resultsPath, 'utf8')).results : [];
-          function countFiles(dir) {
-            return fs.readdirSync(dir, { recursive: true, withFileTypes: true }).filter(entry => entry.isFile()).length;
-          }
-          function run(variant, label, measured) {
-            command('git', ['checkout', '--force', '--detach', revisions[variant]]);
-            fs.rmSync(active, { recursive: true, force: true });
-            const snapshot = path.join(snapshots, variant);
-            if (measured) fs.cpSync(snapshot, active, { recursive: true });
-            else fs.mkdirSync(active, { recursive: true });
-            const cacheBefore = countFiles(active);
-            const log = path.join(out, `${label}.log`);
-            const report = path.join(out, `${label}.json`);
-            const fd = fs.openSync(log, 'w');
-            const args = ['exec', 'vitest', '--', 'run', ...tests,
-              '--maxWorkers=4', '--cache=false', '--fsModuleCache=true', `--fsModuleCachePath=${active}`,
-              '--sequence.shuffle.files=true', '--sequence.shuffle.tests=false', '--sequence.seed=468',
-              '--reporter=default', '--reporter=json', `--outputFile.json=${report}`];
-            console.log(JSON.stringify({ type: 'starting', label, variant, measured, cacheBefore }));
-            const started = performance.now();
-            const runResult = spawnSync('aube', args, {
-              cwd: app, stdio: ['ignore', fd, fd],
-              env: { ...process.env, NODE_DISABLE_COMPILE_CACHE: '1', NODE_COMPILE_CACHE: '' },
-            });
-            const wallSeconds = (performance.now() - started) / 1000;
-            fs.closeSync(fd);
-            if (runResult.error || runResult.status !== 0) {
-              console.log(fs.readFileSync(log, 'utf8').split('\n').slice(-100).join('\n'));
-              throw new Error(`${label} failed: ${runResult.error || runResult.status}`);
-            }
-            const r = JSON.parse(fs.readFileSync(report, 'utf8'));
-            const observed = r.testResults.map(file => path.relative(app, file.name)).sort();
-            if (JSON.stringify(observed) !== JSON.stringify(tests)) throw new Error(`${label}: test file inventory differs`);
-            const cases = r.testResults.flatMap(file => file.assertionResults.map(test =>
-              `${path.relative(app, file.name)}\0${normalizeTitle(path.relative(app, file.name), test.fullName)}`)).sort();
-            if (!expectedCases) { expectedCases = cases; fs.writeFileSync(casesPath, JSON.stringify(cases, null, 2)); }
-            if (JSON.stringify(cases) !== JSON.stringify(expectedCases)) throw new Error(`${label}: test case inventory differs`);
-            if (r.numTotalTests !== 10407 || r.numPassedTests !== 10407 || r.numFailedTests || r.numPendingTests) {
-              throw new Error(`${label}: unexpected test totals/pass status`);
-            }
-            const cacheAfter = countFiles(active);
-            if (measured && cacheBefore < 100) throw new Error(`${label}: warmed cache is missing`);
-            const cleanLog = fs.readFileSync(log, 'utf8').replace(/\x1b\[[0-9;]*m/g, '');
-            const duration = [...cleanLog.matchAll(/Duration\s+([\d.]+)s[^\n]*/g)].at(-1);
-            const row = { label, variant, measured, sha: revisions[variant], wallSeconds,
-              vitestSeconds: duration ? Number(duration[1]) : null,
-              phases: duration?.[0], files: observed.length, tests: r.numPassedTests,
-              cacheBefore, cacheAfter, addedCacheEntries: cacheAfter - cacheBefore,
-              caseInventoryHash: createHash('sha256').update(JSON.stringify(cases)).digest('hex') };
-            results.push(row);
-            fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify({ environment, results }, null, 2));
-            console.log(JSON.stringify({ type: 'finished', ...row }));
-            if (!measured) {
-              fs.cpSync(active, snapshot, { recursive: true });
-              if (!fs.existsSync(path.join(snapshot, '_metadata.json'))) throw new Error(`${variant}: cache metadata missing`);
-            }
-          }
-          function summarize() {
-          const median = values => {
-            const sorted = [...values].sort((a,b) => a-b);
-            return (sorted[(sorted.length - 1) >> 1] + sorted[sorted.length >> 1]) / 2;
-          };
-          const summary = {};
-          for (const variant of Object.keys(revisions)) {
-            const times = results.filter(r => r.measured && r.variant === variant).map(r => r.wallSeconds);
-            summary[variant] = { n: times.length, times, medianSeconds: median(times), minSeconds: Math.min(...times), maxSeconds: Math.max(...times) };
-          }
-          summary.medianReductionPercent = (1 - summary.after.medianSeconds / summary.before.medianSeconds) * 100;
-          fs.writeFileSync(path.join(out, 'summary.json'), JSON.stringify(summary, null, 2));
-          console.log(JSON.stringify({ type: 'summary', ...summary }));
-          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
-            `## Matched dashboard benchmark\n\nSame 4-vCPU runner, 4 workers, 915 files / 10,407 cases, private equally warmed transform caches restored for every run. Result and Node compile caches disabled. Four paired comparisons; balanced order.\n\n| Variant | n | Median command seconds | Range |\n|---|---:|---:|---:|\n` +
-            Object.entries(summary).filter(([key]) => key !== 'medianReductionPercent').map(([key,value]) =>
-              `| ${key} | ${value.n} | ${value.medianSeconds.toFixed(2)} | ${value.minSeconds.toFixed(2)}–${value.maxSeconds.toFixed(2)} |`).join('\n') +
-            `\n\nMedian reduction: ${summary.medianReductionPercent.toFixed(1)}%. Small controlled sample; not a population CI estimate. Warmups excluded. Raw logs, JSON reports and environment are attached.\n`);
-
-          }
-          const [variant, label, mode] = process.argv.slice(2);
-          if (variant === 'summary') summarize();
-          else if ((variant === 'before' || variant === 'after') && label && (mode === 'warm' || mode === 'measured')) run(variant, label, mode === 'measured');
-          else throw new Error('Expected variant, label and warm/measured mode, or summary');
-          BENCHMARK
-      - name: Warm baseline
-        run: node "$RUNNER_TEMP/grw468-benchmark.mjs" before warm-before warm
-      - name: Warm optimized
-        run: node "$RUNNER_TEMP/grw468-benchmark.mjs" after warm-after warm
-      - name: Pair 1 - baseline
-        run: node "$RUNNER_TEMP/grw468-benchmark.mjs" before pair-1-before measured
-      - name: Pair 1 - optimized
-        run: node "$RUNNER_TEMP/grw468-benchmark.mjs" after pair-1-after measured
-      - name: Pair 2 - optimized
-        run: node "$RUNNER_TEMP/grw468-benchmark.mjs" after pair-2-after measured
-      - name: Pair 2 - baseline
-        run: node "$RUNNER_TEMP/grw468-benchmark.mjs" before pair-2-before measured
-      - name: Pair 3 - optimized
-        run: node "$RUNNER_TEMP/grw468-benchmark.mjs" after pair-3-after measured
-      - name: Pair 3 - baseline
-        run: node "$RUNNER_TEMP/grw468-benchmark.mjs" before pair-3-before measured
-      - name: Pair 4 - baseline
-        run: node "$RUNNER_TEMP/grw468-benchmark.mjs" before pair-4-before measured
-      - name: Pair 4 - optimized
-        run: node "$RUNNER_TEMP/grw468-benchmark.mjs" after pair-4-after measured
-      - name: Summarize matched measurements
-        run: node "$RUNNER_TEMP/grw468-benchmark.mjs" summary
-      - name: Upload measurements and raw reports
+          git checkout --force --detach 0aae37a1b459a7b5697286fe29c4eafa5b3c23ff
+          cd client/dashboard
+          /usr/bin/time -p aube exec vitest -- run --maxWorkers=4 --fsModuleCache=false --cache=false --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/grw468-before.json"
+      - name: Full dashboard suite - after
+        run: |
+          git checkout --force --detach 6e4fea31b6a12e9dfaccf8e504326546c3a34b69
+          cd client/dashboard
+          /usr/bin/time -p aube exec vitest -- run --maxWorkers=4 --fsModuleCache=false --cache=false --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/grw468-after.json"
+      - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: grw468-matched-dashboard-results
-          path: ${{ runner.temp }}/grw468-results
+          name: grw468-full-suite-comparison
+          path: |
+            ${{ runner.temp }}/grw468-before.json
+            ${{ runner.temp }}/grw468-after.json
           retention-days: 7
           if-no-files-found: warn
