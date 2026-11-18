@@ -646,6 +646,92 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 	require.Len(t, result.ServerImpacts, 1, "the migrate result reports the same change")
 }
 
+// An attachment on the source may use a login made through another issuer,
+// such as a team gateway's. The merge leaves that login where it is, so no
+// cascade from the login can move the attachment: the merge must move it.
+func TestOrganizationUserSessionIssuerMigrateMovesAttachmentOnLoginFromAnotherIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sourceID := seedIssuer(t, ctx, ti, "cross-issuer-migrate-source")
+	targetID := seedIssuer(t, ctx, ti, "cross-issuer-migrate-target")
+	gatewayID := seedIssuer(t, ctx, ti, "cross-issuer-migrate-gateway")
+	remoteRepo := remotesessionsrepo.New(ti.conn)
+	remoteIssuer, err := remoteRepo.CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                              "cross-issuer-migrate-upstream",
+		Issuer:                            "https://cross-issuer-migrate.example.com",
+		AuthorizationEndpoint:             conv.ToPGText("https://cross-issuer-migrate.example.com/authorize"),
+		TokenEndpoint:                     conv.ToPGText("https://cross-issuer-migrate.example.com/token"),
+		ScopesSupported:                   []string{"openid"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"none"},
+		CodeChallengeMethodsSupported:     []string{"S256"},
+	})
+	require.NoError(t, err)
+	remoteClient, err := remoteRepo.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
+		RemoteSessionIssuerID: remoteIssuer.ID,
+		ClientID:              "cross-issuer-migrate-client",
+		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	})
+	require.NoError(t, err)
+	for _, issuerID := range []uuid.UUID{sourceID, gatewayID} {
+		require.NoError(t, remoteRepo.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
+			RemoteSessionClientID: remoteClient.ID,
+			UserSessionIssuerID:   issuerID,
+		}))
+	}
+
+	login, err := remoteRepo.UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+		SubjectUrn:            urn.NewUserSubject("cross-issuer-migrate-user"),
+		UserSessionIssuerID:   gatewayID,
+		RemoteSessionClientID: remoteClient.ID,
+		AccessTokenEncrypted:  "test-ciphertext",
+		Scopes:                []string{"openid"},
+	})
+	require.NoError(t, err)
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		OwnerUserID:    authCtx.UserID,
+		Name:           "Cross-issuer migration agent",
+	})
+	require.NoError(t, err)
+	fixtures := testrepo.New(ti.conn)
+	bindingID, err := fixtures.InsertPrincipalRemoteSessionBindingFixture(ctx, testrepo.InsertPrincipalRemoteSessionBindingFixtureParams{
+		ProjectID:             *authCtx.ProjectID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		PrincipalID:           agent.ID,
+		UserSessionIssuerID:   sourceID,
+		RemoteSessionClientID: remoteClient.ID,
+		RemoteSessionID:       login.ID,
+		GrantGeneration:       login.GrantGeneration,
+		AttachedBySubjectID:   "cross-issuer-migrate-user",
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, sourceID.String(), targetID.String()))
+	require.NoError(t, err)
+	require.Equal(t, 0, result.RemoteSessionsMigrated, "the login was made through the gateway, not the source")
+
+	bindingIssuerID, err := fixtures.GetPrincipalRemoteSessionBindingIssuerFixture(ctx, bindingID)
+	require.NoError(t, err, "the merge keeps the attachment")
+	require.Equal(t, targetID, bindingIssuerID)
+	var bindingSessionID uuid.UUID
+	require.NoError(t, ti.conn.QueryRow(ctx, "SELECT remote_session_id FROM principal_remote_session_bindings WHERE id = $1", bindingID).Scan(&bindingSessionID))
+	require.Equal(t, login.ID, bindingSessionID, "the attachment keeps its login")
+	loginAfter, err := remoteRepo.GetRemoteSessionByID(ctx, remotesessionsrepo.GetRemoteSessionByIDParams{ID: login.ID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.Equal(t, gatewayID, loginAfter.UserSessionIssuerID, "the login stays on the issuer it was made through")
+}
+
 func TestOrganizationUserSessionIssuerMigrateScopeAndRBAC(t *testing.T) {
 	t.Parallel()
 
