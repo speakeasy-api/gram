@@ -195,3 +195,22 @@ func TestPrepareContext_loadsGrantsForNonEnterpriseOrgs(t *testing.T) {
 	require.Len(t, grants, 1)
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "project_non_enterprise"}))
 }
+
+func TestCredentialCeilingFromContextIsImmutable(t *testing.T) {
+	t.Parallel()
+	source := []Grant{{
+		Scope:    ScopeMCPConnect,
+		Selector: Selector{SelectorKeyProjectID: "project-original"},
+	}}
+	ctx := admittedPoliciesToContext(t.Context(), RepresentedUserPolicy{}, false, source)
+
+	source[0].Selector[SelectorKeyProjectID] = "project-mutated-source"
+	first, ok := CredentialCeilingFromContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, "project-original", first[0].Selector[SelectorKeyProjectID])
+
+	first[0].Selector[SelectorKeyProjectID] = "project-mutated-return"
+	second, ok := CredentialCeilingFromContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, "project-original", second[0].Selector[SelectorKeyProjectID])
+}

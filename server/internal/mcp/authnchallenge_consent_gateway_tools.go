@@ -145,6 +145,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 	}
 
 	gate := &metaGateContext{
+		caller:           emptyGatewayCaller(),
 		fromRequest:      mcpconnectionattempts.FromRequest(r),
 		skippedUpstreams: nil,
 		request:          nil,

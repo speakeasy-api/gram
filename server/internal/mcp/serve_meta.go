@@ -50,6 +50,10 @@ import (
 // outcome, and the surface-resolved protocol version. Assembled once in
 // serveResolvedMetaMCPEndpoint and threaded through dispatch.
 type metaGateContext struct {
+	// caller is the identity, owner, live authorization limits, and project
+	// admitted once for this gateway request.
+	caller gatewayCaller
+
 	// fromRequest is what the request says about its client, for connection rows.
 	fromRequest mcpconnectionattempts.Option
 	projectID   uuid.UUID
@@ -830,16 +834,28 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 	agentKeyChoicesRead := false
 	var gatePolicy *toolfilter.SessionPolicy
 	var gateAuthentication *issuerGateAuthentication
+	var gateCaller gatewayCaller
 	switch {
 	case !metaServer.UserSessionIssuerID.Valid:
+		// Ungated stored gateways still pass through the shared network
+		// boundary. Agent gateways already applied the same organization rule
+		// after authenticating the path-bound key.
+		if membership.agentID == uuid.Nil {
+			if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
+				return ctx, nil, err
+			}
+		}
 	case membership.organization:
 		// Members span projects, so credentials resolve per member project
 		// when a member first needs them rather than once for the gateway.
-		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, r, request.bearer, request.baseURL, resolvedEndpoint)
+		newCtx, admission, err := s.admitGatewayCaller(ctx, w, r, logger, request.bearer, request.baseURL, resolvedEndpoint)
 		if err != nil {
 			return ctx, nil, fmt.Errorf("authenticate organization gateway: %w", err)
 		}
 		ctx = newCtx
+		authentication := admission.authentication
+		toolSelection := admission.toolSelection
+		gateCaller = admission.caller
 		authentication.skippedUpstreams = skipped
 		gateProjectTokens = s.newOrganizationGatewayTokens(r, authentication.endpoint, authentication.subject, skipped)
 		gateMemberChoices, err = s.newMemberChoices(ctx, authentication)
@@ -856,11 +872,14 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 			}
 			resolvedEndpoint = built
 		}
-		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, r, request.bearer, request.baseURL, resolvedEndpoint)
+		newCtx, admission, err := s.admitGatewayCaller(ctx, w, r, logger, request.bearer, request.baseURL, resolvedEndpoint)
 		if err != nil {
-			return ctx, nil, fmt.Errorf("apply issuer gate: %w", err)
+			return ctx, nil, fmt.Errorf("apply gateway admission: %w", err)
 		}
 		ctx = newCtx
+		authentication := admission.authentication
+		toolSelection := admission.toolSelection
+		gateCaller = admission.caller
 		authentication.skippedUpstreams = skipped
 		gateMemberChoices, err = s.newMemberChoices(ctx, authentication)
 		if err != nil {
@@ -910,6 +929,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		}
 	}
 	gate := &metaGateContext{
+		caller:           gateCaller,
 		fromRequest:      request.fromRequest,
 		skippedUpstreams: skipped,
 		request:          r,

@@ -20,13 +20,14 @@ import (
 func TestWorkloadAdmissionReplacesEarlierAdmittedPolicies(t *testing.T) {
 	t.Parallel()
 	check := Check{Scope: ScopeProjectRead, ResourceID: "project-one"}
+	ceiling := []Grant{NewGrant(ScopeProjectRead, "project-one")}
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient(), EngineOpts{
 		DevMode: false,
 		AdmitWorkloadSession: func(context.Context, *pgxpool.Pool) (WorkloadSessionAdmission, error) {
 			return WorkloadSessionAdmission{
 				AgentPrincipal: "agent:018f8d7b-58d7-7cc4-bb16-9f8c6b99a001",
 				OwnerUserID:    "user_123",
-				Ceiling:        []Grant{NewGrant(ScopeProjectRead, "project-one")},
+				Ceiling:        ceiling,
 				Agent:          nil,
 				Owner:          []Grant{NewGrant(ScopeProjectRead, "project-one")},
 			}, nil
@@ -41,6 +42,9 @@ func TestWorkloadAdmissionReplacesEarlierAdmittedPolicies(t *testing.T) {
 
 	admitted, err := engine.AdmitWorkloadSession(earlier)
 	require.NoError(t, err)
+	gotCeiling, ok := CredentialCeilingFromContext(admitted)
+	require.True(t, ok)
+	require.Equal(t, ceiling, gotCeiling)
 
 	err = engine.Require(admitted, check)
 	var oopsErr *oops.ShareableError
@@ -96,9 +100,14 @@ func TestWorkloadAdmissionRetainsOnlyValidAgentPrincipal(t *testing.T) {
 				id, ok := AdmittedWorkloadAgent(ctx)
 				require.True(t, ok)
 				require.Equal(t, "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001", id.String())
+				owner, ok := AdmittedWorkloadOwner(ctx)
+				require.True(t, ok)
+				require.Equal(t, "user_test", owner)
 			} else {
 				require.Error(t, err)
 				_, ok := AdmittedWorkloadAgent(ctx)
+				require.False(t, ok)
+				_, ok = AdmittedWorkloadOwner(ctx)
 				require.False(t, ok)
 			}
 		})

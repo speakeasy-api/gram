@@ -1284,11 +1284,11 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	switch {
 	case err == nil:
 		attributeMCPBandwidthServer(ctx, mcpServer, metaServer, mcpSlug)
-		if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
-			return err
-		}
 		if metaServer != nil {
 			return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer, metaMembership{agentID: uuid.Nil, organization: false}, nil)
+		}
+		if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
+			return err
 		}
 		return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, mcproute.MCP)
 	case mcpendpoints.IsAddressMiss(err), mcpendpoints.IsPolicyDenied(err):

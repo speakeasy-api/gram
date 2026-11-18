@@ -340,6 +340,45 @@ func TestServeAgentGateway_QualifiesMemberSlugsByProject(t *testing.T) {
 	require.Contains(t, body, fx.grantedProject+"."+fx.granted)
 }
 
+func TestServePublic_GatewayAdmissionPreservesAnonymousSession(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug := "anonymous-gateway-" + uuid.NewString()
+	issuerID := createOrganizationIssuer(t, ctx, ti, authCtx.ActiveOrganizationID)
+	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, issuerID)
+	token := mintEndpointUserSession(t, ti, issuerID, slug, urn.NewAnonymousSubject(uuid.NewString()))
+
+	w, err := servePublicHTTP(t, ctx, ti, slug, makeInitializeBody(), token, nil)
+
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestServePublic_GatewayAdmissionRefusesAgentKey(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedAgentGateway(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug := "agent-refused-" + uuid.NewString()
+	issuerID := createOrganizationIssuer(t, ctx, ti, authCtx.ActiveOrganizationID)
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, issuerID)
+	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, meta.ID.String())
+	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, fx.agent.ID.String()), meta.ID)
+	token := mintAgentGatewayKey(t, ctx, ti, fx.agent.ID, meta.ID)
+
+	w, err := servePublicHTTP(t, ctx, ti, slug, makeInitializeBody(), token, nil)
+
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+	require.Contains(t, w.Header().Get("WWW-Authenticate"), "resource_metadata=")
+}
+
 // An org that pins its MCP traffic to a custom domain with an IP allowlist
 // enforces that allowlist at its own ingress, so reaching the same servers on
 // the platform hostname is exactly the bypass the lockdown exists to close. A
