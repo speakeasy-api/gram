@@ -56,7 +56,7 @@ var adminMeanings = map[Code]adminMeaning{
 	CodeRejectedByMember:                 {"The server refused the person's access from the service when Speakeasy checked it.", "The server answered HTTP 401 or 403 when Speakeasy checked the person's access from the service, either right after sign-in or when the person clicked Verify."},
 	CodeProviderRateLimited:              {"The service or the server limited how many requests Speakeasy could make.", "The service or the server answered with HTTP 429."},
 	CodeProviderUnavailable:              {"The service said it was temporarily unavailable, or did not give a usable answer when Speakeasy checked the connection.", ""},
-	CodeProviderServerError:              {"The service returned an error, or an answer Speakeasy could not use.", ""},
+	CodeProviderServerError:              {"The service or the server returned an error, or an answer Speakeasy could not use.", ""},
 	CodeProviderUnreachable:              {"Speakeasy could not reach the service, or the service did not answer in time.", ""},
 	CodeLoginExpired:                     {"A newer sign-in replaced this one before it finished.", ""},
 	CodeSharedCredentialRejected:         {"The server, or the service when Speakeasy asked it for access, rejected the organization's shared credential for it.", ""},
