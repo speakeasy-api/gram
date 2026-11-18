@@ -61,6 +61,7 @@ WHERE relationship.organization_id = @organization_id::text
   AND member.id = ANY(@ids::text[]);
 
 -- name: CountActiveSessionsByDay :many
+-- An organization session counts unless its resource or client ties it to another project only.
 -- A credential keeps its id across refresh rotation, so it is one session.
 -- A row lives from its creation until it is deleted or reaches its deadline; a dashboard mint has no refresh, so its access token's.
 WITH days AS (
@@ -73,7 +74,15 @@ lives AS (
          LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE @dashboard_mint_pattern::text THEN session.expires_at ELSE session.refresh_expires_at END) AS ended_at
   FROM user_sessions AS session
   WHERE session.user_session_issuer_id = @issuer_id
-    AND (session.project_id = @project_id OR (session.project_id IS NULL AND session.organization_id = @organization_id::text))
+    AND (session.project_id = @project_id OR (session.project_id IS NULL AND session.organization_id = @organization_id::text AND NOT COALESCE(
+      (session.resource LIKE @inference_resource_pattern::text AND session.resource <> @project_inference_resource::text)
+      OR EXISTS (SELECT 1 FROM user_session_clients AS client WHERE client.id = session.user_session_client_id AND client.project_id <> @project_id)
+      OR (EXISTS (SELECT 1 FROM mcp_endpoints AS endpoint JOIN projects AS project ON project.id = endpoint.project_id
+                  WHERE project.organization_id = @organization_id::text AND endpoint.project_id <> @project_id
+                    AND endpoint.slug = substring(session.resource from '/([^/?#]+)/?$'))
+          AND NOT EXISTS (SELECT 1 FROM mcp_endpoints AS endpoint WHERE endpoint.project_id = @project_id
+                    AND endpoint.slug = substring(session.resource from '/([^/?#]+)/?$'))),
+      false)))
     AND session.created_at < @to_day::timestamptz
     AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE @dashboard_mint_pattern::text THEN session.expires_at ELSE session.refresh_expires_at END) > @from_day::timestamptz
 )
@@ -89,7 +98,15 @@ ORDER BY days.day_start;
 SELECT COUNT(DISTINCT COALESCE(session.credential_id, session.id))::bigint AS active_sessions
 FROM user_sessions AS session
 WHERE session.user_session_issuer_id = @issuer_id
-  AND (session.project_id = @project_id OR (session.project_id IS NULL AND session.organization_id = @organization_id::text))
+  AND (session.project_id = @project_id OR (session.project_id IS NULL AND session.organization_id = @organization_id::text AND NOT COALESCE(
+      (session.resource LIKE @inference_resource_pattern::text AND session.resource <> @project_inference_resource::text)
+      OR EXISTS (SELECT 1 FROM user_session_clients AS client WHERE client.id = session.user_session_client_id AND client.project_id <> @project_id)
+      OR (EXISTS (SELECT 1 FROM mcp_endpoints AS endpoint JOIN projects AS project ON project.id = endpoint.project_id
+                  WHERE project.organization_id = @organization_id::text AND endpoint.project_id <> @project_id
+                    AND endpoint.slug = substring(session.resource from '/([^/?#]+)/?$'))
+          AND NOT EXISTS (SELECT 1 FROM mcp_endpoints AS endpoint WHERE endpoint.project_id = @project_id
+                    AND endpoint.slug = substring(session.resource from '/([^/?#]+)/?$'))),
+      false)))
   AND session.deleted IS FALSE
   AND CASE WHEN session.refresh_token_hash LIKE @dashboard_mint_pattern::text THEN session.expires_at ELSE session.refresh_expires_at END > clock_timestamp();
 
@@ -100,7 +117,15 @@ WITH ended AS (
   SELECT COALESCE(session.credential_id, session.id) AS credential
   FROM user_sessions AS session
   WHERE session.user_session_issuer_id = @issuer_id
-    AND (session.project_id = @project_id OR (session.project_id IS NULL AND session.organization_id = @organization_id::text))
+    AND (session.project_id = @project_id OR (session.project_id IS NULL AND session.organization_id = @organization_id::text AND NOT COALESCE(
+      (session.resource LIKE @inference_resource_pattern::text AND session.resource <> @project_inference_resource::text)
+      OR EXISTS (SELECT 1 FROM user_session_clients AS client WHERE client.id = session.user_session_client_id AND client.project_id <> @project_id)
+      OR (EXISTS (SELECT 1 FROM mcp_endpoints AS endpoint JOIN projects AS project ON project.id = endpoint.project_id
+                  WHERE project.organization_id = @organization_id::text AND endpoint.project_id <> @project_id
+                    AND endpoint.slug = substring(session.resource from '/([^/?#]+)/?$'))
+          AND NOT EXISTS (SELECT 1 FROM mcp_endpoints AS endpoint WHERE endpoint.project_id = @project_id
+                    AND endpoint.slug = substring(session.resource from '/([^/?#]+)/?$'))),
+      false)))
     AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE @dashboard_mint_pattern::text THEN session.expires_at ELSE session.refresh_expires_at END) >= @from_time::timestamptz
     AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE @dashboard_mint_pattern::text THEN session.expires_at ELSE session.refresh_expires_at END) < @to_time::timestamptz
     AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE @dashboard_mint_pattern::text THEN session.expires_at ELSE session.refresh_expires_at END) <= clock_timestamp()
@@ -111,7 +136,15 @@ lives AS (
          MAX(LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE @dashboard_mint_pattern::text THEN session.expires_at ELSE session.refresh_expires_at END)) AS ended_at
   FROM user_sessions AS session
   WHERE session.user_session_issuer_id = @issuer_id
-    AND (session.project_id = @project_id OR (session.project_id IS NULL AND session.organization_id = @organization_id::text))
+    AND (session.project_id = @project_id OR (session.project_id IS NULL AND session.organization_id = @organization_id::text AND NOT COALESCE(
+      (session.resource LIKE @inference_resource_pattern::text AND session.resource <> @project_inference_resource::text)
+      OR EXISTS (SELECT 1 FROM user_session_clients AS client WHERE client.id = session.user_session_client_id AND client.project_id <> @project_id)
+      OR (EXISTS (SELECT 1 FROM mcp_endpoints AS endpoint JOIN projects AS project ON project.id = endpoint.project_id
+                  WHERE project.organization_id = @organization_id::text AND endpoint.project_id <> @project_id
+                    AND endpoint.slug = substring(session.resource from '/([^/?#]+)/?$'))
+          AND NOT EXISTS (SELECT 1 FROM mcp_endpoints AS endpoint WHERE endpoint.project_id = @project_id
+                    AND endpoint.slug = substring(session.resource from '/([^/?#]+)/?$'))),
+      false)))
     AND COALESCE(session.credential_id, session.id) IN (SELECT credential FROM ended)
   GROUP BY 1
 )

@@ -17,18 +17,34 @@ WITH ended AS (
   SELECT COALESCE(session.credential_id, session.id) AS credential
   FROM user_sessions AS session
   WHERE session.user_session_issuer_id = $3
-    AND (session.project_id = $4 OR (session.project_id IS NULL AND session.organization_id = $5::text))
-    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE $6::text THEN session.expires_at ELSE session.refresh_expires_at END) >= $1::timestamptz
-    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE $6::text THEN session.expires_at ELSE session.refresh_expires_at END) < $2::timestamptz
-    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE $6::text THEN session.expires_at ELSE session.refresh_expires_at END) <= clock_timestamp()
+    AND (session.project_id = $4 OR (session.project_id IS NULL AND session.organization_id = $5::text AND NOT COALESCE(
+      (session.resource LIKE $6::text AND session.resource <> $7::text)
+      OR EXISTS (SELECT 1 FROM user_session_clients AS client WHERE client.id = session.user_session_client_id AND client.project_id <> $4)
+      OR (EXISTS (SELECT 1 FROM mcp_endpoints AS endpoint JOIN projects AS project ON project.id = endpoint.project_id
+                  WHERE project.organization_id = $5::text AND endpoint.project_id <> $4
+                    AND endpoint.slug = substring(session.resource from '/([^/?#]+)/?$'))
+          AND NOT EXISTS (SELECT 1 FROM mcp_endpoints AS endpoint WHERE endpoint.project_id = $4
+                    AND endpoint.slug = substring(session.resource from '/([^/?#]+)/?$'))),
+      false)))
+    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE $8::text THEN session.expires_at ELSE session.refresh_expires_at END) >= $1::timestamptz
+    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE $8::text THEN session.expires_at ELSE session.refresh_expires_at END) < $2::timestamptz
+    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE $8::text THEN session.expires_at ELSE session.refresh_expires_at END) <= clock_timestamp()
 ),
 lives AS (
   SELECT COALESCE(session.credential_id, session.id) AS credential,
          MIN(session.created_at) AS started_at,
-         MAX(LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE $6::text THEN session.expires_at ELSE session.refresh_expires_at END)) AS ended_at
+         MAX(LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE $8::text THEN session.expires_at ELSE session.refresh_expires_at END)) AS ended_at
   FROM user_sessions AS session
   WHERE session.user_session_issuer_id = $3
-    AND (session.project_id = $4 OR (session.project_id IS NULL AND session.organization_id = $5::text))
+    AND (session.project_id = $4 OR (session.project_id IS NULL AND session.organization_id = $5::text AND NOT COALESCE(
+      (session.resource LIKE $6::text AND session.resource <> $7::text)
+      OR EXISTS (SELECT 1 FROM user_session_clients AS client WHERE client.id = session.user_session_client_id AND client.project_id <> $4)
+      OR (EXISTS (SELECT 1 FROM mcp_endpoints AS endpoint JOIN projects AS project ON project.id = endpoint.project_id
+                  WHERE project.organization_id = $5::text AND endpoint.project_id <> $4
+                    AND endpoint.slug = substring(session.resource from '/([^/?#]+)/?$'))
+          AND NOT EXISTS (SELECT 1 FROM mcp_endpoints AS endpoint WHERE endpoint.project_id = $4
+                    AND endpoint.slug = substring(session.resource from '/([^/?#]+)/?$'))),
+      false)))
     AND COALESCE(session.credential_id, session.id) IN (SELECT credential FROM ended)
   GROUP BY 1
 )
@@ -40,12 +56,14 @@ WHERE lives.ended_at >= $1::timestamptz
 `
 
 type AverageEndedSessionSecondsParams struct {
-	FromTime             pgtype.Timestamptz
-	ToTime               pgtype.Timestamptz
-	IssuerID             uuid.UUID
-	ProjectID            uuid.NullUUID
-	OrganizationID       string
-	DashboardMintPattern string
+	FromTime                 pgtype.Timestamptz
+	ToTime                   pgtype.Timestamptz
+	IssuerID                 uuid.UUID
+	ProjectID                uuid.NullUUID
+	OrganizationID           string
+	InferenceResourcePattern string
+	ProjectInferenceResource string
+	DashboardMintPattern     string
 }
 
 // Mean length, first sign-in to expiry or revocation, of sessions that ended
@@ -57,6 +75,8 @@ func (q *Queries) AverageEndedSessionSeconds(ctx context.Context, arg AverageEnd
 		arg.IssuerID,
 		arg.ProjectID,
 		arg.OrganizationID,
+		arg.InferenceResourcePattern,
+		arg.ProjectInferenceResource,
 		arg.DashboardMintPattern,
 	)
 	var average_seconds float64
@@ -75,8 +95,16 @@ lives AS (
          LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE $3::text THEN session.expires_at ELSE session.refresh_expires_at END) AS ended_at
   FROM user_sessions AS session
   WHERE session.user_session_issuer_id = $4
-    AND (session.project_id = $5 OR (session.project_id IS NULL AND session.organization_id = $6::text))
-    AND session.created_at < $7::timestamptz
+    AND (session.project_id = $5 OR (session.project_id IS NULL AND session.organization_id = $6::text AND NOT COALESCE(
+      (session.resource LIKE $7::text AND session.resource <> $8::text)
+      OR EXISTS (SELECT 1 FROM user_session_clients AS client WHERE client.id = session.user_session_client_id AND client.project_id <> $5)
+      OR (EXISTS (SELECT 1 FROM mcp_endpoints AS endpoint JOIN projects AS project ON project.id = endpoint.project_id
+                  WHERE project.organization_id = $6::text AND endpoint.project_id <> $5
+                    AND endpoint.slug = substring(session.resource from '/([^/?#]+)/?$'))
+          AND NOT EXISTS (SELECT 1 FROM mcp_endpoints AS endpoint WHERE endpoint.project_id = $5
+                    AND endpoint.slug = substring(session.resource from '/([^/?#]+)/?$'))),
+      false)))
+    AND session.created_at < $9::timestamptz
     AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE $3::text THEN session.expires_at ELSE session.refresh_expires_at END) > $1::timestamptz
 )
 SELECT days.day_start, COUNT(DISTINCT lives.credential)::bigint AS active_sessions
@@ -89,13 +117,15 @@ ORDER BY days.day_start
 `
 
 type CountActiveSessionsByDayParams struct {
-	FromDay              pgtype.Timestamptz
-	LastDay              pgtype.Timestamptz
-	DashboardMintPattern string
-	IssuerID             uuid.UUID
-	ProjectID            uuid.NullUUID
-	OrganizationID       string
-	ToDay                pgtype.Timestamptz
+	FromDay                  pgtype.Timestamptz
+	LastDay                  pgtype.Timestamptz
+	DashboardMintPattern     string
+	IssuerID                 uuid.UUID
+	ProjectID                uuid.NullUUID
+	OrganizationID           string
+	InferenceResourcePattern string
+	ProjectInferenceResource string
+	ToDay                    pgtype.Timestamptz
 }
 
 type CountActiveSessionsByDayRow struct {
@@ -103,6 +133,7 @@ type CountActiveSessionsByDayRow struct {
 	ActiveSessions int64
 }
 
+// An organization session counts unless its resource or client ties it to another project only.
 // A credential keeps its id across refresh rotation, so it is one session.
 // A row lives from its creation until it is deleted or reaches its deadline; a dashboard mint has no refresh, so its access token's.
 func (q *Queries) CountActiveSessionsByDay(ctx context.Context, arg CountActiveSessionsByDayParams) ([]CountActiveSessionsByDayRow, error) {
@@ -113,6 +144,8 @@ func (q *Queries) CountActiveSessionsByDay(ctx context.Context, arg CountActiveS
 		arg.IssuerID,
 		arg.ProjectID,
 		arg.OrganizationID,
+		arg.InferenceResourcePattern,
+		arg.ProjectInferenceResource,
 		arg.ToDay,
 	)
 	if err != nil {
@@ -137,16 +170,26 @@ const countActiveSessionsNow = `-- name: CountActiveSessionsNow :one
 SELECT COUNT(DISTINCT COALESCE(session.credential_id, session.id))::bigint AS active_sessions
 FROM user_sessions AS session
 WHERE session.user_session_issuer_id = $1
-  AND (session.project_id = $2 OR (session.project_id IS NULL AND session.organization_id = $3::text))
+  AND (session.project_id = $2 OR (session.project_id IS NULL AND session.organization_id = $3::text AND NOT COALESCE(
+      (session.resource LIKE $4::text AND session.resource <> $5::text)
+      OR EXISTS (SELECT 1 FROM user_session_clients AS client WHERE client.id = session.user_session_client_id AND client.project_id <> $2)
+      OR (EXISTS (SELECT 1 FROM mcp_endpoints AS endpoint JOIN projects AS project ON project.id = endpoint.project_id
+                  WHERE project.organization_id = $3::text AND endpoint.project_id <> $2
+                    AND endpoint.slug = substring(session.resource from '/([^/?#]+)/?$'))
+          AND NOT EXISTS (SELECT 1 FROM mcp_endpoints AS endpoint WHERE endpoint.project_id = $2
+                    AND endpoint.slug = substring(session.resource from '/([^/?#]+)/?$'))),
+      false)))
   AND session.deleted IS FALSE
-  AND CASE WHEN session.refresh_token_hash LIKE $4::text THEN session.expires_at ELSE session.refresh_expires_at END > clock_timestamp()
+  AND CASE WHEN session.refresh_token_hash LIKE $6::text THEN session.expires_at ELSE session.refresh_expires_at END > clock_timestamp()
 `
 
 type CountActiveSessionsNowParams struct {
-	IssuerID             uuid.UUID
-	ProjectID            uuid.NullUUID
-	OrganizationID       string
-	DashboardMintPattern string
+	IssuerID                 uuid.UUID
+	ProjectID                uuid.NullUUID
+	OrganizationID           string
+	InferenceResourcePattern string
+	ProjectInferenceResource string
+	DashboardMintPattern     string
 }
 
 func (q *Queries) CountActiveSessionsNow(ctx context.Context, arg CountActiveSessionsNowParams) (int64, error) {
@@ -154,6 +197,8 @@ func (q *Queries) CountActiveSessionsNow(ctx context.Context, arg CountActiveSes
 		arg.IssuerID,
 		arg.ProjectID,
 		arg.OrganizationID,
+		arg.InferenceResourcePattern,
+		arg.ProjectInferenceResource,
 		arg.DashboardMintPattern,
 	)
 	var active_sessions int64

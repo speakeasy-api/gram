@@ -10,6 +10,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_connection_health"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/attemptlog"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionhealth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -116,29 +117,33 @@ func (s *Service) GetSessionActivity(ctx context.Context, payload *gen.GetSessio
 		lastDay = lastDay.AddDate(0, 0, -1)
 	}
 	days, err := queries.CountActiveSessionsByDay(ctx, repo.CountActiveSessionsByDayParams{
-		FromDay:              timestamptz(firstDay),
-		LastDay:              timestamptz(lastDay),
-		IssuerID:             issuer.ID,
-		ProjectID:            project,
-		OrganizationID:       c.organizationID,
-		ToDay:                timestamptz(lastDay.AddDate(0, 0, 1)),
-		DashboardMintPattern: dashboardMintPattern,
+		FromDay:                  timestamptz(firstDay),
+		LastDay:                  timestamptz(lastDay),
+		IssuerID:                 issuer.ID,
+		ProjectID:                project,
+		OrganizationID:           c.organizationID,
+		ToDay:                    timestamptz(lastDay.AddDate(0, 0, 1)),
+		DashboardMintPattern:     dashboardMintPattern,
+		InferenceResourcePattern: inferenceResourcePattern,
+		ProjectInferenceResource: mcp.InferenceResource + ":" + c.projectID.String(),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count active sessions").LogError(ctx, s.logger)
 	}
-	activeNow, err := queries.CountActiveSessionsNow(ctx, repo.CountActiveSessionsNowParams{IssuerID: issuer.ID, ProjectID: project, OrganizationID: c.organizationID, DashboardMintPattern: dashboardMintPattern})
+	activeNow, err := queries.CountActiveSessionsNow(ctx, repo.CountActiveSessionsNowParams{IssuerID: issuer.ID, ProjectID: project, OrganizationID: c.organizationID, DashboardMintPattern: dashboardMintPattern, InferenceResourcePattern: inferenceResourcePattern, ProjectInferenceResource: mcp.InferenceResource + ":" + c.projectID.String()})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count active sessions now").LogError(ctx, s.logger)
 	}
 	averageFrom := now.Add(-averageSessionWindow)
 	average, err := queries.AverageEndedSessionSeconds(ctx, repo.AverageEndedSessionSecondsParams{
-		FromTime:             timestamptz(averageFrom),
-		ToTime:               timestamptz(now.Add(clockSkewAllowance)),
-		IssuerID:             issuer.ID,
-		ProjectID:            project,
-		OrganizationID:       c.organizationID,
-		DashboardMintPattern: dashboardMintPattern,
+		FromTime:                 timestamptz(averageFrom),
+		ToTime:                   timestamptz(now.Add(clockSkewAllowance)),
+		IssuerID:                 issuer.ID,
+		ProjectID:                project,
+		OrganizationID:           c.organizationID,
+		DashboardMintPattern:     dashboardMintPattern,
+		InferenceResourcePattern: inferenceResourcePattern,
+		ProjectInferenceResource: mcp.InferenceResource + ":" + c.projectID.String(),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "average session length").LogError(ctx, s.logger)
@@ -163,6 +168,9 @@ func (s *Service) GetSessionActivity(ctx context.Context, payload *gen.GetSessio
 
 // dashboardMintPattern matches dashboard-minted sessions, which end with their access token.
 var dashboardMintPattern = sessiontokens.DashboardMintRefreshTokenHashPrefix + ":%"
+
+// inferenceResourcePattern matches inference sessions, whose resource names their project.
+var inferenceResourcePattern = mcp.InferenceResource + ":%"
 
 // averageSessionWindow is how far back the average session length looks. It is
 // fixed so the readout does not swing with the chart's range.
