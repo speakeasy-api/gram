@@ -269,7 +269,7 @@ export function ConnectionLogsView({
           : "No match"
       : total === undefined
         ? null
-        : `${(textFilters ? searchedCounts.data : counts.data)?.truncated ? "At least " : ""}${plural(total, "attempt")}`;
+        : plural(total, "attempt");
 
   const schema = lockedServer ? LOG_FILTERS_WITHOUT_SERVER : LOG_FILTERS;
   const filtersActive = schema.some(
