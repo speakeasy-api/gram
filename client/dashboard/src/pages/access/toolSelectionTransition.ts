@@ -75,7 +75,7 @@ const PANEL_DISPOSITIONS: ReadonlySet<string> = new Set(
  */
 export function selectorsAfterAnnotationToggle(
   selectors: Selector[],
-  dispositions: Selector["disposition"][],
+  dispositions: NonNullable<Selector["disposition"]>[],
 ): Selector[] {
   const kept = selectors.filter(
     (s) => s.disposition && !PANEL_DISPOSITIONS.has(s.disposition),
