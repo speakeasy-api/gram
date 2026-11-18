@@ -1,5 +1,20 @@
 # dashboard
 
+## 0.150.0
+
+### Minor Changes
+
+- 6b81913: MCP Sessions opens on one MCP Authentication Provider, chosen from the picker in the page header, with its session length and client access beside the name. Its tabs are Connections (the sessions signed in through that provider), MCP servers (the servers and gateways that use it), and Settings (session length, client access, Enterprise Managed Auth, advanced details, and actions such as Make organization-wide). The page remembers the last provider you opened. Links to the old Configuration tab and provider pages still work.
+
+### Patch Changes
+
+- c381bab: Organizations whose custom domain has an IP allowlist can reach the agent gateway on that domain. The custom-domain ingress now routes `/agent-mcp`, the agent setup wizard and the one-line installer give agents `https://<custom-domain>/agent-mcp/<agent-id>`, and the federated access setup lists the custom domain as the MCP host. Other organizations keep the platform host.
+- 13f5d9d: Search for a GitHub organization by handle or paste its URL during MCP server setup.
+- 78f303e: The row actions on the Guardrails policies, exclusion rules, and quarantines tables are no longer cut off at the table's right edge. The actions column now keeps a fixed width that fits its button.
+- 8e3cf52: A new private network connection now shows as pending, not as an error, while its gateway hosts are still coming up: while the first HTTPS certificate request is in flight, and for the first minute while the tailnet auto-approves the hosts. If a certificate request is refused, the Domains page now shows the reason the gateway reported, such as a Let's Encrypt rate limit and when the gateway retries, instead of always blaming the tailnet's weekly certificate allowance.
+- 00c0e22: Icons rendered through the shared `Icon` component now appear immediately instead of popping in a moment after the page loads.
+- 1f2f51a: The private network setup steps now show the Tailscale tag the environment's gateway actually uses, read from the API, in the tailnet policy snippet, the OAuth client step and the approval help. Gateway machines can carry an environment qualifier (`speakeasy-gw-<qualifier>-<slot>`) so two environments sharing a tailnet register devices that can be told apart; production names are unchanged.
+
 ## 0.149.0
 
 ### Minor Changes

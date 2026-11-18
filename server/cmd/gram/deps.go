@@ -87,6 +87,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
@@ -1998,4 +1999,21 @@ func orgEncryptionSweeper(provisioner *orgencryption.Provisioner) background.Org
 		return nil
 	}
 	return provisioner
+}
+
+// newHookFleetMetrics returns nil when the gauges cannot be set up, which
+// leaves their schedule off rather than failing worker startup. The query
+// runs on the read replica; its reader needs SELECT on hook_install_summaries.
+func newHookFleetMetrics(ctx context.Context, logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, chRead clickhouse.Conn) background.HookFleetMetricsEmitter {
+	policy, err := plugins.HooksVersionPolicy()
+	if err != nil {
+		logger.ErrorContext(ctx, "hook fleet metrics disabled: hooks version policy", attr.SlogError(err))
+		return nil
+	}
+	m, err := admin.NewHookFleetMetrics(logger, meterProvider, db, telemetry.NewHookFleet(chRead), policy)
+	if err != nil {
+		logger.ErrorContext(ctx, "hook fleet metrics disabled", attr.SlogError(err))
+		return nil
+	}
+	return m
 }

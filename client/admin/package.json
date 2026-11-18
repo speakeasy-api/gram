@@ -54,11 +54,11 @@
     "@types/tr46": "^5.0.1",
     "@vitejs/plugin-react": "catalog:",
     "happy-dom": "^21.0.4",
-    "oxlint": "^1.93.0",
-    "oxlint-tsgolint": "^7.0.2006",
+    "oxlint": "^1.94.0",
     "react-grab": "^0.2.0",
+    "tsrs": "0.25.0-ts7.1.0-beta",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vitest": "^5.0.0"
+    "vitest": "^5.1.0"
   }
 }
