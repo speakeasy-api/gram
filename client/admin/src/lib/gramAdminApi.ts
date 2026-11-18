@@ -140,6 +140,16 @@ export async function gramAdminFetch<T>(
   return (await res.json()) as T;
 }
 
+// Downloads use the same first-party admin session and error handling as reads.
+export async function gramAdminDownload(path: string): Promise<Blob> {
+  const res = await gramAdminRequest(
+    path,
+    { headers: { Accept: "application/octet-stream" } },
+    false,
+  );
+  return res.blob();
+}
+
 // A mutation reports its own failure rather than taking the 401 redirect,
 // which would sign the operator back in behind the action they just took.
 export async function gramAdminMutation<T>(
