@@ -10,6 +10,8 @@ export const FEATURE_FLAGS = {
   explore: "gram-explore",
   headlessModeSwitcher: "headless-mode-switcher",
   killswitches: "gram-killswitches",
+  // UI-only gate for MCP Sessions connection health (Overview, Connection Logs).
+  mcpConnectionHealth: "mcp-connection-health",
   // UI-only rollout gate for the MCP scope picker in the risk policy editor;
   // not enforced server-side.
   mcpScopedPolicies: "gram-mcp-scoped-policies",

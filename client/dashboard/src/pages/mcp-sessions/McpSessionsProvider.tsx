@@ -40,15 +40,21 @@ import {
   useParams,
 } from "react-router";
 import { ConnectionsTab } from "./ConnectionsTab";
+import { ConnectionsViews } from "./connection-health/ConnectionsViews";
+import { useConnectionHealthFlag } from "./connection-health/flag";
+import { OverviewTab } from "./connection-health/OverviewTab";
 import { ProviderPicker } from "./ProviderPicker";
 import {
+  HEALTH_PROVIDER_SEGMENTS,
   PROVIDER_TABS,
+  type HealthProviderSegment,
   useLastProvider,
   useProjectProviders,
   type ProviderTab,
 } from "./providers";
 
-const TAB_TITLES: Record<ProviderTab, string> = {
+const TAB_TITLES: Record<ProviderTab | "overview", string> = {
+  overview: "Overview",
   connections: "Connections",
   "mcp-servers": "MCP servers",
   settings: "Settings",
@@ -97,15 +103,24 @@ function ProviderPage(): JSX.Element {
   const { issuerId = "" } = useParams<{ issuerId: string }>();
   const { providers, isLoading } = useProjectProviders();
   const [, rememberProvider] = useLastProvider();
-  const activeTab = activeDetailTab(pathname, PROVIDER_TABS);
+  const health = useConnectionHealthFlag();
+  const healthOn = health === "on";
+  const segment = activeDetailTab(pathname, HEALTH_PROVIDER_SEGMENTS);
+  const isHealthSegment =
+    segment === "overview" || segment === "connection-logs";
+  const activeTab = segment === "connection-logs" ? "connections" : segment;
   const provider = providers.find((p) => p.id === issuerId);
   // The frame owns the scroll container; a tab change starts at the top.
   const contentRef = useTabScrollReset(activeTab);
 
-  const tabHref = (tab: ProviderTab, id: string = issuerId) => {
+  const tabHref = (tab: HealthProviderSegment, id: string = issuerId) => {
     switch (tab) {
+      case "overview":
+        return routes.mcpSessions.provider.overview.href(id);
       case "connections":
         return routes.mcpSessions.provider.connections.href(id);
+      case "connection-logs":
+        return routes.mcpSessions.provider.connectionLogs.href(id);
       case "mcp-servers":
         return routes.mcpSessions.provider.mcpServers.href(id);
       case "settings":
@@ -119,18 +134,29 @@ function ProviderPage(): JSX.Element {
     if (provider) rememberProvider(provider.id);
   }, [provider, rememberProvider]);
 
-  if (!activeTab)
-    return <Navigate to={`${tabHref("connections")}${search}`} replace />;
+  // Wait for the flag before choosing where a bare or flagged URL lands.
+  if (health === "pending" && (!segment || isHealthSegment)) return <></>;
+  if (!segment)
+    return (
+      <Navigate
+        to={`${tabHref(healthOn ? "overview" : "connections")}${search}`}
+        replace
+      />
+    );
+  if (isHealthSegment && !healthOn)
+    return <Navigate to={tabHref("connections")} replace />;
   // A provider this project can't use, or one since consolidated away:
   // the index picks another.
   if (!isLoading && !provider) {
     return <Navigate to={routes.mcpSessions.href()} replace />;
   }
 
-  const tabs: DetailFrameTab[] = PROVIDER_TABS.map((tab) => ({
+  const tabs: DetailFrameTab[] = (
+    healthOn ? (["overview", ...PROVIDER_TABS] as const) : PROVIDER_TABS
+  ).map((tab) => ({
     key: tab,
     title: TAB_TITLES[tab],
-    href: tabHref(tab),
+    href: tabHref(tab === "connections" && healthOn ? "connection-logs" : tab),
   }));
 
   return (
@@ -153,7 +179,7 @@ function ProviderPage(): JSX.Element {
                     // Same tab, other provider; the query's filters (a
                     // person, a status) still apply.
                     onSelect={(next) =>
-                      void navigate(`${tabHref(activeTab, next.id)}${search}`)
+                      void navigate(`${tabHref(segment, next.id)}${search}`)
                     }
                   />
                 }
@@ -176,8 +202,16 @@ function ProviderPage(): JSX.Element {
       {/* Keyed, so switching project or provider starts each tab afresh:
           a search for one project's connections never carries over. */}
       <div key={`${project.id}:${issuerId}`} className="contents">
-        {activeTab === "connections" ? (
-          <ConnectionsTab providerId={issuerId} />
+        {segment === "overview" && provider ? (
+          <OverviewTab provider={provider} />
+        ) : segment === "connection-logs" ? (
+          <ConnectionsViews view="logs" providerId={issuerId} />
+        ) : activeTab === "connections" ? (
+          healthOn ? (
+            <ConnectionsViews view="sessions" providerId={issuerId} />
+          ) : (
+            <ConnectionsTab providerId={issuerId} />
+          )
         ) : activeTab === "mcp-servers" ? (
           <ProviderMcpServersTab issuerId={issuerId} />
         ) : (

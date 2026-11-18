@@ -5,6 +5,7 @@ import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
 import { Navigate, useLocation, useParams } from "react-router";
+import { useConnectionHealthFlag } from "./connection-health/flag";
 import {
   initialProvider,
   useLastProvider,
@@ -27,8 +28,9 @@ export default function McpSessionsIndex(): JSX.Element {
   const { search } = useLocation();
   const { providers, isLoading, isError } = useProjectProviders();
   const [last] = useLastProvider();
+  const health = useConnectionHealthFlag();
 
-  if (isLoading) return <SplashScreen />;
+  if (isLoading || health === "pending") return <SplashScreen />;
 
   const params = new URLSearchParams(search);
   const requested = params.get(LEGACY_PROVIDER_PARAM);
@@ -55,9 +57,14 @@ export default function McpSessionsIndex(): JSX.Element {
   }
 
   const query = params.toString();
+  // A hand-off's filters belong to Connections; a bare visit opens Overview.
+  const landing =
+    health === "on" && !query
+      ? routes.mcpSessions.provider.overview
+      : routes.mcpSessions.provider.connections;
   return (
     <Navigate
-      to={`${routes.mcpSessions.provider.connections.href(provider.id)}${query ? `?${query}` : ""}`}
+      to={`${landing.href(provider.id)}${query ? `?${query}` : ""}`}
       replace
     />
   );

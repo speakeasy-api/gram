@@ -11,6 +11,16 @@ export const PROVIDER_TABS = [
 ] as const;
 export type ProviderTab = (typeof PROVIDER_TABS)[number];
 
+/** With connection health: Overview first, and Connection Logs beside Connections. */
+export const HEALTH_PROVIDER_SEGMENTS = [
+  "overview",
+  "connections",
+  "connection-logs",
+  "mcp-servers",
+  "settings",
+] as const;
+export type HealthProviderSegment = (typeof HEALTH_PROVIDER_SEGMENTS)[number];
+
 /** The slug the organization's own provider is created with. */
 const DEFAULT_PROVIDER_SLUG = "default";
 

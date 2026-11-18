@@ -471,7 +471,13 @@ const ROUTE_STRUCTURE = {
         title: "MCP Authentication Provider",
         url: ":issuerId",
         subPages: {
+          // Overview and Connection Logs: mcp-connection-health flag only.
+          overview: { title: "Overview", url: "overview" },
           connections: { title: "Connections", url: "connections" },
+          connectionLogs: {
+            title: "Connection Logs",
+            url: "connection-logs",
+          },
           mcpServers: { title: "MCP servers", url: "mcp-servers" },
           settings: { title: "Settings", url: "settings" },
         },
