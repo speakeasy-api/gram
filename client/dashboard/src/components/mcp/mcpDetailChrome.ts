@@ -37,8 +37,6 @@ export interface McpDetailChrome {
   items: DetailSidebarNavItem[];
   /** Overview's first card while a guided provider setup is unfinished. */
   overviewSetup?: ReactNode;
-  /** Overview's lead card: how the server reaches the team, with Install. */
-  overviewBanner?: ReactNode;
 }
 
 /** A header readiness check, with what the chip and popover need on top. */
