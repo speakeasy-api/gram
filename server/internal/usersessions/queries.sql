@@ -1139,13 +1139,19 @@ WHERE link.user_session_issuer_id = @source_issuer_id
 -- name: UpdatePrincipalRemoteSessionBindingsToUserSessionIssuer :execrows
 -- Moves agents' attachments with the issuer they were made on. An attachment
 -- need not share its connection's issuer, so moving the connections does not
--- move it. Only clients the target now binds come along; the rest leave with
--- the source's client bindings.
+-- move it. Only live connections of live clients the target now binds come
+-- along, as only live connections move; the rest leave with the source's
+-- client bindings.
 UPDATE principal_remote_session_bindings AS binding
 SET user_session_issuer_id = @target_issuer_id,
     updated_at = clock_timestamp()
+FROM remote_sessions AS session, remote_session_clients AS client
 WHERE binding.user_session_issuer_id = @source_issuer_id
   AND binding.organization_id = @organization_id::text
+  AND session.id = binding.remote_session_id
+  AND session.deleted IS FALSE
+  AND client.id = binding.remote_session_client_id
+  AND client.deleted IS FALSE
   AND EXISTS (
     SELECT 1
     FROM remote_session_client_user_session_issuers AS link

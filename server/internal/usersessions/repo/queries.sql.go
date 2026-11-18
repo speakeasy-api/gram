@@ -8107,8 +8107,13 @@ const updatePrincipalRemoteSessionBindingsToUserSessionIssuer = `-- name: Update
 UPDATE principal_remote_session_bindings AS binding
 SET user_session_issuer_id = $1,
     updated_at = clock_timestamp()
+FROM remote_sessions AS session, remote_session_clients AS client
 WHERE binding.user_session_issuer_id = $2
   AND binding.organization_id = $3::text
+  AND session.id = binding.remote_session_id
+  AND session.deleted IS FALSE
+  AND client.id = binding.remote_session_client_id
+  AND client.deleted IS FALSE
   AND EXISTS (
     SELECT 1
     FROM remote_session_client_user_session_issuers AS link
@@ -8136,8 +8141,9 @@ type UpdatePrincipalRemoteSessionBindingsToUserSessionIssuerParams struct {
 
 // Moves agents' attachments with the issuer they were made on. An attachment
 // need not share its connection's issuer, so moving the connections does not
-// move it. Only clients the target now binds come along; the rest leave with
-// the source's client bindings.
+// move it. Only live connections of live clients the target now binds come
+// along, as only live connections move; the rest leave with the source's
+// client bindings.
 func (q *Queries) UpdatePrincipalRemoteSessionBindingsToUserSessionIssuer(ctx context.Context, arg UpdatePrincipalRemoteSessionBindingsToUserSessionIssuerParams) (int64, error) {
 	result, err := q.db.Exec(ctx, updatePrincipalRemoteSessionBindingsToUserSessionIssuer, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
 	if err != nil {
