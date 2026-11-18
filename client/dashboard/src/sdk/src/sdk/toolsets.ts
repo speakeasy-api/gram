@@ -3,7 +3,6 @@
  */
 
 import { toolsetsAddExternalOAuthServer } from "../funcs/toolsetsAddExternalOAuthServer.js";
-import { toolsetsCheckMCPSlugAvailability } from "../funcs/toolsetsCheckMCPSlugAvailability.js";
 import { toolsetsCloneBySlug } from "../funcs/toolsetsCloneBySlug.js";
 import { toolsetsCreate } from "../funcs/toolsetsCreate.js";
 import { toolsetsDeleteBySlug } from "../funcs/toolsetsDeleteBySlug.js";
@@ -14,7 +13,6 @@ import { toolsetsListToolFilters } from "../funcs/toolsetsListToolFilters.js";
 import { toolsetsListToolSchemaStaticValues } from "../funcs/toolsetsListToolSchemaStaticValues.js";
 import { toolsetsRemoveOAuthServer } from "../funcs/toolsetsRemoveOAuthServer.js";
 import { toolsetsSetToolVariationsGroup } from "../funcs/toolsetsSetToolVariationsGroup.js";
-import { toolsetsSetUserSessionIssuer } from "../funcs/toolsetsSetUserSessionIssuer.js";
 import { toolsetsUpdateBySlug } from "../funcs/toolsetsUpdateBySlug.js";
 import { toolsetsUpdateExternalOAuthServer } from "../funcs/toolsetsUpdateExternalOAuthServer.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -27,10 +25,6 @@ import {
   AddExternalOAuthServerRequest,
   AddExternalOAuthServerSecurity,
 } from "../models/operations/addexternaloauthserver.js";
-import {
-  CheckMCPSlugAvailabilityRequest,
-  CheckMCPSlugAvailabilitySecurity,
-} from "../models/operations/checkmcpslugavailability.js";
 import {
   CloneToolsetRequest,
   CloneToolsetSecurity,
@@ -72,10 +66,6 @@ import {
   SetToolsetToolVariationsGroupSecurity,
 } from "../models/operations/settoolsettoolvariationsgroup.js";
 import {
-  SetToolsetUserSessionIssuerRequest,
-  SetToolsetUserSessionIssuerSecurity,
-} from "../models/operations/settoolsetusersessionissuer.js";
-import {
   UpdateExternalOAuthServerRequest,
   UpdateExternalOAuthServerSecurity,
 } from "../models/operations/updateexternaloauthserver.js";
@@ -98,29 +88,6 @@ export class Toolsets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Toolset> {
     return unwrapAsync(toolsetsAddExternalOAuthServer(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * checkMCPSlugAvailability toolsets
-   *
-   * @remarks
-   * Check if a MCP slug is taken in any scope (true means taken).
-   *
-   * Deprecated: use mcpEndpoints.checkSlugAvailability instead, which is scoped to one domain and returns true when available.
-   *
-   * @deprecated method: This will be removed in a future release, please migrate away from it as soon as possible.
-   */
-  async checkMCPSlugAvailability(
-    request: CheckMCPSlugAvailabilityRequest,
-    security?: CheckMCPSlugAvailabilitySecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<boolean> {
-    return unwrapAsync(toolsetsCheckMCPSlugAvailability(
       this,
       request,
       security,
@@ -311,29 +278,6 @@ export class Toolsets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Toolset> {
     return unwrapAsync(toolsetsSetToolVariationsGroup(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * setUserSessionIssuer toolsets
-   *
-   * @remarks
-   * Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.
-   *
-   * Deprecated: use mcpServers.update instead.
-   *
-   * @deprecated method: This will be removed in a future release, please migrate away from it as soon as possible.
-   */
-  async setUserSessionIssuer(
-    request: SetToolsetUserSessionIssuerRequest,
-    security?: SetToolsetUserSessionIssuerSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<Toolset> {
-    return unwrapAsync(toolsetsSetUserSessionIssuer(
       this,
       request,
       security,

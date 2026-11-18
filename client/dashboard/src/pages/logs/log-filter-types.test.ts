@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { Operator } from "@gram/client/models/components/logfilter";
 import type { ActiveLogFilter } from "./log-filter-types";

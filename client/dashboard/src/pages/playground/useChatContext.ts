@@ -1,4 +1,4 @@
-import { UIMessage } from "ai";
+import type { UIMessage } from "ai";
 import { createContext, useContext } from "react";
 
 type AppendFn = (message: { content: string }) => void;

@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/stretchr/testify/require"
 )
@@ -14,7 +16,7 @@ func TestKitCompositionMachineConfigUsesAssertions(t *testing.T) {
 	resource, _ := url.Parse("https://mcp.example/mcp/resource")
 	raw, err := kitCompositionMCP(KitLocalCompositionConfig{MCPResource: resource}, &KitWorkloadBinding{Audience: "https://issuer.example/oauth/usi/test"})
 	require.NoError(t, err)
-	require.JSONEq(t, `{"mcpServers":{"workload":{"type":"streamable-http","url":"https://mcp.example/mcp/resource","auth":{"type":"workload_identity","tokenFile":"/var/run/secrets/speakeasy/workload/assertion","endpointMode":"explicit","grant":"jwtBearer","tokenEndpoint":"https://issuer.example/oauth/usi/test/token","resource":"https://mcp.example/mcp/resource","scope":"mcp:connect"}}}}`, string(raw))
+	require.JSONEq(t, `{"mcpServers":{"workload":{"headers":{},"type":"streamable-http","url":"https://mcp.example/mcp/resource","auth":{"type":"workload_identity","tokenFile":"/var/run/secrets/speakeasy/workload/assertion","endpointMode":"explicit","grant":"jwtBearer","tokenEndpoint":"https://issuer.example/oauth/usi/test/token","resource":"https://mcp.example/mcp/resource","scope":"mcp:connect"}}}}`, string(raw))
 	require.NotContains(t, string(raw), "client_id")
 }
 
@@ -59,6 +61,10 @@ func TestKitCompositionRequiresExplicitAttachedResource(t *testing.T) {
 	origin, _ := url.Parse("https://mcp.example")
 	a := assistantRecord{MCPServers: []assistantMCPServerRow{{EndpointSlug: "attached", Visibility: "private"}}}
 	require.True(t, kitResourceAttached(a, origin, resource))
+	constructed := a.MCPServers[0].endpointURL(origin)
+	require.Equal(t, "mcp/attached", constructed.Path)
+	require.Equal(t, resource.String(), constructed.String())
+	require.True(t, kitResourceAttached(a, origin, constructed))
 	for _, raw := range []string{
 		"https://other.example/mcp/attached",
 		"https://mcp.example:8443/mcp/attached",
@@ -72,11 +78,14 @@ func TestKitCompositionRequiresExplicitAttachedResource(t *testing.T) {
 		require.False(t, kitResourceAttached(a, origin, other), raw)
 	}
 	require.False(t, kitResourceAttached(a, nil, resource))
+	require.False(t, kitResourceAttached(a, origin, nil))
 	a.MCPServers[0].Visibility = "disabled"
 	require.False(t, kitResourceAttached(a, origin, resource))
 	a.MCPServers[0].Visibility = "private"
 	a.MCPServers[0].EndpointSlug = "other"
 	require.False(t, kitResourceAttached(a, origin, resource))
+	a.MCPServers[0].EndpointSlug = ""
+	require.False(t, kitResourceAttached(a, origin, a.MCPServers[0].endpointURL(origin)))
 	_, err := kitCompositionMCP(KitLocalCompositionConfig{MCPResource: resource, MCPIssuer: resource}, nil)
 	require.Error(t, err)
 }
@@ -88,8 +97,23 @@ func TestKitCompositionCustomDomainResource(t *testing.T) {
 	a := assistantRecord{MCPServers: []assistantMCPServerRow{{EndpointSlug: "attached", EndpointDomain: "mcp.customer.example", Visibility: "private"}}}
 	onDomain, _ := url.Parse("https://mcp.customer.example/mcp/attached")
 	require.True(t, kitResourceAttached(a, origin, onDomain))
+	constructed := a.MCPServers[0].endpointURL(origin)
+	require.Equal(t, "mcp/attached", constructed.Path)
+	require.Equal(t, onDomain.String(), constructed.String())
+	require.True(t, kitResourceAttached(a, origin, constructed))
 	onPlatform, _ := url.Parse("https://platform.example/mcp/attached")
 	require.False(t, kitResourceAttached(a, origin, onPlatform))
+}
+
+func TestKitCompositionHostedDomainRootResource(t *testing.T) {
+	t.Parallel()
+	origin, _ := url.Parse("https://platform.example")
+	a := assistantRecord{MCPServers: []assistantMCPServerRow{{EndpointSlug: "attached", EndpointDomain: "mcp.customer.example", EndpointIsDomainRoot: true, ToolsetSlug: pgtype.Text{String: "attached", Valid: true}, Visibility: "private"}}}
+	root, _ := url.Parse("https://mcp.customer.example")
+	require.Equal(t, root.String(), a.MCPServers[0].endpointURL(origin).String())
+	require.True(t, kitResourceAttached(a, origin, root))
+	onSlug, _ := url.Parse("https://mcp.customer.example/mcp/attached")
+	require.False(t, kitResourceAttached(a, origin, onSlug))
 }
 
 func TestKitCompositionBootstrapRejectsUnattachedDisabledAndWrongOrigin(t *testing.T) {
@@ -117,4 +141,51 @@ func TestKitCompositionBootstrapRejectsUnattachedDisabledAndWrongOrigin(t *testi
 	f.remote.Visibility = "disabled"
 	f.updateWrapper(t, f.remote)
 	assertRejected()
+}
+
+func TestKitCompositionMultipleWorkloadConnections(t *testing.T) {
+	t.Parallel()
+	first, _ := url.Parse("https://mcp.example/mcp/first")
+	second, _ := url.Parse("https://api.example/mcp/second")
+	c := KitLocalCompositionConfig{mcpConnections: []kitMCPConnection{
+		{Name: "attached-first", Resource: first, Environment: "production"},
+		{Name: "attached-second", Resource: second},
+	}}
+	b := kitTestWorkloadBootstrap()
+	var err error
+	b.MCPJSON, err = kitCompositionMCP(c, b.Workload)
+	require.NoError(t, err)
+	require.NoError(t, validateKitBootstrap(b))
+	require.Contains(t, string(b.MCPJSON), second.String())
+	require.NotContains(t, string(b.MCPJSON), "ai.speakeasy.com")
+	require.Contains(t, string(b.MCPJSON), `"Gram-Environment":"production"`)
+	c.mcpConnections[1].Resource, _ = url.Parse("http://api.example/mcp/second")
+	_, err = kitCompositionMCP(c, b.Workload)
+	require.Error(t, err)
+	c.mcpConnections = []kitMCPConnection{}
+	raw, err := kitCompositionMCP(c, b.Workload)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"mcpServers":{}}`, string(raw))
+}
+
+func TestKitMCPDesiredSetHashDetectsRemovalAndEnvironmentChanges(t *testing.T) {
+	t.Parallel()
+	a := runtimeMCPServer{ID: "a", URL: "https://mcp.example/a", Headers: map[string]string{"Gram-Environment": "production"}}
+	b := runtimeMCPServer{ID: "b", URL: "https://mcp.example/b"}
+	original := kitMCPDesiredSetHash([]runtimeMCPServer{a, b})
+	require.Equal(t, original, kitMCPDesiredSetHash([]runtimeMCPServer{b, a}))
+	require.NotEqual(t, original, kitMCPDesiredSetHash([]runtimeMCPServer{a}))
+	require.NotEqual(t, original, kitMCPDesiredSetHash([]runtimeMCPServer{}))
+	a.Headers["Gram-Environment"] = "staging"
+	require.NotEqual(t, original, kitMCPDesiredSetHash([]runtimeMCPServer{a, b}))
+}
+
+func TestKitAttachmentSetsCompareEnvironmentAndIgnoreOrder(t *testing.T) {
+	t.Parallel()
+	a := assistantrepo.LoadAssistantMcpServersRow{McpServerID: uuid.New()}
+	b := assistantrepo.LoadAssistantMcpServersRow{McpServerID: uuid.New()}
+	require.True(t, kitAttachmentSetsEqual([]assistantrepo.LoadAssistantMcpServersRow{a, b}, []assistantrepo.LoadAssistantMcpServersRow{b, a}))
+	changed := a
+	changed.EnvironmentID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	require.False(t, kitAttachmentSetsEqual([]assistantrepo.LoadAssistantMcpServersRow{a}, []assistantrepo.LoadAssistantMcpServersRow{changed}))
 }

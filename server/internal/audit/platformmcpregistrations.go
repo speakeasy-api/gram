@@ -51,6 +51,7 @@ func (l *Logger) LogPlatformMcpRegistrationCreate(ctx context.Context, dbtx repo
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -107,6 +108,7 @@ func (l *Logger) logPlatformMcpRegistrationHandoff(ctx context.Context, dbtx rep
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

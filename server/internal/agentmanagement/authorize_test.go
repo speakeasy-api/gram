@@ -2,6 +2,8 @@ package agentmanagement
 
 import (
 	"context"
+	"log/slog"
+	"os"
 	"testing"
 
 	"github.com/google/uuid"
@@ -34,6 +36,13 @@ func (f *fakeAuthorizationEngine) EvaluateLoadedGrants(_ context.Context, grants
 		}
 	}
 	return nil
+}
+
+// A production-mode engine honours an override header only for platform admins.
+var productionOverrides = authz.NewEngine(slog.New(slog.NewTextHandler(os.Stderr, nil)), nil, nil, nil)
+
+func (f *fakeAuthorizationEngine) GetScopeOverrides(ctx context.Context) ([]authz.RoleGrant, bool) {
+	return productionOverrides.GetScopeOverrides(ctx)
 }
 
 func checkKey(check authz.Check) string { return string(check.Scope) + ":" + check.ResourceID }
@@ -159,7 +168,6 @@ func TestRequireHumanRejectsAlternateAndUntrustedCallers(t *testing.T) {
 		}(),
 		"assistant":            contextvalues.SetAssistantPrincipal(valid, contextvalues.AssistantPrincipal{AssistantID: uuid.New(), ThreadID: uuid.New()}),
 		"oauth":                contextvalues.SetOAuthClientID(valid, "client-id"),
-		"scope override":       contextvalues.SetRBACScopeOverride(valid, "root"),
 		"legacy impersonation": contextvalues.WithValidatedGramSession(t.Context(), mustAuthContext(t, valid), true),
 	}
 
@@ -179,6 +187,58 @@ func TestRequireHumanRejectsAlternateAndUntrustedCallers(t *testing.T) {
 	support = contextvalues.WithValidatedSupportSession(support, mustAuthContext(t, support))
 	_, err = authorizer.RequireHuman(support, conn)
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestScopeOverrideOnlyNarrowsAgentManagement(t *testing.T) {
+	t.Parallel()
+
+	conn := newTestDB(t)
+	seedOrganization(t, conn, "org-a")
+	seedOrganizationUser(t, conn, "org-a", "admin")
+	seedOrganizationUser(t, conn, "org-a", "owner")
+	owned := createAgent(t, conn, "org-a", "admin", "Own agent")
+	other := createAgent(t, conn, "org-a", "owner", "Other agent")
+	seedGrant(t, t.Context(), conn, "org-a", urn.NewPrincipal(urn.PrincipalTypeUser, "admin"), authz.ScopeAgentRead, other.ID.String())
+	authorizer := NewAuthorizer(&fakeAuthorizationEngine{allowed: map[string]bool{}, loadedGrantsOnly: true})
+
+	platformAdmin := func(override string) context.Context {
+		authCtx := *mustAuthContext(t, validatedHumanContext(t, "org-a", "admin"))
+		authCtx.IsAdmin = true
+		ctx := contextvalues.WithValidatedGramSession(contextvalues.SetAuthContext(t.Context(), &authCtx), &authCtx, false)
+		return contextvalues.SetRBACScopeOverride(ctx, override)
+	}
+
+	_, _, err := authorizer.RequireAgent(platformAdmin("agent:read"), conn, other.ID, OwnedAgentRead)
+	require.NoError(t, err, "an override naming the live scope keeps it")
+
+	for _, override := range []string{"project:read", "agent:read=" + uuid.NewString(), "rbac-override:none"} {
+		narrowed := platformAdmin(override)
+		_, _, err = authorizer.RequireAgent(narrowed, conn, other.ID, OwnedAgentRead)
+		requireOopsCode(t, err, oops.CodeForbidden)
+		human, err := authorizer.RequireHuman(narrowed, conn)
+		require.NoError(t, err)
+		permissions, err := authorizer.Permissions(narrowed, human, other)
+		require.NoError(t, err)
+		require.Equal(t, AgentPermissions{Read: false, Write: false, Authorize: false, Transfer: false}, permissions)
+		_, _, err = authorizer.RequireAgent(narrowed, conn, owned.ID, OwnedAgentSetup)
+		require.NoError(t, err, "ownership is intrinsic, not an RBAC grant")
+	}
+
+	widened := platformAdmin("root,agent:write,agent:transfer")
+	_, _, err = authorizer.RequireAgent(widened, conn, other.ID, OwnedAgentSetup)
+	requireOopsCode(t, err, oops.CodeForbidden)
+	human, err := authorizer.RequireHuman(widened, conn)
+	require.NoError(t, err)
+	permissions, err := authorizer.Permissions(widened, human, other)
+	require.NoError(t, err)
+	require.Equal(t, AgentPermissions{Read: true, Write: false, Authorize: false, Transfer: false}, permissions)
+	require.Len(t, human.LiveGrants(), 1, "delegation stays bounded by live grants")
+	require.Equal(t, authz.ScopeAgentRead, human.LiveGrants()[0].Scope)
+
+	// Outside development the engine ignores a non-admin's override header.
+	ignored := contextvalues.SetRBACScopeOverride(validatedHumanContext(t, "org-a", "admin"), "project:read")
+	_, _, err = authorizer.RequireAgent(ignored, conn, other.ID, OwnedAgentRead)
+	require.NoError(t, err)
 }
 
 func TestSelectedAgentDenialsDoNotDiscloseExistenceOrTenant(t *testing.T) {
@@ -269,7 +329,7 @@ func TestConsentProvenanceOnlyAuthorizesSelectedAgentAttachments(t *testing.T) {
 	tx := testenv.BeginTx(t, ctx, conn)
 	_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, agent.ID, OwnedAgentAuthorize)
 	require.NoError(t, err)
-	for _, predicate := range []OwnerPredicate{OwnedAgentRead, OwnedAgentSetup, OwnedAgentTransfer} {
+	for _, predicate := range []OwnerPredicate{OwnedAgentRead, OwnedAgentTransfer} {
 		_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, agent.ID, predicate)
 		requireOopsCode(t, err, oops.CodeUnauthorized)
 	}

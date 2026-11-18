@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	"github.com/stretchr/testify/require"
@@ -69,8 +70,7 @@ func TestOAuthHTTPAuthorizeClientLookupOutage(t *testing.T) {
 	response := httptest.NewRecorder()
 	service.AuthorizeHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/platform-mcp/authorize?response_type=code&client_id=test&redirect_uri=https%3A%2F%2Fclient.example%2Fcallback&code_challenge="+strings.Repeat("a", 43)+"&code_challenge_method=S256", nil))
 	require.Equal(t, http.StatusServiceUnavailable, response.Code, response.Body.String())
-	var body oautherr.RFC6749Error
-	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+	body := oauthtest.RequireAuthorizationErrorPage(t, response, http.StatusServiceUnavailable)
 	require.Equal(t, oautherr.CodeTemporarilyUnavailable, body.Code)
 	require.Empty(t, response.Header().Get("Location"))
 	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))

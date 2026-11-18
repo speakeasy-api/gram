@@ -15,7 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -175,9 +175,14 @@ func TestEvaluateEffectiveMCPAccessMatchesDashboardDecisions(t *testing.T) {
 				held(user, narrowed(authz.ScopeMCPConnect, serverID, explainedProbeTool)),
 			}
 		}(), want: EffectiveMCPAccess{CanConnect: true, ToolAccess: explainedToolAccessSome}},
-		{name: "view and manage", grants: []authz.Grant{
+		{name: "view and manage do not connect", grants: []authz.Grant{
 			held(role, authz.NewGrant(authz.ScopeMCPRead, serverID)),
 			held(role, authz.NewGrant(authz.ScopeMCPWrite, serverID)),
+		}, want: EffectiveMCPAccess{CanConnect: false, ToolAccess: explainedToolAccessNone, CanView: true, CanManage: true}},
+		{name: "view, manage and connect", grants: []authz.Grant{
+			held(role, authz.NewGrant(authz.ScopeMCPRead, serverID)),
+			held(role, authz.NewGrant(authz.ScopeMCPWrite, serverID)),
+			held(role, authz.NewGrant(authz.ScopeMCPConnect, serverID)),
 		}, want: EffectiveMCPAccess{CanConnect: true, ToolAccess: explainedToolAccessAll, CanView: true, CanManage: true}},
 	}
 	for _, test := range tests {
@@ -206,7 +211,6 @@ func TestService_ExplainResourceAccess_BlockFromMappedRoleWins(t *testing.T) {
 	require.Equal(t, []explainedRuleSummary{
 		{displayName: "Contractors", level: audienceLevelBlocked, effect: string(authz.GrantEffectBlocks)},
 		{displayName: "Engineer", level: audienceLevelUse, effect: string(authz.GrantEffectBlocked)},
-		{displayName: "Engineer", level: audienceLevelView, effect: string(authz.GrantEffectBlocked)},
 	}, summarizeExplainedRules(use.Rules))
 
 	contractors := explainedRule(t, use.Rules, "Contractors")
@@ -272,7 +276,6 @@ func TestService_ExplainResourceAccess_DirectGrantOutranksRoleBlock(t *testing.T
 		{displayName: "Mateo", level: audienceLevelUse, effect: string(authz.GrantEffectOverrides)},
 		{displayName: "Contractors", level: audienceLevelBlocked, effect: string(authz.GrantEffectOverridden)},
 		{displayName: "Engineer", level: audienceLevelUse, effect: string(authz.GrantEffectBlocked)},
-		{displayName: "Engineer", level: audienceLevelView, effect: string(authz.GrantEffectBlocked)},
 	}, summarizeExplainedRules(use.Rules))
 	require.Equal(t, "user", explainedRule(t, use.Rules, "Mateo").Kind)
 }
@@ -450,26 +453,6 @@ func TestService_ExplainResourceAccess_ReportsVisibility(t *testing.T) {
 	}
 }
 
-func TestService_ExplainResourceAccess_ToolsetVisibilityFollowsItsMCPEndpoint(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestAccessService(t)
-	orgID := testAccessAuthContext(t, ctx).ActiveOrganizationID
-	seedConnectedUser(t, ctx, ti.conn, orgID, "local_viewer", "viewer@test.com", "Viewer", "user_viewer", "membership_viewer")
-	toolsetID := seedMCPServer(t, ctx, ti.conn, orgID)
-	id := uuid.MustParse(toolsetID)
-	projectID, err := accessrepo.New(ti.conn).FindMCPResourceProject(ctx, accessrepo.FindMCPResourceProjectParams{OrganizationID: orgID, ResourceID: id})
-	require.NoError(t, err)
-
-	require.Equal(t, "disabled", explainAccess(t, ctx, ti, toolsetID, "local_viewer").Visibility, "a switched-off MCP endpoint serves nobody")
-
-	require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, testrepo.SetToolsetMCPEnabledByIDParams{McpEnabled: true, ID: id, ProjectID: projectID}))
-	require.Equal(t, "private", explainAccess(t, ctx, ti, toolsetID, "local_viewer").Visibility)
-
-	require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: id, ProjectID: projectID}))
-	require.Equal(t, "public", explainAccess(t, ctx, ti, toolsetID, "local_viewer").Visibility)
-}
-
 func TestService_ExplainResourceAccess_ToolsetVisibilityFollowsItsCanonicalServer(t *testing.T) {
 	t.Parallel()
 
@@ -481,7 +464,8 @@ func TestService_ExplainResourceAccess_ToolsetVisibilityFollowsItsCanonicalServe
 	projectID, err := accessrepo.New(ti.conn).FindMCPResourceProject(ctx, accessrepo.FindMCPResourceProjectParams{OrganizationID: orgID, ResourceID: id})
 	require.NoError(t, err)
 
-	// A canonical server that disagrees with the toolset columns reads as disabled, as serving denies it.
+	require.Equal(t, "disabled", explainAccess(t, ctx, ti, toolsetID, "local_viewer").Visibility, "a toolset without a canonical server serves nobody")
+
 	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID: id, ProjectID: projectID, Name: pgtype.Text{String: "Audience", Valid: true}, Slug: pgtype.Text{String: "audience-" + toolsetID[:8], Valid: true},
 		EnvironmentID: uuid.NullUUID{}, UserSessionIssuerID: uuid.NullUUID{}, RemoteMcpServerID: uuid.NullUUID{}, TunneledMcpServerID: uuid.NullUUID{},
@@ -489,10 +473,12 @@ func TestService_ExplainResourceAccess_ToolsetVisibilityFollowsItsCanonicalServe
 		Visibility: "private", NetworkAccessMode: pgtype.Text{},
 	})
 	require.NoError(t, err)
-	require.Equal(t, "disabled", explainAccess(t, ctx, ti, toolsetID, "local_viewer").Visibility)
-
-	require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, testrepo.SetToolsetMCPEnabledByIDParams{McpEnabled: true, ID: id, ProjectID: projectID}))
 	require.Equal(t, "private", explainAccess(t, ctx, ti, toolsetID, "local_viewer").Visibility)
+
+	for _, visibility := range []string{"public", "disabled"} {
+		testenv.SetHostedMCP(t, ctx, ti.conn, projectID, id, testenv.HostedMCP{Visibility: visibility, UserSessionIssuerID: nil, Slug: "", CustomDomainID: uuid.NullUUID{}})
+		require.Equal(t, visibility, explainAccess(t, ctx, ti, toolsetID, "local_viewer").Visibility)
+	}
 }
 
 func TestService_ExplainResourceAccess_RejectsGateway(t *testing.T) {

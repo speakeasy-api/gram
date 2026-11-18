@@ -44,7 +44,7 @@ func TestCompletionKitWorkloadAdmission(t *testing.T) {
 	assistantID := seedAssistant(t, ctx, ti)
 	err = assistantsrepo.New(ti.conn).SetAssistantDesiredRuntimeVersionForTest(ctx, assistantsrepo.SetAssistantDesiredRuntimeVersionForTestParams{AssistantID: assistantID, ProjectID: ti.projectID, RuntimeVersion: 3})
 	require.NoError(t, err)
-	trigger, err := triggerrepo.New(ti.conn).CreateTriggerInstance(ctx, triggerrepo.CreateTriggerInstanceParams{
+	_, err = triggerrepo.New(ti.conn).CreateTriggerInstance(ctx, triggerrepo.CreateTriggerInstanceParams{
 		OrganizationID: ti.orgID, ProjectID: ti.projectID, DefinitionSlug: "slack", Name: "Test trigger", TargetKind: "assistant", TargetRef: assistantID.String(), TargetDisplay: "Assistant", ConfigJson: []byte(`{}`), Status: "active",
 	})
 	require.NoError(t, err)
@@ -53,9 +53,8 @@ func TestCompletionKitWorkloadAdmission(t *testing.T) {
 		require.NoError(t, identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: ti.orgID, ProjectID: ti.projectID, AssistantID: assistantID, ActorUserID: "test-owner"}))
 		return nil
 	}))
-	resolved, err := identities.Resolve(ctx, ti.conn, ti.orgID, ti.projectID, assistantID, trigger.ID)
+	resolved, err := identities.ResolveRuntime(ctx, ti.conn, ti.orgID, ti.projectID, assistantID)
 	require.NoError(t, err)
-	require.NotNil(t, resolved.Identity)
 	runtimeID := uuid.New()
 	now := pgtype.Timestamptz{Time: time.Now(), Valid: true}
 	require.NoError(t, assistantsrepo.New(ti.conn).CreateAssistantRuntime(ctx, assistantsrepo.CreateAssistantRuntimeParams{
@@ -79,7 +78,7 @@ func TestCompletionKitWorkloadAdmission(t *testing.T) {
 		require.NoError(t, err)
 		policyJSON, err := runtimepolicy.EncodeDelegatedPolicy(runtimepolicy.AssistantIssuedPolicyVersion, policy)
 		require.NoError(t, err)
-		require.NoError(t, chatrepo.New(ti.conn).SetHistoricalKitKeyProfileFixture(ctx, chatrepo.SetHistoricalKitKeyProfileFixtureParams{ApiKeyID: key.ID, ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true}, SubjectUrn: conv.ToPGText(urn.NewPrincipal(urn.PrincipalTypeAgent, resolved.Identity.AgentID.String()).String()), DelegatedGrants: policyJSON, DelegatedGrantsVersion: pgtype.Int4{Int32: int32(runtimepolicy.AssistantIssuedPolicyVersion), Valid: true}}))
+		require.NoError(t, chatrepo.New(ti.conn).SetHistoricalKitKeyProfileFixture(ctx, chatrepo.SetHistoricalKitKeyProfileFixtureParams{ApiKeyID: key.ID, ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true}, SubjectUrn: conv.ToPGText(urn.NewPrincipal(urn.PrincipalTypeAgent, resolved.AgentID.String()).String()), DelegatedGrants: policyJSON, DelegatedGrantsVersion: pgtype.Int4{Int32: int32(runtimepolicy.AssistantIssuedPolicyVersion), Valid: true}}))
 		_, err = boundary.KeyBasedAuth(ctx, raw, scheme.RequiredScopes)
 		require.NoError(t, err, "the former Kit principal profile is valid until identified as superseded")
 
@@ -100,10 +99,10 @@ func TestCompletionKitWorkloadAdmission(t *testing.T) {
 
 	issuerID := uuid.New()
 	subject := "projected-runtime-generation"
-	metadata, err := json.Marshal(map[string]any{"workload": map[string]any{"issuer_id": issuerID, "subject": subject, "identity": resolved.Identity}})
+	metadata, err := json.Marshal(map[string]any{"workload": map[string]any{"issuer_id": issuerID, "subject": subject, "identity": resolved}})
 	require.NoError(t, err)
 	require.NoError(t, assistantsrepo.New(ti.conn).UpdateAssistantRuntimeMetadata(ctx, assistantsrepo.UpdateAssistantRuntimeMetadataParams{ProjectID: ti.projectID, RuntimeID: runtimeID, BackendMetadataJson: metadata}))
-	effectiveAgent := resolved.Identity.AgentID
+	effectiveAgent := resolved.AgentID
 	ti.service.WithWorkloadInference(kitWorkloadAuthorizer(func(ctx context.Context, token string) (context.Context, bool, error) {
 		require.Equal(t, "verified-workload", token)
 		ac := &contextvalues.AuthContext{ActiveOrganizationID: ti.orgID, ProjectID: &ti.projectID}
@@ -126,7 +125,7 @@ func TestCompletionKitWorkloadAdmission(t *testing.T) {
 	effectiveAgent = uuid.New()
 	_, _, _, err = ti.service.TestingAuthorizeCompletion(request(), true)
 	requireKitAuthError(t, err, oops.CodeUnauthorized)
-	effectiveAgent = resolved.Identity.AgentID
+	effectiveAgent = resolved.AgentID
 	for _, mismatch := range []string{"issuer", "subject"} {
 		savedIssuer, savedSubject := issuerID, subject
 		if mismatch == "issuer" {
@@ -141,15 +140,17 @@ func TestCompletionKitWorkloadAdmission(t *testing.T) {
 		issuerID, subject = savedIssuer, savedSubject
 	}
 
-	for _, field := range []string{"identity project", "identity assistant", "identity subject"} {
-		changed := *resolved.Identity
+	for _, field := range []string{"identity project", "identity assistant", "identity binding", "identity generation"} {
+		changed := resolved
 		switch field {
 		case "identity project":
 			changed.ProjectID = uuid.New()
 		case "identity assistant":
 			changed.AssistantID = uuid.New()
-		case "identity subject":
-			changed.Subject = "retired-assistant-generation"
+		case "identity binding":
+			changed.BindingID = uuid.New()
+		case "identity generation":
+			changed.BindingGeneration++
 		}
 		invalid, err := json.Marshal(map[string]any{"workload": map[string]any{"issuer_id": issuerID, "subject": subject, "identity": changed}})
 		require.NoError(t, err)
@@ -170,7 +171,7 @@ func TestCompletionKitWorkloadAdmission(t *testing.T) {
 	_, _, _, err = ti.service.TestingAuthorizeCompletion(request(), true)
 	requireKitAuthError(t, err, oops.CodeUnauthorized)
 	require.NoError(t, chatrepo.New(ti.conn).SetKitCompletionRuntimeFixture(ctx, chatrepo.SetKitCompletionRuntimeFixtureParams{RuntimeID: runtimeID, ProjectID: ti.projectID, RuntimeVersion: 3}))
-	_, err = agentrepo.New(ti.conn).SuspendAgent(ctx, agentrepo.SuspendAgentParams{OrganizationID: ti.orgID, ID: resolved.Identity.AgentID})
+	_, err = agentrepo.New(ti.conn).SuspendAgent(ctx, agentrepo.SuspendAgentParams{OrganizationID: ti.orgID, ID: resolved.AgentID})
 	require.NoError(t, err)
 	_, _, _, err = ti.service.TestingAuthorizeCompletion(request(), true)
 	requireKitAuthError(t, err, oops.CodeUnauthorized)

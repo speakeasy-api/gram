@@ -15,17 +15,6 @@ import {
 } from "./mcpservertoolsetsummary.js";
 
 /**
- * A first-party backend Speakeasy serves itself, if any. approvals is the server agents call request_approval on; Speakeasy creates it with a project's first approval policy and manages its backend.
- */
-export const BuiltinBackend = {
-  Approvals: "approvals",
-} as const;
-/**
- * A first-party backend Speakeasy serves itself, if any. approvals is the server agents call request_approval on; Speakeasy creates it with a project's first approval policy and manages its backend.
- */
-export type BuiltinBackend = OpenEnum<typeof BuiltinBackend>;
-
-/**
  * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
  */
 export const McpServerNetworkAccessMode = {
@@ -58,10 +47,6 @@ export type McpServerVisibility = OpenEnum<typeof McpServerVisibility>;
  */
 export type McpServer = {
   /**
-   * A first-party backend Speakeasy serves itself, if any. approvals is the server agents call request_approval on; Speakeasy creates it with a project's first approval policy and manages its backend.
-   */
-  builtinBackend?: BuiltinBackend | undefined;
-  /**
    * When the MCP server was created
    */
   createdAt: Date;
@@ -77,6 +62,12 @@ export type McpServer = {
    * The ID of the MCP server
    */
   id: string;
+  /**
+   * Deprecated: always absent.
+   *
+   * @deprecated field: Always absent; use platform_endpoint_slug instead.
+   */
+  legacyPlatformSlug?: string | undefined;
   /**
    * A human-readable display name for the server
    */
@@ -105,6 +96,10 @@ export type McpServer = {
    * The ID of the remote MCP server used as the backend
    */
   remoteMcpServerId?: string | undefined;
+  /**
+   * When an admin marked the upstream provider's manual setup guide as done. Absent while it is not done.
+   */
+  setupGuideCompletedAt?: Date | undefined;
   /**
    * A URL-safe, project-unique slug derived server-side from the name and ID
    */
@@ -144,12 +139,6 @@ export type McpServer = {
 };
 
 /** @internal */
-export const BuiltinBackend$inboundSchema: z.ZodMiniType<
-  BuiltinBackend,
-  unknown
-> = openEnums.inboundSchema(BuiltinBackend);
-
-/** @internal */
 export const McpServerNetworkAccessMode$inboundSchema: z.ZodMiniType<
   McpServerNetworkAccessMode,
   unknown
@@ -165,7 +154,6 @@ export const McpServerVisibility$inboundSchema: z.ZodMiniType<
 export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
   .pipe(
     z.object({
-      builtin_backend: z.optional(BuiltinBackend$inboundSchema),
       created_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
@@ -173,6 +161,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
       environment_id: z.optional(z.string()),
       has_endpoint: z.optional(z.boolean()),
       id: z.string(),
+      legacy_platform_slug: z.optional(z.string()),
       name: z.optional(z.string()),
       network_access_mode: McpServerNetworkAccessMode$inboundSchema,
       platform_endpoint_slug: z.optional(z.string()),
@@ -180,6 +169,9 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
       primary_endpoint_url: z.optional(z.string()),
       project_id: z.string(),
       remote_mcp_server_id: z.optional(z.string()),
+      setup_guide_completed_at: z.optional(
+        z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+      ),
       slug: z.optional(z.string()),
       tool_variations_group_id: z.optional(z.string()),
       toolset: z.optional(McpServerToolsetSummary$inboundSchema),
@@ -195,16 +187,17 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
     }),
     z.transform((v) => {
       return remap$(v, {
-        "builtin_backend": "builtinBackend",
         "created_at": "createdAt",
         "environment_id": "environmentId",
         "has_endpoint": "hasEndpoint",
+        "legacy_platform_slug": "legacyPlatformSlug",
         "network_access_mode": "networkAccessMode",
         "platform_endpoint_slug": "platformEndpointSlug",
         "primary_endpoint_id": "primaryEndpointId",
         "primary_endpoint_url": "primaryEndpointUrl",
         "project_id": "projectId",
         "remote_mcp_server_id": "remoteMcpServerId",
+        "setup_guide_completed_at": "setupGuideCompletedAt",
         "tool_variations_group_id": "toolVariationsGroupId",
         "toolset_id": "toolsetId",
         "tunneled_mcp_server_id": "tunneledMcpServerId",

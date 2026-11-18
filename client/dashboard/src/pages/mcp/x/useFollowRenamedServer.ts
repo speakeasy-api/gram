@@ -1,3 +1,6 @@
+import { removeVisitsMatching } from "@/components/command-palette/recentlyVisited";
+import { useUser } from "@/contexts/Auth";
+import { useSlugs } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import { useCallback } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
@@ -12,6 +15,8 @@ export function useFollowRenamedServer(): (server: {
   const location = useLocation();
   const navigate = useNavigate();
   const routes = useRoutes();
+  const { orgSlug, projectSlug } = useSlugs();
+  const userId = useUser().id || undefined;
   return useCallback(
     (server) => {
       const href = renamedServerHref(
@@ -20,8 +25,18 @@ export function useFollowRenamedServer(): (server: {
         server,
         location,
       );
-      if (href) void navigate(href, { replace: true });
+      if (!href) return;
+      // Recents under the retired slug would land on a not-found page.
+      const oldBase = routes.mcp.details.href(mcpServerSlug ?? "");
+      removeVisitsMatching(
+        userId,
+        orgSlug,
+        projectSlug,
+        (entry) =>
+          entry.href === oldBase || entry.href.startsWith(`${oldBase}/`),
+      );
+      void navigate(href, { replace: true });
     },
-    [routes, mcpServerSlug, location, navigate],
+    [routes, mcpServerSlug, location, navigate, userId, orgSlug, projectSlug],
   );
 }

@@ -1,7 +1,7 @@
-import { InfoResponseBody } from "@gram/client/models/components/inforesponsebody.js";
-import { OrganizationEntry } from "@gram/client/models/components/organizationentry.js";
-import { ProjectEntry } from "@gram/client/models/components/projectentry.js";
-import { SessionInfoResponse } from "@gram/client/models/operations/sessioninfo.js";
+import type { InfoResponseBody } from "@gram/client/models/components/inforesponsebody.js";
+import type { OrganizationEntry } from "@gram/client/models/components/organizationentry.js";
+import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
+import type { SessionInfoResponse } from "@gram/client/models/operations/sessioninfo.js";
 import { useSessionInfo } from "@gram/client/react-query/sessionInfo.js";
 import { createContext, useContext, useEffect, useState } from "react";
 import { useLocation } from "react-router";

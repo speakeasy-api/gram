@@ -1,5 +1,10 @@
 import { IdentityLink } from "@/components/identity-link";
 import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
+import {
+  signedInWithFor,
+  type UpstreamCredential,
+} from "@/components/ui/ActingPrincipal/credential";
+import { useUser } from "@/contexts/Auth";
 import { identityRefForKind } from "@/lib/identity-urn";
 
 export function ToolUsageIdentity({
@@ -8,6 +13,7 @@ export function ToolUsageIdentity({
   label,
   agent,
   authorizer,
+  credential,
 }: {
   kind: string;
   identityKey: string;
@@ -19,7 +25,14 @@ export function ToolUsageIdentity({
    * person behind them, and for agents that sign in as themselves.
    */
   authorizer?: { userId: string; label?: string | undefined };
+  /**
+   * How Speakeasy signed the agent's call in upstream, when the row recorded
+   * it. Shown in place of the authorizer: a shared credential acted for
+   * nobody, and a personal connection names whose it was.
+   */
+  credential?: UpstreamCredential | undefined;
 }): JSX.Element {
+  const viewer = useUser();
   if (kind === "agent_id") {
     // Linked only once the agent itself resolved — an id read off a telemetry
     // row is not proof the reader is allowed to open that agent. The same holds
@@ -38,6 +51,7 @@ export function ToolUsageIdentity({
               }
             : undefined
         }
+        signedInWith={signedInWithFor(credential, viewer.id)}
         linked={Boolean(agent?.id)}
       />
     );

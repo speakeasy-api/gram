@@ -3,9 +3,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useOrgRoutes } from "@/routes";
 import type { OrganizationGateway } from "@gram/client/models/components/organizationgateway.js";
 import { useState } from "react";
@@ -13,9 +11,9 @@ import type { OrganizationGatewaySetting } from "./useOrganizationGatewaySetting
 import { Link } from "react-router";
 
 /**
- * The on/off switch. The page starts an access review when turning on;
- * turning off asks first, because
- * it cuts off every connected client at once. Members see it disabled with the
+ * The on/off switch. Turning on asks first and recommends reviewing MCP
+ * assignments; turning off asks first, because it cuts off every connected
+ * client at once. Members see it disabled with the
  * admin-only reason.
  */
 export function OrganizationGatewaySwitch({
@@ -25,7 +23,10 @@ export function OrganizationGatewaySwitch({
 }: Pick<OrganizationGatewaySetting, "setOn" | "isPending"> & {
   on: boolean;
 }): JSX.Element {
-  const [confirming, setConfirming] = useState(false);
+  const [confirming, setConfirming] = useState<"on" | "off" | null>(null);
+  const onOpenChange = (open: boolean) => {
+    if (!open) setConfirming(null);
+  };
   return (
     <>
       <RequireScope
@@ -35,34 +36,51 @@ export function OrganizationGatewaySwitch({
       >
         <Switch
           checked={on}
-          onCheckedChange={(checked) =>
-            checked ? setOn(true) : setConfirming(true)
-          }
+          onCheckedChange={(checked) => setConfirming(checked ? "on" : "off")}
           disabled={isPending}
           aria-label="Organization Gateway"
         />
       </RequireScope>
       <ConfirmDialog
-        open={confirming}
-        onOpenChange={setConfirming}
-        title="Turn off Organization Gateway?"
+        open={confirming === "on"}
+        onOpenChange={onOpenChange}
+        title="Turn on gateways?"
         description={
           <>
-            This removes your team&apos;s access to their servers through the
-            Organization Gateway. Clients connected to it stop working right
-            away.
+            This turns on every project&apos;s Project Gateway and the
+            Organization Gateway. Through them, each person gets every MCP
+            server they can access, including access inherited from broad roles.
+            <br />
+            <br />
+            We recommend reviewing MCP assignments first and removing any that
+            people no longer need.
+          </>
+        }
+        confirmLabel="Turn on"
+        pendingLabel="Turning on…"
+        confirmVariant="primary"
+        isPending={isPending}
+        onConfirm={() => setOn(true, { onSuccess: () => setConfirming(null) })}
+      />
+      <ConfirmDialog
+        open={confirming === "off"}
+        onOpenChange={onOpenChange}
+        title="Turn off gateways?"
+        description={
+          <>
+            This turns off every project&apos;s Project Gateway and the
+            Organization Gateway. Clients connected to any of them stop working
+            right away.
             <br />
             <br />
             Each MCP server keeps working at its own URL. You can turn the
-            gateway back on at any time.
+            gateways back on at any time.
           </>
         }
         confirmLabel="Turn off"
         pendingLabel="Turning off…"
         isPending={isPending}
-        onConfirm={() =>
-          setOn(false, { onSuccess: () => setConfirming(false) })
-        }
+        onConfirm={() => setOn(false, { onSuccess: () => setConfirming(null) })}
       />
     </>
   );
@@ -81,23 +99,20 @@ export function GatewayNotServed({
   const organization = useOrganization();
   const { hasScope } = useRBAC();
   const canManage = hasScope("org:admin", organization.id);
-  // Speakeasy Authorization Servers can make a project's server
+  // The MCP Authentication page can make a project's server
   // organization-wide and consolidate one server into another (removing the
-  // source). It is rolled out behind a flag and its actions need org:admin;
-  // without both, point to an admin or support instead.
-  const issuersPage =
-    useFeatureFlag(FEATURE_FLAGS.userSessionIssuerDashboard).status ===
-      "enabled" && canManage ? (
-      <Link to={orgRoutes.userSessionIssuers.href()} className="underline">
-        Speakeasy Authorization Servers
-      </Link>
-    ) : null;
+  // source). Its actions need org:admin; without it, point to an admin or
+  // support instead.
+  const issuersPage = canManage ? (
+    <Link to={orgRoutes.userSessionIssuers.href()} className="underline">
+      MCP Authentication
+    </Link>
+  ) : null;
   const askFor = canManage
     ? "Contact support"
     : "Ask an organization admin or contact support";
   switch (reason) {
-    // Only organizations inserted by signup get one automatically; identity-
-    // synced and existing organizations do not.
+    // No organization gets one automatically.
     case "no_organization_issuer":
       return (
         <Text small className="text-warning mt-3">

@@ -1,13 +1,14 @@
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Text } from "@/components/ui/Text";
+import { ServerUsageConfirmation } from "@/components/mcp-server-usage/ServerUsageConfirmation";
+import { useServerUsageConfirmation } from "@/components/mcp-server-usage/useServerUsageConfirmation";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import type { Toolset } from "@/lib/toolTypes";
 import { useToolsets } from "@/pages/toolsets/useToolsets";
 import { useRoutes } from "@/routes";
 import { invalidateAllGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
-import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useQueryClient } from "@tanstack/react-query";
@@ -26,37 +27,21 @@ export function DeleteHostedServerButton({
   const routes = useRoutes();
   const client = useSdkClient();
   const toolsets = useToolsets();
-  const { data: deploymentResult, refetch: refetchDeployment } =
-    useLatestDeployment();
-  const deployment = deploymentResult?.deployment;
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeletingMcpServer, setIsDeletingMcpServer] = useState(false);
+  // A toolset's canonical hosted server shares the toolset's id.
+  const usage = useServerUsageConfirmation({
+    mcpServerId: toolset.id,
+    serverName: toolset.name,
+    open: isDeleteDialogOpen,
+  });
 
   const handleDeleteMcpServer = async () => {
-    if (!toolset) return;
+    if (!toolset || !usage.canConfirm) return;
 
     setIsDeletingMcpServer(true);
 
     try {
-      const externalMcpUrn = toolset.toolUrns?.find((urn) =>
-        urn.includes(":externalmcp:"),
-      );
-
-      if (externalMcpUrn && deployment) {
-        const parts = externalMcpUrn.split(":");
-        const externalMcpSlug = parts[2];
-
-        if (externalMcpSlug) {
-          await client.deployments.evolveDeployment({
-            evolveForm: {
-              deploymentId: deployment.id,
-              nonBlocking: true,
-              excludeExternalMcps: [externalMcpSlug],
-            },
-          });
-        }
-      }
-
       await client.toolsets.deleteBySlug({ slug: toolset.slug });
 
       telemetry.capture("mcp_event", {
@@ -66,7 +51,6 @@ export function DeleteHostedServerButton({
 
       void invalidateAllToolset(queryClient, { refetchType: "none" });
       void invalidateAllGetPeriodUsage(queryClient);
-      void refetchDeployment();
       // Refresh both lists before navigating so the listing never shows the deleted server.
       await Promise.all([
         toolsets.refetch(),
@@ -103,7 +87,7 @@ export function DeleteHostedServerButton({
           if (!isDeletingMcpServer) setIsDeleteDialogOpen(open);
         }}
       >
-        <Dialog.Content>
+        <Dialog.Content className="max-w-2xl!">
           <Dialog.Header>
             <Dialog.Title>Delete MCP Server</Dialog.Title>
           </Dialog.Header>
@@ -116,6 +100,10 @@ export function DeleteHostedServerButton({
               clients will immediately lose access. This action cannot be
               undone.
             </Text>
+            <ServerUsageConfirmation
+              state={usage}
+              disabled={isDeletingMcpServer}
+            />
             <div className="flex justify-end space-x-2">
               <Button
                 variant="secondary"
@@ -127,7 +115,7 @@ export function DeleteHostedServerButton({
               <Button
                 variant="destructive-primary"
                 onClick={() => void handleDeleteMcpServer()}
-                disabled={isDeletingMcpServer}
+                disabled={isDeletingMcpServer || !usage.canConfirm}
               >
                 Delete MCP Server
               </Button>

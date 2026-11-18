@@ -1,6 +1,7 @@
 import { Checkbox } from "@/components/ui/Checkbox";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { authPageHref } from "@/lib/safe-external-url";
+import { signupAttributionParams } from "@/lib/signup-attribution";
 import { buildLoginRedirectURL, cn } from "@/lib/utils";
 import { useForm } from "@tanstack/react-form";
 import { useState } from "react";
@@ -74,6 +75,7 @@ export function SignUpPanel({
           normalizeOrgName(value.companyName),
           value.email.trim(),
           submittedPartnerCode,
+          signupAttributionParams(),
         ),
       );
     },

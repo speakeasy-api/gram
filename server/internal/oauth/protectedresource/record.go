@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -25,24 +26,14 @@ import (
 // failed fetch without replacing the last good document. Stored metadata_url
 // is diagnostic only; validate the full URL before redacting.
 func Record(ctx context.Context, db repo.DBTX, projectID uuid.UUID, orgID, resourceURL string, doc wellknown.OAuthProtectedResourceMetadata) error {
-	// RFC 9728 §§3.3 and 6 require exact equality, not URL equivalence.
-	// Keep this check at the write boundary so every discovery path rejects
-	// mismatches, including identifiers differing only by a trailing slash.
-	if !doc.ValidForResource(resourceURL) {
-		return recordError(ctx, db, projectID, orgID, resourceURL, doc.MetadataURL, mismatchMessage(resourceURL, doc))
-	}
-
-	return upsert(ctx, db, projectID, orgID, resourceURL, doc, false)
+	return recordDocument(ctx, db, projectID, orgID, resourceURL, doc, false)
 }
 
 // RecordIfChanged is Record for a login's read: the row is rewritten only
 // when the document changed, a failure is on record, or the last good read
 // is over a day old.
 func RecordIfChanged(ctx context.Context, db repo.DBTX, projectID uuid.UUID, orgID, resourceURL string, doc wellknown.OAuthProtectedResourceMetadata) error {
-	if !doc.ValidForResource(resourceURL) {
-		return recordError(ctx, db, projectID, orgID, resourceURL, doc.MetadataURL, mismatchMessage(resourceURL, doc))
-	}
-	return upsert(ctx, db, projectID, orgID, resourceURL, doc, true)
+	return recordDocument(ctx, db, projectID, orgID, resourceURL, doc, true)
 }
 
 func upsert(ctx context.Context, db repo.DBTX, projectID uuid.UUID, orgID, resourceURL string, doc wellknown.OAuthProtectedResourceMetadata, onlyIfChanged bool) error {
@@ -70,12 +61,6 @@ func upsert(ctx context.Context, db repo.DBTX, projectID uuid.UUID, orgID, resou
 		_, err = repo.New(db).UpsertRemoteProtectedResource(ctx, params)
 	}
 	if err != nil {
-		if isDataError(err) {
-			// Go accepts JSON values (including escaped NULs and large numbers)
-			// that PostgreSQL cannot store in jsonb or extracted text columns.
-			// Record a safe fetch failure so on-use probes keep their backoff.
-			return recordError(ctx, db, projectID, orgID, resourceURL, doc.MetadataURL, "The metadata document contains values that cannot be stored.")
-		}
 		return fmt.Errorf("upsert remote protected resource: %w", err)
 	}
 	return nil
@@ -97,7 +82,9 @@ func isDataError(err error) bool {
 
 // RecordFetchError stores the public-safe reason the last read of resourceURL failed.
 func RecordFetchError(ctx context.Context, db repo.DBTX, projectID uuid.UUID, orgID, resourceURL string, probeErr *wellknown.ProtectedResourceDiscoveryError) error {
-	return recordError(ctx, db, projectID, orgID, resourceURL, probeErr.ProbeURL, probeErr.UserMessage())
+	return recordWithEMASync(ctx, db, projectID, orgID, resourceURL, probeErr.ProbeURL, func(tx pgx.Tx) error {
+		return recordError(ctx, tx, projectID, orgID, resourceURL, probeErr.ProbeURL, probeErr.UserMessage())
+	})
 }
 
 // recordError stores message as the last fetch failure of resourceURL,

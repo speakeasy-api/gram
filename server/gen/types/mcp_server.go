@@ -21,6 +21,8 @@ type McpServer struct {
 	// The slug of this server's primary platform endpoint, the oldest one. Absent
 	// when no platform endpoint exists; never a custom-domain slug.
 	PlatformEndpointSlug *string
+	// Deprecated: always absent.
+	LegacyPlatformSlug *string
 	// The ID of the environment associated with the server
 	EnvironmentID *string
 	// The ID of the user session issuer that gates OAuth-based MCP client
@@ -38,10 +40,6 @@ type McpServer struct {
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
 	ToolVariationsGroupID *string
-	// A first-party backend Speakeasy serves itself, if any. approvals is the
-	// server agents call request_approval on; Speakeasy creates it with a
-	// project's first approval policy and manages its backend.
-	BuiltinBackend *string
 	// The visibility of the server
 	Visibility McpServerVisibility
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
@@ -60,6 +58,9 @@ type McpServer struct {
 	// Whether any endpoint routes to this server, including one on a custom domain
 	// that is not live yet. Absent when it could not be read.
 	HasEndpoint *bool
+	// When an admin marked the upstream provider's manual setup guide as done.
+	// Absent while it is not done.
+	SetupGuideCompletedAt *string
 	// When the MCP server was created
 	CreatedAt string
 	// When the MCP server was last updated

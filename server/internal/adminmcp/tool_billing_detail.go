@@ -25,7 +25,7 @@ const (
 	// maxBillingDetailProducts matches the three ordinary metered product families.
 	maxBillingDetailProducts = 3
 
-	// maxBillingDetailOutputBytes leaves response headroom below the 64 KiB proposal/request bound.
+	// maxBillingDetailOutputBytes leaves response headroom below the 64 KiB request bound.
 	maxBillingDetailOutputBytes = 48 << 10 // 48 KiB
 )
 

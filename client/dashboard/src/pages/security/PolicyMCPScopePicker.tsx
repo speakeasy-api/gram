@@ -25,7 +25,8 @@ import { useMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers.js";
 import { useMetaMcpServers } from "@gram/client/react-query/metaMcpServers.js";
 import { useRiskListMcpPlatformToolsets } from "@gram/client/react-query/riskListMcpPlatformToolsets.js";
 import { useQueries } from "@tanstack/react-query";
-import { ChevronDown, Info, Loader2, Network, Server, X } from "lucide-react";
+import { ChevronDown, Info, Network, Server, X } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { pluralize } from "@/lib/format";
@@ -113,11 +114,7 @@ export function PolicyMCPScopePicker({
     undefined,
     { throwOnError: false },
   );
-  // Built-in servers, such as the approvals server, are served before any
-  // policy runs, so no policy can scope them.
-  const concreteServers = (serversQuery.data?.mcpServers ?? []).filter(
-    (server) => !server.builtinBackend,
-  );
+  const concreteServers = serversQuery.data?.mcpServers ?? [];
   const remoteServers = concreteServers.filter(
     (server) => !server.toolsetId && !!server.remoteMcpServerId,
   );
@@ -586,7 +583,7 @@ export function PolicyMCPScopePicker({
                 </label>
                 {loading ? (
                   <Text small muted className="flex items-center gap-2 p-3">
-                    <Loader2 className="size-4 animate-spin" />
+                    <Spinner className="mr-0" />
                     Loading MCP servers...
                   </Text>
                 ) : null}
@@ -806,7 +803,7 @@ function FocusedServerPane({
             <div className="border-border border">
               {gatewayMembersLoading ? (
                 <Text small muted className="flex items-center gap-2 p-3">
-                  <Loader2 className="size-4 animate-spin" /> Loading members...
+                  <Spinner className="mr-0" /> Loading members...
                 </Text>
               ) : gatewayMembers.length > 0 ? (
                 gatewayMembers.map((member) => (
@@ -985,7 +982,7 @@ function EmptyToolListNotice({
   if (server.toolsLoading) {
     return (
       <Text small muted className="flex items-center gap-2 p-3">
-        <Loader2 className="size-4 animate-spin" /> Loading tools...
+        <Spinner className="mr-0" /> Loading tools...
       </Text>
     );
   }

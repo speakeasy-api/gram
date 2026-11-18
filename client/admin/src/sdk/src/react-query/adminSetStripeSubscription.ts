@@ -50,7 +50,7 @@ export type AdminSetStripeSubscriptionMutationError =
  * setStripeSubscription admin
  *
  * @remarks
- * Records a Stripe subscription ID on a PAYG organization when its subscription ID is empty, after verifying the subscription belongs to the organization's Stripe customer.
+ * Links an eligible existing Stripe subscription and atomically activates PAYG for free organizations or unconverted enterprise trials. Existing PAYG organizations retain their access policy. Verifies customer ownership, preserves existing subscription links and redeemed partner anchors, and accepts same-subscription retries.
  */
 export function useAdminSetStripeSubscriptionMutation(
   options?: MutationHookOptions<

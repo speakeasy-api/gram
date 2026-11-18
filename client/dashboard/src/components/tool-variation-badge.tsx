@@ -1,6 +1,6 @@
-import { ReactElement } from "react";
-import { Tool } from "@/lib/toolTypes";
-import { CanonicalToolAttributes } from "@gram/client/models/components/canonicaltoolattributes.js";
+import type { ReactElement } from "react";
+import type { Tool } from "@/lib/toolTypes";
+import type { CanonicalToolAttributes } from "@gram/client/models/components/canonicaltoolattributes.js";
 import { Icon } from "@/components/ui/Icon";
 import { SimpleTooltip } from "./ui/Tooltip";
 

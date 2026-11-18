@@ -28,7 +28,7 @@ type runnerHost struct {
 }
 
 func (*runnerHost) Servers(context.Context, PageArgs) (*ServerPage, error) {
-	return &ServerPage{Items: []Server{{Slug: "remote", Name: "Remote tools"}}}, nil
+	return &ServerPage{Items: []Server{{Slug: "remote", Name: "Remote tools", Connection: &ConnectionState{Consent: "required", Authentication: "unknown", Instructions: "Connect this server"}}}}, nil
 }
 func (*runnerHost) Search(context.Context, SearchArgs) (*SearchPage, error) {
 	return &SearchPage{Items: []Candidate{{Path: "remote--ping", Description: "Ping"}}}, nil
@@ -101,6 +101,49 @@ except RuntimeError as error:
 message`, func(context.Context) (Host, error) { return host, nil })
 	require.Nil(t, result.Error, "%+v", result.Error)
 	require.JSONEq(t, `"tool operation unavailable or arguments invalid"`, string(result.Value))
+}
+
+func TestCodeRunnerFailedRunKeepsPrintedOutput(t *testing.T) {
+	t.Parallel()
+	client := realRunnerClient(t)
+	for _, tc := range []struct {
+		name      string
+		code      string
+		message   string
+		output    string
+		truncated bool
+	}{
+		{"traceback", "print(\"before traceback\")\n1 / 0", "ZeroDivisionError", "before traceback\n", false},
+		{"result too large", "print(\"building\")\n\"x\" * 300000", "JSON result exceeds limit", "building\n", false},
+		{"truncated output", "print(\"x\" * 20000)\n1 / 0", "ZeroDivisionError", strings.Repeat("x", maxPrintBytes), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			result := client.Run(t.Context(), uuid.New(), tc.code, func(context.Context) (Host, error) { return &runnerHost{}, nil })
+			require.NotNil(t, result.Error)
+			require.Equal(t, "execution_failed", result.Error.Code)
+			require.Contains(t, result.Error.Message, tc.message)
+			require.Equal(t, tc.output, result.Output)
+			require.Equal(t, tc.truncated, result.OutputTruncated)
+			require.JSONEq(t, `null`, string(result.Value))
+		})
+	}
+}
+
+// The runner's wall deadline falls before the server's, so its deadline
+// report, with what the program printed, reaches the server first.
+func TestCodeRunnerDeadlineKeepsPrintedOutput(t *testing.T) {
+	t.Parallel()
+	client := realRunnerClient(t)
+	host := &runnerHost{entered: make(chan struct{}, 1), block: true}
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	result := client.Run(ctx, uuid.New(), `print("waiting")
+await tools.call("remote--write", {})`, func(context.Context) (Host, error) { return host, nil })
+	require.NotNil(t, result.Error)
+	require.Equal(t, "deadline_exceeded", result.Error.Code)
+	require.Equal(t, "waiting\n", result.Output)
+	require.Equal(t, []CallOutcome{{Path: "remote--write", Outcome: "unknown"}}, result.ToolCalls)
 }
 
 func TestCodeRunnerCancellationPreservesUnknownWrite(t *testing.T) {
@@ -234,4 +277,18 @@ len(response["data"])`, func(context.Context) (Host, error) { return host, nil }
 	require.Nil(t, result.Error, "%+v", result.Error)
 	require.JSONEq(t, strconv.Itoa(MaxResultBytes-len(base)), string(result.Value), "Python receives the whole payload")
 	require.Equal(t, []CallOutcome{{Path: "remote--ping", Outcome: "completed"}}, result.ToolCalls)
+}
+
+func (*runnerHost) Connect(_ context.Context, server string) (*ConnectionAction, error) {
+	return &ConnectionAction{Server: server, Status: "authorization_required", AuthorizationURL: "https://gateway.example.test/connect", Instructions: "Open the URL"}, nil
+}
+
+func TestCodeRunnerConnectionHelpers(t *testing.T) {
+	t.Parallel()
+	host := &runnerHost{}
+	result := realRunnerClient(t).Run(t.Context(), uuid.New(), `[await tools.servers(), await tools.connect(server="tracker")]`, func(context.Context) (Host, error) { return host, nil })
+	require.Nil(t, result.Error, "%+v", result.Error)
+	require.JSONEq(t, `[{"items":[{"slug":"remote","name":"Remote tools","connection":{"consent":"required","authentication":"unknown","instructions":"Connect this server"}}]},{"server":"tracker","status":"authorization_required","authorization_url":"https://gateway.example.test/connect","client_reconnect_required":false,"instructions":"Open the URL"}]`, string(result.Value))
+	require.Empty(t, result.ToolCalls)
+	require.Zero(t, host.called.Load())
 }

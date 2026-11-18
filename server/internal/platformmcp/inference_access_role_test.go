@@ -41,6 +41,14 @@ func TestInferenceAccessRoleGrantIsNarrowAndDistinctFromMCP(t *testing.T) {
 	require.NotEqual(t, inferenceHash, mcpHash)
 }
 
+func TestInferenceAccessRoleOutputReportsSensitiveScopesAdded(t *testing.T) {
+	t.Parallel()
+	output := ConfigureInferenceAccessRoleOutput{Role: AccessRoleMutationSummary{Name: "Operators", Reference: "opaque-role", Version: "opaque-version", MCPAccess: MCPConnectSummary{DispositionRules: []string{}, BlockedDispositionRules: []string{}}}, ProjectID: uuid.NewString(), Scope: string(authz.ScopeInferenceExecute), Receipt: RiskMutationToolReceipt{ID: uuid.NewString()}}
+	require.NotContains(t, decodeKeys(t, output), "sensitive_scopes_added", "absent when the write added nothing sensitive")
+	output.SensitiveScopesAdded = []string{string(authz.ScopeLogRead)}
+	require.Contains(t, decodeKeys(t, output), "sensitive_scopes_added")
+}
+
 func TestExplicitAllProjectsInferenceGrantIsNotMCPAccess(t *testing.T) {
 	t.Parallel()
 	project := uuid.NewString()

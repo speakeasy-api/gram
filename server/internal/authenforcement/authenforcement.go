@@ -48,13 +48,25 @@ func (g *Gate) Enforced(ctx context.Context, organizationID string) (bool, error
 	if enforced, ok := g.cache.Get(organizationID); ok {
 		return enforced, nil
 	}
-	enforced, err := repo.New(g.db).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+	enforced, err := ReadEnforced(ctx, g.db, organizationID)
+	if err != nil {
+		return false, err
+	}
+	g.cache.Add(organizationID, enforced)
+	return enforced, nil
+}
+
+// ReadEnforced reports whether organizationID has enforcement enabled as db
+// sees it, uncached. A writer that treats the two auth models differently
+// under enforcement reads it on its own transaction, so it decides from the
+// state its writes commit beside.
+func ReadEnforced(ctx context.Context, db repo.DBTX, organizationID string) (bool, error) {
+	enforced, err := repo.New(db).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
 		OrganizationID: organizationID,
 		FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
 	})
 	if err != nil {
 		return false, fmt.Errorf("read auth enforcement: %w", err)
 	}
-	g.cache.Add(organizationID, enforced)
 	return enforced, nil
 }

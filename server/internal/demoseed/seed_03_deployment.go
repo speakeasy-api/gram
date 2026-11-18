@@ -10,6 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
+
+	"github.com/speakeasy-api/gram/tunnel/jwks"
 )
 
 // seedDeployment: Deployment stack, toolsets, MCP connections, issuers, agents, assistants.
@@ -92,7 +94,7 @@ func (s *seeder) seedDeploymentStack(ctx context.Context) error {
 			Summary:             "Acme " + strings.ReplaceAll(name, "_", " "),
 			Description:         "Calls the Acme internal API operation " + name + ".",
 			HttpMethod:          method,
-			Path:                "/" + strings.ReplaceAll(name, "_", "/"),
+			Path:                toolPaths[name],
 			ReadOnlyHint:        name != "process_refund",
 			DestructiveHint:     name == "process_refund",
 		}); err != nil {
@@ -106,8 +108,9 @@ func (s *seeder) seedDeploymentToolsets(ctx context.Context) error {
 	proj := s.projectID()
 	externalOAuthID := s.det("external-oauth-discovery")
 
-	// Keep a metadata-based External OAuth row so the authentication page can
-	// demonstrate the proactive recommendation without contacting a provider.
+	// The OpenAPI Server's external OAuth server: callers bring a token from
+	// the API's own authorization server (the MCP fixture's, pointed at by the
+	// fixture servers phase).
 	if err := s.q.DeployInsertExternalOAuthMetadata(ctx, repo.DeployInsertExternalOAuthMetadataParams{
 		ID:        externalOAuthID,
 		ProjectID: proj,
@@ -119,12 +122,6 @@ func (s *seeder) seedDeploymentToolsets(ctx context.Context) error {
 		Toolset1:              s.toolset1(),
 		OrganizationID:        s.orgID(),
 		ProjectID:             proj,
-		SupportMcpSlug:        s.spec.OrgSlug + "-support",
-		Toolset2:              s.toolset2(),
-		Toolset3:              s.toolset3(),
-		PartnerMcpSlug:        s.spec.OrgSlug + "-partner",
-		Toolset4:              s.toolset4(),
-		DiscoveryMcpSlug:      s.spec.OrgSlug + "-oauth-discovery",
 		ExternalOauthServerID: externalOAuthID,
 	}); err != nil {
 		return fmt.Errorf("insert demo toolsets: %w", err)
@@ -140,12 +137,6 @@ func (s *seeder) seedDeploymentToolsets(ctx context.Context) error {
 	if err := s.q.DeployInsertToolsetVersions(ctx, repo.DeployInsertToolsetVersionsParams{
 		Toolset1:     s.toolset1(),
 		Toolset1Urns: urns(0, 1, 2, 3, 4, 5, 6, 7),
-		Toolset2:     s.toolset2(),
-		Toolset2Urns: urns(0, 1, 4, 6, 7),
-		Toolset3:     s.toolset3(),
-		Toolset3Urns: urns(0, 2, 3),
-		Toolset4:     s.toolset4(),
-		Toolset4Urns: urns(0),
 	}); err != nil {
 		return fmt.Errorf("insert demo toolset versions: %w", err)
 	}
@@ -198,13 +189,6 @@ func (s *seeder) seedDeploymentConnections(ctx context.Context) error {
 		OrganizationID: org,
 	}); err != nil {
 		return fmt.Errorf("insert demo user session issuer: %w", err)
-	}
-
-	if err := s.q.DeployAttachUserSessionIssuer(ctx, repo.DeployAttachUserSessionIssuerParams{
-		UserSessionIssuerID: s.usIssuer(),
-		ToolsetID:           s.toolset3(),
-	}); err != nil {
-		return fmt.Errorf("attach demo user session issuer: %w", err)
 	}
 
 	// Advertised capability and an administrator-declared registration are
@@ -526,7 +510,7 @@ func (s *seeder) seedDeploymentAssistants(ctx context.Context) error {
 		OrganizationID: org,
 		ProjectID:      proj,
 		OwnerUserID:    owner,
-		Name:           "Identity-bound assistant agent",
+		Name:           "Identity-bound assistant",
 	}); err != nil {
 		return fmt.Errorf("insert demo assistant agent: %w", err)
 	}
@@ -576,6 +560,8 @@ func (s *seeder) seedDeploymentAssistants(ctx context.Context) error {
 		OrganizationID: org,
 		ProjectID:      proj,
 		Name:           "Assistant triggers " + proj.String(),
+		Issuer:         s.assistantIssuer,
+		JwksUri:        s.assistantIssuer + jwks.Path,
 	}); err != nil {
 		return fmt.Errorf("insert demo assistant workload issuer: %w", err)
 	}

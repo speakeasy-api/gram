@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -14,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"go.opentelemetry.io/otel/codes"
@@ -36,11 +38,18 @@ func (tp *ToolProxy) ReadResource(
 		attr.ToolCallSource(string(tp.source)),
 	))
 	defer func() {
-		if err != nil {
+		// A read abandoned for shutdown is a deploy, not a resource failure.
+		if err != nil && !errors.Is(err, shutdowndrain.ErrInterrupted) {
 			span.SetStatus(codes.Error, err.Error())
 		}
 		span.End()
 	}()
+
+	// Function resource reads wait on a function runner, so the shutdown
+	// drain may abandon them like tool calls.
+	ctx, release := tp.drain.Interruptible(ctx)
+	defer release()
+	defer func() { err = shutdownInterruptedError(ctx, err) }()
 
 	logger := tp.logger.With(
 		attr.SlogProjectID(plan.Descriptor.ProjectID),

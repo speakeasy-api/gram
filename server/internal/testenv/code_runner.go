@@ -46,7 +46,7 @@ func LaunchCodeRunner(t *testing.T) (endpoint, token string) {
 	go func() {
 		scanner := bufio.NewScanner(stderr)
 		for scanner.Scan() {
-			if address, ok := strings.CutPrefix(scanner.Text(), "gram-code-runner protocol 1 listening on "); ok {
+			if address, ok := strings.CutPrefix(scanner.Text(), "gram-code-runner protocol 2 listening on "); ok {
 				ready <- address
 			}
 		}

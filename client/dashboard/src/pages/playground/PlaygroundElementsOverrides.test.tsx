@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { NO_MCP_TOOLS_MESSAGE } from "@/elements/lib/mcpToolsAvailability";
@@ -6,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   ctx: {
     config: {
       welcome: {
-        title: "Test Your MCP Server",
+        title: "Test your MCP server",
         subtitle:
           "This chat has access to the selected MCP server. Use it to test your tools.",
         suggestions: [

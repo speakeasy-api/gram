@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeSimple } from "../lib/encodings.js";
+import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -12,6 +12,10 @@ import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
+import {
+  StripeEmbeddedCheckout,
+  StripeEmbeddedCheckout$inboundSchema,
+} from "../models/components/stripeembeddedcheckout.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -38,7 +42,7 @@ import { Result } from "../types/fp.js";
  * createStripeCheckout usage
  *
  * @remarks
- * Create a Stripe Checkout link for starting PAYG billing
+ * Create an embedded Stripe Checkout session for starting PAYG billing
  */
 export function usageCreateStripeCheckout(
   client: GramCore,
@@ -47,7 +51,7 @@ export function usageCreateStripeCheckout(
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    string,
+    StripeEmbeddedCheckout,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -75,7 +79,7 @@ async function $do(
 ): Promise<
   [
     Result<
-      string,
+      StripeEmbeddedCheckout,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -102,6 +106,10 @@ async function $do(
   const body = null;
 
   const path = pathToFunc("/rpc/usage.createStripeCheckout")();
+
+  const query = encodeFormQuery({
+    "theme": payload?.theme,
+  });
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
@@ -142,6 +150,7 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
+    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
@@ -168,7 +177,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    string,
+    StripeEmbeddedCheckout,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -179,7 +188,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, z.string()),
+    M.json(200, StripeEmbeddedCheckout$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

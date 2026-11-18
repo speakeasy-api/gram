@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { useSlugs } from "@/contexts/Sdk";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { useMembers } from "@gram/client/react-query/members.js";
-import { Column } from "@/components/ui/Table";
+import type { Column } from "@/components/ui/Table";
 import { Bot, KeyRound } from "lucide-react";
 import { useMemo } from "react";
 import { OutcomeBadge } from "./ChallengesTab";
@@ -20,9 +20,13 @@ import { ResourceLink } from "./ResourceLink";
 import { useResourceLinkMaps } from "./useResourceLinkMaps";
 import {
   getInitials,
+  hasActiveTemporaryGrant,
   principalDisplayName,
   reasonLabel,
+  resolutionSummary,
 } from "./challengeHelpers";
+import { formatDeadline } from "@/components/temporary-access-helpers";
+import { useNow } from "@/hooks/useNow";
 
 export function useChallengeRowColumns(
   animatingOutIds?: Set<string>,
@@ -49,6 +53,10 @@ export function useChallengeRowColumns(
     return m;
   }, [membersData]);
 
+  // A temporary grant's badge turns to Resolved at its deadline without a
+  // refetch: re-render each minute so the comparison moves with the clock.
+  const now = useNow(60_000);
+
   return useMemo(() => {
     const isChild = (row: ChallengeBucket) =>
       expandedChildIds?.has(row.id) ?? false;
@@ -66,7 +74,7 @@ export function useChallengeRowColumns(
       {
         key: "avatar",
         header: "",
-        width: "40px",
+        width: "64px", // 32px cell padding + 32px avatar
         render: (row: ChallengeBucket) => {
           if (isChild(row)) return null;
           const isApiKey = row.principalType === "api_key";
@@ -174,15 +182,29 @@ export function useChallengeRowColumns(
       {
         key: "outcome",
         header: "Outcome",
-        width: "80px",
+        width: "100px",
         render: (row: ChallengeBucket) => {
           if (isChild(row)) return null;
           const resolved =
             !!row.resolvedAt || (recentlyResolvedIds?.has(row.id) ?? false);
-          return (
+          const badge = (
             <div className={cn(rowFade(row))}>
-              <OutcomeBadge outcome={row.outcome} resolved={resolved} />
+              <OutcomeBadge
+                outcome={row.outcome}
+                resolved={resolved}
+                temporary={hasActiveTemporaryGrant(row, now)}
+              />
             </div>
+          );
+          const summary = resolutionSummary(row, now, (deadline) =>
+            formatDeadline(deadline, now),
+          );
+          if (!summary) return badge;
+          return (
+            <Tooltip>
+              <TooltipTrigger asChild>{badge}</TooltipTrigger>
+              <TooltipContent>{summary}</TooltipContent>
+            </Tooltip>
           );
         },
       },
@@ -308,5 +330,6 @@ export function useChallengeRowColumns(
     onToggleBucket,
     expandedChildIds,
     recentlyResolvedIds,
+    now,
   ]);
 }

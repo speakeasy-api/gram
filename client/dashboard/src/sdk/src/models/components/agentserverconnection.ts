@@ -35,6 +35,10 @@ export type AgentServerConnection = {
    */
   connectUrl?: string | undefined;
   /**
+   * True when the user hid this server, from the gateway consent page or the device agent. Absent when not hidden.
+   */
+  hidden?: boolean | undefined;
+  /**
    * The server's id, as getPlugins reports it on each plugin server.
    */
   id: string;
@@ -61,6 +65,7 @@ export const AgentServerConnection$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     connect_url: z.optional(z.string()),
+    hidden: z.optional(z.boolean()),
     id: z.string(),
     request_access_url: z.optional(z.string()),
     state: AgentServerConnectionState$inboundSchema,

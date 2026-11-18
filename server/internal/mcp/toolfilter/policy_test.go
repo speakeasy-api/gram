@@ -137,4 +137,16 @@ func TestSessionPolicyValidatesEditedSelectionGrants(t *testing.T) {
 	policy := &SessionPolicy{Resource: resource, Gateway: &GatewayOptions{}, Catalog: &CatalogReference{ID: uuid.New(), Mode: CatalogModeCached, AllTools: false}, Selection: selection}
 	_, err = json.Marshal(policy)
 	require.ErrorContains(t, err, "cached catalog cannot carry live annotation grants")
+
+	// Removing a live grant must also discard its stale compiled projection.
+	selection, err = NewSessionSelection(resource, uuid.New(), []AllowEntry{{Type: AllowTypeAnnotation, Name: AnnotationReadOnly, Mode: &live}})
+	require.NoError(t, err)
+	selection.Allow = []AllowEntry{{Type: AllowTypeTool, Name: "source--tool"}}
+	policy.Selection = selection
+	raw, err := json.Marshal(policy)
+	require.NoError(t, err)
+	parsed, err := ParseSessionPolicy(raw)
+	require.NoError(t, err)
+	require.Empty(t, parsed.Selection.LiveAnnotations())
+	require.True(t, parsed.Selection.AllowsName("source--tool"))
 }

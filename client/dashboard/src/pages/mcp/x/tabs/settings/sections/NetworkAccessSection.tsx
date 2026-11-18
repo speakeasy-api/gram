@@ -7,6 +7,7 @@ import {
   SettingsSection,
 } from "@/components/detail/settings-section";
 import { Button } from "@/components/ui/Button";
+import { Spinner } from "@/components/ui/Spinner";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Dialog } from "@/components/ui/Dialog";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/Field";
@@ -54,7 +55,6 @@ import { useProductFeatures } from "@gram/client/react-query/productFeatures.js"
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { NetworkTrafficPanel } from "./NetworkTrafficPanel";
@@ -84,7 +84,7 @@ type NetworkAccessProps =
   | {
       mcpServer: McpServer;
       metaMcpServer?: never;
-      endpoints?: never;
+      endpoints: McpEndpoint[];
       toolset: Toolset & {
         networkAccessMode?: McpServerNetworkAccessMode;
       };
@@ -117,7 +117,7 @@ export function NetworkAccessSection({
       mcpServer={mcpServer}
       metaMcpServer={metaMcpServer}
       toolset={toolset}
-      endpoints={endpoints ?? hostedToolsetEndpoint(toolset)}
+      endpoints={endpoints}
       canReadIngress={canManageIngress}
     />
   );
@@ -131,24 +131,6 @@ export function NetworkAccessSection({
   }
 
   return section;
-}
-
-function hostedToolsetEndpoint(
-  toolset: (Toolset & { customDomainId?: string }) | undefined,
-): McpEndpoint[] {
-  if (!toolset?.mcpSlug) return [];
-  return [
-    {
-      id: toolset.id,
-      projectId: toolset.projectId,
-      slug: toolset.mcpSlug,
-      customDomainId: toolset.customDomainId,
-      mcpServerId: toolset.id,
-      isDomainRoot: false,
-      createdAt: new Date(0),
-      updatedAt: new Date(0),
-    },
-  ];
 }
 
 function NetworkAccessSectionContent({
@@ -649,7 +631,7 @@ function NetworkAccessSectionContent({
             >
               {isUpdating && (
                 <Button.LeftIcon>
-                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                  <Spinner className="mr-0" />
                 </Button.LeftIcon>
               )}
               <Button.Text>Make private only</Button.Text>
@@ -703,8 +685,8 @@ function networkAccessHint({
   if (!hasEligibleEndpoint) {
     const address =
       endpointNamespaceKind === "custom_domain"
-        ? "Custom Address on the domain configured for your private network"
-        : "Hosted Address";
+        ? "custom address on the domain configured for your private network"
+        : "hosted address";
     const section = isGateway ? "Gateway URL" : "Server URL";
     return currentMode === McpServerNetworkAccessMode.PublicOnly
       ? `In ${section}, add a ${address} so clients can reach this ${isGateway ? "gateway" : "server"} through your private network.`

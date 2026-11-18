@@ -33,11 +33,10 @@ func TestServiceDeletionWaitsForAssistantAttachments(t *testing.T) {
 				ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID), mcpConnectGrant())
 				ts, err := toolsetsrepo.New(conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 					OrganizationID: "org-test", ProjectID: projectID, Name: "Example tools", Slug: "example-tools",
-					McpSlug: pgtype.Text{String: "example-tools-endpoint", Valid: true}, McpEnabled: true,
 				})
 				require.NoError(t, err)
 				if kind == "toolset" {
-					syncCanonicalWrapper(t, conn, ts)
+					createCanonicalWrapper(t, conn, ts, "example-tools-endpoint", "private")
 				}
 				payload := &gen.CreateAssistantPayload{Name: "Assistant", Model: "openai/gpt-4o-mini"}
 				targetID := ts.ID
@@ -61,11 +60,10 @@ func TestServiceDeletionWaitsForAssistantAttachments(t *testing.T) {
 				if mutation == "update" {
 					live, err := toolsetsrepo.New(conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 						OrganizationID: "org-test", ProjectID: projectID, Name: "Live tools", Slug: "live-tools",
-						McpSlug: pgtype.Text{String: "live-tools-endpoint", Valid: true}, McpEnabled: true,
 					})
 					require.NoError(t, err)
 					if kind == "toolset" {
-						syncCanonicalWrapper(t, conn, live)
+						createCanonicalWrapper(t, conn, live, "live-tools-endpoint", "private")
 					}
 					original := &gen.CreateAssistantPayload{Name: "Original", Model: payload.Model}
 					if kind == "toolset" {

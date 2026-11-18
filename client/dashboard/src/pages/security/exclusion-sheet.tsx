@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { Label } from "@/components/ui/Label";
 import {
   Select,
@@ -26,7 +27,7 @@ import type { RiskExclusion } from "@gram/client/models/components/riskexclusion
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import type { JSX, ReactNode } from "react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -496,7 +497,7 @@ function ExclusionForm({
                 >
                   <Button.LeftIcon>
                     {suggestMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <Spinner className="mr-0" />
                     ) : (
                       <Sparkles className="h-4 w-4" />
                     )}
@@ -548,7 +549,7 @@ function ExclusionForm({
         >
           {(submitting || reveals.isLoading) && (
             <Button.LeftIcon>
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Spinner className="mr-0" />
             </Button.LeftIcon>
           )}
           <Button.Text>

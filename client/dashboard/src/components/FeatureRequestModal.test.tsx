@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FeatureRequestModal } from "./FeatureRequestModal";
 
@@ -8,10 +9,8 @@ vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ capture: telemetryCapture }),
 }));
 
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
-    billing: { href: () => "/billing" },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
 afterEach(() => {
@@ -37,6 +36,7 @@ describe("FeatureRequestModal", () => {
           telemetryField: "requested_agent",
         }}
       />,
+      { wrapper: MemoryRouter },
     );
 
     const requestButton = screen.getByRole("button", {
@@ -73,7 +73,7 @@ describe("FeatureRequestModal", () => {
         }}
       />
     );
-    const { rerender } = render(modal(true));
+    const { rerender } = render(modal(true), { wrapper: MemoryRouter });
 
     fireEvent.change(screen.getByLabelText("AI agent"), {
       target: { value: "GitHub Copilot" },

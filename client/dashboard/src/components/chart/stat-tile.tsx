@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { Icon } from "@/components/ui/Icon";
 import { type IconName } from "@/components/ui/Icon/names";
 import { MetricCard as UiMetricCard } from "@/components/ui/MetricCard";
@@ -10,9 +11,8 @@ import { MetricCard as UiMetricCard } from "@/components/ui/MetricCard";
 export const StatTileGroup = UiMetricCard.Group;
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { formatCompact } from "@/lib/format";
-import { ThresholdConfig } from "./chartUtils";
+import type { ThresholdConfig } from "./chartUtils";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Loader2 } from "lucide-react";
 import { Link } from "react-router";
 
 export type StatTileProps = {
@@ -126,9 +126,9 @@ export function StatTile(props: StatTileProps): JSX.Element {
       )}
       {icon &&
         (isRefreshing ? (
-          <Loader2
-            aria-label={`Refreshing ${title}`}
-            className="text-muted-foreground size-3 animate-spin"
+          <Spinner
+            label={`Refreshing ${title}`}
+            className="text-muted-foreground mr-0 size-3"
           />
         ) : (
           <Icon name={icon} className="text-muted-foreground size-3" />
@@ -136,20 +136,25 @@ export function StatTile(props: StatTileProps): JSX.Element {
     </span>
   );
 
+  // Beside the figure the comparison only fits a quarter-width tile without
+  // wrapping when it is the bare percentage, so a tile with no caption of its
+  // own carries "vs previous period" as its caption instead.
+  const comparisonAsCaption = showDelta && !!comparisonLabel && !subtext;
   const deltaNode = showDelta ? (
     <>
       {isPositive ? "+" : "-"}
       {delta.toFixed(1)}%
-      {comparisonLabel && (
+      {comparisonLabel && !comparisonAsCaption && (
         <span className="text-muted"> {comparisonLabel}</span>
       )}
     </>
   ) : undefined;
 
+  const caption = comparisonAsCaption ? comparisonLabel : subtext;
   const description =
-    subtext || link ? (
+    caption || link ? (
       <span className="flex items-center justify-between gap-2">
-        <span className="text-muted-foreground">{subtext}</span>
+        <span className="text-muted-foreground">{caption}</span>
         {link && (
           <Link
             to={link}

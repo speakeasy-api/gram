@@ -53,10 +53,10 @@ func TestPluginAudienceDeliversExistingUseThroughMCP(t *testing.T) {
 		WithPublicationRequests(plugindelivery.PublicationRequests{Enabled: true})
 	accessReads := NewAccessReadService(testenv.NewLogger(t), conn, allowBudget(), "audience-delivery-access-key")
 	session := newPluginRemovalSession(t, service, principal, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID)}, accessReads)
-	readArgs := map[string]any{"project_id": project.ID.String(), "plugin": plugin.ID.String()}
+	readArgs := map[string]any{"project_slug": project.Slug, "plugin": plugin.ID.String()}
 	before := callSkillsTool[GetPluginOutput](t, ctx, session, "get_plugin", readArgs)
 	require.Empty(t, before.Servers)
-	choices := callSkillsTool[ListPluginAssignmentsOutput](t, ctx, session, "list_plugin_assignments", map[string]any{"project_id": project.ID.String()})
+	choices := callSkillsTool[ListPluginAssignmentsOutput](t, ctx, session, "list_plugin_assignments", map[string]any{"project_slug": project.Slug})
 	var reference string
 	for _, choice := range choices.Assignments {
 		if choice.DisplayName == role.WorkosName {
@@ -64,7 +64,7 @@ func TestPluginAudienceDeliversExistingUseThroughMCP(t *testing.T) {
 		}
 	}
 	require.NotEmpty(t, reference)
-	args := map[string]any{"project_id": project.ID.String(), "plugin": plugin.ID.String(), "assignment_references": []string{reference}, "expected_assignment_version": before.AssignmentVersion, "idempotency_key": "assign-existing-use", "confirmed": true}
+	args := map[string]any{"project_slug": project.Slug, "plugin": plugin.ID.String(), "assignment_references": []string{reference}, "expected_assignment_version": before.AssignmentVersion, "idempotency_key": "assign-existing-use", "confirmed": true}
 	type audienceResult struct {
 		SetPluginAssignmentsOutput
 		PublicationRequest string `json:"publication_request"`
@@ -76,7 +76,7 @@ func TestPluginAudienceDeliversExistingUseThroughMCP(t *testing.T) {
 	require.Equal(t, "enqueued", assigned.PublicationRequest)
 	require.False(t, assigned.Receipt.Replayed)
 
-	accessArgs := map[string]any{"project_id": project.ID.String(), "mcp_id": serverID}
+	accessArgs := map[string]any{"project_slug": project.Slug, "mcp_id": serverID}
 	accessBefore := callSkillsTool[GetMCPAccessOutput](t, ctx, session, "get_mcp_access", accessArgs)
 	require.Len(t, accessBefore.Roles, 1)
 	require.Equal(t, role.WorkosName, accessBefore.Roles[0].Name)
@@ -84,7 +84,7 @@ func TestPluginAudienceDeliversExistingUseThroughMCP(t *testing.T) {
 	require.NotEmpty(t, accessBefore.Roles[0].Version)
 	require.Equal(t, []MCPMatchingPlugin{{PluginID: plugin.ID.String(), Name: plugin.Name, Slug: plugin.Slug}}, accessBefore.Roles[0].MatchingPlugins)
 
-	removed := callSkillsTool[RemovePluginServerOutput](t, ctx, session, "remove_plugin_server", map[string]any{"project_id": project.ID.String(), "plugin_id": plugin.ID.String(), "membership_id": after.Servers[0].MembershipID, "confirmed": true})
+	removed := callSkillsTool[RemovePluginServerOutput](t, ctx, session, "remove_plugin_server", map[string]any{"project_slug": project.Slug, "plugin_id": plugin.ID.String(), "membership_id": after.Servers[0].MembershipID, "confirmed": true})
 	require.True(t, removed.Removed)
 	accessAfter := callSkillsTool[GetMCPAccessOutput](t, ctx, session, "get_mcp_access", accessArgs)
 	require.Equal(t, project.ID.String(), accessAfter.ProjectID)
@@ -108,4 +108,67 @@ func TestPluginAudienceDeliversExistingUseThroughMCP(t *testing.T) {
 	current := callSkillsTool[GetPluginOutput](t, ctx, session, "get_plugin", readArgs)
 	require.Empty(t, current.Servers)
 	require.Equal(t, assigned.AssignmentVersion, current.AssignmentVersion)
+}
+
+// Without the durable publication request, an assignment that delivers servers
+// still republishes through the best-effort signal, as the dashboard does. A
+// replay and an unchanged audience send nothing.
+func TestPluginAudienceAssignmentSignalsPublishWithoutPublicationRequests(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_audience_signal")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Role signal", "role-signal")
+	servers, err := platformrepo.New(conn).ListPlatformMCPServers(ctx, platformrepo.ListPlatformMCPServersParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID, LimitValue: 10})
+	require.NoError(t, err)
+	require.NotEmpty(t, servers)
+	now := conv.ToPGTimestamptz(time.Now())
+	role, err := accessrepo.New(conn).CreateOrganizationRole(ctx, accessrepo.CreateOrganizationRoleParams{OrganizationID: principal.OrganizationID, WorkosSlug: "audience-signal", WorkosName: "Audience signal", WorkosCreatedAt: now, WorkosUpdatedAt: now})
+	require.NoError(t, err)
+	roleURN := urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+role.ID.String())
+	selector, err := authz.NewSelector(authz.ScopeMCPConnect, servers[0].ID.String()).MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: principal.OrganizationID, PrincipalUrn: roleURN, Scope: string(authz.ScopeMCPConnect), Selectors: selector,
+	})
+	require.NoError(t, err)
+	_, err = pluginsrepo.New(conn).UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{ProjectID: project.ID, InstallationID: 1, RepoOwner: "test-owner", RepoName: "test-signal-marketplace", PublishedMcpFingerprints: []byte(`{}`), PublishedHooksVersion: pgtype.Text{}})
+	require.NoError(t, err)
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagPlatformMCPPluginAssignmentMutations, principal.OrganizationID, true)
+	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
+	signaler := &recordingPluginPublishSignaler{}
+	service := testPluginTargets(conn).WithAuthorization(engine).
+		WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget()).
+		WithPublicationRequests(plugindelivery.PublicationRequests{Enabled: false})
+	service.WithRepublish(plugindelivery.PublicationRequests{Enabled: false}, signaler, testOperationBudget())
+	accessReads := NewAccessReadService(testenv.NewLogger(t), conn, allowBudget(), "audience-signal-access-key")
+	session := newPluginRemovalSession(t, service, principal, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID)}, accessReads)
+	before := callSkillsTool[GetPluginOutput](t, ctx, session, "get_plugin", map[string]any{"project_slug": project.Slug, "plugin": plugin.ID.String()})
+	choices := callSkillsTool[ListPluginAssignmentsOutput](t, ctx, session, "list_plugin_assignments", map[string]any{"project_slug": project.Slug})
+	var reference string
+	for _, choice := range choices.Assignments {
+		if choice.DisplayName == role.WorkosName {
+			reference = choice.Reference
+		}
+	}
+	require.NotEmpty(t, reference)
+	args := map[string]any{"project_slug": project.Slug, "plugin": plugin.ID.String(), "assignment_references": []string{reference}, "expected_assignment_version": before.AssignmentVersion, "idempotency_key": "assign-signal", "confirmed": true}
+
+	assigned := callSkillsTool[SetPluginAssignmentsOutput](t, ctx, session, "set_plugin_assignments", args)
+	require.Equal(t, string(plugindelivery.ProjectPublicationEmissionDisabled), assigned.PublicationRequest)
+	require.Equal(t, "best_effort_requested", assigned.PublishSignal)
+	require.Equal(t, []pluginPublishSignal{{projectID: project.ID, userID: principal.UserID}}, signaler.recorded())
+
+	replay := callSkillsTool[SetPluginAssignmentsOutput](t, ctx, session, "set_plugin_assignments", args)
+	require.True(t, replay.Receipt.Replayed)
+	require.Equal(t, "not_requested", replay.PublishSignal)
+
+	args["idempotency_key"] = "assign-signal-unchanged"
+	args["expected_assignment_version"] = assigned.AssignmentVersion
+	unchanged := callSkillsTool[SetPluginAssignmentsOutput](t, ctx, session, "set_plugin_assignments", args)
+	require.False(t, unchanged.Receipt.Replayed)
+	require.Equal(t, "not_requested", unchanged.PublishSignal)
+	require.Len(t, signaler.recorded(), 1, "a replay or an unchanged audience must not signal again")
 }

@@ -5,11 +5,14 @@ import {
   encodeShadowServerFilter,
   type ParsedTargetFilter,
 } from "@/components/observe/observeTargetFilters";
+import {
+  withLoadedVia,
+  type SkillLoadChannel,
+} from "@/components/observe/skillLoadChannel";
 import { applyFilterAdd } from "@/pages/logs/log-filter-types";
 import { parseFilters, serializeFilters } from "@/pages/logs/log-filter-url";
-import { useProject } from "@/contexts/Auth";
+import { useToolLogsAccess } from "@/components/observe/toolLogsAccess";
 import { useSlugs } from "@/contexts/Sdk";
-import { useRBAC } from "@/hooks/useRBAC";
 import { Operator } from "@gram/client/models/components/logfilter";
 import { useCallback } from "react";
 import { useSearchParams } from "react-router";
@@ -54,6 +57,8 @@ export type ObserveDeepLinkScope = {
   userEmail?: string;
   hookSource?: string;
   clientKey?: string;
+  /** Narrows skill loads to one channel; rides in `af` like a tool name. */
+  loadedVia?: SkillLoadChannel;
 };
 
 function appendCsv(
@@ -124,15 +129,24 @@ export function buildObserveHref(
   appendCsv(params, "source", scope.hookSource);
   appendCsv(params, "client", scope.clientKey);
 
-  if (scope.toolName) {
+  if (scope.toolName || scope.loadedVia) {
     // Merged into the chips already applied, so an unrelated chip the reader
     // set survives the drill-down. An existing chip on this same path is
     // replaced rather than added to: two eq chips on one path AND to nothing.
-    const merged = applyFilterAdd(parseFilters(current.get("af")), {
-      path: TOOL_NAME_ATTRIBUTE_PATH,
-      op: Operator.Eq,
-      value: scope.toolName,
-    });
+    let merged = parseFilters(current.get("af"));
+    if (scope.toolName) {
+      merged = applyFilterAdd(merged, {
+        path: TOOL_NAME_ATTRIBUTE_PATH,
+        op: Operator.Eq,
+        value: scope.toolName,
+      });
+    }
+    if (scope.loadedVia) {
+      merged = withLoadedVia(merged, scope.loadedVia);
+      // The channel means nothing for a tool call: without the type, "MCP"
+      // would let every hosted tool call through.
+      params.set("hookTypes", "skill");
+    }
     const serialized = serializeFilters(merged);
     if (serialized) params.set("af", serialized);
   }
@@ -142,34 +156,23 @@ export function buildObserveHref(
 }
 
 /**
- * Whether the caller can open Tool Logs for the current project. It needs
- * log:read on the project, which no role holds by default, so links into Tool
- * Logs are only offered to those granted it.
- */
-export function useCanViewToolLogs(): boolean {
-  const project = useProject();
-  const { hasScope } = useRBAC();
-  // An empty id would make this an "any project" check, so outside a project
-  // the answer is no.
-  return Boolean(project.id) && hasScope("log:read", project.id);
-}
-
-/**
  * Binds {@link buildObserveHref} to the current project and URL, for panels
- * that only know what they are showing, not where they are. Returns undefined
- * when the caller cannot open Tool Logs, so the panel renders no link.
+ * that only know what they are showing, not where they are. Tool Logs admits
+ * every project reader (without log:read it shows their own activity), so the
+ * link is undefined only for a viewer the page would turn away, such as an
+ * MCP-only member.
  */
 export function useObserveLogsLink(): (
   scope?: ObserveDeepLinkScope,
 ) => string | undefined {
   const { orgSlug, projectSlug } = useSlugs();
   const [searchParams] = useSearchParams();
-  const canViewToolLogs = useCanViewToolLogs();
+  const { canOpen } = useToolLogsAccess();
   const base = `/${orgSlug}/projects/${projectSlug}/logs`;
 
   return useCallback(
     (scope?: ObserveDeepLinkScope) =>
-      canViewToolLogs ? buildObserveHref(base, searchParams, scope) : undefined,
-    [base, canViewToolLogs, searchParams],
+      canOpen ? buildObserveHref(base, searchParams, scope) : undefined,
+    [base, canOpen, searchParams],
   );
 }

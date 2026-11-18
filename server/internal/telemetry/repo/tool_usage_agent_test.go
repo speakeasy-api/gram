@@ -31,7 +31,7 @@ func TestToolUsageAgentAttributionSQL(t *testing.T) {
 				require.NotContains(t, query, "telemetry_logs")
 			} else {
 				require.Contains(t, query, toolUsageAgentIDExpr+" AS agent_id")
-				require.Contains(t, query, "telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery') AND toString(attributes.gram.authorization.actor.type) = 'agent'")
+				require.Contains(t, query, "telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery', 'hook') AND toString(attributes.gram.authorization.actor.type) = 'agent', toString(attributes.gram.authorization.actor.id)")
 			}
 			agentExpr := prefix + "agent_id"
 			if !tt.grouped {
@@ -60,4 +60,60 @@ func TestToolUsageAuthorizerSummaryExpressionMatchesRaw(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(schema), "max("+toolUsageAuthorizerUserIDExpr+") AS authorizer_user_id")
 	require.Contains(t, string(schema), "authorizer_user_id SimpleAggregateFunction(max, String)")
+}
+
+func TestToolUsageAgentScope(t *testing.T) {
+	t.Parallel()
+	agent := ToolUsageUserFilter{Kind: ToolUsageUserKindAgentID, Key: "a1"}
+	email := ToolUsageUserFilter{Kind: toolUsageUserKindEmail, Key: "x@example.com"}
+	tests := []struct {
+		name        string
+		filters     []ToolUsageUserFilter
+		authorizers []string
+		agentIDs    []string
+		want        []string
+	}{
+		{"no identity filter reads every trace", nil, nil, nil, nil},
+		{"an agent filter pins the read", []ToolUsageUserFilter{agent}, nil, nil, []string{"a1"}},
+		{"a person in the filter reads traces with no agent", []ToolUsageUserFilter{agent, email}, nil, nil, nil},
+		{"an authorizer reads traces the filter does not name", []ToolUsageUserFilter{agent}, []string{"u1"}, nil, nil},
+		{"agent ids pin the read on their own", []ToolUsageUserFilter{email}, []string{"u1"}, []string{"a2"}, []string{"a2"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, toolUsageAgentScope(tt.filters, tt.authorizers, tt.agentIDs))
+		})
+	}
+}
+
+func TestToolUsageAgentScopeNarrowsBeforeGrouping(t *testing.T) {
+	t.Parallel()
+	agentFilter := []ToolUsageUserFilter{{Kind: ToolUsageUserKindAgentID, Key: "a1"}}
+	const narrowing = "trace_id IN (SELECT trace_id FROM trace_summaries WHERE gram_project_id = ? AND agent_id IN (?)"
+	tests := []struct {
+		name  string
+		build func(filters []ToolUsageUserFilter) (string, []any, error)
+		// Each grouped read of trace_summaries carries its own narrowing.
+		reads int
+	}{
+		{"summary", func(filters []ToolUsageUserFilter) (string, []any, error) {
+			return toolUsageNormalizedEventsCTE(GetToolUsageSummaryParams{GramProjectID: "p", UserFilters: filters})
+		}, 2},
+		{"trace summary", func(filters []ToolUsageUserFilter) (string, []any, error) {
+			return toolUsageTraceRowsFromSummariesCTE(ListToolUsageTracesParams{GramProjectID: "p", UserFilters: filters})
+		}, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			scoped, args, err := tt.build(agentFilter)
+			require.NoError(t, err)
+			require.Equal(t, tt.reads, strings.Count(scoped, narrowing))
+			require.Len(t, args, strings.Count(scoped, "?"))
+			unscoped, _, err := tt.build(nil)
+			require.NoError(t, err)
+			require.NotContains(t, unscoped, "agent_id IN")
+		})
+	}
 }

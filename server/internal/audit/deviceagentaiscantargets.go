@@ -108,6 +108,7 @@ func aiScanTargetAuditParams(
 	afterSnapshot []byte,
 ) repo.InsertAuditLogParams {
 	return repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: organizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 

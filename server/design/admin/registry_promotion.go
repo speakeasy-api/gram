@@ -16,6 +16,22 @@ var AdminRegistryPromotionSuggestions = Type("AdminRegistryPromotionSuggestions"
 	Attribute("auth_mode", String, func() { Enum("none", "oauth") })
 })
 
+var AdminRegistryPromotionSetupGuide = Type("AdminRegistryPromotionSetupGuide", func() {
+	Description("A setup guide in the setup-docs export pinned in the server.")
+	Attribute("slug", String)
+	Attribute("title", String)
+	Required("slug", "title")
+})
+
+var AdminRegistryPromotionAuthDiscovery = Type("AdminRegistryPromotionAuthDiscovery", func() {
+	Description("Publicly advertised authentication capabilities, not a verified OAuth connection.")
+	Attribute("supports_dcr", Boolean)
+	Attribute("supports_cimd", Boolean)
+	Attribute("auth_setup", String, func() { Enum("none", "dcr", "cimd", "manual", "unknown") })
+	Attribute("status", String, func() { Enum("complete", "partial", "unavailable", "not_required") })
+	Required("supports_dcr", "supports_cimd", "auth_setup", "status")
+})
+
 var AdminRegistryPromotionCandidate = Type("AdminRegistryPromotionCandidate", func() {
 	Attribute("id", String)
 	Attribute("organization_id", String)
@@ -26,6 +42,10 @@ var AdminRegistryPromotionCandidate = Type("AdminRegistryPromotionCandidate", fu
 	Attribute("created_at", String, func() { Format(FormatDateTime) })
 	Attribute("curation_revision", String, func() { Format(FormatUUID) })
 	Attribute("suggested_metadata", AdminRegistryPromotionSuggestions)
+	Attribute("setup_guides", ArrayOf(AdminRegistryPromotionSetupGuide), "Guides in the pinned setup-docs export, for warning when a slug is already taken. Present only with suggested_metadata. Guides merged after the pinned version are missing.")
+	Attribute("setup_guides_version", String, "Pinned setup-docs export version that setup_guides came from.")
+	Attribute("endpoint_guide_slug", String, "Slug of the one pinned guide that documents the suggested public endpoint.")
+	Attribute("auth_discovery", AdminRegistryPromotionAuthDiscovery)
 	Attribute("source_revision", String)
 	Attribute("eligible", Boolean)
 	Attribute("can_override_eligibility", Boolean, "Whether staff may explicitly accept this candidate's health evidence.")

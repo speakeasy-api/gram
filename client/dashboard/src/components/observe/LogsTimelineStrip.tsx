@@ -1,23 +1,17 @@
 import { StackedTimeBarChart } from "@/components/chart/StackedTimeBarChart";
 import {
-  bucketStartNsToMs,
   pickTimeBucketMs,
+  toolOutcomeDatasets,
 } from "@/components/observe/toolUsageTimeSeriesChartData";
+import { useOtherSeriesColor } from "@/components/chart/useSeriesColors";
 import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { Skeleton } from "@/components/ui/Skeleton";
 import type { ToolUsageTargetTimeSeriesPoint } from "@gram/client/models/components/toolusagetargettimeseriespoint.js";
 import { format } from "date-fns";
 import { useMemo } from "react";
 
 const HOUR_MS = 60 * 60 * 1000;
-// The same colours the status dots use, so a red bar and a red dot are read as
-// the same fact rather than two palettes that happen to share a meaning.
-// emerald-500, rose-500, amber-500, and the muted grey a pending dot carries.
-const OK_COLOR = "#10b981";
-const OK_HOVER_COLOR = "#059669";
-const FAILED_COLOR = "#f43f5e";
-const BLOCKED_COLOR = "#f59e0b";
-const PENDING_COLOR = "#d4d4d8";
 // How many dates the strip's axis can carry before they collide. Eight leaves
 // room for "Aug 18"-width labels on the narrowest layout the page allows.
 const MAX_AXIS_LABELS = 8;
@@ -40,7 +34,11 @@ export function LogsTimelineStrip({
   onResetRange,
   isZoomed = false,
   loading = false,
+  failed = false,
+  onRetry,
   height = 88,
+  maximised = false,
+  onToggleMaximised,
 }: {
   timeSeries: ToolUsageTargetTimeSeriesPoint[];
   from: Date;
@@ -49,48 +47,35 @@ export function LogsTimelineStrip({
   onResetRange?: () => void;
   isZoomed?: boolean;
   loading?: boolean;
+  /**
+   * The series read failed. With nothing drawn yet the strip says so: an
+   * empty axis would read as a window with no calls in it. With a previous
+   * series still drawn, it says that series could not be refreshed.
+   */
+  failed?: boolean;
+  onRetry?: () => void;
   /** Shorter on a short viewport, where the list needs the pixels more. */
   height?: number;
+  /** The strip spans the panel, with the summary stats in a row above it. */
+  maximised?: boolean;
+  onToggleMaximised?: () => void;
 }): JSX.Element {
   // The series is filtered server-side by the same payload the rows are, and
   // every outcome the status filter can express has its own count — so the
   // strip draws whatever came back and needs no client-side correction.
+  // The outcome colors come from the shared OUTCOME tokens, the same ones the
+  // status dots and the agent's Tool calls chart use.
+  const pendingColor = useOtherSeriesColor();
   const chart = useMemo(() => {
     const fromMs = from.getTime();
     const rangeMs = Math.max(to.getTime() - fromMs, HOUR_MS);
     const bucketMs = pickTimeBucketMs(rangeMs);
     const bucketCount = Math.floor(rangeMs / bucketMs) + 1;
 
-    const ok = Array.from<number>({ length: bucketCount }).fill(0);
-    const failed = Array.from<number>({ length: bucketCount }).fill(0);
-    const blocked = Array.from<number>({ length: bucketCount }).fill(0);
-    const pending = Array.from<number>({ length: bucketCount }).fill(0);
     const timestamps = Array.from(
       { length: bucketCount },
       (_, index) => fromMs + index * bucketMs,
     );
-
-    for (const point of timeSeries) {
-      const ms = bucketStartNsToMs(point.bucketStartNs);
-      if (ms === null) continue;
-      // The bucket containing `from` starts before it. Clamp rather than drop
-      // it, or the first bar of every window silently loses its events.
-      const index = Math.min(
-        Math.max(Math.floor((ms - fromMs) / bucketMs), 0),
-        bucketCount - 1,
-      );
-      const failures = Number(point.failureCount);
-      const blocks = Number(point.blockedCount);
-      const pends = Number(point.pendingCount);
-      // eventCount is every call in the bucket, so the successful remainder is
-      // what the three named outcomes leave behind.
-      ok[index] =
-        (ok[index] ?? 0) +
-        Math.max(Number(point.eventCount) - failures - blocks - pends, 0);
-      failed[index] = (failed[index] ?? 0) + failures;
-      blocked[index] = (blocked[index] ?? 0) + blocks;
-      pending[index] = (pending[index] ?? 0) + pends;
-    }
 
     const showDate = rangeMs > 24 * HOUR_MS;
     // Label the first bucket of each day (or each hour, on a sub-day window)
@@ -138,52 +123,13 @@ export function LogsTimelineStrip({
       tooltipLabels: timestamps.map((ts) =>
         format(new Date(ts), showDate ? "MMM d, HH:mm" : "HH:mm"),
       ),
-      // A series of all zeroes still adds a legend entry and a tooltip line
-      // for an outcome that never happened, so each one earns its place.
-      datasets: [
-        ...(ok.some((value) => value > 0)
-          ? [
-              {
-                label: "Calls",
-                data: ok,
-                backgroundColor: OK_COLOR,
-                hoverBackgroundColor: OK_HOVER_COLOR,
-              },
-            ]
-          : []),
-        ...(failed.some((value) => value > 0)
-          ? [
-              {
-                label: "Failures",
-                data: failed,
-                backgroundColor: FAILED_COLOR,
-                hoverBackgroundColor: FAILED_COLOR,
-              },
-            ]
-          : []),
-        ...(blocked.some((value) => value > 0)
-          ? [
-              {
-                label: "Blocked",
-                data: blocked,
-                backgroundColor: BLOCKED_COLOR,
-                hoverBackgroundColor: BLOCKED_COLOR,
-              },
-            ]
-          : []),
-        ...(pending.some((value) => value > 0)
-          ? [
-              {
-                label: "Pending",
-                data: pending,
-                backgroundColor: PENDING_COLOR,
-                hoverBackgroundColor: PENDING_COLOR,
-              },
-            ]
-          : []),
-      ],
+      datasets: toolOutcomeDatasets(
+        timeSeries,
+        { fromMs, bucketMs, bucketCount },
+        pendingColor,
+      ),
     };
-  }, [timeSeries, from, to]);
+  }, [timeSeries, from, to, pendingColor]);
 
   // Only before there is anything to show. Once a shape has been drawn the
   // caller keeps it on screen while the next one loads, so a narrowed filter
@@ -204,6 +150,25 @@ export function LogsTimelineStrip({
     );
   }
 
+  if (failed && timeSeries.length === 0) {
+    return (
+      <div className="flex flex-col gap-1">
+        <div
+          role="alert"
+          className="text-muted-foreground flex items-center justify-center gap-3 text-sm"
+          style={{ height }}
+        >
+          Could not load the calls over time.
+          {onRetry && (
+            <Button variant="tertiary" size="sm" onClick={onRetry}>
+              Retry
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between gap-2">
@@ -211,9 +176,34 @@ export function LogsTimelineStrip({
           Drag to zoom
         </span>
         <div className="flex items-center gap-2">
+          {/* A failed refresh keeps the last series drawn, which may be for
+              another filter or window, so it says the series is stale. */}
+          {failed && (
+            <span
+              role="alert"
+              className="text-muted-foreground flex items-center gap-2 text-[11px]"
+            >
+              Could not refresh the calls over time.
+              {onRetry && (
+                <Button variant="tertiary" size="sm" onClick={onRetry}>
+                  Retry
+                </Button>
+              )}
+            </span>
+          )}
           {isZoomed && onResetRange && (
             <Button variant="tertiary" size="sm" onClick={onResetRange}>
               Reset range
+            </Button>
+          )}
+          {onToggleMaximised && (
+            <Button
+              variant="tertiary"
+              size="sm"
+              onClick={onToggleMaximised}
+              aria-label={maximised ? "Minimize timeline" : "Maximize timeline"}
+            >
+              <Icon name={maximised ? "minimize-2" : "maximize-2"} />
             </Button>
           )}
         </div>

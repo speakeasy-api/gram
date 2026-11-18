@@ -33,7 +33,9 @@ type KitRuntimeProtocol struct{ config KitRuntimeProtocolConfig }
 var _ runtimeProtocol = (*KitRuntimeProtocol)(nil)
 var _ runtimeSwitchCoordinator = (*KitRuntimeProtocol)(nil)
 
-var ErrKitUpgradeNoticeUnsupported = errors.New("kit runtime-generated context upgrade notice is not supported by the pinned runtime")
+// kitHistoryDroppedNotice tells a fresh Kit session that the conversation it
+// joins had earlier turns it cannot see. Prior transcript is never replayed.
+const kitHistoryDroppedNotice = "Earlier messages in this conversation are not available to you. Respond to the current message without assuming what was said before."
 
 func NewKitRuntimeProtocol(c KitRuntimeProtocolConfig) (*KitRuntimeProtocol, error) {
 	if c.Core == nil || c.Projector == nil || c.Endpoint == nil || c.Endpoint.Path != "/acp/v2" || !filepath.IsAbs(c.CWD) {
@@ -101,6 +103,9 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	if req.Model == "" {
 		return errors.New("kit turn requires the persisted assistant model")
 	}
+	if _, err := kitReasoningEffort(req.ReasoningEffort); err != nil {
+		return err
+	}
 	key := kitSessionKey(r, req.ThreadID)
 	session, found, err := p.config.Core.LoadKitRuntimeSession(ctx, key)
 	if err != nil {
@@ -109,20 +114,7 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	if session.ChatID == uuid.Nil {
 		return ErrKitRuntimeBinding
 	}
-	currentIDs := []uuid.UUID{}
-	if req.CanonicalUserMessageID != uuid.Nil {
-		currentIDs = append(currentIDs, req.CanonicalUserMessageID)
-	}
-	if !found && session.HasPriorTranscript {
-		prior, err := assistantrepo.New(p.config.Core.db).KitProtocolHasPriorMessages(ctx, assistantrepo.KitProtocolHasPriorMessagesParams{ProjectID: uuid.NullUUID{UUID: r.ProjectID, Valid: true}, ChatID: session.ChatID, CurrentMessageIds: currentIDs})
-		if err != nil {
-			return fmt.Errorf("kit protocol operation: %w", err)
-		}
-		if prior {
-			return ErrKitUpgradeNoticeUnsupported
-		}
-	}
-	prompt, err := kitProtocolPrompt(req)
+	prompt, err := kitProtocolPrompt(req, false)
 	if err != nil {
 		return fmt.Errorf("kit protocol operation: %w", err)
 	}
@@ -183,6 +175,8 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	binding.UserEchoes = echoes
 	var echoMu sync.RWMutex
 	awaitingEcho := false
+	// Set when replay shows this session already received a prompt.
+	promptedBefore := false
 	var pendingEcho *kitacp.Notification
 	work, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -205,6 +199,9 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 			_ = json.Unmarshal(n.Params, &envelope)
 			echoMu.Lock()
 			defer echoMu.Unlock()
+			if envelope.Update.Kind == "user_message" && !awaitingEcho {
+				promptedBefore = true
+			}
 			if envelope.Update.Kind == "user_message" && awaitingEcho {
 				if _, known := binding.UserEchoes[envelope.Update.ID]; !known {
 					// One prompt produces one complete user echo. Retain only that
@@ -262,11 +259,36 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	if current != selection {
 		return errors.New("kit did not apply the persisted assistant model")
 	}
+	effort, _, err := kitProtocolReasoningOption(configured, req.ReasoningEffort)
+	if err != nil {
+		return err
+	}
+	configured, err = c.Call(work, "session/set_config_option", map[string]string{"sessionId": session.SessionID, "configId": "reasoning_effort", "type": "id", "value": effort}, session.SessionID)
+	if err != nil {
+		return fmt.Errorf("kit reasoning session/set_config_option: %w", err)
+	}
+	_, appliedEffort, err := kitProtocolReasoningOption(configured, req.ReasoningEffort)
+	if err != nil {
+		return err
+	}
+	if appliedEffort != effort {
+		return errors.New("kit did not apply the persisted assistant reasoning effort")
+	}
 	// The same-stream configuration response follows startup replay. Drain all
 	// queued history before reserving the single live prompt echo slot. Unknown
 	// historical users must never wait for this turn's prompt acknowledgement.
 	if err := flushKitNotifications(work, flush); err != nil {
 		return err
+	}
+	// A session that never received a prompt is fresh even if its binding was
+	// persisted by an earlier attempt that failed before prompting.
+	echoMu.RLock()
+	historyDropped := session.HasPriorTranscript && !promptedBefore
+	echoMu.RUnlock()
+	if historyDropped {
+		if prompt, err = kitProtocolPrompt(req, true); err != nil {
+			return fmt.Errorf("kit protocol operation: %w", err)
+		}
 	}
 	// A processing event owns cancellation even before session/new returns.
 	// Startup replay is flushed, and no prompt has yet been submitted.
@@ -523,8 +545,21 @@ func kitConsumeNotifications(ctx context.Context, notifications <-chan kitacp.No
 
 // Images must already be materialized by server attachment loading. Never fetch
 // untrusted image URLs from the control-plane adapter.
-func kitProtocolPrompt(req runTurnRequest) ([]map[string]any, error) {
-	prompt := []map[string]any{{"type": "text", "text": req.Prompt}}
+func kitProtocolPrompt(req runTurnRequest, historyDropped bool) ([]map[string]any, error) {
+	prompt := []map[string]any{}
+	instructions := req.SourceInstructions
+	if req.ThreadID != uuid.Nil {
+		// This is a convenient default target, not an authorization claim. Keep
+		// it per turn rather than in the shared runtime bootstrap instructions.
+		instructions += "\n\nCurrent assistant thread_id: " + req.ThreadID.String() + ". When a built-in tool requires thread_id, use this ID for the current conversation. Other targets remain subject to the tool's existing authorization."
+	}
+	if instructions != "" {
+		prompt = append(prompt, map[string]any{"type": "text", "text": instructions})
+	}
+	if historyDropped {
+		prompt = append(prompt, map[string]any{"type": "text", "text": kitHistoryDroppedNotice})
+	}
+	prompt = append(prompt, map[string]any{"type": "text", "text": req.Prompt})
 	for _, part := range req.InputParts {
 		switch part.Type {
 		case "text":
@@ -678,4 +713,56 @@ func validateKitPromptEcho(pending *kitacp.Notification, acknowledgedID string) 
 		return errors.New("kit prompt echo does not match acknowledgement")
 	}
 	return nil
+}
+
+// Check the advertised selector, not display names or provider defaults. This
+// runs after model selection on every new/resumed turn so durable session state
+// cannot override a changed assistant setting.
+func kitProtocolReasoningOption(raw json.RawMessage, effort string) (selection, current string, err error) {
+	selection, err = kitReasoningEffort(effort)
+	if err != nil {
+		return "", "", err
+	}
+	type option struct {
+		Value   string `json:"value"`
+		Options []struct {
+			Value string `json:"value"`
+		} `json:"options"`
+	}
+	var result struct {
+		ConfigOptions []struct {
+			ID      string   `json:"configId"`
+			Type    string   `json:"type"`
+			Current string   `json:"currentValue"`
+			Options []option `json:"options"`
+		} `json:"configOptions"`
+	}
+	if json.Unmarshal(raw, &result) != nil {
+		return "", "", errors.New("invalid Kit reasoning effort catalog")
+	}
+	configs, matches := 0, 0
+	for _, config := range result.ConfigOptions {
+		if config.ID != "reasoning_effort" {
+			continue
+		}
+		configs++
+		if config.Type != "select" {
+			return "", "", errors.New("unsupported Kit reasoning effort configuration type")
+		}
+		current = config.Current
+		for _, choice := range config.Options {
+			if choice.Value == selection {
+				matches++
+			}
+			for _, nested := range choice.Options {
+				if nested.Value == selection {
+					matches++
+				}
+			}
+		}
+	}
+	if configs != 1 || matches != 1 {
+		return "", "", errors.New("persisted assistant reasoning effort is not uniquely offered by Kit")
+	}
+	return selection, current, nil
 }

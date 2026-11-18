@@ -186,7 +186,7 @@ func (f *fixture) setApprovers(t *testing.T, policyID uuid.UUID, approvers ...st
 	t.Helper()
 	approvalConfig, err := policycore.MarshalApprovalConfig(&policycore.ApprovalConfig{Approvers: approvers})
 	require.NoError(t, err)
-	_, err = f.db.Exec(t.Context(), "UPDATE risk_policies SET approval_config = $1 WHERE id = $2", approvalConfig, policyID) //nolint:glint // notestingrawsql: no query edits only the approver list of a policy
+	err = riskrepo.New(f.db).SetRiskPolicyApprovalConfigFixture(t.Context(), riskrepo.SetRiskPolicyApprovalConfigFixtureParams{ApprovalConfig: approvalConfig, ID: policyID})
 	require.NoError(t, err)
 }
 

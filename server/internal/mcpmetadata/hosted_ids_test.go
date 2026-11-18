@@ -40,7 +40,7 @@ func TestMcpMetadata_HostedRowsReportBothIDs(t *testing.T) {
 	ctx, ti := newTestMCPMetadataService(t)
 
 	hosted := createHostedToolset(t, ctx, ti, "ids-server-keyed")
-	createCanonicalWrapper(t, ctx, ti, hosted)
+	createCanonicalWrapper(t, ctx, ti, hosted, mcpservers.VisibilityPrivate)
 	seedServerKeyedRow(t, ctx, ti, hosted, "seeded")
 
 	for _, payload := range []*gen.GetMcpMetadataPayload{
@@ -73,7 +73,7 @@ func TestMcpMetadata_NonHostedRowsKeepOneID(t *testing.T) {
 
 	// A disabled canonical wrapper still shares its toolset's id.
 	disabled := createHostedToolset(t, ctx, ti, "ids-disabled-wrapper")
-	createCanonicalWrapper(t, ctx, ti, disabled)
+	createCanonicalWrapper(t, ctx, ti, disabled, mcpservers.VisibilityPrivate)
 	require.NoError(t, testrepo.New(ti.conn).SetMCPServerVisibilityFixture(ctx, testrepo.SetMCPServerVisibilityFixtureParams{Visibility: mcpservers.VisibilityDisabled, ID: disabled.ID, ProjectID: disabled.ProjectID}))
 	seedServerKeyedRow(t, ctx, ti, disabled, "seeded")
 	got, err := ti.service.GetMcpMetadata(ctx, &gen.GetMcpMetadataPayload{ToolsetSlug: new(types.Slug(disabled.Slug))})
@@ -82,7 +82,7 @@ func TestMcpMetadata_NonHostedRowsKeepOneID(t *testing.T) {
 
 	// A wrapper that outlived its toolset is not a hosted server; its row reports the server id only.
 	orphaned := createHostedToolset(t, ctx, ti, "ids-orphaned")
-	createCanonicalWrapper(t, ctx, ti, orphaned)
+	createCanonicalWrapper(t, ctx, ti, orphaned, mcpservers.VisibilityPrivate)
 	seedServerKeyedRow(t, ctx, ti, orphaned, "seeded")
 	_, err = toolsets_repo.New(ti.conn).DeleteToolset(ctx, toolsets_repo.DeleteToolsetParams{Slug: orphaned.Slug, ProjectID: orphaned.ProjectID})
 	require.NoError(t, err)

@@ -235,6 +235,25 @@ func (s *Service) ingestOTLPLogs(ctx context.Context, logger *slog.Logger, paylo
 			}
 		}
 
+		// The same race leaves the chat ownerless when its first message came
+		// from a shared plugin key with no self-reported email: the owner fields
+		// are written only at chat creation, so Agent Sessions would show the
+		// session as anonymous for good. Fill-once in SQL, like the link above.
+		if !agent && !foreign && completeMetadata.UserEmail != "" {
+			if _, err := s.repo.LinkChatOwner(ctx, repo.LinkChatOwnerParams{
+				UserID:         conv.ToPGTextEmpty(completeMetadata.UserID),
+				ExternalUserID: conv.ToPGTextEmpty(completeMetadata.UserEmail),
+				ID:             sessionIDToUUID(completeMetadata.SessionID),
+				ProjectID:      projectUUID,
+			}); err != nil {
+				linkFailed = true
+				sessionLogger.ErrorContext(ctx, "failed to backfill chat owner",
+					attr.SlogEvent("chat_owner_backfill_failed"),
+					attr.SlogError(err),
+				)
+			}
+		}
+
 		// Cache only after the backfill: the once-per-session fast path above
 		// keys on the cached UserAccountID (or, for a company-credential session
 		// with no account entity, the resolved AccountType), so caching an

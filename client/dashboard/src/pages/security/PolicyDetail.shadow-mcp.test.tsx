@@ -60,6 +60,7 @@ vi.mock("@/components/require-scope", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: vi.fn(),
   useProjectSlugForRequests: () => "test-project",
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "test-project" }),
 }));
 
 vi.mock("@gram/client/react-query/getHooksStatus.js", () => ({
@@ -73,10 +74,6 @@ vi.mock("@gram/client/react-query/getHooksStatus.js", () => ({
     isSuccess: true,
     isError: false,
   }),
-}));
-
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({ policyCenter: { goTo: vi.fn() } }),
 }));
 
 vi.mock("nuqs", () => ({
@@ -309,11 +306,13 @@ describe("StandardPolicyEditor cached Shadow MCP inventory", () => {
     ]);
 
     render(
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <StandardPolicyEditor policy={blockingPolicyWithDirtyDraftName()} />
-        </TooltipProvider>
-      </QueryClientProvider>,
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <StandardPolicyEditor policy={blockingPolicyWithDirtyDraftName()} />
+          </TooltipProvider>
+        </QueryClientProvider>
+      </MemoryRouter>,
     );
 
     await waitFor(() => {
@@ -350,11 +349,13 @@ describe("StandardPolicyEditor cached Shadow MCP inventory", () => {
     };
 
     render(
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <StandardPolicyEditor policy={allowAllPolicy} />
-        </TooltipProvider>
-      </QueryClientProvider>,
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <StandardPolicyEditor policy={allowAllPolicy} />
+          </TooltipProvider>
+        </QueryClientProvider>
+      </MemoryRouter>,
     );
 
     await waitFor(() => {
@@ -397,16 +398,18 @@ describe("StandardPolicyEditor allow_all posture lock", () => {
     });
     queryClient.setQueryData(shadowMCPPolicyInventoryQueryKey("project-1"), []);
     render(
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <StandardPolicyEditor
-            policy={{
-              ...blockingPolicyWithDirtyDraftName(),
-              shadowMcpDisposition: disposition,
-            }}
-          />
-        </TooltipProvider>
-      </QueryClientProvider>,
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <StandardPolicyEditor
+              policy={{
+                ...blockingPolicyWithDirtyDraftName(),
+                shadowMcpDisposition: disposition,
+              }}
+            />
+          </TooltipProvider>
+        </QueryClientProvider>
+      </MemoryRouter>,
     );
   }
 
@@ -478,13 +481,15 @@ describe("StandardPolicyEditor policy pause", () => {
     queryClient.setQueryData(shadowMCPPolicyInventoryQueryKey("project-1"), []);
 
     render(
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <StandardPolicyEditor
-            policy={{ ...blockingPolicyWithDirtyDraftName(), enabled: false }}
-          />
-        </TooltipProvider>
-      </QueryClientProvider>,
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <StandardPolicyEditor
+              policy={{ ...blockingPolicyWithDirtyDraftName(), enabled: false }}
+            />
+          </TooltipProvider>
+        </QueryClientProvider>
+      </MemoryRouter>,
     );
 
     expect(screen.getByText("Inactive")).toBeTruthy();

@@ -56,6 +56,7 @@ func newDashboardToolFixture(t *testing.T) (context.Context, dashboardToolFixtur
 	require.NotNil(t, service)
 	require.Nil(t, NewDashboardsService(logger, management, NewPostgresReader(logger, db), engine, nil, NewPostgresOrganizationSlugResolver(db), "test-dashboard-key"), "without flags the tools are served as unavailable")
 	reg := newRegistrar(newTestMCPServer())
+	reg.withProjects(&RegistrationStore{db: db})
 	registerDashboardTools(reg, service)
 
 	ctx := dashboardCallerContext(t.Context(), principal, project, authz.ScopeProjectRead, authz.ScopeProjectWrite)
@@ -74,7 +75,7 @@ func dashboardCallerContext(ctx context.Context, principal Principal, project Re
 
 func (f dashboardToolFixture) call(t *testing.T, ctx context.Context, tool string, arguments map[string]any) (any, error) {
 	t.Helper()
-	arguments["project_id"] = f.project.ID.String()
+	arguments["project_slug"] = f.project.Slug
 	raw, err := json.Marshal(arguments)
 	require.NoError(t, err)
 	return descriptorByName(t, f.reg, tool).Invoke(ctx, raw)

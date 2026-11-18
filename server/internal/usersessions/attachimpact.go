@@ -106,15 +106,6 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantID.String(), projectID.String())); err != nil {
 			return none, err
 		}
-		if hostedmcp.IsCanonical(&server, server.ID) {
-			toolset, err := toolsetsrepo.New(s.db).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: server.ID, ProjectID: projectID})
-			switch {
-			case err == nil:
-				return s.canonicalAttachTarget(ctx, logger, organizationID, projectID, &server, toolset.CustomDomainID)
-			case !errors.Is(err, pgx.ErrNoRows):
-				return none, oops.E(oops.CodeUnexpected, err, "get toolset").LogError(ctx, logger)
-			}
-		}
 		customDomainIDs, err := s.liveEndpointDomains(ctx, logger, organizationID, projectID, server.ID)
 		if err != nil {
 			return none, err
@@ -132,20 +123,24 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, toolset.ID.String(), projectID.String())); err != nil {
 			return none, err
 		}
-		toolset, wrapper, err := hostedmcp.LoadServerState(ctx, s.db, toolset)
+		hosting, wrapper, err := hostedmcp.LoadServerState(ctx, s.db, toolset)
 		if err != nil {
 			return none, oops.E(oops.CodeUnexpected, err, "load toolset MCP server").LogError(ctx, logger)
 		}
 		if wrapper == nil {
-			return attachTarget{issuerID: toolset.UserSessionIssuerID, onPlatformHost: !toolset.CustomDomainID.Valid}, nil
+			return attachTarget{issuerID: hosting.UserSessionIssuerID, onPlatformHost: anyOnPlatformHost(nil)}, nil
 		}
-		return s.canonicalAttachTarget(ctx, logger, organizationID, projectID, wrapper, toolset.CustomDomainID)
+		customDomainIDs, err := s.liveEndpointDomains(ctx, logger, organizationID, projectID, wrapper.ID)
+		if err != nil {
+			return none, err
+		}
+		return attachTarget{issuerID: wrapper.UserSessionIssuerID, onPlatformHost: anyOnPlatformHost(customDomainIDs)}, nil
 	default:
 		id, err := uuid.Parse(*payload.MetaMcpServerID)
 		if err != nil {
 			return none, oops.E(oops.CodeBadRequest, err, "invalid meta_mcp_server_id").LogWarn(ctx, logger)
 		}
-		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}); err != nil {
+		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, projectID.String(), projectID.String())); err != nil {
 			return none, err
 		}
 		server, err := metamcprepo.New(s.db).GetMetaMCPServer(ctx, metamcprepo.GetMetaMCPServerParams{ID: id, OrganizationID: organizationID, ProjectID: projectID})
@@ -162,17 +157,6 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 		}
 		return attachTarget{issuerID: server.UserSessionIssuerID, onPlatformHost: anyOnPlatformHost(customDomainIDs)}, nil
 	}
-}
-
-// canonicalAttachTarget previews a toolset's canonical wrapper, which owns the issuer; the toolset's legacy
-// alias answers on its own host beside any live endpoints.
-func (s *Service) canonicalAttachTarget(ctx context.Context, logger *slog.Logger, organizationID string, projectID uuid.UUID, wrapper *mcpserversrepo.McpServer, aliasDomainID uuid.NullUUID) (attachTarget, error) {
-	customDomainIDs, err := s.liveEndpointDomains(ctx, logger, organizationID, projectID, wrapper.ID)
-	if err != nil {
-		return attachTarget{issuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, onPlatformHost: false}, err
-	}
-	onPlatformHost := !aliasDomainID.Valid || (len(customDomainIDs) > 0 && anyOnPlatformHost(customDomainIDs))
-	return attachTarget{issuerID: wrapper.UserSessionIssuerID, onPlatformHost: onPlatformHost}, nil
 }
 
 // liveEndpointDomains lists the custom domain of each endpoint the server serves on.

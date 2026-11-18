@@ -8,11 +8,23 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  AdminRegistryPromotionAuthDiscovery,
+  AdminRegistryPromotionAuthDiscovery$inboundSchema,
+} from "./adminregistrypromotionauthdiscovery.js";
+import {
+  AdminRegistryPromotionSetupGuide,
+  AdminRegistryPromotionSetupGuide$inboundSchema,
+} from "./adminregistrypromotionsetupguide.js";
+import {
   AdminRegistryPromotionSuggestions,
   AdminRegistryPromotionSuggestions$inboundSchema,
 } from "./adminregistrypromotionsuggestions.js";
 
 export type AdminRegistryPromotionCandidate = {
+  /**
+   * Publicly advertised authentication capabilities, not a verified OAuth connection.
+   */
+  authDiscovery?: AdminRegistryPromotionAuthDiscovery | undefined;
   /**
    * Whether staff may explicitly accept this candidate's health evidence.
    */
@@ -30,6 +42,10 @@ export type AdminRegistryPromotionCandidate = {
   docsStatus?: string | undefined;
   docsUrl?: string | undefined;
   eligible: boolean;
+  /**
+   * Slug of the one pinned guide that documents the suggested public endpoint.
+   */
+  endpointGuideSlug?: string | undefined;
   id: string;
   mcpServerId: string;
   observedDays: number;
@@ -42,6 +58,14 @@ export type AdminRegistryPromotionCandidate = {
   reason: string;
   registryEntryId?: string | undefined;
   remoteMcpServerId: string;
+  /**
+   * Guides in the pinned setup-docs export, for warning when a slug is already taken. Present only with suggested_metadata. Guides merged after the pinned version are missing.
+   */
+  setupGuides?: Array<AdminRegistryPromotionSetupGuide> | undefined;
+  /**
+   * Pinned setup-docs export version that setup_guides came from.
+   */
+  setupGuidesVersion?: string | undefined;
   sourceName?: string | undefined;
   sourceRevision: string;
   status: string;
@@ -57,6 +81,9 @@ export const AdminRegistryPromotionCandidate$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    auth_discovery: z.optional(
+      AdminRegistryPromotionAuthDiscovery$inboundSchema,
+    ),
     can_override_eligibility: z.boolean(),
     checked_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
@@ -82,6 +109,7 @@ export const AdminRegistryPromotionCandidate$inboundSchema: z.ZodMiniType<
     docs_status: z.optional(z.string()),
     docs_url: z.optional(z.string()),
     eligible: z.boolean(),
+    endpoint_guide_slug: z.optional(z.string()),
     id: z.string(),
     mcp_server_id: z.string(),
     observed_days: z.int(),
@@ -96,6 +124,10 @@ export const AdminRegistryPromotionCandidate$inboundSchema: z.ZodMiniType<
     reason: z.string(),
     registry_entry_id: z.optional(z.string()),
     remote_mcp_server_id: z.string(),
+    setup_guides: z.optional(
+      z.array(AdminRegistryPromotionSetupGuide$inboundSchema),
+    ),
+    setup_guides_version: z.optional(z.string()),
     source_name: z.optional(z.string()),
     source_revision: z.string(),
     status: z.string(),
@@ -105,6 +137,7 @@ export const AdminRegistryPromotionCandidate$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "auth_discovery": "authDiscovery",
       "can_override_eligibility": "canOverrideEligibility",
       "checked_at": "checkedAt",
       "created_at": "createdAt",
@@ -118,6 +151,7 @@ export const AdminRegistryPromotionCandidate$inboundSchema: z.ZodMiniType<
       "docs_revision": "docsRevision",
       "docs_status": "docsStatus",
       "docs_url": "docsUrl",
+      "endpoint_guide_slug": "endpointGuideSlug",
       "mcp_server_id": "mcpServerId",
       "observed_days": "observedDays",
       "observed_failures": "observedFailures",
@@ -128,6 +162,8 @@ export const AdminRegistryPromotionCandidate$inboundSchema: z.ZodMiniType<
       "public_title": "publicTitle",
       "registry_entry_id": "registryEntryId",
       "remote_mcp_server_id": "remoteMcpServerId",
+      "setup_guides": "setupGuides",
+      "setup_guides_version": "setupGuidesVersion",
       "source_name": "sourceName",
       "source_revision": "sourceRevision",
       "suggested_metadata": "suggestedMetadata",

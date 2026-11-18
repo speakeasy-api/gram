@@ -189,11 +189,14 @@ type CreateResponseBody struct {
 	Name                    *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The optional project this agent is scoped to; absent for an
 	// organization-wide agent
-	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	Lifecycle   *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
-	Permissions *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
-	CreatedAt   *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle *string `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
+	ConnectionNeedsRefresh *bool                         `form:"connection_needs_refresh,omitempty" json:"connection_needs_refresh,omitempty" xml:"connection_needs_refresh,omitempty"`
+	Permissions            *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
+	CreatedAt              *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt              *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // GetResponseBody is the type of the "agents" service "get" endpoint HTTP
@@ -211,11 +214,14 @@ type GetResponseBody struct {
 	Name                    *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The optional project this agent is scoped to; absent for an
 	// organization-wide agent
-	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	Lifecycle   *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
-	Permissions *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
-	CreatedAt   *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle *string `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
+	ConnectionNeedsRefresh *bool                         `form:"connection_needs_refresh,omitempty" json:"connection_needs_refresh,omitempty" xml:"connection_needs_refresh,omitempty"`
+	Permissions            *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
+	CreatedAt              *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt              *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // RenameResponseBody is the type of the "agents" service "rename" endpoint
@@ -233,11 +239,14 @@ type RenameResponseBody struct {
 	Name                    *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The optional project this agent is scoped to; absent for an
 	// organization-wide agent
-	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	Lifecycle   *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
-	Permissions *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
-	CreatedAt   *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle *string `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
+	ConnectionNeedsRefresh *bool                         `form:"connection_needs_refresh,omitempty" json:"connection_needs_refresh,omitempty" xml:"connection_needs_refresh,omitempty"`
+	Permissions            *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
+	CreatedAt              *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt              *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // CheckPolicyGrantsResponseBody is the type of the "agents" service
@@ -305,11 +314,14 @@ type TransferResponseBody struct {
 	Name                    *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The optional project this agent is scoped to; absent for an
 	// organization-wide agent
-	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	Lifecycle   *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
-	Permissions *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
-	CreatedAt   *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle *string `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
+	ConnectionNeedsRefresh *bool                         `form:"connection_needs_refresh,omitempty" json:"connection_needs_refresh,omitempty" xml:"connection_needs_refresh,omitempty"`
+	Permissions            *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
+	CreatedAt              *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt              *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // ReassignResponseBody is the type of the "agents" service "reassign" endpoint
@@ -327,11 +339,14 @@ type ReassignResponseBody struct {
 	Name                    *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The optional project this agent is scoped to; absent for an
 	// organization-wide agent
-	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	Lifecycle   *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
-	Permissions *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
-	CreatedAt   *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle *string `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
+	ConnectionNeedsRefresh *bool                         `form:"connection_needs_refresh,omitempty" json:"connection_needs_refresh,omitempty" xml:"connection_needs_refresh,omitempty"`
+	Permissions            *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
+	CreatedAt              *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt              *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // SuspendResponseBody is the type of the "agents" service "suspend" endpoint
@@ -349,11 +364,14 @@ type SuspendResponseBody struct {
 	Name                    *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The optional project this agent is scoped to; absent for an
 	// organization-wide agent
-	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	Lifecycle   *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
-	Permissions *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
-	CreatedAt   *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle *string `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
+	ConnectionNeedsRefresh *bool                         `form:"connection_needs_refresh,omitempty" json:"connection_needs_refresh,omitempty" xml:"connection_needs_refresh,omitempty"`
+	Permissions            *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
+	CreatedAt              *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt              *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // ResumeResponseBody is the type of the "agents" service "resume" endpoint
@@ -371,11 +389,14 @@ type ResumeResponseBody struct {
 	Name                    *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The optional project this agent is scoped to; absent for an
 	// organization-wide agent
-	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	Lifecycle   *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
-	Permissions *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
-	CreatedAt   *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle *string `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
+	ConnectionNeedsRefresh *bool                         `form:"connection_needs_refresh,omitempty" json:"connection_needs_refresh,omitempty" xml:"connection_needs_refresh,omitempty"`
+	Permissions            *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
+	CreatedAt              *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt              *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // RevokeResponseBody is the type of the "agents" service "revoke" endpoint
@@ -393,11 +414,14 @@ type RevokeResponseBody struct {
 	Name                    *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The optional project this agent is scoped to; absent for an
 	// organization-wide agent
-	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	Lifecycle   *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
-	Permissions *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
-	CreatedAt   *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle *string `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
+	ConnectionNeedsRefresh *bool                         `form:"connection_needs_refresh,omitempty" json:"connection_needs_refresh,omitempty" xml:"connection_needs_refresh,omitempty"`
+	Permissions            *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
+	CreatedAt              *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt              *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // ListSessionsUnauthorizedResponseBody is the type of the "agents" service
@@ -4235,7 +4259,13 @@ type DeleteGatewayErrorResponseBody struct {
 
 // AgentSessionResponseBody is used to define fields on response body types.
 type AgentSessionResponseBody struct {
-	ID               *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Who signed in: the agent itself, or a workload that federation assigns to
+	// the agent.
+	SubjectKind *string `form:"subject_kind,omitempty" json:"subject_kind,omitempty" xml:"subject_kind,omitempty"`
+	// The workload's subject as its platform issued it. Set only when subject_kind
+	// is workload.
+	WorkloadSubject  *string `form:"workload_subject,omitempty" json:"workload_subject,omitempty" xml:"workload_subject,omitempty"`
 	ProjectID        *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	IssuerID         *string `form:"issuer_id,omitempty" json:"issuer_id,omitempty" xml:"issuer_id,omitempty"`
 	IssuerSlug       *string `form:"issuer_slug,omitempty" json:"issuer_slug,omitempty" xml:"issuer_slug,omitempty"`
@@ -4261,11 +4291,14 @@ type ManagedAgentResponseBody struct {
 	Name                    *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The optional project this agent is scoped to; absent for an
 	// organization-wide agent
-	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	Lifecycle   *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
-	Permissions *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
-	CreatedAt   *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle *string `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
+	ConnectionNeedsRefresh *bool                         `form:"connection_needs_refresh,omitempty" json:"connection_needs_refresh,omitempty" xml:"connection_needs_refresh,omitempty"`
+	Permissions            *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
+	CreatedAt              *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt              *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // AgentOwnerProfileResponseBody is used to define fields on response body
@@ -5130,6 +5163,7 @@ func NewCreateManagedAgentCreated(body *CreateResponseBody) *agents.ManagedAgent
 		Name:                        *body.Name,
 		ProjectID:                   body.ProjectID,
 		Lifecycle:                   agents.AgentLifecycle(*body.Lifecycle),
+		ConnectionNeedsRefresh:      body.ConnectionNeedsRefresh,
 		CreatedAt:                   *body.CreatedAt,
 		UpdatedAt:                   *body.UpdatedAt,
 	}
@@ -5297,6 +5331,7 @@ func NewGetManagedAgentOK(body *GetResponseBody) *agents.ManagedAgent {
 		Name:                        *body.Name,
 		ProjectID:                   body.ProjectID,
 		Lifecycle:                   agents.AgentLifecycle(*body.Lifecycle),
+		ConnectionNeedsRefresh:      body.ConnectionNeedsRefresh,
 		CreatedAt:                   *body.CreatedAt,
 		UpdatedAt:                   *body.UpdatedAt,
 	}
@@ -5461,6 +5496,7 @@ func NewRenameManagedAgentOK(body *RenameResponseBody) *agents.ManagedAgent {
 		Name:                        *body.Name,
 		ProjectID:                   body.ProjectID,
 		Lifecycle:                   agents.AgentLifecycle(*body.Lifecycle),
+		ConnectionNeedsRefresh:      body.ConnectionNeedsRefresh,
 		CreatedAt:                   *body.CreatedAt,
 		UpdatedAt:                   *body.UpdatedAt,
 	}
@@ -7085,6 +7121,7 @@ func NewTransferManagedAgentOK(body *TransferResponseBody) *agents.ManagedAgent 
 		Name:                        *body.Name,
 		ProjectID:                   body.ProjectID,
 		Lifecycle:                   agents.AgentLifecycle(*body.Lifecycle),
+		ConnectionNeedsRefresh:      body.ConnectionNeedsRefresh,
 		CreatedAt:                   *body.CreatedAt,
 		UpdatedAt:                   *body.UpdatedAt,
 	}
@@ -7255,6 +7292,7 @@ func NewReassignManagedAgentOK(body *ReassignResponseBody) *agents.ManagedAgent 
 		Name:                        *body.Name,
 		ProjectID:                   body.ProjectID,
 		Lifecycle:                   agents.AgentLifecycle(*body.Lifecycle),
+		ConnectionNeedsRefresh:      body.ConnectionNeedsRefresh,
 		CreatedAt:                   *body.CreatedAt,
 		UpdatedAt:                   *body.UpdatedAt,
 	}
@@ -7425,6 +7463,7 @@ func NewSuspendManagedAgentOK(body *SuspendResponseBody) *agents.ManagedAgent {
 		Name:                        *body.Name,
 		ProjectID:                   body.ProjectID,
 		Lifecycle:                   agents.AgentLifecycle(*body.Lifecycle),
+		ConnectionNeedsRefresh:      body.ConnectionNeedsRefresh,
 		CreatedAt:                   *body.CreatedAt,
 		UpdatedAt:                   *body.UpdatedAt,
 	}
@@ -7593,6 +7632,7 @@ func NewResumeManagedAgentOK(body *ResumeResponseBody) *agents.ManagedAgent {
 		Name:                        *body.Name,
 		ProjectID:                   body.ProjectID,
 		Lifecycle:                   agents.AgentLifecycle(*body.Lifecycle),
+		ConnectionNeedsRefresh:      body.ConnectionNeedsRefresh,
 		CreatedAt:                   *body.CreatedAt,
 		UpdatedAt:                   *body.UpdatedAt,
 	}
@@ -7760,6 +7800,7 @@ func NewRevokeManagedAgentOK(body *RevokeResponseBody) *agents.ManagedAgent {
 		Name:                        *body.Name,
 		ProjectID:                   body.ProjectID,
 		Lifecycle:                   agents.AgentLifecycle(*body.Lifecycle),
+		ConnectionNeedsRefresh:      body.ConnectionNeedsRefresh,
 		CreatedAt:                   *body.CreatedAt,
 		UpdatedAt:                   *body.UpdatedAt,
 	}
@@ -13754,8 +13795,16 @@ func ValidateAgentSessionResponseBody(body *AgentSessionResponseBody) (err error
 	if body.RefreshExpiresAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("refresh_expires_at", "body"))
 	}
+	if body.SubjectKind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("subject_kind", "body"))
+	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.SubjectKind != nil {
+		if !(*body.SubjectKind == "agent" || *body.SubjectKind == "workload") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.subject_kind", *body.SubjectKind, []any{"agent", "workload"}))
+		}
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))

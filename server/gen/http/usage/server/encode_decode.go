@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	usage "github.com/speakeasy-api/gram/server/gen/usage"
 	goahttp "goa.design/goa/v3/http"
@@ -2232,31 +2233,44 @@ func EncodeCreateCustomerSessionError(encoder func(context.Context, http.Respons
 	}
 }
 
-// EncodeCreateCheckoutResponse returns an encoder for responses returned by
-// the usage createCheckout endpoint.
-func EncodeCreateCheckoutResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeGetStripeCheckoutStatusResponse returns an encoder for responses
+// returned by the usage getStripeCheckoutStatus endpoint.
+func EncodeGetStripeCheckoutStatusResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(string)
+		res, _ := v.(*usage.GetStripeCheckoutStatusResult)
 		enc := encoder(ctx, w)
-		body := res
+		body := NewGetStripeCheckoutStatusResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeCreateCheckoutRequest returns a decoder for requests sent to the usage
-// createCheckout endpoint.
-func DecodeCreateCheckoutRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*usage.CreateCheckoutPayload, error) {
-	return func(r *http.Request) (*usage.CreateCheckoutPayload, error) {
-		var payload *usage.CreateCheckoutPayload
+// DecodeGetStripeCheckoutStatusRequest returns a decoder for requests sent to
+// the usage getStripeCheckoutStatus endpoint.
+func DecodeGetStripeCheckoutStatusRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*usage.GetStripeCheckoutStatusPayload, error) {
+	return func(r *http.Request) (*usage.GetStripeCheckoutStatusPayload, error) {
+		var payload *usage.GetStripeCheckoutStatusPayload
 		var (
+			sessionID    string
 			sessionToken *string
+			err          error
 		)
+		sessionID = r.URL.Query().Get("session_id")
+		if sessionID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("session_id", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("session_id", sessionID, "^cs_[A-Za-z0-9_]+$"))
+		if utf8.RuneCountInString(sessionID) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("session_id", sessionID, utf8.RuneCountInString(sessionID), 255, false))
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewCreateCheckoutPayload(sessionToken)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewGetStripeCheckoutStatusPayload(sessionID, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -2269,9 +2283,9 @@ func DecodeCreateCheckoutRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 	}
 }
 
-// EncodeCreateCheckoutError returns an encoder for errors returned by the
-// createCheckout usage endpoint.
-func EncodeCreateCheckoutError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeGetStripeCheckoutStatusError returns an encoder for errors returned by
+// the getStripeCheckoutStatus usage endpoint.
+func EncodeGetStripeCheckoutStatusError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -2288,7 +2302,7 @@ func EncodeCreateCheckoutError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCreateCheckoutUnauthorizedResponseBody(res)
+				body = NewGetStripeCheckoutStatusUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -2302,7 +2316,7 @@ func EncodeCreateCheckoutError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCreateCheckoutForbiddenResponseBody(res)
+				body = NewGetStripeCheckoutStatusForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -2316,7 +2330,7 @@ func EncodeCreateCheckoutError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCreateCheckoutBadRequestResponseBody(res)
+				body = NewGetStripeCheckoutStatusBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -2330,7 +2344,7 @@ func EncodeCreateCheckoutError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCreateCheckoutNotFoundResponseBody(res)
+				body = NewGetStripeCheckoutStatusNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -2344,7 +2358,7 @@ func EncodeCreateCheckoutError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCreateCheckoutConflictResponseBody(res)
+				body = NewGetStripeCheckoutStatusConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -2358,7 +2372,7 @@ func EncodeCreateCheckoutError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCreateCheckoutUnsupportedMediaResponseBody(res)
+				body = NewGetStripeCheckoutStatusUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -2372,7 +2386,7 @@ func EncodeCreateCheckoutError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCreateCheckoutInvalidResponseBody(res)
+				body = NewGetStripeCheckoutStatusInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -2386,7 +2400,7 @@ func EncodeCreateCheckoutError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCreateCheckoutInvariantViolationResponseBody(res)
+				body = NewGetStripeCheckoutStatusInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -2400,7 +2414,7 @@ func EncodeCreateCheckoutError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCreateCheckoutUnexpectedResponseBody(res)
+				body = NewGetStripeCheckoutStatusUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -2414,7 +2428,7 @@ func EncodeCreateCheckoutError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCreateCheckoutGatewayErrorResponseBody(res)
+				body = NewGetStripeCheckoutStatusGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -2429,9 +2443,9 @@ func EncodeCreateCheckoutError(encoder func(context.Context, http.ResponseWriter
 // by the usage createStripeCheckout endpoint.
 func EncodeCreateStripeCheckoutResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(string)
+		res, _ := v.(*usage.StripeEmbeddedCheckout)
 		enc := encoder(ctx, w)
-		body := res
+		body := NewCreateStripeCheckoutResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
@@ -2443,13 +2457,27 @@ func DecodeCreateStripeCheckoutRequest(mux goahttp.Muxer, decoder func(*http.Req
 	return func(r *http.Request) (*usage.CreateStripeCheckoutPayload, error) {
 		var payload *usage.CreateStripeCheckoutPayload
 		var (
+			theme        string
 			sessionToken *string
+			err          error
 		)
+		themeRaw := r.URL.Query().Get("theme")
+		if themeRaw != "" {
+			theme = themeRaw
+		} else {
+			theme = "light"
+		}
+		if !(theme == "light" || theme == "dark") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("theme", theme, []any{"light", "dark"}))
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewCreateStripeCheckoutPayload(sessionToken)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewCreateStripeCheckoutPayload(theme, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

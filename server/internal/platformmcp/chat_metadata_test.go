@@ -61,10 +61,21 @@ func (f fakeChatRiskFindings) Counts(_ context.Context, chatIDs []uuid.UUID) (ma
 	return counts, nil
 }
 
+// fixedChatListVisibility answers the visibility question with a fixed scope.
+// The zero value is a project-wide listing.
+type fixedChatListVisibility struct {
+	scope chatListScope
+	err   error
+}
+
+func (v fixedChatListVisibility) resolve(context.Context, Principal, uuid.UUID) (chatListScope, error) {
+	return v.scope, v.err
+}
+
 // newChatMetadataService composes the listing without Postgres or ClickHouse:
-// the project resolver, the chat query and the finding counts are fakes, and
-// the codec is real so references and cursors round-trip exactly as they do
-// in production.
+// the project resolver, the chat query, the visibility and the finding counts
+// are fakes, and the codec is real so references and cursors round-trip
+// exactly as they do in production.
 func newChatMetadataService(t *testing.T, reader chatMetadataReader, budget OperationBudget) (*ChatMetadataService, ResolvedProject) {
 	t.Helper()
 
@@ -74,6 +85,7 @@ func newChatMetadataService(t *testing.T, reader chatMetadataReader, budget Oper
 	return &ChatMetadataService{
 		projects:     &findingProjects{project: project, calls: nil, err: nil},
 		chats:        reader,
+		visibility:   fixedChatListVisibility{scope: chatListScope{userID: "", ownedAgentIDs: nil}, err: nil},
 		references:   codec,
 		budget:       budget,
 		now:          func() time.Time { return chatListTestNow },
@@ -397,6 +409,7 @@ func TestListChatsRefusesInvalidInput(t *testing.T) {
 	for name, input := range map[string]ListChatsInput{
 		"both selectors":    {ProjectID: uuid.NewString(), ProjectSlug: "default", Window: "", Risk: "", Source: "", AssistantID: "", UserReference: "", Limit: 0, Cursor: ""},
 		"unknown risk":      {ProjectID: "", ProjectSlug: "", Window: "", Risk: "maybe", Source: "", AssistantID: "", UserReference: "", Limit: 0, Cursor: ""},
+		"bad agent id":      {AgentID: "not-a-uuid"},
 		"bad assistant id":  {ProjectID: "", ProjectSlug: "", Window: "", Risk: "", Source: "", AssistantID: "not-a-uuid", UserReference: "", Limit: 0, Cursor: ""},
 		"negative limit":    {ProjectID: "", ProjectSlug: "", Window: "", Risk: "", Source: "", AssistantID: "", UserReference: "", Limit: -1, Cursor: ""},
 		"long source":       {ProjectID: "", ProjectSlug: "", Window: "", Risk: "", Source: strings.Repeat("x", maxChatSourceLength+1), AssistantID: "", UserReference: "", Limit: 0, Cursor: ""},
@@ -451,7 +464,7 @@ func TestListChatsRefusesWithoutBudgetOrProject(t *testing.T) {
 		ProjectID: "", ProjectSlug: "", Window: "", Risk: "", Source: "", AssistantID: "", UserReference: "", Limit: 0, Cursor: "",
 	})
 	require.ErrorIs(t, err, ErrUnavailable)
-	require.Nil(t, NewChatMetadataService(nil, nil, allowBudget(), "key"), "no database leaves the service nil so the stub registers")
+	require.Nil(t, NewChatMetadataService(nil, nil, nil, allowBudget(), "key"), "no database leaves the service nil so the stub registers")
 }
 
 // denyOperationLimiter models a throttled bucket.
@@ -463,4 +476,37 @@ func (denyOperationLimiter) Allow(context.Context, string) (ratelimit.Result, er
 
 func (denyOperationLimiter) AllowN(context.Context, string, int) (ratelimit.Result, error) {
 	return ratelimit.Result{Allowed: false, Remaining: 0, RetryAfter: time.Minute}, nil
+}
+
+func TestListChatsAgentFilterPinsEveryPageAndCount(t *testing.T) {
+	t.Parallel()
+	reader := &recordingChatReader{rows: []chatrepo.ListChatsRow{
+		chatListRow(uuid.New(), chatListTestNow, "", "", "", 2),
+		chatListRow(uuid.New(), chatListTestNow, "", "", "", 2),
+	}}
+	service, _ := newChatMetadataService(t, reader, allowBudget())
+	principal := registrationServicePrincipal()
+	agentID := uuid.New()
+	input := ListChatsInput{AgentID: agentID.String(), Limit: 1}
+	first, err := service.List(t.Context(), principal, input)
+	require.NoError(t, err)
+	require.NotEmpty(t, first.NextCursor)
+	require.Equal(t, uuid.NullUUID{UUID: agentID, Valid: true}, reader.params[0].AgentID)
+
+	input.Cursor = first.NextCursor
+	for _, otherAgent := range []string{"", uuid.NewString()} {
+		other := input
+		other.AgentID = otherAgent
+		_, err := service.List(t.Context(), principal, other)
+		require.ErrorIs(t, err, ErrSubjectReferenceNotFound)
+	}
+	require.Len(t, reader.params, 1)
+	reader.rows = nil
+	reader.count = 1
+	last, err := service.List(t.Context(), principal, input)
+	require.NoError(t, err)
+	require.Equal(t, 1, last.TotalMatches)
+	require.Equal(t, reader.params[0].AgentID, reader.params[1].AgentID)
+	require.Len(t, reader.countParams, 1)
+	require.Equal(t, reader.params[0].AgentID, reader.countParams[0].AgentID)
 }

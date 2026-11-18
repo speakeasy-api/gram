@@ -56,6 +56,10 @@ export type GetServerIdentityImpactRequest = {
    */
   clientId?: string | undefined;
   /**
+   * Preview replacing the provider's bound client, as commitServerIdentityConfiguration's replace_client does. The servers that use it are listed with the resignin impact, and that list is what the commit must confirm. Only with change replace and mcp_server_id.
+   */
+  replaceClient?: boolean | undefined;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -188,6 +192,7 @@ export type GetServerIdentityImpactRequest$Outbound = {
   change: string;
   provider_id?: string | undefined;
   client_id?: string | undefined;
+  replace_client?: boolean | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -204,6 +209,7 @@ export const GetServerIdentityImpactRequest$outboundSchema: z.ZodMiniType<
     change: Change$outboundSchema,
     providerId: z.optional(z.string()),
     clientId: z.optional(z.string()),
+    replaceClient: z.optional(z.boolean()),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
@@ -214,6 +220,7 @@ export const GetServerIdentityImpactRequest$outboundSchema: z.ZodMiniType<
       mcpServerId: "mcp_server_id",
       providerId: "provider_id",
       clientId: "client_id",
+      replaceClient: "replace_client",
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",

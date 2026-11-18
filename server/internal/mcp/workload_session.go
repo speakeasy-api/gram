@@ -52,8 +52,12 @@ const (
 // minted with. It carries no authorizer: a workload records no approving human,
 // which is where it differs from an agent credential.
 type workloadSessionCredential struct {
-	DelegatedGrants        []byte
-	DelegatedGrantsVersion int32
+	// Set by the resource-bound builtin contract at issuance and, after marker
+	// validation, at consumption. Admission derives the ceiling from live agent
+	// policy and intersects it with live agent and owner authority.
+	DerivesPolicyAtAdmission bool
+	DelegatedGrants          []byte
+	DelegatedGrantsVersion   int32
 }
 
 // encodeIssuerWorkloadSessionPolicy is the ceiling of a workload session
@@ -171,8 +175,9 @@ func checkWorkloadSessionCredential(
 	}
 
 	return workloadSessionCredential{
-		DelegatedGrants:        append([]byte(nil), delegatedGrants...),
-		DelegatedGrantsVersion: delegatedGrantsVersion.Int32,
+		DerivesPolicyAtAdmission: false,
+		DelegatedGrants:          append([]byte(nil), delegatedGrants...),
+		DelegatedGrantsVersion:   delegatedGrantsVersion.Int32,
 	}, nil
 }
 
@@ -189,6 +194,14 @@ func isCredentialDenial(err error) bool {
 	return shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized
 }
 
+// markCredentialDenial marks only a real denial as rejected; other failures judged nothing.
+func markCredentialDenial(err error) error {
+	if isCredentialDenial(err) {
+		return fmt.Errorf("%w: %w", errCredentialRejected, err)
+	}
+	return err
+}
+
 func (s *Service) prepareWorkloadSessionContext(ctx context.Context, organizationID string, subject urn.SessionSubject, credential workloadSessionCredential) (context.Context, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || subject.Kind != urn.SessionSubjectKindWorkload {
@@ -199,12 +212,16 @@ func (s *Service) prepareWorkloadSessionContext(ctx context.Context, organizatio
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 	actor := urn.NewWorkloadPrincipal(workloadIssuerID, externalSubject)
+	grants, version := credential.DelegatedGrants, credential.DelegatedGrantsVersion
+	if credential.DerivesPolicyAtAdmission {
+		grants, version = nil, 0
+	}
 	ctx = contextvalues.WithPrincipalCredentialAuthorization(ctx, authCtx, actor, contextvalues.PrincipalCredential{
 		// No authorizer, so admission must not require one.
 		AuthorizerUserID:         "",
-		DelegatedGrants:          credential.DelegatedGrants,
-		DelegatedGrantsVersion:   credential.DelegatedGrantsVersion,
-		DerivesPolicyAtAdmission: false,
+		DelegatedGrants:          grants,
+		DelegatedGrantsVersion:   version,
+		DerivesPolicyAtAdmission: credential.DerivesPolicyAtAdmission,
 	})
 	return ctx, nil
 }

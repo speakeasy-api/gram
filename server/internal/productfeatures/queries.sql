@@ -41,6 +41,16 @@ SELECT COALESCE(EXISTS (
     )
 ), FALSE)::boolean AS enabled;
 
+-- name: IsFeatureExplicitlyEnabled :one
+-- Only an active row counts: unlike IsFeatureEnabled, an organization that
+-- never configured the inverted gateway setting reads as not turned off.
+SELECT EXISTS (
+    SELECT 1 FROM organization_features
+    WHERE organization_id = @organization_id
+      AND feature_name = @feature_name
+      AND deleted IS FALSE
+)::boolean AS enabled;
+
 -- name: HasDeviceAgentSync :one
 -- Whether any device has polled agent.getPlugins for the org — the member-
 -- readable "org uses the device agent" signal (device_agent_syncs is written

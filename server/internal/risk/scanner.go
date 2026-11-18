@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -186,6 +187,19 @@ func (r *ScanResult) IsWarnChallenge() bool {
 func callFingerprint(text string) string {
 	sum := sha256.Sum256([]byte(text))
 	return hex.EncodeToString(sum[:])
+}
+
+// coworkSendTime matches the sentence Claude's apps add to a prompt's
+// reminder naming the minute the message was sent.
+var coworkSendTime = regexp.MustCompile(`Message sent at [^<\n]*? local time\.`)
+
+// CoworkPromptCallFingerprint is callFingerprint for a prompt typed in Claude
+// Cowork. Cowork puts the minute the message was sent in a reminder before
+// the prompt, so that one sentence is masked: the same prompt sent again a
+// minute later must still match its challenge. Everything else, reminders
+// included, still counts.
+func CoworkPromptCallFingerprint(prompt string) string {
+	return callFingerprint(coworkSendTime.ReplaceAllString(prompt, "Message sent at <time>."))
 }
 
 const (

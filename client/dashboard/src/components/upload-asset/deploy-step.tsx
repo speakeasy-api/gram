@@ -15,8 +15,8 @@ import { useListTools } from "@/hooks/toolTypes";
 import { asTools } from "@/lib/toolTypes";
 import { slugify } from "@/lib/constants";
 import { useRoutes } from "@/routes";
-import { Deployment } from "@gram/client/models/components/deployment.js";
-import { DeploymentLogEvent } from "@gram/client/models/components/deploymentlogevent.js";
+import type { Deployment } from "@gram/client/models/components/deployment.js";
+import type { DeploymentLogEvent } from "@gram/client/models/components/deploymentlogevent.js";
 import { invalidateAllActiveDeployment } from "@gram/client/react-query/activeDeployment.js";
 import { useDeploymentLogs } from "@gram/client/react-query/deploymentLogs.js";
 import { invalidateAllLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
@@ -29,6 +29,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Stack } from "@/components/ui/Stack";
 import { ChevronDownIcon, ExternalLinkIcon } from "lucide-react";
 import React from "react";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Spinner } from "@/components/ui/Spinner";
 import { Text } from "@/components/ui/Text";
 import { useStep } from "./step/use-step";
@@ -130,7 +131,7 @@ export default function DeployStep({
   }, [tools, stepper.meta]);
 
   // Auto-create toolset after tools are loaded (regardless of overall deployment status)
-  // The deployment may fail due to unrelated issues (e.g., external MCP), but if tools
+  // The deployment may fail due to unrelated issues, but if tools
   // were created for this asset, we should still create a toolset for them.
   React.useEffect(() => {
     if (gateway?.gatewayId && (deploymentError || deploymentPending)) return;
@@ -416,10 +417,9 @@ function DeployCompletedMessage({
   // Still loading tools
   if (toolsLoading) {
     return (
-      <Stack direction="horizontal" gap={1} align="center">
-        <Spinner />
-        <Text>Checking generated tools...</Text>
-      </Stack>
+      <div role="status" aria-label="Checking generated tools">
+        <Skeleton className="h-9 w-full" />
+      </div>
     );
   }
 

@@ -1,3 +1,4 @@
+import { Slot } from "@radix-ui/react-slot";
 import {
   act,
   cleanup,
@@ -170,22 +171,27 @@ vi.mock("@/components/ui/Button", () => ({
       children,
       disabled,
       onClick,
+      asChild,
       ...props
     }: {
       children: ReactNode;
       disabled?: boolean;
+      asChild?: boolean;
       onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
       [key: string]: unknown;
-    }) => (
-      <button
-        disabled={disabled}
-        onClick={(event) => onClick?.(event)}
-        type="button"
-        {...props}
-      >
-        {children}
-      </button>
-    ),
+    }) => {
+      const Component = asChild ? Slot : "button";
+      return (
+        <Component
+          disabled={disabled}
+          onClick={(event) => onClick?.(event)}
+          type="button"
+          {...props}
+        >
+          {children}
+        </Component>
+      );
+    },
     {
       Icon: ({ children }: { children: ReactNode }) => <span>{children}</span>,
       LeftIcon: ({ children }: { children: ReactNode }) => (

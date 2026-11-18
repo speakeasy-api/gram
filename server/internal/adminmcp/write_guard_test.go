@@ -28,54 +28,28 @@ func writePrincipalContext(t *testing.T, scopes []string) context.Context {
 func TestWriteConfigDefaultsToDisabled(t *testing.T) {
 	t.Parallel()
 	var config WriteConfig
-	require.False(t, config.WritesAvailable())
-	require.Empty(t, config.EnabledOperations())
-	for _, op := range AllWriteOperations {
-		require.False(t, config.OperationEnabled(op), op)
-	}
-
-	// An operation switch without the global switch stays off.
-	config.Operations = map[WriteOperation]bool{OperationSetOrganizationFeature: true} //nolint:exhaustive // Only selected write operations are enabled by this test.
-	require.False(t, config.WritesAvailable())
-	require.False(t, config.OperationEnabled(OperationSetOrganizationFeature))
-
-	// The global switch without any operation switch stays off.
-	require.False(t, WriteConfig{Enabled: true}.WritesAvailable())
+	require.False(t, config.Enabled)
+	_, err := requireWriteAuthority(writePrincipalContext(t, []string{ScopeRead, ScopeWrite}), config, OperationSetOrganizationFeature)
+	require.ErrorIs(t, err, ErrWriteDisabled)
 }
 
-func TestWriteConsentOffersOnlyImplementedOperations(t *testing.T) {
+func TestWriteConsentFollowsTheWriteSwitch(t *testing.T) {
 	t.Parallel()
-	for _, op := range AllWriteOperations {
-		config := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{op: true}} //nolint:exhaustive // Exercise each operation separately.
-		require.Equal(t, op.implemented(), config.WritesAvailable(), op)
-		oauth := &StaffOAuth{writes: config}
+	for _, enabled := range []bool{false, true} {
+		oauth := &StaffOAuth{writes: WriteConfig{Enabled: enabled}}
 		want := []string{ScopeRead}
-		if op.implemented() {
+		if enabled {
 			want = append(want, ScopeWrite)
 		}
-		require.Equal(t, want, oauth.scopesSupported(), op)
-		_, allowed := normalizeRequestedScopes(ScopeWrite, config.WritesAvailable())
-		require.Equal(t, op.implemented(), allowed, op)
+		require.Equal(t, want, oauth.scopesSupported())
+		_, allowed := normalizeRequestedScopes(ScopeWrite, oauth.writes.Enabled)
+		require.Equal(t, enabled, allowed)
 	}
-}
-
-func TestParseWriteOperationsRejectsUnknownNames(t *testing.T) {
-	t.Parallel()
-	operations, err := ParseWriteOperations(" set_organization_feature, ,extend_organization_trial ")
-	require.NoError(t, err)
-	require.Equal(t, map[WriteOperation]bool{OperationSetOrganizationFeature: true, OperationExtendOrganizationTrial: true}, operations) //nolint:exhaustive // Only selected write operations are enabled by this test.
-
-	empty, err := ParseWriteOperations("")
-	require.NoError(t, err)
-	require.Empty(t, empty)
-
-	_, err = ParseWriteOperations("set_organization_feature,delete_global_issuer")
-	require.ErrorIs(t, err, errUnknownWriteOp)
 }
 
 func TestRequireWriteAuthority(t *testing.T) {
 	t.Parallel()
-	enabled := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationFeature: true}} //nolint:exhaustive // Only selected write operations are enabled by this test.
+	enabled := WriteConfig{Enabled: true}
 
 	authority, err := requireWriteAuthority(writePrincipalContext(t, []string{ScopeRead, ScopeWrite}), enabled, OperationSetOrganizationFeature)
 	require.NoError(t, err)
@@ -85,9 +59,6 @@ func TestRequireWriteAuthority(t *testing.T) {
 
 	_, err = requireWriteAuthority(writePrincipalContext(t, []string{ScopeRead, ScopeWrite}), WriteConfig{}, OperationSetOrganizationFeature)
 	require.ErrorIs(t, err, ErrWriteDisabled)
-
-	_, err = requireWriteAuthority(writePrincipalContext(t, []string{ScopeRead, ScopeWrite}), enabled, OperationDisableOrganization)
-	require.ErrorIs(t, err, ErrWriteDisabled, "an operation outside the enabled list must be refused")
 
 	_, err = requireWriteAuthority(writePrincipalContext(t, []string{ScopeRead, ScopeWrite}), enabled, WriteOperation("delete_global_issuer"))
 	require.ErrorIs(t, err, errUnknownWriteOp)
@@ -104,7 +75,7 @@ func TestRequireWriteAuthority(t *testing.T) {
 	_, err = requireWriteAuthority(ctx, enabled, OperationSetOrganizationFeature)
 	require.ErrorIs(t, err, ErrWriteIdentity)
 
-	// Missing generation or client row cannot bind a proposal.
+	// Missing generation or client row cannot bind a write.
 	staff := &contextvalues.AdminAuthContext{SessionID: "s", OIDCSubject: staffSubject, Email: "staff@example.test"}
 	partial := Principal{Subject: "user:" + staffSubject, Email: staff.Email, ClientID: staffClient, ConnectionID: "connection-1", Scopes: []string{ScopeRead, ScopeWrite}, staff: staff}
 	ctx = contextvalues.SetAdminAuthContext(context.WithValue(t.Context(), principalKey{}, partial), staff)
@@ -176,7 +147,7 @@ func staffConsentWithScope(t *testing.T, writes WriteConfig, scope string) (*rec
 func TestStaffConsentRechecksWriteSwitchOnSubmit(t *testing.T) {
 	t.Parallel()
 	s, store, _, pkce := staffAuthorizationFixture(t)
-	s.writes = WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationFeature: true}} //nolint:exhaustive // Only the reviewed feature operation is enabled.
+	s.writes = WriteConfig{Enabled: true}
 	request := staffAuthorizeRequest(pkce)
 	query := request.URL.Query()
 	query.Set("scope", "admin:read admin:write")
@@ -215,7 +186,7 @@ func TestStaffConsentRechecksWriteSwitchOnSubmit(t *testing.T) {
 
 func TestStaffConsentGrantsWriteOnlyWhenSwitchedOn(t *testing.T) {
 	t.Parallel()
-	enabled := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationFeature: true}} //nolint:exhaustive // Only selected write operations are enabled by this test.
+	enabled := WriteConfig{Enabled: true}
 
 	store, response := staffConsentWithScope(t, enabled, "admin:read admin:write")
 	require.Equal(t, http.StatusSeeOther, response.Code)

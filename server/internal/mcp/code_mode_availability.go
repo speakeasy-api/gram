@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 
+	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
@@ -19,4 +20,10 @@ func (s *Service) CodeModeAvailable(ctx context.Context, organizationID string) 
 		return false
 	}
 	return s.platformFeatureChecker(ctx, organizationID, string(productfeatures.FeatureCodeMode))
+}
+
+// CodeExecutor returns the code runtime this service owns, so Platform MCP can
+// run Code Mode programs on the same coordinator and limits.
+func (s *Service) CodeExecutor() codemode.Executor {
+	return s.codeExecutor
 }

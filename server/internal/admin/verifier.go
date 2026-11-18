@@ -62,6 +62,11 @@ func (v *Verifier) Authorize(ctx context.Context, key string, scheme *security.A
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 
+	if session.Expired(time.Now()) {
+		_ = v.sessions.Delete(ctx, session.SessionID)
+		return ctx, oops.C(oops.CodeUnauthorized).LogInfo(ctx, v.logger)
+	}
+
 	accessToken, err := v.sessions.DecryptAccessToken(session)
 	if err != nil {
 		return ctx, oops.E(oops.CodeUnexpected, err, "decrypt admin session").LogError(ctx, v.logger)

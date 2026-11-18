@@ -1,6 +1,4 @@
 import { Alert } from "@/components/ui/Alert";
-import { Button } from "@/components/ui/Button";
-import { Dialog } from "@/components/ui/Dialog";
 import { Text } from "@/components/ui/Text";
 import { ArrowDown, Bot, Check, Server, User } from "lucide-react";
 import type { ReactNode } from "react";
@@ -69,9 +67,8 @@ function UseItWhen({ items }: { items: string[] }): JSX.Element {
 }
 
 /**
- * The side-by-side comparison itself. Rendered in a dialog from the server
- * details pill, and inline inside a setup step — a step that is already a
- * dialog must not stack another one on top of it.
+ * The side-by-side comparison itself, shown inline inside a setup step: a
+ * step that is already a dialog must not stack another one on top of it.
  */
 function IdentityExplainerContent(): JSX.Element {
   return (
@@ -109,7 +106,7 @@ function IdentityExplainerContent(): JSX.Element {
         />
       </div>
       <div>
-        <div className="text-eyebrow">Service Account</div>
+        <div className="text-eyebrow">Shared credential</div>
         <div className="mt-3">
           <Flow
             nodes={[
@@ -126,60 +123,21 @@ function IdentityExplainerContent(): JSX.Element {
                 label: "Service",
               },
             ]}
-            edges={["signs in", "one service account"]}
+            edges={["signs in", "one shared credential"]}
           />
         </div>
         <Text muted variant="small" className="mt-3 block font-mono text-xs">
-          Permissions: the service account&apos;s, set in the control plane
+          Permissions: the shared credential&apos;s, set in the control plane
         </Text>
         <UseItWhen
           items={[
             "Limit what an agent with bad judgment can do wherever this server is deployed.",
-            "Actions should be attributed to the service account in the upstream service.",
-            "The service does not support OAuth login.",
+            "Actions should be attributed to one account in the upstream service.",
+            "The service accepts a static API key, or OAuth client credentials for a service account.",
           ]}
         />
       </div>
     </div>
-  );
-}
-
-/**
- * The explainer as a dialog, opened from the identity pill on a server's
- * details page. There is no step to inline it into there, and the designs
- * call for it to be readable on its own.
- */
-export function IdentityExplainerDialog({
-  open,
-  onOpenChange,
-  trigger,
-}: {
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
-  trigger?: ReactNode;
-}): JSX.Element {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      {trigger ? <Dialog.Trigger asChild>{trigger}</Dialog.Trigger> : null}
-      <Dialog.Content className="max-h-[85vh] max-w-2xl overflow-y-auto">
-        <Dialog.Header>
-          <Dialog.Title>User Identity or Service Account?</Dialog.Title>
-          <Dialog.Description>
-            Users of this server must authenticate as themselves against the
-            service&apos;s authorization server, or every caller can act as one
-            Service Account whose permissions you manage in the control plane.
-          </Dialog.Description>
-        </Dialog.Header>
-        <IdentityExplainerContent />
-        <Dialog.Footer>
-          <Dialog.Close asChild>
-            <Button variant="secondary">
-              <Button.Text>Close</Button.Text>
-            </Button>
-          </Dialog.Close>
-        </Dialog.Footer>
-      </Dialog.Content>
-    </Dialog>
   );
 }
 
@@ -199,8 +157,8 @@ export function IdentityExplainerCallout({
       <div className="space-y-3">
         <Text small>
           Users of this server must authenticate as themselves against the
-          service&apos;s authorization server, or every caller can act as one
-          Service Account whose permissions you manage in the control plane.
+          service&apos;s authorization server, or every caller can share one
+          credential whose permissions you manage in the control plane.
         </Text>
         <IdentityExplainerContent />
       </div>

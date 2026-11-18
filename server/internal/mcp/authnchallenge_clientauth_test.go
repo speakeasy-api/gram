@@ -26,7 +26,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -99,7 +98,7 @@ func seedAssertionClient(t *testing.T, ctx context.Context, ti *testInstance, is
 
 // seedAuthorizationCode stores a redeemable grant for client and returns the
 // code with the PKCE verifier that matches it.
-func seedAuthorizationCode(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, client usersessions_repo.UserSessionClient) (string, string) {
+func seedAuthorizationCode(t *testing.T, ctx context.Context, ti *testInstance, toolset hostedToolset, client usersessions_repo.UserSessionClient) (string, string) {
 	t.Helper()
 
 	verifier := "verifier-" + uuid.NewString()

@@ -21,7 +21,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
@@ -188,21 +187,23 @@ func TestCreate_SecondLiveConnectionConflicts(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeConflict)
 }
 
-func TestCreate_PendingIssuersCoexistUntilCredentialProof(t *testing.T) {
+func TestSubmitClientID_TwoOrganizationsVerifySameOktaOrg(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
 	first := createConnection(t, ctx, si, fullOrgURL)
 	otherCtx, _ := asOtherOrganization(t, ctx, si)
 	second := createConnection(t, otherCtx, si, fullOrgURL)
 
-	// The later creator can prove ownership; the earlier pending row cannot squat.
-	submitClientID(t, otherCtx, si, second.ID)
-	_, err := si.svc.SubmitClientID(ctx, &gen.SubmitClientIDPayload{ID: first.ID, ClientID: testClientID})
-	requireOopsCode(t, err, oops.CodeConflict)
-	fetched, err := si.svc.Get(ctx, &gen.GetPayload{ID: &first.ID})
-	require.NoError(t, err)
-	require.False(t, fetched.Connection.ClientIDSubmitted, "conflicting claim rolls back the client id")
-	require.Equal(t, identityproviderconnections.StatusPending, fetched.Connection.Status)
+	contexts := []context.Context{ctx, otherCtx}
+	for i, connection := range []*gen.OktaIdentityProviderConnection{first, second} {
+		result := submitClientID(t, contexts[i], si, connection.ID)
+		require.Equal(t, identityproviderconnections.StatusVerified, result.Status)
+		stored, err := repo.New(si.conn.conn).GetOktaIdentityProviderConnection(ctx, repo.GetOktaIdentityProviderConnectionParams{
+			OrganizationID: connection.OrganizationID, ID: conv.ToNullUUID(mustParseUUID(t, connection.ID)),
+		})
+		require.NoError(t, err)
+		require.True(t, stored.OktaIdentityProviderConnection.OwnershipClaimed)
+	}
 }
 
 func TestSubmitClientID_RejectsMalformedIDs(t *testing.T) {
@@ -240,7 +241,7 @@ func TestSubmitClientID_VerifiesAndPersists(t *testing.T) {
 	require.Nil(t, submitted.LastError)
 
 	fake := si.oktaFakes.Fake(fullOrgURL)
-	require.Equal(t, []string{"VerifyScopes", "ListApps", "ListUsers", "ListGroups"}, fake.Calls())
+	require.Equal(t, []string{"VerifyScopes", "ListApps"}, fake.Calls())
 
 	managed, err := si.provisioner.GetManagedClient(ctx, si.orgID, mustParseUUID(t, created.ID))
 	require.NoError(t, err)
@@ -300,9 +301,9 @@ func TestSubmitClientID_DegradedStillPersists(t *testing.T) {
 
 	require.Equal(t, identityproviderconnections.StatusDegraded, submitted.Status)
 	require.True(t, submitted.ClientIDSubmitted)
-	require.Equal(t, []string{"okta.apps.read"}, submitted.GrantedScopes)
-	require.Equal(t, []string{"okta.users.read", "okta.groups.read"}, submitted.MissingScopes)
-	require.Equal(t, []string{identityproviderconnections.ReasonMissingScope}, submitted.VerificationReasons)
+	require.Empty(t, submitted.GrantedScopes)
+	require.Equal(t, []string{"okta.apps.read"}, submitted.MissingScopes)
+	require.Equal(t, []string{identityproviderconnections.ReasonMissingScope, identityproviderconnections.ReasonDPoPNotBound}, submitted.VerificationReasons, "a refused scope mints no token")
 	require.Nil(t, submitted.LastError, "reasons are not failures")
 	require.Nil(t, submitted.LastVerifiedAt, "only a verified outcome advances last_verified_at")
 }
@@ -386,7 +387,6 @@ func TestVerify_ReadFailureDegrades(t *testing.T) {
 	require.Equal(t, []string{identityproviderconnections.ReasonReadFailedApps, identityproviderconnections.ReasonMissingRole}, verified.VerificationReasons)
 	require.Nil(t, verified.LastError)
 	require.Equal(t, allScopes(), verified.GrantedScopes)
-	require.Contains(t, fake.Calls(), "ListUsers", "every granted scope is read")
 
 	// The token mint failing as a non-credential error keeps the status and
 	// records the typed failure.
@@ -650,54 +650,6 @@ func TestRBAC_ReadersCannotMutate(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
-func TestFlag_OnlyGatesCreate(t *testing.T) {
-	t.Parallel()
-	ctx, si := newTestService(t)
-
-	created := createConnection(t, ctx, si, fullOrgURL)
-	si.flags.SetFlag(feature.FlagOktaConnections, si.orgID, false)
-
-	fetched, err := si.svc.Get(ctx, &gen.GetPayload{SessionToken: nil, ID: nil})
-	require.NoError(t, err)
-	require.Equal(t, created.ID, fetched.Connection.ID)
-	revoked, err := si.svc.Revoke(ctx, &gen.RevokePayload{SessionToken: nil, ID: created.ID})
-	require.NoError(t, err)
-	require.Equal(t, identityproviderconnections.StatusRevoked, revoked.Status)
-
-	_, err = si.svc.Create(ctx, &gen.CreatePayload{SessionToken: nil, OrgURL: fullOrgURL, ListingMode: nil})
-	requireOopsCode(t, err, oops.CodeForbidden)
-
-	errCtx, errSi := newTestServiceWithFlags(t, errFlags{})
-	empty, err := errSi.svc.Get(errCtx, &gen.GetPayload{SessionToken: nil, ID: nil})
-	require.NoError(t, err)
-	require.Nil(t, empty.Connection)
-	_, err = errSi.svc.Create(errCtx, &gen.CreatePayload{SessionToken: nil, OrgURL: fullOrgURL, ListingMode: nil})
-	requireOopsCode(t, err, oops.CodeUnavailable)
-}
-
-func TestFlag_OrganizationLookupFailureIsUnavailable(t *testing.T) {
-	t.Parallel()
-	ctx, si := newTestService(t)
-
-	missingOrgID := "org_missing_" + uuid.NewString()
-	other := *si.authCtx
-	other.ActiveOrganizationID = missingOrgID
-	missingCtx := authztest.WithExactGrants(t, contextvalues.SetAuthContext(ctx, &other), authz.NewGrant(authz.ScopeOrgAdmin, missingOrgID))
-	si.flags.SetFlag(feature.FlagOktaConnections, missingOrgID, true)
-
-	_, err := si.svc.Create(missingCtx, &gen.CreatePayload{SessionToken: nil, OrgURL: fullOrgURL, ListingMode: nil})
-	requireOopsCode(t, err, oops.CodeUnavailable)
-}
-
-func TestFlag_RBACRunsBeforeTheFlag(t *testing.T) {
-	t.Parallel()
-	ctx, si := newTestServiceWithFlags(t, errFlags{})
-
-	noneCtx := authztest.WithExactGrants(t, ctx)
-	_, err := si.svc.Create(noneCtx, &gen.CreatePayload{SessionToken: nil, OrgURL: fullOrgURL, ListingMode: nil})
-	requireOopsCode(t, err, oops.CodeForbidden)
-}
-
 func TestUnconfiguredDeployment_IsUnavailable(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
@@ -878,20 +830,6 @@ func TestRevoke_ConcurrentCallsBothSucceedAndAuditOnce(t *testing.T) {
 	require.Equal(t, before+1, after)
 }
 
-func TestCreate_SameOktaOrgFreedByRevoke(t *testing.T) {
-	t.Parallel()
-	ctx, si := newTestService(t)
-	first := createConnection(t, ctx, si, fullOrgURL)
-	submitClientID(t, ctx, si, first.ID)
-	otherCtx, _ := asOtherOrganization(t, ctx, si)
-	second := createConnection(t, otherCtx, si, fullOrgURL)
-	_, err := si.svc.SubmitClientID(otherCtx, &gen.SubmitClientIDPayload{ID: second.ID, ClientID: testClientID})
-	requireOopsCode(t, err, oops.CodeConflict)
-	_, err = si.svc.Revoke(ctx, &gen.RevokePayload{ID: first.ID})
-	require.NoError(t, err)
-	submitClientID(t, otherCtx, si, second.ID)
-}
-
 func TestNormalizeOktaOrgURL(t *testing.T) {
 	t.Parallel()
 
@@ -999,50 +937,12 @@ func TestSubmitClientID_NoMintedTokenDoesNotClaimIssuer(t *testing.T) {
 	}
 }
 
-func TestSubmitClientID_ConcurrentIssuerClaimsHaveOneWinner(t *testing.T) {
-	t.Parallel()
-	ctx, si := newTestService(t)
-	first := createConnection(t, ctx, si, fullOrgURL)
-	otherCtx, _ := asOtherOrganization(t, ctx, si)
-	second := createConnection(t, otherCtx, si, fullOrgURL)
-	start := make(chan struct{})
-	results := make(chan error, 2)
-	contexts := []context.Context{ctx, otherCtx}
-	connections := []*gen.OktaIdentityProviderConnection{first, second}
-	for i, connection := range connections {
-		go func() {
-			<-start
-			_, err := si.svc.SubmitClientID(contexts[i], &gen.SubmitClientIDPayload{ID: connection.ID, ClientID: testClientID})
-			results <- err
-		}()
-	}
-	close(start)
-	a, b := <-results, <-results
-	if a == nil {
-		requireOopsCode(t, b, oops.CodeConflict)
-	} else {
-		requireOopsCode(t, a, oops.CodeConflict)
-		require.NoError(t, b)
-	}
-	claimed := 0
-	for _, connection := range connections {
-		stored, err := repo.New(si.conn.conn).GetOktaIdentityProviderConnection(ctx, repo.GetOktaIdentityProviderConnectionParams{
-			OrganizationID: connection.OrganizationID, ID: conv.ToNullUUID(mustParseUUID(t, connection.ID)),
-		})
-		require.NoError(t, err)
-		if stored.OktaIdentityProviderConnection.OwnershipClaimed {
-			claimed++
-		}
-	}
-	require.Equal(t, 1, claimed)
-}
-
 func TestCreate_SmallPoolAdmissionPreventsCrossOrganizationStarvation(t *testing.T) {
 	t.Parallel()
 	for _, maxConns := range []int32{2, 4} {
 		t.Run(fmt.Sprintf("pool_%d", maxConns), func(t *testing.T) {
 			t.Parallel()
-			ctx, si := newTestServiceWithPoolLimit(t, nil, maxConns)
+			ctx, si := newTestServiceWithPoolLimit(t, maxConns)
 			ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 			defer cancel()
 			slots := int(maxConns / 2)
@@ -1108,7 +1008,7 @@ func TestCreate_SmallPoolAdmissionPreventsCrossOrganizationStarvation(t *testing
 
 func TestCreate_SingleConnectionPoolIsUnavailable(t *testing.T) {
 	t.Parallel()
-	ctx, si := newTestServiceWithPoolLimit(t, nil, 1)
+	ctx, si := newTestServiceWithPoolLimit(t, 1)
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	_, err := si.svc.Create(ctx, &gen.CreatePayload{OrgURL: fullOrgURL})
@@ -1125,7 +1025,7 @@ func TestCreate_SingleConnectionPoolIsUnavailable(t *testing.T) {
 // connection available to it.
 func TestMutations_CompleteWithOneSparePoolConnection(t *testing.T) {
 	t.Parallel()
-	ctx, si := newTestServiceWithPoolLimit(t, nil, 2)
+	ctx, si := newTestServiceWithPoolLimit(t, 2)
 	created := createConnection(t, ctx, si, fullOrgURL)
 
 	held, err := si.conn.conn.Acquire(ctx)

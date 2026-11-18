@@ -11,20 +11,20 @@ import (
 )
 
 type GetMCPClientAdmissionToolInput struct {
-	ProjectSlug    string `json:"project_slug" jsonschema:"explicit project slug that owns the reviewed MCP registration"`
-	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_catalog_mcp or register_remote_mcp"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	MCPID       string `json:"mcp_id" jsonschema:"MCP server ID from find_mcp or get_mcp, or the mcp_id setup returned"`
 }
 
 type SetMCPClientAdmissionToolInput struct {
-	ProjectSlug    string `json:"project_slug" jsonschema:"explicit project slug that owns the reviewed MCP registration"`
-	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_catalog_mcp or register_remote_mcp"`
-	Mode           string `json:"mode" jsonschema:"which MCP clients that identify themselves with a client ID metadata document may sign in; one of presets, open, or disabled"`
-	Confirmed      bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms this exact setting for this exact MCP server; it takes effect for every app that connects to it"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	MCPID       string `json:"mcp_id" jsonschema:"MCP server ID from find_mcp or get_mcp, or the mcp_id setup returned"`
+	Mode        string `json:"mode" jsonschema:"which MCP clients that identify themselves with a client ID metadata document may sign in; one of presets, open, or disabled"`
+	Confirmed   bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms this exact setting for this exact MCP server; it takes effect for every app that connects to it"`
 }
 
 type MCPClientAdmissionToolOutput struct {
 	ProjectSlug      string   `json:"project_slug"`
-	RegistrationID   string   `json:"registration_id"`
+	MCPID            string   `json:"mcp_id"`
 	Mode             string   `json:"mode"`
 	AllowedModes     []string `json:"allowed_modes"`
 	CustomClientURLs []string `json:"custom_client_urls"`
@@ -59,7 +59,7 @@ func modeGuidance(mode string) string {
 func registerUnavailableClientAdmissionTools(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_mcp_client_admission",
-		Title:       "Which Apps Can Sign In",
+		Title:       "See Which Apps Can Sign In",
 		Description: "Show which apps can sign in to an MCP server. This is not switched on for your organization yet.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("client_admission"))
@@ -83,7 +83,7 @@ func setMCPClientAdmissionAnnotations() *mcp.ToolAnnotations {
 func registerClientAdmissionTools(reg *Registrar, registrations *RegistrationService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_mcp_client_admission",
-		Title:       "Which Apps Can Sign In",
+		Title:       "See Which Apps Can Sign In",
 		Description: "Show which MCP clients are allowed to sign in to one MCP server: the setting in force now, the settings you can choose, and any custom client ID metadata URLs this MCP server allows on top. Read this before proposing a change.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPClientAdmissionToolInput) (*mcp.CallToolResult, MCPClientAdmissionToolOutput, error) {
@@ -91,14 +91,21 @@ func registerClientAdmissionTools(reg *Registrar, registrations *RegistrationSer
 		if err != nil {
 			return nil, MCPClientAdmissionToolOutput{}, err
 		}
-		result, err := registrations.GetClientAdmission(ctx, principal, input.ProjectSlug, input.RegistrationID)
+		registrationID, err := registrations.registrationIDForMCP(ctx, principal, input.ProjectSlug, input.MCPID, "get_mcp_client_admission")
 		if err != nil {
 			if toolResult, ok := clientAdmissionToolError(err); ok {
 				return toolResult, MCPClientAdmissionToolOutput{}, nil
 			}
 			return nil, MCPClientAdmissionToolOutput{}, err
 		}
-		return nil, clientAdmissionToolOutput(input.ProjectSlug, input.RegistrationID, result, modeGuidance(result.Mode)), nil
+		result, err := registrations.GetClientAdmission(ctx, principal, input.ProjectSlug, registrationID)
+		if err != nil {
+			if toolResult, ok := clientAdmissionToolError(err); ok {
+				return toolResult, MCPClientAdmissionToolOutput{}, nil
+			}
+			return nil, MCPClientAdmissionToolOutput{}, err
+		}
+		return nil, clientAdmissionToolOutput(input.ProjectSlug, input.MCPID, result, modeGuidance(result.Mode)), nil
 	})
 
 	addTool(reg, &mcp.Tool{
@@ -117,21 +124,28 @@ func registerClientAdmissionTools(reg *Registrar, registrations *RegistrationSer
 		if !input.Confirmed {
 			return clientAdmissionErrorTool("confirmation_required", "Tell the user which clients "+input.Mode+" admits and which it refuses, ask them to explicitly confirm that mode for this MCP, then call this tool again with confirmed: true."), MCPClientAdmissionToolOutput{}, nil
 		}
-		result, err := registrations.SetClientAdmission(ctx, principal, input.ProjectSlug, input.RegistrationID, input.Mode)
+		registrationID, err := registrations.registrationIDForMCP(ctx, principal, input.ProjectSlug, input.MCPID, "set_mcp_client_admission")
 		if err != nil {
 			if toolResult, ok := clientAdmissionToolError(err); ok {
 				return toolResult, MCPClientAdmissionToolOutput{}, nil
 			}
 			return nil, MCPClientAdmissionToolOutput{}, err
 		}
-		return nil, clientAdmissionToolOutput(input.ProjectSlug, input.RegistrationID, result, "Client admission is now "+result.Mode+". "+modeGuidance(result.Mode)), nil
+		result, err := registrations.SetClientAdmission(ctx, principal, input.ProjectSlug, registrationID, input.Mode)
+		if err != nil {
+			if toolResult, ok := clientAdmissionToolError(err); ok {
+				return toolResult, MCPClientAdmissionToolOutput{}, nil
+			}
+			return nil, MCPClientAdmissionToolOutput{}, err
+		}
+		return nil, clientAdmissionToolOutput(input.ProjectSlug, input.MCPID, result, "Client admission is now "+result.Mode+". "+modeGuidance(result.Mode)), nil
 	})
 }
 
-func clientAdmissionToolOutput(projectSlug, registrationID string, result ClientAdmission, message string) MCPClientAdmissionToolOutput {
+func clientAdmissionToolOutput(projectSlug, mcpID string, result ClientAdmission, message string) MCPClientAdmissionToolOutput {
 	return MCPClientAdmissionToolOutput{
 		ProjectSlug:      projectSlug,
-		RegistrationID:   registrationID,
+		MCPID:            mcpID,
 		Mode:             result.Mode,
 		AllowedModes:     result.AllowedModes,
 		CustomClientURLs: result.CustomClientURLs,

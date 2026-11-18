@@ -374,6 +374,11 @@ func (s *Service) ListDismissedRiskResults(ctx context.Context, payload *gen.Lis
 	var nextCursor *riskResultsCursor
 	for i, row := range rows {
 		result := chListRowToResult(row.RiskFindingListRow, titles, blocks, userEmails)
+		// An impersonated session sees no stored chat title, as on the other
+		// risk listings.
+		if result.ChatTitle != nil {
+			result.ChatTitle = new(authz.RedactSessionTitle(ctx, *result.ChatTitle, result.ChatID))
+		}
 		suppressedAt := row.SuppressedAt.UTC().Format(time.RFC3339)
 		result.SuppressedAt = &suppressedAt
 		// FalsePositiveAt is the deprecated mirror of SuppressedAt, kept

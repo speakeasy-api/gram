@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod as AuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import { describe, expect, it } from "vitest";
 

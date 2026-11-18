@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { traceLogsQueryOptions } from "@/pages/logs/traceLogsQuery";
 import { IdentityLink } from "@/components/identity-link";
 import { identityRefForKind } from "@/lib/identity-urn";
@@ -10,7 +11,11 @@ import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
-  FilterChip,
+  GatewayDispatchLink,
+  GatewayTargetLink,
+} from "@/components/observe/GatewayDispatchLink";
+import type { FilterChip } from "@/components/observe/ObserveFilterBar";
+import {
   type ObserveStatusFilterValue,
   type ObserveTypeFilterValue,
 } from "@/components/observe/ObserveFilterBar";
@@ -20,6 +25,7 @@ import {
   encodeShadowServerFilter,
   parseTargetFilter,
   isDefaultToolUsageTypeSelection,
+  scopedToolUsageDefaultTypes,
   selectedHookSources,
   selectedTargetValues,
   selectedUserEmails,
@@ -41,8 +47,24 @@ import {
 } from "@/components/observe/LogsFacetRail";
 import { ACCOUNT_TYPE_OPTIONS } from "@/components/observe/observeFilterConstants";
 import { LogsTimelineStrip } from "@/components/observe/LogsTimelineStrip";
+import { ScopedToolLogsEmptyState } from "@/components/observe/ScopedToolLogsEmptyState";
+import { OwnScopeToolLogsNotice } from "@/components/observe/OwnScopeToolLogsNotice";
+import {
+  isOwnedAgent,
+  ownScopeFacetGroups,
+  useToolLogsAccess,
+} from "@/components/observe/toolLogsAccess";
+import {
+  SKILL_LOAD_CHANNEL_LABELS,
+  selectedLoadedVia,
+  skillLoadChannel,
+  withLoadedVia,
+  type SkillLoadChannel,
+} from "@/components/observe/skillLoadChannel";
+import { useSkillsOverMcpEnabled } from "@/pages/skills/use-skills-over-mcp";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/Sheet";
 import { useToolUsagePayload } from "@/components/observe/toolUsagePayload";
+import { useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
@@ -54,26 +76,35 @@ import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIco
 import { hasAgentProviderIcon } from "@/components/agent-providers/agent-provider-icon-kind";
 import { IdentityAvatar } from "@/components/identity-avatar";
 import { EditServerNameDialog } from "@/pages/hooks/EditServerNameDialog";
-import { LogDetailSheet } from "@/pages/logs/LogDetailSheet";
+import {
+  LogDetailSheet,
+  type ConnectionOwner,
+} from "@/pages/logs/LogDetailSheet";
 import { LogFilterBar } from "@/pages/logs/LogFilterBar";
 import {
   applyFilterAdd,
   type ActiveLogFilter,
 } from "@/pages/logs/log-filter-types";
+import { parseFilters, serializeFilters } from "@/pages/logs/log-filter-url";
 import { TraceLogsList } from "@/pages/logs/TraceLogsList";
 import { formatPlatform } from "@/lib/formatPlatform";
+import { useStalePendingRerender } from "@/lib/toolCallStatus";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { type DateRangePreset } from "@/elements";
 import { telemetryGetToolUsageFilterOptions } from "@gram/client/funcs/telemetryGetToolUsageFilterOptions";
+import type { OptionTypes } from "@gram/client/models/components/gettoolusagefilteroptionspayload";
+import { telemetryReadRetry } from "./telemetryReadRetry";
 import { telemetryGetToolUsageTargetTimeSeries } from "@gram/client/funcs/telemetryGetToolUsageTargetTimeSeries";
 import { telemetryGetToolUsageTotals } from "@gram/client/funcs/telemetryGetToolUsageTotals";
 import { telemetryListToolUsageTraces } from "@gram/client/funcs/telemetryListToolUsageTraces";
 import type { LogFilter } from "@gram/client/models/components/logfilter.js";
+import type { ToolUsageUserFilter } from "@gram/client/models/components/toolusageuserfilter.js";
 import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 import type { ToolUsageTargetTimeSeriesPoint } from "@gram/client/models/components/toolusagetargettimeseriespoint.js";
 import type { ToolUsageTotals } from "@gram/client/models/components/toolusagetotals.js";
 import type { ToolUsageTraceSummary } from "@gram/client/models/components/toolusagetracesummary.js";
+import { getToolLogStatusConfig } from "./toolLogStatus";
 import { Operator } from "@gram/client/models/components/logfilter";
 import type { ListToolUsageTracesPayloadTargetTypes } from "@gram/client/models/components/listtoolusagetracespayload";
 import { useGramContext } from "@gram/client/react-query/_context.js";
@@ -90,6 +121,7 @@ import {
 import { format } from "date-fns";
 import { Bot, Settings } from "lucide-react";
 import { DateGroupHeader } from "@/components/auditlogs/feed";
+import { groupByLocalDay, pinnedDayAt } from "./toolLogDayGroups";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
@@ -115,10 +147,50 @@ function toSdkFilters(filters: ActiveLogFilter[]): LogFilter[] {
   });
 }
 
-export function LogsTools(): JSX.Element {
+/** Pins the view to one identity's calls, for embedding on its page. */
+export type LogsToolsScope = {
+  /** Never empty: an empty list would show every identity's calls. */
+  userFilters: ToolUsageUserFilter[];
+  /**
+   * The host page's account filter ("" for every account), which replaces
+   * the view's own so its rows match the page around it.
+   */
+  accountType?: string;
+  /**
+   * The host page's "Show local tools" choice, which sets the Type facet's
+   * default. Omitted means every type, local tools included.
+   */
+  includeLocalTools?: boolean;
+};
+
+/** Facets that pick identities, which a scoped view has already chosen. */
+const IDENTITY_FACETS = new Set(["role", "user", "agent"]);
+// Every filter option group but the users (which carries the agents too),
+// for a view whose identity facets are hidden.
+const SCOPED_FILTER_OPTION_TYPES: OptionTypes[] = [
+  "hosted_servers",
+  "shadow_servers",
+  "gateways",
+  "clients",
+];
+
+export function LogsTools({
+  scope,
+}: {
+  /** Embedded on an identity's page: no page header, identity facets hidden. */
+  scope?: LogsToolsScope;
+} = {}): JSX.Element {
   const { projectSlug } = useSlugs();
   const queryClient = useQueryClient();
   const client = useGramContext();
+  const { user } = useSession();
+  const toolLogsAccess = useToolLogsAccess();
+  // Without log:read the server returns only the viewer's own rows, while the
+  // summary and facet options stay project-wide aggregates: asked for only
+  // once log:read is known, so grants still loading count as own scope.
+  const accessLoading = !scope && toolLogsAccess.isLoading;
+  // Embedded views gate themselves before rendering this.
+  const ownScope = !scope && !toolLogsAccess.projectWide;
 
   const mcpConfig = useObservabilityMcpConfig({
     toolsToInclude: ({ toolName }) =>
@@ -126,6 +198,17 @@ export function LogsTools(): JSX.Element {
   });
 
   const serverNameMappings = useServerNameMappings();
+
+  // A scoped view shows every call the identity made unless its page hides
+  // local tools. Local tools are hidden by default on the page-wide view for
+  // volume, but an agent that only runs through hooks makes nothing but local
+  // tool calls, and hiding them would leave its panel empty. These are only
+  // the defaults: a Type selection the user makes in the facet is kept in the
+  // URL and wins over the page's toggle. Every list is a module constant, so
+  // the reference stays stable across renders.
+  const defaultTypes = scope
+    ? scopedToolUsageDefaultTypes(scope.includeLocalTools ?? true)
+    : TOOL_USAGE_DEFAULT_TYPES;
 
   const {
     from,
@@ -150,12 +233,14 @@ export function LogsTools(): JSX.Element {
     handleRoleSelectionChange,
     roleEmails,
     roleFilterPending,
-    accountType,
+    accountType: pickedAccountType,
     handleAccountTypeChange,
   } = useObserveFilters<ToolUsageType>({
-    defaultTypes: TOOL_USAGE_DEFAULT_TYPES,
+    defaultTypes,
     validTypes: TOOL_USAGE_VALID_TYPES,
   });
+  const accountType =
+    scope?.accountType !== undefined ? scope.accountType : pickedAccountType;
 
   const {
     attributeSearchInput,
@@ -210,6 +295,38 @@ export function LogsTools(): JSX.Element {
     [setSearchParams],
   );
 
+  const skillsOverMcpEnabled = useSkillsOverMcpEnabled();
+  const selectedSkillChannel = useMemo(
+    () => selectedLoadedVia(attributeFilters),
+    [attributeFilters],
+  );
+  // One URL write for both params: two functional updates in the same tick
+  // each start from the same location, so the second would drop the first.
+  // Picking a channel also narrows the type to skills, since "loaded via"
+  // means nothing for a tool call and the event-source filter alone would let
+  // hosted tool calls through as "MCP".
+  const setLoadedVia = useCallback(
+    (channel: SkillLoadChannel | null) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          const serialized = serializeFilters(
+            withLoadedVia(parseFilters(prev.get("af")), channel),
+          );
+          if (serialized) {
+            next.set("af", serialized);
+          } else {
+            next.delete("af");
+          }
+          if (channel) next.set("hookTypes", "skill");
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
   const { summaryPayload, sharedQueryKey } = useToolUsagePayload({
     activeFilters,
     roleEmails,
@@ -217,6 +334,7 @@ export function LogsTools(): JSX.Element {
     accountType,
     clientKeys: selectedClientKeys,
     agentIds: selectedAgentIds,
+    scopedUserFilters: scope?.userFilters,
     from,
     to,
   });
@@ -263,29 +381,46 @@ export function LogsTools(): JSX.Element {
     [sharedQueryKey, statuses, attributeSearchQuery, queryFilters],
   );
 
-  const { data: filterOptionsData } = useQuery({
+  // The server counts each facet under every applied filter but its own, so
+  // picking an agent narrows the users and servers on offer while the other
+  // agents stay selectable beside it.
+  // Embedded on an identity's page the user and agent facets are hidden, so
+  // the read asks for the other groups alone. Each group is a full pass over
+  // the window on the server, and the user groups are the widest: they drop
+  // the identity scope to list everyone else.
+  const filterOptionTypes = scope ? SCOPED_FILTER_OPTION_TYPES : undefined;
+  const { data: fetchedFilterOptions } = useQuery({
     queryKey: [
       "tool-usage-filter-options",
-      from.toISOString(),
-      to.toISOString(),
+      ...narrowedQueryKey,
+      filterOptionTypes ?? null,
     ],
     queryFn: () =>
       unwrapAsync(
         telemetryGetToolUsageFilterOptions(client, {
           getToolUsageFilterOptionsPayload: {
-            from,
-            to,
+            ...narrowedPayload,
+            optionTypes: filterOptionTypes,
           },
         }),
       ),
+    enabled: !roleFilterPending && !ownScope,
+    retry: telemetryReadRetry,
+    // Holds the rail in place while the narrowed counts load, rather than
+    // emptying every group under the pointer.
+    placeholderData: keepPreviousData,
     throwOnError: false,
   });
+  // Project-wide, so an own-scope viewer neither asks for them nor reads what
+  // an earlier log:read grant left in the cache under this key.
+  const filterOptionsData = ownScope ? undefined : fetchedFilterOptions;
 
   // Feeds the strip. Same key Insights uses, so crossing over from a deep link
   // paints it from cache rather than refetching the window.
   const {
-    data: timeSeriesData,
+    data: fetchedTimeSeries,
     isPending: timeSeriesPending,
+    isError: timeSeriesFailed,
     refetch: refetchTimeSeries,
   } = useQuery({
     queryKey: ["tool-usage-target-time-series", ...narrowedQueryKey],
@@ -295,7 +430,8 @@ export function LogsTools(): JSX.Element {
           getToolUsageSummaryPayload: narrowedPayload,
         }),
       ),
-    enabled: !roleFilterPending,
+    enabled: !roleFilterPending && !ownScope,
+    retry: telemetryReadRetry,
     // Narrowing a facet asks the same question of a smaller set. Dropping the
     // shape while the new one loads collapses the panel and jumps the page
     // under the pointer; the previous one holds its place instead, and the
@@ -307,11 +443,10 @@ export function LogsTools(): JSX.Element {
   // The rail is a second view over the same params the toolbar writes: every
   // toggle below routes into the same handlers, so the two cannot disagree.
   //
-  // Counts come from the filter-options endpoint, which is keyed on the window
-  // alone and is deliberately blind to the other applied filters — a
-  // self-narrowing list dead-ends the moment a reader picks a value that
-  // excludes everything else. Groups whose source has no counts show none
-  // rather than inventing them.
+  // Counts come from the filter-options endpoint, narrowed by every applied
+  // filter except the group's own — a group narrowed by its own selection
+  // would offer only what is already picked. Groups whose source has no
+  // counts show none rather than inventing them.
   const selectedServerValues = useMemo(
     () => selectedTargetValues(activeFilters),
     [activeFilters],
@@ -333,16 +468,35 @@ export function LogsTools(): JSX.Element {
   );
   // Same query the table's rows read, so the names resolve once for both.
   const readableAgents = useReadableAgents(
-    agentOptions.length > 0 || selectedAgentIds.length > 0,
+    ownScope || agentOptions.length > 0 || selectedAgentIds.length > 0,
   );
+  const agents = readableAgents.isError ? undefined : readableAgents.data;
   const agentNamesById = useMemo(
-    () =>
-      new Map(
-        (readableAgents.isError ? [] : (readableAgents.data ?? [])).map(
-          (agent) => [agent.id, agent.name],
-        ),
-      ),
-    [readableAgents.data, readableAgents.isError],
+    () => new Map((agents ?? []).map((agent) => [agent.id, agent.name])),
+    [agents],
+  );
+  // What the identity facets offer in own scope, in place of the project-wide
+  // options: the viewer themself and the agents they own.
+  const ownFacetValues = useMemo(
+    () => ({
+      user: [
+        {
+          value: user.email,
+          label: user.email,
+          icon: <IdentityAvatar label={user.email} className="size-5" />,
+          selected: selectedEmails.includes(user.email),
+        },
+      ],
+      agent: (agents ?? [])
+        .filter((agent) => isOwnedAgent(agent, user.id))
+        .map((agent) => ({
+          value: agent.id,
+          label: agent.name,
+          icon: <Bot className="text-muted-foreground size-4" />,
+          selected: selectedAgentIds.includes(agent.id),
+        })),
+    }),
+    [agents, selectedAgentIds, selectedEmails, user.email, user.id],
   );
 
   const facetGroups = useMemo<FacetGroup[]>(() => {
@@ -444,7 +598,10 @@ export function LogsTools(): JSX.Element {
       {
         id: "type",
         label: "Type",
-        isDefaultSelection: isDefaultToolUsageTypeSelection(selectedHookTypes),
+        isDefaultSelection: isDefaultToolUsageTypeSelection(
+          selectedHookTypes,
+          defaultTypes,
+        ),
         // Declared order groups the MCP surfaces together and leaves local
         // tools and skills at the end, which alphabetising breaks apart.
         keepValueOrder: true,
@@ -454,6 +611,22 @@ export function LogsTools(): JSX.Element {
           selected: selectedHookTypes.includes(option.value as ToolUsageType),
         })),
       },
+      ...(skillsOverMcpEnabled
+        ? [
+            {
+              id: "loaded_via",
+              label: "Loaded via",
+              // MCP before hooks: the served path is the one this filter is
+              // here to find.
+              keepValueOrder: true,
+              values: (["mcp", "hook"] as const).map((channel) => ({
+                value: channel,
+                label: SKILL_LOAD_CHANNEL_LABELS[channel],
+                selected: selectedSkillChannel === channel,
+              })),
+            },
+          ]
+        : []),
       {
         id: "source",
         label: "Harness",
@@ -532,6 +705,7 @@ export function LogsTools(): JSX.Element {
     accountType,
     agentNamesById,
     agentOptions,
+    defaultTypes,
     filterOptionsData,
     hookSourceOptions,
     roleOptions,
@@ -541,9 +715,11 @@ export function LogsTools(): JSX.Element {
     selectedEmails,
     selectedHookTypes,
     selectedServerValues,
+    selectedSkillChannel,
     selectedSources,
     selectedStatuses,
     serverNameMappings,
+    skillsOverMcpEnabled,
   ]);
 
   const onFacetToggle = useCallback(
@@ -579,6 +755,10 @@ export function LogsTools(): JSX.Element {
         case "account_type":
           handleAccountTypeChange(nextSelected ? value : "");
           break;
+        case "loaded_via":
+          // One channel at a time: both together is the same as neither.
+          setLoadedVia(nextSelected ? (value as SkillLoadChannel) : null);
+          break;
         case "user":
           handleUserEmailSelectionChange(next(selectedEmails));
           break;
@@ -605,6 +785,7 @@ export function LogsTools(): JSX.Element {
       selectedAgentIds,
       setAgentIds,
       setClientKeys,
+      setLoadedVia,
     ],
   );
 
@@ -621,7 +802,7 @@ export function LogsTools(): JSX.Element {
           handleStatusesChange([]);
           break;
         case "type":
-          handleHookTypesChange(TOOL_USAGE_DEFAULT_TYPES);
+          handleHookTypesChange(defaultTypes);
           break;
         case "source":
           handleHookSourceSelectionChange([]);
@@ -632,6 +813,9 @@ export function LogsTools(): JSX.Element {
         case "account_type":
           handleAccountTypeChange("");
           break;
+        case "loaded_via":
+          setLoadedVia(null);
+          break;
         case "user":
           handleUserEmailSelectionChange([]);
           break;
@@ -641,6 +825,8 @@ export function LogsTools(): JSX.Element {
       }
     },
     [
+      defaultTypes,
+      setLoadedVia,
       handleAccountTypeChange,
       handleRoleSelectionChange,
       handleHookSourceSelectionChange,
@@ -669,7 +855,11 @@ export function LogsTools(): JSX.Element {
   // The window's real totals, not a count of what has been scrolled into view.
   // Same query key Insights uses, so arriving from a deep link paints these
   // immediately from its cache.
-  const { data: totalsData, refetch: refetchTotals } = useQuery({
+  const {
+    data: fetchedTotals,
+    isError: totalsFailed,
+    refetch: refetchTotals,
+  } = useQuery({
     queryKey: ["tool-usage-totals", ...narrowedQueryKey],
     queryFn: () =>
       unwrapAsync(
@@ -677,12 +867,15 @@ export function LogsTools(): JSX.Element {
           getToolUsageSummaryPayload: narrowedPayload,
         }),
       ),
-    enabled: !roleFilterPending,
+    enabled: !roleFilterPending && !ownScope,
+    retry: telemetryReadRetry,
     // Same reason as the series above: the tiles keep their numbers rather
     // than blinking to em dashes and back.
     placeholderData: keepPreviousData,
     throwOnError: false,
   });
+  const totalsData = ownScope ? undefined : fetchedTotals;
+  const timeSeriesData = ownScope ? undefined : fetchedTimeSeries;
 
   const {
     data: tracesData,
@@ -695,7 +888,15 @@ export function LogsTools(): JSX.Element {
     isLogsDisabled: isLogsLogsDisabled,
   } = useLogsEnabledErrorCheck(
     useInfiniteQuery({
-      queryKey: ["tool-usage-traces", ...narrowedQueryKey],
+      // The server narrows the rows to the caller's scope, so the scope is
+      // part of the key: losing log:read must not keep serving everyone's
+      // rows from the cache, and holding it must not serve a stale own set.
+      // The own set is per viewer, so a user switch cannot replay another's rows.
+      queryKey: [
+        "tool-usage-traces",
+        ownScope ? `own:${user.id}` : "project",
+        ...narrowedQueryKey,
+      ],
       queryFn: ({ pageParam }) =>
         unwrapAsync(
           telemetryListToolUsageTraces(client, {
@@ -712,7 +913,9 @@ export function LogsTools(): JSX.Element {
         ),
       initialPageParam: undefined as string | undefined,
       getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-      enabled: !roleFilterPending,
+      // Waits for the grants so the page fetches once, under the right key.
+      enabled: !roleFilterPending && !accessLoading,
+      retry: telemetryReadRetry,
       // The rows hold too: an empty table between two filter states reads as
       // "no results" for as long as the fetch takes.
       placeholderData: keepPreviousData,
@@ -730,18 +933,17 @@ export function LogsTools(): JSX.Element {
   const [stickyDayTs, setStickyDayTs] = useState<number | null>(null);
 
   const syncStickyDay = useCallback((container: HTMLElement) => {
-    const groups = container.querySelectorAll<HTMLElement>("[data-day-ts]");
-    let current: number | null = null;
-    for (const group of groups) {
+    const groups = [
+      ...container.querySelectorAll<HTMLElement>("[data-day-ts]"),
+    ].flatMap((group) => {
       const ts = Number(group.dataset.dayTs);
-      if (!Number.isFinite(ts)) continue;
-      if (current === null || group.offsetTop <= container.scrollTop + 1) {
-        current = ts;
-      } else {
-        break;
-      }
-    }
-    setStickyDayTs(current);
+      if (!Number.isFinite(ts)) return [];
+      // A day's own header sits above its rows. The pinned date waits for
+      // it to scroll out, so the two never show the same date at once.
+      const header = group.querySelector<HTMLElement>("[data-day-header]");
+      return [{ ts, rowsTop: group.offsetTop + (header?.offsetHeight ?? 0) }];
+    });
+    setStickyDayTs(pinnedDayAt(groups, container.scrollTop));
   }, []);
 
   // The list changes height without a scroll event — a first page arrives, a
@@ -779,11 +981,21 @@ export function LogsTools(): JSX.Element {
 
   const [selectedHostedToolsetSlug, setSelectedHostedToolsetSlug] =
     useState<string>();
+  const [selectedConnectionOwner, setSelectedConnectionOwner] =
+    useState<ConnectionOwner>();
   const handleLogClick = useCallback(
     (log: TelemetryLogRecord, trace?: ToolUsageTraceSummary) => {
       setSelectedLog(log);
       setSelectedHostedToolsetSlug(
         trace?.targetType === "hosted_mcp_server" ? trace.targetId : undefined,
+      );
+      setSelectedConnectionOwner(
+        trace?.connectionOwnerUserId
+          ? {
+              userId: trace.connectionOwnerUserId,
+              label: trace.connectionOwnerLabel,
+            }
+          : undefined,
       );
     },
     [],
@@ -827,10 +1039,13 @@ export function LogsTools(): JSX.Element {
   // stay stuck on an empty result after logging is first enabled.
   const refetch = useCallback(() => {
     void refetchLogs();
-    void refetchTotals();
-    void refetchTimeSeries();
+    // The aggregates are project-wide, so own scope leaves them alone.
+    if (!ownScope) {
+      void refetchTotals();
+      void refetchTimeSeries();
+    }
     void queryClient.invalidateQueries({ queryKey: ["trace-logs"] });
-  }, [queryClient, refetchLogs, refetchTotals, refetchTimeSeries]);
+  }, [ownScope, queryClient, refetchLogs, refetchTotals, refetchTimeSeries]);
 
   const handleAddFilterFromLog = useCallback(
     (path: string, op: Operator, value: string) => {
@@ -847,23 +1062,43 @@ export function LogsTools(): JSX.Element {
     ? new Error("Unable to load tool logs. Please try again.")
     : null;
 
+  let visibleFacetGroups = facetGroups;
+  if (scope) {
+    visibleFacetGroups = facetGroups.filter(
+      (group) =>
+        !IDENTITY_FACETS.has(group.id) &&
+        !(group.id === "account_type" && scope.accountType !== undefined),
+    );
+  } else if (ownScope) {
+    visibleFacetGroups = ownScopeFacetGroups(facetGroups, ownFacetValues);
+  }
+
   return (
     <>
-      <InsightsConfig
-        mcpConfig={mcpConfig}
-        title="Explore Tool Logs"
-        subtitle="Ask me about your tool logs! Powered by Elements + platform MCP"
-        // Hide the docked assistant on this page — it floats over the last
-        // rows of the table, which is the primary surface here.
-        hideTrigger
-        suggestions={INSIGHTS_SUGGESTIONS["logs/tools"]}
-      />
+      {scope ? null : (
+        <InsightsConfig
+          mcpConfig={mcpConfig}
+          title="Explore Tool Logs"
+          subtitle="Ask me about your tool logs! Powered by Elements + platform MCP"
+          // Hide the docked assistant on this page — it floats over the last
+          // rows of the table, which is the primary surface here.
+          hideTrigger
+          suggestions={INSIGHTS_SUGGESTIONS["logs/tools"]}
+        />
+      )}
       {isLogsDisabled ? (
-        <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
-          <LoggingPageHeader
-            title="Tool Logs"
-            description="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
-          />
+        <div
+          className={cn(
+            "min-h-0 w-full flex-1 space-y-6 overflow-y-auto",
+            !scope && "p-8 pb-24",
+          )}
+        >
+          {scope ? null : (
+            <LoggingPageHeader
+              title="Tool Logs"
+              description="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
+            />
+          )}
           <div className="flex-1">
             <EnableLoggingOverlay
               onEnabled={refetch}
@@ -884,9 +1119,17 @@ export function LogsTools(): JSX.Element {
             error={displayError}
             traces={traces}
             totals={totalsData?.totals}
+            totalsFailed={totalsFailed}
+            onRetryTotals={() => void refetchTotals()}
             timeSeries={timeSeriesData?.targetTimeSeries ?? []}
             timeSeriesPending={timeSeriesPending}
-            facetGroups={facetGroups}
+            timeSeriesFailed={timeSeriesFailed}
+            onRetryTimeSeries={() => void refetchTimeSeries()}
+            facetGroups={visibleFacetGroups}
+            embedded={!!scope}
+            ownScope={ownScope}
+            accessLoading={accessLoading}
+            defaultTypes={defaultTypes}
             onFacetToggle={onFacetToggle}
             onFacetClearGroup={onFacetClearGroup}
             onRangeSelect={setRangeFromBrush}
@@ -903,6 +1146,7 @@ export function LogsTools(): JSX.Element {
             toggleExpand={toggleExpand}
             selectedLog={selectedLog}
             selectedHostedToolsetSlug={selectedHostedToolsetSlug}
+            selectedConnectionOwner={selectedConnectionOwner}
             handleLogClick={handleLogClick}
             setSelectedLog={setSelectedLog}
             containerRef={containerRef}
@@ -1067,11 +1311,11 @@ function SummaryStat({
   tone?: "default" | "destructive" | "warning";
 }) {
   return (
-    <div className="flex flex-col gap-1 px-4 py-3 short:py-2">
+    <div className="flex flex-col justify-center gap-1.5 px-5 py-3 whitespace-nowrap short:py-2">
       <span className="text-eyebrow">{label}</span>
       <span
         className={cn(
-          "font-mono text-2xl leading-none tabular-nums",
+          "font-mono text-xl leading-none tabular-nums",
           tone === "destructive" && "text-destructive",
           // Amber, matching the blocked status dot: a denial is the policy
           // working, not the call breaking.
@@ -1102,6 +1346,7 @@ function LogsToolsContent({
   toggleExpand,
   selectedLog,
   selectedHostedToolsetSlug,
+  selectedConnectionOwner,
   handleLogClick,
   setSelectedLog,
   containerRef,
@@ -1129,14 +1374,22 @@ function LogsToolsContent({
   from,
   to,
   totals,
+  totalsFailed,
+  onRetryTotals,
   timeSeries,
   timeSeriesPending,
+  timeSeriesFailed,
+  onRetryTimeSeries,
   facetGroups,
   onFacetToggle,
   onFacetClearGroup,
   onRangeSelect,
   onResetRange,
   isZoomed,
+  embedded = false,
+  ownScope = false,
+  accessLoading = false,
+  defaultTypes,
 }: {
   isLoading: boolean;
   isFetching: boolean;
@@ -1154,6 +1407,7 @@ function LogsToolsContent({
   toggleExpand: (trace: ToolUsageTraceSummary) => Promise<void>;
   selectedLog: TelemetryLogRecord | null;
   selectedHostedToolsetSlug?: string;
+  selectedConnectionOwner?: ConnectionOwner | undefined;
   handleLogClick: (
     log: TelemetryLogRecord,
     trace?: ToolUsageTraceSummary,
@@ -1184,14 +1438,29 @@ function LogsToolsContent({
   from: Date;
   to: Date;
   totals: ToolUsageTotals | undefined;
+  /** The totals read failed: the summary says so rather than showing dashes
+   * or the last window's numbers as if they were current. */
+  totalsFailed: boolean;
+  onRetryTotals: () => void;
   timeSeries: ToolUsageTargetTimeSeriesPoint[];
   timeSeriesPending: boolean;
+  /** The series read failed: the strip says so instead of drawing no calls. */
+  timeSeriesFailed: boolean;
+  onRetryTimeSeries: () => void;
   facetGroups: FacetGroup[];
   onFacetToggle: (groupId: string, value: string, next: boolean) => void;
   onFacetClearGroup: (groupId: string) => void;
   onRangeSelect: (from: Date, to: Date) => void;
   onResetRange: () => void;
   isZoomed: boolean;
+  /** Inside another page: that page supplies the heading and the inset. */
+  embedded?: boolean;
+  /** The viewer reads only their own activity: say so, and skip the summary. */
+  ownScope?: boolean;
+  /** Grants not in yet: still no summary, but no notice that may not apply. */
+  accessLoading?: boolean;
+  /** The type selection that counts as "no filter" for this view. */
+  defaultTypes: ToolUsageType[];
 }) {
   const orgRoutes = useOrgRoutes();
   // Below xl the rail does not fit beside the table. It is the only filter
@@ -1199,31 +1468,13 @@ function LogsToolsContent({
   const [facetsOpen, setFacetsOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useSummaryPanelOpen();
   const [railWidth, setRailWidth] = useRailWidth();
-  const stripHeight = useIsShortViewport() ? 64 : 88;
+  const stripHeight = useIsShortViewport() ? 40 : 56;
+  // Maximised, the strip takes the panel's full width and the stats sit in a
+  // row above it, at every breakpoint rather than only below 2xl.
+  const [timelineMaximised, setTimelineMaximised] = useState(false);
 
   const rail = (
     <LogsFacetRail
-      header={
-        <TimeRangePicker
-          preset={customRange ? null : dateRange}
-          customRange={customRange}
-          // The badge is a fixed-width slot for "1w" or "3mo". A brushed range
-          // arrives with a full "11 Sept, 7:28 - 16 Sept, 1:28" label, which
-          // bursts it; the picker falls back to "Custom" without one, and the
-          // field beside it already spells the range out.
-          customRangeLabel={null}
-          onPresetChange={(preset) => onDateRangeChange(preset)}
-          onCustomRangeChange={onCustomRangeChange}
-          onClearCustomRange={onClearCustomRange}
-          projectSlug={projectSlug}
-          // The rail is narrower than the picker's intrinsic width, so without
-          // letting the free-text input shrink the trigger overflows and the
-          // chevron sits outside its own border.
-          // White against the rail's grey: it is a control you type into, not
-          // part of the panel behind it.
-          className="bg-card w-full [&_input]:min-w-0"
-        />
-      }
       groups={facetGroups}
       onToggle={onFacetToggle}
       onClearGroup={onFacetClearGroup}
@@ -1241,17 +1492,29 @@ function LogsToolsContent({
       </Sheet>
 
       <div className="flex min-h-0 w-full flex-1 flex-col">
-        <div className="flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8 short:gap-3 short:px-5 short:pt-4">
-          <div className="flex shrink-0 items-start justify-between gap-4">
-            <LoggingPageHeader
-              title="Tool Logs"
-              description="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
-            />
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 flex-col gap-6 short:gap-3",
+            !embedded && "px-8 pt-8 short:px-5 short:pt-4",
+          )}
+        >
+          <div
+            className={cn(
+              "flex shrink-0 items-start gap-4",
+              embedded ? "justify-end" : "justify-between",
+            )}
+          >
+            {embedded ? null : (
+              <LoggingPageHeader
+                title="Tool Logs"
+                description="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
+              />
+            )}
             <div className="flex items-center gap-2">
               <Button
                 variant="secondary"
                 size="sm"
-                className="xl:hidden"
+                className={embedded ? undefined : "xl:hidden"}
                 onClick={() => setFacetsOpen(true)}
               >
                 <Icon name="filter" className="size-4" />
@@ -1269,134 +1532,210 @@ function LogsToolsContent({
                 />
                 Refresh
               </Button>
-              <Button variant="secondary" size="sm" asChild>
-                <Link to={orgRoutes.logs.href()}>
-                  <Settings className="h-4 w-4" />
-                  Configure settings
-                </Link>
-              </Button>
+              {embedded ? null : (
+                <Button variant="secondary" size="sm" asChild>
+                  <Link to={orgRoutes.logs.href()}>
+                    <Settings className="h-4 w-4" />
+                    Configure settings
+                  </Link>
+                </Button>
+              )}
             </div>
           </div>
 
+          {ownScope && !accessLoading && <OwnScopeToolLogsNotice />}
+
           {/* Summary and the window's shape are one statement about the range,
-              so they share a panel: four numbers, then the silhouette they
-              came from. It folds because on a laptop those ~300px are the
-              difference between five rows of the list and eighteen. */}
-          <div className="border-border bg-card shrink-0 border">
-            <button
-              type="button"
-              aria-expanded={summaryOpen}
-              onClick={() => setSummaryOpen(!summaryOpen)}
-              className="text-eyebrow hover:bg-muted/40 flex w-full items-center gap-2 px-4 py-2 text-left transition-colors"
-            >
-              <Icon
-                name={summaryOpen ? "chevron-down" : "chevron-right"}
-                className="text-muted-foreground size-3.5 shrink-0"
-              />
-              <span>Summary and timeline</span>
-              {/* Folded, the panel still has to answer the question it exists
+              so they share a panel: the numbers, then beside them the
+              silhouette they came from. One band rather than two stacked rows,
+              because every pixel of height it takes is a row of the list. It
+              still folds for laptops. Both are project-wide aggregates, so a
+              viewer limited to their own rows gets neither. */}
+          {!ownScope && (
+            <div className="border-border bg-card shrink-0 border">
+              <button
+                type="button"
+                aria-expanded={summaryOpen}
+                onClick={() => setSummaryOpen(!summaryOpen)}
+                className="text-eyebrow hover:bg-muted/40 flex w-full items-center gap-2 px-4 py-2 text-left transition-colors"
+              >
+                <Icon
+                  name={summaryOpen ? "chevron-down" : "chevron-right"}
+                  className="text-muted-foreground size-3.5 shrink-0"
+                />
+                <span>Summary and timeline</span>
+                {/* Folded, the panel still has to answer the question it exists
                   for, or folding it costs the reader the headline. */}
-              {!summaryOpen && totals && (
-                <span className="text-muted-foreground ml-auto normal-case">
-                  {Number(totals.eventCount).toLocaleString()} calls ·{" "}
-                  <span
+                {!summaryOpen && totals && (
+                  <span className="text-muted-foreground ml-auto normal-case">
+                    {Number(totals.eventCount).toLocaleString()} calls ·{" "}
+                    <span
+                      className={cn(
+                        Number(totals.failureCount) > 0 &&
+                          "text-destructive-default",
+                      )}
+                    >
+                      {Number(totals.failureCount).toLocaleString()} failed
+                    </span>
+                  </span>
+                )}
+              </button>
+              {summaryOpen && (
+                <>
+                  {totalsFailed && (
+                    <div
+                      role="alert"
+                      className="border-border text-muted-foreground flex items-center gap-3 border-t px-4 py-2 text-sm"
+                    >
+                      Could not load the totals for this window.
+                      <Button
+                        variant="tertiary"
+                        size="sm"
+                        onClick={onRetryTotals}
+                      >
+                        Retry
+                      </Button>
+                    </div>
+                  )}
+                  <div
                     className={cn(
-                      Number(totals.failureCount) > 0 &&
-                        "text-destructive-default",
+                      "border-border flex flex-col border-t",
+                      !timelineMaximised && "2xl:flex-row",
                     )}
                   >
-                    {Number(totals.failureCount).toLocaleString()} failed
-                  </span>
-                </span>
-              )}
-            </button>
-            {summaryOpen && (
-              <>
-                <div className="divide-border border-border grid grid-cols-2 divide-x border-t md:grid-cols-3 lg:grid-cols-5">
-                  <SummaryStat
-                    label="Tool calls"
-                    value={
-                      totals ? Number(totals.eventCount).toLocaleString() : "—"
-                    }
-                  />
-                  <SummaryStat
-                    label="Failures"
-                    value={
-                      totals
-                        ? Number(totals.failureCount).toLocaleString()
-                        : "—"
-                    }
-                    tone={
-                      totals && Number(totals.failureCount) > 0
-                        ? "destructive"
-                        : "default"
-                    }
-                  />
-                  <SummaryStat
-                    label="Failure rate"
-                    value={
-                      totals ? `${(totals.failureRate * 100).toFixed(1)}%` : "—"
-                    }
-                    tone={
-                      totals && totals.failureRate > 0
-                        ? "destructive"
-                        : "default"
-                    }
-                  />
-                  <SummaryStat
-                    label="Blocked rate"
-                    value={
-                      totals ? `${(totals.blockedRate * 100).toFixed(1)}%` : "—"
-                    }
-                    tone={
-                      totals && totals.blockedRate > 0 ? "warning" : "default"
-                    }
-                  />
-                  <SummaryStat
-                    label="Tools"
-                    value={
-                      totals ? Number(totals.uniqueTools).toLocaleString() : "—"
-                    }
-                  />
-                </div>
+                    <div
+                      className={cn(
+                        "divide-border border-border grid shrink-0 grid-cols-2 divide-x sm:grid-cols-5",
+                        timelineMaximised
+                          ? "border-b"
+                          : "max-2xl:border-b 2xl:border-r",
+                      )}
+                    >
+                      <SummaryStat
+                        label="Tool calls"
+                        value={
+                          totals
+                            ? Number(totals.eventCount).toLocaleString()
+                            : "—"
+                        }
+                      />
+                      <SummaryStat
+                        label="Failures"
+                        value={
+                          totals
+                            ? Number(totals.failureCount).toLocaleString()
+                            : "—"
+                        }
+                        tone={
+                          totals && Number(totals.failureCount) > 0
+                            ? "destructive"
+                            : "default"
+                        }
+                      />
+                      <SummaryStat
+                        label="Failure rate"
+                        value={
+                          totals
+                            ? `${(totals.failureRate * 100).toFixed(1)}%`
+                            : "—"
+                        }
+                        tone={
+                          totals && totals.failureRate > 0
+                            ? "destructive"
+                            : "default"
+                        }
+                      />
+                      <SummaryStat
+                        label="Blocked rate"
+                        value={
+                          totals
+                            ? `${(totals.blockedRate * 100).toFixed(1)}%`
+                            : "—"
+                        }
+                        tone={
+                          totals && totals.blockedRate > 0
+                            ? "warning"
+                            : "default"
+                        }
+                      />
+                      <SummaryStat
+                        label="Tools"
+                        value={
+                          totals
+                            ? Number(totals.uniqueTools).toLocaleString()
+                            : "—"
+                        }
+                      />
+                    </div>
 
-                {/* Graph paper: faint vertical rules on a grey ground, which
-                    is what a time axis looks like when it is furniture. A
-                    diagonal hatch reads as "unavailable" instead. */}
-                <div className="border-border bg-background relative isolate border-t bg-[length:24px_100%] px-4 pt-3 pb-2 [background-image:repeating-linear-gradient(to_right,rgba(0,0,0,0.035)_0,rgba(0,0,0,0.035)_1px,transparent_1px,transparent_24px)]">
-                  <LogsTimelineStrip
-                    height={stripHeight}
-                    loading={timeSeriesPending}
-                    timeSeries={timeSeries}
-                    from={from}
-                    to={to}
-                    onRangeSelect={onRangeSelect}
-                    onResetRange={onResetRange}
-                    isZoomed={isZoomed}
-                  />
-                </div>
-              </>
-            )}
-          </div>
+                    {/* Graph paper: faint vertical rules on a grey ground, which
+                      is what a time axis looks like when it is furniture. A
+                      diagonal hatch reads as "unavailable" instead. */}
+                    <div className="bg-background relative isolate min-w-0 flex-1 bg-[length:24px_100%] px-4 pt-2 pb-1 [background-image:repeating-linear-gradient(to_right,rgba(0,0,0,0.035)_0,rgba(0,0,0,0.035)_1px,transparent_1px,transparent_24px)]">
+                      <LogsTimelineStrip
+                        height={stripHeight}
+                        loading={timeSeriesPending}
+                        failed={timeSeriesFailed}
+                        onRetry={onRetryTimeSeries}
+                        timeSeries={timeSeries}
+                        from={from}
+                        to={to}
+                        onRangeSelect={onRangeSelect}
+                        onResetRange={onResetRange}
+                        isZoomed={isZoomed}
+                        maximised={timelineMaximised}
+                        onToggleMaximised={() =>
+                          setTimelineMaximised(!timelineMaximised)
+                        }
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           <div className="border-border bg-card flex min-h-0 flex-1 flex-col overflow-hidden border">
-            {/* Search reads across both columns — it narrows the rows, not the
-                facet list — so it spans them rather than sitting in one. */}
-            <div className="border-border shrink-0 border-b p-3">
-              <LogFilterBar
-                filters={attributeFilters}
-                onChange={onAttributeFiltersChange}
-                attributeKeys={attributeKeys}
-                isLoadingKeys={isLoadingAttributeKeys}
-                searchInput={attributeSearchInput}
-                onSearchInputChange={onAttributeSearchInputChange}
-                onSearchSubmit={onAttributeSearchSubmit}
+            {/* Search and the window read across both columns — they narrow
+                the rows and the facet counts alike — so they span them rather
+                than sitting in one. */}
+            <div className="border-border flex shrink-0 items-start gap-2 border-b p-3">
+              <div className="min-w-0 flex-1">
+                <LogFilterBar
+                  filters={attributeFilters}
+                  onChange={onAttributeFiltersChange}
+                  attributeKeys={attributeKeys}
+                  isLoadingKeys={isLoadingAttributeKeys}
+                  searchInput={attributeSearchInput}
+                  onSearchInputChange={onAttributeSearchInputChange}
+                  onSearchSubmit={onAttributeSearchSubmit}
+                />
+              </div>
+              <TimeRangePicker
+                preset={customRange ? null : dateRange}
+                customRange={customRange}
+                // The badge is a fixed-width slot for "1w" or "3mo". A brushed
+                // range arrives with a full "11 Sept, 7:28 - 16 Sept, 1:28"
+                // label, which bursts it; the picker falls back to "Custom"
+                // without one, and the field beside it already spells the
+                // range out.
+                customRangeLabel={null}
+                onPresetChange={(preset) => onDateRangeChange(preset)}
+                onCustomRangeChange={onCustomRangeChange}
+                onClearCustomRange={onClearCustomRange}
+                projectSlug={projectSlug}
+                className="bg-card shrink-0"
               />
             </div>
 
             <div className="flex min-h-0 flex-1 overflow-hidden">
               <div
-                className="border-border bg-background relative hidden shrink-0 border-r xl:flex"
+                className={cn(
+                  "border-border bg-background relative hidden shrink-0 border-r",
+                  // Embedded, the host page's own rail already takes the
+                  // side, so filters stay behind the Filters button.
+                  !embedded && "xl:flex",
+                )}
                 style={{ width: railWidth }}
               >
                 {rail}
@@ -1463,11 +1802,13 @@ function LogsToolsContent({
                     <div className="w-32 shrink-0">Client</div>
                   </div>
 
-                  {/* One header for the whole list instead of a sticky header
-                      per day group. Sticky groups hand off by pushing each
-                      other out of the viewport, which reads as a jump when
-                      scrolling fast. This one never moves: only its date
-                      changes, as the day under the top of the list changes. */}
+                  {/* One pinned header for the whole list instead of a sticky
+                      header per day group. Sticky groups hand off by pushing
+                      each other out of the viewport, which reads as a jump
+                      when scrolling fast. This one never moves: only its date
+                      changes, as the day under the top of the list changes.
+                      Every later day also opens with its own header in the
+                      list, so a day change on screen is always marked. */}
                   {stickyDayDate && traces.length > 0 && (
                     <div className="shrink-0 border-b">
                       <DateGroupHeader date={stickyDayDate} mode="local" />
@@ -1485,7 +1826,10 @@ function LogsToolsContent({
                       traces={traces}
                       hasActiveFilters={
                         activeFilters.length > 0 ||
-                        !isDefaultToolUsageTypeSelection(selectedTypes) ||
+                        !isDefaultToolUsageTypeSelection(
+                          selectedTypes,
+                          defaultTypes,
+                        ) ||
                         selectedStatuses.length > 0 ||
                         selectedRoleIds.length > 0 ||
                         selectedClientKeys.length > 0 ||
@@ -1503,6 +1847,8 @@ function LogsToolsContent({
                       serverNameMappings={serverNameMappings}
                       from={from}
                       to={to}
+                      embedded={embedded}
+                      localToolsHidden={!defaultTypes.includes("local_tool")}
                     />
                   </div>
 
@@ -1525,6 +1871,7 @@ function LogsToolsContent({
       <LogDetailSheet
         log={selectedLog}
         hostedToolsetSlug={selectedHostedToolsetSlug}
+        connectionOwner={selectedConnectionOwner}
         open={!!selectedLog}
         onOpenChange={(open) => {
           void (!open && setSelectedLog(null));
@@ -1549,6 +1896,8 @@ function LogsToolsTableContent({
   serverNameMappings,
   from,
   to,
+  embedded = false,
+  localToolsHidden = false,
 }: {
   error: Error | null;
   isLoading: boolean;
@@ -1565,6 +1914,10 @@ function LogsToolsTableContent({
   to: Date;
   /** Resolved when this row's caller is an agent; its name is not on the row. */
   agent?: { id: string; name: string };
+  /** Scoped to one identity, whose page already says capture is set up. */
+  embedded?: boolean;
+  /** The view's default leaves local tools out, so "no calls" means no others. */
+  localToolsHidden?: boolean;
 }) {
   // Agent names are not on a trace — the row carries "agent:<uuid>" and
   // nothing else — so they are read once here rather than per row. Asked for
@@ -1630,6 +1983,10 @@ function LogsToolsTableContent({
   }
 
   if (traces.length === 0) {
+    if (!hasActiveFilters && embedded) {
+      return <ScopedToolLogsEmptyState localToolsHidden={localToolsHidden} />;
+    }
+
     if (!hasActiveFilters) {
       return <HooksEmptyState />;
     }
@@ -1651,34 +2008,39 @@ function LogsToolsTableContent({
     );
   }
 
-  // The date is the same for long runs of rows, so it is stated once per day
-  // rather than on every line. Each group carries the timestamp of its first
-  // row so the pinned header above the list can read the current day straight
-  // off the DOM while scrolling.
-  const dayGroups: Array<{ key: string; date: Date; traces: typeof traces }> =
-    [];
-  for (const trace of traces) {
-    const timestamp = new Date(
-      Number(BigInt(trace.startTimeUnixNano) / 1_000_000n),
-    );
-    const key = format(timestamp, "yyyy-MM-dd");
-    const current = dayGroups[dayGroups.length - 1];
-    if (current?.key === key) {
-      current.traces.push(trace);
-    } else {
-      dayGroups.push({ key, date: timestamp, traces: [trace] });
-    }
-  }
+  // The date is the same for long runs of rows, so it is stated once per
+  // local day rather than on every line. The pinned header above the list
+  // names the first day; every later day opens with its own header, so rows
+  // from another day never sit under the wrong date. Each group carries the
+  // timestamp of its first row so the pinned header can read the current day
+  // straight off the DOM while scrolling.
+  const dayGroups = groupByLocalDay(
+    traces,
+    (trace) => new Date(Number(BigInt(trace.startTimeUnixNano) / 1_000_000n)),
+  );
+  // Keyed by day, so a refetch that adds a newer day on top does not remount
+  // every group below it. A day that comes back later counts its runs.
+  const dayRuns = new Map<string, number>();
+  const dayGroupKeys = dayGroups.map((group) => {
+    const run = dayRuns.get(group.key) ?? 0;
+    dayRuns.set(group.key, run + 1);
+    return run === 0 ? group.key : `${group.key}-${run}`;
+  });
 
   return (
     <>
-      {dayGroups.map((group) => (
+      {dayGroups.map((group, index) => (
         <div
-          key={group.key}
+          key={dayGroupKeys[index]}
           data-day-ts={group.date.getTime()}
           className="border-border/60 border-t first:border-t-0"
         >
-          {group.traces.map((trace) => (
+          {index > 0 && (
+            <div data-day-header className="bg-background border-b">
+              <DateGroupHeader date={group.date} mode="local" />
+            </div>
+          )}
+          {group.items.map((trace) => (
             <LogsToolsTraceRow
               key={trace.id}
               trace={trace}
@@ -1706,7 +2068,7 @@ function LogsToolsTableContent({
         <div className="text-muted-foreground flex h-12 items-center justify-center gap-2 border-t">
           {isFetchingNextPage && (
             <>
-              <Icon name="loader-circle" className="size-3.5 animate-spin" />
+              <Spinner className="mr-0 size-3.5" />
               <span className="text-eyebrow">Loading more</span>
             </>
           )}
@@ -1785,8 +2147,17 @@ function LogsToolsTraceRow({
     trace.targetType,
   ]);
 
-  const statusConfig = getStatusConfig(trace);
+  // A pending call turns Unknown after a while; re-render then so the label
+  // does not wait for an unrelated update.
+  useStalePendingRerender(
+    trace.hookStatus === "pending"
+      ? Number(BigInt(trace.startTimeUnixNano) / 1_000_000n)
+      : undefined,
+  );
+  const statusConfig = getToolLogStatusConfig(trace);
   const targetConfig = getTargetConfig(trace.targetType);
+  const skillsOverMcpEnabled = useSkillsOverMcpEnabled();
+  const skillChannel = skillsOverMcpEnabled ? skillLoadChannel(trace) : null;
   const userLabel = trace.userLabel || "—";
 
   return (
@@ -1844,14 +2215,10 @@ function LogsToolsTraceRow({
                 >
                   {targetLabel}
                 </Link>
-              ) : trace.targetType === "meta_mcp_server" && trace.targetId ? (
-                <Link
-                  to={routes.mcp.gateway.overview.href(trace.targetId)}
-                  onClick={(event) => event.stopPropagation()}
-                  className="hover:text-foreground hover:underline"
-                >
+              ) : trace.targetType === "meta_mcp_server" ? (
+                <GatewayTargetLink trace={trace}>
                   {targetLabel}
-                </Link>
+                </GatewayTargetLink>
               ) : (
                 targetLabel
               )}
@@ -1876,18 +2243,7 @@ function LogsToolsTraceRow({
           )}
           {trace.viaMetaMcpServerId && (
             // The gateway that dispatched this member call.
-            <SimpleTooltip
-              tooltip={`Dispatched through gateway "${trace.viaMetaMcpServerName ?? trace.viaMetaMcpServerId}"`}
-            >
-              <Link
-                to={routes.mcp.gateway.overview.href(trace.viaMetaMcpServerId)}
-                onClick={(event) => event.stopPropagation()}
-                aria-label={`Dispatched through gateway "${trace.viaMetaMcpServerName ?? trace.viaMetaMcpServerId}"`}
-                className="flex shrink-0 items-center text-[var(--color-feedback-blue-700)] hover:text-[var(--color-feedback-blue-500)] dark:text-[var(--color-feedback-blue-500)] dark:hover:text-[var(--color-feedback-blue-400)]"
-              >
-                <Icon name="network" className="size-4" />
-              </Link>
-            </SimpleTooltip>
+            <GatewayDispatchLink trace={trace} />
           )}
         </div>
 
@@ -1897,7 +2253,7 @@ function LogsToolsTraceRow({
           </span>
         </div>
 
-        <div className="w-20 shrink-0">
+        <div className="flex w-20 shrink-0 items-center gap-1">
           <span
             title={targetConfig.label}
             className={cn(
@@ -1907,6 +2263,20 @@ function LogsToolsTraceRow({
           >
             {targetConfig.shortLabel}
           </span>
+          {skillChannel && (
+            // How the skill reached the agent. Uncoloured: the Skill badge
+            // beside it already carries the hue, and this only qualifies it.
+            <span
+              title={
+                skillChannel === "mcp"
+                  ? "Loaded over MCP from a server or gateway"
+                  : "Reported by an agent hook"
+              }
+              className="bg-muted text-muted-foreground inline-flex items-center px-1 py-0.5 font-mono text-[10px] tracking-wide uppercase"
+            >
+              {SKILL_LOAD_CHANNEL_LABELS[skillChannel]}
+            </span>
+          )}
         </div>
 
         {/* An agent is not a person: its own icon and its own link, never
@@ -1924,6 +2294,16 @@ function LogsToolsTraceRow({
                   ? {
                       userId: trace.authorizerUserId,
                       label: trace.authorizerLabel,
+                    }
+                  : undefined
+              }
+              credential={
+                trace.authClientType
+                  ? {
+                      type: trace.authClientType,
+                      clientId: trace.authClientId,
+                      ownerUserId: trace.connectionOwnerUserId,
+                      ownerName: trace.connectionOwnerLabel,
                     }
                   : undefined
               }
@@ -2070,52 +2450,4 @@ function getTargetConfig(targetType: ToolUsageTraceSummary["targetType"]) {
         badgeClassName: "bg-muted text-muted-foreground",
       };
   }
-}
-
-// Status renders as a plain mono word: color only where attention is due
-// (error red, blocked orange); success and pending stay muted ink.
-function getStatusConfig(trace: ToolUsageTraceSummary): {
-  className: string;
-  dotClassName: string;
-  label: string;
-} | null {
-  const ok = {
-    className: "text-muted-foreground",
-    dotClassName: "bg-emerald-500",
-    label: "Success",
-  };
-  const failed = {
-    className: "text-destructive",
-    dotClassName: "bg-rose-500",
-    label: "Error",
-  };
-
-  if (trace.hookStatus) {
-    switch (trace.hookStatus) {
-      case "blocked":
-        // Blocked is the same answer to "did this call run" — it did not — but
-        // it is the policy working rather than something broken, so it takes
-        // amber and leaves red to mean failure.
-        return { ...failed, dotClassName: "bg-amber-500", label: "Blocked" };
-      case "failure":
-        return failed;
-      case "success":
-        return ok;
-      case "pending":
-        return {
-          className: "text-muted-foreground",
-          dotClassName: "bg-muted-foreground/30",
-          label: "Pending",
-        };
-      default:
-        return null;
-    }
-  }
-
-  if (trace.httpStatusCode !== undefined) {
-    if (trace.httpStatusCode >= 400) return failed;
-    if (trace.httpStatusCode >= 200 && trace.httpStatusCode < 400) return ok;
-  }
-
-  return null;
 }

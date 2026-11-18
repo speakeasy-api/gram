@@ -40,7 +40,7 @@ func TestPlatformCleanupPreservesManualAndPublishes(t *testing.T) {
 			backend := createTestToolset(t, ctx, ti.conn, "cleanup-"+name)
 			toolsetID := backend.ID.String()
 			manualPayload := &gen.AddPluginServerPayload{ToolsetID: &toolsetID, Policy: "required"}
-			endpointSlug := backend.McpSlug.String
+			endpointSlug := backend.Slug
 			var endpointID uuid.UUID
 			if wrapped {
 				wrapperID := uuid.New()

@@ -81,7 +81,7 @@ type SetupResource struct {
 	Links []string
 	// DocsURL is this guide's published page on the Speakeasy documentation
 	// site — the same content, somewhere a person can open, link, and share.
-	// The gram:// URI addresses the resource; this addresses the page.
+	// The speakeasy:// URI addresses the resource; this addresses the page.
 	DocsURL string
 }
 
@@ -238,10 +238,10 @@ func ValidateSetupResource(resource SetupResource) error {
 	switch {
 	case err != nil:
 		return fmt.Errorf("parse setup resource URI %q: %w", resource.URI, err)
-	case parsed.Scheme != "gram" || parsed.Host != "platform-mcp" || !strings.HasPrefix(resource.URI, "gram://platform-mcp/setup/"):
-		return fmt.Errorf("setup resource URI %q is not under gram://platform-mcp/setup/", resource.URI)
+	case parsed.Scheme != "speakeasy" || parsed.Host != "platform-mcp" || !strings.HasPrefix(resource.URI, "speakeasy://platform-mcp/setup/"):
+		return fmt.Errorf("setup resource URI %q is not under speakeasy://platform-mcp/setup/", resource.URI)
 	case resource.URI != setupResourceURIFromURI(resource.URI):
-		return fmt.Errorf("setup resource URI %q is not exactly gram://platform-mcp/setup/<provider>/<intent>", resource.URI)
+		return fmt.Errorf("setup resource URI %q is not exactly speakeasy://platform-mcp/setup/<provider>/<intent>", resource.URI)
 	case resource.Name == "" || resource.Title == "" || resource.Description == "":
 		return fmt.Errorf("setup resource %q is missing a name, title, or description", resource.URI)
 	case resource.Text == "":
@@ -263,11 +263,11 @@ func ValidateSetupResource(resource SetupResource) error {
 // because a corpus builder must produce exactly these URIs — they are a public
 // contract with every MCP client that has one bookmarked.
 func SetupResourceURI(provider, intent string) string {
-	return fmt.Sprintf("gram://platform-mcp/setup/%s/%s", provider, intent)
+	return fmt.Sprintf("speakeasy://platform-mcp/setup/%s/%s", provider, intent)
 }
 
 func setupResourceURIFromURI(uri string) string {
-	parts := strings.Split(strings.TrimPrefix(uri, "gram://platform-mcp/setup/"), "/")
+	parts := strings.Split(strings.TrimPrefix(uri, "speakeasy://platform-mcp/setup/"), "/")
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return ""
 	}

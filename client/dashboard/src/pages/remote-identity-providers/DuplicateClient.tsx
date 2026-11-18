@@ -251,8 +251,8 @@ function DuplicateClientDialog({
   });
 
   const description = metadataDocument
-    ? "The copy gets its own client metadata document and client ID, with this client's scopes, audience, and authentication."
-    : "The copy gets this client's scopes, audience, authentication method, and key set. MCP servers keep using this client.";
+    ? "The copy gets its own client metadata document and client ID, with this client's scopes, audience, authentication, and client name setting."
+    : "The copy gets this client's scopes, audience, authentication method, key set, and client name setting. MCP servers keep using this client.";
 
   return (
     <ConfirmDialog

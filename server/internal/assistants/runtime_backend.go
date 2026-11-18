@@ -16,7 +16,8 @@ type runTurnRequest struct {
 	EventAttempt           int
 	CanonicalUserMessageID uuid.UUID
 	// Model is the persisted assistant choice, not a guest default.
-	Model string
+	Model           string
+	ReasoningEffort string
 
 	// IdempotencyKey deduplicates redelivered turns; the runner serializes
 	// admissions per key.
@@ -28,6 +29,9 @@ type runTurnRequest struct {
 
 	// Prompt is the turn's user input text.
 	Prompt string
+
+	// SourceInstructions is control-plane context for this thread and turn only.
+	SourceInstructions string
 
 	// InputParts optionally attaches structured content (e.g. image_url
 	// parts with data: URIs) that the runner folds into the turn's user

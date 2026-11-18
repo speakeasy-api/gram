@@ -17,13 +17,13 @@ import (
 // Session attribution selects only a persisted binding inside that authority;
 // it neither grants cross-runtime access nor asserts per-turn isolation.
 func (m *Manager) BindKitSession(ctx context.Context, providerID uuid.UUID) (context.Context, error) {
-	identity, ok := ctx.Value(inferenceContextKey{}).(assistantidentity.Identity)
+	identity, ok := ctx.Value(inferenceContextKey{}).(assistantidentity.RuntimeIdentity)
 	runtimeID, hasRuntime := ctx.Value(inferenceRuntimeContextKey{}).(uuid.UUID)
 	workload, hasWorkload := ctx.Value(inferenceWorkloadContextKey{}).([]byte)
 	if !hasWorkload || !ok || !hasRuntime || runtimeID == uuid.Nil || providerID == uuid.Nil {
 		return ctx, oops.C(oops.CodeForbidden)
 	}
-	if err := new(assistantidentity.Service).Validate(ctx, m.db, identity); err != nil {
+	if err := new(assistantidentity.Service).ValidateRuntime(ctx, m.db, identity); err != nil {
 		return ctx, kitIdentityValidationError(err)
 	}
 	bindings, err := m.tokens.ListKitInferenceSessionBindings(ctx, tokenrepo.ListKitInferenceSessionBindingsParams{

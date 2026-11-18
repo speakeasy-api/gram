@@ -37,7 +37,7 @@ func TestRemoteLoginCallback_NoExpiresIn_JWTAccessToken_StoresExp(t *testing.T) 
 	require.WithinDuration(t, exp, env.session.AccessExpiresAt.Time, time.Second)
 	require.True(t, env.session.RefreshTokenEncrypted.Valid, "refresh token must be persisted")
 
-	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	resolved, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, access, resolved, "a token before its exp is served as-is")
 }
@@ -67,7 +67,7 @@ func TestRemoteLoginCallback_JWTAccessToken_RefreshesOnceExpPasses(t *testing.T)
 		AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Minute)),
 	}))
 
-	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	resolved, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, rotated, resolved)
 	require.Equal(t, int64(1), refreshCount.Load())
@@ -105,7 +105,7 @@ func TestRemoteLoginCallback_JWTAccessToken_PastExpWithRefreshToken_RefreshesOnF
 	require.True(t, env.session.AccessExpiresAt.Valid)
 	require.False(t, env.session.AccessExpiresAt.Time.After(time.Now()), "the persisted deadline is the past exp")
 
-	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	resolved, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, rotated, resolved)
 	require.Equal(t, int64(1), refreshCount.Load())

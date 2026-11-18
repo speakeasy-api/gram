@@ -143,11 +143,13 @@ type ToolCallAttributeFilter struct {
 // SearchToolCallsInput narrows one project's tool calls. Every filter is
 // optional; an empty search lists the newest calls in the window.
 type SearchToolCallsInput struct {
-	ProjectID        string                    `json:"project_id" jsonschema:"project ID to search"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID        string                    `json:"-"`
 	Window           string                    `json:"window,omitempty" jsonschema:"observation window: 1h, 24h (default), 7d, or 30d. When a cursor is supplied the interval comes from the cursor and this must still name the window the cursor was minted for"`
 	ToolNameContains string                    `json:"tool_name_contains,omitempty" jsonschema:"case-sensitive text the tool name must contain"`
 	ErrorContains    string                    `json:"error_contains,omitempty" jsonschema:"case-sensitive text the recorded error message must contain; only calls that failed with an error message can match"`
-	Outcome          string                    `json:"outcome,omitempty" jsonschema:"optional outcome filter: success, failure, blocked, or pending"`
+	Outcome          string                    `json:"outcome,omitempty" jsonschema:"optional outcome filter: success, failure, blocked, or pending; pending means no result was reported; a call still pending ten minutes after it started most likely ended without reporting one, and Tool logs show it as Unknown"`
 	MCPID            string                    `json:"mcp_id,omitempty" jsonschema:"optional configured MCP ID, as returned by find_mcp or get_mcp, to narrow to one server; matches only calls the platform tied to that server, never calls an app merely reported under a matching name"`
 	UserReference    string                    `json:"user_reference,omitempty" jsonschema:"optional person reference from a previous search_tool_calls row in this project, or from list_mcp_usage_users when the same mcp_id and window are supplied"`
 	Attributes       []ToolCallAttributeFilter `json:"attributes,omitempty" jsonschema:"optional attribute filters, at most 5, combined with AND; discover keys with list_attribute_keys. A system key is refused when it identifies a person, in which case narrow to one person with user_reference instead, and when it carries tool content or an HTTP header. An @-prefixed custom key is the project's own integration data and allows every operator, whatever it is named"`
@@ -218,10 +220,11 @@ func (s *DiagnosticsService) SearchToolCalls(ctx context.Context, principal Prin
 	if err != nil {
 		return SearchToolCallsOutput{}, err
 	}
-	// log:read is the authorization boundary for listing individual calls,
-	// exactly as it is for list_recent_tool_calls and the dashboard Tool Logs.
-	// It is checked before the budget so a refused call spends nothing.
-	if _, err := s.reader.ResolveProjectLogRead(ctx, principal, FindMCPInput{ProjectID: search.projectID}); err != nil {
+	// Decided before the budget so a refused call spends nothing. A member
+	// without log:read is not refused: as in the dashboard Tool Logs they search
+	// their own sessions and their agents', and every filter only narrows that.
+	_, ownScope, err := s.reader.ResolveProjectLogScope(ctx, principal, FindMCPInput{ProjectID: search.projectID})
+	if err != nil {
 		return SearchToolCallsOutput{}, fmt.Errorf("authorize tool call search: %w", err)
 	}
 	// Metered on the sensitive allowance: a page carries masked identities and
@@ -284,7 +287,7 @@ func (s *DiagnosticsService) SearchToolCalls(ctx context.Context, principal Prin
 		return SearchToolCallsOutput{}, err
 	}
 
-	matchers, err := s.toolCallSearchMatchers(ctx, search.projectID)
+	matchers, err := s.toolCallSearchMatchers(ctx, principal.OrganizationID, search.projectID)
 	if err != nil {
 		return SearchToolCallsOutput{}, err
 	}
@@ -293,6 +296,7 @@ func (s *DiagnosticsService) SearchToolCalls(ctx context.Context, principal Prin
 		statuses = []string{search.outcome}
 	}
 	rows, err := s.search.ListToolUsageTraces(ctx, telemetryrepo.ListToolUsageTracesParams{
+		OwnScope:           ownScope,
 		GramProjectID:      search.projectID,
 		TimeStart:          search.window.start.UnixNano(),
 		TimeEnd:            search.window.end.UnixNano(),
@@ -395,7 +399,7 @@ func normalizeToolCallSearch(input SearchToolCallsInput) (toolCallSearch, error)
 		identity:   "",
 	}
 	if search.projectID == "" {
-		return toolCallSearch{}, fmt.Errorf("%w: project_id is required", ErrToolCallSearchInvalid)
+		return toolCallSearch{}, fmt.Errorf("%w: project_slug is required", ErrToolCallSearchInvalid)
 	}
 	if len(search.toolName) > maxToolCallSearchTextLength || len(search.errorText) > maxToolCallSearchTextLength {
 		return toolCallSearch{}, fmt.Errorf("%w: tool_name_contains and error_contains must be at most %d characters", ErrToolCallSearchInvalid, maxToolCallSearchTextLength)
@@ -687,7 +691,7 @@ type toolUsageMatchers struct {
 	meta    []telemetryrepo.MetaMCPMatcher
 }
 
-func (s *DiagnosticsService) toolCallSearchMatchers(ctx context.Context, projectID string) (toolUsageMatchers, error) {
+func (s *DiagnosticsService) toolCallSearchMatchers(ctx context.Context, organizationID string, projectID string) (toolUsageMatchers, error) {
 	// Without Postgres the rows still list, but hook-observed calls cannot be
 	// folded onto the configured servers and are reported as the calling app
 	// named them.
@@ -702,7 +706,7 @@ func (s *DiagnosticsService) toolCallSearchMatchers(ctx context.Context, project
 	if err != nil {
 		return toolUsageMatchers{}, fmt.Errorf("load tool call search matchers: %w", err)
 	}
-	meta, err := telemetrysvc.LoadMetaMCPMatchers(ctx, s.db, parsedProject)
+	meta, err := telemetrysvc.LoadMetaMCPMatchers(ctx, s.db, s.authz, organizationID, parsedProject)
 	if err != nil {
 		return toolUsageMatchers{}, fmt.Errorf("load tool call search gateway matchers: %w", err)
 	}
@@ -880,7 +884,9 @@ func (s *DiagnosticsService) decodeToolCallCursor(cursor string, principal Princ
 // ListAttributeKeysInput asks which attribute keys one project's telemetry
 // carried in a window, so a caller can choose filters before searching.
 type ListAttributeKeysInput struct {
-	ProjectID string `json:"project_id" jsonschema:"project ID to inspect"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h, 24h, 7d (default), or 30d"`
 }
 
@@ -911,7 +917,7 @@ func (s *DiagnosticsService) ListAttributeKeys(ctx context.Context, principal Pr
 	}
 	projectID := strings.TrimSpace(input.ProjectID)
 	if projectID == "" {
-		return ListAttributeKeysOutput{}, fmt.Errorf("%w: project_id is required", ErrToolCallSearchInvalid)
+		return ListAttributeKeysOutput{}, fmt.Errorf("%w: project_slug is required", ErrToolCallSearchInvalid)
 	}
 	// Metered on the summary allowance: a key inventory names no subject and
 	// reads a pre-aggregated view.

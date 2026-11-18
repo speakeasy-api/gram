@@ -4,6 +4,8 @@
 
 set -e
 
+# The Goa design reads authz scope names, so the authz model's output comes first.
+mise run gen:authz
 mise run gen:server
 
 pids=()

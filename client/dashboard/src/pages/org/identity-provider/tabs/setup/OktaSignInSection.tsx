@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { organizationUserSessionIssuersGetDeletePreflight } from "@gram/client/funcs/organizationUserSessionIssuersGetDeletePreflight.js";
@@ -241,9 +242,10 @@ function SignInPublicKey({ setId }: { setId: string }): JSX.Element {
   const jwk = activePublicJwk(keysQuery.data?.keys ?? []);
   if (keysQuery.isPending) {
     return (
-      <Text muted small>
-        Loading the public key…
-      </Text>
+      <Skeleton label="Loading the public key">
+        <div className="h-4 w-40" />
+        <div className="h-40 w-full" />
+      </Skeleton>
     );
   }
   if (keysQuery.error) return <ApiErrorAlert error={keysQuery.error} />;
@@ -457,9 +459,12 @@ function OktaSignInBody({
     <>
       <SettingsSection.Body>
         {loading ? (
-          <Text muted small>
-            Loading sign-in settings…
-          </Text>
+          <div role="status" aria-label="Loading sign-in settings">
+            <Skeleton>
+              <div className="h-5 w-full max-w-md" />
+              <div className="h-5 w-full max-w-md" />
+            </Skeleton>
+          </div>
         ) : (
           ready && <SignInFacts client={client} agentId={agentId} />
         )}

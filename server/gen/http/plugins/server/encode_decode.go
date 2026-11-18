@@ -1250,6 +1250,20 @@ func EncodeUpdatePluginError(encoder func(context.Context, http.ResponseWriter) 
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
+		case "failed_precondition":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUpdatePluginFailedPreconditionResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusPreconditionFailed)
+			return enc.Encode(body)
 		case "unauthorized":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -3325,8 +3339,8 @@ func DecodeDownloadObservabilityPluginRequest(mux goahttp.Muxer, decoder func(*h
 		if platform == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("platform", "query string"))
 		}
-		if !(platform == "claude" || platform == "cursor" || platform == "codex" || platform == "opencode" || platform == "copilot" || platform == "openclaw" || platform == "pi") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor", "codex", "opencode", "copilot", "openclaw", "pi"}))
+		if !(platform == "claude" || platform == "cursor" || platform == "codex" || platform == "opencode" || platform == "copilot" || platform == "openclaw" || platform == "pi" || platform == "vibe") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor", "codex", "opencode", "copilot", "openclaw", "pi", "vibe"}))
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -4682,6 +4696,7 @@ func marshalPluginsPluginToPluginResponseBody(v *plugins.Plugin) *PluginResponse
 		Description:              v.Description,
 		IsDefault:                v.IsDefault,
 		AutoCreated:              v.AutoCreated,
+		AutoSyncEnabled:          v.AutoSyncEnabled,
 		ServerCount:              v.ServerCount,
 		SkillCount:               v.SkillCount,
 		AssignmentCount:          v.AssignmentCount,
@@ -4773,6 +4788,22 @@ func marshalPluginsRotatedObservabilityKeyToRotatedObservabilityKeyResponseBody(
 		Name:      v.Name,
 		KeyPrefix: v.KeyPrefix,
 		ExpiresAt: v.ExpiresAt,
+	}
+
+	return res
+}
+
+// marshalPluginsPluginPublishStatusToPluginPublishStatusResponseBody builds a
+// value of type *PluginPublishStatusResponseBody from a value of type
+// *plugins.PluginPublishStatus.
+func marshalPluginsPluginPublishStatusToPluginPublishStatusResponseBody(v *plugins.PluginPublishStatus) *PluginPublishStatusResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &PluginPublishStatusResponseBody{
+		Slug:               v.Slug,
+		UpToDate:           v.UpToDate,
+		AwaitingManualSync: v.AwaitingManualSync,
 	}
 
 	return res

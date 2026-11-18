@@ -6,7 +6,7 @@ import {
   statusSelection,
   type FilterSelection,
 } from "@/lib/organizationFilters";
-import type { OrganizationsSearch } from "@/routes/organizations.index";
+import type { OrganizationsSearch } from "@/lib/organizationSearch";
 
 const ROUTE_ID = "/organizations/";
 

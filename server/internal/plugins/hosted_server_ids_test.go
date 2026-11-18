@@ -34,7 +34,7 @@ func TestPluginsService_HostedEntriesReportBothIDs(t *testing.T) {
 	ctx, ti := newTestPluginsService(t)
 
 	serverKeyed := createUnwrappedTestToolset(t, ctx, ti.conn, "server-keyed")
-	createCanonicalWrapper(t, ctx, ti, serverKeyed, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, serverKeyed.McpSlug.String)
+	createCanonicalWrapper(t, ctx, ti, serverKeyed, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, serverKeyed.Slug)
 	fresh := createTestMcpServer(t, ctx, ti.conn, "fresh", "private")
 
 	orphaned := createUnwrappedTestToolset(t, ctx, ti.conn, "orphaned")
@@ -52,7 +52,7 @@ func TestPluginsService_HostedEntriesReportBothIDs(t *testing.T) {
 	require.Equal(t, serverKeyed.ID.String(), conv.PtrValOr(added.McpServerID, ""))
 
 	byToolset := createUnwrappedTestToolset(t, ctx, ti.conn, "by-toolset")
-	createCanonicalWrapper(t, ctx, ti, byToolset, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, byToolset.McpSlug.String)
+	createCanonicalWrapper(t, ctx, ti, byToolset, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, byToolset.Slug)
 	addedByToolset, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(byToolset.ID.String()), DisplayName: conv.PtrEmpty("ByToolset"), Policy: "required"})
 	require.NoError(t, err)
 	require.Equal(t, new(byToolset.ID.String()), addedByToolset.ToolsetID)
@@ -60,7 +60,7 @@ func TestPluginsService_HostedEntriesReportBothIDs(t *testing.T) {
 
 	// An entry echoed from a read carries both ids; equal ids name the toolset, unequal ones are rejected.
 	echoed := createUnwrappedTestToolset(t, ctx, ti.conn, "echoed")
-	createCanonicalWrapper(t, ctx, ti, echoed, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, echoed.McpSlug.String)
+	createCanonicalWrapper(t, ctx, ti, echoed, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, echoed.Slug)
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(echoed.ID.String()), McpServerID: conv.PtrEmpty(fresh.idStr), DisplayName: conv.PtrEmpty("Mismatched"), Policy: "required"})
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)

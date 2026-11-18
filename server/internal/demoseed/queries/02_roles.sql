@@ -27,9 +27,9 @@ INSERT INTO principal_grants
   (organization_id, principal_urn, scope, selectors)
 SELECT @organization_id::text, @principal_urn::text, scope,
        jsonb_build_object(
-         'resource_kind', CASE WHEN scope IN ('plugin:write', 'log:read') THEN 'project'
+         'resource_kind', CASE WHEN scope IN ('plugin:write', 'log:read', 'channels:connect', 'channels:admin', 'channels:read_all') THEN 'project'
                                ELSE split_part(scope, ':', 1) END,
-         'resource_id', CASE WHEN scope = 'log:read' THEN @project_id::text ELSE '*' END)
+         'resource_id', CASE WHEN scope IN ('log:read', 'channels:connect', 'channels:admin', 'channels:read_all') THEN @project_id::text ELSE '*' END)
 FROM unnest(@scopes::text[]) AS scope;
 
 -- name: RolesInsertRoleAssignment :exec
@@ -271,10 +271,33 @@ VALUES (@organization_id, @user_id::text, @provider, @external_org_id::text,
 INSERT INTO device_owners (organization_id, provider, device_id, linked_user_id)
 VALUES (@organization_id, 'anthropic', @device_id, @linked_user_id::text);
 
+-- name: RolesDeleteDeviceAgentStateReports :exec
+DELETE FROM device_agent_state_reports WHERE organization_id = @organization_id;
+
+-- served_etag is the policy etag the user's last poll was served; NULL for an
+-- agent that has not polled since the column existed.
 -- name: RolesInsertDeviceAgentSync :exec
-INSERT INTO device_agent_syncs (organization_id, email, first_seen_at, last_seen_at)
+INSERT INTO device_agent_syncs
+  (organization_id, email, first_seen_at, last_seen_at, served_etag,
+   served_etag_changed_at)
 VALUES (@organization_id, @email, now() - interval '9 days',
-        now() - (@last_seen_ago::text)::interval);
+        now() - (@last_seen_ago::text)::interval, sqlc.narg(served_etag)::text,
+        CASE WHEN sqlc.narg(served_etag)::text IS NULL THEN NULL
+             ELSE now() - interval '2 days' END);
+
+-- name: RolesInsertDeviceAgentStateReport :exec
+INSERT INTO device_agent_state_reports
+  (organization_id, email, serial_number, hostname, schema_version,
+   generated_at, reported_at, applied_etag, applied_at, enforcement_halted,
+   tools, degraded_tool_count, drift_counting_since, speakeasyd_version,
+   speakeasy_version, os, arch, auto_update, update_channel)
+VALUES (@organization_id, @email, NULLIF(@serial_number::text, ''), @hostname::text, 1,
+        now() - (@reported_ago::text)::interval,
+        now() - (@reported_ago::text)::interval,
+        @applied_etag::text, now() - (@applied_ago::text)::interval, FALSE,
+        @tools::jsonb, @degraded_tool_count::integer,
+        now() - interval '9 days', @speakeasyd_version::text,
+        @speakeasyd_version::text, @os::text, @arch::text, 'automatic', 'stable');
 
 -- name: RolesDeleteAIScanTargets :exec
 DELETE FROM ai_scan_targets WHERE organization_id = @organization_id;

@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/catalogauth"
+	"github.com/speakeasy-api/gram/server/internal/setupguides"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	delivery "github.com/speakeasy-api/gram/server/internal/thirdparty/catalogpromotion"
 )
@@ -69,6 +71,8 @@ type Request struct {
 	PublicMetadataConfirmed bool `json:"public_metadata_confirmed"`
 	// OverrideEligibility explicitly accepts insufficient or unhealthy usage evidence.
 	OverrideEligibility bool `json:"override_eligibility,omitempty"`
+	// AuthDiscovery is the server-owned public capability snapshot bound to an Admin MCP proposal.
+	AuthDiscovery catalogauth.Discovery `json:"auth_discovery,omitzero"`
 	// RetryKey identifies one exact requested change.
 	RetryKey string `json:"retry_key"`
 }
@@ -92,6 +96,22 @@ type Candidate struct {
 	CurationRevision string `json:"curation_revision"`
 	// SuggestedMetadata is untrusted draft input, never an approval or published value.
 	SuggestedMetadata *PublicMetadata `json:"suggested_metadata,omitempty"`
+
+	// SetupGuides lists the guides in the pinned setup-docs export so the
+	// review form can warn when a slug is already taken. Set only alongside
+	// SuggestedMetadata. Guides merged after the pinned version are missing.
+	SetupGuides []setupguides.Guide `json:"setup_guides,omitempty"`
+
+	// SetupGuidesVersion is the pinned setup-docs export version SetupGuides
+	// came from. Set only alongside SetupGuides.
+	SetupGuidesVersion string `json:"setup_guides_version,omitempty"`
+
+	// EndpointGuideSlug is the slug of the one pinned guide that documents the
+	// suggested public endpoint, or empty when none or several do.
+	EndpointGuideSlug string `json:"endpoint_guide_slug,omitempty"`
+
+	// AuthDiscovery is public metadata evidence from the reviewed source endpoint.
+	AuthDiscovery *catalogauth.Discovery `json:"auth_discovery,omitempty"`
 	// SourceName is a bounded private label for the staff UI only.
 	SourceName string `json:"source_name,omitempty"`
 	// SourceRevision binds the change to the observed source configuration.
@@ -112,9 +132,13 @@ type Candidate struct {
 	CheckedAt string `json:"checked_at,omitempty"`
 	// RegistryEntryID identifies the published native catalogue entry.
 	RegistryEntryID string `json:"registry_entry_id,omitempty"`
-	// DocsStatus distinguishes pending delivery from a queued guide request.
+	// DocsStatus is pending, retrying, needs_attention, queued (guide request
+	// filed), existing_guide (a guide already exists, so none was filed) or
+	// guide_in_review (waiting on an open guide pull request).
 	DocsStatus string `json:"docs_status,omitempty"`
-	// DocsURL points to the queued guide request, not a completed guide.
+	// DocsURL points to the guide request issue, the existing guide, or the
+	// open guide pull request, depending on DocsStatus. A guide request or
+	// pull request is not a published guide.
 	DocsURL string `json:"docs_url,omitempty"`
 
 	// DocsRevision binds manual retries to an exact delivery state.
@@ -127,7 +151,7 @@ type Candidate struct {
 	DocsLastAttemptAt string `json:"docs_last_attempt_at,omitempty"`
 	// DocsNextAttemptAt is the earliest automatic retry time.
 	DocsNextAttemptAt string `json:"docs_next_attempt_at,omitempty"`
-	// DocsQueuedAt records acknowledgement of the guide factory request.
+	// DocsQueuedAt records acknowledgement of the guide factory request, or when an existing guide was found.
 	DocsQueuedAt string `json:"docs_queued_at,omitempty"`
 	// PromotedAt records the original reviewed catalogue publication.
 	PromotedAt string `json:"promoted_at,omitempty"`
@@ -150,7 +174,7 @@ type HealthReader interface {
 
 // DeliveryClient submits idempotent documentation jobs.
 type DeliveryClient interface {
-	EnsureGuide(context.Context, delivery.Guide) (string, error)
+	EnsureGuide(context.Context, delivery.Guide) (delivery.GuideResult, error)
 }
 
 // DocsRetryRequest identifies an exact staff-approved documentation retry.
@@ -167,12 +191,16 @@ type DocsRetryRequest struct {
 
 // JobStatus contains bounded aggregate operational health without tenant information.
 type JobStatus struct {
-	// PendingDocs counts guide requests waiting for automatic delivery.
+	// PendingDocs counts guide requests waiting for automatic delivery,
+	// excluding those waiting on an open guide pull request.
 	PendingDocs int64
 	// NeedsAttention counts parked requests requiring staff action.
 	NeedsAttention int64
-	// OldestPendingAt is the earliest publication awaiting a guide request.
+	// OldestPendingAt is the earliest publication awaiting a guide request,
+	// excluding those waiting on an open guide pull request.
 	OldestPendingAt time.Time
+	// GuideInReview counts requests waiting on an open guide pull request.
+	GuideInReview int64
 	// LastDiscoveryAt is the most recent started discovery observation.
 	LastDiscoveryAt time.Time
 	// DiscoveryFailures counts candidates whose latest discovery attempt failed.
@@ -191,4 +219,11 @@ type CurationRequest struct {
 	Action string `json:"action"`
 	// RetryKey identifies the exact staff request.
 	RetryKey string `json:"retry_key"`
+}
+
+// publicSnapshot persists public metadata and server-owned discovery without changing reviewed input.
+type publicSnapshot struct {
+	PublicMetadata
+	// AuthDiscovery contains only bounded public capability evidence.
+	AuthDiscovery catalogauth.Discovery `json:"auth_discovery,omitzero"`
 }

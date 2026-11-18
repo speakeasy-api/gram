@@ -32,6 +32,9 @@ const sessionPolicyTTL = 5 * time.Minute
 // caller must 401 into reauth rather than reinterpret the policy.
 var errToolSelectionResourceMismatch = errors.New("session tool selection is bound to a different endpoint")
 
+// errSessionPolicyGone marks a bearer whose session row is gone: the token is no good, nothing is down.
+var errSessionPolicyGone = errors.New("session policy gone")
+
 // errToolSelectionLoad marks a post-validation policy-store failure. The
 // bearer token itself is valid; the request still fails closed, but logs must
 // distinguish this operational or stored-data failure from bad credentials.
@@ -104,12 +107,10 @@ func endpointToolSelectionResource(endpoint *ResolvedMcpEndpoint) string {
 }
 
 // endpointAcceptsToolSelectionResource reports whether a stored consent
-// selection belongs to this endpoint. A toolset-backed wrapper additionally
-// accepts the legacy "toolset:<id>" form: selections consented while the
-// server was still resolved through toolsets.mcp_slug were stored against the
-// toolset resource and must keep authorizing the same server for one
-// access-token lifetime after the backfill (AIS-633; removed with the legacy
-// audience acceptance by AIS-646).
+// selection belongs to this endpoint. A toolset-backed server also accepts the
+// "toolset:<id>" form of its toolset, which selections consented before servers
+// owned their endpoints still carry, so those sessions keep serving and
+// refreshing.
 func endpointAcceptsToolSelectionResource(endpoint *ResolvedMcpEndpoint, resource string) bool {
 	if resource == endpointToolSelectionResource(endpoint) {
 		return true
@@ -144,7 +145,7 @@ func (s *Service) loadSessionPolicy(ctx context.Context, endpoint *ResolvedMcpEn
 		})
 		if derr != nil {
 			if errors.Is(derr, pgx.ErrNoRows) {
-				return sessionPolicy{}, fmt.Errorf("user session row not found for jti")
+				return sessionPolicy{}, fmt.Errorf("user session row not found for jti: %w", errSessionPolicyGone)
 			}
 			return sessionPolicy{}, fmt.Errorf("load session policy: %w", derr)
 		}

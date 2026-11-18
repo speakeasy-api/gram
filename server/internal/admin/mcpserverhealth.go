@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authclients"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -115,6 +116,17 @@ func (s *Service) DescribeMcpServerHealth(ctx context.Context, payload *gen.Desc
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read mcp server health").LogError(ctx, s.logger, target.logAttrs...)
 	}
+	if healthServerSource(target.row) == "remote" {
+		scopes, err := s.scopes.Describe(ctx, remotemcp.StaffScopeTarget{OrganizationID: payload.OrganizationID, ProjectID: target.projectID, McpServerID: target.row.ID})
+		switch {
+		case errors.Is(err, remotemcp.ErrNotRemoteBacked):
+			// The remote row was deleted under a live server: no resource to report.
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "read mcp server resource scopes").LogError(ctx, s.logger, target.logAttrs...)
+		default:
+			result.ResourceScopes = adminResourceScopes(scopes)
+		}
+	}
 	return result, nil
 }
 
@@ -190,16 +202,15 @@ func (s *Service) buildMCPServerHealth(ctx context.Context, queries *repo.Querie
 		Correlation:       healthCorrelation(server),
 		LegacyAuth:        nil,
 		UserSessionIssuer: nil,
+		ResourceScopes:    nil,
 		UpstreamAuth:      nil,
 	}
 
-	if !server.ToolsetOnly {
-		upstream, err := authclients.ReadServerAuthentication(ctx, s.db, organizationID, server.ID)
-		if err != nil {
-			return nil, fmt.Errorf("read upstream authentication: %w", err)
-		}
-		result.UpstreamAuth = healthUpstreamAuth(upstream)
+	upstream, err := authclients.ReadServerAuthentication(ctx, s.db, organizationID, server.ID)
+	if err != nil {
+		return nil, fmt.Errorf("read upstream authentication: %w", err)
 	}
+	result.UpstreamAuth = healthUpstreamAuth(upstream)
 
 	if server.UserSessionIssuerID.Valid {
 		issuer, err := s.readUserSessionIssuer(ctx, queries, organizationID, projectID, server.ID, server.UserSessionIssuerID.UUID, windowStart)
@@ -224,11 +235,9 @@ func healthCorrelation(server repo.AdminGetMcpServerAuthRow) *gen.AdminMcpServer
 		McpServerID: nil,
 		ToolsetSlug: nil,
 	}
-	if !server.ToolsetOnly {
-		id := server.ID.String()
-		correlation.McpServerID = &id
-	}
-	if server.ToolsetSlug != "" && (server.ToolsetOnly || server.ToolsetWrapperCount <= 1) {
+	id := server.ID.String()
+	correlation.McpServerID = &id
+	if server.ToolsetSlug != "" && server.ToolsetWrapperCount <= 1 {
 		slug := server.ToolsetSlug
 		correlation.ToolsetSlug = &slug
 	}
@@ -237,8 +246,6 @@ func healthCorrelation(server repo.AdminGetMcpServerAuthRow) *gen.AdminMcpServer
 
 func healthServerSource(server repo.AdminGetMcpServerAuthRow) string {
 	switch {
-	case server.ToolsetOnly:
-		return "toolset_only"
 	case server.ToolsetID.Valid:
 		return "toolset"
 	case server.RemoteMcpServerID.Valid:

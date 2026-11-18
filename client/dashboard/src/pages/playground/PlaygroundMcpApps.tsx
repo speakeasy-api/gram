@@ -7,7 +7,6 @@ import type { Toolset } from "@/lib/toolTypes";
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { ToolFallback } from "@/elements";
 import { useQuery } from "@tanstack/react-query";
-import { LoaderCircle } from "lucide-react";
 import {
   createContext,
   useContext,
@@ -17,6 +16,7 @@ import {
   useState,
   type PropsWithChildren,
 } from "react";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 const MCP_PROTOCOL_VERSION = "2025-06-18";
 const MCP_APP_MIME_TYPE = "text/html;profile=mcp-app";
@@ -240,9 +240,8 @@ function PlaygroundMcpAppRenderer({
 
   if (resourceQuery.isLoading) {
     return (
-      <div className="border-border text-muted-foreground flex items-center gap-2 border-t px-4 py-4 text-sm">
-        <LoaderCircle className="size-4 animate-spin" />
-        Loading MCP app resource…
+      <div className="border-border border-t px-4 py-4">
+        <Skeleton label="Loading MCP app resource" className="h-32 w-full" />
       </div>
     );
   }
@@ -613,13 +612,6 @@ function getToolInfo(tool: Toolset["rawTools"][number]) {
       description: tool.httpToolDefinition.description,
       inputSchema: safeJsonParse(tool.httpToolDefinition.schema),
       name: tool.httpToolDefinition.name,
-    };
-  }
-  if (tool.externalMcpToolDefinition) {
-    return {
-      description: tool.externalMcpToolDefinition.description,
-      inputSchema: safeJsonParse(tool.externalMcpToolDefinition.schema),
-      name: tool.externalMcpToolDefinition.name,
     };
   }
   if (tool.promptTemplate) {

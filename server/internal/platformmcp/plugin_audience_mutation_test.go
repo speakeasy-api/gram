@@ -59,7 +59,7 @@ func TestSetPluginAssignmentsOutputProjectsOnlySafeFields(t *testing.T) {
 	keys := decodeKeys(t, output)
 	require.ElementsMatch(t, []string{
 		"project_id", "plugin", "id", "name", "slug", "is_default", "assignments", "all_members", "roles", "users", "publication",
-		"assignment_version", "assignments", "kind", "display_name", "member_count", "result_category", "receipt", "id", "replayed",
+		"assignment_version", "assignments", "kind", "display_name", "member_count", "result_category", "publish_signal", "receipt", "id", "replayed",
 	}, keys)
 	payload, err := json.Marshal(output)
 	require.NoError(t, err)

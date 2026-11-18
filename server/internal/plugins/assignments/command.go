@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -62,35 +63,28 @@ func Lock(ctx context.Context, tx pgx.Tx, organizationID string, projectID, plug
 	if tx == nil || organizationID == "" || projectID == uuid.Nil || pluginID == uuid.Nil {
 		return pluginsrepo.Plugin{}, ErrInvalid
 	}
-	var plugin pluginsrepo.Plugin
-	err := tx.QueryRow(ctx, `
-SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
-FROM plugins
-WHERE id = $1
-  AND organization_id = $2
-  AND project_id = $3
-  AND deleted IS FALSE
-FOR UPDATE`, pluginID, organizationID, projectID).Scan(
-		&plugin.ID,
-		&plugin.OrganizationID,
-		&plugin.ProjectID,
-		&plugin.Name,
-		&plugin.Slug,
-		&plugin.Description,
-		&plugin.IsDefault,
-		&plugin.AutoCreated,
-		&plugin.CreatedAt,
-		&plugin.UpdatedAt,
-		&plugin.DeletedAt,
-		&plugin.Deleted,
-	)
+	row, err := pluginsrepo.New(tx).LockPluginForAssignments(ctx, pluginsrepo.LockPluginForAssignmentsParams{ID: pluginID, OrganizationID: organizationID, ProjectID: projectID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return pluginsrepo.Plugin{}, ErrNotFound
 	}
 	if err != nil {
 		return pluginsrepo.Plugin{}, fmt.Errorf("lock plugin assignment target: %w", err)
 	}
-	return plugin, nil
+	return pluginsrepo.Plugin{
+		ID:              row.ID,
+		OrganizationID:  row.OrganizationID,
+		ProjectID:       row.ProjectID,
+		Name:            row.Name,
+		Slug:            row.Slug,
+		Description:     row.Description,
+		IsDefault:       row.IsDefault,
+		AutoCreated:     row.AutoCreated,
+		AutoSyncEnabled: pgtype.Bool{Bool: false, Valid: false},
+		CreatedAt:       row.CreatedAt,
+		UpdatedAt:       row.UpdatedAt,
+		DeletedAt:       row.DeletedAt,
+		Deleted:         row.Deleted,
+	}, nil
 }
 
 // IsSubset compares canonical assignment sets without inferring group membership.

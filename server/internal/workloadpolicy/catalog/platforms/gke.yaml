@@ -1,0 +1,65 @@
+# Google Kubernetes Engine.
+#
+# Every GKE cluster is its own issuer, named by its project, location and
+# cluster, so those three are platform-tier: each connected cluster is a
+# trusted platform of its own, and a rule on one cluster admits nothing on
+# another. GKE publishes each cluster's discovery document and keys on
+# container.googleapis.com whether or not its control plane is private.
+#
+# Pods present a projected service account token, whose subject names the
+# namespace and service account. The rule is exact: a wildcard would admit
+# every service account in a namespace, including ones created later. Each
+# pattern refuses ":" and "/", which would otherwise let a value reach into
+# a neighboring segment of the issuer or the subject.
+key: gke
+display_name: GKE
+description: Let workloads on a Google Kubernetes Engine cluster call your MCP servers as a service account, with no Speakeasy secret stored in the cluster.
+icon: /access-hub/gke.svg
+enabled: true
+
+issuer:
+  value: https://container.googleapis.com/v1/projects/{project}/locations/{location}/clusters/{cluster}
+  visibility: read-only
+jwks_uri:
+  value: https://container.googleapis.com/v1/projects/{project}/locations/{location}/clusters/{cluster}/jwks
+  visibility: hidden
+
+variables:
+  - key: project
+    tier: platform
+    label: Project ID
+    help: The Google Cloud project the cluster runs in.
+    placeholder: my-project
+    pattern: "[a-z][a-z0-9-]{4,28}[a-z0-9]"
+    pattern_message: A project ID is 6 to 30 lowercase letters, numbers and hyphens, starting with a letter.
+  - key: location
+    tier: platform
+    label: Location
+    help: The cluster's region or zone, such as us-central1 or us-central1-a.
+    placeholder: us-central1
+    pattern: "[a-z]+-[a-z]+[0-9]+(?:-[a-z])?"
+    pattern_message: A location is a region such as us-central1, or a zone such as us-central1-a.
+  - key: cluster
+    tier: platform
+    label: Cluster name
+    placeholder: my-cluster
+    pattern: "[a-z](?:[-a-z0-9]{0,38}[a-z0-9])?"
+    pattern_message: A cluster name is up to 40 lowercase letters, numbers and hyphens, starting with a letter.
+  - key: namespace
+    tier: rule
+    label: Namespace
+    help: The namespace the workload's pods run in.
+    placeholder: default
+    pattern: "[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?"
+    pattern_message: A namespace is up to 63 lowercase letters, numbers and hyphens.
+  - key: service_account
+    tier: rule
+    label: Service account
+    help: The Kubernetes service account the pods run as, set by serviceAccountName in the pod spec.
+    placeholder: my-workload
+    pattern: "[a-z0-9](?:[-a-z0-9.]{0,251}[a-z0-9])?"
+    pattern_message: A service account name is lowercase letters, numbers, hyphens and dots.
+
+subject:
+  template: "system:serviceaccount:{namespace}:{service_account}"
+  wildcard: false

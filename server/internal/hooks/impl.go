@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/hookversions"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -108,6 +109,9 @@ type Service struct {
 	// relative to the attribute_metrics_summaries MV cutoff. Defaults to
 	// time.Now via NewService; access through now() for nil-safety.
 	nowFunc func() time.Time
+	// versionPolicy classifies the sender's hooks version for the
+	// hooks_version effect. Zero leaves the effect off.
+	versionPolicy hookversions.Policy
 	// claudeBudget bounds how long the legacy /rpc/hooks.claude endpoint waits
 	// for a verdict before it answers from the org's fail-open posture.
 	claudeBudget time.Duration
@@ -131,6 +135,10 @@ func (s *Service) now() time.Time {
 
 type authorizer interface {
 	Authorize(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error)
+
+	// AuthorizeWithHandlerProjectAccess resolves the project like Authorize
+	// but leaves the project permission check to the caller.
+	AuthorizeWithHandlerProjectAccess(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error)
 }
 
 // SessionMetadata contains validated session information from the Logs endpoint.
@@ -332,7 +340,13 @@ func NewService(
 		claudeBudget:       legacyClaudeHookDecisionBudget,
 		claudeDrains:       sync.WaitGroup{},
 		deviceAgentTokens:  deviceAgentTokens,
+		versionPolicy:      hookversions.Policy{Latest: nil, Minimum: nil},
 	}
+}
+
+// SetVersionPolicy turns on the hooks_version effect on ingest responses.
+func (s *Service) SetVersionPolicy(policy hookversions.Policy) {
+	s.versionPolicy = policy
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
@@ -355,31 +369,37 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	if schema.Name == constants.ProjectSlugSecuritySchema && deviceagenttoken.IsWorkloadActor(ctx) {
 		return s.authorizeWorkloadProject(ctx, key, schema)
 	}
+	if schema.Name == constants.ProjectSlugSecuritySchema {
+		// Every method an agent key reaches pairs the key with this scheme, so
+		// the project-scoped hooks check runs here, once the project resolves.
+		// An agent skips project:read only on an ingestion method.
+		if isAgentActor(ctx) && !isAgentIngestMethod(ctx) {
+			return ctx, oops.C(oops.CodeForbidden)
+		}
+		return s.authorizeHooksProject(ctx, key, schema)
+	}
 
 	ctx, err := s.auth.Authorize(ctx, key, schema)
 	if err != nil {
 		return ctx, fmt.Errorf("authorize hooks api key: %w", err)
 	}
-	if !isAgentActor(ctx) {
-		return ctx, nil
-	}
-
-	switch schema.Name {
-	case constants.KeySecurityScheme:
-		// Agent-principal keys may only reach the ingestion methods.
-		switch method, _ := ctx.Value(goa.MethodKey).(string); method {
-		case "cursor", "codex", "logs", "metrics":
-		default:
-			return ctx, oops.C(oops.CodeForbidden)
-		}
-	case constants.ProjectSlugSecuritySchema:
-		// Every method an agent key reaches pairs the key with this scheme, so
-		// the project-scoped hooks check runs here, once the project resolves.
-		if err := s.requireAgentHooksIngest(ctx); err != nil {
-			return ctx, err
-		}
+	// Agent-principal keys may only reach the ingestion methods.
+	if schema.Name == constants.KeySecurityScheme && isAgentActor(ctx) && !isAgentIngestMethod(ctx) {
+		return ctx, oops.C(oops.CodeForbidden)
 	}
 	return ctx, nil
+}
+
+// isAgentIngestMethod reports whether the Goa method on ctx ingests events,
+// the only hooks methods an agent actor may call through Goa security. The
+// claude and ingest methods authenticate inside their handlers instead.
+func isAgentIngestMethod(ctx context.Context) bool {
+	switch method, _ := ctx.Value(goa.MethodKey).(string); method {
+	case "cursor", "codex", "logs", "metrics":
+		return true
+	default:
+		return false
+	}
 }
 
 // JWTAuth admits a device-agent token on the ingestion methods; the project step
@@ -398,9 +418,7 @@ func (s *Service) JWTAuth(ctx context.Context, token string, _ *security.JWTSche
 		refusal := oops.E(oops.CodeUnauthorized, nil, "this deployment does not accept device-agent tokens")
 		return deviceagenttoken.WithAuthFailure(ctx, refusal), refusal
 	}
-	switch method, _ := ctx.Value(goa.MethodKey).(string); method {
-	case "cursor", "codex", "logs", "metrics":
-	default:
+	if !isAgentIngestMethod(ctx) {
 		return ctx, oops.C(oops.CodeForbidden)
 	}
 
@@ -424,14 +442,11 @@ func (s *Service) authorizeWorkloadProject(ctx context.Context, key string, sche
 		return deviceagenttoken.WithAuthFailure(ctx, err), err
 	}
 
-	authorized, err := s.auth.Authorize(ctx, key, schema)
-	if err != nil {
-		err = fmt.Errorf("authorize workload hooks project: %w", err)
-		return deviceagenttoken.WithAuthFailure(ctx, err), err
-	}
 	// The workload stays the actor; attribution, spend and session scoping read
 	// the agent it acts for through deviceagenttoken.EffectiveAgent.
-	if err := s.requireAgentHooksIngest(authorized); err != nil {
+	authorized, err := s.authorizeHooksProject(ctx, key, schema)
+	if err != nil {
+		err = fmt.Errorf("authorize workload hooks project: %w", err)
 		return deviceagenttoken.WithAuthFailure(ctx, err), err
 	}
 	return authorized, nil
@@ -441,7 +456,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	server := srv.New(endpoints, mux, newHooksRequestDecoder(service.logger), goahttp.ResponseEncoder, nil, nil)
+	server := srv.New(endpoints, mux, newHooksRequestDecoder(service.logger), goahttp.ResponseEncoder, nil, hooksErrorFormatter)
 	// Only these methods accept device-agent tokens.
 	server.Cursor = deviceagenttoken.BearerChallenge(server.Cursor)
 	server.Codex = deviceagenttoken.BearerChallenge(server.Codex)

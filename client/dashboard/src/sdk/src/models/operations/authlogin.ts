@@ -29,6 +29,30 @@ export type AuthLoginRequest = {
    * Opaque, one-time organization support handoff. Never included in OAuth state.
    */
   supportHandoff?: string | undefined;
+  /**
+   * Optional sign-up attribution: UTM source.
+   */
+  utmSource?: string | undefined;
+  /**
+   * Optional sign-up attribution: UTM medium.
+   */
+  utmMedium?: string | undefined;
+  /**
+   * Optional sign-up attribution: UTM campaign.
+   */
+  utmCampaign?: string | undefined;
+  /**
+   * Optional sign-up attribution: UTM term.
+   */
+  utmTerm?: string | undefined;
+  /**
+   * Optional sign-up attribution: UTM content.
+   */
+  utmContent?: string | undefined;
+  /**
+   * Optional sign-up attribution: the browser's product analytics session id.
+   */
+  analyticsSessionId?: string | undefined;
 };
 
 export type AuthLoginResponse = {
@@ -42,6 +66,12 @@ export type AuthLoginRequest$Outbound = {
   partner_code?: string | undefined;
   email?: string | undefined;
   support_handoff?: string | undefined;
+  utm_source?: string | undefined;
+  utm_medium?: string | undefined;
+  utm_campaign?: string | undefined;
+  utm_term?: string | undefined;
+  utm_content?: string | undefined;
+  analytics_session_id?: string | undefined;
 };
 
 /** @internal */
@@ -55,12 +85,24 @@ export const AuthLoginRequest$outboundSchema: z.ZodMiniType<
     partnerCode: z.optional(z.string()),
     email: z.optional(z.string()),
     supportHandoff: z.optional(z.string()),
+    utmSource: z.optional(z.string()),
+    utmMedium: z.optional(z.string()),
+    utmCampaign: z.optional(z.string()),
+    utmTerm: z.optional(z.string()),
+    utmContent: z.optional(z.string()),
+    analyticsSessionId: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       orgName: "org_name",
       partnerCode: "partner_code",
       supportHandoff: "support_handoff",
+      utmSource: "utm_source",
+      utmMedium: "utm_medium",
+      utmCampaign: "utm_campaign",
+      utmTerm: "utm_term",
+      utmContent: "utm_content",
+      analyticsSessionId: "analytics_session_id",
     });
   }),
 );

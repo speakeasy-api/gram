@@ -1,22 +1,17 @@
 import { useRoutes } from "@/routes";
 import { useProject } from "@/contexts/Auth";
-import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
 import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { useQuery } from "@tanstack/react-query";
 import { serializeFilters } from "@/pages/logs/log-filter-url";
 import { Operator } from "@gram/client/models/components/logfilter";
-import { PluginStatusBanner } from "@/pages/mcp/overview/PluginStatusBanner";
 import { Stack } from "@/components/ui/Stack";
 import {
   type HostedServerRef,
   MCPOverviewTab,
 } from "@/pages/mcp/overview/MCPOverviewTab";
-import {
-  isCanonicalHostedWrapper,
-  standsInForToolset,
-} from "@/pages/mcp/x/MCPServerDetailsRouting";
+import { standsInForToolset } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { TunneledMcpConnectionsPanel } from "./TunneledMcpConnectionsPanel";
 import { UnproxiedMcpOverviewTab } from "./UnproxiedMcpOverviewTab";
@@ -37,12 +32,11 @@ export function OverviewTab({
   const routes = useRoutes();
   const client = useGramContext();
   const project = useProject();
-  const canViewToolLogs = useCanViewToolLogs();
   // Tool Logs is empty when the organization does not record logs, so the
   // tunnel view links to it only when it can show something. Tool Logs' own
-  // search answers 404 in that case and is authorized for the same log:read
-  // audience as the link, unlike the organization's feature settings. A
-  // one-minute, one-row search keeps the probe cheap.
+  // search answers 404 in that case and is open to every member, unlike the
+  // organization's feature settings. A one-minute, one-row search keeps the
+  // probe cheap.
   const toolLogsProbe = useQuery({
     queryKey: ["tool-logs-available", project.id],
     queryFn: () => {
@@ -57,19 +51,16 @@ export function OverviewTab({
         }),
       );
     },
-    enabled: canViewToolLogs && !!mcpServer.tunneledMcpServerId,
+    enabled: !!mcpServer.tunneledMcpServerId,
     staleTime: 5 * 60_000,
     retry: false,
     throwOnError: false,
   });
-  const toolLogsAvailable = canViewToolLogs && toolLogsProbe.isSuccess;
+  const toolLogsAvailable = toolLogsProbe.isSuccess;
   if (mcpServer.unproxiedMcpServerId) {
     return (
       <UnproxiedMcpOverviewTab
         unproxiedMcpServerId={mcpServer.unproxiedMcpServerId}
-        mcpServerId={mcpServer.id}
-        mcpServerSlug={mcpServer.slug ?? ""}
-        mcpServerName={mcpServer.name ?? "MCP Server"}
       />
     );
   }
@@ -96,24 +87,11 @@ export function OverviewTab({
   const tunneled = !!mcpServer.tunneledMcpServerId;
   // The usage dashboard is keyed by slug; a tunneled server without one still
   // gets its tunnel status.
-  // Plugin entries name a non-canonical host by its own id; only the canonical wrapper shares the toolset's.
-  const pluginServer: HostedServerRef =
-    hostedToolset && !isCanonicalHostedWrapper(mcpServer)
-      ? {
-          kind: "mcp-server",
-          id: mcpServer.id,
-          slug: mcpServer.slug ?? "",
-          name: mcpServer.name ?? "MCP Server",
-        }
-      : server;
   const usage = hostedToolset ? (
-    <MCPOverviewTab server={server} pluginServer={pluginServer} />
+    <MCPOverviewTab server={server} />
   ) : mcpServer.slug ? (
     <MCPOverviewTab
       server={server}
-      // For tunneled servers the marketplace banner sits above the tunnel
-      // status, so the usage dashboard must not show it a second time.
-      showPluginBanner={!tunneled}
       // Tool Logs lists no tunneled servers as filter options yet.
       logsTarget={tunneled ? null : { type: "mcp_server", id: mcpServer.id }}
     />
@@ -134,7 +112,6 @@ export function OverviewTab({
     : undefined;
   return (
     <Stack gap={6}>
-      <PluginStatusBanner server={server} />
       <TunneledMcpConnectionsPanel
         tunneledMcpServerId={mcpServer.tunneledMcpServerId}
         agentSetupHref={agentSetupHref}

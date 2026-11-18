@@ -39,10 +39,13 @@ type Client struct {
 	UnshareEndpoint                goa.Endpoint
 	GetSharedEndpoint              goa.Endpoint
 	ListDistributionsEndpoint      goa.Endpoint
+	LinkEndpoint                   goa.Endpoint
+	UnlinkEndpoint                 goa.Endpoint
+	ListLinksEndpoint              goa.Endpoint
 }
 
 // NewClient initializes a "skills" service client given the endpoints.
-func NewClient(create, addVersion, restoreVersion, update, list, listTags, listSuggestions, listFeedback, triggerSuggestion, approveSuggestion, dismissSuggestion, listSuggestionFeedback, approveAllSuggestions, get, listUnknownActivations, listVersions, archive, distribute, undistribute, share, unshare, getShared, listDistributions goa.Endpoint) *Client {
+func NewClient(create, addVersion, restoreVersion, update, list, listTags, listSuggestions, listFeedback, triggerSuggestion, approveSuggestion, dismissSuggestion, listSuggestionFeedback, approveAllSuggestions, get, listUnknownActivations, listVersions, archive, distribute, undistribute, share, unshare, getShared, listDistributions, link, unlink, listLinks goa.Endpoint) *Client {
 	return &Client{
 		CreateEndpoint:                 create,
 		AddVersionEndpoint:             addVersion,
@@ -67,6 +70,9 @@ func NewClient(create, addVersion, restoreVersion, update, list, listTags, listS
 		UnshareEndpoint:                unshare,
 		GetSharedEndpoint:              getShared,
 		ListDistributionsEndpoint:      listDistributions,
+		LinkEndpoint:                   link,
+		UnlinkEndpoint:                 unlink,
+		ListLinksEndpoint:              listLinks,
 	}
 }
 
@@ -565,4 +571,66 @@ func (c *Client) ListDistributions(ctx context.Context, p *ListDistributionsPayl
 		return
 	}
 	return ires.(*ListSkillDistributionsResult), nil
+}
+
+// Link calls the "link" endpoint of the "skills" service.
+// Link may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) Link(ctx context.Context, p *LinkPayload) (res *types.SkillLink, err error) {
+	var ires any
+	ires, err = c.LinkEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.SkillLink), nil
+}
+
+// Unlink calls the "unlink" endpoint of the "skills" service.
+// Unlink may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) Unlink(ctx context.Context, p *UnlinkPayload) (err error) {
+	_, err = c.UnlinkEndpoint(ctx, p)
+	return
+}
+
+// ListLinks calls the "listLinks" endpoint of the "skills" service.
+// ListLinks may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListLinks(ctx context.Context, p *ListLinksPayload) (res *ListSkillLinksResult, err error) {
+	var ires any
+	ires, err = c.ListLinksEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListSkillLinksResult), nil
 }

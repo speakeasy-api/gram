@@ -1,6 +1,7 @@
 import { StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { AlertTriangle, Check, Minus } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { flushSync } from "react-dom";
 
 import {
   ANNOTATION_OPTIONS,
@@ -216,7 +217,46 @@ function initialAccessMode(
   return gateway ? "cached" : "all";
 }
 
-export function ConsentToolsApp({
+function selectedAuthClient(formId: string): string {
+  for (const input of document.querySelectorAll<HTMLInputElement>(
+    'input[name="auth_client"]',
+  )) {
+    if (
+      (input.form?.id === formId || input.getAttribute("form") === formId) &&
+      (input.type === "hidden" || (input.type === "radio" && input.checked))
+    )
+      return input.value;
+  }
+  return "";
+}
+
+export function ConsentToolsApp(props: ConsentToolsAppProps): JSX.Element {
+  const [authClient, setAuthClient] = useState(() =>
+    props.gateway ? "" : selectedAuthClient(props.formId),
+  );
+  useLayoutEffect(() => {
+    if (props.gateway) return;
+    const onChange = (event: Event) => {
+      const input = event.target;
+      if (!(input instanceof HTMLInputElement) || input.name !== "auth_client")
+        return;
+      // The controls live outside React. Commit the reset before another
+      // native listener can submit a snapshot captured for the old identity.
+      flushSync(() => setAuthClient(selectedAuthClient(props.formId)));
+    };
+    document.addEventListener("change", onChange, true);
+    return () => document.removeEventListener("change", onChange, true);
+  }, [props.formId, props.gateway]);
+  return (
+    <ConsentToolsSelection
+      key={authClient}
+      {...props}
+      authClient={authClient}
+    />
+  );
+}
+
+function ConsentToolsSelection({
   toolsUrl,
   state,
   csrfToken,
@@ -228,7 +268,8 @@ export function ConsentToolsApp({
   inventoryDeferred,
   serverName,
   prefill,
-}: ConsentToolsAppProps): JSX.Element {
+  authClient,
+}: ConsentToolsAppProps & { authClient: string }): JSX.Element {
   const [loadPhase, setPhase] = useState<ConsentPhase>({ name: "loading" });
   const [attemptID, setAttemptID] = useState(
     () => gatewayInventory?.attempt ?? crypto.randomUUID(),
@@ -248,6 +289,7 @@ export function ConsentToolsApp({
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     setPhase({ name: "loading" });
     const load = async () => {
       let inventory: ConsentInventory;
@@ -261,6 +303,8 @@ export function ConsentToolsApp({
           state,
           csrfToken,
           attemptID,
+          controller.signal,
+          authClient,
         );
       }
       if (cancelled) return;
@@ -309,8 +353,10 @@ export function ConsentToolsApp({
     });
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [
+    authClient,
     attemptID,
     toolsUrl,
     state,

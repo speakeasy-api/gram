@@ -13,7 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// MandatoryPolicySource names the policy a mandatory decision evaluated.
+// MandatoryPolicySource names the policy or public visibility admission behind a mandatory decision.
 type MandatoryPolicySource string
 
 const (
@@ -46,8 +46,12 @@ const (
 	MandatoryDenyReasonUnauthenticated    MandatoryDenyReason = "unauthenticated"
 )
 
-// MandatoryDecision is the outcome of a mandatory check. Allowed is true only
-// when a real policy was evaluated and allowed every check.
+// MandatoryDecision is the outcome of a mandatory check. Allowed is true when
+// a policy allowed every check, or DecideServerAdmission or
+// DecideAuthClientAdmission explicitly admitted an anonymous caller to a public
+// server or to the auth client it resolved. Source distinguishes policy
+// evaluation from public visibility admission, which grants only mcp:connect
+// and mcp:auth on that server.
 type MandatoryDecision struct {
 	Allowed bool
 	Source  MandatoryPolicySource
@@ -76,10 +80,12 @@ const MandatoryDenyReasonOrganizationMismatch MandatoryDenyReason = "organizatio
 // MandatoryAuthorization is a caller's admitted mandatory policy, prepared
 // once per request so several checks share one admission.
 type MandatoryAuthorization struct {
-	organizationID string
-	caller         MandatoryCaller
-	principalID    string
-	source         MandatoryPolicySource
+	// publicAnonymous distinguishes absent identity from malformed credential context.
+	publicAnonymous bool
+	organizationID  string
+	caller          MandatoryCaller
+	principalID     string
+	source          MandatoryPolicySource
 	// decided is a decision admission already reached for every check.
 	decided       *MandatoryDecision
 	authorization grantAuthorization
@@ -127,6 +133,7 @@ func (e *Engine) AuthorizeMandatory(ctx context.Context, checks ...Check) (Manda
 // change ctx.
 func (e *Engine) PrepareMandatory(ctx context.Context) (MandatoryAuthorization, error) {
 	m := MandatoryAuthorization{
+		publicAnonymous: false,
 		organizationID:  "",
 		caller:          MandatoryCallerAnonymous,
 		principalID:     "",
@@ -138,6 +145,10 @@ func (e *Engine) PrepareMandatory(ctx context.Context) (MandatoryAuthorization, 
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+		_, hasMode := contextvalues.APIKeyAuthorization(ctx)
+		_, hasCredential := contextvalues.PrincipalCredentialAuthorization(ctx)
+		_, hasActor := contextvalues.AuthenticatedActor(ctx)
+		m.publicAnonymous = authCtx == nil && !hasMode && !hasCredential && !hasActor
 		return m.decide(MandatoryPolicySourceNone, MandatoryDenyReasonUnauthenticated), nil
 	}
 	m.organizationID = authCtx.ActiveOrganizationID
@@ -201,6 +212,73 @@ func (m MandatoryAuthorization) decide(source MandatoryPolicySource, reason Mand
 	decision := denyMandatory(source, reason)
 	m.decided = &decision
 	return m
+}
+
+// MandatoryServerVisibility is the visibility a server is admitted under.
+// Anything other than MandatoryServerPublic is decided as private.
+type MandatoryServerVisibility string
+
+const (
+	MandatoryServerPrivate MandatoryServerVisibility = "private"
+	MandatoryServerPublic  MandatoryServerVisibility = "public"
+)
+
+// MandatoryPolicySourceVisibility is a public server admitting a caller that
+// presents no credential, to the server and to the auth client it resolved.
+// It is not a policy and grants nothing else.
+const MandatoryPolicySourceVisibility MandatoryPolicySource = "visibility"
+
+// DecideServerAdmission decides mcp:connect on a server in organizationID
+// under its visibility. It adds explicit public admission to mandatory policy evaluation and does
+// no I/O. The shadow uses this boundary; legacy enforcement is unchanged.
+//
+// A public server admits a caller with no credential: public access needs no
+// policy. Every caller that presents a credential is still decided by its
+// policy exactly as Decide does, so a credential from another organization is
+// never authority here and an inactive or out-of-limits credential stays
+// denied. Private servers are decided by Decide alone. An mcp:auth check is
+// refused here; DecideAuthClientAdmission decides those.
+func (m MandatoryAuthorization) DecideServerAdmission(organizationID string, visibility MandatoryServerVisibility, connect Check) (MandatoryDecision, error) {
+	if connect.Scope != ScopeMCPConnect {
+		return MandatoryDecision{}, fmt.Errorf("server admission decides %s, not %s", ScopeMCPConnect, connect.Scope)
+	}
+	if decision, done, err := validateMandatoryChecks([]Check{connect}); done || err != nil {
+		return decision, err
+	}
+	if m.admittedByVisibility(visibility) {
+		return visibilityAdmission(), nil
+	}
+	return m.Decide(organizationID, connect)
+}
+
+// DecideAuthClientAdmission decides mcp:auth for using an auth client a server
+// in organizationID resolved, under the server's visibility. It does no I/O.
+//
+// A public server admits a caller with no credential to the client it
+// resolved for that caller, as it admits the caller to the server: an
+// anonymous caller can reach only what public access already serves it, such
+// as the personal connection it made itself. Such a caller names nobody a
+// check could carry, so its admission does not read the check. Every caller
+// that presents a credential, and every caller of a private server, is
+// decided by Decide.
+func (m MandatoryAuthorization) DecideAuthClientAdmission(organizationID string, visibility MandatoryServerVisibility, use Check) (MandatoryDecision, error) {
+	if use.Scope != ScopeMCPAuth {
+		return MandatoryDecision{}, fmt.Errorf("auth client admission decides %s, not %s", ScopeMCPAuth, use.Scope)
+	}
+	if m.admittedByVisibility(visibility) {
+		return visibilityAdmission(), nil
+	}
+	return m.Decide(organizationID, use)
+}
+
+// admittedByVisibility reports whether visibility alone admits the caller:
+// an anonymous caller that presented no credential, on a public server.
+func (m MandatoryAuthorization) admittedByVisibility(visibility MandatoryServerVisibility) bool {
+	return visibility == MandatoryServerPublic && m.publicAnonymous && m.caller == MandatoryCallerAnonymous
+}
+
+func visibilityAdmission() MandatoryDecision {
+	return MandatoryDecision{Allowed: true, Source: MandatoryPolicySourceVisibility, Reason: MandatoryDenyReasonNone}
 }
 
 // Decide evaluates checks on a server in organizationID. It does no I/O.

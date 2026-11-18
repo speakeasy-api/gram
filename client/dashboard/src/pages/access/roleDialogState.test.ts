@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from "vitest";
 import {
   visiblePermissionCount,
@@ -388,6 +389,19 @@ function sel(overrides: Partial<Selector> = {}): Selector {
 // --- computeRuleLabel ---
 
 describe("computeRuleLabel", () => {
+  it("counts named servers that carry their project as servers", () => {
+    expect(
+      computeRuleLabel(
+        [
+          sel({ resourceId: "srv-1", projectId: "p1" }),
+          sel({ resourceId: "srv-2", projectId: "p1" }),
+        ],
+        "mcp",
+        projects,
+      ),
+    ).toBe("2 servers");
+  });
+
   it("null selectors (mcp) → All servers", () => {
     expect(computeRuleLabel(null, "mcp", projects)).toBe("All servers");
   });

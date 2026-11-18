@@ -661,7 +661,7 @@ func TestRun_EMABindingsAcrossServersAreOneClient(t *testing.T) {
 	clientID, issuerID := f.emaClient()
 	resource := "https://mcp.vendor.example.com/mcp"
 	first := f.serverAt(resource, usi)
-	second := f.serverAt(resource+"/", otherUSI)
+	second := f.serverAt(resource, otherUSI)
 	f.binding(usi, issuerID, clientID, resource, []string{"read", "write"})
 	f.binding(otherUSI, issuerID, clientID, resource, []string{"write", "read"})
 
@@ -756,20 +756,22 @@ func TestRun_EMAMixedCaseScopesAreRecorded(t *testing.T) {
 	require.Empty(t, results(rerun, KindEMA, OutcomeSkippedRace))
 }
 
-func TestRun_EMAResourceVariantsAreAmbiguous(t *testing.T) {
+func TestRun_EMAResourceVariantsStayDistinct(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	clientID, issuerID := f.emaClient()
 	resource := "https://mcp.vendor.example.com/mcp"
 	usi, otherUSI := f.userSessionIssuer(), f.userSessionIssuer()
-	f.serverAt(resource, usi)
+	server := f.serverAt(resource, usi)
+	otherServer := f.serverAt(resource+"/", otherUSI)
 	f.binding(usi, issuerID, clientID, resource, []string{})
 	f.binding(otherUSI, issuerID, clientID, resource+"/", []string{})
 
 	report := f.run(true)
-	ambiguous := results(report, KindEMA, OutcomeAmbiguous)
-	require.Len(t, ambiguous, 1)
-	require.Equal(t, ReasonResourceVariants, ambiguous[0].Reason)
+	require.Empty(t, results(report, KindEMA, OutcomeAmbiguous))
+	require.Len(t, f.live(TypeEMA), 2)
+	require.Equal(t, []uuid.UUID{EMAClientID(f.orgID, issuerID, clientID, resource)}, f.links(server))
+	require.Equal(t, []uuid.UUID{EMAClientID(f.orgID, issuerID, clientID, resource+"/")}, f.links(otherServer))
 }
 
 func TestRun_EMABindingReachingNoServerIsNotMatched(t *testing.T) {
@@ -802,7 +804,7 @@ func TestRun_EMAMatchesAPersistedProtectedResource(t *testing.T) {
 	require.Equal(t, []uuid.UUID{ema[0].ID}, f.links(server))
 }
 
-func TestRun_EMAMatchesATunneledServerUnderItsOwnIssuer(t *testing.T) {
+func TestRun_EMAMatchesATunneledServerByItsAssociationProvider(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	usi := f.userSessionIssuer()
@@ -820,15 +822,21 @@ func TestRun_EMAMatchesATunneledServerUnderItsOwnIssuer(t *testing.T) {
 	require.NoError(t, f.q.SetServerUserSessionIssuerFixture(t.Context(), SetServerUserSessionIssuerFixtureParams{UserSessionIssuerID: uuid.NullUUID{UUID: usi, Valid: true}, ID: serverID}))
 	f.binding(usi, issuerID, clientID, resource, []string{})
 
-	// Without its own derived issuer the tunneled server is not reached.
+	// Without an association naming the binding's provider the tunneled
+	// server is not reached, whatever its column says.
 	report := f.run(false)
 	require.Len(t, results(report, KindEMA, OutcomeAmbiguous), 1)
-
 	require.NoError(t, f.q.SetServerRemoteSessionIssuerFixture(t.Context(), SetServerRemoteSessionIssuerFixtureParams{RemoteSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true}, ID: serverID}))
+	report = f.run(false)
+	require.Len(t, results(report, KindEMA, OutcomeAmbiguous), 1)
+
+	// The association also backfills the server's own OAuth client beside
+	// the EMA client.
+	f.associate(serverID, clientID)
 	f.run(true)
 	ema := f.live(TypeEMA)
 	require.Len(t, ema, 1)
-	require.Equal(t, []uuid.UUID{ema[0].ID}, f.links(serverID))
+	require.Contains(t, f.links(serverID), ema[0].ID)
 }
 
 func TestRun_EMAScopesFollowTheBindings(t *testing.T) {
@@ -1004,37 +1012,6 @@ func TestRun_AFailedPhaseLeavesTheOthers(t *testing.T) { //nolint:paralleltest /
 	require.Contains(t, f.links(server), staticID)
 }
 
-func TestRun_MarksHeaderAndEMAServersAsNeedingUpstreamAuth(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	source := f.source()
-	headerServer := f.serverOn(source)
-	decidedNone := f.serverOn(source)
-	f.staticHeader(source, "Authorization")
-	require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(t.Context(), SetRequiresUpstreamAuthFixtureParams{RequiresUpstreamAuth: pgtype.Bool{Bool: false, Valid: true}, ID: decidedNone}))
-
-	usi := f.userSessionIssuer()
-	clientID, issuerID := f.emaClient()
-	resource := "https://mcp.vendor.example.com/mcp"
-	emaServer := f.serverAt(resource, usi)
-	f.binding(usi, issuerID, clientID, resource, []string{})
-
-	dry := f.run(false)
-	require.Equal(t, 2, dry.PendingMarkedServers, "the explicitly undecided header and EMA servers")
-	applied := f.run(true)
-	require.Equal(t, 2, applied.ServersMarked)
-
-	for _, server := range []uuid.UUID{headerServer, emaServer} {
-		got, err := f.q.GetRequiresUpstreamAuthFixture(t.Context(), server)
-		require.NoError(t, err)
-		require.True(t, got.Valid && got.Bool, "a server offering a backfilled client needs upstream auth")
-	}
-	got, err := f.q.GetRequiresUpstreamAuthFixture(t.Context(), decidedNone)
-	require.NoError(t, err)
-	require.True(t, got.Valid && !got.Bool, "an explicit decision is never overwritten")
-	require.Zero(t, f.run(true).ServersMarked)
-}
-
 func TestRun_NeverCopiesCredentialHeadersOntoAnOAuthClientSharedAcrossSources(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
@@ -1084,7 +1061,7 @@ func TestRun_EMASameOriginServerItCannotConfirmIsAWarning(t *testing.T) {
 	require.Equal(t, 1, report.ByKind[KindEMA].Warnings)
 	require.Zero(t, report.ByKind[KindEMA].Unresolved)
 	dry := f.run(false)
-	require.Zero(t, dry.PendingClients+dry.PendingLinks+dry.PendingHeaders+dry.PendingRetiredClients+dry.PendingRetiredLinks+dry.PendingMarkedServers)
+	require.Zero(t, dry.PendingClients+dry.PendingLinks+dry.PendingHeaders+dry.PendingRetiredClients+dry.PendingRetiredLinks)
 }
 
 func TestRun_RetiresCopiesOnceAnOAuthClientIsSharedAcrossSources(t *testing.T) {
@@ -1234,12 +1211,12 @@ func TestReconcileDerived_KeepsARacedClientsLinks(t *testing.T) {
 	want := newExpected()
 	want.race(clientID)
 	report := newReport(true)
-	require.NoError(t, reconcileDerived(t.Context(), f.q, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0}, &report, want, map[Kind]bool{}, startedAt))
+	require.NoError(t, reconcileDerived(t.Context(), f.q, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0}, &report, want, make(map[Kind]bool), startedAt))
 	require.Zero(t, report.ClientsRetired+report.LinksRetired+report.PendingRetiredLinks)
 	require.Equal(t, []uuid.UUID{clientID}, f.links(server), "a race never retires the client's links")
 
 	report = newReport(true)
-	require.NoError(t, reconcileDerived(t.Context(), f.q, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0}, &report, newExpected(), map[Kind]bool{}, startedAt))
+	require.NoError(t, reconcileDerived(t.Context(), f.q, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0}, &report, newExpected(), make(map[Kind]bool), startedAt))
 	require.Equal(t, 1, report.LinksRetired, "without the race the link is retired")
 }
 
@@ -1358,7 +1335,7 @@ func TestRun_EMAHonorsThePersistedProtectedResource(t *testing.T) {
 	require.Empty(t, f.live(TypeEMA))
 	require.Empty(t, f.links(refused))
 	require.Empty(t, f.links(renamed))
-	reasons := map[Reason]uuid.UUID{}
+	reasons := make(map[Reason]uuid.UUID)
 	for _, r := range results(report, KindEMA, OutcomeAmbiguous) {
 		reasons[r.Reason] = r.MCPServerID
 	}
@@ -1436,39 +1413,6 @@ func TestRun_DryRunModelsReviving(t *testing.T) {
 	require.Equal(t, dry.ByKind[KindHeader].PendingClients, applied.ByKind[KindHeader].PendingClients)
 	require.Zero(t, applied.LinksRetired)
 	require.Equal(t, []uuid.UUID{clientID}, f.links(server))
-}
-
-func TestRun_MarksOnlyServersWhoseHeaderOrEMAEvidenceHolds(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	ctx := t.Context()
-	source := f.source()
-	headerServer := f.serverOn(source)
-	auth := f.staticHeader(source, "Authorization")
-	usi := f.userSessionIssuer()
-	clientID, issuerID := f.emaClient()
-	resource := "https://mcp.vendor.example.com/mcp"
-	emaServer := f.serverAt(resource, usi)
-	binding := f.binding(usi, issuerID, clientID, resource, []string{})
-	f.run(true)
-
-	servers := []uuid.UUID{headerServer, emaServer}
-	undecided := pgtype.Bool{Bool: false, Valid: false}
-	for _, server := range servers {
-		require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(ctx, SetRequiresUpstreamAuthFixtureParams{RequiresUpstreamAuth: undecided, ID: server}))
-	}
-	listed, err := f.q.ListUndecidedUpstreamAuthServers(ctx, ListUndecidedUpstreamAuthServersParams{OrganizationID: f.orgID, McpServerIds: servers})
-	require.NoError(t, err)
-	require.ElementsMatch(t, servers, listed, "both still hold their evidence")
-
-	require.NoError(t, f.q.SoftDeleteRemoteHeaderFixture(ctx, auth))
-	require.NoError(t, f.q.DeleteEMABindingFixture(ctx, binding))
-	listed, err = f.q.ListUndecidedUpstreamAuthServers(ctx, ListUndecidedUpstreamAuthServersParams{OrganizationID: f.orgID, McpServerIds: servers})
-	require.NoError(t, err)
-	require.Empty(t, listed)
-	marked, err := f.q.MarkServersRequiringUpstreamAuth(ctx, MarkServersRequiringUpstreamAuthParams{OrganizationID: f.orgID, McpServerIds: servers})
-	require.NoError(t, err)
-	require.Empty(t, marked, "a link whose evidence is gone never marks its server")
 }
 
 func TestRun_AnAssociationOutOfReachLeavesCredentialHeadersTheirOwnClient(t *testing.T) {

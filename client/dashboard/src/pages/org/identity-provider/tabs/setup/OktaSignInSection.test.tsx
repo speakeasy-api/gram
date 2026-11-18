@@ -220,7 +220,9 @@ describe("OktaSignInSection", () => {
     const { rerenderSection: again } = renderSection();
     expect(state.fetchClientsPage).toHaveBeenCalledTimes(1);
     expect(state.fetchIssuersPage).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("Loading sign-in settings…")).toBeTruthy();
+    expect(
+      screen.getByRole("status", { name: "Loading sign-in settings" }),
+    ).toBeTruthy();
 
     // In flight: no duplicate fetch.
     again();
@@ -231,12 +233,16 @@ describe("OktaSignInSection", () => {
     again();
     expect(state.fetchClientsPage).toHaveBeenCalledTimes(1);
     expect(state.fetchIssuersPage).toHaveBeenCalledTimes(2);
-    expect(screen.getByText("Loading sign-in settings…")).toBeTruthy();
+    expect(
+      screen.getByRole("status", { name: "Loading sign-in settings" }),
+    ).toBeTruthy();
 
     state.issuers = loaded(pages);
     again();
     expect(state.fetchIssuersPage).toHaveBeenCalledTimes(2);
-    expect(screen.queryByText("Loading sign-in settings…")).toBeNull();
+    expect(
+      screen.queryByRole("status", { name: "Loading sign-in settings" }),
+    ).toBeNull();
     for (const slug of ["first", "second", "third"]) {
       expect(screen.getByText(slug)).toBeTruthy();
     }
@@ -289,7 +295,9 @@ describe("OktaSignInSection", () => {
     };
     renderSection();
     expect(state.fetchIssuersPage).not.toHaveBeenCalled();
-    expect(screen.queryByText("Loading sign-in settings…")).toBeNull();
+    expect(
+      screen.queryByRole("status", { name: "Loading sign-in settings" }),
+    ).toBeNull();
     expect(screen.getByText("page two failed")).toBeTruthy();
     expect(setUpButton().disabled).toBe(true);
   });

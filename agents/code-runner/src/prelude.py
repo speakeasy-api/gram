@@ -20,8 +20,14 @@ class _GramTools:
     async def call(self, path, arguments):
         return await _gram_host("call", {"path": path, "arguments": arguments})
 
-    async def servers(self, limit=10, cursor=None):
-        return await _gram_host("servers", {"limit": limit, "cursor": cursor})
+    async def connect(self, server):
+        return await _gram_host("connect", {"server": server})
+
+    async def servers(self, limit=10, cursor=None, server=None, verify=False):
+        return await _gram_host(
+            "servers",
+            {"limit": limit, "cursor": cursor, "server": server, "verify": verify},
+        )
 
 
 tools = _GramTools()

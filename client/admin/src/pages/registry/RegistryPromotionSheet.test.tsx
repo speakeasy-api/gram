@@ -1,8 +1,15 @@
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import {
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { queryOptions, useMutation } from "@tanstack/react-query";
-import { renderWithApp } from "@/test/harness";
+
 import { RegistryPromotionSheet } from "./RegistryPromotionSheet";
+import { renderWithApp } from "@/test/harness";
 
 const api = vi.hoisted(() => ({
   candidate: vi.fn(),
@@ -503,4 +510,164 @@ it("retains reviewed fields and confirmation on an unknown validation failure wi
   expect(api.promote.mock.calls[1]?.[0].request).toEqual(
     api.promote.mock.calls[0]?.[0].request,
   );
+});
+
+it("shows CIMD discovery and hides it when the reviewed endpoint changes", async () => {
+  api.candidate.mockResolvedValue({
+    ...candidate,
+    suggestedMetadata: { ...metadata, authMode: "oauth" },
+    authDiscovery: {
+      supportsDcr: false,
+      supportsCimd: true,
+      authSetup: "cimd",
+      status: "complete",
+    },
+  });
+  await renderWithApp(
+    <RegistryPromotionSheet target={target} onClose={vi.fn<() => void>()} />,
+  );
+  await screen.findByText(
+    "Automatic OAuth setup is available through client ID metadata.",
+  );
+  const section = screen.getByRole("region", { name: "Sign-in setup" });
+  expect(within(section).getByText("Available")).toBeTruthy();
+  expect(within(section).getByText("Not available")).toBeTruthy();
+  fireEvent.change(
+    screen.getByRole("textbox", { name: "Public MCP endpoint" }),
+    { target: { value: "https://different.example.com/mcp" } },
+  );
+  expect(
+    screen.queryByText(
+      "Automatic OAuth setup is available through client ID metadata.",
+    ),
+  ).toBeNull();
+  expect(
+    screen.getByText(
+      /Sign-in options will be checked for the reviewed endpoint/,
+    ),
+  ).toBeTruthy();
+});
+
+it.each([
+  {
+    label: "known auth mode",
+    authMode: "oauth" as const,
+    publicUrl: metadata.publicUrl,
+  },
+  {
+    label: "omitted auth mode",
+    authMode: undefined,
+    publicUrl: metadata.publicUrl,
+  },
+  {
+    label: "omitted endpoint and auth mode",
+    authMode: undefined,
+    publicUrl: undefined,
+  },
+])(
+  "lets staff retry inconclusive discovery without promotion: $label",
+  async ({ authMode, publicUrl }) => {
+    api.candidate.mockResolvedValue({
+      ...candidate,
+      suggestedMetadata: { ...metadata, authMode, publicUrl },
+      authDiscovery: {
+        supportsDcr: false,
+        supportsCimd: false,
+        authSetup: "unknown",
+        status: "unavailable",
+      },
+    });
+    await renderWithApp(
+      <RegistryPromotionSheet target={target} onClose={vi.fn<() => void>()} />,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Recheck sign-in options" }),
+    );
+    await waitFor(() => expect(api.candidate).toHaveBeenCalledTimes(2));
+    expect(
+      await screen.findByText(
+        "Sign-in setup could not be confirmed. This does not mean automatic setup is unsupported.",
+      ),
+    ).toBeDefined();
+    expect(api.promote).not.toHaveBeenCalled();
+  },
+);
+const setupGuides = [
+  { slug: "slack", title: "Slack" },
+  { slug: "box", title: "Box" },
+];
+it("warns without blocking when the slug belongs to another guide and updates as it is edited", async () => {
+  api.candidate.mockResolvedValue({
+    ...candidate,
+    suggestedMetadata: { ...metadata, authMode: "none" },
+    setupGuides,
+    setupGuidesVersion: "v0.3.9",
+  });
+  await renderWithApp(
+    <RegistryPromotionSheet target={target} onClose={vi.fn<() => void>()} />,
+  );
+  const slug = await screen.findByRole("textbox", {
+    name: "Setup documentation slug",
+  });
+  expect(
+    screen.getByText(/No guide in the setup guides released to Speakeasy/)
+      .textContent,
+  ).toContain("(v0.3.9)");
+  fireEvent.change(slug, { target: { value: "box" } });
+  expect(screen.getByText("Warning:")).toBeTruthy();
+  fireEvent.click(screen.getByRole("checkbox"));
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "Publish catalog entry",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(false);
+  expect(screen.getByText(/already uses this slug/).textContent).toContain(
+    "Box",
+  );
+  expect(
+    screen.getByRole("link", { name: "View guide" }).getAttribute("href"),
+  ).toBe(
+    "https://github.com/speakeasy-api/mcp-setup-docs/tree/main/guides/box",
+  );
+  fireEvent.change(slug, { target: { value: "box-enterprise" } });
+  expect(screen.queryByText(/already uses this slug/)).toBeNull();
+  expect(
+    screen.getByText(/No guide in the setup guides released to Speakeasy/),
+  ).toBeTruthy();
+});
+it("notes an endpoint-matched slug instead of warning, without blocking publication", async () => {
+  api.candidate.mockResolvedValue({
+    ...candidate,
+    suggestedMetadata: { ...metadata, docsSlug: "slack", authMode: "none" },
+    setupGuides,
+    setupGuidesVersion: "v0.3.9",
+    endpointGuideSlug: "slack",
+  });
+  await renderWithApp(
+    <RegistryPromotionSheet target={target} onClose={vi.fn<() => void>()} />,
+  );
+  expect(
+    (await screen.findByText(/guide for this endpoint/)).textContent,
+  ).toContain("Slack");
+  expect(screen.queryByText(/already uses this slug/)).toBeNull();
+  expect(screen.queryByText("Warning:")).toBeNull();
+  fireEvent.click(screen.getByRole("checkbox"));
+  const button = screen.getByRole("button", {
+    name: "Publish catalog entry",
+  }) as HTMLButtonElement;
+  expect(button.disabled).toBe(false);
+});
+it("shows no guide hint when the candidate carries no guide list", async () => {
+  api.candidate.mockResolvedValue({
+    ...candidate,
+    suggestedMetadata: metadata,
+  });
+  await renderWithApp(
+    <RegistryPromotionSheet target={target} onClose={vi.fn<() => void>()} />,
+  );
+  await screen.findByRole("textbox", { name: "Setup documentation slug" });
+  expect(screen.queryByText(/setup guides released to Speakeasy/)).toBeNull();
+  expect(screen.queryByText(/already uses this slug/)).toBeNull();
 });

@@ -40,7 +40,7 @@ func (s *workspaceTestState) SuggestedWorkspaceName(context.Context, string) (st
 	return "Acme", nil
 }
 
-func (s *workspaceTestState) ProvisionWorkspace(_ context.Context, userID, name string) (OrganizationOption, error) {
+func (s *workspaceTestState) ProvisionWorkspace(_ context.Context, userID, name, clientName string) (OrganizationOption, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// Mirrors the auth service, which refuses while an invitation is pending.
@@ -49,7 +49,7 @@ func (s *workspaceTestState) ProvisionWorkspace(_ context.Context, userID, name 
 	}
 	organization := OrganizationOption{ID: "org-new", Name: name}
 	s.organizations = append(s.organizations, organization)
-	s.provisioned = append(s.provisioned, userID+":"+name)
+	s.provisioned = append(s.provisioned, userID+":"+name+":"+clientName)
 	return organization, nil
 }
 
@@ -187,7 +187,7 @@ func TestOAuthHTTPUserWithoutOrganizationCreatesWorkspaceAndContinues(t *testing
 
 	created := postWorkspace(service, url.Values{"state": {state}, "csrf_token": {csrf}, "workspace_name": {"Acme Inc"}})
 	require.Equal(t, http.StatusSeeOther, created.Code)
-	require.Equal(t, []string{"user-1:Acme Inc"}, workspaces.provisioned)
+	require.Equal(t, []string{"user-1:Acme Inc:test client"}, workspaces.provisioned)
 	connectURL, err := url.Parse(created.Header().Get("Location"))
 	require.NoError(t, err)
 	require.Equal(t, "/platform-mcp/connect", connectURL.Path)
@@ -204,7 +204,10 @@ func TestOAuthHTTPUserWithoutOrganizationCreatesWorkspaceAndContinues(t *testing
 	require.Equal(t, http.StatusOK, connect.Code)
 	require.Contains(t, connect.Body.String(), "Acme Inc")
 
-	approve := httptest.NewRequest(http.MethodPost, "/platform-mcp/connect", strings.NewReader(url.Values{"state": {connectState}, "csrf_token": {csrf}, "action": {"approve"}}.Encode()))
+	organizationID := formValue(t, connect.Body.String(), "organization_id")
+	require.Equal(t, "org-new", organizationID)
+
+	approve := httptest.NewRequest(http.MethodPost, "/platform-mcp/connect", strings.NewReader(url.Values{"state": {connectState}, "csrf_token": {csrf}, "organization_id": {organizationID}, "action": {"approve"}}.Encode()))
 	approve.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	approved := httptest.NewRecorder()
 	service.ConnectHandler().ServeHTTP(approved, approve)

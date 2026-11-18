@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { AiScanTarget } from "@gram/client/models/components/aiscantarget.js";
 import { describe, expect, it } from "vitest";
 import { shadowAITargetsInsightsContext } from "./shadow-ai-targets-insights";

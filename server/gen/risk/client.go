@@ -16,125 +16,127 @@ import (
 
 // Client is the "risk" service client.
 type Client struct {
-	CreateRiskPolicyEndpoint               goa.Endpoint
-	ListRiskPoliciesEndpoint               goa.Endpoint
-	ListMCPPlatformToolsetsEndpoint        goa.Endpoint
-	ListRiskPoliciesForMcpServerEndpoint   goa.Endpoint
-	ListBuiltinExclusionsEndpoint          goa.Endpoint
-	GetRiskPolicyEndpoint                  goa.Endpoint
-	UpdateRiskPolicyEndpoint               goa.Endpoint
-	DeleteRiskPolicyEndpoint               goa.Endpoint
-	ListSessionQuarantinesEndpoint         goa.Endpoint
-	ReleaseSessionQuarantineEndpoint       goa.Endpoint
-	ListRiskResultsEndpoint                goa.Endpoint
-	ListRiskResultsForAgentEndpoint        goa.Endpoint
-	UnmaskRiskResultEndpoint               goa.Endpoint
-	RevealRiskResultPayloadEndpoint        goa.Endpoint
-	ListRiskResultsByChatEndpoint          goa.Endpoint
-	MarkRiskResultsFalsePositiveEndpoint   goa.Endpoint
-	UnmarkRiskResultsFalsePositiveEndpoint goa.Endpoint
-	ListDismissedRiskResultsEndpoint       goa.Endpoint
-	GetRiskOverviewEndpoint                goa.Endpoint
-	ListRiskCategoriesEndpoint             goa.Endpoint
-	ListRiskPresetsEndpoint                goa.Endpoint
-	SuggestRiskPolicyEndpoint              goa.Endpoint
-	CompileExprEndpoint                    goa.Endpoint
-	GetRiskUserBreakdownEndpoint           goa.Endpoint
-	GetRiskSignalsEndpoint                 goa.Endpoint
-	GetRiskMcpServerCountsEndpoint         goa.Endpoint
-	GetRiskAnalysisStatusEndpoint          goa.Endpoint
-	CreateRiskPolicyBypassRequestEndpoint  goa.Endpoint
-	AcknowledgeRiskPolicyChallengeEndpoint goa.Endpoint
-	GetRiskPolicyChallengeEndpoint         goa.Endpoint
-	DeclineRiskPolicyChallengeEndpoint     goa.Endpoint
-	GetRiskBlockEndpoint                   goa.Endpoint
-	SubmitRiskBlockFeedbackEndpoint        goa.Endpoint
-	ListRiskPolicyBypassRequestsEndpoint   goa.Endpoint
-	ApproveRiskPolicyBypassRequestEndpoint goa.Endpoint
-	DenyRiskPolicyBypassRequestEndpoint    goa.Endpoint
-	RevokeRiskPolicyBypassRequestEndpoint  goa.Endpoint
-	ListRiskPolicyApprovalsEndpoint        goa.Endpoint
-	GetRiskPolicyApprovalEndpoint          goa.Endpoint
-	DecideRiskPolicyApprovalEndpoint       goa.Endpoint
-	TriggerRiskAnalysisEndpoint            goa.Endpoint
-	CreateCustomDetectionRuleEndpoint      goa.Endpoint
-	ListCustomDetectionRulesEndpoint       goa.Endpoint
-	GetCustomDetectionRuleEndpoint         goa.Endpoint
-	UpdateCustomDetectionRuleEndpoint      goa.Endpoint
-	DeleteCustomDetectionRuleEndpoint      goa.Endpoint
-	ListRiskExclusionsEndpoint             goa.Endpoint
-	CreateRiskExclusionEndpoint            goa.Endpoint
-	UpdateRiskExclusionEndpoint            goa.Endpoint
-	DeleteRiskExclusionEndpoint            goa.Endpoint
-	SuggestCustomDetectionRuleEndpoint     goa.Endpoint
-	SuggestExclusionEndpoint               goa.Endpoint
-	TestDetectionRuleEndpoint              goa.Endpoint
-	EvaluatePromptGuardrailEndpoint        goa.Endpoint
-	SaveRiskEvalReviewEndpoint             goa.Endpoint
-	ListRiskEvalReviewsEndpoint            goa.Endpoint
-	DeleteRiskEvalReviewEndpoint           goa.Endpoint
+	CreateRiskPolicyEndpoint                 goa.Endpoint
+	ListRiskPoliciesEndpoint                 goa.Endpoint
+	ListMCPPlatformToolsetsEndpoint          goa.Endpoint
+	ListRiskPoliciesForMcpServerEndpoint     goa.Endpoint
+	ListBuiltinExclusionsEndpoint            goa.Endpoint
+	GetRiskPolicyEndpoint                    goa.Endpoint
+	UpdateRiskPolicyEndpoint                 goa.Endpoint
+	DeleteRiskPolicyEndpoint                 goa.Endpoint
+	ListSessionQuarantinesEndpoint           goa.Endpoint
+	ReleaseSessionQuarantineEndpoint         goa.Endpoint
+	ListRiskResultsEndpoint                  goa.Endpoint
+	ListRiskResultsForAgentEndpoint          goa.Endpoint
+	UnmaskRiskResultEndpoint                 goa.Endpoint
+	RevealRiskResultPayloadEndpoint          goa.Endpoint
+	ListRiskResultsByChatEndpoint            goa.Endpoint
+	MarkRiskResultsFalsePositiveEndpoint     goa.Endpoint
+	UnmarkRiskResultsFalsePositiveEndpoint   goa.Endpoint
+	ListDismissedRiskResultsEndpoint         goa.Endpoint
+	GetRiskOverviewEndpoint                  goa.Endpoint
+	ListRiskCategoriesEndpoint               goa.Endpoint
+	ListRiskPresetsEndpoint                  goa.Endpoint
+	SuggestRiskPolicyEndpoint                goa.Endpoint
+	CompileExprEndpoint                      goa.Endpoint
+	GetRiskUserBreakdownEndpoint             goa.Endpoint
+	GetRiskSignalsEndpoint                   goa.Endpoint
+	GetRiskMcpServerCountsEndpoint           goa.Endpoint
+	GetRiskAnalysisStatusEndpoint            goa.Endpoint
+	CreateRiskPolicyBypassRequestEndpoint    goa.Endpoint
+	GetRiskPolicyBypassRequestTargetEndpoint goa.Endpoint
+	AcknowledgeRiskPolicyChallengeEndpoint   goa.Endpoint
+	GetRiskPolicyChallengeEndpoint           goa.Endpoint
+	DeclineRiskPolicyChallengeEndpoint       goa.Endpoint
+	GetRiskBlockEndpoint                     goa.Endpoint
+	SubmitRiskBlockFeedbackEndpoint          goa.Endpoint
+	ListRiskPolicyBypassRequestsEndpoint     goa.Endpoint
+	ApproveRiskPolicyBypassRequestEndpoint   goa.Endpoint
+	DenyRiskPolicyBypassRequestEndpoint      goa.Endpoint
+	RevokeRiskPolicyBypassRequestEndpoint    goa.Endpoint
+	ListRiskPolicyApprovalsEndpoint          goa.Endpoint
+	GetRiskPolicyApprovalEndpoint            goa.Endpoint
+	DecideRiskPolicyApprovalEndpoint         goa.Endpoint
+	TriggerRiskAnalysisEndpoint              goa.Endpoint
+	CreateCustomDetectionRuleEndpoint        goa.Endpoint
+	ListCustomDetectionRulesEndpoint         goa.Endpoint
+	GetCustomDetectionRuleEndpoint           goa.Endpoint
+	UpdateCustomDetectionRuleEndpoint        goa.Endpoint
+	DeleteCustomDetectionRuleEndpoint        goa.Endpoint
+	ListRiskExclusionsEndpoint               goa.Endpoint
+	CreateRiskExclusionEndpoint              goa.Endpoint
+	UpdateRiskExclusionEndpoint              goa.Endpoint
+	DeleteRiskExclusionEndpoint              goa.Endpoint
+	SuggestCustomDetectionRuleEndpoint       goa.Endpoint
+	SuggestExclusionEndpoint                 goa.Endpoint
+	TestDetectionRuleEndpoint                goa.Endpoint
+	EvaluatePromptGuardrailEndpoint          goa.Endpoint
+	SaveRiskEvalReviewEndpoint               goa.Endpoint
+	ListRiskEvalReviewsEndpoint              goa.Endpoint
+	DeleteRiskEvalReviewEndpoint             goa.Endpoint
 }
 
 // NewClient initializes a "risk" service client given the endpoints.
-func NewClient(createRiskPolicy, listRiskPolicies, listMCPPlatformToolsets, listRiskPoliciesForMcpServer, listBuiltinExclusions, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listSessionQuarantines, releaseSessionQuarantine, listRiskResults, listRiskResultsForAgent, unmaskRiskResult, revealRiskResultPayload, listRiskResultsByChat, markRiskResultsFalsePositive, unmarkRiskResultsFalsePositive, listDismissedRiskResults, getRiskOverview, listRiskCategories, listRiskPresets, suggestRiskPolicy, compileExpr, getRiskUserBreakdown, getRiskSignals, getRiskMcpServerCounts, getRiskAnalysisStatus, createRiskPolicyBypassRequest, acknowledgeRiskPolicyChallenge, getRiskPolicyChallenge, declineRiskPolicyChallenge, getRiskBlock, submitRiskBlockFeedback, listRiskPolicyBypassRequests, approveRiskPolicyBypassRequest, denyRiskPolicyBypassRequest, revokeRiskPolicyBypassRequest, listRiskPolicyApprovals, getRiskPolicyApproval, decideRiskPolicyApproval, triggerRiskAnalysis, createCustomDetectionRule, listCustomDetectionRules, getCustomDetectionRule, updateCustomDetectionRule, deleteCustomDetectionRule, listRiskExclusions, createRiskExclusion, updateRiskExclusion, deleteRiskExclusion, suggestCustomDetectionRule, suggestExclusion, testDetectionRule, evaluatePromptGuardrail, saveRiskEvalReview, listRiskEvalReviews, deleteRiskEvalReview goa.Endpoint) *Client {
+func NewClient(createRiskPolicy, listRiskPolicies, listMCPPlatformToolsets, listRiskPoliciesForMcpServer, listBuiltinExclusions, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listSessionQuarantines, releaseSessionQuarantine, listRiskResults, listRiskResultsForAgent, unmaskRiskResult, revealRiskResultPayload, listRiskResultsByChat, markRiskResultsFalsePositive, unmarkRiskResultsFalsePositive, listDismissedRiskResults, getRiskOverview, listRiskCategories, listRiskPresets, suggestRiskPolicy, compileExpr, getRiskUserBreakdown, getRiskSignals, getRiskMcpServerCounts, getRiskAnalysisStatus, createRiskPolicyBypassRequest, getRiskPolicyBypassRequestTarget, acknowledgeRiskPolicyChallenge, getRiskPolicyChallenge, declineRiskPolicyChallenge, getRiskBlock, submitRiskBlockFeedback, listRiskPolicyBypassRequests, approveRiskPolicyBypassRequest, denyRiskPolicyBypassRequest, revokeRiskPolicyBypassRequest, listRiskPolicyApprovals, getRiskPolicyApproval, decideRiskPolicyApproval, triggerRiskAnalysis, createCustomDetectionRule, listCustomDetectionRules, getCustomDetectionRule, updateCustomDetectionRule, deleteCustomDetectionRule, listRiskExclusions, createRiskExclusion, updateRiskExclusion, deleteRiskExclusion, suggestCustomDetectionRule, suggestExclusion, testDetectionRule, evaluatePromptGuardrail, saveRiskEvalReview, listRiskEvalReviews, deleteRiskEvalReview goa.Endpoint) *Client {
 	return &Client{
-		CreateRiskPolicyEndpoint:               createRiskPolicy,
-		ListRiskPoliciesEndpoint:               listRiskPolicies,
-		ListMCPPlatformToolsetsEndpoint:        listMCPPlatformToolsets,
-		ListRiskPoliciesForMcpServerEndpoint:   listRiskPoliciesForMcpServer,
-		ListBuiltinExclusionsEndpoint:          listBuiltinExclusions,
-		GetRiskPolicyEndpoint:                  getRiskPolicy,
-		UpdateRiskPolicyEndpoint:               updateRiskPolicy,
-		DeleteRiskPolicyEndpoint:               deleteRiskPolicy,
-		ListSessionQuarantinesEndpoint:         listSessionQuarantines,
-		ReleaseSessionQuarantineEndpoint:       releaseSessionQuarantine,
-		ListRiskResultsEndpoint:                listRiskResults,
-		ListRiskResultsForAgentEndpoint:        listRiskResultsForAgent,
-		UnmaskRiskResultEndpoint:               unmaskRiskResult,
-		RevealRiskResultPayloadEndpoint:        revealRiskResultPayload,
-		ListRiskResultsByChatEndpoint:          listRiskResultsByChat,
-		MarkRiskResultsFalsePositiveEndpoint:   markRiskResultsFalsePositive,
-		UnmarkRiskResultsFalsePositiveEndpoint: unmarkRiskResultsFalsePositive,
-		ListDismissedRiskResultsEndpoint:       listDismissedRiskResults,
-		GetRiskOverviewEndpoint:                getRiskOverview,
-		ListRiskCategoriesEndpoint:             listRiskCategories,
-		ListRiskPresetsEndpoint:                listRiskPresets,
-		SuggestRiskPolicyEndpoint:              suggestRiskPolicy,
-		CompileExprEndpoint:                    compileExpr,
-		GetRiskUserBreakdownEndpoint:           getRiskUserBreakdown,
-		GetRiskSignalsEndpoint:                 getRiskSignals,
-		GetRiskMcpServerCountsEndpoint:         getRiskMcpServerCounts,
-		GetRiskAnalysisStatusEndpoint:          getRiskAnalysisStatus,
-		CreateRiskPolicyBypassRequestEndpoint:  createRiskPolicyBypassRequest,
-		AcknowledgeRiskPolicyChallengeEndpoint: acknowledgeRiskPolicyChallenge,
-		GetRiskPolicyChallengeEndpoint:         getRiskPolicyChallenge,
-		DeclineRiskPolicyChallengeEndpoint:     declineRiskPolicyChallenge,
-		GetRiskBlockEndpoint:                   getRiskBlock,
-		SubmitRiskBlockFeedbackEndpoint:        submitRiskBlockFeedback,
-		ListRiskPolicyBypassRequestsEndpoint:   listRiskPolicyBypassRequests,
-		ApproveRiskPolicyBypassRequestEndpoint: approveRiskPolicyBypassRequest,
-		DenyRiskPolicyBypassRequestEndpoint:    denyRiskPolicyBypassRequest,
-		RevokeRiskPolicyBypassRequestEndpoint:  revokeRiskPolicyBypassRequest,
-		ListRiskPolicyApprovalsEndpoint:        listRiskPolicyApprovals,
-		GetRiskPolicyApprovalEndpoint:          getRiskPolicyApproval,
-		DecideRiskPolicyApprovalEndpoint:       decideRiskPolicyApproval,
-		TriggerRiskAnalysisEndpoint:            triggerRiskAnalysis,
-		CreateCustomDetectionRuleEndpoint:      createCustomDetectionRule,
-		ListCustomDetectionRulesEndpoint:       listCustomDetectionRules,
-		GetCustomDetectionRuleEndpoint:         getCustomDetectionRule,
-		UpdateCustomDetectionRuleEndpoint:      updateCustomDetectionRule,
-		DeleteCustomDetectionRuleEndpoint:      deleteCustomDetectionRule,
-		ListRiskExclusionsEndpoint:             listRiskExclusions,
-		CreateRiskExclusionEndpoint:            createRiskExclusion,
-		UpdateRiskExclusionEndpoint:            updateRiskExclusion,
-		DeleteRiskExclusionEndpoint:            deleteRiskExclusion,
-		SuggestCustomDetectionRuleEndpoint:     suggestCustomDetectionRule,
-		SuggestExclusionEndpoint:               suggestExclusion,
-		TestDetectionRuleEndpoint:              testDetectionRule,
-		EvaluatePromptGuardrailEndpoint:        evaluatePromptGuardrail,
-		SaveRiskEvalReviewEndpoint:             saveRiskEvalReview,
-		ListRiskEvalReviewsEndpoint:            listRiskEvalReviews,
-		DeleteRiskEvalReviewEndpoint:           deleteRiskEvalReview,
+		CreateRiskPolicyEndpoint:                 createRiskPolicy,
+		ListRiskPoliciesEndpoint:                 listRiskPolicies,
+		ListMCPPlatformToolsetsEndpoint:          listMCPPlatformToolsets,
+		ListRiskPoliciesForMcpServerEndpoint:     listRiskPoliciesForMcpServer,
+		ListBuiltinExclusionsEndpoint:            listBuiltinExclusions,
+		GetRiskPolicyEndpoint:                    getRiskPolicy,
+		UpdateRiskPolicyEndpoint:                 updateRiskPolicy,
+		DeleteRiskPolicyEndpoint:                 deleteRiskPolicy,
+		ListSessionQuarantinesEndpoint:           listSessionQuarantines,
+		ReleaseSessionQuarantineEndpoint:         releaseSessionQuarantine,
+		ListRiskResultsEndpoint:                  listRiskResults,
+		ListRiskResultsForAgentEndpoint:          listRiskResultsForAgent,
+		UnmaskRiskResultEndpoint:                 unmaskRiskResult,
+		RevealRiskResultPayloadEndpoint:          revealRiskResultPayload,
+		ListRiskResultsByChatEndpoint:            listRiskResultsByChat,
+		MarkRiskResultsFalsePositiveEndpoint:     markRiskResultsFalsePositive,
+		UnmarkRiskResultsFalsePositiveEndpoint:   unmarkRiskResultsFalsePositive,
+		ListDismissedRiskResultsEndpoint:         listDismissedRiskResults,
+		GetRiskOverviewEndpoint:                  getRiskOverview,
+		ListRiskCategoriesEndpoint:               listRiskCategories,
+		ListRiskPresetsEndpoint:                  listRiskPresets,
+		SuggestRiskPolicyEndpoint:                suggestRiskPolicy,
+		CompileExprEndpoint:                      compileExpr,
+		GetRiskUserBreakdownEndpoint:             getRiskUserBreakdown,
+		GetRiskSignalsEndpoint:                   getRiskSignals,
+		GetRiskMcpServerCountsEndpoint:           getRiskMcpServerCounts,
+		GetRiskAnalysisStatusEndpoint:            getRiskAnalysisStatus,
+		CreateRiskPolicyBypassRequestEndpoint:    createRiskPolicyBypassRequest,
+		GetRiskPolicyBypassRequestTargetEndpoint: getRiskPolicyBypassRequestTarget,
+		AcknowledgeRiskPolicyChallengeEndpoint:   acknowledgeRiskPolicyChallenge,
+		GetRiskPolicyChallengeEndpoint:           getRiskPolicyChallenge,
+		DeclineRiskPolicyChallengeEndpoint:       declineRiskPolicyChallenge,
+		GetRiskBlockEndpoint:                     getRiskBlock,
+		SubmitRiskBlockFeedbackEndpoint:          submitRiskBlockFeedback,
+		ListRiskPolicyBypassRequestsEndpoint:     listRiskPolicyBypassRequests,
+		ApproveRiskPolicyBypassRequestEndpoint:   approveRiskPolicyBypassRequest,
+		DenyRiskPolicyBypassRequestEndpoint:      denyRiskPolicyBypassRequest,
+		RevokeRiskPolicyBypassRequestEndpoint:    revokeRiskPolicyBypassRequest,
+		ListRiskPolicyApprovalsEndpoint:          listRiskPolicyApprovals,
+		GetRiskPolicyApprovalEndpoint:            getRiskPolicyApproval,
+		DecideRiskPolicyApprovalEndpoint:         decideRiskPolicyApproval,
+		TriggerRiskAnalysisEndpoint:              triggerRiskAnalysis,
+		CreateCustomDetectionRuleEndpoint:        createCustomDetectionRule,
+		ListCustomDetectionRulesEndpoint:         listCustomDetectionRules,
+		GetCustomDetectionRuleEndpoint:           getCustomDetectionRule,
+		UpdateCustomDetectionRuleEndpoint:        updateCustomDetectionRule,
+		DeleteCustomDetectionRuleEndpoint:        deleteCustomDetectionRule,
+		ListRiskExclusionsEndpoint:               listRiskExclusions,
+		CreateRiskExclusionEndpoint:              createRiskExclusion,
+		UpdateRiskExclusionEndpoint:              updateRiskExclusion,
+		DeleteRiskExclusionEndpoint:              deleteRiskExclusion,
+		SuggestCustomDetectionRuleEndpoint:       suggestCustomDetectionRule,
+		SuggestExclusionEndpoint:                 suggestExclusion,
+		TestDetectionRuleEndpoint:                testDetectionRule,
+		EvaluatePromptGuardrailEndpoint:          evaluatePromptGuardrail,
+		SaveRiskEvalReviewEndpoint:               saveRiskEvalReview,
+		ListRiskEvalReviewsEndpoint:              listRiskEvalReviews,
+		DeleteRiskEvalReviewEndpoint:             deleteRiskEvalReview,
 	}
 }
 
@@ -757,6 +759,29 @@ func (c *Client) CreateRiskPolicyBypassRequest(ctx context.Context, p *CreateRis
 		return
 	}
 	return ires.(*PolicyBypassRedemption), nil
+}
+
+// GetRiskPolicyBypassRequestTarget calls the
+// "getRiskPolicyBypassRequestTarget" endpoint of the "risk" service.
+// GetRiskPolicyBypassRequestTarget may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetRiskPolicyBypassRequestTarget(ctx context.Context, p *GetRiskPolicyBypassRequestTargetPayload) (res *GetRiskPolicyBypassRequestTargetResult, err error) {
+	var ires any
+	ires, err = c.GetRiskPolicyBypassRequestTargetEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetRiskPolicyBypassRequestTargetResult), nil
 }
 
 // AcknowledgeRiskPolicyChallenge calls the "acknowledgeRiskPolicyChallenge"

@@ -1,3 +1,4 @@
+import { PromotionAuthDiscovery } from "./PromotionAuthDiscovery";
 import { useRef, useState, type JSX } from "react";
 import { useBlocker } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -26,6 +27,8 @@ import {
 } from "@/components/ui/sheet";
 import { promotionReason, promotionTimestamp } from "./registryPromotionLabels";
 import { RegistryPromotionDocs } from "./RegistryPromotionDocs";
+import { PromotionSlugGuideHint } from "./PromotionSlugGuideHint";
+import { slugGuideHint } from "./registryPromotionGuides";
 import { Badge } from "@/components/ui/badge";
 import { badgeTone } from "@/lib/badgeTone";
 
@@ -272,6 +275,19 @@ export function RegistryPromotionSheet({
               )}
             </div>
           )}
+          {candidate && candidate.status === "candidate" && (
+            <PromotionAuthDiscovery
+              discovery={candidate.authDiscovery}
+              matchesSource={
+                form.publicUrl ===
+                  (candidate.suggestedMetadata?.publicUrl ?? "") &&
+                authMode === (candidate.suggestedMetadata?.authMode ?? "")
+              }
+              pending={query.isFetching}
+              disabled={mutation.isPending}
+              onRetry={() => void query.refetch()}
+            />
+          )}
           {(candidate?.status === "rejected" ||
             candidate?.status === "archived") && (
             <p role="status" className="rounded-md border p-3 text-sm">
@@ -358,7 +374,9 @@ export function RegistryPromotionSheet({
                       aria-describedby={
                         field === "publicTitle"
                           ? "promotion-title-length"
-                          : undefined
+                          : field === "docsSlug"
+                            ? "promotion-slug-guide"
+                            : undefined
                       }
                       maxLength={INPUT_MAX_LENGTHS[field]}
                       onChange={(event) => change(field, event.target.value)}
@@ -378,6 +396,12 @@ export function RegistryPromotionSheet({
                         </p>
                       )}
                     </div>
+                  )}
+                  {field === "docsSlug" && (
+                    <PromotionSlugGuideHint
+                      id="promotion-slug-guide"
+                      hint={slugGuideHint(candidate, form.docsSlug)}
+                    />
                   )}
                 </div>
               ))}

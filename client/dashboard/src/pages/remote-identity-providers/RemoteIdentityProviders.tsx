@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
+import { RemoteSessionRefreshPolicySetting } from "@/pages/org/RemoteSessionRefreshPolicySetting";
 import { useIssuerHref } from "./useIssuerHref";
 import type { OrganizationRemoteSessionIssuer } from "@gram/client/models/components/organizationremotesessionissuer.js";
 import { useDeleteOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/deleteOrganizationRemoteSessionIssuer.js";
@@ -172,6 +173,12 @@ function RemoteIdentityProvidersOverview() {
           </RequireScope>
         }
       >
+        {/* The refresh policy governs these servers' remote sessions, so it
+            lives here rather than on MCP Sessions. Pulled up under the
+            description so the surface does not read as a dropped card. */}
+        <div className="-mt-6 mb-8">
+          <RemoteSessionRefreshPolicySetting />
+        </div>
         <IssuerTable
           items={organizational}
           isLoading={organizationalTier.isLoading}

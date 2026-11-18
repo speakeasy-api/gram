@@ -1,5 +1,13 @@
 # @gram-ai/functions
 
+## 0.20.1
+
+### Patch Changes
+
+- f43e71e: Update npm dependencies to address high-severity Dependabot security alerts. `@speakeasy-api/functions` and `@gram-ai/functions` now require `@modelcontextprotocol/sdk` 1.32.0 or later as a peer dependency.
+- Updated dependencies [f43e71e]
+  - @speakeasy-api/functions@0.20.1
+
 ## 0.20.0
 
 ### Minor Changes

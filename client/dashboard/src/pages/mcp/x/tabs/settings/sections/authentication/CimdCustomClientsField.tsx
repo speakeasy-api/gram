@@ -1,5 +1,7 @@
 import { RequireScope } from "@/components/require-scope";
 import { Alert } from "@/components/ui/Alert";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Spinner } from "@/components/ui/Spinner";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { FieldError } from "@/components/ui/Field";
@@ -17,7 +19,7 @@ import {
 } from "@gram/client/react-query/userSessionIssuerCimdClients.js";
 import { useVerifyUserSessionIssuerCimdClientURLMutation } from "@gram/client/react-query/verifyUserSessionIssuerCimdClientURL.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { useEffect, useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -283,7 +285,17 @@ export function CimdCustomClientsField({
             data={rows}
             rowKey={(row) => row.id}
             noResultsMessage={
-              listLoading ? "Loading…" : "No clients are allowed yet."
+              listLoading ? (
+                <div role="status" aria-label="Loading allowed clients">
+                  <Skeleton>
+                    <div className="h-5 w-full" />
+                    <div className="h-5 w-full" />
+                    <div className="h-5 w-full" />
+                  </Skeleton>
+                </div>
+              ) : (
+                "No clients are allowed yet."
+              )
             }
           />
 
@@ -322,10 +334,7 @@ export function CimdCustomClientsField({
                     >
                       {verify.isPending && (
                         <Button.LeftIcon>
-                          <Loader2
-                            aria-hidden="true"
-                            className="size-4 animate-spin"
-                          />
+                          <Spinner className="mr-0" />
                         </Button.LeftIcon>
                       )}
                       <Button.Text>
@@ -340,10 +349,7 @@ export function CimdCustomClientsField({
                     >
                       {create.isPending && (
                         <Button.LeftIcon>
-                          <Loader2
-                            aria-hidden="true"
-                            className="size-4 animate-spin"
-                          />
+                          <Spinner className="mr-0" />
                         </Button.LeftIcon>
                       )}
                       <Button.Text>

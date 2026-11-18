@@ -2270,7 +2270,7 @@ func DecodeWithdrawSubjectResponse(decoder func(*http.Response) goahttp.Decoder,
 			if err != nil {
 				return nil, goahttp.ErrValidationError("workloadIdentities", "withdrawSubject", err)
 			}
-			res := NewWithdrawSubjectWorkloadIdentityPolicyOK(&body)
+			res := NewWithdrawSubjectWithdrawnWorkloadSubjectPolicyOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -3012,6 +3012,40 @@ func unmarshalWorkloadPlatformVariableResponseBodyToWorkloadidentitiesWorkloadPl
 // value of type *WorkloadPlatformSubjectResponseBody.
 func unmarshalWorkloadPlatformSubjectResponseBodyToWorkloadidentitiesWorkloadPlatformSubject(v *WorkloadPlatformSubjectResponseBody) *workloadidentities.WorkloadPlatformSubject {
 	res := &workloadidentities.WorkloadPlatformSubject{
+		Template: *v.Template,
+		Wildcard: *v.Wildcard,
+	}
+	if v.Label != nil {
+		res.Label = *v.Label
+	}
+	if v.Label == nil {
+		res.Label = ""
+	}
+	if v.Alternatives != nil {
+		res.Alternatives = make([]*workloadidentities.WorkloadPlatformSubjectAlternative, len(v.Alternatives))
+		for i, val := range v.Alternatives {
+			if val == nil {
+				res.Alternatives[i] = nil
+				continue
+			}
+			res.Alternatives[i] = unmarshalWorkloadPlatformSubjectAlternativeResponseBodyToWorkloadidentitiesWorkloadPlatformSubjectAlternative(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalWorkloadPlatformSubjectAlternativeResponseBodyToWorkloadidentitiesWorkloadPlatformSubjectAlternative
+// builds a value of type
+// *workloadidentities.WorkloadPlatformSubjectAlternative from a value of type
+// *WorkloadPlatformSubjectAlternativeResponseBody.
+func unmarshalWorkloadPlatformSubjectAlternativeResponseBodyToWorkloadidentitiesWorkloadPlatformSubjectAlternative(v *WorkloadPlatformSubjectAlternativeResponseBody) *workloadidentities.WorkloadPlatformSubjectAlternative {
+	if v == nil {
+		return nil
+	}
+	res := &workloadidentities.WorkloadPlatformSubjectAlternative{
+		Key:      *v.Key,
+		Label:    *v.Label,
 		Template: *v.Template,
 		Wildcard: *v.Wildcard,
 	}

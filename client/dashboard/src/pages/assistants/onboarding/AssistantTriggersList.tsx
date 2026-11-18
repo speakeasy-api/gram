@@ -4,16 +4,14 @@ import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { type BadgeVariant } from "@/components/ui/lib/types";
 import { useChatDetailSheet } from "@/pages/chatLogs/useChatDetailSheet";
-import {
-  TriggerEvent,
-  TriggerEventStatus,
-} from "@gram/client/models/components/triggerevent.js";
-import { TriggerInstance } from "@gram/client/models/components/triggerinstance.js";
+import type { TriggerEvent } from "@gram/client/models/components/triggerevent.js";
+import { TriggerEventStatus } from "@gram/client/models/components/triggerevent.js";
+import type { TriggerInstance } from "@gram/client/models/components/triggerinstance.js";
 import { useTriggerEvents } from "@gram/client/react-query/triggerEvents.js";
 import { format } from "date-fns";
-import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { slackReplyModeLabel } from "./slackCapabilities";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 function triggerStatusLabel(status: string): string {
   switch (status) {
@@ -162,13 +160,12 @@ function TriggerTraffic({
 
   if (isLoading) {
     return (
-      <Stack
-        align="center"
-        justify="center"
-        className="border-border border-t py-4"
-      >
-        <Loader2 className="text-muted-foreground h-4 w-4 animate-spin" />
-      </Stack>
+      <div className="border-border border-t px-3 py-2">
+        <Skeleton label="Loading trigger events">
+          <div className="h-5 w-full" />
+          <div className="h-5 w-full" />
+        </Skeleton>
+      </div>
     );
   }
 

@@ -12,7 +12,9 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_metadata"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -112,13 +114,7 @@ func createMCPToolset(t *testing.T, ctx context.Context, ti *testInstance, slug 
 	t.Helper()
 
 	toolset := createTestToolset(t, ctx, ti, slug)
-	require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, testrepo.SetToolsetMCPEnabledByIDParams{
-		McpEnabled: true,
-		ID:         toolset.ID,
-		ProjectID:  toolset.ProjectID,
-	}))
-	toolset.McpEnabled = true
-	syncWrapperVisibility(t, ctx, ti, toolset)
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: mcpservers.VisibilityPrivate, UserSessionIssuerID: nil, Slug: "", CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
 	return toolset
 }
 
@@ -128,13 +124,7 @@ func createPublicToolset(t *testing.T, ctx context.Context, ti *testInstance, sl
 	t.Helper()
 
 	toolset := createMCPToolset(t, ctx, ti, slug)
-	require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	}))
-	toolset.McpIsPublic = true
-	syncWrapperVisibility(t, ctx, ti, toolset)
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: mcpservers.VisibilityPublic, UserSessionIssuerID: nil, Slug: "", CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
 	return toolset
 }
 

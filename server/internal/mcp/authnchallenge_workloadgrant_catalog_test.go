@@ -1,6 +1,7 @@
 package mcp_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -15,15 +16,27 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 	"github.com/speakeasy-api/gram/server/internal/workloadpolicy/catalog"
 )
 
 // catalogTestOrganization stands in for a customer's Anthropic organization ID.
 const catalogTestOrganization = "org-123"
 
-// catalogRule fills a catalog platform's subject template the way the guided
-// setup does, and returns the access rule it writes.
+// catalogRule fills a catalog platform's default subject template the way
+// the guided setup does, and returns the wildcard rule it writes.
 func catalogRule(t *testing.T, key string, values map[string]string) string {
+	t.Helper()
+
+	rule, matchKind := catalogChoiceRule(t, key, "", values)
+	require.Equal(t, workloadidentity.MatchKindWildcard, matchKind)
+	return rule
+}
+
+// catalogChoiceRule fills the subject template a catalog platform offers
+// under choice, its default for "", and returns the rule the guided setup
+// writes with its match kind.
+func catalogChoiceRule(t *testing.T, key, choice string, values map[string]string) (string, workloadidentity.MatchKind) {
 	t.Helper()
 
 	platforms, err := catalog.Embedded().Platforms(t.Context())
@@ -32,16 +45,24 @@ func catalogRule(t *testing.T, key string, values map[string]string) string {
 		if platform.Key != key {
 			continue
 		}
-		rule := platform.Subject.Template
+		template, wildcard := platform.Subject.Template, platform.Subject.Wildcard
+		if choice != "" {
+			i := slices.IndexFunc(platform.Subject.Alternatives, func(a catalog.SubjectAlternative) bool { return a.Key == choice })
+			require.GreaterOrEqual(t, i, 0, "%s has no subject alternative %s", key, choice)
+			template, wildcard = platform.Subject.Alternatives[i].Template, platform.Subject.Alternatives[i].Wildcard
+		}
+		rule := template
 		for name, value := range values {
 			rule = strings.ReplaceAll(rule, "{"+name+"}", value)
 		}
 		require.NotContains(t, rule, "{", "every placeholder must be filled")
-		require.True(t, platform.Subject.Wildcard)
-		return rule + "*"
+		if wildcard {
+			return rule + "*", workloadidentity.MatchKindWildcard
+		}
+		return rule, workloadidentity.MatchKindExact
 	}
 	require.FailNow(t, "catalog has no platform "+key)
-	return ""
+	return "", ""
 }
 
 // newCatalogWorkloadGrantFixture is newWorkloadGrantFixture with the access

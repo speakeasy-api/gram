@@ -24,6 +24,10 @@ import {
   AdminMcpServerHealthUserSessionIssuer,
   AdminMcpServerHealthUserSessionIssuer$inboundSchema,
 } from "./adminmcpserverhealthusersessionissuer.js";
+import {
+  AdminMcpServerResourceScopes,
+  AdminMcpServerResourceScopes$inboundSchema,
+} from "./adminmcpserverresourcescopes.js";
 
 /**
  * Legacy authentication in force. Set only when the server has no user session issuer.
@@ -50,6 +54,10 @@ export type AdminMcpServerHealth = {
    */
   legacyAuth?: LegacyAuth | undefined;
   /**
+   * The scopes logins through a remote-backed MCP server request, read from the cached protected resource without probing.
+   */
+  resourceScopes?: AdminMcpServerResourceScopes | undefined;
+  /**
    * The server the health report describes, as listProjectMcpServers lists it.
    */
   server: AdminMcpServerHealthServer;
@@ -75,6 +83,7 @@ export const AdminMcpServerHealth$inboundSchema: z.ZodMiniType<
   z.object({
     correlation: AdminMcpServerHealthCorrelation$inboundSchema,
     legacy_auth: z.optional(LegacyAuth$inboundSchema),
+    resource_scopes: z.optional(AdminMcpServerResourceScopes$inboundSchema),
     server: AdminMcpServerHealthServer$inboundSchema,
     upstream_auth: z.optional(AdminMcpServerHealthUpstreamAuth$inboundSchema),
     user_session_issuer: z.optional(
@@ -84,6 +93,7 @@ export const AdminMcpServerHealth$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "legacy_auth": "legacyAuth",
+      "resource_scopes": "resourceScopes",
       "upstream_auth": "upstreamAuth",
       "user_session_issuer": "userSessionIssuer",
     });

@@ -3,7 +3,10 @@ package authz
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/url"
+	"slices"
+	"strings"
 )
 
 // Selector is a set of key-value constraints attached to a grant or check.
@@ -49,13 +52,27 @@ const (
 	AuthClientTypeEMA              = "ema"
 )
 
-var validAuthClientTypes = map[string]bool{
-	AuthClientTypeRemoteSession:    true,
-	AuthClientTypeServiceAccount:   true,
-	AuthClientTypeStaticCredential: true,
-	AuthClientTypePassThrough:      true,
-	AuthClientTypeEMA:              true,
+// IsSharedAuthClientType reports whether clientType serves every caller with
+// one credential that belongs to nobody, as opposed to a person's own
+// connection or identity-provider sign-in.
+func IsSharedAuthClientType(clientType string) bool {
+	switch clientType {
+	case AuthClientTypeServiceAccount, AuthClientTypeStaticCredential, AuthClientTypePassThrough:
+		return true
+	}
+	return false
 }
+
+// IsAgentKeyAuthClientType reports whether an agent key can be set up to use
+// clientType: a shared credential that needs nothing from the caller's
+// request, since the agent gateway does not carry the caller's headers to its
+// servers.
+func IsAgentKeyAuthClientType(clientType string) bool {
+	return IsSharedAuthClientType(clientType) && clientType != AuthClientTypePassThrough
+}
+
+// validAuthClientTypes is the closed value set of client_type in Model.
+var validAuthClientTypes = Model.deriveDimensionValues(ResourceKindMCPAuthClient, SelectorKeyClientType)
 
 // Matches reports whether this (grant) selector satisfies the given check
 // selector. A nil/empty grant selector matches any check (defensive fallback).
@@ -124,39 +141,36 @@ func selectorValueMatches(key, grantVal, checkVal, representedUser string) bool 
 		(checkVal == SelectorValueRepresentedUser && grantVal == representedUser)
 }
 
-// ResourceKindForScope derives the selector resource kind from a scope.
+// scopeResourceKinds maps every scope the model declares to the resource kind
+// its checks and grant selectors name.
+var scopeResourceKinds = Model.deriveResourceKinds()
+
+// ResourceKindForScope returns the selector resource kind of a scope: the kind
+// Model declares it on, or, for a scope the model does not know, the kind its
+// prefix has always meant.
 func ResourceKindForScope(scope Scope) string {
-	if scope == ScopeMCPAuth || scope == ScopeMCPBlockedAuth {
-		return ResourceKindMCPAuthClient
+	if kind, ok := scopeResourceKinds[scope]; ok {
+		return kind
 	}
-	switch scope.Parts().Resource {
-	case "project", "plugin", "log":
+	return legacyResourceKindForScope(scope)
+}
+
+// legacyResourceKindForScope keeps today's answer for scopes outside the
+// model, such as retired ones still stored in old policies.
+func legacyResourceKindForScope(scope Scope) string {
+	prefix := scope.Parts().Resource
+	switch prefix {
+	case "plugin", "log":
 		return ResourceKindProject
 	case "remote-mcp":
 		return ResourceKindMCP
-	case "mcp":
-		return ResourceKindMCP
-	case "org":
-		return ResourceKindOrg
-	case "environment":
-		return ResourceKindEnvironment
-	case "skill":
-		return ResourceKindSkill
-	case "assistant":
-		return ResourceKindAssistant
-	case "risk_policy":
-		return ResourceKindRiskPolicy
-	case "inference":
-		return ResourceKindInference
-	case "chat":
-		return ResourceKindChat
-	case "agent":
-		return ResourceKindAgent
-	case "workload":
-		return ResourceKindWorkload
-	default:
-		return ResourceKindWildcard
 	}
+	for _, t := range Model.Types {
+		if string(t.Kind) == prefix && t.Kind != ResourceKindMCPAuthClient {
+			return prefix
+		}
+	}
+	return ResourceKindWildcard
 }
 
 // Disposition values matching MCP tool annotation hint names (snake_case, no _hint suffix).
@@ -167,49 +181,24 @@ const (
 	DispositionOpenWorld   = "open_world"
 )
 
-// validDispositions is the set of allowed disposition values.
-var validDispositions = map[string]bool{
-	DispositionReadOnly:    true,
-	DispositionDestructive: true,
-	DispositionIdempotent:  true,
-	DispositionOpenWorld:   true,
-}
+// validDispositions is the closed value set of disposition in Model.
+var validDispositions = Model.deriveDimensionValues(ResourceKindMCP, SelectorKeyDisposition)
 
 // allowedSelectorKeys defines which extra keys (beyond resource_kind and
-// resource_id) are valid for each scope family. Scope families not listed here
-// allow no extra keys, except where scopeAllowsSelectorKey admits one for a
-// single scope.
-var allowedSelectorKeys = map[string]map[string]bool{
-	ResourceKindInference: {
-		SelectorKeyProjectID: true,
-	},
-	ResourceKindMCP: {
-		SelectorKeyTool:        true,
-		SelectorKeyDisposition: true,
-		SelectorKeyProjectID:   true,
-	},
-	ResourceKindEnvironment: {
-		SelectorKeyProjectID: true,
-	},
-	ResourceKindAssistant: {
-		SelectorKeyProjectID: true,
-	},
-	ResourceKindRiskPolicy: {
-		SelectorKeyServerURL:      true,
-		SelectorKeyServerIdentity: true,
-	},
-	ResourceKindMCPAuthClient: {
-		SelectorKeyClientType:      true,
-		SelectorKeyProjectID:       true,
-		SelectorKeyConnectionOwner: true,
-		SelectorKeyUpstreamClient:  true,
-	},
-}
+// resource_id) are valid for each resource kind: the Dimensions each type
+// declares in Model. Kinds not listed here allow no extra keys, except where
+// scopeAllowsSelectorKey admits one for a single scope.
+var allowedSelectorKeys = Model.deriveAllowedSelectorKeys()
 
-// scopeAllowsSelectorKey allows project_id on org:hooks_ingest only: it is the
-// one org scope checked per project, and elsewhere the key would restrict nothing.
+// scopeSelectorKeys holds the keys single permissions declare beyond their
+// type's.
+var scopeSelectorKeys = Model.deriveScopeSelectorKeys()
+
+// scopeAllowsSelectorKey reports whether a single permission declares key
+// beyond its type's dimensions. Today that is project_id on org:hooks_ingest:
+// the one org scope checked per project (R6, parked).
 func scopeAllowsSelectorKey(scope Scope, key string) bool {
-	return scope == ScopeOrgHooksIngest && key == SelectorKeyProjectID
+	return scopeSelectorKeys[scope][key]
 }
 
 // ValidateSelector checks that a selector is well-formed for the given scope.
@@ -349,6 +338,42 @@ func (s Selector) IsRestricted() bool {
 		return true
 	}
 	return kind != WildcardResource || id != WildcardResource
+}
+
+// CoversEveryResource reports whether the selector names every resource of
+// its kind: a wildcard resource id and no narrowing dimension such as a
+// project, tool or server URL. Unlike IsRestricted, a wildcard confined to one
+// resource kind still counts, since that is how an unrestricted grant of a
+// scope is stored.
+func (s Selector) CoversEveryResource() bool {
+	for selectorKey, value := range s {
+		switch selectorKey {
+		case SelectorKeyResourceKind:
+		case SelectorKeyResourceID:
+			if value != WildcardResource {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// Key is a canonical text form of the selector: two selectors that name the
+// same resource the same way have the same key, whatever order their
+// dimensions were set in.
+func (s Selector) Key() string {
+	var b strings.Builder
+	for i, key := range slices.Sorted(maps.Keys(s)) {
+		if i > 0 {
+			b.WriteByte(';')
+		}
+		b.WriteString(key)
+		b.WriteByte('=')
+		b.WriteString(s[key])
+	}
+	return b.String()
 }
 
 // SelectorFromRow parses the selectors JSONB column into a Selector.

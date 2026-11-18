@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { ProxiedMcpTool } from "@/hooks/useProxiedMcpTools";
 import type { ToolMetadata } from "@gram/client/models/components/toolmetadata.js";
 import { describe, expect, it } from "vitest";
@@ -30,6 +31,30 @@ function byName(...entries: ToolMetadata[]): ToolMetadataByName {
 }
 
 describe("computeDrift", () => {
+  it("treats unset and false as equal for hints that default to false", () => {
+    const drift = computeDrift(
+      live(["alpha", { readOnlyHint: false, idempotentHint: false }]),
+      byName(stored("alpha")),
+    );
+    expect(drift).toEqual([]);
+  });
+
+  it("still reports unset and false as different for hints that default to true", () => {
+    const drift = computeDrift(
+      live(["alpha", { destructiveHint: false }]),
+      byName(stored("alpha")),
+    );
+    expect(drift).toEqual([
+      {
+        kind: "changed",
+        toolName: "alpha",
+        changes: [
+          { field: "destructiveHint", stored: undefined, advertised: false },
+        ],
+      },
+    ]);
+  });
+
   it("reports nothing when the stored set already mirrors the session", () => {
     const drift = computeDrift(
       live(["alpha", { readOnlyHint: true }]),
@@ -85,19 +110,17 @@ describe("computeDrift", () => {
     ]);
   });
 
-  it("treats an unset hint as different from an explicit false", () => {
-    // The runtime distinguishes the two, so a sync has to be able to move a
-    // stored `false` back to unset when the server stops asserting it.
+  it("lets a sync move a stored false back to unset for hints that default to true", () => {
     const drift = computeDrift(
       live(["alpha", {}]),
-      byName(stored("alpha", { readOnlyHint: false })),
+      byName(stored("alpha", { destructiveHint: false })),
     );
     expect(drift).toEqual([
       {
         kind: "changed",
         toolName: "alpha",
         changes: [
-          { field: "readOnlyHint", stored: false, advertised: undefined },
+          { field: "destructiveHint", stored: false, advertised: undefined },
         ],
       },
     ]);

@@ -1,3 +1,4 @@
+import { PENDING_DOT_CLASS } from "@/components/chart/palette";
 import type {
   FilterChip,
   ObserveStatusFilterValue,
@@ -63,15 +64,17 @@ export const TOOL_USAGE_STATUS_OPTIONS: Array<{
   /** The dot a row with this status carries, so the two agree on sight. */
   dotClassName: string;
 }> = [
-  { label: "Error", value: "error", dotClassName: "bg-rose-500" },
-  { label: "Success", value: "success", dotClassName: "bg-emerald-500" },
-  // Amber, not red: a denial is the policy working, not the call failing, and
+  { label: "Error", value: "error", dotClassName: "bg-destructive-default" },
+  { label: "Success", value: "success", dotClassName: "bg-success-default" },
+  // Orange, not red: a denial is the policy working, not the call failing, and
   // a reader scanning for breakage should not be pulled to it.
-  { label: "Blocked", value: "blocked", dotClassName: "bg-amber-500" },
+  { label: "Blocked", value: "blocked", dotClassName: "bg-warning-default" },
+  // The filter matches every call with no result: still running (Pending)
+  // or long ended without one (Unknown).
   {
-    label: "Pending",
+    label: "Pending or unknown",
     value: "pending",
-    dotClassName: "bg-muted-foreground/30",
+    dotClassName: PENDING_DOT_CLASS,
   },
 ];
 
@@ -170,13 +173,35 @@ export function selectedHookSources(activeFilters: FilterChip[]): string[] {
     .filter(Boolean);
 }
 
+/**
+ * Whether the selection is the view's default. Views default differently (one
+ * scoped to an identity starts from every type), so each passes its own
+ * defaults: the page-wide `TOOL_USAGE_DEFAULT_TYPES` or a scoped list.
+ */
 export function isDefaultToolUsageTypeSelection(
   selectedTypes: ObserveTypeFilterValue[],
+  defaultTypes: ObserveTypeFilterValue[],
 ): boolean {
   return (
-    selectedTypes.length === TOOL_USAGE_DEFAULT_TYPES.length &&
-    TOOL_USAGE_DEFAULT_TYPES.every((type) => selectedTypes.includes(type))
+    selectedTypes.length === defaultTypes.length &&
+    defaultTypes.every((type) => selectedTypes.includes(type))
   );
+}
+
+/** Every tool type but local tools, for an identity view that hides them. */
+export const TOOL_USAGE_TYPES_WITHOUT_LOCAL_TOOLS: ObserveTypeFilterValue[] =
+  TOOL_USAGE_VALID_TYPES.filter((type) => type !== "local_tool");
+
+/**
+ * The type selection a view scoped to one identity starts from. It shows
+ * every type unless the page hides local tools. Both lists are module
+ * constants, so the reference stays stable across renders.
+ */
+export function scopedToolUsageDefaultTypes(
+  includeLocalTools: boolean,
+): ObserveTypeFilterValue[] {
+  if (includeLocalTools) return TOOL_USAGE_VALID_TYPES;
+  return TOOL_USAGE_TYPES_WITHOUT_LOCAL_TOOLS;
 }
 
 export function toTargetTypes(

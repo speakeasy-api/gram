@@ -21,6 +21,10 @@ type CreatePluginRequestBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// Defaults to true. When false, the plugin stays out of the marketplace until
+	// someone syncs it by hand.
+	AutoSyncEnabled *bool `form:"auto_sync_enabled,omitempty" json:"auto_sync_enabled,omitempty" xml:"auto_sync_enabled,omitempty"`
 }
 
 // UpdatePluginRequestBody is the type of the "plugins" service "updatePlugin"
@@ -33,6 +37,11 @@ type UpdatePluginRequestBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Updated description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// Omit to keep the current setting. Turning it off is refused while the plugin
+	// has changes that haven't been synced, and the slug can't change while it is
+	// off.
+	AutoSyncEnabled *bool `form:"auto_sync_enabled,omitempty" json:"auto_sync_enabled,omitempty" xml:"auto_sync_enabled,omitempty"`
 }
 
 // AddPluginServerRequestBody is the type of the "plugins" service
@@ -145,6 +154,9 @@ type GetPluginResponseBody struct {
 	// Whether automatic role distribution created this plugin. Read-only;
 	// preserved after edits and reuse.
 	AutoCreated *bool `form:"auto_created,omitempty" json:"auto_created,omitempty" xml:"auto_created,omitempty"`
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// When false, they wait until someone syncs the marketplace by hand.
+	AutoSyncEnabled *bool `form:"auto_sync_enabled,omitempty" json:"auto_sync_enabled,omitempty" xml:"auto_sync_enabled,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -178,6 +190,9 @@ type CreatePluginResponseBody struct {
 	// Whether automatic role distribution created this plugin. Read-only;
 	// preserved after edits and reuse.
 	AutoCreated *bool `form:"auto_created,omitempty" json:"auto_created,omitempty" xml:"auto_created,omitempty"`
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// When false, they wait until someone syncs the marketplace by hand.
+	AutoSyncEnabled *bool `form:"auto_sync_enabled,omitempty" json:"auto_sync_enabled,omitempty" xml:"auto_sync_enabled,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -211,6 +226,9 @@ type UpdatePluginResponseBody struct {
 	// Whether automatic role distribution created this plugin. Read-only;
 	// preserved after edits and reuse.
 	AutoCreated *bool `form:"auto_created,omitempty" json:"auto_created,omitempty" xml:"auto_created,omitempty"`
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// When false, they wait until someone syncs the marketplace by hand.
+	AutoSyncEnabled *bool `form:"auto_sync_enabled,omitempty" json:"auto_sync_enabled,omitempty" xml:"auto_sync_enabled,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -347,14 +365,33 @@ type GetPublishStatusResponseBody struct {
 	// marketplace — the value to mark required in Cursor's team marketplace.
 	// Present when connected.
 	CursorObservabilityPlugin *string `form:"cursor_observability_plugin,omitempty" json:"cursor_observability_plugin,omitempty" xml:"cursor_observability_plugin,omitempty"`
+	// Whether the Mistral Vibe observability plugin ZIP can be downloaded right
+	// now: the pinned hooks release's relay carries the vibe provider and the org
+	// name satisfies the Agent Plugins 1.0 name schema. Present (true or false)
+	// when connected and observability is enabled for the project.
+	VibeObservabilityAvailable *bool `form:"vibe_observability_available,omitempty" json:"vibe_observability_available,omitempty" xml:"vibe_observability_available,omitempty"`
+	// Slug of the generated Mistral Vibe observability plugin's install directory
+	// (`~/.vibe/plugins/<slug>`) — present only when connected, observability is
+	// enabled, the vibe package is available, and the stored published hooks
+	// version equals the current generator version, i.e. the published marketplace
+	// repo actually carries the package. The marketplace repo directory is
+	// `<slug>-vibe`.
+	VibeObservabilityPlugin *string `form:"vibe_observability_plugin,omitempty" json:"vibe_observability_plugin,omitempty" xml:"vibe_observability_plugin,omitempty"`
 	// Whether the repo has at least one directly-added GitHub collaborator
 	// (excludes access granted via org membership/teams). Absent when the project
 	// is not connected.
 	HasCollaborators *bool `form:"has_collaborators,omitempty" json:"has_collaborators,omitempty" xml:"has_collaborators,omitempty"`
 	// Whether the project's current plugin state matches what was last published
-	// to GitHub. Absent when the project is not connected, or when the connection
-	// predates content fingerprinting (freshness can't be determined).
+	// to GitHub, including changes of plugins whose auto sync is off that wait for
+	// a manual sync. Absent when the project is not connected, or when the
+	// connection predates content fingerprinting (freshness can't be determined).
 	UpToDate *bool `form:"up_to_date,omitempty" json:"up_to_date,omitempty" xml:"up_to_date,omitempty"`
+	// Whether an automatic publish would change the published marketplace. False
+	// while the only pending changes belong to plugins whose auto sync is off,
+	// which publish only on a manual sync. Absent when up_to_date is absent.
+	AutomaticSyncPending *bool `form:"automatic_sync_pending,omitempty" json:"automatic_sync_pending,omitempty" xml:"automatic_sync_pending,omitempty"`
+	// Each live plugin's own freshness. Absent when up_to_date is absent.
+	Plugins []*PluginPublishStatusResponseBody `form:"plugins,omitempty" json:"plugins,omitempty" xml:"plugins,omitempty"`
 	// When the project was last published to GitHub. Absent when the project is
 	// not connected.
 	LastPublishedAt *string `form:"last_published_at,omitempty" json:"last_published_at,omitempty" xml:"last_published_at,omitempty"`
@@ -1403,6 +1440,25 @@ type CreatePluginGatewayErrorResponseBody struct {
 // CreatePluginUnavailableResponseBody is the type of the "plugins" service
 // "createPlugin" endpoint HTTP response body for the "unavailable" error.
 type CreatePluginUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdatePluginFailedPreconditionResponseBody is the type of the "plugins"
+// service "updatePlugin" endpoint HTTP response body for the
+// "failed_precondition" error.
+type UpdatePluginFailedPreconditionResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -4538,6 +4594,9 @@ type PluginResponseBody struct {
 	// Whether automatic role distribution created this plugin. Read-only;
 	// preserved after edits and reuse.
 	AutoCreated *bool `form:"auto_created,omitempty" json:"auto_created,omitempty" xml:"auto_created,omitempty"`
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// When false, they wait until someone syncs the marketplace by hand.
+	AutoSyncEnabled *bool `form:"auto_sync_enabled,omitempty" json:"auto_sync_enabled,omitempty" xml:"auto_sync_enabled,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -4618,6 +4677,21 @@ type RotatedObservabilityKeyResponseBody struct {
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 }
 
+// PluginPublishStatusResponseBody is used to define fields on response body
+// types.
+type PluginPublishStatusResponseBody struct {
+	// The plugin's slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Whether the plugin's published package is current. With auto sync on: an
+	// automatic publish would push nothing new for it, its package and the
+	// marketplace manifests alike. With auto sync off: its package matches what it
+	// was last published with.
+	UpToDate *bool `form:"up_to_date,omitempty" json:"up_to_date,omitempty" xml:"up_to_date,omitempty"`
+	// Whether the plugin's auto sync is off and it has changes, or has never been
+	// published, so only a manual sync publishes it.
+	AwaitingManualSync *bool `form:"awaiting_manual_sync,omitempty" json:"awaiting_manual_sync,omitempty" xml:"awaiting_manual_sync,omitempty"`
+}
+
 // MarketplaceSettingsResultResponseBody is used to define fields on response
 // body types.
 type MarketplaceSettingsResultResponseBody struct {
@@ -4638,9 +4712,10 @@ type MarketplaceSettingsResultResponseBody struct {
 // the "createPlugin" endpoint of the "plugins" service.
 func NewCreatePluginRequestBody(p *plugins.CreatePluginPayload) *CreatePluginRequestBody {
 	body := &CreatePluginRequestBody{
-		Name:        p.Name,
-		Slug:        p.Slug,
-		Description: p.Description,
+		Name:            p.Name,
+		Slug:            p.Slug,
+		Description:     p.Description,
+		AutoSyncEnabled: p.AutoSyncEnabled,
 	}
 	return body
 }
@@ -4649,10 +4724,11 @@ func NewCreatePluginRequestBody(p *plugins.CreatePluginPayload) *CreatePluginReq
 // the "updatePlugin" endpoint of the "plugins" service.
 func NewUpdatePluginRequestBody(p *plugins.UpdatePluginPayload) *UpdatePluginRequestBody {
 	body := &UpdatePluginRequestBody{
-		ID:          p.ID,
-		Name:        p.Name,
-		Slug:        p.Slug,
-		Description: p.Description,
+		ID:              p.ID,
+		Name:            p.Name,
+		Slug:            p.Slug,
+		Description:     p.Description,
+		AutoSyncEnabled: p.AutoSyncEnabled,
 	}
 	return body
 }
@@ -5319,6 +5395,7 @@ func NewGetPluginPluginOK(body *GetPluginResponseBody) *plugins.Plugin {
 		Description:              body.Description,
 		IsDefault:                body.IsDefault,
 		AutoCreated:              *body.AutoCreated,
+		AutoSyncEnabled:          *body.AutoSyncEnabled,
 		ServerCount:              body.ServerCount,
 		SkillCount:               body.SkillCount,
 		AssignmentCount:          body.AssignmentCount,
@@ -5525,6 +5602,7 @@ func NewCreatePluginPluginCreated(body *CreatePluginResponseBody) *plugins.Plugi
 		Description:              body.Description,
 		IsDefault:                body.IsDefault,
 		AutoCreated:              *body.AutoCreated,
+		AutoSyncEnabled:          *body.AutoSyncEnabled,
 		ServerCount:              body.ServerCount,
 		SkillCount:               body.SkillCount,
 		AssignmentCount:          body.AssignmentCount,
@@ -5731,6 +5809,7 @@ func NewUpdatePluginPluginOK(body *UpdatePluginResponseBody) *plugins.Plugin {
 		Description:              body.Description,
 		IsDefault:                body.IsDefault,
 		AutoCreated:              *body.AutoCreated,
+		AutoSyncEnabled:          *body.AutoSyncEnabled,
 		ServerCount:              body.ServerCount,
 		SkillCount:               body.SkillCount,
 		AssignmentCount:          body.AssignmentCount,
@@ -5757,6 +5836,21 @@ func NewUpdatePluginPluginOK(body *UpdatePluginResponseBody) *plugins.Plugin {
 			}
 			v.Assignments[i] = unmarshalPluginAssignmentResponseBodyToPluginsPluginAssignment(val)
 		}
+	}
+
+	return v
+}
+
+// NewUpdatePluginFailedPrecondition builds a plugins service updatePlugin
+// endpoint failed_precondition error.
+func NewUpdatePluginFailedPrecondition(body *UpdatePluginFailedPreconditionResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
 	}
 
 	return v
@@ -7716,19 +7810,32 @@ func NewDownloadCodexInstallScriptUnavailable(body *DownloadCodexInstallScriptUn
 // "getPublishStatus" endpoint result from a HTTP "OK" response.
 func NewGetPublishStatusPublishStatusResultOK(body *GetPublishStatusResponseBody) *plugins.PublishStatusResult {
 	v := &plugins.PublishStatusResult{
-		Configured:                *body.Configured,
-		Connected:                 *body.Connected,
-		RepoOwner:                 body.RepoOwner,
-		RepoName:                  body.RepoName,
-		RepoURL:                   body.RepoURL,
-		MarketplaceURL:            body.MarketplaceURL,
-		ClaudeObservabilityPlugin: body.ClaudeObservabilityPlugin,
-		CodexObservabilityPlugin:  body.CodexObservabilityPlugin,
-		CursorObservabilityPlugin: body.CursorObservabilityPlugin,
-		HasCollaborators:          body.HasCollaborators,
-		UpToDate:                  body.UpToDate,
-		LastPublishedAt:           body.LastPublishedAt,
-		LiveVersion:               body.LiveVersion,
+		Configured:                 *body.Configured,
+		Connected:                  *body.Connected,
+		RepoOwner:                  body.RepoOwner,
+		RepoName:                   body.RepoName,
+		RepoURL:                    body.RepoURL,
+		MarketplaceURL:             body.MarketplaceURL,
+		ClaudeObservabilityPlugin:  body.ClaudeObservabilityPlugin,
+		CodexObservabilityPlugin:   body.CodexObservabilityPlugin,
+		CursorObservabilityPlugin:  body.CursorObservabilityPlugin,
+		VibeObservabilityAvailable: body.VibeObservabilityAvailable,
+		VibeObservabilityPlugin:    body.VibeObservabilityPlugin,
+		HasCollaborators:           body.HasCollaborators,
+		UpToDate:                   body.UpToDate,
+		AutomaticSyncPending:       body.AutomaticSyncPending,
+		LastPublishedAt:            body.LastPublishedAt,
+		LiveVersion:                body.LiveVersion,
+	}
+	if body.Plugins != nil {
+		v.Plugins = make([]*plugins.PluginPublishStatus, len(body.Plugins))
+		for i, val := range body.Plugins {
+			if val == nil {
+				v.Plugins[i] = nil
+				continue
+			}
+			v.Plugins[i] = unmarshalPluginPublishStatusResponseBodyToPluginsPluginPublishStatus(val)
+		}
 	}
 
 	return v
@@ -8497,6 +8604,9 @@ func ValidateGetPluginResponseBody(body *GetPluginResponseBody) (err error) {
 	if body.AutoCreated == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("auto_created", "body"))
 	}
+	if body.AutoSyncEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_sync_enabled", "body"))
+	}
 	if body.AgentPluginsV1Compatible == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_plugins_v1_compatible", "body"))
 	}
@@ -8547,6 +8657,9 @@ func ValidateCreatePluginResponseBody(body *CreatePluginResponseBody) (err error
 	if body.AutoCreated == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("auto_created", "body"))
 	}
+	if body.AutoSyncEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_sync_enabled", "body"))
+	}
 	if body.AgentPluginsV1Compatible == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_plugins_v1_compatible", "body"))
 	}
@@ -8596,6 +8709,9 @@ func ValidateUpdatePluginResponseBody(body *UpdatePluginResponseBody) (err error
 	}
 	if body.AutoCreated == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("auto_created", "body"))
+	}
+	if body.AutoSyncEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_sync_enabled", "body"))
 	}
 	if body.AgentPluginsV1Compatible == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_plugins_v1_compatible", "body"))
@@ -8793,6 +8909,13 @@ func ValidateGetPublishStatusResponseBody(body *GetPublishStatusResponseBody) (e
 	}
 	if body.Connected == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("connected", "body"))
+	}
+	for _, e := range body.Plugins {
+		if e != nil {
+			if err2 := ValidatePluginPublishStatusResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	if body.LastPublishedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_published_at", *body.LastPublishedAt, goa.FormatDateTime))
@@ -10143,6 +10266,30 @@ func ValidateCreatePluginGatewayErrorResponseBody(body *CreatePluginGatewayError
 // ValidateCreatePluginUnavailableResponseBody runs the validations defined on
 // createPlugin_unavailable_response_body
 func ValidateCreatePluginUnavailableResponseBody(body *CreatePluginUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdatePluginFailedPreconditionResponseBody runs the validations
+// defined on updatePlugin_failed_precondition_response_body
+func ValidateUpdatePluginFailedPreconditionResponseBody(body *UpdatePluginFailedPreconditionResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -14199,6 +14346,9 @@ func ValidatePluginResponseBody(body *PluginResponseBody) (err error) {
 	if body.AutoCreated == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("auto_created", "body"))
 	}
+	if body.AutoSyncEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_sync_enabled", "body"))
+	}
 	if body.AgentPluginsV1Compatible == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_plugins_v1_compatible", "body"))
 	}
@@ -14341,6 +14491,21 @@ func ValidateRotatedObservabilityKeyResponseBody(body *RotatedObservabilityKeyRe
 	}
 	if body.ExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidatePluginPublishStatusResponseBody runs the validations defined on
+// PluginPublishStatusResponseBody
+func ValidatePluginPublishStatusResponseBody(body *PluginPublishStatusResponseBody) (err error) {
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.UpToDate == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("up_to_date", "body"))
+	}
+	if body.AwaitingManualSync == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("awaiting_manual_sync", "body"))
 	}
 	return
 }

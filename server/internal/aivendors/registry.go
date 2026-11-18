@@ -693,10 +693,10 @@ var registry = []Product{
 	// global configuration under ~/.pi/agent (settings, sessions, extensions,
 	// installed packages) and project-local overrides in a repository's .pi.
 	// ~/.pi is matched rather than the agent dir so a fresh install counts
-	// before anything has populated it. Pi ships no MCP client of its own --
-	// servers reach it only through third-party extensions that register them
-	// as ordinary Pi tools -- so it publishes no CIMD document, and a decision
-	// about it is recorded but not enforceable.
+	// before anything has populated it. Documents verified 2026-11-13 against
+	// pi.dev and earendil-works/pi commit 908aa7b: MCP OAuth prefers the stable
+	// document when the server supports RFC 9207, otherwise a per-server
+	// document with one callback ID path segment.
 	{
 		ID:          "pi",
 		VendorKey:   "pi",
@@ -710,6 +710,31 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"pi"},
+		Documents: []Document{
+			{URL: "https://pi.dev/oauth/client.json", DisplayName: "Pi", Enabled: true},
+			{URL: "https://pi.dev/oauth/*/client.json", DisplayName: "Pi (per-server document)", Enabled: true},
+		},
+	},
+
+	// Mistral Vibe (mistralai/mistral-vibe): the binary is `vibe` (uv tool
+	// install mistral-vibe), global configuration under ~/.vibe (config.toml,
+	// hooks.toml, plugins/, skills/), overridable via VIBE_HOME. ~/.vibe is
+	// matched rather than a deeper subdir so a fresh install counts before
+	// anything has populated it. No CIMD document published, so no access
+	// decision can be recorded or enforced for it — detection only.
+	{
+		ID:          "vibe",
+		VendorKey:   "mistral",
+		DisplayName: "Mistral Vibe",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     []string{"vibe"},
+			ConfigDirs:   []string{"~/.vibe"},
+			ProcessNames: []string{"vibe"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"vibe", "mistral-vibe", "Mistral Vibe"},
 		Documents:       nil,
 	},
 

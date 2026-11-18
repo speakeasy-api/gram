@@ -2,10 +2,12 @@ package admin
 
 import (
 	"errors"
+	"testing"
+
 	"github.com/speakeasy-api/gram/server/internal/catalogpromotion"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/setupguides"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestPromotionCandidateViewOverrideCapability(t *testing.T) {
@@ -25,6 +27,24 @@ func TestPromotionCandidateViewOverrideCapability(t *testing.T) {
 			require.Equal(t, tc.allowed, view.CanOverrideEligibility)
 		})
 	}
+}
+
+func TestPromotionCandidateViewCarriesSetupGuides(t *testing.T) {
+	t.Parallel()
+	view := promotionCandidateView(catalogpromotion.Candidate{
+		Status: "candidate", SetupGuides: []setupguides.Guide{{Slug: "slack", Title: "Slack"}},
+		SetupGuidesVersion: "v0.0.1", EndpointGuideSlug: "slack",
+	})
+	require.Len(t, view.SetupGuides, 1)
+	require.Equal(t, "slack", view.SetupGuides[0].Slug)
+	require.Equal(t, "Slack", view.SetupGuides[0].Title)
+	require.Equal(t, "v0.0.1", *view.SetupGuidesVersion)
+	require.Equal(t, "slack", *view.EndpointGuideSlug)
+
+	empty := promotionCandidateView(catalogpromotion.Candidate{Status: "promoted"})
+	require.Nil(t, empty.SetupGuides)
+	require.Nil(t, empty.SetupGuidesVersion)
+	require.Nil(t, empty.EndpointGuideSlug)
 }
 
 func TestPromotionLengthErrorsGiveSafeFieldGuidance(t *testing.T) {

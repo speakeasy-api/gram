@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import { describe, expect, it } from "vitest";
 import {

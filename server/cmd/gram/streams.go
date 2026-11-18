@@ -84,6 +84,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/destructivetool"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/scanners/presidiostub"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
@@ -122,6 +123,16 @@ const (
 	// is being inserted and acknowledged by the Pub/Sub service.
 	spanEventWriterOutstandingBatches = 2
 )
+
+// checkPystreamsStub enforces that the pystreams stub only runs in local
+// development. Elsewhere it would silently skip Presidio scanning and answer
+// enforcement requests with no findings.
+func checkPystreamsStub(environment string, enabled bool) error {
+	if enabled && environment != "local" {
+		return fmt.Errorf("--pystreams-stub is only allowed in the local environment, not %q", environment)
+	}
+	return nil
+}
 
 func newStreamsCommand() *cli.Command {
 	var shutdownFuncs []func(context.Context) error
@@ -309,6 +320,11 @@ func newStreamsCommand() *cli.Command {
 			Value:   "local/lake",
 		},
 		&cli.BoolFlag{
+			Name:    "pystreams-stub",
+			Usage:   "Consume the pystreams subscriptions here with no-op stubs instead of running pystreams: acknowledge Presidio analysis and Python ping messages, and answer Presidio enforcement with no findings. For local development only",
+			EnvVars: []string{"GRAM_PYSTREAMS_STUB"},
+		},
+		&cli.BoolFlag{
 			Name:    "sigint-ack-only",
 			Usage:   "Temporarily drain the sensor evaluation subscription: acknowledge all messages without evaluation or reading publication",
 			EnvVars: []string{"GRAM_SIGINT_ACK_ONLY"},
@@ -351,6 +367,9 @@ func newStreamsCommand() *cli.Command {
 		Action: func(c *cli.Context) error {
 			serviceName := "gram-streams"
 			serviceEnv := c.String("environment")
+			if err := checkPystreamsStub(serviceEnv, c.Bool("pystreams-stub")); err != nil {
+				return err
+			}
 			appinfo := o11y.PullAppInfo(c.Context)
 			appinfo.Command = "streams"
 			logger := PullLogger(c.Context).With(
@@ -848,7 +867,7 @@ func newStreamsCommand() *cli.Command {
 				})
 				mustReceive(rg, &roledistributionv1.RoleDistributionSetupRequestedV1{}, &roledistributionv1.RoleDistributionSetupHandler{}, streams.HandlerFunc[*roledistributionv1.RoleDistributionSetupRequestedV1](roleDistributionHandler.HandleRoleDistributionSetupRequested))
 				if c.Bool(pluginPublicationConsumeFlagName) {
-					publicationHandler := plugins.NewPublicationHandler(logger, db, (&background.TemporalPluginPublisher{TemporalEnv: temporalEnv}).SignalPluginPublish)
+					publicationHandler := plugins.NewPublicationHandler(logger, db, &background.TemporalPluginPublisher{TemporalEnv: temporalEnv})
 					organizationPublicationHandler := plugins.NewOrganizationPublicationHandler(logger, db)
 					settings := gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0}
 					mustReceiveBatchWithResult(rg, &pluginsv1.PublicationRequested{}, &pluginsv1.PublicationScheduler{}, publicationHandler, settings)
@@ -857,6 +876,15 @@ func newStreamsCommand() *cli.Command {
 				if queue := c.String(networkIngressQueueFlag); queue != "" {
 					client := &background.NetworkIngressClient{Client: temporalEnv.Client(), Queue: queue}
 					mustReceiveBatchWithResult(rg, &networkingressv1.ReconcileRequested{}, &networkingressv1.Reconciler{}, networkingress.NewReconcileHandler(logger, queue, client.SignalNetworkIngress), gcp.BatchReceiveSettings{MaxMessages: 100, MaxBytes: constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+				}
+
+				if c.Bool("pystreams-stub") {
+					// Stand in for pystreams. Running both would split each
+					// subscription's messages between real and stubbed consumers.
+					logger.WarnContext(ctx, "pystreams stubbed: Presidio scans are skipped")
+					mustReceive(rg, &pingv2.Message{}, &pingv2.PyProcessor{}, new(subscribers.NoopHandler[*pingv2.Message]))
+					mustReceive(rg, &riskv1.PresidioAnalysis{}, &riskv1.PresidioAnalyzer{}, new(subscribers.NoopHandler[*riskv1.PresidioAnalysis]))
+					mustReceive(rg, &riskv1.PresidioEnforcement{}, &riskv1.PresidioEnforcer{}, presidiostub.NewEnforceHandler(logger, replyWriter))
 				}
 
 				mustReceive(rg, &riskv1.GitleaksAnalysis{}, &riskv1.GitleaksAnalyzer{}, gitleaksHandler)

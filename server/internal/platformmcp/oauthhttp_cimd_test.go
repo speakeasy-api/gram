@@ -274,6 +274,7 @@ func TestCIMDAuthorize_DocumentClientIDMismatchRejected(t *testing.T) {
 	response := doCIMDAuthorize(t, service, ds.clientID, "http://127.0.0.1:33418/callback")
 	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Contains(t, response.Body.String(), `"invalid_client_metadata"`)
+	require.Contains(t, response.Body.String(), "or its return address")
 }
 
 func TestCIMDAuthorize_ConfidentialDocumentRejected(t *testing.T) {
@@ -287,6 +288,7 @@ func TestCIMDAuthorize_ConfidentialDocumentRejected(t *testing.T) {
 	response := doCIMDAuthorize(t, service, ds.clientID, "http://127.0.0.1:33418/callback")
 	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Contains(t, response.Body.String(), `"invalid_client_metadata"`)
+	require.Contains(t, response.Body.String(), "or its return address")
 }
 
 func TestCIMDToken_ClientPresentingSecretRejected(t *testing.T) {

@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -55,15 +56,8 @@ func (s *Service) handleInferenceWorkloadGrant(ctx context.Context, w http.Respo
 	}
 	projectID, err := uuid.Parse(r.PostForm.Get("project_id"))
 	shared := issuer.authorizationServer
-	if err != nil || len(r.PostForm["project_id"]) != 1 || projectID == uuid.Nil || (shared.projectID != uuid.Nil && shared.projectID != projectID) {
+	if err != nil || len(r.PostForm["project_id"]) != 1 || projectID == uuid.Nil {
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, "a project in the authorization issuer's tenancy is required")
-	}
-	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, projectID)
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && project.OrganizationID != issuer.organizationID) {
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, "a project in the authorization issuer's tenancy is required")
-	}
-	if err != nil {
-		return fmt.Errorf("exchange workload inference: %w", err)
 	}
 	assertion := r.PostForm.Get(oauthwire.ParamAssertion)
 	if assertion == "" {
@@ -73,11 +67,31 @@ func (s *Service) handleInferenceWorkloadGrant(ctx context.Context, w http.Respo
 	if err != nil {
 		return fmt.Errorf("exchange workload inference: %w", err)
 	}
-	// The target project has been checked against the authorization server tenancy.
-	// Use it for project-tier admission, including organization-owned issuers.
+	// Authenticate before looking up the project, as the platform grant does. The
+	// requested project selects project-tier admission and is checked below.
 	presented, err := admitWorkloadAssertion(ctx, s.workloadGrant, workloadTenancy{OrganizationID: issuer.organizationID, ProjectID: projectID, UserSessionIssuerID: shared.issuerID}, []string{urls.Issuer, urls.Token}, assertion)
+	if err != nil && !presented.signatureVerified {
+		return s.refuseUnverifiedWorkloadGrant(ctx, w, logger, presented, err)
+	}
+	subject := urn.NewWorkloadSubject(presented.issuerID, presented.subject)
+	t := s.trackSharedWorkloadGrant(r, issuer, presented, subject)
+	defer t.Finish(ctx)
 	if err != nil {
+		refuseWorkloadGrantRow(ctx, t, err)
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, err)
+	}
+	if shared.projectID != uuid.Nil && shared.projectID != projectID {
+		t.Refuse(ctx, mcpconnectionattempts.CodeResourceMismatch, mcpconnectionattempts.Detail("project_outside_issuer"))
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, "a project in the authorization issuer's tenancy is required")
+	}
+	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, projectID)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && project.OrganizationID != issuer.organizationID) {
+		t.Refuse(ctx, mcpconnectionattempts.CodeResourceMismatch, mcpconnectionattempts.Detail("project_outside_issuer"))
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, "a project in the authorization issuer's tenancy is required")
+	}
+	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+		return fmt.Errorf("exchange workload inference: %w", err)
 	}
 	// This new audience has no legacy consumers. Its inference-only ceiling
 	// uses version 6 without advancing issuance for existing MCP credentials.
@@ -85,16 +99,16 @@ func (s *Service) handleInferenceWorkloadGrant(ctx context.Context, w http.Respo
 	version := runtimepolicy.InferenceIssuedPolicyVersion
 	grants, err := encodeInferenceWorkloadPolicy(projectID, version)
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return fmt.Errorf("exchange workload inference: %w", err)
 	}
-	credential := workloadSessionCredential{DelegatedGrants: grants, DelegatedGrantsVersion: int32(version)}
-	subject := urn.NewWorkloadSubject(presented.issuerID, presented.subject)
+	credential := workloadSessionCredential{DerivesPolicyAtAdmission: false, DelegatedGrants: grants, DelegatedGrantsVersion: int32(version)}
 	session := workloadSessionIssuance(workloadSessionTarget{userSessionIssuerID: shared.issuerID, projectID: projectID, organizationID: issuer.organizationID, issuer: shared.issuer, audience: InferenceResource}, subject, credential)
 	// The session row inherits its issuer tenancy (organization issuers have
 	// no project_id). Persist the exact target in the immutable resource and
 	// ceiling so completion never takes tenancy from caller headers.
 	session.Resource = InferenceResource + ":" + projectID.String()
-	return s.issueWorkloadGrantSession(ctx, w, logger, workloadGrantIssuance{client: nil, beforeCommit: nil, presented: presented, credential: credential, projectID: &projectID, endpoint: nil, session: session})
+	return s.issueWorkloadGrantSession(ctx, w, logger, workloadGrantIssuance{client: nil, beforeCommit: nil, tracker: t, presented: presented, credential: credential, projectID: &projectID, endpoint: nil, session: session, choosesUpstream: false, requestedAuthClients: nil})
 }
 
 // AuthorizeWorkloadInference implements the completion-only authentication

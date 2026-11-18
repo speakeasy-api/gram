@@ -45,6 +45,7 @@ func (l *Logger) LogAIToolDecisionSet(ctx context.Context, dbtx repo.DBTX, event
 	}
 	return l.log(ctx, dbtx, auditEntry{
 		Params: repo.InsertAuditLogParams{
+			IsInternal:     false,
 			OrganizationID: event.OrganizationID,
 			ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 

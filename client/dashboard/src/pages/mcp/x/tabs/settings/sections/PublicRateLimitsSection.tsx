@@ -1,3 +1,5 @@
+import { useSettingsSectionHeading } from "@/components/detail/settings-layout";
+import { Spinner } from "@/components/ui/Spinner";
 import { Button } from "@/components/ui/Button";
 import { Field, FieldError } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
@@ -9,7 +11,6 @@ import type { TunneledMcpServer } from "@gram/client/models/components/tunneledm
 import { useGetTunneledMcpServer } from "@gram/client/react-query/getTunneledMcpServer.js";
 import { useUpdateTunneledMcpServerMutation } from "@gram/client/react-query/updateTunneledMcpServer.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
@@ -98,6 +99,8 @@ function PublicRateLimits({
   // The stored values the draft was last synced from, so a refetch that
   // changes them only replaces an untouched draft and never clobbers edits.
   const syncedFrom = useRef(toPublicRateDraft(tunneledMcpServer));
+  const [root, setRoot] = useState<HTMLDivElement | null>(null);
+  useSettingsSectionHeading("Anonymous rate limit", root);
 
   const { publicRequestRatePerSecond, publicRequestBurst } = tunneledMcpServer;
   useEffect(() => {
@@ -171,13 +174,13 @@ function PublicRateLimits({
   };
 
   return (
-    <div className="border p-6">
+    <div ref={setRoot} className="border p-6">
       <Text
         variant="subheading"
         id="tunneled-mcp-public-rate-limits-label"
         className="mb-1"
       >
-        Anonymous Rate Limit
+        Anonymous rate limit
       </Text>
       <Text muted small className="mb-4 max-w-3xl">
         Caps how many requests anonymous callers can send to MCP servers
@@ -188,14 +191,14 @@ function PublicRateLimits({
         {tunneledMcpServer.allowPublic ? null : (
           <>
             {" "}
-            Applies once{" "}
+            Applies once the server&apos;s{" "}
             <Link
               to={`#${MCP_PUBLIC_ACCESS_SECTION_ID}`}
               className="underline underline-offset-2"
             >
-              Public Access
+              visibility
             </Link>{" "}
-            is enabled.
+            is public.
           </>
         )}
       </Text>
@@ -257,7 +260,7 @@ function PublicRateLimits({
             >
               {update.isPending ? (
                 <Button.LeftIcon>
-                  <Loader2 className="size-4 animate-spin" />
+                  <Spinner className="mr-0 size-4" />
                 </Button.LeftIcon>
               ) : null}
               <Button.Text>

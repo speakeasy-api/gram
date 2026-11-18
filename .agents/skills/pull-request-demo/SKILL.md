@@ -30,7 +30,7 @@ Reviewers judge a change by how it fits its page: its position next to the exist
 
   Expect at least one row, every row reading `gram_account_type = 'enterprise'`. Two rows is normal, because your dev org and the demo org each own a `default` project. Run `mise run seed` only on zero rows or a non-enterprise tier.
 
-- Invoke Playwright only through `mise run playwright`. The task uses the repo configuration and installs Chromium on demand.
+- Invoke Playwright only through `mise run playwright`. The task uses the repo configuration and launches the system Google Chrome with its sandbox enabled. It does not install Chrome; if Chrome is missing, ask the user to install it.
 - Use `./tools/ffmpeg` for the trim, frame-extraction, and GIF steps. The PNG path needs no conversion.
 
 The login flow is credential-less: open the dashboard, click **Login** if redirected, and wait for `/speakeasy`. If the first load is blank after a fresh browser install, navigate to the URL again.
@@ -132,6 +132,27 @@ Every `mise run playwright` subcommand costs one to two seconds of process start
 ```
 
 The trimmed file is the one you publish, so it is the one section 3 applies to. GitHub serves `.webm` back as `video/webm` and renders it as a player, so no further conversion is needed. If a take goes wrong, stop it, restore the starting state in a new session, and record again. Do not include setup, login, exploration, or unrelated page tours.
+
+### Narration: expressive and easy to listen to
+
+When narration is requested, use a natural, expressive voice with conversational pacing, varied intonation, deliberate emphasis, and short pauses between steps. Explain the action and its result; do not read every label or narrate clicks mechanically. Prefer a high-quality expressive speech engine available in the environment. Do not use the stock macOS `say` Daniel voice or another flat system voice as the default: it produced a recording the user found “very hard to listen to.” Use such a voice only if the user explicitly selects it after hearing a sample. Increasing speaking speed or volume does not fix monotonous delivery.
+
+For this user, the selected narration voice is **Kokoro `bm_george`**. Use it by default for narrated recordings unless the user requests another voice. The working local configuration is `voice="bm_george", lang="en-gb", speed=1.0` with `kokoro-onnx`. Keep downloaded models and generated audio in ignored local artifact directories. An isolated invocation that worked here is `uv run --no-project --python 3.12 --with kokoro-onnx --with soundfile python "$DIR/narration.py" "$DIR"`; `--no-project` avoids changing the repository Python environment.
+
+Download the model and voice bundle once into the ignored recording directory, then pass both paths to `Kokoro`:
+
+```bash
+curl -fL --retry 3 -o "$DIR/kokoro-v1.0.onnx" https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/kokoro-v1.0.onnx
+curl -fL --retry 3 -o "$DIR/voices-v1.0.bin" https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/voices-v1.0.bin
+```
+
+In the narration script, accept `$DIR` as its first argument and initialize `Kokoro(str(Path(sys.argv[1]) / "kokoro-v1.0.onnx"), str(Path(sys.argv[1]) / "voices-v1.0.bin"))` after importing `sys`, `Path` from `pathlib`, and `Kokoro` from `kokoro_onnx`. Keep these downloaded files out of commits.
+
+Honor an existing user voice selection without asking for approval again. When choosing a new voice, generate a short sample from the actual script before rendering the full recording. Listen to it when audio review is available; otherwise present the sample for the user's voice choice, state that you cannot assess its sound yourself, and wait for that choice before rendering the full narration. If no expressive voice is available, keep the captured video and surface that limitation instead of silently substituting a robotic voice. Never claim to have reviewed expressiveness from a transcript, waveform, or volume check alone.
+
+Time each sentence to the visible action, leave room to read the result, and avoid rushed acronyms. Review the final muxed audio for intelligibility, natural phrasing, clipped words, long silences, and alignment with the screen. When direct audio review is unavailable, present the final narrated file for user review and clearly state that its sound has not been assessed. Regenerate weak narration before publishing. Disclose synthesized narration without implying a real person recorded it.
+
+The trim example above uses `-an` for a silent capture. For already narrated footage, trim while preserving audio. For silent footage, trim first and then mux narration into a temporary WebM. Replace `$DIR/demo-trimmed.webm` with that muxed output before inspection, GIF conversion, or upload so subsequent steps use the narrated artifact. Attach that WebM alongside any silent GIF fallback. Never publish a version whose narration was removed by `-an`, or use a silent GIF as the only deliverable. Inspect and publish the final file containing both picture and sound.
 
 ### GIF fallback
 

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { makeConnection } from "./tabs/setup/testFixtures";
 import { describe, expect, it } from "vitest";

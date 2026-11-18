@@ -5,7 +5,7 @@ import {
   type ConnectionKillswitchContext,
 } from "@/components/connections/ConnectionsList";
 import {
-  CONNECTION_GROUPING_LABELS,
+  groupingOptions,
   type ConnectionGrouping,
 } from "@/components/connections/groupConnections";
 import { InlineEmptyState } from "@/components/inline-empty-state";
@@ -18,24 +18,6 @@ import { useRBAC } from "@/hooks/useRBAC";
 
 import type { UserSession } from "@gram/client/models/components/usersession.js";
 import type { UserSessionClient } from "@gram/client/models/components/usersessionclient.js";
-
-const GROUPING_OPTIONS: { value: ConnectionGrouping; label: string }[] = [
-  { value: "subject", label: CONNECTION_GROUPING_LABELS.subject },
-  { value: "issuer", label: CONNECTION_GROUPING_LABELS.issuer },
-  { value: "provider", label: CONNECTION_GROUPING_LABELS.provider },
-  { value: "client", label: CONNECTION_GROUPING_LABELS.client },
-];
-
-/**
- * Groupings worth offering for the scope a caller is showing.
- *
- * A grouping the caller has already fixed sorts a list of one: the MCP server
- * detail lists that server's own sessions, so filing them by MCP server draws
- * a single group and an option that appears to do nothing.
- */
-function groupingOptions(hide: ConnectionGrouping[]) {
-  return GROUPING_OPTIONS.filter((option) => !hide.includes(option.value));
-}
 
 /**
  * Connections plus their grouping control and the loading / error / empty
@@ -52,6 +34,7 @@ export function ConnectionsListSection({
   onRetry,
   onRevoked,
   defaultGrouping = "subject",
+  grouping: controlledGrouping,
   showGroupingControl = true,
   hideGroupings,
   bordered = true,
@@ -59,6 +42,8 @@ export function ConnectionsListSection({
   emptyDescription = "Connections agents establish will appear here.",
   clients,
   killswitchContext,
+  revocable = true,
+  canViewRegistrations,
 }: {
   sessions: UserSession[];
   /** Registrations for this scope; surfaced by the client grouping. */
@@ -69,6 +54,11 @@ export function ConnectionsListSection({
   onRetry: () => void;
   onRevoked: () => void;
   defaultGrouping?: ConnectionGrouping;
+  /**
+   * The grouping chosen by a control the caller renders itself, such as one in
+   * its `Page.Toolbar`. Pair it with `showGroupingControl={false}`.
+   */
+  grouping?: ConnectionGrouping;
   /**
    * Whether the reader can regroup the list.
    *
@@ -86,15 +76,25 @@ export function ConnectionsListSection({
   bordered?: boolean;
   emptyHeading?: string;
   emptyDescription?: string;
+  /**
+   * Whether revoke actions may be offered at all. Off for a listing that spans
+   * projects, where the working project is not the one a session belongs to.
+   */
+  revocable?: boolean;
+  /** Passed through to the list; see `ConnectionsList`. */
+  canViewRegistrations?: boolean;
 }): JSX.Element {
-  const [grouping, setGrouping] = useState<ConnectionGrouping>(defaultGrouping);
+  const [ownGrouping, setGrouping] =
+    useState<ConnectionGrouping>(defaultGrouping);
+  const grouping = controlledGrouping ?? ownGrouping;
   const project = useProject();
   const { hasScope } = useRBAC();
   // Scoped to the project these connections belong to, not the bare scope: a
   // user with project:write somewhere in the org must not be offered revoke
   // affordances here, where they would only fail at mutation time. Every
-  // surface embedding this section is scoped to the working project.
-  const canRevoke = hasScope("project:write", project.id);
+  // surface embedding this section is scoped to the working project, except
+  // one that spans projects, which opts out through `revocable`.
+  const canRevoke = revocable && hasScope("project:write", project.id);
 
   if (isPending) {
     return (
@@ -108,19 +108,18 @@ export function ConnectionsListSection({
 
   if (isError) {
     return (
-      <Stack
-        direction="horizontal"
-        align="center"
-        justify="space-between"
-        gap={3}
-      >
-        <p className="text-destructive text-sm">
-          Couldn&apos;t load connections.
-        </p>
-        <Button variant="tertiary" size="sm" onClick={onRetry}>
-          Retry
-        </Button>
-      </Stack>
+      <div role="alert">
+        <InlineEmptyState
+          icon="triangle-alert"
+          heading="Couldn't load connections"
+          description="Check your connection, then try again."
+          action={
+            <Button variant="secondary" size="sm" onClick={onRetry}>
+              Retry
+            </Button>
+          }
+        />
+      </div>
     );
   }
 
@@ -155,6 +154,7 @@ export function ConnectionsListSection({
         bordered={bordered}
         grouping={grouping}
         canRevoke={canRevoke}
+        canViewRegistrations={canViewRegistrations}
         onRevoked={onRevoked}
         clients={clients}
         killswitchContext={killswitchContext}

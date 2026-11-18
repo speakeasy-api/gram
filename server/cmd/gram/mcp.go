@@ -19,7 +19,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
 	"github.com/urfave/cli/v2"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
@@ -33,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -42,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/memory"
@@ -74,6 +75,7 @@ import (
 func mcpServerFlags() []cli.Flag {
 	flags := mcpRuntimeFlags()
 	return append(flags,
+		riskFingerprintPepperFlag(),
 		&cli.StringFlag{Name: "address", Value: ":8080", Usage: "HTTP address to listen on", EnvVars: []string{"GRAM_SERVER_ADDRESS"}},
 		&cli.StringFlag{Name: "ssl-key-file", Usage: "The SSL key file path to use for the server", EnvVars: []string{"GRAM_SSL_KEY_FILE"}},
 		&cli.StringFlag{Name: "ssl-cert-file", Usage: "The SSL certificate file path to use for the server", EnvVars: []string{"GRAM_SSL_CERT_FILE"}},
@@ -295,15 +297,19 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	// Shutdown funcs run concurrently, so everything publishing through
 	// psbroker stops in order inside its close.
 	var drainRisk func(context.Context) error
+	var shutdownConnections func(context.Context) error
 	stopPubSub := shutdown.funcs[pubsubShutdown]
 	shutdown.funcs[pubsubShutdown] = func(ctx context.Context) error {
 		var errs []error
+		// The recorder publishes its exports, so only the publishers wait for it.
+		waitConnections := startShutdown(ctx, shutdownConnections)
 		if drainRisk != nil {
 			errs = append(errs, drainRisk(ctx))
 		}
 		if enforcementShutdown != nil {
 			errs = append(errs, enforcementShutdown(ctx))
 		}
+		errs = append(errs, waitConnections())
 		return errors.Join(append(errs, stopPublishers(ctx), stopPubSub(ctx))...)
 	}
 
@@ -313,7 +319,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	telemLogger, stop := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cacheImpl, chDB, logsEnabled, toolIOLogsEnabled,
 		tm.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs))
 	shutdown.funcs = append(shutdown.funcs, stop)
-	telemSvc := tm.NewService(logger, tracerProvider, db, chDB, chDB, sessionManager, chatSessions, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine, featureFlags)
+	telemSvc := tm.NewService(logger, tracerProvider, db, chDB, chDB, sessionManager, chatSessions, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
 
 	// Platform memory tools and dynamic tool search need a completions client.
 	// The chat writer captures any transcript they produce but carries none of
@@ -353,6 +359,10 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	}
 	clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 	clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
+	orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
+	if err != nil {
+		return err
+	}
 	issuerGate := newInternalSessionIssuerGate(c, db, featureFlags, false)
 	issuerSigner := internalsessionissuers.NewSigner(logger, tracerProvider, meterProvider, db, issuerGate, gcpIdentity, kmsSigningClients, internalIssuerSignerConfig(c, callbackOrigins.Outbound))
 	issuerGate.SetSigningAuthority(issuerSigner.CheckAuthority)
@@ -363,7 +373,9 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		return fmt.Errorf("build tunnel http client: %w", err)
 	}
 	protectedResources := protectedresource.NewProber(db, guardianPolicy)
-	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags)
+	connectionRecorder := mcpconnectionattempts.NewRecorder(logger, meterProvider, chDB, logsEnabled, connectionDeviceKeys(ctx, logger, c.String("risk-fingerprint-pepper-keyring")), newConnectionLogExport(publishers.OTELLogs))
+	shutdownConnections = connectionRecorderShutdown(connectionRecorder)
+	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags, connectionRecorder, orgEncryption)
 	if err != nil {
 		return err
 	}
@@ -373,6 +385,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		return errors.Join(stopTunnelMetrics(ctx), stopClient(ctx))
 	}
 	mcpService, err := newMCPService(c, mcpServiceDependencies{
+		Connections:      connectionRecorder,
 		CallerAssertions: callerAssertions,
 		IssuerGate:       issuerGate, IssuerSigner: issuerSigner,
 		Logger: logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
@@ -400,22 +413,35 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		remotesessions.WithRefreshIDTokenVerifier(remoteSessionDeps.Verifier),
 		remotesessions.WithRefreshIssuerMetadataRefresher(remoteSessionDeps.Refresher),
 		remotesessions.WithRefreshSessionEnricher(remoteSessionDeps.Enricher),
-		remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner))
+		remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner),
+		remotesessions.WithRefreshConnectionRecorder(connectionRecorder),
+		remotesessions.WithRefreshFeatureFlags(featureFlags))
 	remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, enc, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, identityCommitter, remoteSessionsRefresher, productFeatures, protectedResources)
 	remoteSessionsService.SetCallbackOrigins(callbackOrigins)
 	remoteSessionsService.SetFeatureFlags(featureFlags)
 	remoteSessionsService.SetSpeakeasySigningAvailable(issuerSigner.Available())
-	remoteSessionsService.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
+	remoteSessionsService.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID, write bool) error {
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		if !ok || authCtx == nil {
 			return oops.C(oops.CodeNotFound)
 		}
-		_, _, err := agentmanagement.NewAuthorizer(authzEngine).RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentAuthorize)
+		predicate := agentmanagement.OwnedAgentAuthorize
+		if write {
+			predicate = agentmanagement.OwnedAgentSetup
+		}
+		authorizer := agentmanagement.NewAuthorizer(authzEngine)
+		_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, predicate)
+		if err != nil && !write {
+			_, _, err = authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentSetup)
+		}
 		if err != nil {
 			return fmt.Errorf("authorize attachment owner: %w", err)
 		}
 		return nil
 	})
+	bindingRefreshAttempts := remotesessions.NewBindingRefreshAttempts(logger, cache.NewRedisCacheAdapter(redisClient))
+	remoteSessionsService.SetBindingRefreshAttempts(bindingRefreshAttempts)
+	mcpService.SetBindingRefreshAttempts(bindingRefreshAttempts)
 	mcpService.SetConsentBindingService(remoteSessionsService)
 	mcpService.StartRemoteSessionRecheck(ctx)
 
@@ -439,6 +465,11 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	attachApprovals(mux, logger, approvalService, runtime.MCP, ratelimit.NewRedisStore(redisClient))
 	usersessions.AttachRetiredProxy(mux, logger)
 
+	// Requests get their own base context so the shutdown deadline can cancel
+	// the ones still running without cancelling ctx, which the probe drain
+	// below still needs.
+	requestCtx, cancelRequests := context.WithCancelCause(ctx)
+	defer cancelRequests(nil)
 	srv := &http.Server{
 		Addr:              c.String("address"),
 		Handler:           mux,
@@ -447,7 +478,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		// backend connections at 600s, so the backend must outlast it. No
 		// WriteTimeout, since this mux serves long-lived MCP streams.
 		IdleTimeout: 620 * time.Second,
-		BaseContext: func(net.Listener) context.Context { return ctx },
+		BaseContext: func(net.Listener) context.Context { return requestCtx },
 	}
 
 	sigctx, sigcancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
@@ -456,14 +487,10 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	group.Go(func() {
 		<-sigctx.Done()
 		logger.InfoContext(ctx, "shutting down mcp server")
-		graceCtx, graceCancel := context.WithTimeoutCause(context.WithoutCancel(ctx), shutdownDrainTimeout, errors.New("graceful shutdown timed out"))
-		defer graceCancel()
-		if err := srv.Shutdown(graceCtx); err != nil {
-			if gerr := context.Cause(graceCtx); gerr != nil {
-				err = errors.Join(err, gerr)
-			}
-			logger.ErrorContext(ctx, "failed to shutdown mcp server", attr.SlogError(err))
-		}
+		// Listen streams never finish on their own, so end them first and
+		// let their clients reconnect to a replica that is still serving.
+		mcpService.StartDrain(requestInterruptAfter)
+		drainHTTPServer(ctx, logger, srv, cancelRequests, shutdownDrainTimeout, "failed to shutdown mcp server")
 		// Handlers are drained; the automatic remote-session probes they
 		// detached still write verdicts, so give them their own budget before
 		// the datastores close.
@@ -525,12 +552,7 @@ func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serv
 		})
 	})
 	mux.Use(middleware.DropInboundOTelBaggage)
-	mux.Use(func(h http.Handler) http.Handler {
-		return otelhttp.NewHandler(h, "http",
-			otelhttp.WithServerName("gram-mcp"),
-			otelhttp.WithPublicEndpointFn(middleware.IsOTelPublicEndpoint),
-		)
-	})
+	mux.Use(middleware.PublicHTTPTracing("gram-mcp"))
 	mux.Use(middleware.RouteLabelerMiddleware)
 	mux.Use(middleware.MCPProtocolVersionTelemetry)
 	mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
@@ -540,6 +562,13 @@ func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serv
 	if err != nil {
 		return nil, fmt.Errorf("configure mcp security middleware: %w", err)
 	}
+	// Response compression and the request body limit live in the app because
+	// the Gateway edge offers neither. Below CORS so a 413 carries CORS
+	// headers, and outside the bandwidth meter: handlers write uncompressed
+	// bytes into the meter, which forwards them to the compressor, so billed
+	// egress is the size of the uncompressed body.
+	mux.Use(middleware.ResponseCompression())
+	mux.Use(middleware.RequestBodyLimit(logger, constants.MaxRequestBodyBytes))
 	// Below CORS, which browser OAuth clients need on the authentication
 	// host too. Above MCPSecurity, so MCP endpoint paths answer 404 there like
 	// every route the host does not serve, and above customdomains.Middleware,
@@ -547,6 +576,13 @@ func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serv
 	mux.Use(authenticationHost.Middleware)
 	mux.Use(mcpSecurity)
 	mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL, platformHosts))
+	// Middleware outside the meter must not consume request bodies or buffer,
+	// truncate, or replace successful response bodies; those bytes would not
+	// be counted. Two exceptions are deliberate. ResponseCompression
+	// transforms bytes after the meter has counted them. RequestBodyLimit
+	// answers a body that overflows during a read with a 413, so the meter
+	// counts the handler's discarded response (a small error body) rather
+	// than the 413.
 	mux.Use(metering.NewMCPBandwidthMiddleware(logger, publishers.MeterReadings))
 	mux.Use(middleware.SessionMiddleware)
 	return mux, nil

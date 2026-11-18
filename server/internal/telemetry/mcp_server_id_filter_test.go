@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpendpointsRepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -35,12 +36,14 @@ func createHostedMCPServerFixture(t *testing.T, ctx context.Context, ti *testIns
 		Slug:                   slug,
 		Description:            pgtype.Text{},
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                pgtype.Text{String: "acme-" + slug, Valid: true},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-
-	return addToolsetWrapper(t, ctx, ti, toolset.ID, toolset.ID, "acme-"+slug)
+	serverID := addToolsetWrapper(t, ctx, ti, toolset.ID, toolset.ID, "acme-"+slug)
+	_, err = mcpendpointsRepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsRepo.CreateMCPEndpointParams{
+		ProjectID: *authCtx.ProjectID, McpServerID: uuid.NullUUID{UUID: serverID, Valid: true}, Slug: "acme-" + slug,
+	})
+	require.NoError(t, err)
+	return serverID
 }
 
 // addToolsetWrapper adds a private, endpointless mcp_servers row serving the toolset.
@@ -190,7 +193,7 @@ func TestToolUsage_FiltersByMCPServerID(t *testing.T) {
 		}
 	})
 
-	t.Run("it lists the same traces by the legacy toolset slug", func(t *testing.T) {
+	t.Run("it lists the same traces by the toolset slug", func(t *testing.T) {
 		t.Parallel()
 		res, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{
 			From:               from,
@@ -410,11 +413,10 @@ func TestToolUsage_DisabledToolsetKeepsServerIDForPastCalls(t *testing.T) {
 		Slug:                   "retired",
 		Description:            pgtype.Text{},
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                pgtype.Text{String: "acme-retired", Valid: true},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
 	serverID := addToolsetWrapper(t, ctx, ti, toolset.ID, toolset.ID, "acme-retired")
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "disabled", UserSessionIssuerID: nil, Slug: "", CustomDomainID: uuid.NullUUID{}})
 
 	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
 		projectID:   authCtx.ProjectID.String(),
@@ -450,8 +452,6 @@ func TestToolUsage_DisabledCanonicalKeepsUnstampedCalls(t *testing.T) {
 		Slug:                   "paused",
 		Description:            pgtype.Text{},
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                pgtype.Text{String: "acme-paused", Valid: true},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
 	canonicalID := addToolsetWrapperWith(t, ctx, ti, toolset.ID, toolset.ID, "acme-paused", "disabled", true)

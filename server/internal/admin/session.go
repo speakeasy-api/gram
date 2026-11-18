@@ -29,11 +29,21 @@ func SessionMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// adminSessionTTL is how long an admin session record is kept in the cache
-// before it is evicted. The record is refreshed (cache write) on every
-// request so an active admin member's session stays alive; an inactive
-// session is eventually reclaimed.
-const adminSessionTTL = 24 * time.Hour
+// adminSessionTTL is the inactivity timeout for an admin session. Each write of
+// the record restarts it, and using a session rewrites the record whenever its
+// hourly OIDC access token is refreshed, so the timeout runs from the last
+// refresh rather than the last request.
+const adminSessionTTL = 48 * time.Hour
+
+// adminSessionMaxLifetime caps a session's age however active it stays, so
+// staff sign in with the OIDC provider at least this often. Staff Admin MCP
+// connections depend on the session they were authorized with, so they end
+// with it.
+const adminSessionMaxLifetime = 45 * 24 * time.Hour
+
+// adminSessionExpiredTTL clears a record written at or past the maximum
+// lifetime. Redis needs a positive TTL, so it can't be zero.
+const adminSessionExpiredTTL = time.Second
 
 // Session is the server-side record for an OIDC-authenticated admin user.
 // The access and refresh tokens are stored encrypted so the cache contents are
@@ -60,8 +70,19 @@ func (s Session) CacheKey() string {
 	return AdminSessionCacheKey(s.SessionID)
 }
 
+// TTL restarts the inactivity timeout without outliving the session's maximum
+// lifetime. Verifier.Authorize enforces that lifetime on every use.
 func (s Session) TTL() time.Duration {
-	return adminSessionTTL
+	remaining := time.Until(s.CreatedAt.Add(adminSessionMaxLifetime))
+	if remaining <= 0 {
+		return adminSessionExpiredTTL
+	}
+	return min(remaining, adminSessionTTL)
+}
+
+// Expired reports whether the session has reached its maximum lifetime.
+func (s Session) Expired(now time.Time) bool {
+	return !now.Before(s.CreatedAt.Add(adminSessionMaxLifetime))
 }
 
 // newSessionID returns a URL-safe random identifier used as the opaque value

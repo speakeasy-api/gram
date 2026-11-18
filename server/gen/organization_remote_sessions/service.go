@@ -65,7 +65,20 @@ var MethodNames = [4]string{"listClientSessions", "revokeSession", "refreshSessi
 type ListClientSessionsPayload struct {
 	// The remote_session_client id.
 	ClientID string
-	// Pagination cursor.
+	// Case-insensitive literal identity search.
+	Search *string
+	// Filter by effective upstream authorization status. Access expiry alone does
+	// not expire a refreshable account.
+	Status *string
+	// Inclusive creation lower bound.
+	CreatedAfter *string
+	// Exclusive creation upper bound.
+	CreatedBefore *string
+	// Ordering. Authorization expiry is the earliest hard authorization deadline
+	// and usable refresh/access deadline. Omit to retain ID ordering and UUID
+	// cursors.
+	Sort *string
+	// Pagination cursor. Preserve the filters and ordering when following it.
 	Cursor *string
 	// Page size (default 50, max 100).
 	Limit        *int

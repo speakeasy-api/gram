@@ -33,7 +33,11 @@ export type AdminUpstreamOAuthMigrationAuthClients = {
    */
   associations: number;
   /**
-   * Whether every configured identity has its auth client, server links and header copies recorded, no backfilled record is left to retire, no server offering one is left undecided, and no phase failed.
+   * Agent attachments whose grants a run does not write while the organization's upstream selector writes are not allowed. While any wait, complete is false.
+   */
+  attachmentsWaiting?: number | undefined;
+  /**
+   * Whether every configured identity has its auth client, server links and header copies recorded, no backfilled record is left to retire, and no phase failed.
    */
   complete: boolean;
   /**
@@ -65,7 +69,7 @@ export type AdminUpstreamOAuthMigrationAuthClients = {
    */
   pendingLinks: number;
   /**
-   * Servers offering a backfilled auth client whose need for upstream authentication is still undecided, not yet marked as needing it.
+   * Deprecated: always 0. Whether a server needs upstream authentication follows from the auth clients it offers, so no server is marked.
    */
   pendingMarkedServers: number;
   /**
@@ -115,6 +119,7 @@ export const AdminUpstreamOAuthMigrationAuthClients$inboundSchema:
   z.ZodMiniType<AdminUpstreamOAuthMigrationAuthClients, unknown> = z.pipe(
     z.object({
       associations: z.int(),
+      attachments_waiting: z.optional(z.int()),
       complete: z.boolean(),
       failed_phases: z.array(z.string()),
       in_progress: z.boolean(),
@@ -144,6 +149,7 @@ export const AdminUpstreamOAuthMigrationAuthClients$inboundSchema:
     }),
     z.transform((v) => {
       return remap$(v, {
+        "attachments_waiting": "attachmentsWaiting",
         "failed_phases": "failedPhases",
         "in_progress": "inProgress",
         "pending_clients": "pendingClients",

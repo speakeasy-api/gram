@@ -25,7 +25,6 @@ import (
 )
 
 const staffAccessLifetime = time.Hour
-const staffRefreshLifetime = 24 * time.Hour
 
 // StaffOAuthTokens exchanges one-use codes and rotates refresh tokens. No HTTP
 // handler in this package accepts an admin browser cookie as a token credential.
@@ -213,6 +212,7 @@ func (s *StaffOAuthTokens) refresh(w http.ResponseWriter, ctx context.Context, c
 		staffTokenError(w, err)
 		return
 	}
+	connection.AuthorizedTil = now.Add(staffInactivityTimeout)
 	access, refresh, session, err := s.mintPair(connection, clientID, now)
 	if err != nil {
 		staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint staff token")
@@ -265,7 +265,7 @@ func (s *StaffOAuthTokens) mintPair(connection staffTokenConnection, clientID st
 		return "", "", staffIssuedSession{}, err
 	}
 	accessExpiry := minStaffTime(now.Add(staffAccessLifetime), connection.AuthorizedTil)
-	refreshExpiry := minStaffTime(now.Add(staffRefreshLifetime), connection.AuthorizedTil)
+	refreshExpiry := connection.AuthorizedTil
 	access, _, err := s.signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: s.resource, Issuer: s.issuer, Lifetime: 0, ExpiresAt: &accessExpiry, ClientID: clientID, JTI: jti})
 	if err != nil {
 		return "", "", staffIssuedSession{}, fmt.Errorf("mint staff access token: %w", err)

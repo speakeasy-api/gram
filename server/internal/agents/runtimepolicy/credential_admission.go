@@ -19,6 +19,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// ErrPrincipalNotAdmitted marks a refusal earned by the agent's lifecycle or a user's eligibility.
+var ErrPrincipalNotAdmitted = errors.New("principal not admitted")
+
+func principalNotAdmitted() error {
+	return oops.E(oops.CodeUnauthorized, ErrPrincipalNotAdmitted, "%s", oops.CodeUnauthorized.UserMessage())
+}
+
 // AdmitPrincipalCredential performs authoritative parent admission and loads
 // credential policy R, live direct agent policy A, and the current owner's live
 // policy O as three independent policy sets, plus the authorizing user's live
@@ -110,12 +117,12 @@ func AdmitPrincipalCredentialWithDBTX(ctx context.Context, tx accessrepo.DBTX) (
 	agent, err := agents.ResolvePrincipal(ctx, tx, authCtx.ActiveOrganizationID, actor)
 	if err != nil {
 		if errors.Is(err, agents.ErrPrincipalInvalid) || errors.Is(err, agents.ErrPrincipalNotFound) {
-			return authz.PrincipalCredentialAdmission{}, oops.C(oops.CodeUnauthorized)
+			return authz.PrincipalCredentialAdmission{}, principalNotAdmitted()
 		}
 		return authz.PrincipalCredentialAdmission{}, fmt.Errorf("resolve credential parent: %w", err)
 	}
 	if agents.DeriveLifecycle(agent) != agents.LifecycleActive || agent.OwnerReassignmentRequiredAt.Valid {
-		return authz.PrincipalCredentialAdmission{}, oops.C(oops.CodeUnauthorized)
+		return authz.PrincipalCredentialAdmission{}, principalNotAdmitted()
 	}
 
 	ownerPrincipals, ownerEligible, err := ResolveEligibleUser(ctx, tx, authCtx.ActiveOrganizationID, agent.OwnerUserID)
@@ -123,7 +130,7 @@ func AdmitPrincipalCredentialWithDBTX(ctx context.Context, tx accessrepo.DBTX) (
 		return authz.PrincipalCredentialAdmission{}, fmt.Errorf("resolve credential owner: %w", err)
 	}
 	if !ownerEligible {
-		return authz.PrincipalCredentialAdmission{}, oops.C(oops.CodeUnauthorized)
+		return authz.PrincipalCredentialAdmission{}, principalNotAdmitted()
 	}
 
 	agentPolicy, err := LoadAgentPolicy(ctx, tx, authCtx.ActiveOrganizationID, actor)
@@ -150,7 +157,7 @@ func AdmitPrincipalCredentialWithDBTX(ctx context.Context, tx accessrepo.DBTX) (
 				return authz.PrincipalCredentialAdmission{}, fmt.Errorf("load live authorizer policy: %w", err)
 			}
 		case credential.DerivesPolicyAtAdmission:
-			return authz.PrincipalCredentialAdmission{}, oops.C(oops.CodeUnauthorized)
+			return authz.PrincipalCredentialAdmission{}, principalNotAdmitted()
 		default:
 			// A stored policy admits on its own as before; an ineligible
 			// authorizer only leaves no auth client usable.

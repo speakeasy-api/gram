@@ -27,7 +27,7 @@ const ahpDefaultInterceptTimeout = 10 * time.Second
 // once: intercept delivery already records the event, so adding an observer
 // for the same event would duplicate ingestion.
 func ahpConfiguration(failOpen bool, uploadURL string) *ahp.Configuration {
-	boundaries := []event.Type{event.UserMessageInbound, event.ToolBefore}
+	boundaries := []event.Type{event.TurnStart, event.UserMessageInbound, event.ToolBefore}
 	observations := []event.Type{
 		event.SessionStart, event.SessionEnd, event.TurnEnd,
 		event.ModelResponseAfter, event.ToolAfter,

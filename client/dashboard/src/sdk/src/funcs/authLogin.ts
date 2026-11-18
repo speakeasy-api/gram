@@ -100,11 +100,17 @@ async function $do(
   const path = pathToFunc("/rpc/auth.login")();
 
   const query = encodeFormQuery({
+    "analytics_session_id": payload?.analytics_session_id,
     "email": payload?.email,
     "org_name": payload?.org_name,
     "partner_code": payload?.partner_code,
     "redirect": payload?.redirect,
     "support_handoff": payload?.support_handoff,
+    "utm_campaign": payload?.utm_campaign,
+    "utm_content": payload?.utm_content,
+    "utm_medium": payload?.utm_medium,
+    "utm_source": payload?.utm_source,
+    "utm_term": payload?.utm_term,
   });
 
   const headers = new Headers(compactMap({

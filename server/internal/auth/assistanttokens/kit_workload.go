@@ -45,9 +45,9 @@ func (m *Manager) AuthorizeKitWorkload(ctx context.Context) (context.Context, er
 	row := rows[0]
 	var metadata struct {
 		Workload struct {
-			IssuerID uuid.UUID                  `json:"issuer_id"`
-			Subject  string                     `json:"subject"`
-			Identity assistantidentity.Identity `json:"identity"`
+			IssuerID uuid.UUID                         `json:"issuer_id"`
+			Subject  string                            `json:"subject"`
+			Identity assistantidentity.RuntimeIdentity `json:"identity"`
 		} `json:"workload"`
 	}
 	if json.Unmarshal(row.BackendMetadataJson, &metadata) != nil {
@@ -60,9 +60,9 @@ func (m *Manager) AuthorizeKitWorkload(ctx context.Context) (context.Context, er
 		!hasAgent || agent != urn.NewPrincipal(urn.PrincipalTypeAgent, identity.AgentID.String()) {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
-	// Validate re-resolves the current assistant, trigger, owner, agent and
-	// identity subject. A replaced identity or disabled trigger cannot bind.
-	if err := new(assistantidentity.Service).Validate(ctx, m.db, identity); err != nil {
+	// Re-resolve the assistant binding independently of individual event roots.
+	// Binding replacement invalidates even a generation using the same agent.
+	if err := new(assistantidentity.Service).ValidateRuntime(ctx, m.db, identity); err != nil {
 		return ctx, kitIdentityValidationError(err)
 	}
 	var snapshot struct {

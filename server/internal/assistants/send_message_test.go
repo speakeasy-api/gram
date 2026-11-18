@@ -35,6 +35,9 @@ func projectAssistantGrant(scope authz.Scope, projectID uuid.UUID) authz.Grant {
 // allowAllMCPEnable stands in for a caller with mcp:write on every toolset.
 func allowAllMCPEnable(uuid.UUID) bool { return true }
 
+// allowAllEnvironments stands in for a caller with environment:read on every environment.
+func allowAllEnvironments(uuid.UUID) bool { return true }
+
 func mcpWriteGrant(toolsetID uuid.UUID) authz.Grant {
 	return authz.NewGrant(authz.ScopeMCPWrite, toolsetID.String())
 }

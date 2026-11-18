@@ -57,11 +57,14 @@ export function RegistryPromotionCandidates({
       status,
       cursor: cursors[cursors.length - 1],
     }),
+    // Refresh while delivery can still change a row on its own, including an
+    // open guide pull request that may merge or close at its next check.
     refetchInterval: (state) =>
       state.state.data?.candidates.some(
         (candidate) =>
           candidate.docsStatus === "pending" ||
-          candidate.docsStatus === "retrying",
+          candidate.docsStatus === "retrying" ||
+          candidate.docsStatus === "guide_in_review",
       )
         ? 30_000
         : false,

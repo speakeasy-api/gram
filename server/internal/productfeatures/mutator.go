@@ -138,6 +138,15 @@ func (m *Mutator) applyFeatureTx(ctx context.Context, dbtx pgx.Tx, organizationI
 		return false, nil
 	}
 
+	syncGateway := func() error { return nil }
+	if feature == FeatureOrganizationGatewayDisabled {
+		var err error
+		syncGateway, err = prepareGatewayAuthClients(ctx, dbtx, organizationID)
+		if err != nil {
+			return false, err
+		}
+	}
+
 	// Derive changed from the write itself so audit records exactly the
 	// transition that commits, without a read-then-write race.
 	q := repo.New(dbtx)
@@ -177,6 +186,10 @@ func (m *Mutator) applyFeatureTx(ctx context.Context, dbtx pgx.Tx, organizationI
 		default:
 			changed = true
 		}
+	}
+
+	if err := syncGateway(); err != nil {
+		return false, err
 	}
 
 	if changed {

@@ -73,6 +73,25 @@ export const Sortable: Story = {
   },
 };
 
+export const Expandable: Story = {
+  render: () => (
+    <Table
+      columns={columns}
+      data={SERVERS}
+      rowKey={(row) => row.id}
+      renderExpandedContent={(row) => (
+        <div className="bg-muted/30 space-y-2 p-4">
+          <p className="font-medium">{row.name} details</p>
+          <p>
+            This server exposes {row.tools} tools. Click the row or chevron to
+            collapse these details.
+          </p>
+        </div>
+      )}
+    />
+  ),
+};
+
 export const Empty: Story = {
   render: () => (
     <Table

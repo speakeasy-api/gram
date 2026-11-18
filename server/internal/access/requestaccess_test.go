@@ -50,6 +50,10 @@ func TestService_RequestAccess_NotifiesAdmins(t *testing.T) {
 	require.Contains(t, link, "project_id="+projectID)
 	require.NotEmpty(t, sent[0].DataVariables["requester_name"])
 	require.NotEmpty(t, sent[0].DataVariables["organization_name"])
+	// The admin reads the catalogue wording, not just the slug.
+	require.Equal(t, "Connect to MCP servers", sent[0].DataVariables["permission_label"])
+	require.Equal(t, "mcp:connect", sent[0].DataVariables["permission_scope"])
+	require.NotEmpty(t, sent[0].DataVariables["permission_description"])
 }
 
 func TestService_RequestAccess_LegacyResourceStillNotifiesWithoutProject(t *testing.T) {

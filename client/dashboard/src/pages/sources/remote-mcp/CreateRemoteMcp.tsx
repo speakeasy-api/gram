@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { GatewayAttachmentStatus } from "@/pages/mcp/gateway/GatewayAttachmentStatus";
 import { useGatewayCreation } from "@/pages/mcp/gateway/useGatewayCreation";
 import { FormPage } from "@/components/page-templates";
@@ -15,7 +16,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { Stack } from "@/components/ui/Stack";
 import { useIsSpeakeasyStaff, useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
-import { AlertCircle, Loader2, Plug } from "lucide-react";
+import { AlertCircle, Plug } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
@@ -177,8 +178,6 @@ function CreateRemoteMcpForm() {
             selectedIssuer === PROJECT_SPECIFIC_ISSUER_VALUE
               ? undefined
               : selectedIssuer,
-          organizationOwnedUserSessionIssuer:
-            selectedIssuer !== PROJECT_SPECIFIC_ISSUER_VALUE,
           identityMode,
           agentAuthorization:
             identityMode === "agent"
@@ -428,7 +427,7 @@ function CreateRemoteMcpForm() {
             >
               {verify.isPending || isPending ? (
                 <Button.LeftIcon>
-                  <Loader2 className="size-4 animate-spin" />
+                  <Spinner className="mr-0 size-4" />
                 </Button.LeftIcon>
               ) : !readyToSave ? (
                 <Button.LeftIcon>

@@ -33,10 +33,8 @@ type ImageUploadURLOutput struct {
 	ExampleCommand      string            `json:"example_command"`
 }
 
-// createImageUploadURL is a direct write. The stored image is public and
-// persistent, but no customer sees it until something references it, and the
-// only staff reference, a registry entry, goes through its own approved
-// proposal.
+// createImageUploadURL is a write. The stored image is public and persistent,
+// but no customer sees it until a registry entry references it.
 func createImageUploadURL(ctx context.Context, uploads PlatformImageUploader, writes WriteConfig) (ImageUploadURLOutput, error) {
 	authority, err := requireWriteAuthority(ctx, writes, OperationUploadPlatformImage)
 	if err != nil {
@@ -58,8 +56,7 @@ func createImageUploadURL(ctx context.Context, uploads PlatformImageUploader, wr
 }
 
 func registerImageUploadTool(server *mcp.Server, uploads PlatformImageUploader, writes WriteConfig) {
-	mcp.AddTool(server, &mcp.Tool{Name: "create_image_upload_url", Title: "Create Image Upload URL", Description: "Create a single-use upload token, valid for 15 minutes, that publishes one image as a public Speakeasy asset, for example a registry entry icon. PUT the raw file bytes to upload_url with the returned headers (the token is sent as an Authorization bearer header), from a shell with access to the admin site, as example_command shows with the token in UPLOAD_TOKEN; keep the token out of command arguments. The image is public and stays stored once uploaded. PNG, JPEG, GIF or WebP up to 4 MiB; the type is detected from the bytes and SVG is refused. The PUT response contains the asset ID and its public URL, usable as a registry entry's server.icons[].src (registry icons accept PNG, JPEG or WebP). Identical images share one asset. Requires admin:write.", Annotations: &mcp.ToolAnnotations{DestructiveHint: new(false)}}, func(ctx context.Context, _ *mcp.CallToolRequest, _ CreateImageUploadURLInput) (*mcp.CallToolResult, ImageUploadURLOutput, error) {
-		out, err := createImageUploadURL(ctx, uploads, writes)
-		return nil, out, err
+	addWriteTool(server, &mcp.Tool{Name: "create_image_upload_url", Title: "Create Image Upload URL", Description: "Create a single-use upload token, valid for 15 minutes, that publishes one image as a public Speakeasy asset, for example a registry entry icon. PUT the raw file bytes to upload_url with the returned headers (the token is sent as an Authorization bearer header), from a shell with access to the admin site, as example_command shows with the token in UPLOAD_TOKEN; keep the token out of command arguments. The image is publicly served immediately and stays stored once uploaded. PNG, JPEG, GIF, WebP or validated static SVG up to 4 MiB; the type is detected from the bytes and SVG is canonicalized before storage. The PUT response contains the asset ID, public URL, canonical MIME type and length. Curated catalog SVG icons belong in envelope _meta[com.speakeasy.ai/icons], not server.icons; associate them with set_registry_icons. SVG allows static paths, basic shapes and local clip paths; scripts, external references and embedded images are rejected. Identical images share one asset."}, func(ctx context.Context, _ CreateImageUploadURLInput) (ImageUploadURLOutput, error) {
+		return createImageUploadURL(ctx, uploads, writes)
 	})
 }

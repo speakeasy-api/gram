@@ -24,7 +24,9 @@ const (
 )
 
 type GetMCPConnectionSettingsInput struct {
-	ProjectID  string                          `json:"project_id" jsonschema:"project ID that owns the target"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID  string                          `json:"-"`
 	TargetKind MCPConnectionSettingsTargetKind `json:"target_kind" jsonschema:"exact target type: mcp_server or gateway"`
 	TargetID   string                          `json:"target_id" jsonschema:"ID of the exact MCP server or gateway"`
 }
@@ -70,8 +72,8 @@ type MCPUpstreamAuthClient struct {
 // MCPUpstreamAuthentication says whether the server's upstream needs
 // authentication and which clients it offers.
 type MCPUpstreamAuthentication struct {
-	Status               string                  `json:"status" jsonschema:"configured, setup_incomplete (authentication required but no enabled client), no_auth_required, or undecided"`
-	RequiresUpstreamAuth *bool                   `json:"requires_upstream_auth,omitempty"`
+	Status               string                  `json:"status" jsonschema:"configured (at least one enabled client), setup_incomplete (no client was ever linked, but upstream credentials are configured that no client records yet), or no_auth_required"`
+	RequiresUpstreamAuth bool                    `json:"requires_upstream_auth" jsonschema:"true when the server offers at least one enabled client"`
 	Clients              []MCPUpstreamAuthClient `json:"clients"`
 }
 

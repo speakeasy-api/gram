@@ -1,7 +1,10 @@
 package plugins
 
 import (
+	"bytes"
 	"encoding/json"
+	"image"
+	_ "image/png"
 	"strings"
 	"testing"
 
@@ -41,11 +44,20 @@ func TestPublicPlatformMCPFiles(t *testing.T) {
 	require.Equal(t, PublicMarketplaceName, claude.Name)
 	require.Len(t, claude.Plugins, 1, "the public marketplace advertises only the first-party package")
 	require.Equal(t, platformMCPPluginName, claude.Plugins[0].Name)
+	// The Claude plugin directory held "Platform MCP" for resembling another
+	// publisher's listing, so the display name must name Speakeasy.
+	require.Equal(t, "Speakeasy Platform", claude.Plugins[0].DisplayName)
 
 	var codex codexMarketplaceManifest
 	require.NoError(t, json.Unmarshal(files[".agents/plugins/marketplace.json"], &codex))
 	require.Equal(t, PublicMarketplaceName, codex.Name)
 	require.Len(t, codex.Plugins, 1)
+	require.Equal(t, "Speakeasy Platform", codex.Interface.DisplayName)
+
+	var cursor cursorPluginMeta
+	require.NoError(t, json.Unmarshal(files["cursor-plugins/speakeasy-cursor/.cursor-plugin/plugin.json"], &cursor))
+	require.Equal(t, "Speakeasy Platform", cursor.DisplayName)
+	require.True(t, strings.HasPrefix(string(files["README.md"]), "# Speakeasy Platform\n"))
 
 	claudeSkill := files["speakeasy/skills/manage-mcp-access/SKILL.md"]
 	require.Equal(t, claudeSkill, files["agent-plugins/speakeasy/skills/manage-mcp-access/SKILL.md"])
@@ -96,6 +108,7 @@ func TestPublicPlatformMCPFiles(t *testing.T) {
 	var meta claudePluginMeta
 	require.NoError(t, json.Unmarshal(files["speakeasy/.claude-plugin/plugin.json"], &meta))
 	require.Equal(t, "0."+platformMCPGeneratorVersion+".17", meta.Version, "the CI counter must reach the manifest so installs refresh")
+	require.Equal(t, "Speakeasy Platform", meta.DisplayName)
 }
 
 // The public repository is world-readable, so nothing org-derived or secret may
@@ -168,10 +181,84 @@ func TestLocalPlatformMCPFilesTargetsLocalServer(t *testing.T) {
 	var meta claudePluginMeta
 	require.NoError(t, json.Unmarshal(files["speakeasy/.claude-plugin/plugin.json"], &meta))
 	require.Equal(t, "0."+platformMCPGeneratorVersion+".42", meta.Version)
+	require.Equal(t, "https://www.speakeasy.com/privacy-policy", meta.PrivacyPolicyURL, "the Claude plugin directory warns when the listing has no privacy policy")
 
 	var claude marketplaceManifest
 	require.NoError(t, json.Unmarshal(files[".claude-plugin/marketplace.json"], &claude))
 	require.Equal(t, PublicMarketplaceName, claude.Name)
 	require.Len(t, claude.Plugins, 1)
 	require.Equal(t, platformMCPPluginName, claude.Plugins[0].Name)
+}
+
+// Codex does not open the sign-in page for a plugin's MCP server on its own,
+// so the model sees the skills but no Platform tools and no reason why. The
+// sign-in skill gives it the per-client sign-in steps, and the workflows that
+// start with list_projects point at it instead of a vague "repair OAuth".
+func TestPublicPlatformMCPFilesShipSignInWorkflow(t *testing.T) {
+	t.Parallel()
+
+	files, err := PublicPlatformMCPFiles("https://app.getgram.ai", "17")
+	require.NoError(t, err)
+
+	const path = "skills/platform-sign-in/SKILL.md"
+	content := files["speakeasy/"+path]
+	require.NotEmpty(t, content)
+	require.Equal(t, content, files["agent-plugins/speakeasy/"+path])
+	require.Equal(t, content, files["speakeasy-codex/"+path], "the Codex package is the one that needs the sign-in steps")
+	workflow := string(content)
+	for _, required := range []string{
+		"name: platform-sign-in",
+		"codex mcp login platform",
+		"/Applications/Codex.app/Contents/Resources/codex mcp login platform",
+		"codex mcp list",
+		"Never run it without asking",
+		"`/mcp`",
+		"call `list_projects` again",
+		"start a new conversation or restart the client",
+		"is not a sign-in problem",
+	} {
+		require.Contains(t, workflow, required)
+	}
+	for _, forbidden := range []string{"Gram", "paste the token", "bearer_token"} {
+		require.NotContains(t, workflow, forbidden)
+	}
+
+	for _, skill := range []string{
+		"add-mcp-from-catalog",
+		"add-mcp-from-remote-url",
+		"expose-tools-on-mcp",
+		"migrate-mcp-between-projects",
+		"create-guardrail-from-description",
+		"summarize-critical-watchdog-findings",
+		"share-coding-session",
+	} {
+		body := string(files["speakeasy/skills/"+skill+"/SKILL.md"])
+		require.Contains(t, body, "follow the `platform-sign-in` workflow", skill)
+		require.NotContains(t, body, "repair AICP OAuth", skill)
+	}
+
+	readme := string(files["README.md"])
+	codexAt := strings.Index(readme, "## Codex")
+	cursorAt := strings.Index(readme, "## Cursor")
+	require.Positive(t, codexAt)
+	require.Greater(t, cursorAt, codexAt)
+	require.Contains(t, readme[codexAt:cursorAt], "codex mcp login "+platformMCPServerName)
+}
+
+// The Claude plugin directory warns when the listing has no icon. It reads
+// .claude-plugin/icon.png: a square PNG, 512 to 2048 px, under 2 MB.
+func TestPublicPlatformMCPFilesShipClaudeIcon(t *testing.T) {
+	t.Parallel()
+
+	files, err := PublicPlatformMCPFiles("https://app.getgram.ai", "17")
+	require.NoError(t, err)
+
+	icon := files["speakeasy/.claude-plugin/icon.png"]
+	require.Less(t, len(icon), 2<<20)
+	iconConfig, iconFormat, err := image.DecodeConfig(bytes.NewReader(icon))
+	require.NoError(t, err)
+	require.Equal(t, "png", iconFormat)
+	require.Equal(t, iconConfig.Width, iconConfig.Height)
+	require.GreaterOrEqual(t, iconConfig.Width, 512)
+	require.LessOrEqual(t, iconConfig.Width, 2048)
 }

@@ -43,6 +43,15 @@ type BeginRequestBody struct {
 	ConnectionID *string `form:"connection_id,omitempty" json:"connection_id,omitempty" xml:"connection_id,omitempty"`
 }
 
+// SetDefaultProjectRequestBody is the type of the "slackDirectoryConnections"
+// service "setDefaultProject" endpoint HTTP request body.
+type SetDefaultProjectRequestBody struct {
+	// Durable organization workspace connection ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Project in the organization. Omit to clear the default project.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+}
+
 // DisconnectRequestBody is the type of the "slackDirectoryConnections" service
 // "disconnect" endpoint HTTP request body.
 type DisconnectRequestBody struct {
@@ -174,6 +183,54 @@ type BeginResponseBody struct {
 	AuthorizationURL string `form:"authorization_url" json:"authorization_url" xml:"authorization_url"`
 }
 
+// SetDefaultProjectResponseBody is the type of the "slackDirectoryConnections"
+// service "setDefaultProject" endpoint HTTP response body.
+type SetDefaultProjectResponseBody struct {
+	// Durable organization workspace connection ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Verified Slack workspace ID.
+	WorkspaceID string `form:"workspace_id" json:"workspace_id" xml:"workspace_id"`
+	// Workspace display name from Slack.
+	WorkspaceName string `form:"workspace_name" json:"workspace_name" xml:"workspace_name"`
+	// Authorization status, independent of directory sync.
+	Status string `form:"status" json:"status" xml:"status"`
+	// Connection generation used to reject stale changes.
+	Generation string `form:"generation" json:"generation" xml:"generation"`
+	// Permissions granted by Slack.
+	GrantedScopes []string `form:"granted_scopes" json:"granted_scopes" xml:"granted_scopes"`
+	// Permissions Speakeasy asks for that this install has not granted.
+	// Reinstalling the app grants them. Without chat:write, approval requests do
+	// not reach approvers in Slack.
+	MissingScopes []string `form:"missing_scopes" json:"missing_scopes" xml:"missing_scopes"`
+	// Bounded authorization failure code, when known.
+	LastErrorCode *string `form:"last_error_code,omitempty" json:"last_error_code,omitempty" xml:"last_error_code,omitempty"`
+	// When credentials were removed.
+	DisconnectedAt *string `form:"disconnected_at,omitempty" json:"disconnected_at,omitempty" xml:"disconnected_at,omitempty"`
+	// Members observed in the last complete snapshot, including guests and bots.
+	MemberCount int64 `form:"member_count" json:"member_count" xml:"member_count"`
+	// Whether a snapshot belongs to the usable current authorization.
+	DirectoryStatus string `form:"directory_status" json:"directory_status" xml:"directory_status"`
+	// Latest workflow state. Unknown means progress could not be checked.
+	SyncStatus string `form:"sync_status" json:"sync_status" xml:"sync_status"`
+	// Bounded progress phase while syncing.
+	SyncPhase *string `form:"sync_phase,omitempty" json:"sync_phase,omitempty" xml:"sync_phase,omitempty"`
+	// Completed pages in the current attempt.
+	SyncPages *int `form:"sync_pages,omitempty" json:"sync_pages,omitempty" xml:"sync_pages,omitempty"`
+	// Verified members fetched in the current attempt.
+	SyncMembers *int `form:"sync_members,omitempty" json:"sync_members,omitempty" xml:"sync_members,omitempty"`
+	// Start of the latest attempted sync.
+	LastSyncStartedAt *string `form:"last_sync_started_at,omitempty" json:"last_sync_started_at,omitempty" xml:"last_sync_started_at,omitempty"`
+	// Most recent failed attempt; may precede a successful sync.
+	LastSyncFailedAt *string `form:"last_sync_failed_at,omitempty" json:"last_sync_failed_at,omitempty" xml:"last_sync_failed_at,omitempty"`
+	// Last complete directory publication, possibly from an earlier authorization.
+	LastFullSyncSucceededAt *string `form:"last_full_sync_succeeded_at,omitempty" json:"last_full_sync_succeeded_at,omitempty" xml:"last_full_sync_succeeded_at,omitempty"`
+	// Last connection change timestamp.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Project whose managed assistant answers Speakeasy app mentions and direct
+	// messages in this workspace.
+	DefaultProjectID *string `form:"default_project_id,omitempty" json:"default_project_id,omitempty" xml:"default_project_id,omitempty"`
+}
+
 // DisconnectResponseBody is the type of the "slackDirectoryConnections"
 // service "disconnect" endpoint HTTP response body.
 type DisconnectResponseBody struct {
@@ -217,6 +274,9 @@ type DisconnectResponseBody struct {
 	LastFullSyncSucceededAt *string `form:"last_full_sync_succeeded_at,omitempty" json:"last_full_sync_succeeded_at,omitempty" xml:"last_full_sync_succeeded_at,omitempty"`
 	// Last connection change timestamp.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Project whose managed assistant answers Speakeasy app mentions and direct
+	// messages in this workspace.
+	DefaultProjectID *string `form:"default_project_id,omitempty" json:"default_project_id,omitempty" xml:"default_project_id,omitempty"`
 }
 
 // ListUnauthorizedResponseBody is the type of the "slackDirectoryConnections"
@@ -1651,6 +1711,215 @@ type BeginUnavailableResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// SetDefaultProjectUnauthorizedResponseBody is the type of the
+// "slackDirectoryConnections" service "setDefaultProject" endpoint HTTP
+// response body for the "unauthorized" error.
+type SetDefaultProjectUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetDefaultProjectForbiddenResponseBody is the type of the
+// "slackDirectoryConnections" service "setDefaultProject" endpoint HTTP
+// response body for the "forbidden" error.
+type SetDefaultProjectForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetDefaultProjectBadRequestResponseBody is the type of the
+// "slackDirectoryConnections" service "setDefaultProject" endpoint HTTP
+// response body for the "bad_request" error.
+type SetDefaultProjectBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetDefaultProjectNotFoundResponseBody is the type of the
+// "slackDirectoryConnections" service "setDefaultProject" endpoint HTTP
+// response body for the "not_found" error.
+type SetDefaultProjectNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetDefaultProjectConflictResponseBody is the type of the
+// "slackDirectoryConnections" service "setDefaultProject" endpoint HTTP
+// response body for the "conflict" error.
+type SetDefaultProjectConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetDefaultProjectUnsupportedMediaResponseBody is the type of the
+// "slackDirectoryConnections" service "setDefaultProject" endpoint HTTP
+// response body for the "unsupported_media" error.
+type SetDefaultProjectUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetDefaultProjectInvalidResponseBody is the type of the
+// "slackDirectoryConnections" service "setDefaultProject" endpoint HTTP
+// response body for the "invalid" error.
+type SetDefaultProjectInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetDefaultProjectInvariantViolationResponseBody is the type of the
+// "slackDirectoryConnections" service "setDefaultProject" endpoint HTTP
+// response body for the "invariant_violation" error.
+type SetDefaultProjectInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetDefaultProjectUnexpectedResponseBody is the type of the
+// "slackDirectoryConnections" service "setDefaultProject" endpoint HTTP
+// response body for the "unexpected" error.
+type SetDefaultProjectUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetDefaultProjectGatewayErrorResponseBody is the type of the
+// "slackDirectoryConnections" service "setDefaultProject" endpoint HTTP
+// response body for the "gateway_error" error.
+type SetDefaultProjectGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetDefaultProjectUnavailableResponseBody is the type of the
+// "slackDirectoryConnections" service "setDefaultProject" endpoint HTTP
+// response body for the "unavailable" error.
+type SetDefaultProjectUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DisconnectUnauthorizedResponseBody is the type of the
 // "slackDirectoryConnections" service "disconnect" endpoint HTTP response body
 // for the "unauthorized" error.
@@ -1902,6 +2171,9 @@ type SlackDirectoryConnectionResponseBody struct {
 	LastFullSyncSucceededAt *string `form:"last_full_sync_succeeded_at,omitempty" json:"last_full_sync_succeeded_at,omitempty" xml:"last_full_sync_succeeded_at,omitempty"`
 	// Last connection change timestamp.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Project whose managed assistant answers Speakeasy app mentions and direct
+	// messages in this workspace.
+	DefaultProjectID *string `form:"default_project_id,omitempty" json:"default_project_id,omitempty" xml:"default_project_id,omitempty"`
 }
 
 // SlackDirectoryMemberResponseBody is used to define fields on response body
@@ -2107,6 +2379,49 @@ func NewBeginResponseBody(res *slackdirectoryconnections.BeginResult) *BeginResp
 	return body
 }
 
+// NewSetDefaultProjectResponseBody builds the HTTP response body from the
+// result of the "setDefaultProject" endpoint of the
+// "slackDirectoryConnections" service.
+func NewSetDefaultProjectResponseBody(res *slackdirectoryconnections.SlackDirectoryConnection) *SetDefaultProjectResponseBody {
+	body := &SetDefaultProjectResponseBody{
+		ID:                      res.ID,
+		WorkspaceID:             res.WorkspaceID,
+		WorkspaceName:           res.WorkspaceName,
+		Status:                  res.Status,
+		Generation:              res.Generation,
+		LastErrorCode:           res.LastErrorCode,
+		DisconnectedAt:          res.DisconnectedAt,
+		MemberCount:             res.MemberCount,
+		DirectoryStatus:         res.DirectoryStatus,
+		SyncStatus:              res.SyncStatus,
+		SyncPhase:               res.SyncPhase,
+		SyncPages:               res.SyncPages,
+		SyncMembers:             res.SyncMembers,
+		LastSyncStartedAt:       res.LastSyncStartedAt,
+		LastSyncFailedAt:        res.LastSyncFailedAt,
+		LastFullSyncSucceededAt: res.LastFullSyncSucceededAt,
+		UpdatedAt:               res.UpdatedAt,
+		DefaultProjectID:        res.DefaultProjectID,
+	}
+	if res.GrantedScopes != nil {
+		body.GrantedScopes = make([]string, len(res.GrantedScopes))
+		for i, val := range res.GrantedScopes {
+			body.GrantedScopes[i] = val
+		}
+	} else {
+		body.GrantedScopes = []string{}
+	}
+	if res.MissingScopes != nil {
+		body.MissingScopes = make([]string, len(res.MissingScopes))
+		for i, val := range res.MissingScopes {
+			body.MissingScopes[i] = val
+		}
+	} else {
+		body.MissingScopes = []string{}
+	}
+	return body
+}
+
 // NewDisconnectResponseBody builds the HTTP response body from the result of
 // the "disconnect" endpoint of the "slackDirectoryConnections" service.
 func NewDisconnectResponseBody(res *slackdirectoryconnections.SlackDirectoryConnection) *DisconnectResponseBody {
@@ -2128,6 +2443,7 @@ func NewDisconnectResponseBody(res *slackdirectoryconnections.SlackDirectoryConn
 		LastSyncFailedAt:        res.LastSyncFailedAt,
 		LastFullSyncSucceededAt: res.LastFullSyncSucceededAt,
 		UpdatedAt:               res.UpdatedAt,
+		DefaultProjectID:        res.DefaultProjectID,
 	}
 	if res.GrantedScopes != nil {
 		body.GrantedScopes = make([]string, len(res.GrantedScopes))
@@ -3271,6 +3587,171 @@ func NewBeginUnavailableResponseBody(res *goa.ServiceError) *BeginUnavailableRes
 	return body
 }
 
+// NewSetDefaultProjectUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "setDefaultProject" endpoint of the
+// "slackDirectoryConnections" service.
+func NewSetDefaultProjectUnauthorizedResponseBody(res *goa.ServiceError) *SetDefaultProjectUnauthorizedResponseBody {
+	body := &SetDefaultProjectUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetDefaultProjectForbiddenResponseBody builds the HTTP response body from
+// the result of the "setDefaultProject" endpoint of the
+// "slackDirectoryConnections" service.
+func NewSetDefaultProjectForbiddenResponseBody(res *goa.ServiceError) *SetDefaultProjectForbiddenResponseBody {
+	body := &SetDefaultProjectForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetDefaultProjectBadRequestResponseBody builds the HTTP response body
+// from the result of the "setDefaultProject" endpoint of the
+// "slackDirectoryConnections" service.
+func NewSetDefaultProjectBadRequestResponseBody(res *goa.ServiceError) *SetDefaultProjectBadRequestResponseBody {
+	body := &SetDefaultProjectBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetDefaultProjectNotFoundResponseBody builds the HTTP response body from
+// the result of the "setDefaultProject" endpoint of the
+// "slackDirectoryConnections" service.
+func NewSetDefaultProjectNotFoundResponseBody(res *goa.ServiceError) *SetDefaultProjectNotFoundResponseBody {
+	body := &SetDefaultProjectNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetDefaultProjectConflictResponseBody builds the HTTP response body from
+// the result of the "setDefaultProject" endpoint of the
+// "slackDirectoryConnections" service.
+func NewSetDefaultProjectConflictResponseBody(res *goa.ServiceError) *SetDefaultProjectConflictResponseBody {
+	body := &SetDefaultProjectConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetDefaultProjectUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "setDefaultProject" endpoint of the
+// "slackDirectoryConnections" service.
+func NewSetDefaultProjectUnsupportedMediaResponseBody(res *goa.ServiceError) *SetDefaultProjectUnsupportedMediaResponseBody {
+	body := &SetDefaultProjectUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetDefaultProjectInvalidResponseBody builds the HTTP response body from
+// the result of the "setDefaultProject" endpoint of the
+// "slackDirectoryConnections" service.
+func NewSetDefaultProjectInvalidResponseBody(res *goa.ServiceError) *SetDefaultProjectInvalidResponseBody {
+	body := &SetDefaultProjectInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetDefaultProjectInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "setDefaultProject" endpoint of the
+// "slackDirectoryConnections" service.
+func NewSetDefaultProjectInvariantViolationResponseBody(res *goa.ServiceError) *SetDefaultProjectInvariantViolationResponseBody {
+	body := &SetDefaultProjectInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetDefaultProjectUnexpectedResponseBody builds the HTTP response body
+// from the result of the "setDefaultProject" endpoint of the
+// "slackDirectoryConnections" service.
+func NewSetDefaultProjectUnexpectedResponseBody(res *goa.ServiceError) *SetDefaultProjectUnexpectedResponseBody {
+	body := &SetDefaultProjectUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetDefaultProjectGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "setDefaultProject" endpoint of the
+// "slackDirectoryConnections" service.
+func NewSetDefaultProjectGatewayErrorResponseBody(res *goa.ServiceError) *SetDefaultProjectGatewayErrorResponseBody {
+	body := &SetDefaultProjectGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetDefaultProjectUnavailableResponseBody builds the HTTP response body
+// from the result of the "setDefaultProject" endpoint of the
+// "slackDirectoryConnections" service.
+func NewSetDefaultProjectUnavailableResponseBody(res *goa.ServiceError) *SetDefaultProjectUnavailableResponseBody {
+	body := &SetDefaultProjectUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewDisconnectUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "disconnect" endpoint of the "slackDirectoryConnections"
 // service.
@@ -3521,6 +4002,18 @@ func NewBeginPayload(body *BeginRequestBody, sessionToken *string) *slackdirecto
 	return v
 }
 
+// NewSetDefaultProjectPayload builds a slackDirectoryConnections service
+// setDefaultProject endpoint payload.
+func NewSetDefaultProjectPayload(body *SetDefaultProjectRequestBody, sessionToken *string) *slackdirectoryconnections.SetDefaultProjectPayload {
+	v := &slackdirectoryconnections.SetDefaultProjectPayload{
+		ID:        *body.ID,
+		ProjectID: body.ProjectID,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewDisconnectPayload builds a slackDirectoryConnections service disconnect
 // endpoint payload.
 func NewDisconnectPayload(body *DisconnectRequestBody, sessionToken *string) *slackdirectoryconnections.DisconnectPayload {
@@ -3587,6 +4080,21 @@ func ValidateSetMappingRequestBody(body *SetMappingRequestBody) (err error) {
 func ValidateBeginRequestBody(body *BeginRequestBody) (err error) {
 	if body.ConnectionID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.connection_id", *body.ConnectionID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateSetDefaultProjectRequestBody runs the validations defined on
+// SetDefaultProjectRequestBody
+func ValidateSetDefaultProjectRequestBody(body *SetDefaultProjectRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	return
 }

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { useInferenceSetupCandidate } from "./useInferenceSetupCandidate";
 const mocks = vi.hoisted(() => ({
+  flagStatus: "enabled",
   workloadWrite: true,
   orgSlug: "example",
   organizationOverride: false,
@@ -11,6 +12,12 @@ const mocks = vi.hoisted(() => ({
   adminOrg: "",
   impersonatorEmail: "",
   navigate: vi.fn(),
+}));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: (flag: string) => {
+    expect(flag).toBe("inference-workload-setup");
+    return { status: mocks.flagStatus };
+  },
 }));
 vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: "project_one" }),
@@ -35,21 +42,17 @@ vi.mock("@/hooks/useRBAC", () => ({
     },
   }),
 }));
-vi.mock("react-router", () => ({ useNavigate: () => mocks.navigate }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    identities: {
-      agents: {
-        new: { href: () => "/example/projects/main/identities/agents/new" },
-      },
-    },
-  }),
-  useOrgRoutes: () => ({
-    access: { roles: { href: () => "/example/access/roles" } },
-  }),
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
+  useLocation: () => ({ pathname: "/", search: "" }),
+  useNavigate: () => mocks.navigate,
+}));
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: mocks.orgSlug, projectSlug: "main" }),
 }));
 afterEach(cleanup);
 beforeEach(() => {
+  mocks.flagStatus = "enabled";
   mocks.workloadWrite = true;
   mocks.orgSlug = "example";
   mocks.organizationOverride = false;
@@ -126,5 +129,19 @@ it.each(["demo", "support", "override"])(
       useInferenceSetupCandidate({ enabled: true }),
     );
     expect(result.current).toEqual([]);
+  },
+);
+
+it.each(["disabled", "loading", "missing", "error"])(
+  "hides setup when its rollout flag is %s without hiding role configuration",
+  (status) => {
+    mocks.flagStatus = status;
+    mocks.adminOrg = "org_one";
+    const { result } = renderHook(() =>
+      useInferenceSetupCandidate({ enabled: true }),
+    );
+    expect(result.current.map((candidate) => candidate.id)).toEqual([
+      "inference-role-permissions",
+    ]);
   },
 );

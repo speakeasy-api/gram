@@ -67,8 +67,13 @@ func delegationOutcome(err error) Outcome {
 	switch {
 	case err == nil:
 		return success
-	case errors.Is(err, remotesessions.ErrDelegationReauthentication):
+	// A new sign-in retains the delegation under the current registration.
+	case errors.Is(err, remotesessions.ErrDelegationReauthentication), errors.Is(err, remotesessions.ErrDelegationStaleRegistration):
 		return newOutcome(StageDelegation, ReasonReauthenticationRequired, ConfidenceVerified, false)
+	case errors.Is(err, remotesessions.ErrDelegationRetainedConfiguration):
+		o := newOutcome(StageDelegation, ReasonConfigurationRequired, ConfidenceVerified, false)
+		o.Retained = true
+		return o
 	case errors.Is(err, remotesessions.ErrDelegationConfiguration):
 		return newOutcome(StageDelegation, ReasonConfigurationRequired, ConfidenceVerified, false)
 	default:

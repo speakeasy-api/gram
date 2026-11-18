@@ -20,8 +20,8 @@ vi.mock("@gram/client/react-query/productFeatures.js", () => ({
     isError: state.error,
   }),
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ domains: { href: () => "/org-test/domains" } }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org-test", projectSlug: undefined }),
 }));
 function renderStep(onComplete: () => void = vi.fn<() => void>()) {
   return render(

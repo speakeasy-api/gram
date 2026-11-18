@@ -35,6 +35,7 @@ func (l *Logger) LogOrganizationPartnerSignupAttributed(ctx context.Context, dbt
 		return fmt.Errorf("marshal partner signup attribution: %w", err)
 	}
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName), ActorSlug: conv.ToPGTextEmpty(""),
 		Action: string(ActionOrganizationPartnerSignupAttributed), SubjectID: event.OrganizationID, SubjectType: "organization",

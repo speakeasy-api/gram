@@ -14,13 +14,13 @@ func registerRemoveSelfFromRiskPolicy(reg *Registrar, catalogAvailable bool, han
 		handler = handlers.RemoveSelf
 	}
 	schema := closedObject(map[string]*jsonschema.Schema{
-		"project_slug":     stringSchema("Exact project slug; never defaults.", 1, 0),
+		"project_slug":     stringSchema(projectSlugDescription, 1, 0),
 		"policy_id":        uuidSchema("Exact policy ID."),
 		"expected_version": stringSchema("Opaque version from a fresh get_risk_policy read.", 1, 0),
 		"idempotency_key":  stringSchema("Stable replay key for this confirmed self removal.", 1, 128),
 		"confirmed":        {Type: "boolean", Enum: []any{true}},
 	}, []string{"project_slug", "policy_id", "expected_version", "idempotency_key", "confirmed"})
-	addTool(reg, &mcp.Tool{Meta: nil, OutputSchema: nil, Icons: nil, Name: operationRemoveSelfFromRiskPolicy, Title: "Remove Self From Risk Policy", Description: description, InputSchema: schema, Annotations: &mcp.ToolAnnotations{OpenWorldHint: new(false), ReadOnlyHint: false, Title: "", DestructiveHint: new(true), IdempotentHint: true}}, ToolMeta{DiscoveryScopes: nil, Authorization: ExternalAuthorizationOrgAdmin, Audiences: []Audience{AudienceExternal}, ProjectScope: ProjectScopeExplicit}, instrumentRiskMutation(reg, operationRemoveSelfFromRiskPolicy, handler))
+	addTool(reg, &mcp.Tool{Meta: nil, OutputSchema: nil, Icons: nil, Name: operationRemoveSelfFromRiskPolicy, Title: "Remove Myself from a Risk Policy", Description: description, InputSchema: schema, Annotations: &mcp.ToolAnnotations{OpenWorldHint: new(false), ReadOnlyHint: false, Title: "", DestructiveHint: new(true), IdempotentHint: true}}, ToolMeta{DiscoveryScopes: nil, Authorization: ExternalAuthorizationOrgAdmin, Audiences: []Audience{AudienceExternal}, ProjectScope: ProjectScopeExplicit}, instrumentRiskMutation(reg, operationRemoveSelfFromRiskPolicy, handler))
 }
 
 func (s *riskPolicyMutationService) removeSelfFromPolicyTool(ctx context.Context, _ *mcp.CallToolRequest, raw map[string]any) (*mcp.CallToolResult, UpdateRiskPolicyToolOutput, error) {

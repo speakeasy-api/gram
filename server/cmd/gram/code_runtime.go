@@ -153,7 +153,7 @@ func newGKECodeProvider(c *cli.Context, logger *slog.Logger, policy *guardian.Po
 		cidrs = append(cidrs, cidr)
 	}
 	provider, err := codemode.NewGKEProvider(c.Context, codemode.GKEConfig{
-		Dynamic: client, Namespace: c.String("code-runtime-gke-namespace"), Template: c.String("code-runtime-gke-sandbox-template"),
+		Dynamic: client, Namespace: c.String("code-runtime-gke-namespace"), WarmPool: c.String("code-runtime-gke-sandbox-template"),
 		Image: c.String("code-runtime-image"), AllowTaggedImage: c.Bool("code-runtime-is-preview"), Port: c.Int("code-runtime-port"), Token: token,
 		Dialer: policy.Dialer(guardian.WithDialerAllowedCIDRBlocks(cidrs)), CIDRs: cidrs, Logger: logger,
 		MaxRunners: c.Int("code-runtime-max-runners"), MaxOrganizationRunners: c.Int("code-runtime-max-organization-runners"),
@@ -190,7 +190,7 @@ func codeRuntimeFlags() []cli.Flag {
 		&cli.StringFlag{Name: "code-runtime-gke-cluster-endpoint", Usage: "GKE code sandbox cluster API endpoint", EnvVars: []string{"GRAM_CODE_RUNTIME_GKE_CLUSTER_ENDPOINT"}},
 		&cli.StringFlag{Name: "code-runtime-gke-cluster-ca", Usage: "Base64-encoded GKE code sandbox cluster CA", EnvVars: []string{"GRAM_CODE_RUNTIME_GKE_CLUSTER_CA"}},
 		&cli.StringFlag{Name: "code-runtime-gke-namespace", Usage: "Dedicated code sandbox namespace", EnvVars: []string{"GRAM_CODE_RUNTIME_GKE_NAMESPACE"}},
-		&cli.StringFlag{Name: "code-runtime-gke-sandbox-template", Usage: "Dedicated code SandboxTemplate", EnvVars: []string{"GRAM_CODE_RUNTIME_GKE_SANDBOX_TEMPLATE"}},
+		&cli.StringFlag{Name: "code-runtime-gke-sandbox-template", Usage: "Dedicated code SandboxTemplate and same-named SandboxWarmPool", EnvVars: []string{"GRAM_CODE_RUNTIME_GKE_SANDBOX_TEMPLATE"}},
 		&cli.StringSliceFlag{Name: "code-runtime-gke-runner-cidr", Usage: "Permitted code sandbox pod CIDRs", EnvVars: []string{"GRAM_CODE_RUNTIME_GKE_RUNNER_CIDR"}},
 		&cli.IntFlag{Name: "code-runtime-max-runners", Usage: "Most code runner pods one replica claims across organizations", EnvVars: []string{"GRAM_CODE_RUNTIME_MAX_RUNNERS"}, Value: 64},
 		&cli.IntFlag{Name: "code-runtime-max-organization-runners", Usage: "Most shared code runner pods one organization holds on a replica", EnvVars: []string{"GRAM_CODE_RUNTIME_MAX_ORGANIZATION_RUNNERS"}, Value: 4},

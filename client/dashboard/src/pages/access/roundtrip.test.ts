@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { describe, it, expect } from "vitest";
 import type { Role } from "@gram/client/models/components/role.js";
@@ -18,6 +19,11 @@ const scopeDefinitions = [
     resourceType: "project",
     visibility: "user_visible",
     agentEligible: true,
+    temporaryGrantable: true,
+    label: "project:write",
+    category: "project",
+    sensitive: false,
+    subScopes: [],
     exclusionScope: "project:blocked_write",
   },
   {
@@ -26,6 +32,11 @@ const scopeDefinitions = [
     resourceType: "mcp",
     visibility: "user_visible",
     agentEligible: true,
+    temporaryGrantable: true,
+    label: "mcp:write",
+    category: "mcp",
+    sensitive: false,
+    subScopes: [],
     exclusionScope: "mcp:blocked_write",
   },
   {
@@ -34,6 +45,11 @@ const scopeDefinitions = [
     resourceType: "mcp",
     visibility: "user_visible",
     agentEligible: true,
+    temporaryGrantable: true,
+    label: "mcp:connect",
+    category: "mcp",
+    sensitive: false,
+    subScopes: [],
     exclusionScope: "mcp:blocked_connect",
   },
   {
@@ -42,6 +58,11 @@ const scopeDefinitions = [
     resourceType: "skill",
     visibility: "user_visible",
     agentEligible: true,
+    temporaryGrantable: true,
+    label: "skill:write",
+    category: "skill",
+    sensitive: false,
+    subScopes: [],
     exclusionScope: "skill:blocked_write",
   },
   {
@@ -50,6 +71,11 @@ const scopeDefinitions = [
     resourceType: "assistant",
     visibility: "user_visible",
     agentEligible: true,
+    temporaryGrantable: true,
+    label: "assistant:write",
+    category: "assistant",
+    sensitive: false,
+    subScopes: [],
     exclusionScope: "assistant:blocked_write",
   },
 ] satisfies ScopeDefinition[];

@@ -28,19 +28,19 @@ func TestGetPluginReadsHostedEntryThroughCanonicalServer(t *testing.T) {
 	newToolset := func(name string) toolsetsrepo.Toolset {
 		toolset, err := toolsetsrepo.New(conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 			OrganizationID: principal.OrganizationID, ProjectID: project.ID, Name: name, Slug: name + "-" + uuid.NewString()[:8],
-			McpSlug: conv.ToPGText(name + "-" + uuid.NewString()[:8]), McpEnabled: true,
 		})
 		require.NoError(t, err)
 		return toolset
 	}
 	hosted := newToolset("hosted")
+	hostedSlug := "hosted-" + uuid.NewString()[:8]
 	_, err = mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID: hosted.ID, ProjectID: project.ID, Name: conv.ToPGText(hosted.Name), Slug: hosted.McpSlug,
+		ID: hosted.ID, ProjectID: project.ID, Name: conv.ToPGText(hosted.Name), Slug: conv.ToPGText(hostedSlug),
 		ToolsetID: uuid.NullUUID{UUID: hosted.ID, Valid: true}, Visibility: "private",
 	})
 	require.NoError(t, err)
 	_, err = mcpendpointsrepo.New(conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
-		ProjectID: project.ID, McpServerID: uuid.NullUUID{UUID: hosted.ID, Valid: true}, Slug: hosted.McpSlug.String,
+		ProjectID: project.ID, McpServerID: uuid.NullUUID{UUID: hosted.ID, Valid: true}, Slug: hostedSlug,
 	})
 	require.NoError(t, err)
 	_, err = pluginsrepo.New(conn).AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
@@ -54,7 +54,7 @@ func TestGetPluginReadsHostedEntryThroughCanonicalServer(t *testing.T) {
 	require.Len(t, got.Servers, 1)
 	require.Equal(t, "mcp_server", got.Servers[0].Backend)
 	require.Equal(t, hosted.ID.String(), got.Servers[0].TargetID)
-	require.Equal(t, hosted.McpSlug.String, got.Servers[0].MCPSlug)
+	require.Equal(t, hostedSlug, got.Servers[0].MCPSlug)
 	require.True(t, got.Servers[0].Enabled)
 
 	settings, err := platformrepo.New(conn).GetPlatformMCPConnectionSettings(ctx, platformrepo.GetPlatformMCPConnectionSettingsParams{
@@ -68,12 +68,12 @@ func TestGetPluginReadsHostedEntryThroughCanonicalServer(t *testing.T) {
 	got, err = service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: plugin.ID.String()})
 	require.NoError(t, err)
 	require.Equal(t, "mcp_server", got.Servers[0].Backend)
-	require.Equal(t, hosted.McpSlug.String, got.Servers[0].MCPSlug)
+	require.Equal(t, hostedSlug, got.Servers[0].MCPSlug)
 	require.False(t, got.Servers[0].Enabled, "a disabled canonical server reads as disabled")
 }
 
-// An endpointless canonical wrapper reports its toolset's MCP slug; a fresh-id server does not.
-func TestGetPluginEndpointlessWrapperKeepsToolsetSlug(t *testing.T) {
+// An endpointless server reports no slug, whether or not it is its toolset's canonical wrapper.
+func TestGetPluginEndpointlessWrapperHasNoSlug(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -86,7 +86,6 @@ func TestGetPluginEndpointlessWrapperKeepsToolsetSlug(t *testing.T) {
 	newToolset := func(name string) toolsetsrepo.Toolset {
 		toolset, err := toolsetsrepo.New(conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 			OrganizationID: principal.OrganizationID, ProjectID: project.ID, Name: name, Slug: name + "-" + uuid.NewString()[:8],
-			McpSlug: conv.ToPGText(name + "-" + uuid.NewString()[:8]), McpEnabled: true,
 		})
 		require.NoError(t, err)
 		return toolset
@@ -116,18 +115,18 @@ func TestGetPluginEndpointlessWrapperKeepsToolsetSlug(t *testing.T) {
 	got, err := service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: plugin.ID.String()})
 	require.NoError(t, err)
 	require.Len(t, got.Servers, 2)
-	require.Equal(t, serverKeyed.McpSlug.String, got.Servers[0].MCPSlug)
+	require.Empty(t, got.Servers[0].MCPSlug)
 	require.Empty(t, got.Servers[1].MCPSlug)
 	for _, server := range got.Servers {
 		require.Equal(t, "mcp_server", server.Backend)
 	}
 
-	// The member-facing projection resolves the same fallback.
+	// The member-facing projection agrees.
 	member, err := platformrepo.New(conn).ListPlatformMCPPluginServers(ctx, platformrepo.ListPlatformMCPPluginServersParams{
 		PluginID: plugin.ID, ProjectID: project.ID, OrganizationID: principal.OrganizationID, ResultLimit: 10,
 	})
 	require.NoError(t, err)
 	require.Len(t, member, 2)
-	require.Equal(t, serverKeyed.McpSlug.String, member[0].McpSlug)
+	require.Empty(t, member[0].McpSlug)
 	require.Empty(t, member[1].McpSlug)
 }

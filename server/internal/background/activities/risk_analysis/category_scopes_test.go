@@ -204,7 +204,7 @@ func TestSourceCategoriesConsistentWithClassify(t *testing.T) {
 		categories.CategoryCustom:          {finding(SourceCustom, "custom.test")},
 	}
 
-	reachable := map[categories.Category]bool{}
+	reachable := make(map[categories.Category]bool)
 	for source, cats := range sourceCategories {
 		require.NotEmpty(t, cats)
 		for _, cat := range cats {
