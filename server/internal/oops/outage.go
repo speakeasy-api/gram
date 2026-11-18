@@ -108,7 +108,7 @@ func IsStoreFailure(err error) bool {
 }
 
 // answerOutage turns a server fault caused by a failed dependency into a 503
-// with Retry-After, and paces every other 503. Never tagged external: it's ours.
+// with Retry-After, and paces every other 503 except Unpaced ones. Never tagged external: it's ours.
 func answerOutage(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, err error) error {
 	if _, refused := errors.AsType[*OAuthError](err); refused {
 		return err
