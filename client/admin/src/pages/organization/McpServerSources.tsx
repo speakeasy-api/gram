@@ -110,7 +110,7 @@ function SourceRow({
         link.click();
       } finally {
         link.remove();
-        URL.revokeObjectURL(url);
+        setTimeout(() => URL.revokeObjectURL(url), 0);
       }
     },
   });

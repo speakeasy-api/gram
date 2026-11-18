@@ -145,7 +145,7 @@ export async function gramAdminDownload(path: string): Promise<Blob> {
   const res = await gramAdminRequest(
     path,
     { headers: { Accept: "application/octet-stream" } },
-    false,
+    true,
   );
   return res.blob();
 }

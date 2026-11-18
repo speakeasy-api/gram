@@ -1,5 +1,11 @@
 import { QueryClient } from "@tanstack/react-query";
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { renderWithApp } from "@/test/harness";
 import { McpServerSources } from "./McpServerSources";
@@ -24,6 +30,7 @@ beforeEach(() => {
   click.mockReset();
 });
 afterEach(() => {
+  vi.useRealTimers();
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -44,12 +51,16 @@ it("lists sources and downloads bytes using the exact scoped admin target", asyn
   );
   fetchMock.mockResolvedValueOnce(new Response("openapi: 3.1.0"));
   await renderWithApp(<McpServerSources {...target} />);
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Download Example API" }),
-  );
-  await waitFor(() =>
-    expect(click).toHaveBeenCalledWith("Example API.yaml", "blob:source"),
-  );
+  const button = await screen.findByRole("button", {
+    name: "Download Example API",
+  });
+  vi.useFakeTimers();
+  await act(async () => {
+    fireEvent.click(button);
+  });
+  expect(click).toHaveBeenCalledWith("Example API.yaml", "blob:source");
+  expect(revoke).not.toHaveBeenCalled();
+  await vi.runOnlyPendingTimersAsync();
   expect(revoke).toHaveBeenCalledWith("blob:source");
   const [listPath, listInit] = fetchMock.mock.calls[0]!;
   expect(listPath).toBe(
