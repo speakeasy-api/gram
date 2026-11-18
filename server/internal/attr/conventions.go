@@ -507,8 +507,10 @@ const (
 	// Kubernetes API call.
 	NetworkIngressKubernetesStatusCodeKey = attribute.Key("gram.network_ingress.kubernetes.status_code")
 
-	// NetworkIngressKubernetesResourceKey is the resource type a failed
-	// Kubernetes API call addressed (for example secrets or proxygroups).
+	// NetworkIngressKubernetesResourceKey is the type a failed Kubernetes API
+	// call addressed, qualified by its API group. The API server reports the
+	// plural resource for most failures (tailnets.tailscale.com) but the Kind
+	// for validation failures (Tailnet.tailscale.com), so filter on both.
 	NetworkIngressKubernetesResourceKey = attribute.Key("gram.network_ingress.kubernetes.resource")
 
 	TailnetGatewaySlotKey         = attribute.Key("gram.tailnet_gateway.slot")

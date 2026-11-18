@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -14,6 +15,7 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -154,6 +156,51 @@ func TestNetworkIngressKubernetesFailureNamesTheCallButNotItsData(t *testing.T) 
 	require.Equal(t, "tailnets.tailscale.com", log[string(attr.NetworkIngressKubernetesResourceKey)])
 	require.NotContains(t, logs.String(), sensitive)
 	require.NotContains(t, logs.String(), "private-resource")
+}
+
+func TestNetworkIngressKubernetesFailureNamesTheKindOfAnInvalidObject(t *testing.T) {
+	t.Parallel()
+
+	invalid := k8serrors.NewInvalid(schema.GroupKind{Group: "tailscale.com", Kind: "ProxyGroup"}, "private-resource", nil)
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	provisioner := ObserveNetworkIngressProvisioner(NetworkIngressProviderTailscale,
+		telemetryNetworkIngressProvisioner{err: invalid}, logger, nil)
+
+	require.ErrorIs(t, provisioner.Delete(t.Context(), NetworkIngressResourceNames{}), invalid)
+
+	var log map[string]any
+	require.NoError(t, json.Unmarshal(logs.Bytes(), &log))
+	require.Equal(t, "Invalid", log[string(attr.NetworkIngressKubernetesReasonKey)])
+	require.Equal(t, "ProxyGroup.tailscale.com", log[string(attr.NetworkIngressKubernetesResourceKey)])
+	require.NotContains(t, logs.String(), "private-resource")
+}
+
+func TestNetworkIngressKubernetesFailureDropsUnexpectedStatusFields(t *testing.T) {
+	t.Parallel()
+
+	const sensitive = "private provider request sentinel"
+	custom := &k8serrors.StatusError{ErrStatus: metav1.Status{
+		Status:  metav1.StatusFailure,
+		Code:    http.StatusForbidden,
+		Reason:  metav1.StatusReason(sensitive),
+		Message: sensitive,
+		Details: &metav1.StatusDetails{Kind: sensitive, Group: "tailscale.com", Name: sensitive},
+	}}
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	provisioner := ObserveNetworkIngressProvisioner(NetworkIngressProviderTailscale,
+		telemetryNetworkIngressProvisioner{err: custom}, logger, nil)
+
+	require.ErrorIs(t, provisioner.Delete(t.Context(), NetworkIngressResourceNames{}), custom)
+
+	var log map[string]any
+	require.NoError(t, json.Unmarshal(logs.Bytes(), &log))
+	require.Equal(t, NetworkIngressErrorKubernetes, log[string(attr.NetworkIngressErrorCodeKey)])
+	require.Equal(t, string(metav1.StatusReasonUnknown), log[string(attr.NetworkIngressKubernetesReasonKey)])
+	require.InDelta(t, http.StatusForbidden, log[string(attr.NetworkIngressKubernetesStatusCodeKey)], 0)
+	require.NotContains(t, log, string(attr.NetworkIngressKubernetesResourceKey))
+	require.NotContains(t, logs.String(), sensitive)
 }
 
 func TestNetworkIngressNonKubernetesFailureHasNoKubernetesFields(t *testing.T) {
