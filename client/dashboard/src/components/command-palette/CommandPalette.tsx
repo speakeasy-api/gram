@@ -43,6 +43,11 @@ const KBD_CLASS =
   "border-neutral-softest bg-muted text-muted-foreground pointer-events-none inline-flex h-5 min-w-5 items-center justify-center gap-1 border px-1.5 font-mono text-[10px] font-medium select-none";
 
 const ASK_AI_VALUE = "__ask_ai__";
+// Keep broad terms (for example a popular integration name) from mounting an
+// unbounded number of cmdk rows. The server contract is already bounded to 40
+// results globally; applying the same ceiling after local ranking also covers
+// page actions, catalog entries, recents, and specialized MCP actions.
+const MAX_VISIBLE_SEARCH_RESULTS = 40;
 
 /** A candidate displayed by the palette. */
 interface DisplayRow {
@@ -328,7 +333,10 @@ export function CommandPalette(): JSX.Element {
     if (!isOpen || !hasQuery) return null;
 
     const startedAt = performance.now();
-    const rows = rank(prefilter(trimmedQuery, candidates));
+    const rows = rank(prefilter(trimmedQuery, candidates)).slice(
+      0,
+      MAX_VISIBLE_SEARCH_RESULTS,
+    );
     return { rows, duration: performance.now() - startedAt };
   }, [candidates, hasQuery, isOpen, trimmedQuery]);
   const rows = ranked?.rows ?? EMPTY_ROWS;
