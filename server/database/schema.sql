@@ -11951,16 +11951,6 @@ COMMENT ON COLUMN plugin_github_connections.published_hooks_version IS '@access:
 COMMENT ON COLUMN plugin_github_connections.published_hooks_config IS '@access: confidential';
 COMMENT ON COLUMN plugin_github_connections.created_at IS '@access: confidential';
 COMMENT ON COLUMN plugin_github_connections.updated_at IS '@access: confidential';
-COMMENT ON COLUMN hooks_rollout_pins.id IS '@access: confidential';
-COMMENT ON COLUMN hooks_rollout_pins.seq IS '@access: confidential';
-COMMENT ON COLUMN hooks_rollout_pins.organization_id IS 'NULL for the platform-wide default pin.
-@access: confidential';
-COMMENT ON COLUMN hooks_rollout_pins.version IS 'Highest hooks generator version the scope is cleared for. NULL clears an organization override.
-@access: confidential';
-COMMENT ON COLUMN hooks_rollout_pins.set_by IS 'Email of the staff operator who made the change.
-@access: confidential-pii';
-COMMENT ON COLUMN hooks_rollout_pins.created_at IS '@access: confidential';
-COMMENT ON COLUMN hooks_rollout_pins.updated_at IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_project_id_key
   ON plugin_github_connections (project_id);
@@ -12013,6 +12003,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS hooks_rollout_pins_seq_key
 
 CREATE INDEX IF NOT EXISTS hooks_rollout_pins_organization_id_seq_idx
   ON hooks_rollout_pins (organization_id, seq DESC);
+
+COMMENT ON COLUMN hooks_rollout_pins.id IS '@access: confidential';
+COMMENT ON COLUMN hooks_rollout_pins.seq IS '@access: confidential';
+COMMENT ON COLUMN hooks_rollout_pins.organization_id IS 'NULL for the platform-wide default pin.
+@access: confidential';
+COMMENT ON COLUMN hooks_rollout_pins.version IS 'Highest hooks generator version the scope is cleared for. NULL clears an organization override.
+@access: confidential';
+COMMENT ON COLUMN hooks_rollout_pins.set_by IS 'Email of the staff operator who made the change.
+@access: confidential-pii';
+COMMENT ON COLUMN hooks_rollout_pins.created_at IS '@access: confidential';
+COMMENT ON COLUMN hooks_rollout_pins.updated_at IS '@access: confidential';
 
 -- Per-project marketplace configuration applied to the marketplace.json
 -- generated for Claude Code, Cursor, and Codex. Designed to be extensible:

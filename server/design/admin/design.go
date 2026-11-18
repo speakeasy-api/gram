@@ -1504,4 +1504,5 @@ var _ = Service("admin", func() {
 	platformExternalCredentialMethods()
 	memoryEvalMethods()
 	assistantMethods()
+	hooksRolloutMethods()
 })

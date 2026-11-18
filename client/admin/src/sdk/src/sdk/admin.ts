@@ -8,6 +8,7 @@ import { adminBackfillMcpConnectGrants } from "../funcs/adminBackfillMcpConnectG
 import { adminBulkUpdateAccountType } from "../funcs/adminBulkUpdateAccountType.js";
 import { adminCancelStripeSubscription } from "../funcs/adminCancelStripeSubscription.js";
 import { adminChangeTrialEndDate } from "../funcs/adminChangeTrialEndDate.js";
+import { adminClearOrganizationHooksRollout } from "../funcs/adminClearOrganizationHooksRollout.js";
 import { adminCloneOnboardingPlaybook } from "../funcs/adminCloneOnboardingPlaybook.js";
 import { adminCreateGcpIamPlatformCredential } from "../funcs/adminCreateGcpIamPlatformCredential.js";
 import { adminCreateGlobalIssuer } from "../funcs/adminCreateGlobalIssuer.js";
@@ -33,6 +34,7 @@ import { adminGetGlobalIssuer } from "../funcs/adminGetGlobalIssuer.js";
 import { adminGetGlobalIssuerDuplicatePreflight } from "../funcs/adminGetGlobalIssuerDuplicatePreflight.js";
 import { adminGetGlobalIssuerMigratePreflight } from "../funcs/adminGetGlobalIssuerMigratePreflight.js";
 import { adminGetHookClients } from "../funcs/adminGetHookClients.js";
+import { adminGetHooksRollout } from "../funcs/adminGetHooksRollout.js";
 import { adminGetInferenceKeys } from "../funcs/adminGetInferenceKeys.js";
 import { adminGetInferenceSpendHistory } from "../funcs/adminGetInferenceSpendHistory.js";
 import { adminGetMcpServerToolCalls } from "../funcs/adminGetMcpServerToolCalls.js";
@@ -44,6 +46,7 @@ import { adminGetOrganization } from "../funcs/adminGetOrganization.js";
 import { adminGetOrganizationChatAnalysisSettings } from "../funcs/adminGetOrganizationChatAnalysisSettings.js";
 import { adminGetOrganizationFeatures } from "../funcs/adminGetOrganizationFeatures.js";
 import { adminGetOrganizationHookFleet } from "../funcs/adminGetOrganizationHookFleet.js";
+import { adminGetOrganizationHooksRollout } from "../funcs/adminGetOrganizationHooksRollout.js";
 import { adminGetOrganizationOnboardingPlaybook } from "../funcs/adminGetOrganizationOnboardingPlaybook.js";
 import { adminGetOrganizationOnboardingStack } from "../funcs/adminGetOrganizationOnboardingStack.js";
 import { adminGetOrganizationStats } from "../funcs/adminGetOrganizationStats.js";
@@ -102,10 +105,12 @@ import { adminRunUpstreamOAuthMigration } from "../funcs/adminRunUpstreamOAuthMi
 import { adminSaveRegistryEntry } from "../funcs/adminSaveRegistryEntry.js";
 import { adminServeImage } from "../funcs/adminServeImage.js";
 import { adminSetAdoptionDashboardUrl } from "../funcs/adminSetAdoptionDashboardUrl.js";
+import { adminSetHooksRolloutDefault } from "../funcs/adminSetHooksRolloutDefault.js";
 import { adminSetInferenceKeyMonthlyLimit } from "../funcs/adminSetInferenceKeyMonthlyLimit.js";
 import { adminSetMcpServerScopePin } from "../funcs/adminSetMcpServerScopePin.js";
 import { adminSetOrganizationChatAnalysisSettings } from "../funcs/adminSetOrganizationChatAnalysisSettings.js";
 import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeature.js";
+import { adminSetOrganizationHooksRollout } from "../funcs/adminSetOrganizationHooksRollout.js";
 import { adminSetOrganizationOnboardingStack } from "../funcs/adminSetOrganizationOnboardingStack.js";
 import { adminSetOrganizationProviderSetup } from "../funcs/adminSetOrganizationProviderSetup.js";
 import { adminSetRegistryEntryPublished } from "../funcs/adminSetRegistryEntryPublished.js";
@@ -136,6 +141,7 @@ import { AdminChatAnalysisTriggerResult } from "../models/components/adminchatan
 import { AdminCustomerUsageResponse } from "../models/components/admincustomerusageresponse.js";
 import { AdminHookClientsResult } from "../models/components/adminhookclientsresult.js";
 import { AdminHookFleetResult } from "../models/components/adminhookfleetresult.js";
+import { AdminHooksRollout } from "../models/components/adminhooksrollout.js";
 import { AdminInferenceKey } from "../models/components/admininferencekey.js";
 import { AdminInferenceKeyLimit } from "../models/components/admininferencekeylimit.js";
 import { AdminInferenceKeyRepairResult } from "../models/components/admininferencekeyrepairresult.js";
@@ -161,6 +167,7 @@ import { AdminOnboardingUseCase } from "../models/components/adminonboardingusec
 import { AdminOnboardingUseCaseList } from "../models/components/adminonboardingusecaselist.js";
 import { AdminOrganization } from "../models/components/adminorganization.js";
 import { AdminOrganizationAssistants } from "../models/components/adminorganizationassistants.js";
+import { AdminOrganizationHooksRollout } from "../models/components/adminorganizationhooksrollout.js";
 import { AdminOrganizationOnboardingPlaybook } from "../models/components/adminorganizationonboardingplaybook.js";
 import { AdminOrganizationStats } from "../models/components/adminorganizationstats.js";
 import { AdminPaygBillingSummary } from "../models/components/adminpaygbillingsummary.js";
@@ -188,6 +195,7 @@ import { BackfillMcpConnectGrantsRequestBody } from "../models/components/backfi
 import { BulkUpdateAccountTypeRequestBody } from "../models/components/bulkupdateaccounttyperequestbody.js";
 import { CancelStripeSubscriptionRequestBody } from "../models/components/cancelstripesubscriptionrequestbody.js";
 import { ChangeTrialEndDateRequestBody } from "../models/components/changetrialenddaterequestbody.js";
+import { ClearOrganizationHooksRolloutRequestBody } from "../models/components/clearorganizationhooksrolloutrequestbody.js";
 import { CloneOnboardingPlaybookRequestBody } from "../models/components/cloneonboardingplaybookrequestbody.js";
 import { CreateOnboardingPlaybookRequestBody } from "../models/components/createonboardingplaybookrequestbody.js";
 import { CreateOnboardingUseCaseRequestBody } from "../models/components/createonboardingusecaserequestbody.js";
@@ -234,10 +242,12 @@ import { RiskIDRequestBody } from "../models/components/riskidrequestbody.js";
 import { RunUpstreamOAuthMigrationRequestBody } from "../models/components/runupstreamoauthmigrationrequestbody.js";
 import { SaveRegistryEntryRequestBody } from "../models/components/saveregistryentryrequestbody.js";
 import { SetAdoptionDashboardURLRequestBody } from "../models/components/setadoptiondashboardurlrequestbody.js";
+import { SetHooksRolloutDefaultRequestBody } from "../models/components/sethooksrolloutdefaultrequestbody.js";
 import { SetInferenceKeyMonthlyLimitRequestBody } from "../models/components/setinferencekeymonthlylimitrequestbody.js";
 import { SetMcpServerScopePinRequestBody } from "../models/components/setmcpserverscopepinrequestbody.js";
 import { SetOrganizationChatAnalysisSettingsRequestBody } from "../models/components/setorganizationchatanalysissettingsrequestbody.js";
 import { SetOrganizationFeatureRequestBody } from "../models/components/setorganizationfeaturerequestbody.js";
+import { SetOrganizationHooksRolloutRequestBody } from "../models/components/setorganizationhooksrolloutrequestbody.js";
 import { SetOrganizationOnboardingStackRequestBody } from "../models/components/setorganizationonboardingstackrequestbody.js";
 import { SetOrganizationProviderSetupRequestBody } from "../models/components/setorganizationprovidersetuprequestbody.js";
 import { SetRegistryEntryPublishedRequestBody } from "../models/components/setregistryentrypublishedrequestbody.js";
@@ -272,6 +282,7 @@ import { AdminGetOrganizationRequest } from "../models/operations/admingetorgani
 import { AdminGetOrganizationChatAnalysisSettingsRequest } from "../models/operations/admingetorganizationchatanalysissettings.js";
 import { AdminGetOrganizationFeaturesRequest } from "../models/operations/admingetorganizationfeatures.js";
 import { AdminGetOrganizationHookFleetRequest } from "../models/operations/admingetorganizationhookfleet.js";
+import { AdminGetOrganizationHooksRolloutRequest } from "../models/operations/admingetorganizationhooksrollout.js";
 import { AdminGetOrganizationOnboardingPlaybookRequest } from "../models/operations/admingetorganizationonboardingplaybook.js";
 import { AdminGetOrganizationOnboardingStackRequest } from "../models/operations/admingetorganizationonboardingstack.js";
 import { AdminGetPaygBillingSummaryRequest } from "../models/operations/admingetpaygbillingsummary.js";
@@ -2343,6 +2354,89 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminListUserOrganizationsResult> {
     return unwrapAsync(adminListUserOrganizations(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getHooksRollout admin
+   *
+   * @remarks
+   * Returns the platform-wide hooks version rollout state: the version this build publishes, the default pin, canary organizations, organization overrides and recent changes.
+   */
+  async getHooksRollout(
+    options?: RequestOptions,
+  ): Promise<AdminHooksRollout> {
+    return unwrapAsync(adminGetHooksRollout(
+      this,
+      options,
+    ));
+  }
+
+  /**
+   * setHooksRolloutDefault admin
+   *
+   * @remarks
+   * Moves the default hooks rollout pin for every organization without an override. Customer organizations receive a hooks version on the next rollout sweep once the pin reaches it. Lowering the pin holds back later versions; it never downgrades a published hooks plugin.
+   */
+  async setHooksRolloutDefault(
+    request: SetHooksRolloutDefaultRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminHooksRollout> {
+    return unwrapAsync(adminSetHooksRolloutDefault(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * clearOrganizationHooksRollout admin
+   *
+   * @remarks
+   * Removes an organization's hooks version override so it follows the default pin again.
+   */
+  async clearOrganizationHooksRollout(
+    request: ClearOrganizationHooksRolloutRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminOrganizationHooksRollout> {
+    return unwrapAsync(adminClearOrganizationHooksRollout(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getOrganizationHooksRollout admin
+   *
+   * @remarks
+   * Returns the hooks version rollout state for one organization.
+   */
+  async getOrganizationHooksRollout(
+    request: AdminGetOrganizationHooksRolloutRequest,
+    options?: RequestOptions,
+  ): Promise<AdminOrganizationHooksRollout> {
+    return unwrapAsync(adminGetOrganizationHooksRollout(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * setOrganizationHooksRollout admin
+   *
+   * @remarks
+   * Pins one organization to its own hooks version, regardless of the default pin.
+   */
+  async setOrganizationHooksRollout(
+    request: SetOrganizationHooksRolloutRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminOrganizationHooksRollout> {
+    return unwrapAsync(adminSetOrganizationHooksRollout(
       this,
       request,
       options,

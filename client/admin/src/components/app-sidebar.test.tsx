@@ -227,6 +227,7 @@ describe("AppSidebar", () => {
           { label: "Signup offers", href: "/signup-offers" },
           { label: "Steps", href: "/onboarding-steps" },
           { label: "Use Cases & Playbooks", href: "/onboarding-playbooks" },
+          { label: "Hooks rollout", href: "/hooks-rollout" },
           { label: "Remote Session Issuers", href: "/remote-session-issuers" },
           { label: "Assistants", href: "/assistants" },
           {

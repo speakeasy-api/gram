@@ -14,6 +14,7 @@ import { Route as AssistantsRouteImport } from './routes/assistants'
 import { Route as CustomDomainsRouteImport } from './routes/custom-domains'
 import { Route as CustomerUsageRouteImport } from './routes/customer-usage'
 import { Route as FleetHealthRouteImport } from './routes/fleet-health'
+import { Route as HooksRolloutRouteImport } from './routes/hooks-rollout'
 import { Route as IntegrationCoverageRouteImport } from './routes/integration-coverage'
 import { Route as McpSetupRouteImport } from './routes/mcp-setup'
 import { Route as MemoryEvalsRouteImport } from './routes/memory-evals'
@@ -83,6 +84,11 @@ const CustomerUsageRoute = CustomerUsageRouteImport.update({
 const FleetHealthRoute = FleetHealthRouteImport.update({
   id: '/fleet-health',
   path: '/fleet-health',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HooksRolloutRoute = HooksRolloutRouteImport.update({
+  id: '/hooks-rollout',
+  path: '/hooks-rollout',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IntegrationCoverageRoute = IntegrationCoverageRouteImport.update({
@@ -339,6 +345,7 @@ export interface FileRoutesByFullPath {
   '/custom-domains': typeof CustomDomainsRoute
   '/customer-usage': typeof CustomerUsageRoute
   '/fleet-health': typeof FleetHealthRoute
+  '/hooks-rollout': typeof HooksRolloutRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
   '/memory-evals': typeof MemoryEvalsRoute
@@ -391,6 +398,7 @@ export interface FileRoutesByTo {
   '/custom-domains': typeof CustomDomainsRoute
   '/customer-usage': typeof CustomerUsageRoute
   '/fleet-health': typeof FleetHealthRoute
+  '/hooks-rollout': typeof HooksRolloutRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
   '/memory-evals': typeof MemoryEvalsRoute
@@ -435,6 +443,7 @@ export interface FileRoutesById {
   '/custom-domains': typeof CustomDomainsRoute
   '/customer-usage': typeof CustomerUsageRoute
   '/fleet-health': typeof FleetHealthRoute
+  '/hooks-rollout': typeof HooksRolloutRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
   '/memory-evals': typeof MemoryEvalsRoute
@@ -489,6 +498,7 @@ export interface FileRouteTypes {
     | '/custom-domains'
     | '/customer-usage'
     | '/fleet-health'
+    | '/hooks-rollout'
     | '/integration-coverage'
     | '/mcp-setup'
     | '/memory-evals'
@@ -541,6 +551,7 @@ export interface FileRouteTypes {
     | '/custom-domains'
     | '/customer-usage'
     | '/fleet-health'
+    | '/hooks-rollout'
     | '/integration-coverage'
     | '/mcp-setup'
     | '/memory-evals'
@@ -584,6 +595,7 @@ export interface FileRouteTypes {
     | '/custom-domains'
     | '/customer-usage'
     | '/fleet-health'
+    | '/hooks-rollout'
     | '/integration-coverage'
     | '/mcp-setup'
     | '/memory-evals'
@@ -637,6 +649,7 @@ export interface RootRouteChildren {
   CustomDomainsRoute: typeof CustomDomainsRoute
   CustomerUsageRoute: typeof CustomerUsageRoute
   FleetHealthRoute: typeof FleetHealthRoute
+  HooksRolloutRoute: typeof HooksRolloutRoute
   IntegrationCoverageRoute: typeof IntegrationCoverageRoute
   McpSetupRoute: typeof McpSetupRoute
   MemoryEvalsRoute: typeof MemoryEvalsRoute
@@ -689,6 +702,13 @@ declare module '@tanstack/react-router' {
       path: '/fleet-health'
       fullPath: '/fleet-health'
       preLoaderRoute: typeof FleetHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/hooks-rollout': {
+      id: '/hooks-rollout'
+      path: '/hooks-rollout'
+      fullPath: '/hooks-rollout'
+      preLoaderRoute: typeof HooksRolloutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/integration-coverage': {
@@ -1176,6 +1196,7 @@ const rootRouteChildren: RootRouteChildren = {
   CustomDomainsRoute: CustomDomainsRoute,
   CustomerUsageRoute: CustomerUsageRoute,
   FleetHealthRoute: FleetHealthRoute,
+  HooksRolloutRoute: HooksRolloutRoute,
   IntegrationCoverageRoute: IntegrationCoverageRoute,
   McpSetupRoute: McpSetupRoute,
   MemoryEvalsRoute: MemoryEvalsRoute,

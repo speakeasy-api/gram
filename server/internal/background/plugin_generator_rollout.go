@@ -23,10 +23,12 @@ const (
 	// This sweep is the safety net, not the primary trigger: plugin and plugin
 	// membership changes signal a per-project publish directly (see
 	// plugin_publish.go), so the cadence here only bounds how long a change with
-	// NO database write takes to propagate — a hooks generator-version bump or a
-	// hooks-rollout pin advance in PostHog, neither of which any callsite can
-	// signal. At 10s this workflow dominated the Temporal action bill for work
-	// that was a no-op on almost every tick.
+	// no per-project signal takes to propagate — a hooks generator-version bump
+	// or a hooks rollout pin change in the admin dashboard, which applies to
+	// every project of one or all organizations at once. It is also how long a
+	// rollout pin change waits to reach customers. At 10s this workflow
+	// dominated the Temporal action bill for work that was a no-op on almost
+	// every tick.
 	//
 	// The fingerprint check keeps unchanged projects from doing any GitHub/key
 	// work, so each tick is cheap apart from the per-project scan (resolve +

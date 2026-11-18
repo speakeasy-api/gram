@@ -1097,6 +1097,10 @@ const (
 	HookDeliveryFailedIdempotencyKeyKey = attribute.Key("gram.hook.delivery.failed_idempotency_key")
 	HookDeliverySessionIDKey            = attribute.Key("gram.hook.delivery.session_id")
 	HookDeliverySpoolDepthKey           = attribute.Key("gram.hook.delivery.spool_depth")
+	// HooksRolloutVersionKey is a hooks rollout pin: the highest hooks
+	// generator version an organization, or every organization without an
+	// override, is cleared to receive.
+	HooksRolloutVersionKey = attribute.Key("gram.hooks_rollout.version")
 	// Hardware identity the Speakeasy device agent (speakeasyd) reports via
 	// the Gram-Device-* headers, recorded on the request log for its
 	// endpoints so a fleet's requests can be counted and told apart per
@@ -3767,6 +3771,10 @@ func SlogRiskFindingID(v string) slog.Attr      { return slog.String(string(Risk
 func RiskPolicyVersion(v int64) attribute.KeyValue { return RiskPolicyVersionKey.Int64(v) }
 func SlogRiskPolicyVersion(v int64) slog.Attr {
 	return slog.Int64(string(RiskPolicyVersionKey), v)
+}
+
+func SlogHooksRolloutVersion(v int) slog.Attr {
+	return slog.Int(string(HooksRolloutVersionKey), v)
 }
 
 func RiskConfidence(v float64) attribute.KeyValue { return RiskConfidenceKey.Float64(v) }
