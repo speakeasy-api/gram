@@ -255,18 +255,10 @@ export function useOwnerConnections(
     byServer.set(
       server.id,
       serverConnection(
-        server.issuerId!,
         clientRead.data,
         [
           ...(bindingRead?.data?.items ?? []).flatMap((binding) =>
-            binding.remoteSession
-              ? [
-                  {
-                    ...binding.remoteSession,
-                    userSessionIssuerId: server.issuerId!,
-                  },
-                ]
-              : [],
+            binding.remoteSession ? [binding.remoteSession] : [],
           ),
           ...sessionRead.data,
         ],
@@ -303,17 +295,9 @@ export function useOwnerConnections(
       assignedByServer.set(
         server.id,
         serverConnection(
-          server.issuerId!,
           clientsRead.data,
           bindingRead.data.items.flatMap((binding) =>
-            binding.remoteSession
-              ? [
-                  {
-                    ...binding.remoteSession,
-                    userSessionIssuerId: server.issuerId!,
-                  },
-                ]
-              : [],
+            binding.remoteSession ? [binding.remoteSession] : [],
           ),
           undefined,
           { anyOne: clientsRead.anyOne },
