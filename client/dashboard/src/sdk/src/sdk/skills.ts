@@ -328,7 +328,7 @@ export class Skills extends ClientSDK {
    * link skills
    *
    * @remarks
-   * Link a skill to exactly one MCP surface that serves it over MCP. Repeating the request for the same skill and target updates the version pin or is a no-op. Requires the skills-over-mcp rollout for the organization.
+   * Link a skill to exactly one MCP surface that serves it over MCP. Repeating the request for the same skill and target updates the version pin or is a no-op. Requires the skills_over_mcp product feature for the organization.
    */
   async link(
     request: LinkSkillRequest,
@@ -404,7 +404,7 @@ export class Skills extends ClientSDK {
    * listLinks skills
    *
    * @remarks
-   * List the current project's live skill links, limited to MCP surfaces the caller can read. Requires the skills-over-mcp rollout for the organization.
+   * List the current project's live skill links, limited to MCP surfaces the caller can read. Requires the skills_over_mcp product feature for the organization.
    */
   async listLinks(
     request?: ListSkillLinksRequest | undefined,
@@ -596,7 +596,7 @@ export class Skills extends ClientSDK {
    * unlink skills
    *
    * @remarks
-   * Remove a skill link so its MCP surface stops serving the skill through it. Removing a link that is already gone is a no-op. Requires the skills-over-mcp rollout for the organization.
+   * Remove a skill link so its MCP surface stops serving the skill through it. Removing a link that is already gone is a no-op. Requires the skills_over_mcp product feature for the organization.
    */
   async unlink(
     request: UnlinkSkillRequest,

@@ -78,7 +78,7 @@ export type SkillLinksQueryError =
  * listLinks skills
  *
  * @remarks
- * List the current project's live skill links, limited to MCP surfaces the caller can read. Requires the skills-over-mcp rollout for the organization.
+ * List the current project's live skill links, limited to MCP surfaces the caller can read. Requires the skills_over_mcp product feature for the organization.
  */
 export function useSkillLinks(
   request?: ListSkillLinksRequest | undefined,
@@ -101,7 +101,7 @@ export function useSkillLinks(
  * listLinks skills
  *
  * @remarks
- * List the current project's live skill links, limited to MCP surfaces the caller can read. Requires the skills-over-mcp rollout for the organization.
+ * List the current project's live skill links, limited to MCP surfaces the caller can read. Requires the skills_over_mcp product feature for the organization.
  */
 export function useSkillLinksSuspense(
   request?: ListSkillLinksRequest | undefined,
@@ -124,7 +124,7 @@ export function useSkillLinksSuspense(
  * listLinks skills
  *
  * @remarks
- * List the current project's live skill links, limited to MCP surfaces the caller can read. Requires the skills-over-mcp rollout for the organization.
+ * List the current project's live skill links, limited to MCP surfaces the caller can read. Requires the skills_over_mcp product feature for the organization.
  */
 export function useSkillLinksInfinite(
   request?: ListSkillLinksRequest | undefined,
@@ -161,7 +161,7 @@ export function useSkillLinksInfinite(
  * listLinks skills
  *
  * @remarks
- * List the current project's live skill links, limited to MCP surfaces the caller can read. Requires the skills-over-mcp rollout for the organization.
+ * List the current project's live skill links, limited to MCP surfaces the caller can read. Requires the skills_over_mcp product feature for the organization.
  */
 export function useSkillLinksInfiniteSuspense(
   request?: ListSkillLinksRequest | undefined,

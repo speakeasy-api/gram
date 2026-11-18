@@ -120,6 +120,13 @@ const PRODUCT_FEATURES = {
     description:
       "Enables the Signals intelligence configuration dashboard for this organization.",
   },
+  skills_over_mcp: {
+    kind: "toggle",
+    enabledKey: "skillsOverMcpEnabled",
+    label: "Skills over MCP",
+    description:
+      "Enables Skills over MCP for this organization: linked skills on hosted MCP servers and gateways, the Platform MCP skill surface, and skill links in the dashboard. Off by default.",
+  },
   sso: {
     kind: "toggle",
     enabledKey: "ssoEnabled",

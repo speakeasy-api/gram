@@ -31,6 +31,7 @@ export const FeatureName = {
   SignalsIntelligence: "signals_intelligence",
   OrganizationGatewayDisabled: "organization_gateway_disabled",
   CodeMode: "code_mode",
+  SkillsOverMcp: "skills_over_mcp",
 } as const;
 /**
  * Name of the feature to update

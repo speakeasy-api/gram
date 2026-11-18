@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * link skills
  *
  * @remarks
- * Link a skill to exactly one MCP surface that serves it over MCP. Repeating the request for the same skill and target updates the version pin or is a no-op. Requires the skills-over-mcp rollout for the organization.
+ * Link a skill to exactly one MCP surface that serves it over MCP. Repeating the request for the same skill and target updates the version pin or is a no-op. Requires the skills_over_mcp product feature for the organization.
  */
 export function skillsLink(
   client: GramCore,

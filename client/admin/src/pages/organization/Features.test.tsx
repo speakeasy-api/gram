@@ -52,6 +52,7 @@ const FEATURES: ProductFeatures = {
   signalsIntelligenceEnabled: false,
   skillCaptureMetadataOnly: false,
   skillsEnabled: true,
+  skillsOverMcpEnabled: false,
   ssoEnabled: true,
   toolIoLogsEnabled: true,
 };
@@ -77,6 +78,7 @@ const FEATURES_RESPONSE = {
   signals_intelligence_enabled: false,
   skill_capture_metadata_only: false,
   skills_enabled: true,
+  skills_over_mcp_enabled: false,
   sso_enabled: true,
   tool_io_logs_enabled: true,
 };
@@ -131,6 +133,11 @@ const TOGGLE_FEATURES = [
     featureName: "signals_intelligence",
     enabledKey: "signalsIntelligenceEnabled",
     label: "Signals Intelligence",
+  },
+  {
+    featureName: "skills_over_mcp",
+    enabledKey: "skillsOverMcpEnabled",
+    label: "Skills over MCP",
   },
   { featureName: "sso", enabledKey: "ssoEnabled", label: "SSO" },
   { featureName: "scim", enabledKey: "scimEnabled", label: "SCIM" },

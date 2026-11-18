@@ -38,7 +38,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -73,9 +72,6 @@ type Service struct {
 	// is a no-op then.
 	publisher PluginPublishSignaler
 	siteURL   *url.URL
-	// flags gates the skill link methods behind the skills-over-mcp rollout.
-	// Nil refuses them; see WithFeatureProvider.
-	flags feature.Provider
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -106,7 +102,6 @@ func NewService(
 		signaler:  signaler,
 		publisher: publisher,
 		siteURL:   siteURL,
-		flags:     nil,
 	}
 }
 

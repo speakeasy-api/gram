@@ -36,6 +36,10 @@ vi.mock("@/components/page-layout", () => {
     useInPageFrame: () => true,
   };
 });
+vi.mock("@/pages/skills/use-skills-over-mcp", () => ({
+  useSkillsOverMcpStatus: () => state.flag,
+  useSkillsOverMcpEnabled: () => state.flag.status === "enabled",
+}));
 vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: () => state.flag,
 }));

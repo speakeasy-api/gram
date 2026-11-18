@@ -728,7 +728,7 @@ var _ = Service("skills", func() {
 	})
 
 	Method("link", func() {
-		Description("Link a skill to exactly one MCP surface that serves it over MCP. Repeating the request for the same skill and target updates the version pin or is a no-op. Requires the skills-over-mcp rollout for the organization.")
+		Description("Link a skill to exactly one MCP surface that serves it over MCP. Repeating the request for the same skill and target updates the version pin or is a no-op. Requires the skills_over_mcp product feature for the organization.")
 
 		Payload(func() {
 			Attribute("id", String, "The skill ID.", func() { Format(FormatUUID) })
@@ -761,7 +761,7 @@ var _ = Service("skills", func() {
 	})
 
 	Method("unlink", func() {
-		Description("Remove a skill link so its MCP surface stops serving the skill through it. Removing a link that is already gone is a no-op. Requires the skills-over-mcp rollout for the organization.")
+		Description("Remove a skill link so its MCP surface stops serving the skill through it. Removing a link that is already gone is a no-op. Requires the skills_over_mcp product feature for the organization.")
 
 		Payload(func() {
 			Attribute("link_id", String, "The skill link ID.", func() { Format(FormatUUID) })
@@ -786,7 +786,7 @@ var _ = Service("skills", func() {
 	})
 
 	Method("listLinks", func() {
-		Description("List the current project's live skill links, limited to MCP surfaces the caller can read. Requires the skills-over-mcp rollout for the organization.")
+		Description("List the current project's live skill links, limited to MCP surfaces the caller can read. Requires the skills_over_mcp product feature for the organization.")
 
 		Payload(func() {
 			Attribute("skill_id", String, "Only return links of this skill.", func() { Format(FormatUUID) })

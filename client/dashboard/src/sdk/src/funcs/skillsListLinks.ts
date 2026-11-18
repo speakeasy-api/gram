@@ -46,7 +46,7 @@ import {
  * listLinks skills
  *
  * @remarks
- * List the current project's live skill links, limited to MCP surfaces the caller can read. Requires the skills-over-mcp rollout for the organization.
+ * List the current project's live skill links, limited to MCP surfaces the caller can read. Requires the skills_over_mcp product feature for the organization.
  */
 export function skillsListLinks(
   client: GramCore,
