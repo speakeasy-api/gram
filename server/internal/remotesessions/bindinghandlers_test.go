@@ -114,17 +114,6 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	require.NoError(t, err)
 	theirs := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("another-user"), sourceConfig.String(), client)
 
-	// A reachable client does not make a sibling issuer's session attachable.
-	siblingConfig := createUserSessionIssuer(t, ctx, ti.conn, "binding-sibling-config")
-	siblingIssuer := createRemoteIssuer(t, ctx, ti, "binding-sibling-provider", "")
-	siblingClient := createRemoteClient(t, ctx, ti, siblingIssuer, config.String(), "binding-sibling-client")
-	sibling := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), siblingConfig.String(), siblingClient)
-	_, err = repo.New(ti.conn).AttachPrincipalRemoteSessionBinding(ctx, repo.AttachPrincipalRemoteSessionBindingParams{
-		ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID,
-		UserSessionIssuerID: config, SubjectUrn: sibling.SubjectUrn.String(), RemoteSessionID: sibling.ID,
-	})
-	require.ErrorIs(t, err, pgx.ErrNoRows, "reject a mismatched issuer before the exact-session FK")
-
 	candidates, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{PrincipalID: conv.PtrEmpty(agent.ID.String()), UserSessionIssuerID: conv.PtrEmpty(config.String())})
 	require.NoError(t, err)
 	require.Len(t, candidates.Items, 1)
@@ -351,8 +340,9 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 }
 
 // A person who signed in through a team gateway attaches that connection to an
-// agent for a member server, when the client is bound to both the gateway's
-// issuer and the member's. A client the gateway never binds stays unattachable.
+// agent for a member server whose issuer binds the same client. The gateway's
+// issuer is provenance only: the connection stays attachable, and an existing
+// attachment keeps resolving, after the gateway stops binding the client.
 func TestBindingsAttachConnectionMadeThroughGatewayIssuer(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -403,16 +393,29 @@ func TestBindingsAttachConnectionMadeThroughGatewayIssuer(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, viaGateway.ID, resolved.ID)
 
-	// A client bound only to the member never reached the gateway, so a session
-	// recorded under the gateway for it is not attachable.
-	otherIssuer := createRemoteIssuer(t, ctx, ti, "binding-gateway-other-provider", "")
-	memberOnly := createRemoteClient(t, ctx, ti, otherIssuer, member.String(), "binding-gateway-member-only-client")
-	stray := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), gateway.String(), memberOnly)
+	// The gateway stops binding the client. Its login is untouched, so the
+	// attachment keeps resolving and the login stays attachable.
+	unlinked, err := repo.New(ti.conn).DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachProjectRemoteSessionClientFromUserSessionIssuerParams{
+		RemoteSessionClientID: viaGateway.RemoteSessionClientID, UserSessionIssuerID: gateway,
+		ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), unlinked)
+	resolved, err = repo.New(ti.conn).GetPrincipalRemoteSessionBinding(ctx, repo.GetPrincipalRemoteSessionBindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: member, RemoteSessionClientID: viaGateway.RemoteSessionClientID})
+	require.NoError(t, err)
+	require.Equal(t, viaGateway.ID, resolved.ID)
 	candidates, err = ti.service.ListRemoteSessions(ctx, eligible)
 	require.NoError(t, err)
-	for _, candidate := range candidates.Items {
-		require.NotEqual(t, stray.ID.String(), candidate.ID)
-	}
+	require.Len(t, candidates.Items, 1)
+	require.Equal(t, viaGateway.ID.String(), candidates.Items[0].ID)
+	reattached, err := ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: member.String(), RemoteSessionID: viaGateway.ID.String()})
+	require.NoError(t, err)
+	require.Equal(t, attached.ID, reattached.ID)
+
+	// The member's issuer must still bind the client itself.
+	otherIssuer := createRemoteIssuer(t, ctx, ti, "binding-gateway-other-provider", "")
+	gatewayOnly := createRemoteClient(t, ctx, ti, otherIssuer, gateway.String(), "binding-gateway-only-client")
+	stray := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), gateway.String(), gatewayOnly)
 	_, err = ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: member.String(), RemoteSessionID: stray.ID.String()})
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
