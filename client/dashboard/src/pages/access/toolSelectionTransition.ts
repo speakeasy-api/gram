@@ -1,5 +1,7 @@
 import type { Selector } from "@gram/client/models/components/selector.js";
 
+import { ANNOTATION_TO_DISPOSITION } from "./types";
+
 /**
  * Selector transitions for the tool-selection panel's annotation → manual
  * mode switch. The panel promises the two modes are mutually exclusive, so
@@ -59,4 +61,31 @@ export function selectorsAfterToolBatch(
   return base.filter(
     (s) => !(s.resourceId === serverId && s.tool && toolSet.has(s.tool)),
   );
+}
+
+const PANEL_DISPOSITIONS: ReadonlySet<string> = new Set(
+  Object.values(ANNOTATION_TO_DISPOSITION),
+);
+
+/**
+ * The selectors after an annotation is ticked or unticked in the panel. The
+ * panel shows only the four annotation hints, so a stored disposition it
+ * cannot show, such as unannotated, is kept as it was instead of being
+ * dropped by an edit to another annotation.
+ */
+export function selectorsAfterAnnotationToggle(
+  selectors: Selector[],
+  dispositions: Selector["disposition"][],
+): Selector[] {
+  const kept = selectors.filter(
+    (s) => s.disposition && !PANEL_DISPOSITIONS.has(s.disposition),
+  );
+  return [
+    ...dispositions.map((disposition) => ({
+      resourceKind: "mcp" as const,
+      resourceId: "*",
+      disposition,
+    })),
+    ...kept,
+  ];
 }

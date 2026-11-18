@@ -177,6 +177,19 @@ describe("computePanelState", () => {
       });
     });
 
+    it("counts an unannotated rule the panel has no annotation for", () => {
+      const result = computePanelState(
+        [disposition("read_only"), disposition("unannotated")],
+        "mcp",
+      );
+      expect(result).toEqual({
+        activePanel: "tools",
+        tab: "auto-groups",
+        annotations: ["readOnlyHint"],
+        label: "2 rules selected",
+      });
+    });
+
     it("single disposition → singular label", () => {
       const result = computePanelState([disposition("destructive")], "mcp");
       expect(result).toEqual({
