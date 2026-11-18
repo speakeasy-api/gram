@@ -196,13 +196,22 @@ func SourceOf(reason string, outcome Outcome) Source {
 	}
 }
 
-// MessageOf is the plain sentence for a reason, empty when the reason is unknown or empty.
+// MessageOf is the administrator's sentence for a reason, empty when the reason is unknown or empty.
 func MessageOf(reason string) string {
 	meaning, ok := mcpconnectionattempts.MeaningOf(reason)
 	if !ok {
 		return ""
 	}
-	return meaning.WhatHappened
+	return meaning.WhatHappenedForAdmin
+}
+
+// TechnicalOf is the precise technical fact for a reason, empty when there is none.
+func TechnicalOf(reason string) string {
+	meaning, ok := mcpconnectionattempts.MeaningOf(reason)
+	if !ok {
+		return ""
+	}
+	return meaning.Technical
 }
 
 // UnlistedAppName is shown for an app that is not on the family list.

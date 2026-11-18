@@ -13,12 +13,15 @@ export type ConnectionDeniedClient = {
   app: ConnectionApp;
   attempts: number;
   lastAt: Date;
+  /**
+   * What happened, in one sentence for an administrator.
+   */
   message: string;
   networks: number;
   people: number;
   reason: string;
   /**
-   * Reserved: a sentence for administrators about the reason. Not returned yet.
+   * A precise technical fact about the reason, when every cause of it shares one.
    */
   technicalMessage?: string | undefined;
 };

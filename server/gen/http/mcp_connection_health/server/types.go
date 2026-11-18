@@ -1301,8 +1301,9 @@ type ConnectionAttemptRowResponseBody struct {
 	Outcome string  `form:"outcome" json:"outcome" xml:"outcome"`
 	Step    string  `form:"step" json:"step" xml:"step"`
 	Reason  *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// What happened, in one sentence for an administrator.
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Reserved: a sentence for administrators about the reason. Not returned yet.
+	// A precise technical fact about the reason, when every cause of it shares one.
 	TechnicalMessage *string                        `form:"technical_message,omitempty" json:"technical_message,omitempty" xml:"technical_message,omitempty"`
 	Source           *string                        `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
 	Person           *ConnectionPersonResponseBody  `form:"person,omitempty" json:"person,omitempty" xml:"person,omitempty"`
@@ -1392,8 +1393,9 @@ type ConnectionAttemptDetailResponseBody struct {
 	Outcome string  `form:"outcome" json:"outcome" xml:"outcome"`
 	Step    string  `form:"step" json:"step" xml:"step"`
 	Reason  *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// What happened, in one sentence for an administrator.
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Reserved: a sentence for administrators about the reason. Not returned yet.
+	// A precise technical fact about the reason, when every cause of it shares one.
 	TechnicalMessage *string                        `form:"technical_message,omitempty" json:"technical_message,omitempty" xml:"technical_message,omitempty"`
 	Source           *string                        `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
 	Person           *ConnectionPersonResponseBody  `form:"person,omitempty" json:"person,omitempty" xml:"person,omitempty"`
@@ -1413,8 +1415,9 @@ type ConnectionAttemptStepResponseBody struct {
 	Result     string  `form:"result" json:"result" xml:"result"`
 	Final      bool    `form:"final" json:"final" xml:"final"`
 	Reason     *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
-	Message    *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Reserved: a sentence for administrators about the reason. Not returned yet.
+	// What happened, in one sentence for an administrator.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// A precise technical fact about the reason, when every cause of it shares one.
 	TechnicalMessage *string                       `form:"technical_message,omitempty" json:"technical_message,omitempty" xml:"technical_message,omitempty"`
 	Member           *ConnectionServerResponseBody `form:"member,omitempty" json:"member,omitempty" xml:"member,omitempty"`
 	Service          *string                       `form:"service,omitempty" json:"service,omitempty" xml:"service,omitempty"`
@@ -1454,10 +1457,11 @@ type ConnectionSessionDayResponseBody struct {
 // ConnectionDeniedClientResponseBody is used to define fields on response body
 // types.
 type ConnectionDeniedClientResponseBody struct {
-	App     *ConnectionAppResponseBody `form:"app" json:"app" xml:"app"`
-	Reason  string                     `form:"reason" json:"reason" xml:"reason"`
-	Message string                     `form:"message" json:"message" xml:"message"`
-	// Reserved: a sentence for administrators about the reason. Not returned yet.
+	App    *ConnectionAppResponseBody `form:"app" json:"app" xml:"app"`
+	Reason string                     `form:"reason" json:"reason" xml:"reason"`
+	// What happened, in one sentence for an administrator.
+	Message string `form:"message" json:"message" xml:"message"`
+	// A precise technical fact about the reason, when every cause of it shares one.
 	TechnicalMessage *string `form:"technical_message,omitempty" json:"technical_message,omitempty" xml:"technical_message,omitempty"`
 	Attempts         int64   `form:"attempts" json:"attempts" xml:"attempts"`
 	People           int64   `form:"people" json:"people" xml:"people"`

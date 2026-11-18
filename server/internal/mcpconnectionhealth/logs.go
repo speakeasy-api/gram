@@ -229,7 +229,7 @@ func (s *Service) GetAttempt(ctx context.Context, payload *gen.GetAttemptPayload
 		Step:                view.Step,
 		Reason:              view.Reason,
 		Message:             view.Message,
-		TechnicalMessage:    nil,
+		TechnicalMessage:    view.TechnicalMessage,
 		Source:              view.Source,
 		Person:              n.person(row.Subject, true),
 		Network:             view.Network,
@@ -259,7 +259,7 @@ func (s *Service) GetAttempt(ctx context.Context, payload *gen.GetAttemptPayload
 			Final:            step.Final,
 			Reason:           conv.PtrEmpty(step.Reason),
 			Message:          conv.PtrEmpty(attemptlog.MessageOf(step.Reason)),
-			TechnicalMessage: nil,
+			TechnicalMessage: conv.PtrEmpty(attemptlog.TechnicalOf(step.Reason)),
 			Member:           n.member(step.MemberID),
 			Service:          conv.PtrEmpty(step.Service),
 		}

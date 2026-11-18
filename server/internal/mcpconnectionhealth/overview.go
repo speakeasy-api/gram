@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_connection_health"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/attemptlog"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionhealth/repo"
@@ -79,7 +80,7 @@ func (s *Service) ListDeniedClients(ctx context.Context, payload *gen.ListDenied
 			App:              appView(client.App, "", client.AppKey),
 			Reason:           client.Reason,
 			Message:          attemptlog.MessageOf(client.Reason),
-			TechnicalMessage: nil,
+			TechnicalMessage: conv.PtrEmpty(attemptlog.TechnicalOf(client.Reason)),
 			Attempts:         count(client.Attempts),
 			People:           count(client.People),
 			Networks:         count(client.Networks),

@@ -94889,6 +94889,7 @@ components:
           $ref: '#/components/schemas/ConnectionServer'
         message:
           type: string
+          description: What happened, in one sentence for an administrator.
         network:
           $ref: '#/components/schemas/ConnectionNetwork'
         outcome:
@@ -94943,7 +94944,7 @@ components:
             $ref: '#/components/schemas/ConnectionAttemptStep'
         technical_message:
           type: string
-          description: 'Reserved: a sentence for administrators about the reason. Not returned yet.'
+          description: A precise technical fact about the reason, when every cause of it shares one.
         time:
           type: string
           description: When the newest attempt ended or last moved.
@@ -95144,6 +95145,7 @@ components:
           $ref: '#/components/schemas/ConnectionServer'
         message:
           type: string
+          description: What happened, in one sentence for an administrator.
         network:
           $ref: '#/components/schemas/ConnectionNetwork'
         outcome:
@@ -95191,7 +95193,7 @@ components:
           x-speakeasy-name-override: ConnectionStepGroup
         technical_message:
           type: string
-          description: 'Reserved: a sentence for administrators about the reason. Not returned yet.'
+          description: A precise technical fact about the reason, when every cause of it shares one.
         time:
           type: string
           description: When the newest attempt ended or last moved.
@@ -95216,6 +95218,7 @@ components:
           $ref: '#/components/schemas/ConnectionServer'
         message:
           type: string
+          description: What happened, in one sentence for an administrator.
         reason:
           type: string
         result:
@@ -95239,7 +95242,7 @@ components:
           type: string
         technical_message:
           type: string
-          description: 'Reserved: a sentence for administrators about the reason. Not returned yet.'
+          description: A precise technical fact about the reason, when every cause of it shares one.
       required:
         - at
         - step
@@ -95259,6 +95262,7 @@ components:
           format: date-time
         message:
           type: string
+          description: What happened, in one sentence for an administrator.
         networks:
           type: integer
           format: int64
@@ -95269,7 +95273,7 @@ components:
           type: string
         technical_message:
           type: string
-          description: 'Reserved: a sentence for administrators about the reason. Not returned yet.'
+          description: A precise technical fact about the reason, when every cause of it shares one.
       required:
         - app
         - reason

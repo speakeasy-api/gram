@@ -218,7 +218,7 @@ func (n names) row(r attemptlog.Row) *gen.ConnectionAttemptRow {
 		Step:             gen.ConnectionStepGroup(r.Step),
 		Reason:           conv.PtrEmpty(r.Reason),
 		Message:          conv.PtrEmpty(attemptlog.MessageOf(r.Reason)),
-		TechnicalMessage: nil,
+		TechnicalMessage: conv.PtrEmpty(attemptlog.TechnicalOf(r.Reason)),
 		Source:           conv.PtrEmpty(gen.ConnectionFailureSource(attemptlog.SourceOf(r.Reason, attemptlog.Outcome(r.Outcome)))),
 		Person:           n.person(r.Subject, false),
 		Network:          networkView(r.Network),
