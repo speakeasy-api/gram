@@ -526,27 +526,11 @@ type piMCPServer struct {
 	Enabled *bool    `json:"enabled"`
 }
 
-// maxPiMCPConfigBytes bounds one MCP config read. The file is read on the
-// tool-call gating path, so it must never stall or balloon the relay.
-const maxPiMCPConfigBytes = 1 << 20
-
 func readPiMCPConfig(path string) []agenthooks.MCPServer {
-	// The project config is repository-controlled: a FIFO or a symlink to a
-	// device would block the read past the shim's deadline, turning the tool
-	// call's verdict into an allow. The open cannot block (see
-	// piNonBlockingOpenFlag) and the descriptor itself is checked, so a path
-	// swapped after an earlier stat cannot smuggle one in.
-	f, err := os.OpenFile(path, os.O_RDONLY|piNonBlockingOpenFlag, 0)
-	if err != nil {
-		return nil
-	}
-	defer func() { _ = f.Close() }()
-	info, err := f.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Size() > maxPiMCPConfigBytes {
-		return nil
-	}
-	data, err := io.ReadAll(io.LimitReader(f, maxPiMCPConfigBytes+1))
-	if err != nil || len(data) > maxPiMCPConfigBytes {
+	// The project config is repository-controlled, so the shared bounded,
+	// non-blocking read (readMCPConfigBounded) guards the gating path.
+	data := readMCPConfigBounded(path)
+	if data == nil {
 		return nil
 	}
 	var doc piMCPConfig
@@ -559,14 +543,10 @@ func readPiMCPConfig(path string) []agenthooks.MCPServer {
 			if server.Enabled != nil && !*server.Enabled {
 				continue
 			}
-			command := strings.TrimSpace(server.Command)
-			if command != "" && len(server.Args) > 0 {
-				command = strings.Join(append([]string{command}, server.Args...), " ")
-			}
 			out = append(out, agenthooks.MCPServer{
 				Name:    strings.TrimSpace(name),
 				URL:     strings.TrimSpace(server.URL),
-				Command: command,
+				Command: joinMCPServerCommand(server.Command, server.Args),
 			})
 		}
 	}

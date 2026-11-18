@@ -7731,6 +7731,27 @@
       }
     },
     {
+      "name": "get_my_vibe_observability_install",
+      "description": "Check whether your organization's Mistral Vibe observability plugin (the Speakeasy hooks package for Mistral Vibe) can be installed, and get its install guidance. Returns available=true when a download ZIP can be minted (the pinned speakeasy-hooks release carries the vibe provider and the organization name fits the plugin schema), and published=true with the plugin install name when the published marketplace repository carries the package. When available, download_url is the ZIP endpoint to fetch, and next_action says how to install it: extract the ZIP into ~/.vibe/plugins/<plugin> (user scope) or copy the <plugin>-vibe/ directory from the marketplace repository, then restart Vibe or run /reload-plugins; the package's ai.mistral.vibe/hooks.toml runs automatically. When not available, next_action says what is missing (the hooks release carrying the vibe provider, or a name-schema-compatible organization name). The ZIP endpoint mints a fresh hooks-scoped key on each download. No API key, token, or package bytes are returned by this tool.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "project_slug": {
+            "type": "string",
+            "description": "the project's slug, as list_projects returns it; omit it to use the organization's Default project"
+          }
+        },
+        "additionalProperties": false
+      },
+      "read_only": true,
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      }
+    },
+    {
       "name": "get_my_install_instructions",
       "description": "Get non-secret, client-specific install guidance for one assigned published plugin or one configured MCP server the caller may connect to. Show each step's link as a clickable link and each snippet verbatim in a code block. Name exactly one target in a named project, or else the organization's default project; an mcp_id target uses the project that owns that server. Plugin guidance rechecks the caller's current recipient assignments; MCP guidance rechecks mcp:connect. No marketplace token, repository credential, package bytes, API key or OAuth credential is returned.",
       "input_schema": {
