@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
@@ -85,6 +91,14 @@ function GoToExploreDemo(): JSX.Element {
 }
 
 describe("project routes", () => {
+  it("marks Agent Identity as beta in shared navigation metadata", () => {
+    const { result } = renderHook(() => useRoutes(), {
+      wrapper: MemoryRouter,
+    });
+
+    expect(result.current.identities.agents.stage).toBe("beta");
+  });
+
   it("exposes the standalone guide route", () => {
     render(
       <MemoryRouter initialEntries={["/org/projects/project"]}>

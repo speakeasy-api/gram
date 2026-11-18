@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AssistantsRouteImport } from './routes/assistants'
 import { Route as CustomDomainsRouteImport } from './routes/custom-domains'
 import { Route as CustomerUsageRouteImport } from './routes/customer-usage'
 import { Route as FleetHealthRouteImport } from './routes/fleet-health'
@@ -62,6 +63,11 @@ import { Route as OrganizationsIdOrSlugProjectsProjectIdOrSlugRouteImport } from
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AssistantsRoute = AssistantsRouteImport.update({
+  id: '/assistants',
+  path: '/assistants',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CustomDomainsRoute = CustomDomainsRouteImport.update({
@@ -329,6 +335,7 @@ const OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/assistants': typeof AssistantsRoute
   '/custom-domains': typeof CustomDomainsRoute
   '/customer-usage': typeof CustomerUsageRoute
   '/fleet-health': typeof FleetHealthRoute
@@ -380,6 +387,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/assistants': typeof AssistantsRoute
   '/custom-domains': typeof CustomDomainsRoute
   '/customer-usage': typeof CustomerUsageRoute
   '/fleet-health': typeof FleetHealthRoute
@@ -423,6 +431,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/assistants': typeof AssistantsRoute
   '/custom-domains': typeof CustomDomainsRoute
   '/customer-usage': typeof CustomerUsageRoute
   '/fleet-health': typeof FleetHealthRoute
@@ -476,6 +485,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/assistants'
     | '/custom-domains'
     | '/customer-usage'
     | '/fleet-health'
@@ -527,6 +537,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/assistants'
     | '/custom-domains'
     | '/customer-usage'
     | '/fleet-health'
@@ -569,6 +580,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/assistants'
     | '/custom-domains'
     | '/customer-usage'
     | '/fleet-health'
@@ -621,6 +633,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AssistantsRoute: typeof AssistantsRoute
   CustomDomainsRoute: typeof CustomDomainsRoute
   CustomerUsageRoute: typeof CustomerUsageRoute
   FleetHealthRoute: typeof FleetHealthRoute
@@ -648,6 +661,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/assistants': {
+      id: '/assistants'
+      path: '/assistants'
+      fullPath: '/assistants'
+      preLoaderRoute: typeof AssistantsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/custom-domains': {
@@ -1152,6 +1172,7 @@ const UsersRouteWithChildren = UsersRoute._addFileChildren(UsersRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AssistantsRoute: AssistantsRoute,
   CustomDomainsRoute: CustomDomainsRoute,
   CustomerUsageRoute: CustomerUsageRoute,
   FleetHealthRoute: FleetHealthRoute,

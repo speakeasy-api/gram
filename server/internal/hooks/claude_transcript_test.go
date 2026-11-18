@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -222,6 +223,49 @@ func TestClaudeTranscriptEndpointSkipsWhenCaptureDisabled(t *testing.T) {
 	messages, err := chatrepo.New(ti.conn).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{ChatID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
 	require.Empty(t, messages)
+}
+
+// TestClaudeTranscriptEndpointAcceptsClientSkip: a skip report from the
+// binary is acknowledged and logged, and stores nothing.
+func TestClaudeTranscriptEndpointAcceptsClientSkip(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	ti.service.auth = &ahpTestAuthorizer{authCtx: authCtx}
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	h := ti.service.ahpAuthenticate(http.HandlerFunc(ti.service.serveTranscript))
+
+	sessionID := uuid.NewString()
+	body := claudeTranscriptUploadBody(sessionID, nil)
+	body["diagnostic"] = map[string]string{"reason": "transcript_path_invalid", "detail": strings.Repeat("x", 2*claudeTranscriptMaxDiagnosticBytes)}
+	require.Equal(t, int64(0), claudeTranscriptStored(t, claudeTranscriptRequest(t, h, body, ahpAuthHeaders)))
+
+	_, err := chatrepo.New(ti.conn).GetChat(ctx, chatrepo.GetChatParams{ID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID})
+	require.Error(t, err, "a skip report creates no chat")
+}
+
+// TestClaudeTranscriptEndpointStoresEntriesBesideDiagnostic: an upload that
+// carries both a diagnostic and entries still stores the entries.
+func TestClaudeTranscriptEndpointStoresEntriesBesideDiagnostic(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	ti.service.auth = &ahpTestAuthorizer{authCtx: authCtx}
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	h := ti.service.ahpAuthenticate(http.HandlerFunc(ti.service.serveTranscript))
+
+	body := claudeTranscriptUploadBody(uuid.NewString(), claudeTranscriptFixture())
+	body["diagnostic"] = map[string]string{"reason": "transcript_read_failed"}
+	require.Equal(t, int64(6), claudeTranscriptStored(t, claudeTranscriptRequest(t, h, body, ahpAuthHeaders)))
+}
+
+func TestTruncateDiagnostic(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "short", truncateDiagnostic("short"))
+	long := strings.Repeat("é", claudeTranscriptMaxDiagnosticBytes)
+	got := truncateDiagnostic(long)
+	require.LessOrEqual(t, len(got), claudeTranscriptMaxDiagnosticBytes)
+	require.True(t, utf8.ValidString(got))
 }
 
 func TestClaudeTranscriptEndpointRejectsInvalidRequests(t *testing.T) {

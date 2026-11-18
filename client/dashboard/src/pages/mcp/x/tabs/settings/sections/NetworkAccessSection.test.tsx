@@ -1005,7 +1005,7 @@ describe("NetworkAccessSection", () => {
 
     expect(
       screen.getByText(
-        "In Server URL, add a Hosted Address so clients can reach this server through your private network.",
+        "In Server URL, add a hosted address so clients can reach this server through your private network.",
       ),
     ).toBeTruthy();
     fireEvent.click(
@@ -1028,7 +1028,7 @@ describe("NetworkAccessSection", () => {
 
     expect(
       screen.getByText(
-        "In Server URL, add a Custom Address on the domain configured for your private network so clients can reach this server through your private network.",
+        "In Server URL, add a custom address on the domain configured for your private network so clients can reach this server through your private network.",
       ),
     ).toBeTruthy();
   });
@@ -1217,7 +1217,7 @@ describe("NetworkAccessSection", () => {
     );
     expect(
       screen.getByText(
-        "In Gateway URL, add a Hosted Address so clients can reach this gateway through your private network.",
+        "In Gateway URL, add a hosted address so clients can reach this gateway through your private network.",
       ),
     ).toBeTruthy();
     fireEvent.click(

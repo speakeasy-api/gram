@@ -18,6 +18,9 @@ type Fake struct {
 	// Reject, when non-nil, is returned from every call.
 	Reject error
 
+	// RejectServiceDeletes, when non-nil, is returned from DeleteService.
+	RejectServiceDeletes error
+
 	// Now supplies key expiry timestamps.
 	Now func() time.Time
 
@@ -31,7 +34,7 @@ var _ Client = (*Fake)(nil)
 
 // NewFake returns an empty fake.
 func NewFake() *Fake {
-	return &Fake{mu: sync.Mutex{}, Reject: nil, Now: time.Now, keys: nil, requests: nil, services: make(map[string]Service), deleted: nil}
+	return &Fake{mu: sync.Mutex{}, Reject: nil, RejectServiceDeletes: nil, Now: time.Now, keys: nil, requests: nil, services: make(map[string]Service), deleted: nil}
 }
 
 func (f *Fake) check(creds Credentials) error {
@@ -98,6 +101,9 @@ func (f *Fake) DeleteService(_ context.Context, creds Credentials, name string) 
 	defer f.mu.Unlock()
 	if err := f.check(creds); err != nil {
 		return err
+	}
+	if f.RejectServiceDeletes != nil {
+		return f.RejectServiceDeletes
 	}
 	if !strings.HasPrefix(name, "svc:") {
 		return errors.New("service deletion requires a svc: name")

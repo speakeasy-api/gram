@@ -434,3 +434,42 @@ func BuildDeleteRoutePayload(dataExportsDeleteRouteID string, dataExportsDeleteR
 
 	return v, nil
 }
+
+// BuildTestRoutePayload builds the payload for the dataExports testRoute
+// endpoint from CLI flags.
+func BuildTestRoutePayload(dataExportsTestRouteID string, dataExportsTestRouteSessionToken string, dataExportsTestRouteApikeyToken string, dataExportsTestRouteProjectSlugInput string) (*dataexports.TestRoutePayload, error) {
+	var err error
+	var id string
+	{
+		id = dataExportsTestRouteID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if dataExportsTestRouteSessionToken != "" {
+			sessionToken = &dataExportsTestRouteSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if dataExportsTestRouteApikeyToken != "" {
+			apikeyToken = &dataExportsTestRouteApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if dataExportsTestRouteProjectSlugInput != "" {
+			projectSlugInput = &dataExportsTestRouteProjectSlugInput
+		}
+	}
+	v := &dataexports.TestRoutePayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

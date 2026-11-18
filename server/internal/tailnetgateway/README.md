@@ -13,6 +13,16 @@ per-ingress attestor pods.
   fencing. A force-deleted or partitioned pod can briefly overlap with its
   replacement; Tailscale allows one live session per node key, which bounds
   that overlap.
+- An environment that shares customer tailnets with another, such as dev
+  beside production, sets `GRAM_NETWORK_INGRESS_GATEWAY_NAME_QUALIFIER` on
+  both the reconciler and the gateway. Its machines are then
+  `speakeasy-gw-<qualifier>-<n>`, and its auth key descriptions and service
+  comments carry the qualifier. Hostnames and services are not qualified.
+  Production leaves it unset. The ACL tag is set separately
+  (`GRAM_NETWORK_INGRESS_GATEWAY_TAG` on the reconciler and API server,
+  `GRAM_TAILNET_GATEWAY_TAG` on the gateway, both `tag:speakeasy` by
+  default), and the dashboard shows the configured tag in the policy it asks
+  customers to add.
 - The reconciler (`gram network-ingress-worker`) creates one
   `network_ingress_nodes` row per slot, defines the Tailscale Service
   `svc:<label>` through the Tailscale API and mints a one-shot, preauthorized,
@@ -44,9 +54,11 @@ per-ingress attestor pods.
   approved it to host `svc:<label>`, which control signals through the
   node's `service-host` capability. Advertising alone is not enough: a node
   whose service is unapproved, missing or misnamed connects without error but
-  gets no traffic. Such a slot reports `awaiting_approval`, and the ingress
-  shows `provider_service_not_approved` until the customer approves the host
-  or fixes `autoApprovers`. Approval is re-checked on every heartbeat, so
+  gets no traffic. Auto-approval takes a few seconds, so for the first minute
+  after its node is up (`ApprovalGrace`) an unapproved slot still reports
+  `starting` and the ingress stays pending. After that the slot reports
+  `awaiting_approval`, and the ingress shows `provider_service_not_approved`
+  until the customer approves the host or fixes `autoApprovers`. Approval is re-checked on every heartbeat, so
   approving or revoking a host takes effect without a restart.
 - An approved slot is `online` only once it also holds the TLS certificate
   for `svc:<label>`: without it every client handshake fails. Tailscale gets
@@ -60,9 +72,13 @@ per-ingress attestor pods.
   before one is stored, outside the lease below, so each slot a client
   reached would spend one; `issuancetest` reproduces that against a real
   tsnet node and a Pebble ACME server.
-  Until it is issued the slot reports `awaiting_certificate`: its message says
-  the request is in progress or, after a refusal, why and when it retries.
-  The ingress shows `provider_certificate_unavailable`. A slot reuses a
+  While the first request runs, or waits for another slot's lease or for
+  control to list the service name, the slot reports `starting` with a
+  message saying so, and the ingress stays pending. Once a request is refused
+  or fails, the slot reports `awaiting_certificate` with why and when it
+  retries, and the ingress shows `provider_certificate_unavailable`; the API
+  returns that slot's message as `status_detail` so the dashboard can show
+  the cause. A slot reuses a
   stored certificate directly; to request a missing one it first claims a
   short lease row in `network_ingress_certificate_states`, so slots of one
   connection take turns and the one that waited finds the certificate
@@ -136,7 +152,7 @@ In a cluster the gateway attests with its projected service-account token and
 the listener checks it with Kubernetes TokenReview. Locally the gateway
 presents an HMAC-signed token with the same claims (subject
 `system:serviceaccount:gram-local:gram-tailnet-gateway`, audience
-`gram-netingress`, 24-hour expiry), and the listener verifies it with
+`gram-netingress`, 30-day expiry), and the listener verifies it with
 `netingress.LocalTokenReviewer`. Everything after the token review is the
 production code path. The key and token live in `local/netingress/`, are
 created on first start, and the token is re-minted on every gateway start.
@@ -159,14 +175,15 @@ as a renewal. Because worktrees share the names, run the private network
 group in one worktree at a time.
 
 Naming lives behind `networkingress.Namer`, one method per artifact.
-`LocalNamer` gives:
+`ProductionNamer`, `QualifiedNamer` (a deployed environment with a machine
+name qualifier) and `LocalNamer` give:
 
-| Artifact                                 | Production            | Local                                          |
-| ---------------------------------------- | --------------------- | ---------------------------------------------- |
-| Connection hostname                      | as requested          | `local-<id>-<requested>` (the API prefixes it) |
-| Tailscale Service                        | `svc:<hostname>`      | `svc:local-<id>-<hostname>`                    |
-| Gateway machine                          | `speakeasy-gw-<slot>` | `speakeasy-gw-local-<id>-<slot>`               |
-| Service comment and auth key description | Speakeasy             | name `local-<id>`                              |
+| Artifact                                 | Production            | Qualified (`dev`)         | Local                                          |
+| ---------------------------------------- | --------------------- | ------------------------- | ---------------------------------------------- |
+| Connection hostname                      | as requested          | as requested              | `local-<id>-<requested>` (the API prefixes it) |
+| Tailscale Service                        | `svc:<hostname>`      | `svc:<hostname>`          | `svc:local-<id>-<hostname>`                    |
+| Gateway machine                          | `speakeasy-gw-<slot>` | `speakeasy-gw-dev-<slot>` | `speakeasy-gw-local-<id>-<slot>`               |
+| Service comment and auth key description | Speakeasy             | name `dev`                | name `local-<id>`                              |
 
 Beyond naming, a local stack never touches a hostname without its prefix. The
 reconciler refuses to define its service and leaves it alone on rename and
@@ -184,6 +201,12 @@ recorded, so they need no ownership check. Local machines still carry
 3. Start the group: `pitchfork start --group private-network`.
 4. On the dashboard's Domains page, connect Tailscale with an OAuth client
    from a test tailnet and the `tag:speakeasy` policy the setup sheet shows.
+   Type the full `local-<id>-<name>` hostname into the sheet (`<id>` is
+   `GRAM_NETWORK_INGRESS_DEV_ID`). The sheet builds the policy snippet from
+   the name you type, and the API keeps an already-prefixed name unchanged,
+   so the snippet then names the real `svc:local-<id>-<name>` service. A bare
+   name is still prefixed, but the snippet would name `svc:<name>`, which
+   does not exist.
 
 Readiness is served on `http://127.0.0.1:$GRAM_NETINGRESS_CONTROL_PORT/healthz`
 (which also reviews the gateway's token),

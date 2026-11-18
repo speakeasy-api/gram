@@ -237,6 +237,48 @@ func (q *Queries) CreateEncryptionGcpKmsKey(ctx context.Context, arg CreateEncry
 	return external_key_id, err
 }
 
+const createEncryptionTransition = `-- name: CreateEncryptionTransition :one
+INSERT INTO organization_encryption_transitions (organization_id, use_case, state, platform_copies_cleared_at)
+VALUES ($1, $2, $3, $4)
+RETURNING id, organization_id, use_case, state, generation, state_changed_at, platform_copies_cleared_at, last_backfill_started_at, last_backfill_completed_at, last_backfill_converted_count, last_backfill_remaining_count, last_backfill_unreadable_count, last_backfill_error, last_verified_at, created_at, updated_at
+`
+
+type CreateEncryptionTransitionParams struct {
+	OrganizationID          string
+	UseCase                 string
+	State                   string
+	PlatformCopiesClearedAt pgtype.Timestamptz
+}
+
+func (q *Queries) CreateEncryptionTransition(ctx context.Context, arg CreateEncryptionTransitionParams) (OrganizationEncryptionTransition, error) {
+	row := q.db.QueryRow(ctx, createEncryptionTransition,
+		arg.OrganizationID,
+		arg.UseCase,
+		arg.State,
+		arg.PlatformCopiesClearedAt,
+	)
+	var i OrganizationEncryptionTransition
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.UseCase,
+		&i.State,
+		&i.Generation,
+		&i.StateChangedAt,
+		&i.PlatformCopiesClearedAt,
+		&i.LastBackfillStartedAt,
+		&i.LastBackfillCompletedAt,
+		&i.LastBackfillConvertedCount,
+		&i.LastBackfillRemainingCount,
+		&i.LastBackfillUnreadableCount,
+		&i.LastBackfillError,
+		&i.LastVerifiedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createManagedEncryptionKey = `-- name: CreateManagedEncryptionKey :exec
 INSERT INTO managed_encryption_keys (external_key_id, organization_id)
 VALUES ($1, $2)
@@ -294,6 +336,33 @@ func (q *Queries) CreateOrganizationEncryptionConfig(ctx context.Context, arg Cr
 	return i, err
 }
 
+const deleteEncryptionUnreadableValue = `-- name: DeleteEncryptionUnreadableValue :exec
+DELETE FROM organization_encryption_unreadable_values
+WHERE organization_id = $1
+  AND use_case = $2
+  AND source_column = $3
+  AND row_id = $4
+`
+
+type DeleteEncryptionUnreadableValueParams struct {
+	OrganizationID string
+	UseCase        string
+	SourceColumn   string
+	RowID          string
+}
+
+// Unreadable records are derived state, so deleting one once its value seals
+// is safe.
+func (q *Queries) DeleteEncryptionUnreadableValue(ctx context.Context, arg DeleteEncryptionUnreadableValueParams) error {
+	_, err := q.db.Exec(ctx, deleteEncryptionUnreadableValue,
+		arg.OrganizationID,
+		arg.UseCase,
+		arg.SourceColumn,
+		arg.RowID,
+	)
+	return err
+}
+
 const externalKeyProtectsOrganizationData = `-- name: ExternalKeyProtectsOrganizationData :one
 SELECT (
   EXISTS (
@@ -323,6 +392,47 @@ func (q *Queries) ExternalKeyProtectsOrganizationData(ctx context.Context, arg E
 	var protects bool
 	err := row.Scan(&protects)
 	return protects, err
+}
+
+const fencedWriteFixture = `-- name: FencedWriteFixture :execrows
+UPDATE organization_encryption_unreadable_values AS v
+SET error_code = $1
+WHERE v.organization_id = $2
+  AND v.use_case = $3
+  AND v.source_column = $4
+  AND v.row_id = $5
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = v.organization_id AND t.use_case = $3
+    FOR KEY SHARE
+  ), 0) = $6::bigint
+`
+
+type FencedWriteFixtureParams struct {
+	ErrorCode         string
+	OrganizationID    string
+	UseCase           string
+	SourceColumn      string
+	RowID             string
+	DecidedGeneration int64
+}
+
+// Test fixture: a fenced write shaped like a feature's, against a table that
+// has an organization_id column, so tests can exercise the fence predicate
+// and its row lock on real Postgres.
+func (q *Queries) FencedWriteFixture(ctx context.Context, arg FencedWriteFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, fencedWriteFixture,
+		arg.ErrorCode,
+		arg.OrganizationID,
+		arg.UseCase,
+		arg.SourceColumn,
+		arg.RowID,
+		arg.DecidedGeneration,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const getActiveDataEncryptionKey = `-- name: GetActiveDataEncryptionKey :one
@@ -391,6 +501,19 @@ func (q *Queries) GetDataEncryptionKeyWrap(ctx context.Context, arg GetDataEncry
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getEncryptionClock = `-- name: GetEncryptionClock :one
+SELECT clock_timestamp()::timestamptz AS now
+`
+
+// The database clock, so times compared with state_changed_at and the
+// backfill columns come from the same clock.
+func (q *Queries) GetEncryptionClock(ctx context.Context) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getEncryptionClock)
+	var now pgtype.Timestamptz
+	err := row.Scan(&now)
+	return now, err
 }
 
 const getEncryptionExternalKey = `-- name: GetEncryptionExternalKey :one
@@ -524,6 +647,87 @@ func (q *Queries) GetEncryptionKeyForUse(ctx context.Context, arg GetEncryptionK
 		&i.WifProviderID,
 		&i.WifProjectNumber,
 		&i.SkipProjectVerification,
+	)
+	return i, err
+}
+
+const getEncryptionTransition = `-- name: GetEncryptionTransition :one
+
+SELECT id, organization_id, use_case, state, generation, state_changed_at, platform_copies_cleared_at, last_backfill_started_at, last_backfill_completed_at, last_backfill_converted_count, last_backfill_remaining_count, last_backfill_unreadable_count, last_backfill_error, last_verified_at, created_at, updated_at
+FROM organization_encryption_transitions
+WHERE organization_id = $1
+  AND use_case = $2
+`
+
+type GetEncryptionTransitionParams struct {
+	OrganizationID string
+	UseCase        string
+}
+
+// Transition state: where an organization is in moving one use case's values
+// from the platform key to its own key. A missing row is platform_key at
+// generation 0. Rows are never deleted or recreated, so generation only grows.
+func (q *Queries) GetEncryptionTransition(ctx context.Context, arg GetEncryptionTransitionParams) (OrganizationEncryptionTransition, error) {
+	row := q.db.QueryRow(ctx, getEncryptionTransition, arg.OrganizationID, arg.UseCase)
+	var i OrganizationEncryptionTransition
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.UseCase,
+		&i.State,
+		&i.Generation,
+		&i.StateChangedAt,
+		&i.PlatformCopiesClearedAt,
+		&i.LastBackfillStartedAt,
+		&i.LastBackfillCompletedAt,
+		&i.LastBackfillConvertedCount,
+		&i.LastBackfillRemainingCount,
+		&i.LastBackfillUnreadableCount,
+		&i.LastBackfillError,
+		&i.LastVerifiedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getEncryptionUnreadableValue = `-- name: GetEncryptionUnreadableValue :one
+SELECT id, organization_id, use_case, source_column, row_id, platform_ciphertext_sha256, error_code, first_detected_at, last_detected_at, created_at, updated_at
+FROM organization_encryption_unreadable_values
+WHERE organization_id = $1
+  AND use_case = $2
+  AND source_column = $3
+  AND row_id = $4
+`
+
+type GetEncryptionUnreadableValueParams struct {
+	OrganizationID string
+	UseCase        string
+	SourceColumn   string
+	RowID          string
+}
+
+// Test fixture: reads one unreadable value record.
+func (q *Queries) GetEncryptionUnreadableValue(ctx context.Context, arg GetEncryptionUnreadableValueParams) (OrganizationEncryptionUnreadableValue, error) {
+	row := q.db.QueryRow(ctx, getEncryptionUnreadableValue,
+		arg.OrganizationID,
+		arg.UseCase,
+		arg.SourceColumn,
+		arg.RowID,
+	)
+	var i OrganizationEncryptionUnreadableValue
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.UseCase,
+		&i.SourceColumn,
+		&i.RowID,
+		&i.PlatformCiphertextSha256,
+		&i.ErrorCode,
+		&i.FirstDetectedAt,
+		&i.LastDetectedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -839,6 +1043,50 @@ func (q *Queries) ListEncryptionExternalKeys(ctx context.Context, organizationID
 	return items, nil
 }
 
+const listEncryptionTransitions = `-- name: ListEncryptionTransitions :many
+SELECT id, organization_id, use_case, state, generation, state_changed_at, platform_copies_cleared_at, last_backfill_started_at, last_backfill_completed_at, last_backfill_converted_count, last_backfill_remaining_count, last_backfill_unreadable_count, last_backfill_error, last_verified_at, created_at, updated_at
+FROM organization_encryption_transitions
+WHERE organization_id = $1
+ORDER BY use_case
+`
+
+func (q *Queries) ListEncryptionTransitions(ctx context.Context, organizationID string) ([]OrganizationEncryptionTransition, error) {
+	rows, err := q.db.Query(ctx, listEncryptionTransitions, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OrganizationEncryptionTransition
+	for rows.Next() {
+		var i OrganizationEncryptionTransition
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.UseCase,
+			&i.State,
+			&i.Generation,
+			&i.StateChangedAt,
+			&i.PlatformCopiesClearedAt,
+			&i.LastBackfillStartedAt,
+			&i.LastBackfillCompletedAt,
+			&i.LastBackfillConvertedCount,
+			&i.LastBackfillRemainingCount,
+			&i.LastBackfillUnreadableCount,
+			&i.LastBackfillError,
+			&i.LastVerifiedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listManagedEncryptionKeysPendingDisable = `-- name: ListManagedEncryptionKeysPendingDisable :many
 SELECT mek.external_key_id, mek.organization_id, gcp.resource_name
 FROM managed_encryption_keys AS mek
@@ -1006,6 +1254,45 @@ func (q *Queries) LockEncryptionKeyForSwitch(ctx context.Context, arg LockEncryp
 	return i, err
 }
 
+const lockEncryptionTransition = `-- name: LockEncryptionTransition :one
+SELECT id, organization_id, use_case, state, generation, state_changed_at, platform_copies_cleared_at, last_backfill_started_at, last_backfill_completed_at, last_backfill_converted_count, last_backfill_remaining_count, last_backfill_unreadable_count, last_backfill_error, last_verified_at, created_at, updated_at
+FROM organization_encryption_transitions
+WHERE organization_id = $1
+  AND use_case = $2
+FOR UPDATE
+`
+
+type LockEncryptionTransitionParams struct {
+	OrganizationID string
+	UseCase        string
+}
+
+// Callers hold the organization lock, so a missing row cannot be inserted
+// concurrently while they decide.
+func (q *Queries) LockEncryptionTransition(ctx context.Context, arg LockEncryptionTransitionParams) (OrganizationEncryptionTransition, error) {
+	row := q.db.QueryRow(ctx, lockEncryptionTransition, arg.OrganizationID, arg.UseCase)
+	var i OrganizationEncryptionTransition
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.UseCase,
+		&i.State,
+		&i.Generation,
+		&i.StateChangedAt,
+		&i.PlatformCopiesClearedAt,
+		&i.LastBackfillStartedAt,
+		&i.LastBackfillCompletedAt,
+		&i.LastBackfillConvertedCount,
+		&i.LastBackfillRemainingCount,
+		&i.LastBackfillUnreadableCount,
+		&i.LastBackfillError,
+		&i.LastVerifiedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const lockOrganizationForEncryption = `-- name: LockOrganizationForEncryption :one
 SELECT id
 FROM organization_metadata
@@ -1061,6 +1348,47 @@ func (q *Queries) ManagedEncryptionKeyIsUnused(ctx context.Context, arg ManagedE
 	return unused, err
 }
 
+const markEncryptionTransitionPlatformCopiesCleared = `-- name: MarkEncryptionTransitionPlatformCopiesCleared :one
+UPDATE organization_encryption_transitions
+SET platform_copies_cleared_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND use_case = $2
+  AND generation = $3
+  AND platform_copies_cleared_at IS NULL
+RETURNING id, organization_id, use_case, state, generation, state_changed_at, platform_copies_cleared_at, last_backfill_started_at, last_backfill_completed_at, last_backfill_converted_count, last_backfill_remaining_count, last_backfill_unreadable_count, last_backfill_error, last_verified_at, created_at, updated_at
+`
+
+type MarkEncryptionTransitionPlatformCopiesClearedParams struct {
+	OrganizationID string
+	UseCase        string
+	Generation     int64
+}
+
+func (q *Queries) MarkEncryptionTransitionPlatformCopiesCleared(ctx context.Context, arg MarkEncryptionTransitionPlatformCopiesClearedParams) (OrganizationEncryptionTransition, error) {
+	row := q.db.QueryRow(ctx, markEncryptionTransitionPlatformCopiesCleared, arg.OrganizationID, arg.UseCase, arg.Generation)
+	var i OrganizationEncryptionTransition
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.UseCase,
+		&i.State,
+		&i.Generation,
+		&i.StateChangedAt,
+		&i.PlatformCopiesClearedAt,
+		&i.LastBackfillStartedAt,
+		&i.LastBackfillCompletedAt,
+		&i.LastBackfillConvertedCount,
+		&i.LastBackfillRemainingCount,
+		&i.LastBackfillUnreadableCount,
+		&i.LastBackfillError,
+		&i.LastVerifiedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const markManagedEncryptionKeyDisabled = `-- name: MarkManagedEncryptionKeyDisabled :exec
 UPDATE managed_encryption_keys
 SET kms_disabled_at = clock_timestamp(), updated_at = clock_timestamp()
@@ -1096,6 +1424,90 @@ type RecordEncryptionKeyCheckParams struct {
 func (q *Queries) RecordEncryptionKeyCheck(ctx context.Context, arg RecordEncryptionKeyCheckParams) error {
 	_, err := q.db.Exec(ctx, recordEncryptionKeyCheck, arg.LastKekCheckError, arg.OrganizationID)
 	return err
+}
+
+const recordEncryptionTransitionBackfillCompleted = `-- name: RecordEncryptionTransitionBackfillCompleted :exec
+UPDATE organization_encryption_transitions
+SET last_backfill_completed_at = clock_timestamp(),
+    last_backfill_converted_count = $1::bigint,
+    last_backfill_remaining_count = $2::bigint,
+    last_backfill_unreadable_count = $3::bigint,
+    last_backfill_error = $4,
+    updated_at = clock_timestamp()
+WHERE organization_id = $5
+  AND use_case = $6
+`
+
+type RecordEncryptionTransitionBackfillCompletedParams struct {
+	ConvertedCount  int64
+	RemainingCount  int64
+	UnreadableCount int64
+	Error           pgtype.Text
+	OrganizationID  string
+	UseCase         string
+}
+
+func (q *Queries) RecordEncryptionTransitionBackfillCompleted(ctx context.Context, arg RecordEncryptionTransitionBackfillCompletedParams) error {
+	_, err := q.db.Exec(ctx, recordEncryptionTransitionBackfillCompleted,
+		arg.ConvertedCount,
+		arg.RemainingCount,
+		arg.UnreadableCount,
+		arg.Error,
+		arg.OrganizationID,
+		arg.UseCase,
+	)
+	return err
+}
+
+const recordEncryptionTransitionBackfillStarted = `-- name: RecordEncryptionTransitionBackfillStarted :exec
+UPDATE organization_encryption_transitions
+SET last_backfill_started_at = clock_timestamp(),
+    last_backfill_completed_at = NULL,
+    last_backfill_error = NULL,
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND use_case = $2
+`
+
+type RecordEncryptionTransitionBackfillStartedParams struct {
+	OrganizationID string
+	UseCase        string
+}
+
+func (q *Queries) RecordEncryptionTransitionBackfillStarted(ctx context.Context, arg RecordEncryptionTransitionBackfillStartedParams) error {
+	_, err := q.db.Exec(ctx, recordEncryptionTransitionBackfillStarted, arg.OrganizationID, arg.UseCase)
+	return err
+}
+
+const recordEncryptionTransitionVerified = `-- name: RecordEncryptionTransitionVerified :execrows
+UPDATE organization_encryption_transitions
+SET last_verified_at = $1::timestamptz,
+    updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND use_case = $3
+  AND generation = $4
+`
+
+type RecordEncryptionTransitionVerifiedParams struct {
+	VerifiedAt     pgtype.Timestamptz
+	OrganizationID string
+	UseCase        string
+	Generation     int64
+}
+
+// Records a clean verification pass that started at verified_at. It lands only
+// while the state is still the generation the pass verified under.
+func (q *Queries) RecordEncryptionTransitionVerified(ctx context.Context, arg RecordEncryptionTransitionVerifiedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordEncryptionTransitionVerified,
+		arg.VerifiedAt,
+		arg.OrganizationID,
+		arg.UseCase,
+		arg.Generation,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const replaceDataEncryptionKeyWrap = `-- name: ReplaceDataEncryptionKeyWrap :one
@@ -1253,6 +1665,26 @@ func (q *Queries) RollbackEncryptionConfigSwitch(ctx context.Context, arg Rollba
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const setEncryptionTransitionStateChangedAt = `-- name: SetEncryptionTransitionStateChangedAt :exec
+UPDATE organization_encryption_transitions
+SET state_changed_at = $1
+WHERE organization_id = $2
+  AND use_case = $3
+`
+
+type SetEncryptionTransitionStateChangedAtParams struct {
+	StateChangedAt pgtype.Timestamptz
+	OrganizationID string
+	UseCase        string
+}
+
+// Test fixture: moves when a use case entered its state, so tests can pass the
+// minimum time in dual_write without waiting.
+func (q *Queries) SetEncryptionTransitionStateChangedAt(ctx context.Context, arg SetEncryptionTransitionStateChangedAtParams) error {
+	_, err := q.db.Exec(ctx, setEncryptionTransitionStateChangedAt, arg.StateChangedAt, arg.OrganizationID, arg.UseCase)
+	return err
 }
 
 const softDeleteDataEncryptionKeyWrapsForKey = `-- name: SoftDeleteDataEncryptionKeyWrapsForKey :many
@@ -1438,5 +1870,96 @@ type TouchDataEncryptionKeyWrapUnwrappedParams struct {
 
 func (q *Queries) TouchDataEncryptionKeyWrapUnwrapped(ctx context.Context, arg TouchDataEncryptionKeyWrapUnwrappedParams) error {
 	_, err := q.db.Exec(ctx, touchDataEncryptionKeyWrapUnwrapped, arg.ID, arg.OrganizationID)
+	return err
+}
+
+const updateEncryptionTransitionState = `-- name: UpdateEncryptionTransitionState :one
+UPDATE organization_encryption_transitions
+SET state = $1,
+    generation = generation + 1,
+    state_changed_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND use_case = $3
+  AND generation = $4
+RETURNING id, organization_id, use_case, state, generation, state_changed_at, platform_copies_cleared_at, last_backfill_started_at, last_backfill_completed_at, last_backfill_converted_count, last_backfill_remaining_count, last_backfill_unreadable_count, last_backfill_error, last_verified_at, created_at, updated_at
+`
+
+type UpdateEncryptionTransitionStateParams struct {
+	State          string
+	OrganizationID string
+	UseCase        string
+	Generation     int64
+}
+
+// Lands only while the row is still at the generation the caller locked, so a
+// state change can never skip one.
+func (q *Queries) UpdateEncryptionTransitionState(ctx context.Context, arg UpdateEncryptionTransitionStateParams) (OrganizationEncryptionTransition, error) {
+	row := q.db.QueryRow(ctx, updateEncryptionTransitionState,
+		arg.State,
+		arg.OrganizationID,
+		arg.UseCase,
+		arg.Generation,
+	)
+	var i OrganizationEncryptionTransition
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.UseCase,
+		&i.State,
+		&i.Generation,
+		&i.StateChangedAt,
+		&i.PlatformCopiesClearedAt,
+		&i.LastBackfillStartedAt,
+		&i.LastBackfillCompletedAt,
+		&i.LastBackfillConvertedCount,
+		&i.LastBackfillRemainingCount,
+		&i.LastBackfillUnreadableCount,
+		&i.LastBackfillError,
+		&i.LastVerifiedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertEncryptionUnreadableValue = `-- name: UpsertEncryptionUnreadableValue :exec
+INSERT INTO organization_encryption_unreadable_values (
+  organization_id, use_case, source_column, row_id, platform_ciphertext_sha256, error_code
+) VALUES (
+  $1, $2, $3, $4, $5, $6
+)
+ON CONFLICT (organization_id, use_case, source_column, row_id) DO UPDATE
+SET first_detected_at = CASE
+      WHEN organization_encryption_unreadable_values.platform_ciphertext_sha256 = EXCLUDED.platform_ciphertext_sha256
+        THEN organization_encryption_unreadable_values.first_detected_at
+      ELSE clock_timestamp()
+    END,
+    platform_ciphertext_sha256 = EXCLUDED.platform_ciphertext_sha256,
+    error_code = EXCLUDED.error_code,
+    last_detected_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+`
+
+type UpsertEncryptionUnreadableValueParams struct {
+	OrganizationID           string
+	UseCase                  string
+	SourceColumn             string
+	RowID                    string
+	PlatformCiphertextSha256 []byte
+	ErrorCode                string
+}
+
+// Records a value whose platform-key copy does not decrypt. A new hash means
+// the row was rewritten, so detection starts over.
+func (q *Queries) UpsertEncryptionUnreadableValue(ctx context.Context, arg UpsertEncryptionUnreadableValueParams) error {
+	_, err := q.db.Exec(ctx, upsertEncryptionUnreadableValue,
+		arg.OrganizationID,
+		arg.UseCase,
+		arg.SourceColumn,
+		arg.RowID,
+		arg.PlatformCiphertextSha256,
+		arg.ErrorCode,
+	)
 	return err
 }

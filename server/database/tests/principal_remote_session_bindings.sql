@@ -50,9 +50,14 @@ FROM generate_series(1, 6) AS n;
 INSERT INTO remote_session_client_user_session_issuers (user_session_issuer_id, remote_session_client_id)
 SELECT pg_temp.fixture_id(i), pg_temp.fixture_id(c)
 FROM generate_series(1, 6) AS i CROSS JOIN generate_series(1, 6) AS c;
-INSERT INTO remote_sessions (id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted)
+INSERT INTO remote_sessions (id, subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted)
 SELECT pg_temp.fixture_id(i * 10 + c), 'fixture-subject-' || i,
-  pg_temp.fixture_id(i), pg_temp.fixture_id(c), 'fixture-ciphertext'
+  pg_temp.fixture_id(i), pg_temp.fixture_id(c),
+  (SELECT org.id FROM remote_session_clients AS client
+   LEFT JOIN projects AS project ON project.id = client.project_id
+   JOIN organization_metadata AS org ON org.id = COALESCE(project.organization_id, client.organization_id)
+   WHERE client.id = pg_temp.fixture_id(c)),
+  'fixture-ciphertext'
 FROM generate_series(1, 6) AS i CROSS JOIN generate_series(1, 6) AS c;
 
 CREATE FUNCTION pg_temp.attach(p integer, o text, i integer, c integer, s integer DEFAULT NULL, a integer DEFAULT 1)

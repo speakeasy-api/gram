@@ -295,9 +295,16 @@ func receiptCard(title string, object jsonObject) resultCard {
 		card.Eyebrow = cardStatus{Label: "Preview, not applied", Tone: cardToneAction}
 	case replayed || matched == true || outcome == "unchanged" || outcome == "no_change" || strings.HasPrefix(outcome, "already"):
 		card.Eyebrow = cardStatus{Label: "No change", Tone: cardToneNeutral}
+	case slices.Contains(notAcceptedOutcomes, outcome):
+		card.Eyebrow = cardStatus{Label: "Not accepted", Tone: cardToneAction}
+		card.Icon = cardAlertIcon
+		card.Description = cardTruncate(cmp.Or(object.firstString([]string{"message"}), card.Description), maxCardTextRunes)
 	}
 	return card
 }
+
+// notAcceptedOutcomes are the outcomes of a test event the destination did not accept.
+var notAcceptedOutcomes = []string{"refused", "not_found", "unreachable", "error"}
 
 // refusalCard shows the readable reason a call did not complete. The message
 // is the one the tool already returned to the client.

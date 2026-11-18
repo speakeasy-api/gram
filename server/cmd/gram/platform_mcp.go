@@ -123,6 +123,8 @@ type platformMCPConfig struct {
 	AccessRoles            access.RoleProvider
 	PluginPublisher        *plugins.Service
 	PluginManagement       *plugins.Service
+	// DataExportRouteTests is shared with the dashboard, so both spend the same allowances.
+	DataExportRouteTests *dataexports.RouteTestCore
 	// DirectoryReview backs the directory review tools with the dashboard's
 	// access service, so they share its authorization, checks and audit.
 	DirectoryReview        platformmcp.DirectoryReviewBackend
@@ -572,6 +574,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithDataExportRouteToggle(newPlatformMCPDataExportRouteToggle(config, authorizer, limitStore)).
+		WithDataExportTestEvent(platformmcp.NewDataExportTestEventService(config.Logger, config.DB, config.DataExportRouteTests, authorizer)).
 		WithCanonicalIdentityGate(config.CanonicalIdentity).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
 		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).
@@ -1365,6 +1368,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithDataExportRouteToggle(newPlatformMCPDataExportRouteToggle(config, authorizer, limitStore)).
+		WithDataExportTestEvent(platformmcp.NewDataExportTestEventService(config.Logger, config.DB, config.DataExportRouteTests, authorizer)).
 		WithCanonicalIdentityGate(config.CanonicalIdentity).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
 		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).

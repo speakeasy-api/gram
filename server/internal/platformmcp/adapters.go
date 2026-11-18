@@ -381,6 +381,7 @@ type PostgresReader struct {
 	dataExports               *DataExportReadService
 	dataExportMutations       *dataExportMutationService
 	dataExportRouteToggle     *DataExportRouteToggleService
+	dataExportTestEvent       *DataExportTestEventService
 	recentToolCalls           *RecentToolCallReadService
 	networkTraffic            MCPNetworkTrafficReader
 	networkTrafficLogsEnabled FeatureChecker
@@ -433,6 +434,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		dataExports:               nil,
 		dataExportMutations:       nil,
 		dataExportRouteToggle:     nil,
+		dataExportTestEvent:       nil,
 		recentToolCalls:           nil,
 		networkTraffic:            nil,
 		networkTrafficLogsEnabled: nil,

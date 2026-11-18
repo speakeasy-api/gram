@@ -4563,11 +4563,13 @@ type ToolUsageClientToolBreakdownRow struct {
 
 // GetToolUsageSummary retrieves target-aware MCP and tool usage aggregates.
 func (q *Queries) GetToolUsageSummary(ctx context.Context, arg GetToolUsageSummaryParams) (*ToolUsageSummary, error) {
-	// The aggregates are independent reads of the same window — run them
-	// concurrently so the endpoint costs the slowest query, not the sum.
-	// Each goroutine writes a distinct field of summary.
+	// The aggregates are independent reads of the same window. They run
+	// concurrently, but a few at a time: each is a full GROUP BY trace_id over
+	// the window, and all nine at once can exhaust ClickHouse memory on a large
+	// project. Each goroutine writes a distinct field of summary.
 	var summary ToolUsageSummary
 	eg, egCtx := errgroup.WithContext(ctx)
+	eg.SetLimit(toolUsageFanOutLimit)
 	eg.Go(func() error {
 		var err error
 		summary.Totals, err = q.GetToolUsageTotals(egCtx, arg)
@@ -4651,10 +4653,12 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 	agentArg.AgentIDs = nil
 	splitAgents := len(arg.UserFilters) > 0 || len(arg.AgentIDs) > 0
 
-	// Independent reads of the same window — run concurrently; each goroutine
-	// writes a distinct field of options.
+	// Independent reads of the same window, run a few at a time for the same
+	// reason as GetToolUsageSummary; each goroutine writes a distinct field of
+	// options.
 	var options ToolUsageFilterOptions
 	eg, egCtx := errgroup.WithContext(ctx)
+	eg.SetLimit(toolUsageFanOutLimit)
 	if groups.HostedServers {
 		eg.Go(func() error {
 			var err error
@@ -5038,7 +5042,7 @@ func (q *Queries) GetToolUsageTotals(ctx context.Context, arg GetToolUsageSummar
 		return ToolUsageTotalsRow{}, fmt.Errorf("building tool usage totals query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return ToolUsageTotalsRow{}, err
 	}
@@ -5101,7 +5105,7 @@ func (q *Queries) GetToolUsageTargets(ctx context.Context, arg GetToolUsageSumma
 		return nil, fmt.Errorf("building tool usage targets query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5285,7 +5289,7 @@ func (q *Queries) GetToolUsageUsers(ctx context.Context, arg GetToolUsageSummary
 		return nil, fmt.Errorf("building tool usage users query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5337,7 +5341,7 @@ func (q *Queries) GetToolUsageClients(ctx context.Context, arg GetToolUsageSumma
 		return nil, fmt.Errorf("building tool usage clients query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5386,7 +5390,7 @@ func (q *Queries) GetToolUsageClientToolBreakdown(ctx context.Context, arg GetTo
 		return nil, fmt.Errorf("building tool usage client tool breakdown query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5433,7 +5437,7 @@ func (q *Queries) GetToolUsageTargetTimeSeries(ctx context.Context, arg GetToolU
 		return nil, fmt.Errorf("building tool usage target time series query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5477,7 +5481,7 @@ func (q *Queries) GetToolUsageUserTimeSeries(ctx context.Context, arg GetToolUsa
 		return nil, fmt.Errorf("building tool usage user time series query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5523,7 +5527,7 @@ func (q *Queries) GetToolUsageUsersByTarget(ctx context.Context, arg GetToolUsag
 		return nil, fmt.Errorf("building tool usage users by target query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5569,7 +5573,7 @@ func (q *Queries) GetToolUsageTargetToolBreakdown(ctx context.Context, arg GetTo
 		return nil, fmt.Errorf("building tool usage target tool breakdown query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5609,7 +5613,7 @@ func (q *Queries) getToolUsageHostedServerFilterOptions(ctx context.Context, arg
 		return nil, fmt.Errorf("building tool usage hosted server filter options query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5648,7 +5652,7 @@ func (q *Queries) getToolUsageShadowServerFilterOptions(ctx context.Context, arg
 		return nil, fmt.Errorf("building tool usage shadow server filter options query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5687,7 +5691,7 @@ func (q *Queries) getToolUsageGatewayFilterOptions(ctx context.Context, arg GetT
 		return nil, fmt.Errorf("building tool usage gateway filter options query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5726,7 +5730,7 @@ func (q *Queries) getToolUsageClientFilterOptions(ctx context.Context, arg GetTo
 		return nil, fmt.Errorf("building tool usage client filter options query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5767,7 +5771,7 @@ func (q *Queries) getToolUsageUserFilterOptions(ctx context.Context, arg GetTool
 		return nil, fmt.Errorf("building tool usage user filter options query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5805,7 +5809,7 @@ func (q *Queries) getToolUsageAuthorizerFilterOptions(ctx context.Context, arg G
 		return nil, fmt.Errorf("building tool usage authorizer filter options query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -8335,7 +8339,7 @@ func (q *Queries) GetTopServers(ctx context.Context, arg GetTopServersParams) ([
 		return nil, fmt.Errorf("building top servers query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -8697,7 +8701,7 @@ func (q *Queries) GetUnifiedActiveServerCount(ctx context.Context, arg GetTopSer
 	args := make([]any, 0, len(normalizedArgs)+len(proxiedArgs))
 	args = append(args, normalizedArgs...)
 	args = append(args, proxiedArgs...)
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return 0, fmt.Errorf("querying active server count: %w", err)
 	}

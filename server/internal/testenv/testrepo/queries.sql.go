@@ -2538,6 +2538,71 @@ func (q *Queries) GetLatestTrialArmAuditIDFixture(ctx context.Context, organizat
 	return id, err
 }
 
+const getLocalEMATypedAuthClientResourceFixture = `-- name: GetLocalEMATypedAuthClientResourceFixture :one
+SELECT resource FROM mcp_auth_client_emas
+WHERE remote_session_client_id = $1
+  AND organization_id = $2 AND deleted IS FALSE
+`
+
+type GetLocalEMATypedAuthClientResourceFixtureParams struct {
+	RemoteSessionClientID uuid.UUID
+	OrganizationID        string
+}
+
+// Reads the resource of the typed auth client the local seed records for the
+// Enterprise Sign-In (ID-JAG) Server's client.
+func (q *Queries) GetLocalEMATypedAuthClientResourceFixture(ctx context.Context, arg GetLocalEMATypedAuthClientResourceFixtureParams) (string, error) {
+	row := q.db.QueryRow(ctx, getLocalEMATypedAuthClientResourceFixture, arg.RemoteSessionClientID, arg.OrganizationID)
+	var resource string
+	err := row.Scan(&resource)
+	return resource, err
+}
+
+const getLocalEMAWiringFixture = `-- name: GetLocalEMAWiringFixture :one
+SELECT b.resource,
+       idp.issuer AS identity_provider,
+       idp_client.client_id AS identity_provider_client_id,
+       idp_client.client_secret_encrypted AS identity_provider_client_secret,
+       vendor.issuer AS authorization_server,
+       vendor.token_endpoint AS authorization_server_token_endpoint,
+       vendor_client.client_id AS authorization_server_client_id
+FROM remote_session_ema_bindings b
+JOIN user_session_issuers usi ON usi.id = b.user_session_issuer_id
+JOIN remote_session_issuers idp ON idp.id = usi.trusted_remote_session_issuer_id
+JOIN remote_session_clients idp_client ON idp_client.id = usi.trusted_remote_session_client_id
+JOIN remote_session_issuers vendor ON vendor.id = b.remote_session_issuer_id
+JOIN remote_session_clients vendor_client ON vendor_client.id = b.remote_session_client_id
+WHERE b.id = $1
+`
+
+type GetLocalEMAWiringFixtureRow struct {
+	Resource                         string
+	IdentityProvider                 string
+	IdentityProviderClientID         string
+	IdentityProviderClientSecret     pgtype.Text
+	AuthorizationServer              string
+	AuthorizationServerTokenEndpoint pgtype.Text
+	AuthorizationServerClientID      string
+}
+
+// Reads what the local seed points the Enterprise Sign-In (ID-JAG) Server's
+// binding at: its resource, the user session issuer's trusted identity
+// provider and client, and the authorization server and its client.
+func (q *Queries) GetLocalEMAWiringFixture(ctx context.Context, id uuid.UUID) (GetLocalEMAWiringFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getLocalEMAWiringFixture, id)
+	var i GetLocalEMAWiringFixtureRow
+	err := row.Scan(
+		&i.Resource,
+		&i.IdentityProvider,
+		&i.IdentityProviderClientID,
+		&i.IdentityProviderClientSecret,
+		&i.AuthorizationServer,
+		&i.AuthorizationServerTokenEndpoint,
+		&i.AuthorizationServerClientID,
+	)
+	return i, err
+}
+
 const getMCPServerRequiresUpstreamAuthFixture = `-- name: GetMCPServerRequiresUpstreamAuthFixture :one
 SELECT requires_upstream_auth FROM mcp_servers WHERE id = $1
 `
@@ -2936,6 +3001,24 @@ func (q *Queries) GetRemoteSessionEMABindingFixture(ctx context.Context, id uuid
 	row := q.db.QueryRow(ctx, getRemoteSessionEMABindingFixture, id)
 	var i GetRemoteSessionEMABindingFixtureRow
 	err := row.Scan(&i.UserSessionIssuerID, &i.Generation)
+	return i, err
+}
+
+const getRemoteSessionOrganizationFixture = `-- name: GetRemoteSessionOrganizationFixture :one
+SELECT organization_id, updated_at FROM remote_sessions WHERE id = $1
+`
+
+type GetRemoteSessionOrganizationFixtureRow struct {
+	OrganizationID pgtype.Text
+	UpdatedAt      pgtype.Timestamptz
+}
+
+// Test-only fixture: reads a session's organization at any client scope,
+// soft-deleted or not.
+func (q *Queries) GetRemoteSessionOrganizationFixture(ctx context.Context, id uuid.UUID) (GetRemoteSessionOrganizationFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getRemoteSessionOrganizationFixture, id)
+	var i GetRemoteSessionOrganizationFixtureRow
+	err := row.Scan(&i.OrganizationID, &i.UpdatedAt)
 	return i, err
 }
 
@@ -3625,8 +3708,13 @@ func (q *Queries) InsertNetworkIngressFixture(ctx context.Context, arg InsertNet
 }
 
 const insertOlderRemoteSessionTombstoneFixture = `-- name: InsertOlderRemoteSessionTombstoneFixture :exec
-INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, deleted_at)
-SELECT src.subject_urn, src.user_session_issuer_id, src.remote_session_client_id, 'unrelated-old-access', src.deleted_at - interval '1 second'
+INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted, deleted_at)
+SELECT src.subject_urn, src.user_session_issuer_id, src.remote_session_client_id,
+  (SELECT org.id FROM remote_session_clients AS client
+   LEFT JOIN projects AS project ON project.id = client.project_id
+   JOIN organization_metadata AS org ON org.id = COALESCE(project.organization_id, client.organization_id)
+   WHERE client.id = src.remote_session_client_id),
+  'unrelated-old-access', src.deleted_at - interval '1 second'
 FROM remote_sessions src WHERE src.id = $1::uuid
 `
 
@@ -7807,6 +7895,23 @@ func (q *Queries) SetRemoteSessionListFixture(ctx context.Context, arg SetRemote
 		arg.ID,
 		arg.OrganizationID,
 	)
+	return err
+}
+
+const setRemoteSessionOrganizationFixture = `-- name: SetRemoteSessionOrganizationFixture :exec
+UPDATE remote_sessions SET organization_id = $1::text WHERE id = $2
+`
+
+type SetRemoteSessionOrganizationFixtureParams struct {
+	OrganizationID pgtype.Text
+	ID             uuid.UUID
+}
+
+// Test-only fixture: NULL reproduces a row written before remote_sessions had
+// an organization_id; any other value fakes a row that disagrees with its
+// client.
+func (q *Queries) SetRemoteSessionOrganizationFixture(ctx context.Context, arg SetRemoteSessionOrganizationFixtureParams) error {
+	_, err := q.db.Exec(ctx, setRemoteSessionOrganizationFixture, arg.OrganizationID, arg.ID)
 	return err
 }
 

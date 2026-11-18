@@ -252,6 +252,7 @@ trackedFiles:
   src/funcs/dataExportsListDestinations.ts: {}
   src/funcs/dataExportsListForOrg.ts: {}
   src/funcs/dataExportsListRoutes.ts: {}
+  src/funcs/dataExportsTestRoute.ts: {}
   src/funcs/dataExportsUpdateDestination.ts: {}
   src/funcs/dataExportsUpdateRoute.ts: {}
   src/funcs/deploymentsActive.ts: {}
@@ -509,6 +510,7 @@ trackedFiles:
   src/funcs/organizationUserSessionIssuersList.ts: {}
   src/funcs/organizationUserSessionIssuersListCimdClients.ts: {}
   src/funcs/organizationUserSessionIssuersListMcpServers.ts: {}
+  src/funcs/organizationUserSessionIssuersListRemoteSessionClientBindings.ts: {}
   src/funcs/organizationUserSessionIssuersMigrate.ts: {}
   src/funcs/organizationUserSessionIssuersMove.ts: {}
   src/funcs/organizationUserSessionIssuersSetAuthenticationHost.ts: {}
@@ -820,7 +822,6 @@ trackedFiles:
   src/funcs/toolsetsListToolSchemaStaticValues.ts: {}
   src/funcs/toolsetsRemoveOAuthServer.ts: {}
   src/funcs/toolsetsSetToolVariationsGroup.ts: {}
-  src/funcs/toolsetsSetUserSessionIssuer.ts: {}
   src/funcs/toolsetsUpdateBySlug.ts: {}
   src/funcs/toolsetsUpdateExternalOAuthServer.ts: {}
   src/funcs/triggersCreate.ts: {}
@@ -845,7 +846,6 @@ trackedFiles:
   src/funcs/unproxiedMcpGetServer.ts: {}
   src/funcs/unproxiedMcpListServers.ts: {}
   src/funcs/usageCancelStripeSubscription.ts: {}
-  src/funcs/usageCreateCheckout.ts: {}
   src/funcs/usageCreateCustomerSession.ts: {}
   src/funcs/usageCreateStripeCheckout.ts: {}
   src/funcs/usageCreateStripePortalSession.ts: {}
@@ -2001,7 +2001,6 @@ trackedFiles:
   src/models/components/setuptask.ts: {}
   src/models/components/setuptaskassignee.ts: {}
   src/models/components/setuptaskassigneeinput.ts: {}
-  src/models/components/setusersessionissuerrequestbody.ts: {}
   src/models/components/shadowmcpaccesssummary.ts: {}
   src/models/components/shadowmcpinventoryapprovalrequest.ts: {}
   src/models/components/shadowmcpinventoryrequestsummary.ts: {}
@@ -2087,6 +2086,8 @@ trackedFiles:
   src/models/components/telemetrylogrecord.ts: {}
   src/models/components/telemetrywindowpayload.ts: {}
   src/models/components/temporarygrant.ts: {}
+  src/models/components/testdataexportrouteresult.ts: {}
+  src/models/components/testdataexportroutesignalresult.ts: {}
   src/models/components/testdetectionrulematch.ts: {}
   src/models/components/testdetectionrulerequestbody.ts: {}
   src/models/components/testdetectionruleresult.ts: {}
@@ -2263,6 +2264,9 @@ trackedFiles:
   src/models/components/usersessionissuermcpserver.ts: {}
   src/models/components/usersessionissuermigrationclient.ts: {}
   src/models/components/usersessionissuermigrationserverimpact.ts: {}
+  src/models/components/usersessionissuerremotesessionclient.ts: {}
+  src/models/components/usersessionissuerremotesessionclientbindings.ts: {}
+  src/models/components/usersessionissuerserverremotesessionclient.ts: {}
   src/models/components/usersessionupstream.ts: {}
   src/models/components/usersessionworkload.ts: {}
   src/models/components/usersessionworkloadadmission.ts: {}
@@ -2371,7 +2375,6 @@ trackedFiles:
   src/models/operations/createawsiamcredential.ts: {}
   src/models/operations/createawskmskey.ts: {}
   src/models/operations/createchatsession.ts: {}
-  src/models/operations/createcheckout.ts: {}
   src/models/operations/createcimdorganizationremotesessionclient.ts: {}
   src/models/operations/createcimdremotesessionclient.ts: {}
   src/models/operations/createcustomdetectionrule.ts: {}
@@ -2818,6 +2821,7 @@ trackedFiles:
   src/models/operations/listorganizationusers.ts: {}
   src/models/operations/listorganizationusersessionissuercimdclients.ts: {}
   src/models/operations/listorganizationusersessionissuermcpservers.ts: {}
+  src/models/operations/listorganizationusersessionissuerremotesessionclientbindings.ts: {}
   src/models/operations/listorganizationusersessionissuers.ts: {}
   src/models/operations/listorgencryptionkeys.ts: {}
   src/models/operations/listpackages.ts: {}
@@ -3060,7 +3064,6 @@ trackedFiles:
   src/models/operations/setspendcap.ts: {}
   src/models/operations/settoolsetenvironmentlink.ts: {}
   src/models/operations/settoolsettoolvariationsgroup.ts: {}
-  src/models/operations/settoolsetusersessionissuer.ts: {}
   src/models/operations/shareskill.ts: {}
   src/models/operations/skillfeedback.ts: {}
   src/models/operations/startmcpresearch.ts: {}
@@ -3081,6 +3084,7 @@ trackedFiles:
   src/models/operations/syncdirectorygroups.ts: {}
   src/models/operations/syncidentityproviderconnectionapplications.ts: {}
   src/models/operations/syncslackdirectory.ts: {}
+  src/models/operations/testdataexportroute.ts: {}
   src/models/operations/testdetectionrule.ts: {}
   src/models/operations/testdeviceintegrationconnection.ts: {}
   src/models/operations/testserverconnection.ts: {}
@@ -3324,7 +3328,6 @@ trackedFiles:
   src/react-query/createAuthClient.ts: {}
   src/react-query/createAwsIamCredential.ts: {}
   src/react-query/createAwsKmsKey.ts: {}
-  src/react-query/createCheckout.ts: {}
   src/react-query/createCimdOrganizationRemoteSessionClient.ts: {}
   src/react-query/createCimdRemoteSessionClient.ts: {}
   src/react-query/createCustomerSession.ts: {}
@@ -3912,6 +3915,8 @@ trackedFiles:
   src/react-query/organizationUserSessionIssuerMcpServers.ts: {}
   src/react-query/organizationUserSessionIssuerMigratePreflight.core.ts: {}
   src/react-query/organizationUserSessionIssuerMigratePreflight.ts: {}
+  src/react-query/organizationUserSessionIssuerRemoteSessionClientBindings.core.ts: {}
+  src/react-query/organizationUserSessionIssuerRemoteSessionClientBindings.ts: {}
   src/react-query/organizationUserSessionIssuers.core.ts: {}
   src/react-query/organizationUserSessionIssuers.ts: {}
   src/react-query/pauseTrigger.ts: {}
@@ -4211,7 +4216,6 @@ trackedFiles:
   src/react-query/setSpendCap.ts: {}
   src/react-query/setToolsetEnvironmentLink.ts: {}
   src/react-query/setToolsetToolVariationsGroup.ts: {}
-  src/react-query/setToolsetUserSessionIssuer.ts: {}
   src/react-query/shadowMCPInventory.core.ts: {}
   src/react-query/shadowMCPInventory.ts: {}
   src/react-query/shadowMCPInventoryServer.core.ts: {}
@@ -4296,6 +4300,7 @@ trackedFiles:
   src/react-query/templates.ts: {}
   src/react-query/temporaryGrants.core.ts: {}
   src/react-query/temporaryGrants.ts: {}
+  src/react-query/testDataExportRoute.ts: {}
   src/react-query/testDeviceIntegrationConnection.ts: {}
   src/react-query/testServerConnection.ts: {}
   src/react-query/tokenExchangeExchange.ts: {}
@@ -8159,7 +8164,7 @@ examples:
     speakeasy-default-get-network-ingress:
       responses:
         "200":
-          application/json: {}
+          application/json: {"gateway_tag": "tag:speakeasy"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -10806,6 +10811,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listOrganizationUserSessionIssuerRemoteSessionClientBindings:
+    speakeasy-default-list-organization-user-session-issuer-remote-session-client-bindings:
+      parameters:
+        query:
+          user_session_issuer_id: "d144812c-ddb0-4000-94cf-44b327fc244a"
+      responses:
+        "200":
+          application/json: {"bound_clients": [{"client_id": "<id>", "id": "f357a53a-de8d-480d-b770-8ba4420dcfbe", "remote_session_issuer_id": "c05c907f-05f9-430f-90af-bc78bfba9756", "remote_session_issuer_name": "<value>", "remote_session_issuer_url": "https://smug-scarification.org/"}], "server_clients": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listOrganizationUserSessionIssuers:
     speakeasy-default-list-organization-user-session-issuers:
       responses:
@@ -13915,6 +13932,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  testDataExportRoute:
+    speakeasy-default-test-data-export-route:
+      parameters:
+        query:
+          id: "6ecef0d6-e426-4c4c-bafe-7b477e1a37d3"
+      responses:
+        "200":
+          application/json: {"message": "<value>", "outcome": "unreachable", "signals": [], "test_event_id": "<id>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   testDetectionRule:
     speakeasy-default-test-detection-rule:
       requestBody:

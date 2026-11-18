@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"testing"
 	"time"
 
@@ -52,7 +54,7 @@ func newProvisionerFixture(t *testing.T, name string) *provisionerFixture {
 	require.NoError(t, err)
 	resources.Runtime = networkingress.RuntimeGateway
 	provisioner, err := tailnetgateway.NewProvisioner(testenv.NewLogger(t), db, orgEncryption(t, db).Service, orgEncryption(t, db).Provisioner, api, tailnetgateway.ProvisionerConfig{
-		Tag: tailnetgateway.DefaultTag, Namer: networkingress.ProductionNamer{}, Slots: 3, AuthKeyTTL: 24 * time.Hour, StaleAfter: 2 * time.Minute, Now: time.Now,
+		Tag: networkingress.DefaultGatewayTag, Namer: networkingress.ProductionNamer{}, Slots: 3, AuthKeyTTL: 24 * time.Hour, StaleAfter: 2 * time.Minute, Now: time.Now,
 	})
 	require.NoError(t, err)
 	// seedIngress creates a gateway ingress; tests of the operator path
@@ -159,7 +161,7 @@ func TestProvisionerScaleDownPurgesRetiredSlotsAfterHostsStop(t *testing.T) {
 	f.heartbeat(t, 2, tailnetgateway.NodeStatusOnline, "nTHREE")
 
 	smaller, err := tailnetgateway.NewProvisioner(testenv.NewLogger(t), f.db, orgEncryption(t, f.db).Service, orgEncryption(t, f.db).Provisioner, f.api, tailnetgateway.ProvisionerConfig{
-		Tag: tailnetgateway.DefaultTag, Namer: networkingress.ProductionNamer{}, Slots: 2, AuthKeyTTL: 24 * time.Hour, StaleAfter: 2 * time.Minute, Now: time.Now,
+		Tag: networkingress.DefaultGatewayTag, Namer: networkingress.ProductionNamer{}, Slots: 2, AuthKeyTTL: 24 * time.Hour, StaleAfter: 2 * time.Minute, Now: time.Now,
 	})
 	require.NoError(t, err)
 	_, err = smaller.Apply(ctx, f.desired(t))
@@ -266,7 +268,7 @@ func TestProvisionerObserveFollowsHeartbeats(t *testing.T) {
 	// Heartbeats older than the staleness window mean the gateway is gone.
 	f.heartbeat(t, 0, tailnetgateway.NodeStatusOnline, "nONE")
 	stale, err := tailnetgateway.NewProvisioner(testenv.NewLogger(t), f.db, orgEncryption(t, f.db).Service, orgEncryption(t, f.db).Provisioner, f.api, tailnetgateway.ProvisionerConfig{
-		Tag: tailnetgateway.DefaultTag, Namer: networkingress.ProductionNamer{}, Slots: 3, AuthKeyTTL: time.Hour, StaleAfter: 2 * time.Minute,
+		Tag: networkingress.DefaultGatewayTag, Namer: networkingress.ProductionNamer{}, Slots: 3, AuthKeyTTL: time.Hour, StaleAfter: 2 * time.Minute,
 		Now: func() time.Time { return time.Now().Add(time.Hour) },
 	})
 	require.NoError(t, err)
@@ -430,6 +432,23 @@ func TestProvisionerReportsSlotWaitingForLoginAsError(t *testing.T) {
 	observation, err := f.provisioner.Observe(ctx, f.resources)
 	require.NoError(t, err)
 	require.Equal(t, k8s.NetworkIngressStatusError, observation.Status, "a slot waiting for login is not healthy")
+}
+
+func TestProvisionerReportsHostsStillComingUpAsPending(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newProvisionerFixture(t, "tailnetprovcomingup")
+	_, err := f.provisioner.Apply(ctx, f.desired(t))
+	require.NoError(t, err)
+
+	// The gateway reports starting while a node's first certificate request
+	// runs and while its approval is within the grace period.
+	f.heartbeat(t, 0, tailnetgateway.NodeStatusStarting, "nONE")
+	f.heartbeat(t, 1, tailnetgateway.NodeStatusStarting, "nTWO")
+	observation, err := f.provisioner.Observe(ctx, f.resources)
+	require.NoError(t, err)
+	require.Equal(t, k8s.NetworkIngressStatusPending, observation.Status, "hosts that are still coming up are not an error")
+	require.Empty(t, observation.ErrorCode)
 }
 
 func TestProvisionerReportsHostsAwaitingACertificate(t *testing.T) {
@@ -639,7 +658,7 @@ func TestProvisionerApplyRequiresOrganizationEncryption(t *testing.T) {
 	t.Parallel()
 	f := newProvisionerFixture(t, "tailnetprovnoenc")
 	unconfigured, err := tailnetgateway.NewProvisioner(testenv.NewLogger(t), f.db, nil, nil, f.api, tailnetgateway.ProvisionerConfig{
-		Tag: tailnetgateway.DefaultTag, Namer: networkingress.ProductionNamer{}, Slots: 1, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
+		Tag: networkingress.DefaultGatewayTag, Namer: networkingress.ProductionNamer{}, Slots: 1, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
 	})
 	require.NoError(t, err)
 
@@ -653,7 +672,7 @@ func TestProvisionerLogsTheCauseOfAFailedApply(t *testing.T) {
 	f := newProvisionerFixture(t, "tailnetprovlogs")
 	var logs bytes.Buffer
 	provisioner, err := tailnetgateway.NewProvisioner(slog.New(slog.NewJSONHandler(&logs, nil)), f.db, orgEncryption(t, f.db).Service, orgEncryption(t, f.db).Provisioner, f.api, tailnetgateway.ProvisionerConfig{
-		Tag: tailnetgateway.DefaultTag, Namer: networkingress.ProductionNamer{}, Slots: 1, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
+		Tag: networkingress.DefaultGatewayTag, Namer: networkingress.ProductionNamer{}, Slots: 1, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
 	})
 	require.NoError(t, err)
 	f.api.Reject = errors.New("upsert service: when updating a service, addrs must contain 2 elements (400)")
@@ -673,7 +692,7 @@ func TestProvisionerLogsTheOrganizationOfAFailedTeardown(t *testing.T) {
 	require.NoError(t, err)
 	var logs bytes.Buffer
 	provisioner, err := tailnetgateway.NewProvisioner(slog.New(slog.NewJSONHandler(&logs, nil)), f.db, orgEncryption(t, f.db).Service, orgEncryption(t, f.db).Provisioner, f.api, tailnetgateway.ProvisionerConfig{
-		Tag: tailnetgateway.DefaultTag, Namer: networkingress.ProductionNamer{}, Slots: 3, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
+		Tag: networkingress.DefaultGatewayTag, Namer: networkingress.ProductionNamer{}, Slots: 3, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
 	})
 	require.NoError(t, err)
 	f.api.Reject = fmt.Errorf("%w: delete service", tailscaleapi.ErrRateLimited)
@@ -709,6 +728,93 @@ func TestProvisionerRenameDeletesThePreviousServiceOnce(t *testing.T) {
 	require.Contains(t, f.api.Services(), "svc:private", "a completed rename deletes the old service only once")
 }
 
+func TestProvisionerRenamesWhileDeletesFailLeaveNoService(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newProvisionerFixture(t, "tailnetprovrenametwice")
+	_, err := f.provisioner.Apply(ctx, f.desired(t))
+	require.NoError(t, err)
+
+	// Two renames while Tailscale refuses to delete services: each pass
+	// defines the new service and fails to delete the old ones.
+	f.api.RejectServiceDeletes = tailscaleapi.ErrForbidden
+	for _, hostname := range []string{"middle", "speakeasy"} {
+		renamed := f.desired(t)
+		renamed.Hostname = hostname
+		_, err = f.provisioner.Apply(ctx, renamed)
+		require.Error(t, err)
+	}
+	require.Contains(t, f.api.Services(), "svc:middle")
+
+	// Once deletes work, the next pass removes every service but the current one.
+	f.api.RejectServiceDeletes = nil
+	renamed := f.desired(t)
+	renamed.Hostname = "speakeasy"
+	_, err = f.provisioner.Apply(ctx, renamed)
+	require.NoError(t, err)
+	require.Equal(t, []string{"svc:speakeasy"}, slices.Collect(maps.Keys(f.api.Services())),
+		"the middle name's service is deleted although the hostname moved past it")
+}
+
+func TestProvisionerRetriesAReportedLabelsServiceUntilItIsDeleted(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newProvisionerFixture(t, "tailnetprovreportedlabel")
+	creds := tailscaleapi.Credentials{ClientID: "cid", ClientSecret: "csecret"}
+	report := func(dnsName string) {
+		t.Helper()
+		_, err := repo.New(f.db).HeartbeatNetworkIngressNode(ctx, repo.HeartbeatNetworkIngressNodeParams{
+			PodName: conv.ToPGText("gram-tailnet-gateway-0"), Status: string(tailnetgateway.NodeStatusOnline), NodeID: conv.ToPGText("nONE"),
+			DnsName: conv.ToPGText(dnsName), LastError: conv.ToPGTextEmpty(""),
+			NetworkIngressID: f.ingressID, OrganizationID: f.orgID, Slot: 0,
+		})
+		require.NoError(t, err)
+	}
+
+	// An ingress the gateway served as "old" before it recorded any label:
+	// only a host's reported FQDN names the old service.
+	require.NoError(t, f.api.UpsertService(ctx, creds, tailscaleapi.Service{Name: "svc:old", Ports: []string{"tcp:443"}, Tags: nil, Comment: ""}))
+	require.NoError(t, repo.New(f.db).EnsureNetworkIngressNodeSlot(ctx, repo.EnsureNetworkIngressNodeSlotParams{NetworkIngressID: f.ingressID, OrganizationID: f.orgID, Slot: 0}))
+	report("old.example.ts.net")
+
+	f.api.RejectServiceDeletes = tailscaleapi.ErrForbidden
+	_, err := f.provisioner.Apply(ctx, f.desired(t))
+	require.Error(t, err)
+	require.Contains(t, f.api.Services(), "svc:old")
+
+	// The host now reports the new name, but the failed delete is retried.
+	report("private.example.ts.net")
+	f.api.RejectServiceDeletes = nil
+	_, err = f.provisioner.Apply(ctx, f.desired(t))
+	require.NoError(t, err)
+	require.NotContains(t, f.api.Services(), "svc:old", "a reported label is recorded, so its failed delete is retried")
+	require.Contains(t, f.api.Services(), "svc:private")
+}
+
+func TestProvisionerApplyRefusesAnIngressOfAnotherOrganization(t *testing.T) {
+	t.Parallel()
+	f := newProvisionerFixture(t, "tailnetprovotherorg")
+	desired := f.desired(t)
+	desired.OrganizationID = "org_other"
+
+	observation, err := f.provisioner.Apply(t.Context(), desired)
+	require.ErrorIs(t, err, k8s.ErrNetworkIngressInvalidDesiredState)
+	require.Equal(t, k8s.NetworkIngressErrorInvalidDesiredState, observation.ErrorCode)
+	require.Empty(t, f.api.Services())
+}
+
+func TestProvisionerObserveOwnerReadFailureIsRetryable(t *testing.T) {
+	t.Parallel()
+	f := newProvisionerFixture(t, "tailnetprovobserveowner")
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	observation, err := f.provisioner.Observe(ctx, f.resources)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, k8s.ErrNetworkIngressInvalidDesiredState)
+	require.NotEqual(t, k8s.NetworkIngressErrorInvalidDesiredState, observation.ErrorCode, "a database error is not a permanent desired-state error")
+}
+
 func TestProvisionerTeardownDeletesTheRecordedServiceOfAPendingRename(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
@@ -738,7 +844,7 @@ func TestLocalProvisionerRefusesHostnamesItDoesNotOwn(t *testing.T) {
 	t.Parallel()
 	f := newProvisionerFixture(t, "tailnetprovlocalrefuse")
 	local, err := tailnetgateway.NewProvisioner(testenv.NewLogger(t), f.db, orgEncryption(t, f.db).Service, orgEncryption(t, f.db).Provisioner, f.api, tailnetgateway.ProvisionerConfig{
-		Tag: tailnetgateway.DefaultTag, Namer: localTestNamer(t), Slots: 1, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
+		Tag: networkingress.DefaultGatewayTag, Namer: localTestNamer(t), Slots: 1, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
 	})
 	require.NoError(t, err)
 
@@ -753,7 +859,7 @@ func TestLocalProvisionerNamesItsArtifacts(t *testing.T) {
 	t.Parallel()
 	f := newProvisionerFixture(t, "tailnetprovlocalnames")
 	local, err := tailnetgateway.NewProvisioner(testenv.NewLogger(t), f.db, orgEncryption(t, f.db).Service, orgEncryption(t, f.db).Provisioner, f.api, tailnetgateway.ProvisionerConfig{
-		Tag: tailnetgateway.DefaultTag, Namer: localTestNamer(t), Slots: 1, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
+		Tag: networkingress.DefaultGatewayTag, Namer: localTestNamer(t), Slots: 1, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
 	})
 	require.NoError(t, err)
 	desired := f.desired(t)
@@ -778,7 +884,7 @@ func TestLocalProvisionerTeardownLeavesServicesItDoesNotOwn(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, f.api.Services(), "svc:private")
 	local, err := tailnetgateway.NewProvisioner(testenv.NewLogger(t), f.db, orgEncryption(t, f.db).Service, orgEncryption(t, f.db).Provisioner, f.api, tailnetgateway.ProvisionerConfig{
-		Tag: tailnetgateway.DefaultTag, Namer: localTestNamer(t), Slots: 3, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
+		Tag: networkingress.DefaultGatewayTag, Namer: localTestNamer(t), Slots: 3, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
 	})
 	require.NoError(t, err)
 
@@ -790,7 +896,7 @@ func TestProvisionerRequiresANamer(t *testing.T) {
 	t.Parallel()
 	f := newProvisionerFixture(t, "tailnetprovnonamer")
 	_, err := tailnetgateway.NewProvisioner(testenv.NewLogger(t), f.db, nil, nil, f.api, tailnetgateway.ProvisionerConfig{
-		Tag: tailnetgateway.DefaultTag, Namer: nil, Slots: 1, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
+		Tag: networkingress.DefaultGatewayTag, Namer: nil, Slots: 1, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
 	})
 	require.ErrorContains(t, err, "namer")
 }

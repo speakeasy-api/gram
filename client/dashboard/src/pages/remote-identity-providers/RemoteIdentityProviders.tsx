@@ -13,8 +13,6 @@ import {
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { RemoteSessionRefreshPolicySetting } from "@/pages/org/RemoteSessionRefreshPolicySetting";
 import { useIssuerHref } from "./useIssuerHref";
 import type { OrganizationRemoteSessionIssuer } from "@gram/client/models/components/organizationremotesessionissuer.js";
@@ -78,11 +76,6 @@ function RemoteIdentityProvidersOverview() {
   const [addClientTarget, setAddClientTarget] =
     useState<OrganizationRemoteSessionIssuer | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
-  // Behind gram-user-session-issuer-dashboard, the refresh policy for these
-  // servers' connections lives here instead of on MCP Sessions.
-  const showRefreshPolicy =
-    useFeatureFlag(FEATURE_FLAGS.userSessionIssuerDashboard).status ===
-    "enabled";
 
   // Three tenancy tiers, each listed on its own. Platform issuers are
   // inherited from the shared catalog and are read-only to the tenant, so they
@@ -180,13 +173,12 @@ function RemoteIdentityProvidersOverview() {
           </RequireScope>
         }
       >
-        {showRefreshPolicy ? (
-          // Pulled up under the description, as on MCP Sessions, so the
-          // surface does not read as a dropped card.
-          <div className="-mt-6 mb-8">
-            <RemoteSessionRefreshPolicySetting />
-          </div>
-        ) : null}
+        {/* The refresh policy governs these servers' remote sessions, so it
+            lives here rather than on MCP Sessions. Pulled up under the
+            description so the surface does not read as a dropped card. */}
+        <div className="-mt-6 mb-8">
+          <RemoteSessionRefreshPolicySetting />
+        </div>
         <IssuerTable
           items={organizational}
           isLoading={organizationalTier.isLoading}
