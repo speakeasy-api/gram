@@ -87,12 +87,12 @@ export function FilterChip({
   if (locked) {
     return (
       <span
-        role="note"
-        aria-label={ariaLabel ?? label}
+        title={ariaLabel}
         className="bg-card border-foreground text-foreground inline-flex h-10 shrink-0 items-center gap-2 border px-3"
       >
         <Lock className="size-3.5 shrink-0" aria-hidden />
         <span className="text-eyebrow">{label}</span>
+        {ariaLabel ? <span className="sr-only">{ariaLabel}</span> : null}
       </span>
     );
   }

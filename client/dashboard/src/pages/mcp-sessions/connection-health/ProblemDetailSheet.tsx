@@ -71,7 +71,13 @@ export function ProblemDetailSheet({
               </SheetDescription>
             </SheetHeader>
             <div className="p-6">
-              {query.isPending ? (
+              {query.isError ? (
+                <InlineEmptyState
+                  icon="triangle-alert"
+                  heading="Couldn't load this problem"
+                  description="Close it and open it again."
+                />
+              ) : query.isPending ? (
                 <div className="space-y-3">
                   <Skeleton className="h-6 w-2/3" />
                   <Skeleton className="h-32 w-full" />
@@ -94,9 +100,9 @@ export function ProblemDetailSheet({
 function investigationFor(problem: SuspectedProblemDetail): Investigation {
   return {
     question: `Why can't ${
-      problem.people.length === 1
-        ? personLabel(problem.people[0]!)
-        : `these ${problem.people.length} people`
+      problem.peopleCount === 1 && problem.people[0]
+        ? personLabel(problem.people[0])
+        : `these ${problem.peopleCount} people`
     } connect, and is there anything I should change?`,
     context: [
       SUSPECTED_PROBLEMS_ARE_SAMPLE
@@ -135,7 +141,7 @@ function ProblemBody({
     0,
   );
   const logsHref = `${routes.mcpSessions.provider.connectionLogs.href(providerId)}${logsSearch(problem.filters, now)}`;
-  const peopleCount = problem.people.length;
+  const peopleCount = problem.peopleCount;
   const sinceLabel = formatSince(problem.since, now);
   return (
     <div className="flex min-h-full flex-col">
@@ -275,9 +281,9 @@ function ProblemBody({
             {problem.otherFailuresOnService === 1
               ? "1 other failure"
               : `${formatCount(problem.otherFailuresOnService)} other failures`}{" "}
-            on the {problem.scope.name} in this time{" "}
-            {problem.otherFailuresOnService === 1 ? "is" : "are"} not part of
-            this.
+            on {problem.filters.services?.[0] ?? "the same service"} in this
+            time range {problem.otherFailuresOnService === 1 ? "is" : "are"} not
+            part of this.
           </p>
         ) : null}
       </div>

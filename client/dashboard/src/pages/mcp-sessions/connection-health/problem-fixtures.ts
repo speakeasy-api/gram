@@ -17,7 +17,16 @@ const MINUTE = 60_000;
 /** The fixtures' clock: today at 11:05 local, so the sample day reads as today. */
 export function fixtureNow(): Date {
   const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 11, 5, 0);
+  const today = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    11,
+    5,
+  );
+  // Before 11:05 the sample day is yesterday, so no sample time is in the future.
+  if (today > now) today.setDate(today.getDate() - 1);
+  return today;
 }
 
 /** A local time `dayOffset` days from the fixture day, "HH:MM[:SS]". */
@@ -406,9 +415,7 @@ function later<T>(value: () => T): Promise<T> {
   });
 }
 
-export function fixtureListSuspectedProblems({
-  serverId,
-}: {
+export function fixtureListSuspectedProblems(_: {
   userSessionIssuerId: string;
   serverId?: string;
 }): Promise<ListSuspectedProblemsResponse> {
@@ -417,13 +424,8 @@ export function fixtureListSuspectedProblems({
     const list = problems();
     return {
       loggingEnabled: true,
-      problems: serverId
-        ? list.map((p) => ({
-            ...summaryOf(p),
-            // A real server has no sample problems; each one stands in for it.
-            peopleOnServerCount: Math.max(1, p.people.length - 2),
-          }))
-        : list.map(summaryOf),
+      // Sample problems name made-up servers, so no per-server share is shown.
+      problems: list.map(summaryOf),
     };
   });
 }

@@ -17,17 +17,20 @@ import {
 } from "@/components/ui/Sheet";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
+import { Button } from "@/components/ui/Button";
 import { useRoutes } from "@/routes";
-import { ArrowRight, ChevronDown, X } from "lucide-react";
+import { useProjectProviders } from "../providers";
+import { ArrowRight, ChevronDown, Globe, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { connectionHealthNow, useAttempt } from "./api";
 import { AskAiButton, type Investigation } from "./AskAiButton";
 import { OutcomeLabel } from "./AttemptsTable";
-import { logsSearch } from "./filters";
+import { logsSearch, RETENTION_MS } from "./filters";
 import {
   appLabel,
   formatClock,
+  formatDayMonth,
   formatFull,
   OUTCOME_LABELS,
   personLabel,
@@ -94,10 +97,22 @@ export function AttemptDetailSheet({
                   }
                   description={
                     query.isError
-                      ? "Close and open it again to retry."
+                      ? "Connections are not affected."
                       : query.data?.loggingEnabled === false
                         ? "Attempts are not kept while logging is off for this organization."
-                        : "Connection Logs keep the last 30 days of this project."
+                        : query.data?.viewerScope === "own"
+                          ? "Connection Logs keep the last 30 days, and you see only your own attempts."
+                          : "Connection Logs keep the last 30 days of this project."
+                  }
+                  action={
+                    query.isError ? (
+                      <Button
+                        variant="secondary"
+                        onClick={() => void query.refetch()}
+                      >
+                        Try again
+                      </Button>
+                    ) : undefined
                   }
                 />
               )}
@@ -109,11 +124,34 @@ export function AttemptDetailSheet({
   );
 }
 
+function questionFor(attempt: AttemptDetail, who: string, where: string) {
+  const to = where ? ` to ${where}` : "";
+  switch (attempt.outcome) {
+    case "connected":
+      return `What happened in ${who}'s connection${to}, and does anything look wrong?`;
+    case "in_progress":
+      return `${who}'s connection${to} is still in progress. What has happened so far?`;
+    case "failed":
+    case "blocked":
+    case "declined":
+    case "didnt_finish":
+      return `Why did ${who}'s connection${to} end as "${OUTCOME_LABELS[attempt.outcome]}", and is there anything I should change?`;
+  }
+}
+
+/** The attempt's local day start, kept inside what the log holds. */
+function startOfDay(iso: string): string {
+  const date = new Date(iso);
+  date.setHours(0, 0, 0, 0);
+  const oldest = Date.now() - RETENTION_MS + 60_000;
+  return new Date(Math.max(date.getTime(), oldest)).toISOString();
+}
+
 function investigationFor(attempt: AttemptDetail): Investigation {
   const who = personLabel(attempt);
   const where = serverLabel(attempt);
   return {
-    question: `Why did ${who}'s connection to ${where} end as "${OUTCOME_LABELS[attempt.outcome]}", and is there anything I should change?`,
+    question: questionFor(attempt, who, where),
     context: [
       `Connection attempt ${attempt.id}`,
       `${OUTCOME_LABELS[attempt.outcome]} at step ${STEP_LABELS[attempt.step]}, ${formatFull(attempt.time)}`,
@@ -159,7 +197,13 @@ function AttemptDetailBody({
         </SheetTitle>
         <SheetDescription asChild>
           <div className="mt-1 flex items-center gap-3">
-            <IdentityAvatar label={who} className="size-8" />
+            {attempt.person ? (
+              <IdentityAvatar label={who} className="size-8" />
+            ) : (
+              <span className="text-muted-foreground flex size-8 shrink-0 items-center justify-center">
+                <Globe className="size-4" aria-hidden />
+              </span>
+            )}
             <div className="min-w-0">
               <div className="text-foreground truncate text-sm">{who}</div>
               <div className="text-muted-foreground truncate text-xs">
@@ -247,13 +291,14 @@ function AttemptDetailBody({
                 <RelatedLink
                   to={`${routes.mcpSessions.provider.connectionLogs.href(providerId)}${logsSearch(
                     {
+                      from: startOfDay(attempt.startedAt),
                       people: [attempt.person.subjectUrn],
                       serverIds: attempt.server ? [attempt.server.id] : [],
                     },
                     now,
                   )}`}
                   title={`All outcomes for ${who}${where ? ` on ${where}` : ""}`}
-                  detail="Last 24 hours · Connection Logs"
+                  detail={`Since ${formatDayMonth(attempt.startedAt)} · Connection Logs`}
                 />
                 <RelatedLink
                   to={`${routes.mcpSessions.provider.connections.href(providerId)}?subjectUrn=${encodeURIComponent(attempt.person.subjectUrn)}`}
@@ -308,6 +353,10 @@ function ContextFacts({
   providerName?: string;
 }): JSX.Element {
   const [open, setOpen] = useState(true);
+  const { providers } = useProjectProviders();
+  const provider =
+    providers.find((p) => p.id === attempt.userSessionIssuerId)?.slug ??
+    providerName;
   const facts: [string, ReactNode][] = [];
   if (attempt.source) {
     facts.push([
@@ -331,9 +380,9 @@ function ContextFacts({
     "App",
     attempt.app.version
       ? appLabel(attempt.app)
-      : `${attempt.app.name}. No version reported at this step.`,
+      : `${attempt.app.name}. No version reported.`,
   ]);
-  if (providerName) facts.push(["Provider", providerName]);
+  if (provider) facts.push(["Provider", provider]);
   if (attempt.network) facts.push(["Network", attempt.network.label]);
   if (attempt.context.grantType)
     facts.push(["Grant", attempt.context.grantType]);

@@ -228,9 +228,14 @@ export function problemHeadline(problem: SuspectedProblem, now: Date): string {
 
 /** A session length in its largest whole unit: "9 days", "5 hours". */
 export function formatSessionLength(seconds: number): string {
-  const days = Math.round(seconds / 86_400);
-  if (days >= 1) return plural(days, "day");
   const hours = Math.round(seconds / 3_600);
+  if (hours >= 24) {
+    const days = Math.floor(hours / 24);
+    const rest = hours % 24;
+    return rest === 0
+      ? plural(days, "day")
+      : `${plural(days, "day")} ${plural(rest, "hour")}`;
+  }
   if (hours >= 1) return plural(hours, "hour");
   return plural(Math.max(1, Math.round(seconds / 60)), "minute");
 }

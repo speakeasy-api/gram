@@ -76,6 +76,9 @@ export const LOG_FILTERS_WITHOUT_SERVER = LOG_FILTERS.filter(
   (dim) => dim.id !== "server",
 );
 
+/** The URL value for unlisted apps, whose family is "". */
+export const UNLISTED_APP = "unlisted";
+
 export const SEARCH_PARAM = "q";
 export const ATTEMPT_PARAM = "attempt";
 export const PROBLEM_PARAM = "problem";
@@ -123,7 +126,7 @@ export function toAttemptFilters(values: LogFilterValues): AttemptFilters {
     serverIds: one(values.server),
     services: one(values.service),
     people: one(values.person),
-    apps: one(values.app),
+    apps: one(values.app === UNLISTED_APP ? "" : values.app),
     appVersions: one(values.appVersion),
     steps: nonEmpty(
       values.step.filter((s): s is StepGroup =>
@@ -167,7 +170,11 @@ export function logsSearch(filters: LinkFilters, now: Date): string {
   set("server", filters.serverIds, true);
   set("service", filters.services, true);
   set("person", filters.people, true);
-  set("app", filters.apps, true);
+  set(
+    "app",
+    filters.apps?.map((a) => (a === "" ? UNLISTED_APP : a)),
+    true,
+  );
   set("appVersion", filters.appVersions, true);
   set("step", filters.steps);
   set("message", filters.reasons);

@@ -50,15 +50,19 @@ describe("toAttemptFilters", () => {
         step: ["sign_in_renewal", "nope"],
         person: "user:user_dana",
         message: ["session_expired"],
-        app: "",
+        app: "unlisted",
       }),
     );
     expect(filters.outcomes).toEqual(["failed"]);
     expect(filters.steps).toEqual(["sign_in_renewal"]);
     expect(filters.people).toEqual(["user:user_dana"]);
     expect(filters.reasons).toEqual(["session_expired"]);
-    // "" is the unlisted-app family, a real selection.
     expect(filters.apps).toEqual([""]);
+  });
+
+  it("round-trips the unlisted app through the URL", () => {
+    const params = new URLSearchParams(logsSearch({ apps: [""] }, NOW));
+    expect(params.get("app")).toBe("unlisted");
   });
 });
 

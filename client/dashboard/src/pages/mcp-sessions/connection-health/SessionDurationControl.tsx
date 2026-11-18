@@ -4,7 +4,7 @@ import { Link } from "react-router";
 import { useSessionAverage } from "./api";
 import { formatSessionLength } from "./format";
 
-/** The header's one Session duration readout: the 30-day average and the setting. */
+/** The header's one Session length readout: the 30-day average and the setting. */
 export function SessionDurationControl({
   providerId,
   configuredHours,

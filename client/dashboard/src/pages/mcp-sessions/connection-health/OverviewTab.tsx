@@ -168,7 +168,9 @@ export function OverviewTab({
             </SelectContent>
           </Select>
         }
-        logsHref={logsHref(logsSearch({ range: range.value }, now))}
+        logsHref={logsHref(
+          logsSearch({ range: range.value, steps: [...SIGN_IN_STEPS] }, now),
+        )}
         sessionsHref={routes.mcpSessions.provider.connections.href(providerId)}
       />
 
@@ -322,7 +324,13 @@ function KillswitchesInForce({
         key: "who",
         header: "Who",
         width: "1.4fr",
-        render: (k) => names.get(k.userId) ?? "Former member",
+        render: (k) =>
+          names.get(k.userId) ??
+          (members.isPending
+            ? ""
+            : members.isError
+              ? "Unknown"
+              : "Former member"),
       },
       {
         key: "servers",
@@ -337,7 +345,7 @@ function KillswitchesInForce({
         render: (k) => (k.until ? formatDayMonth(k.until) : "No end date"),
       },
     ];
-  }, [members.data, servers.data]);
+  }, [members.data, members.isPending, members.isError, servers.data]);
   return (
     <OverviewSection
       title={`Killswitches in force · ${killswitches.length}`}
@@ -378,8 +386,13 @@ function DeniedClients({
               ) : null}
             </div>
             <div className="text-muted-foreground text-xs">
-              {plural(c.attempts, "time")}
-              {c.networks > 0 ? `, from ${plural(c.networks, "network")}` : ""}
+              {[
+                plural(c.attempts, "time"),
+                c.people > 0 ? plural(c.people, "person", "people") : null,
+                c.networks > 0 ? `from ${plural(c.networks, "network")}` : null,
+              ]
+                .filter(Boolean)
+                .join(", ")}
             </div>
           </div>
         ),
@@ -434,7 +447,7 @@ function Configuration({
   const average = useSessionAverage(provider.id).data;
   const facts: [string, string, string?][] = [
     [
-      "Session duration",
+      "Session length",
       `${duration.number} ${duration.unit}${duration.number === 1 ? "" : "s"}`,
       average === undefined
         ? undefined

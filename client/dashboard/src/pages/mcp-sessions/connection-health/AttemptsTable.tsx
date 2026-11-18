@@ -124,12 +124,7 @@ export function AttemptsTable({
     const base: Column<AttemptRow>[] = [
       {
         key: "time",
-        header: (
-          <span>
-            Time <span aria-hidden>↓</span>
-            <span className="sr-only">, newest first</span>
-          </span>
-        ),
+        header: "Time",
         width: "130px",
         render: (row) => (
           <div className="font-mono text-xs leading-5 whitespace-nowrap">
@@ -144,7 +139,7 @@ export function AttemptsTable({
       },
       {
         key: "who",
-        header: "Person · App",
+        header: "Person · app",
         width: "1.2fr",
         render: (row) => <AttemptWho row={row} />,
       },
@@ -249,7 +244,7 @@ export function AttemptsFooter({
         {total === undefined ? "" : `${plural(total, "attempt")} · `}
         newest first
       </span>
-      <span>{hasMore ? "Load more below" : "All loaded"}</span>
+      <span>{hasMore ? "Scroll to load more" : "All loaded"}</span>
     </div>
   );
 }

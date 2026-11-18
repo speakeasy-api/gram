@@ -245,7 +245,7 @@ function ProviderHeaderControls({
         rows={[
           {
             key: "session-duration",
-            label: "Session duration",
+            label: "Session length",
             control: (
               <SessionDurationControl
                 providerId={provider.id}

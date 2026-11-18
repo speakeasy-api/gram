@@ -14,6 +14,7 @@ import { FilterChip } from "@/components/filters/FilterChip";
 import { ArrowRight, RefreshCw } from "lucide-react";
 import { RequireScope } from "@/components/require-scope";
 import { useOrganization } from "@/contexts/Auth";
+import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
 import { useQueryClient } from "@tanstack/react-query";
@@ -36,6 +37,7 @@ import {
   LOG_FILTERS_WITHOUT_SERVER,
   LOG_PARAMS,
   resolveWindow,
+  UNLISTED_APP,
   RETENTION_MS,
   SEARCH_PARAM,
   startsBeforeRetention,
@@ -43,7 +45,6 @@ import {
   type LogFilterValues,
 } from "./filters";
 import {
-  formatCount,
   formatSince,
   OUTCOME_LABELS,
   plural,
@@ -86,15 +87,14 @@ function optionsFrom(facets: AttemptFacets | undefined): OptionsById {
     })),
     step: FILTER_STEPS.map((s) => ({ value: s, label: STEP_LABELS[s] })),
     server: facetOptions(facets?.servers, "Removed server"),
-    person: facetOptions(
-      facets?.people.map((v) =>
-        v.value === "" ? { ...v, label: "No known person" } : v,
-      ),
-    ),
+    // Attempts with no known person are found by network instead.
+    person: facetOptions(facets?.people.filter((v) => v.value !== "")),
     service: facetOptions(facets?.services),
     app: facetOptions(
       facets?.apps.map((v) =>
-        v.value === "" ? { ...v, label: v.label ?? "Unlisted app" } : v,
+        v.value === ""
+          ? { ...v, value: UNLISTED_APP, label: v.label ?? "Unlisted app" }
+          : v,
       ),
     ),
     appVersion: facetOptions(facets?.appVersions),
@@ -335,7 +335,7 @@ export function ConnectionLogsView({
         ? null
         : rows[0]
           ? rows[0].count > 1
-            ? `1 match · stands for ${formatCount(rows[0].count)} repeats`
+            ? `1 match · ${plural(rows[0].count, "attempt")}`
             : "1 match"
           : "No match"
       : total === undefined
@@ -367,7 +367,7 @@ export function ConnectionLogsView({
       <InlineEmptyState
         icon="file-x"
         heading="Connection Logs needs logging"
-        description="Logging is off for this organization, so attempts are not kept. Turning it on starts the log from that moment."
+        description="Logging is off for this organization, so attempts are not kept. Turning it on starts logging for the whole organization, from that moment."
         action={<EnableLoggingAction />}
       />
     );
@@ -542,8 +542,7 @@ export function ConnectionLogsView({
                 lockedServer ? (
                   <FilterChip
                     label={`Server: ${lockedServer.name}`}
-                    ariaLabel={`Server: ${lockedServer.name}, fixed on this tab`}
-                    active
+                    ariaLabel="Fixed on this tab"
                     locked
                   />
                 ) : undefined
@@ -561,7 +560,7 @@ export function ConnectionLogsView({
       </Page.Toolbar>
       {isReference ? (
         <p className="text-muted-foreground -mt-2 text-xs">
-          Reference search covers all 30 days.
+          Reference search covers the last 30 days and ignores the filters.
         </p>
       ) : null}
       {viewerScope === "own" ? <OwnAttemptsNotice /> : null}
@@ -585,6 +584,17 @@ function noMatchSentence(
 ): string {
   const range = rangePhrase(values, options);
   if (search) return `Nothing matches “${search}” in ${range}.`;
+  const others =
+    [
+      values.person,
+      values.service,
+      values.app,
+      values.appVersion,
+      values.network,
+    ].some(Boolean) ||
+    values.step.length > 0 ||
+    values.message.length > 0;
+  if (others) return `No attempts match these filters in ${range}.`;
   const verb =
     values.outcome.length === 1 ? OUTCOME_SENTENCE[values.outcome[0]!] : null;
   const server = values.server
@@ -599,13 +609,19 @@ function noMatchSentence(
 /** Turns logging on for an organization admin; others are told who can. */
 function EnableLoggingAction(): JSX.Element {
   const organization = useOrganization();
+  const isCurrentOrganization = useIsCurrentOrganization(organization.id);
   const queryClient = useQueryClient();
   const enable = useFeaturesSetMutation({
-    onSuccess: () =>
-      queryClient.invalidateQueries({
+    onSuccess: () => {
+      if (!isCurrentOrganization()) return;
+      void queryClient.invalidateQueries({
         queryKey: [CONNECTION_HEALTH_QUERY_ROOT],
-      }),
-    onError: () => toast.error("Couldn't turn on logging. Try again."),
+      });
+    },
+    onError: () => {
+      if (isCurrentOrganization())
+        toast.error("Couldn't turn on logging. Try again.");
+    },
   });
   return (
     <div className="flex flex-col items-center gap-2">

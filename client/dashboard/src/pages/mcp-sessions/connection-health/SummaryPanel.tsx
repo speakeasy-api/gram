@@ -119,7 +119,10 @@ export function SummaryPanel({
             ) : signIns.isError || !signIns.data ? (
               <ChartMessage>Couldn&apos;t load sign-in attempts.</ChartMessage>
             ) : !signIns.data.loggingEnabled ? (
-              <ChartMessage>Sign-in attempts need logging.</ChartMessage>
+              <ChartMessage>
+                Sign-in attempts need logging, which is off for this
+                organization.
+              </ChartMessage>
             ) : (
               <SignInBars
                 data={signIns.data}
