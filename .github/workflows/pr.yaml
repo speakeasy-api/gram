@@ -340,7 +340,7 @@ jobs:
           retry go mod download
           retry go -C glint mod download
           retry mise run go:tidy
-          (cd server && retry golangci-lint custom)
+          retry mise run build:gcl
 
       - name: Save Go module cache
         if: steps.lookup.outputs.cache-hit != 'true'
@@ -1503,7 +1503,7 @@ jobs:
       - name: Compute golangci-lint cache key
         id: lint-cache-key
         env:
-          FILES_HASH: ${{ hashFiles('server/.golangci.yaml', 'server/.custom-gcl.yml', 'glint/**') }}
+          FILES_HASH: ${{ hashFiles('server/.golangci.yaml', 'server/gcl/**', '.mise-tasks/build/gcl.sh', 'glint/**') }}
         run: echo "inputs=$(go env GOVERSION)-${FILES_HASH}" >> "$GITHUB_OUTPUT"
 
       - name: Restore golangci-lint cache
@@ -1513,6 +1513,17 @@ jobs:
           path: ~/.cache/golangci-lint
           key: golangci-lint-server-blacksmith-v1-${{ steps.lint-cache-key.outputs.inputs }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: golangci-lint-server-blacksmith-v1-${{ steps.lint-cache-key.outputs.inputs }}-
+
+      # The lint action would build an unpatched binary itself if it found a
+      # .custom-gcl.yml. gcl is built here instead, with the patches in
+      # server/gcl/patches, and put on PATH as the golangci-lint the action
+      # runs with install-mode none.
+      - name: Build gcl
+        run: |
+          mise run build:gcl
+          mkdir -p "$RUNNER_TEMP/gcl"
+          ln -sf "$GITHUB_WORKSPACE/server/bin/gcl" "$RUNNER_TEMP/gcl/golangci-lint"
+          echo "$RUNNER_TEMP/gcl" >> "$GITHUB_PATH"
 
       # Lint the package list the local task uses rather than the action's
       # default ./..., which also analyses the generated server/gen packages.
@@ -1623,7 +1634,7 @@ jobs:
       - name: Compute golangci-lint cache key
         id: lint-cache-key
         env:
-          FILES_HASH: ${{ hashFiles('server/.golangci.yaml', 'server/.custom-gcl.yml', 'glint/**') }}
+          FILES_HASH: ${{ hashFiles('server/.golangci.yaml', 'server/gcl/**', '.mise-tasks/build/gcl.sh', 'glint/**') }}
         run: echo "inputs=$(go env GOVERSION)-${FILES_HASH}" >> "$GITHUB_OUTPUT"
 
       - name: Restore golangci-lint cache
@@ -1633,6 +1644,13 @@ jobs:
           path: ~/.cache/golangci-lint
           key: golangci-lint-server-blacksmith-v1-${{ steps.lint-cache-key.outputs.inputs }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: golangci-lint-server-blacksmith-v1-${{ steps.lint-cache-key.outputs.inputs }}-
+
+      - name: Build gcl
+        run: |
+          mise run build:gcl
+          mkdir -p "$RUNNER_TEMP/gcl"
+          ln -sf "$GITHUB_WORKSPACE/server/bin/gcl" "$RUNNER_TEMP/gcl/golangci-lint"
+          echo "$RUNNER_TEMP/gcl" >> "$GITHUB_PATH"
 
       # Keep the package list in step with server-checks, or the cache saved
       # here would not cover what pull requests lint.
