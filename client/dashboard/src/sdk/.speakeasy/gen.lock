@@ -1387,6 +1387,7 @@ trackedFiles:
   src/models/components/hookingestevent.ts: {}
   src/models/components/hookingestsession.ts: {}
   src/models/components/hookingestsource.ts: {}
+  src/models/components/hookinstallfailuredata.ts: {}
   src/models/components/hookmcpattributionentry.ts: {}
   src/models/components/hookmcpdata.ts: {}
   src/models/components/hookmessagedata.ts: {}
