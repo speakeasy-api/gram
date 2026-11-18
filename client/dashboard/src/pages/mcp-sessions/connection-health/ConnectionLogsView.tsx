@@ -44,12 +44,7 @@ import {
   toAttemptFilters,
   type LogFilterValues,
 } from "./filters";
-import {
-  formatSince,
-  OUTCOME_LABELS,
-  plural,
-  STEP_LABELS,
-} from "./format";
+import { formatSince, OUTCOME_LABELS, plural, STEP_LABELS } from "./format";
 import {
   FILTER_OUTCOMES,
   FILTER_STEPS,
