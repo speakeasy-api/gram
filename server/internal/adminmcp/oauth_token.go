@@ -237,7 +237,7 @@ func (s *StaffOAuthTokens) verifyConnection(ctx context.Context, connection staf
 	if err != nil || sessionID == "" {
 		return errStaffGrant
 	}
-	verified, err := s.verifier.Authorize(ctx, sessionID, &security.APIKeyScheme{Name: constants.AdminAuthSecurityScheme}) //nolint:exhaustruct // Only name is used.
+	verified, err := s.verifier.Authorize(ctx, sessionID, &security.APIKeyScheme{Name: constants.AdminAuthSecurityScheme}) //nolint:exhaustruct_v5 // Only name is used.
 	if err != nil {
 		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && (shareable.Code == oops.CodeUnauthorized || shareable.Code == oops.CodeForbidden) {
 			return errStaffGrant

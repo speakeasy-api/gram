@@ -14,6 +14,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -31,11 +32,13 @@ const (
 )
 
 type SetDataExportMinSeverityInput struct {
-	ProjectID      string `json:"project_id" jsonschema:"project ID that owns the route, from list_data_exports"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID      string `json:"-"`
 	RouteID        string `json:"route_id" jsonschema:"exact mcp_connection_logs route ID from list_data_exports"`
-	MinSeverity    string `json:"min_severity" jsonschema:"lowest level the route sends: error (failed connections), warn (adds blocked connections), or info (adds declined connections)"`
+	MinSeverity    string `json:"min_severity" jsonschema:"lowest level the route sends: error (failed connections), warn (adds blocked connections and failed sign-in steps that may still recover, such as a saved sign-in the service no longer accepts; only those steps are sent with speakeasy.mcp_connection.final=false), or info (adds declined connections)"`
 	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-chosen key that makes a retry of this exact change safe"`
-	Confirmed      bool   `json:"confirmed" jsonschema:"true only after the user confirmed this exact project, route, and new level"`
+	Confirmed      bool   `json:"confirmed" jsonschema:"false to preview the change without writing; true only after the user confirms this exact project, route, and new level"`
 }
 
 // SetDataExportMinSeverityOutput reports changed or unchanged; a refusal is an
@@ -48,6 +51,33 @@ type SetDataExportMinSeverityOutput struct {
 	TakesEffect         string                  `json:"takes_effect"`
 	Receipt             RiskMutationToolReceipt `json:"receipt"`
 }
+
+// DataExportLevelPreview is what an unconfirmed level change reports: the
+// route as it stands and the change a confirmed call with the same input would
+// make. Nothing is written for it.
+type DataExportLevelPreview struct {
+	// Route is the route as it stands now, before the change.
+	Route DataExportRoute `json:"route"`
+	// MinSeverityBefore and MinSeverityAfter are the route's level now and
+	// after a confirmed call.
+	MinSeverityBefore string `json:"min_severity_before"`
+	MinSeverityAfter  string `json:"min_severity_after"`
+	// Outcome is what a confirmed call would report: changed or unchanged.
+	Outcome     string `json:"outcome"`
+	TakesEffect string `json:"takes_effect"`
+}
+
+// dataExportLevelPreviewError is the confirmation_required refusal of an
+// unconfirmed level change.
+type dataExportLevelPreviewError struct {
+	Preview DataExportLevelPreview
+}
+
+func (e *dataExportLevelPreviewError) Error() string {
+	return "Nothing was changed. Show the user the exact project, route, data source, destination, and the level change in this preview, then call again with the same input, the same idempotency key, and confirmed: true once they confirm."
+}
+
+func (e *dataExportLevelPreviewError) Unwrap() error { return ErrDataExportRequestInvalid }
 
 type dataExportLevelReceipt struct {
 	Outcome     string `json:"outcome"`
@@ -94,11 +124,11 @@ func (s *DataExportRouteToggleService) setMinSeverity(ctx context.Context, princ
 	}
 	// Authorized before any lookup, so a non-admin cannot tell real routes from invented ones.
 	if err := s.admin.RequireLiveOrgAdmin(ctx, principal); err != nil {
-		return SetDataExportMinSeverityOutput{}, dataExportToggleAdminError(err)
+		return SetDataExportMinSeverityOutput{}, dataExportAdminError(err, dataExportLevelUnavailable)
 	}
 	row, err := s.queries.ResolvePlatformMCPProjectByID(ctx, platformrepo.ResolvePlatformMCPProjectByIDParams{OrganizationID: principal.OrganizationID, ProjectID: projectID})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return SetDataExportMinSeverityOutput{}, dataExportToggleMissing()
+		return SetDataExportMinSeverityOutput{}, dataExportRouteMissing()
 	}
 	if err != nil {
 		return SetDataExportMinSeverityOutput{}, dataExportLevelUnavailable(fmt.Errorf("resolve data export route project: %w", err))
@@ -115,18 +145,18 @@ func (s *DataExportRouteToggleService) setMinSeverity(ctx context.Context, princ
 	charge := func(ctx context.Context) error {
 		if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
 			if errors.Is(err, ErrOperationRateLimited) {
-				return &DataExportToggleError{Code: "rate_limited", Message: "Changing data export levels was asked for too often just now. Try again shortly.", Cause: err}
+				return &DataExportRefusalError{Code: "rate_limited", Message: "Changing data export levels was asked for too often just now. Try again shortly.", Cause: err}
 			}
 			return dataExportLevelUnavailable(err)
 		}
 		return nil
 	}
-	receipt, err := executeChargedMutationReceipt(ctx, charge, mutationReceiptExecution[dataExportLevelReceipt]{
+	execution := mutationReceiptExecution[dataExportLevelReceipt]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: operationSetDataExportMinSeverity,
 		IdempotencyKey: key, InputHash: inputHash, Label: "data export " + operationSetDataExportMinSeverity,
 		Invalid: func(error) error { return dataExportLevelInvalid("The request is invalid.") },
 		Conflict: func(message string) error {
-			return &DataExportToggleError{Code: "conflict", Message: message, Cause: ErrDataExportToggleConflict}
+			return &DataExportRefusalError{Code: "conflict", Message: message, Cause: ErrDataExportToggleConflict}
 		},
 		Unavailable:    dataExportLevelUnavailable,
 		ValidateReplay: validDataExportLevelReceipt,
@@ -155,7 +185,20 @@ func (s *DataExportRouteToggleService) setMinSeverity(ctx context.Context, princ
 			}
 			return result, nil
 		},
-	})
+	}
+	if !input.Confirmed {
+		// A preview refuses the key the confirmed call would refuse, and it
+		// spends the same allowance, since it takes the same row lock and
+		// writes the same audit entry before rolling back. It stores nothing.
+		if err := checkPreviewReceipt(ctx, execution); err != nil {
+			return SetDataExportMinSeverityOutput{}, err
+		}
+		if err := charge(ctx); err != nil {
+			return SetDataExportMinSeverityOutput{}, err
+		}
+		return SetDataExportMinSeverityOutput{}, s.levelPreview(ctx, principal, project, routeID, level)
+	}
+	receipt, err := executeChargedMutationReceipt(ctx, charge, execution)
 	if err != nil {
 		return SetDataExportMinSeverityOutput{}, err
 	}
@@ -178,6 +221,46 @@ func (s *DataExportRouteToggleService) setMinSeverity(ctx context.Context, princ
 	return output, nil
 }
 
+// levelPreview returns a preview only when the confirmed write would succeed
+// now: it runs that write in a transaction it rolls back, so the preview and
+// the confirmed call refuse the same changes. Nothing is stored.
+func (s *DataExportRouteToggleService) levelPreview(ctx context.Context, principal Principal, project ResolvedProject, routeID uuid.UUID, level string) error {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return dataExportLevelUnavailable(fmt.Errorf("begin data export level preview: %w", err))
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	changed, err := s.level.SetMinSeverity(ctx, tx, dataexports.SetRouteMinSeverityParams{
+		OrganizationID:   principal.OrganizationID,
+		ProjectID:        project.ID,
+		RouteID:          routeID,
+		MinSeverity:      level,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
+		ActorDisplayName: nil,
+	})
+	if err != nil {
+		return classifyDataExportLevelError(err)
+	}
+	route := readRouteWith(ctx, tx, principal, project, routeID)
+	if route == nil {
+		return dataExportLevelUnavailable(errors.New("read data export route for level preview"))
+	}
+	// The read runs after the rolled-back write, so the level before it comes
+	// from the locked row.
+	route.MinSeverity = changed.Before
+	preview := DataExportLevelPreview{
+		Route:             *route,
+		MinSeverityBefore: changed.Before,
+		MinSeverityAfter:  changed.After,
+		Outcome:           dataExportOutcomeUnchanged,
+		TakesEffect:       dataExportLevelTakesEffect,
+	}
+	if changed.Changed {
+		preview.Outcome = dataExportOutcomeLevelChanged
+	}
+	return &dataExportLevelPreviewError{Preview: preview}
+}
+
 func validDataExportLevelReceipt(stored []byte) bool {
 	var result dataExportLevelReceipt
 	if json.Unmarshal(stored, &result) != nil {
@@ -187,16 +270,13 @@ func validDataExportLevelReceipt(stored []byte) bool {
 }
 
 func validateDataExportLevel(input SetDataExportMinSeverityInput) (uuid.UUID, uuid.UUID, string, string, error) {
-	if !input.Confirmed {
-		return uuid.Nil, uuid.Nil, "", "", &DataExportToggleError{Code: "confirmation_required", Message: "Show the user the exact project, route, its current level, and the new level, then ask them to confirm before changing it.", Cause: ErrDataExportToggleInvalid}
-	}
 	key := strings.TrimSpace(input.IdempotencyKey)
 	if key == "" || len(key) > 128 {
 		return uuid.Nil, uuid.Nil, "", "", dataExportLevelInvalid("Provide a stable idempotency key of at most 128 characters so retrying this exact change is safe.")
 	}
 	projectID, err := uuid.Parse(strings.TrimSpace(input.ProjectID))
 	if err != nil {
-		return uuid.Nil, uuid.Nil, "", "", dataExportLevelInvalid("Provide the explicit project ID that owns the route.")
+		return uuid.Nil, uuid.Nil, "", "", dataExportLevelInvalid("Provide the slug of the project that owns the route.")
 	}
 	routeID, err := uuid.Parse(strings.TrimSpace(input.RouteID))
 	if err != nil {
@@ -212,7 +292,7 @@ func validateDataExportLevel(input SetDataExportMinSeverityInput) (uuid.UUID, uu
 func classifyDataExportLevelError(err error) error {
 	switch {
 	case errors.Is(err, dataexports.ErrRouteNotFound):
-		return dataExportToggleMissing()
+		return dataExportRouteMissing()
 	case errors.Is(err, dataexports.ErrRouteMinSeverityInvalid):
 		return dataExportLevelInvalid("Only mcp_connection_logs routes have a level. Nothing was changed. Choose an mcp_connection_logs route from the current data export list.")
 	default:
@@ -221,13 +301,13 @@ func classifyDataExportLevelError(err error) error {
 }
 
 func dataExportLevelInvalid(message string) error {
-	return &DataExportToggleError{Code: "invalid_input", Message: message, Cause: ErrDataExportToggleInvalid}
+	return &DataExportRefusalError{Code: "invalid_input", Message: message, Cause: ErrDataExportRequestInvalid}
 }
 
 const dataExportLevelUnavailableMessage = "Changing data export levels is temporarily unavailable."
 
 func dataExportLevelUnavailable(cause error) error {
-	return &DataExportToggleError{Code: unavailableCode, Message: dataExportLevelUnavailableMessage, Cause: errors.Join(ErrUnavailable, cause)}
+	return &DataExportRefusalError{Code: unavailableCode, Message: dataExportLevelUnavailableMessage, Cause: errors.Join(ErrUnavailable, cause)}
 }
 
 // levelBoundaryError keeps database text from reaching the caller, like boundaryError.
@@ -238,7 +318,7 @@ func (s *DataExportRouteToggleService) levelBoundaryError(ctx context.Context, e
 	if _, ok := errors.AsType[*ExternalAuthorizationError](err); ok {
 		return err
 	}
-	refusal, ok := errors.AsType[*DataExportToggleError](err)
+	refusal, ok := errors.AsType[*DataExportRefusalError](err)
 	if ok && refusal.Code != unavailableCode {
 		return err
 	}
@@ -250,7 +330,7 @@ func (s *DataExportRouteToggleService) levelBoundaryError(ctx context.Context, e
 		s.logger.ErrorContext(ctx, "platform mcp data export "+operationSetDataExportMinSeverity+" failed", attr.SlogError(cause))
 	}
 	if ok {
-		return &DataExportToggleError{Code: unavailableCode, Message: dataExportLevelUnavailableMessage, Cause: refusal.Cause}
+		return &DataExportRefusalError{Code: unavailableCode, Message: dataExportLevelUnavailableMessage, Cause: refusal.Cause}
 	}
 	return dataExportLevelUnavailable(err)
 }

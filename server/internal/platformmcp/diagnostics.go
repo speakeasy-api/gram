@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Diagnostic projections intentionally omit documented optional fields.
+//nolint:exhaustruct_v5 // Diagnostic projections intentionally omit documented optional fields.
 package platformmcp
 
 import (
@@ -63,8 +63,8 @@ type DiagnosticsTelemetryReader interface {
 	GetSkillBreakdown(ctx context.Context, arg telemetryrepo.GetSkillBreakdownParams) ([]telemetryrepo.SkillBreakdownRow, error)
 }
 
-// CanonicalIdentityGate keeps Platform MCP user grouping under the same rollout
-// switch as the dashboard telemetry APIs.
+// CanonicalIdentityGate keeps Platform MCP user grouping folded the same way as
+// the dashboard telemetry APIs.
 type CanonicalIdentityGate interface {
 	CanonicalOrgFor(ctx context.Context, orgID string) string
 }
@@ -146,9 +146,8 @@ func (s *DiagnosticsService) WithAuthorization(engine *authz.Engine) *Diagnostic
 	return s
 }
 
-// WithCanonicalIdentityGate applies the telemetry service's rollout-aware
-// identity folding to user attribution without making the ClickHouse repository
-// responsible for feature flags.
+// WithCanonicalIdentityGate applies the telemetry service's identity folding
+// to user attribution.
 func (s *DiagnosticsService) WithCanonicalIdentityGate(gate CanonicalIdentityGate) *DiagnosticsService {
 	if s != nil {
 		s.identityGate = gate
@@ -196,7 +195,9 @@ func (s *DiagnosticsService) valid() bool {
 // filters: the overview is the entry point, and narrowing happens through the
 // drill-down tools once it has identified something to look at.
 type GetProjectOverviewInput struct {
-	ProjectID string `json:"project_id" jsonschema:"project ID to summarize"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h, 24h (default), 7d, or 30d"`
 }
 
@@ -239,7 +240,7 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 		return GetProjectOverviewOutput{}, ErrUnavailable
 	}
 	if input.ProjectID == "" {
-		return GetProjectOverviewOutput{}, fmt.Errorf("project_id is required")
+		return GetProjectOverviewOutput{}, fmt.Errorf("project_slug is required")
 	}
 	now := s.now()
 	window, err := resolveWindow(input.Window, now, overviewWindowSpec)
@@ -386,7 +387,9 @@ func overviewObserved(summary *telemetryrepo.OverviewSummary, activeServers int6
 // GetMCPDiagnosticsInput names one configured MCP, using the same identity
 // find_mcp and get_mcp return.
 type GetMCPDiagnosticsInput struct {
-	ProjectID string `json:"project_id" jsonschema:"project ID that owns the MCP"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID as returned by find_mcp or get_mcp"`
 	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h (default) or 24h"`
 }
@@ -449,7 +452,7 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 		return GetMCPDiagnosticsOutput{}, ErrUnavailable
 	}
 	if input.ProjectID == "" || input.MCPID == "" {
-		return GetMCPDiagnosticsOutput{}, fmt.Errorf("project_id and mcp_id are required")
+		return GetMCPDiagnosticsOutput{}, fmt.Errorf("project_slug and mcp_id are required")
 	}
 	now := s.now()
 	window, err := resolveWindow(input.Window, now, diagnosticsWindowSpec)

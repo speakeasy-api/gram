@@ -132,6 +132,11 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 
 	checks := []postflightCountCheck{
 		{
+			what:  "remote server tool metadata",
+			count: byProject(s.q.PostflightCountToolMetadata),
+			fail:  postflightMustEqual(inspectMetadataCount(), fmt.Sprintf("expected %d remote server tool metadata rows, found %%d", inspectMetadataCount())),
+		},
+		{
 			what: "paused Gemini connection without credentials",
 			count: func() (int64, error) {
 				return s.q.ActivityCountSafeGeminiComplianceConfig(ctx, repo.ActivityCountSafeGeminiComplianceConfigParams{OrganizationID: org, ProjectID: proj})
@@ -269,7 +274,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 				return s.q.PostflightCountKillswitchOverlappingActive(ctx, repo.PostflightCountKillswitchOverlappingActiveParams{
 					OrgID:        org,
 					PrincipalKey: s.userID(demoUsers[0].handle),
-					ResourceKey:  s.det("mcpserver-support").String(),
+					ResourceKey:  s.supportServer().String(),
 				})
 			},
 			fail: postflightMustEqual(2, "expected 2 overlapping active killswitches, found %d"),
@@ -451,7 +456,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "gateway members",
 			count: byProject(s.q.PostflightCountGatewayMembers),
-			fail:  postflightMustEqual(6, "expected 6 gateway members, found %d"),
+			fail:  postflightMustEqual(7, "expected 7 gateway members, found %d"),
 		},
 		{
 			what:  "removed gateway members",
@@ -471,12 +476,12 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "canonical wrappers",
 			count: byProject(s.q.PostflightCountCanonicalWrappers),
-			fail:  postflightMustEqual(4, "expected 4 canonical hosted MCP servers (support, ops, partner, discovery), found %d"),
+			fail:  postflightMustEqual(1, "expected 1 canonical hosted MCP server (the OpenAPI Server), found %d"),
 		},
 		{
 			what:  "gateway endpoints",
 			count: byProject(s.q.PostflightCountGatewayEndpoints),
-			fail:  postflightMustEqual(2, "expected 2 gateway endpoints, found %d"),
+			fail:  postflightMustEqual(3, "expected 3 gateway endpoints, found %d"),
 		},
 		// A member whose server lost its backend can never be dispatched to,
 		// so it would sit in the gateway's table permanently unavailable.
@@ -484,11 +489,6 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			what:  "unservable gateway members",
 			count: byProject(s.q.PostflightCountUnservableGatewayMembers),
 			fail:  postflightMustBeZero("%d gateway members are not servable"),
-		},
-		{
-			what:  "tunnel endpoints",
-			count: byProject(s.q.PostflightCountTunnelEndpoints),
-			fail:  postflightMustEqual(1, "expected 1 private tunnel endpoint, found %d"),
 		},
 		{
 			what: "active session quarantines",

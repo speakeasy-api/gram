@@ -729,6 +729,12 @@ type StartMemoryEvalRunRequestBody struct {
 	Config *AdminMemoryEvalRunConfigRequestBody `form:"config,omitempty" json:"config,omitempty" xml:"config,omitempty"`
 }
 
+// RepairOrganizationAssistantAgentNamesRequestBody is the type of the "admin"
+// service "repairOrganizationAssistantAgentNames" endpoint HTTP request body.
+type RepairOrganizationAssistantAgentNamesRequestBody struct {
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+}
+
 // MigrateOrganizationAssistantIdentitiesRequestBody is the type of the "admin"
 // service "migrateOrganizationAssistantIdentities" endpoint HTTP request body.
 type MigrateOrganizationAssistantIdentitiesRequestBody struct {
@@ -816,6 +822,14 @@ type GetOrganizationFeaturesResponseBody struct {
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent bool `form:"device_agent" json:"device_agent" xml:"device_agent"`
+	// Whether this deployment can run assistants. A deployment-wide setting, not
+	// an organization entitlement: false when the deployment runs with the
+	// disabled assistant runtime provider. Absent from staff admin responses.
+	AssistantsAvailable *bool `form:"assistants_available,omitempty" json:"assistants_available,omitempty" xml:"assistants_available,omitempty"`
+	// Whether this deployment can run Speakeasy Functions. A deployment-wide
+	// setting, not an organization entitlement: false when the deployment runs
+	// with the disabled Functions provider. Absent from staff admin responses.
+	FunctionsAvailable *bool `form:"functions_available,omitempty" json:"functions_available,omitempty" xml:"functions_available,omitempty"`
 	// Whether upstream auth enforcement is on for the organization. Absent when
 	// the state could not be read. Staff change it through the admin enforcement
 	// endpoint.
@@ -885,6 +899,14 @@ type SetOrganizationProviderSetupResponseBody struct {
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent bool `form:"device_agent" json:"device_agent" xml:"device_agent"`
+	// Whether this deployment can run assistants. A deployment-wide setting, not
+	// an organization entitlement: false when the deployment runs with the
+	// disabled assistant runtime provider. Absent from staff admin responses.
+	AssistantsAvailable *bool `form:"assistants_available,omitempty" json:"assistants_available,omitempty" xml:"assistants_available,omitempty"`
+	// Whether this deployment can run Speakeasy Functions. A deployment-wide
+	// setting, not an organization entitlement: false when the deployment runs
+	// with the disabled Functions provider. Absent from staff admin responses.
+	FunctionsAvailable *bool `form:"functions_available,omitempty" json:"functions_available,omitempty" xml:"functions_available,omitempty"`
 	// Whether upstream auth enforcement is on for the organization. Absent when
 	// the state could not be read. Staff change it through the admin enforcement
 	// endpoint.
@@ -954,6 +976,14 @@ type SetOrganizationFeatureResponseBody struct {
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent bool `form:"device_agent" json:"device_agent" xml:"device_agent"`
+	// Whether this deployment can run assistants. A deployment-wide setting, not
+	// an organization entitlement: false when the deployment runs with the
+	// disabled assistant runtime provider. Absent from staff admin responses.
+	AssistantsAvailable *bool `form:"assistants_available,omitempty" json:"assistants_available,omitempty" xml:"assistants_available,omitempty"`
+	// Whether this deployment can run Speakeasy Functions. A deployment-wide
+	// setting, not an organization entitlement: false when the deployment runs
+	// with the disabled Functions provider. Absent from staff admin responses.
+	FunctionsAvailable *bool `form:"functions_available,omitempty" json:"functions_available,omitempty" xml:"functions_available,omitempty"`
 	// Whether upstream auth enforcement is on for the organization. Absent when
 	// the state could not be read. Staff change it through the admin enforcement
 	// endpoint.
@@ -3178,8 +3208,6 @@ type GetProjectRedeployPreviewResponseBody struct {
 	FunctionAssets int `form:"function_assets" json:"function_assets" xml:"function_assets"`
 	// Packages carried into the new deployment.
 	Packages int `form:"packages" json:"packages" xml:"packages"`
-	// External MCP sources the new deployment would drop.
-	ExternalMcps int `form:"external_mcps" json:"external_mcps" xml:"external_mcps"`
 }
 
 // RedeployProjectResponseBody is the type of the "admin" service
@@ -3365,6 +3393,22 @@ type StartMemoryEvalRunResponseBody struct {
 	StartedAt  *string `form:"started_at,omitempty" json:"started_at,omitempty" xml:"started_at,omitempty"`
 	FinishedAt *string `form:"finished_at,omitempty" json:"finished_at,omitempty" xml:"finished_at,omitempty"`
 	CreatedAt  string  `form:"created_at" json:"created_at" xml:"created_at"`
+}
+
+// ListAssistantOrganizationsResponseBody is the type of the "admin" service
+// "listAssistantOrganizations" endpoint HTTP response body.
+type ListAssistantOrganizationsResponseBody struct {
+	Organizations []*AdminAssistantOrganizationResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
+}
+
+// RepairOrganizationAssistantAgentNamesResponseBody is the type of the "admin"
+// service "repairOrganizationAssistantAgentNames" endpoint HTTP response body.
+type RepairOrganizationAssistantAgentNamesResponseBody struct {
+	OrganizationID string                                             `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	Repaired       int64                                              `form:"repaired" json:"repaired" xml:"repaired"`
+	Conflicts      int64                                              `form:"conflicts" json:"conflicts" xml:"conflicts"`
+	Failed         int64                                              `form:"failed" json:"failed" xml:"failed"`
+	Results        []*AdminAssistantAgentNameRepairResultResponseBody `form:"results" json:"results" xml:"results"`
 }
 
 // ListOrganizationAssistantsResponseBody is the type of the "admin" service
@@ -26228,6 +26272,386 @@ type StartMemoryEvalRunGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListAssistantOrganizationsUnauthorizedResponseBody is the type of the
+// "admin" service "listAssistantOrganizations" endpoint HTTP response body for
+// the "unauthorized" error.
+type ListAssistantOrganizationsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAssistantOrganizationsForbiddenResponseBody is the type of the "admin"
+// service "listAssistantOrganizations" endpoint HTTP response body for the
+// "forbidden" error.
+type ListAssistantOrganizationsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAssistantOrganizationsBadRequestResponseBody is the type of the "admin"
+// service "listAssistantOrganizations" endpoint HTTP response body for the
+// "bad_request" error.
+type ListAssistantOrganizationsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAssistantOrganizationsNotFoundResponseBody is the type of the "admin"
+// service "listAssistantOrganizations" endpoint HTTP response body for the
+// "not_found" error.
+type ListAssistantOrganizationsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAssistantOrganizationsConflictResponseBody is the type of the "admin"
+// service "listAssistantOrganizations" endpoint HTTP response body for the
+// "conflict" error.
+type ListAssistantOrganizationsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAssistantOrganizationsUnsupportedMediaResponseBody is the type of the
+// "admin" service "listAssistantOrganizations" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ListAssistantOrganizationsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAssistantOrganizationsInvalidResponseBody is the type of the "admin"
+// service "listAssistantOrganizations" endpoint HTTP response body for the
+// "invalid" error.
+type ListAssistantOrganizationsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAssistantOrganizationsInvariantViolationResponseBody is the type of the
+// "admin" service "listAssistantOrganizations" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ListAssistantOrganizationsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAssistantOrganizationsUnexpectedResponseBody is the type of the "admin"
+// service "listAssistantOrganizations" endpoint HTTP response body for the
+// "unexpected" error.
+type ListAssistantOrganizationsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAssistantOrganizationsGatewayErrorResponseBody is the type of the
+// "admin" service "listAssistantOrganizations" endpoint HTTP response body for
+// the "gateway_error" error.
+type ListAssistantOrganizationsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairOrganizationAssistantAgentNamesUnauthorizedResponseBody is the type of
+// the "admin" service "repairOrganizationAssistantAgentNames" endpoint HTTP
+// response body for the "unauthorized" error.
+type RepairOrganizationAssistantAgentNamesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairOrganizationAssistantAgentNamesForbiddenResponseBody is the type of
+// the "admin" service "repairOrganizationAssistantAgentNames" endpoint HTTP
+// response body for the "forbidden" error.
+type RepairOrganizationAssistantAgentNamesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairOrganizationAssistantAgentNamesBadRequestResponseBody is the type of
+// the "admin" service "repairOrganizationAssistantAgentNames" endpoint HTTP
+// response body for the "bad_request" error.
+type RepairOrganizationAssistantAgentNamesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairOrganizationAssistantAgentNamesNotFoundResponseBody is the type of the
+// "admin" service "repairOrganizationAssistantAgentNames" endpoint HTTP
+// response body for the "not_found" error.
+type RepairOrganizationAssistantAgentNamesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairOrganizationAssistantAgentNamesConflictResponseBody is the type of the
+// "admin" service "repairOrganizationAssistantAgentNames" endpoint HTTP
+// response body for the "conflict" error.
+type RepairOrganizationAssistantAgentNamesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairOrganizationAssistantAgentNamesUnsupportedMediaResponseBody is the
+// type of the "admin" service "repairOrganizationAssistantAgentNames" endpoint
+// HTTP response body for the "unsupported_media" error.
+type RepairOrganizationAssistantAgentNamesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairOrganizationAssistantAgentNamesInvalidResponseBody is the type of the
+// "admin" service "repairOrganizationAssistantAgentNames" endpoint HTTP
+// response body for the "invalid" error.
+type RepairOrganizationAssistantAgentNamesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairOrganizationAssistantAgentNamesInvariantViolationResponseBody is the
+// type of the "admin" service "repairOrganizationAssistantAgentNames" endpoint
+// HTTP response body for the "invariant_violation" error.
+type RepairOrganizationAssistantAgentNamesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairOrganizationAssistantAgentNamesUnexpectedResponseBody is the type of
+// the "admin" service "repairOrganizationAssistantAgentNames" endpoint HTTP
+// response body for the "unexpected" error.
+type RepairOrganizationAssistantAgentNamesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairOrganizationAssistantAgentNamesGatewayErrorResponseBody is the type of
+// the "admin" service "repairOrganizationAssistantAgentNames" endpoint HTTP
+// response body for the "gateway_error" error.
+type RepairOrganizationAssistantAgentNamesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListOrganizationAssistantsUnauthorizedResponseBody is the type of the
 // "admin" service "listOrganizationAssistants" endpoint HTTP response body for
 // the "unauthorized" error.
@@ -28486,6 +28910,24 @@ type AdminMemoryEvalRunResponseBody struct {
 	CreatedAt  string  `form:"created_at" json:"created_at" xml:"created_at"`
 }
 
+// AdminAssistantOrganizationResponseBody is used to define fields on response
+// body types.
+type AdminAssistantOrganizationResponseBody struct {
+	ID         string `form:"id" json:"id" xml:"id"`
+	Name       string `form:"name" json:"name" xml:"name"`
+	Slug       string `form:"slug" json:"slug" xml:"slug"`
+	Assistants int64  `form:"assistants" json:"assistants" xml:"assistants"`
+}
+
+// AdminAssistantAgentNameRepairResultResponseBody is used to define fields on
+// response body types.
+type AdminAssistantAgentNameRepairResultResponseBody struct {
+	AssistantID string `form:"assistant_id" json:"assistant_id" xml:"assistant_id"`
+	ProjectID   string `form:"project_id" json:"project_id" xml:"project_id"`
+	Name        string `form:"name" json:"name" xml:"name"`
+	Outcome     string `form:"outcome" json:"outcome" xml:"outcome"`
+}
+
 // AdminOrganizationAssistantResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationAssistantResponseBody struct {
@@ -28505,6 +28947,10 @@ type AdminOrganizationAssistantResponseBody struct {
 	// its owner, ACTIVE when its dedicated agent is usable, and UNAVAILABLE when
 	// that agent is suspended, revoked, or deleted.
 	IdentityState string `form:"identity_state" json:"identity_state" xml:"identity_state"`
+	// The live bound agent name, when available.
+	AgentName *string `form:"agent_name,omitempty" json:"agent_name,omitempty" xml:"agent_name,omitempty"`
+	// Whether the exact legacy generated agent name needs repair.
+	AgentNameRepairState string `form:"agent_name_repair_state" json:"agent_name_repair_state" xml:"agent_name_repair_state"`
 	// The dedicated agent, when the assistant has one.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
 	// The assistant's selected runtime: 2 for the default runtime, 3 for Kit.
@@ -28635,6 +29081,8 @@ func NewGetOrganizationFeaturesResponseBody(res *adminviews.ProductFeaturesView)
 		OrganizationGatewayDisabled:             *res.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         *res.CodeModeEnabled,
 		DeviceAgent:                             *res.DeviceAgent,
+		AssistantsAvailable:                     res.AssistantsAvailable,
+		FunctionsAvailable:                      res.FunctionsAvailable,
 		UpstreamAuthEnforced:                    res.UpstreamAuthEnforced,
 	}
 	return body
@@ -28668,6 +29116,8 @@ func NewSetOrganizationProviderSetupResponseBody(res *adminviews.ProductFeatures
 		OrganizationGatewayDisabled:             *res.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         *res.CodeModeEnabled,
 		DeviceAgent:                             *res.DeviceAgent,
+		AssistantsAvailable:                     res.AssistantsAvailable,
+		FunctionsAvailable:                      res.FunctionsAvailable,
 		UpstreamAuthEnforced:                    res.UpstreamAuthEnforced,
 	}
 	return body
@@ -28700,6 +29150,8 @@ func NewSetOrganizationFeatureResponseBody(res *adminviews.ProductFeaturesView) 
 		OrganizationGatewayDisabled:             *res.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         *res.CodeModeEnabled,
 		DeviceAgent:                             *res.DeviceAgent,
+		AssistantsAvailable:                     res.AssistantsAvailable,
+		FunctionsAvailable:                      res.FunctionsAvailable,
 		UpstreamAuthEnforced:                    res.UpstreamAuthEnforced,
 	}
 	return body
@@ -31391,7 +31843,6 @@ func NewGetProjectRedeployPreviewResponseBody(res *admin.AdminProjectRedeployPre
 		OpenapiAssets:      res.OpenapiAssets,
 		FunctionAssets:     res.FunctionAssets,
 		Packages:           res.Packages,
-		ExternalMcps:       res.ExternalMcps,
 	}
 	return body
 }
@@ -31594,6 +32045,51 @@ func NewStartMemoryEvalRunResponseBody(res *admin.AdminMemoryEvalRun) *StartMemo
 	}
 	if res.Config != nil {
 		body.Config = marshalAdminAdminMemoryEvalRunConfigToAdminMemoryEvalRunConfigResponseBody(res.Config)
+	}
+	return body
+}
+
+// NewListAssistantOrganizationsResponseBody builds the HTTP response body from
+// the result of the "listAssistantOrganizations" endpoint of the "admin"
+// service.
+func NewListAssistantOrganizationsResponseBody(res *admin.AdminAssistantOrganizations) *ListAssistantOrganizationsResponseBody {
+	body := &ListAssistantOrganizationsResponseBody{}
+	if res.Organizations != nil {
+		body.Organizations = make([]*AdminAssistantOrganizationResponseBody, len(res.Organizations))
+		for i, val := range res.Organizations {
+			if val == nil {
+				body.Organizations[i] = nil
+				continue
+			}
+			body.Organizations[i] = marshalAdminAdminAssistantOrganizationToAdminAssistantOrganizationResponseBody(val)
+		}
+	} else {
+		body.Organizations = []*AdminAssistantOrganizationResponseBody{}
+	}
+	return body
+}
+
+// NewRepairOrganizationAssistantAgentNamesResponseBody builds the HTTP
+// response body from the result of the "repairOrganizationAssistantAgentNames"
+// endpoint of the "admin" service.
+func NewRepairOrganizationAssistantAgentNamesResponseBody(res *admin.AdminAssistantAgentNameRepairRun) *RepairOrganizationAssistantAgentNamesResponseBody {
+	body := &RepairOrganizationAssistantAgentNamesResponseBody{
+		OrganizationID: res.OrganizationID,
+		Repaired:       res.Repaired,
+		Conflicts:      res.Conflicts,
+		Failed:         res.Failed,
+	}
+	if res.Results != nil {
+		body.Results = make([]*AdminAssistantAgentNameRepairResultResponseBody, len(res.Results))
+		for i, val := range res.Results {
+			if val == nil {
+				body.Results[i] = nil
+				continue
+			}
+			body.Results[i] = marshalAdminAdminAssistantAgentNameRepairResultToAdminAssistantAgentNameRepairResultResponseBody(val)
+		}
+	} else {
+		body.Results = []*AdminAssistantAgentNameRepairResultResponseBody{}
 	}
 	return body
 }
@@ -49574,6 +50070,306 @@ func NewStartMemoryEvalRunGatewayErrorResponseBody(res *goa.ServiceError) *Start
 	return body
 }
 
+// NewListAssistantOrganizationsUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "listAssistantOrganizations" endpoint
+// of the "admin" service.
+func NewListAssistantOrganizationsUnauthorizedResponseBody(res *goa.ServiceError) *ListAssistantOrganizationsUnauthorizedResponseBody {
+	body := &ListAssistantOrganizationsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAssistantOrganizationsForbiddenResponseBody builds the HTTP response
+// body from the result of the "listAssistantOrganizations" endpoint of the
+// "admin" service.
+func NewListAssistantOrganizationsForbiddenResponseBody(res *goa.ServiceError) *ListAssistantOrganizationsForbiddenResponseBody {
+	body := &ListAssistantOrganizationsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAssistantOrganizationsBadRequestResponseBody builds the HTTP response
+// body from the result of the "listAssistantOrganizations" endpoint of the
+// "admin" service.
+func NewListAssistantOrganizationsBadRequestResponseBody(res *goa.ServiceError) *ListAssistantOrganizationsBadRequestResponseBody {
+	body := &ListAssistantOrganizationsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAssistantOrganizationsNotFoundResponseBody builds the HTTP response
+// body from the result of the "listAssistantOrganizations" endpoint of the
+// "admin" service.
+func NewListAssistantOrganizationsNotFoundResponseBody(res *goa.ServiceError) *ListAssistantOrganizationsNotFoundResponseBody {
+	body := &ListAssistantOrganizationsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAssistantOrganizationsConflictResponseBody builds the HTTP response
+// body from the result of the "listAssistantOrganizations" endpoint of the
+// "admin" service.
+func NewListAssistantOrganizationsConflictResponseBody(res *goa.ServiceError) *ListAssistantOrganizationsConflictResponseBody {
+	body := &ListAssistantOrganizationsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAssistantOrganizationsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listAssistantOrganizations" endpoint
+// of the "admin" service.
+func NewListAssistantOrganizationsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListAssistantOrganizationsUnsupportedMediaResponseBody {
+	body := &ListAssistantOrganizationsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAssistantOrganizationsInvalidResponseBody builds the HTTP response
+// body from the result of the "listAssistantOrganizations" endpoint of the
+// "admin" service.
+func NewListAssistantOrganizationsInvalidResponseBody(res *goa.ServiceError) *ListAssistantOrganizationsInvalidResponseBody {
+	body := &ListAssistantOrganizationsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAssistantOrganizationsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listAssistantOrganizations" endpoint
+// of the "admin" service.
+func NewListAssistantOrganizationsInvariantViolationResponseBody(res *goa.ServiceError) *ListAssistantOrganizationsInvariantViolationResponseBody {
+	body := &ListAssistantOrganizationsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAssistantOrganizationsUnexpectedResponseBody builds the HTTP response
+// body from the result of the "listAssistantOrganizations" endpoint of the
+// "admin" service.
+func NewListAssistantOrganizationsUnexpectedResponseBody(res *goa.ServiceError) *ListAssistantOrganizationsUnexpectedResponseBody {
+	body := &ListAssistantOrganizationsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAssistantOrganizationsGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "listAssistantOrganizations" endpoint
+// of the "admin" service.
+func NewListAssistantOrganizationsGatewayErrorResponseBody(res *goa.ServiceError) *ListAssistantOrganizationsGatewayErrorResponseBody {
+	body := &ListAssistantOrganizationsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairOrganizationAssistantAgentNamesUnauthorizedResponseBody builds the
+// HTTP response body from the result of the
+// "repairOrganizationAssistantAgentNames" endpoint of the "admin" service.
+func NewRepairOrganizationAssistantAgentNamesUnauthorizedResponseBody(res *goa.ServiceError) *RepairOrganizationAssistantAgentNamesUnauthorizedResponseBody {
+	body := &RepairOrganizationAssistantAgentNamesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairOrganizationAssistantAgentNamesForbiddenResponseBody builds the
+// HTTP response body from the result of the
+// "repairOrganizationAssistantAgentNames" endpoint of the "admin" service.
+func NewRepairOrganizationAssistantAgentNamesForbiddenResponseBody(res *goa.ServiceError) *RepairOrganizationAssistantAgentNamesForbiddenResponseBody {
+	body := &RepairOrganizationAssistantAgentNamesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairOrganizationAssistantAgentNamesBadRequestResponseBody builds the
+// HTTP response body from the result of the
+// "repairOrganizationAssistantAgentNames" endpoint of the "admin" service.
+func NewRepairOrganizationAssistantAgentNamesBadRequestResponseBody(res *goa.ServiceError) *RepairOrganizationAssistantAgentNamesBadRequestResponseBody {
+	body := &RepairOrganizationAssistantAgentNamesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairOrganizationAssistantAgentNamesNotFoundResponseBody builds the HTTP
+// response body from the result of the "repairOrganizationAssistantAgentNames"
+// endpoint of the "admin" service.
+func NewRepairOrganizationAssistantAgentNamesNotFoundResponseBody(res *goa.ServiceError) *RepairOrganizationAssistantAgentNamesNotFoundResponseBody {
+	body := &RepairOrganizationAssistantAgentNamesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairOrganizationAssistantAgentNamesConflictResponseBody builds the HTTP
+// response body from the result of the "repairOrganizationAssistantAgentNames"
+// endpoint of the "admin" service.
+func NewRepairOrganizationAssistantAgentNamesConflictResponseBody(res *goa.ServiceError) *RepairOrganizationAssistantAgentNamesConflictResponseBody {
+	body := &RepairOrganizationAssistantAgentNamesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairOrganizationAssistantAgentNamesUnsupportedMediaResponseBody builds
+// the HTTP response body from the result of the
+// "repairOrganizationAssistantAgentNames" endpoint of the "admin" service.
+func NewRepairOrganizationAssistantAgentNamesUnsupportedMediaResponseBody(res *goa.ServiceError) *RepairOrganizationAssistantAgentNamesUnsupportedMediaResponseBody {
+	body := &RepairOrganizationAssistantAgentNamesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairOrganizationAssistantAgentNamesInvalidResponseBody builds the HTTP
+// response body from the result of the "repairOrganizationAssistantAgentNames"
+// endpoint of the "admin" service.
+func NewRepairOrganizationAssistantAgentNamesInvalidResponseBody(res *goa.ServiceError) *RepairOrganizationAssistantAgentNamesInvalidResponseBody {
+	body := &RepairOrganizationAssistantAgentNamesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairOrganizationAssistantAgentNamesInvariantViolationResponseBody
+// builds the HTTP response body from the result of the
+// "repairOrganizationAssistantAgentNames" endpoint of the "admin" service.
+func NewRepairOrganizationAssistantAgentNamesInvariantViolationResponseBody(res *goa.ServiceError) *RepairOrganizationAssistantAgentNamesInvariantViolationResponseBody {
+	body := &RepairOrganizationAssistantAgentNamesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairOrganizationAssistantAgentNamesUnexpectedResponseBody builds the
+// HTTP response body from the result of the
+// "repairOrganizationAssistantAgentNames" endpoint of the "admin" service.
+func NewRepairOrganizationAssistantAgentNamesUnexpectedResponseBody(res *goa.ServiceError) *RepairOrganizationAssistantAgentNamesUnexpectedResponseBody {
+	body := &RepairOrganizationAssistantAgentNamesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairOrganizationAssistantAgentNamesGatewayErrorResponseBody builds the
+// HTTP response body from the result of the
+// "repairOrganizationAssistantAgentNames" endpoint of the "admin" service.
+func NewRepairOrganizationAssistantAgentNamesGatewayErrorResponseBody(res *goa.ServiceError) *RepairOrganizationAssistantAgentNamesGatewayErrorResponseBody {
+	body := &RepairOrganizationAssistantAgentNamesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListOrganizationAssistantsUnauthorizedResponseBody builds the HTTP
 // response body from the result of the "listOrganizationAssistants" endpoint
 // of the "admin" service.
@@ -51600,6 +52396,26 @@ func NewStartMemoryEvalRunPayload(body *StartMemoryEvalRunRequestBody, adminSess
 	return v
 }
 
+// NewListAssistantOrganizationsPayload builds a admin service
+// listAssistantOrganizations endpoint payload.
+func NewListAssistantOrganizationsPayload(adminSessionToken *string) *admin.ListAssistantOrganizationsPayload {
+	v := &admin.ListAssistantOrganizationsPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewRepairOrganizationAssistantAgentNamesPayload builds a admin service
+// repairOrganizationAssistantAgentNames endpoint payload.
+func NewRepairOrganizationAssistantAgentNamesPayload(body *RepairOrganizationAssistantAgentNamesRequestBody, adminSessionToken *string) *admin.RepairOrganizationAssistantAgentNamesPayload {
+	v := &admin.RepairOrganizationAssistantAgentNamesPayload{
+		OrganizationID: *body.OrganizationID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // NewListOrganizationAssistantsPayload builds a admin service
 // listOrganizationAssistants endpoint payload.
 func NewListOrganizationAssistantsPayload(organizationID string, adminSessionToken *string) *admin.ListOrganizationAssistantsPayload {
@@ -52707,6 +53523,15 @@ func ValidateStartMemoryEvalRunRequestBody(body *StartMemoryEvalRunRequestBody) 
 		if err2 := ValidateAdminMemoryEvalRunConfigRequestBody(body.Config); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
+	}
+	return
+}
+
+// ValidateRepairOrganizationAssistantAgentNamesRequestBody runs the
+// validations defined on RepairOrganizationAssistantAgentNamesRequestBody
+func ValidateRepairOrganizationAssistantAgentNamesRequestBody(body *RepairOrganizationAssistantAgentNamesRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
 	}
 	return
 }

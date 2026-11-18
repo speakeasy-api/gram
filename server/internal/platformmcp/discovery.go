@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP SDK and Code Mode types deliberately rely on documented zero-value defaults.
+//nolint:exhaustruct_v5 // MCP SDK and Code Mode types deliberately rely on documented zero-value defaults.
 package platformmcp
 
 import (
@@ -287,8 +287,8 @@ func (r *Runtime) instructionBudget(logger *slog.Logger) func(context.Context) i
 // discoveryInstructions replace the full server instructions, which Codex cuts
 // to 1 KB. Tool-specific rules travel with describe_platform_tool instead.
 func discoveryInstructions(mode discoveryMode) string {
-	instructions := "Speakeasy's AI Control Plane lets an administrator put MCP servers and skills in front of the people in their organization, and manage access, logs, analytics, risk signals, exports, dashboards and Organizational Memory (team decisions). This connection lists the tools most people use first; call them directly. Before saying something can't be done, find the tool with search_platform_tools in plain words, then describe_platform_tool and call_platform_tool. Answer how-to questions with search_speakeasy_docs and cite its pages. " +
-		"Write tools preview first: show the user what will change and wait for explicit confirmation before calling again with confirmed set. Never request or accept tokens, passwords or secrets in chat. Do not read tool names, IDs or error codes aloud."
+	instructions := "Speakeasy's AI Control Plane lets an administrator put MCP servers and skills in front of the people in their organization, and manage access, logs, analytics, risk signals, exports, dashboards and Organizational Memory (team decisions). Call the listed tools directly. Before saying something can't be done, find the tool with search_platform_tools in plain words, then describe_platform_tool and call_platform_tool. Answer how-to questions with search_speakeasy_docs and cite its pages. " +
+		"Writes: call with confirmed:false first, even if the user agreed, and show the preview; send confirmed:true only after the user approves it. Never request or accept tokens, passwords or secrets in chat. Do not read tool names, IDs or error codes aloud."
 	if mode == discoveryCode {
 		instructions += " For multi-step work, execute runs Python that can search, describe and call every tool as platform--<tool name>."
 	}

@@ -648,13 +648,13 @@ func buildTestMCPService(
 		tracerProvider,
 		conn,
 		chConn,
+		chConn,
 		sessionManager,
 		chatSessions,
 		logsEnabled,
 		sessionCaptureEnabled,
 		posthog,
 		authzEngine,
-		nil,
 	)
 
 	var temporalEnv *temporal.Environment

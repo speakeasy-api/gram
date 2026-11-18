@@ -1,3 +1,5 @@
+import { InlineEmptyState } from "@/components/inline-empty-state";
+import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";
 import { enforcementOutcomeLabel } from "@/pages/security/risk-outcome";
@@ -60,15 +62,28 @@ export function ServerRiskEvents({
           Loading risk events…
         </Text>
       ) : eventsQuery.isError ? (
-        <Text small className="text-destructive">
-          {eventsQuery.error.message}
-        </Text>
-      ) : events.length === 0 ? (
-        <div className="border-border border border-dashed p-6 text-center">
-          <Text small muted>
-            No risk events on this server yet.
-          </Text>
+        <div role="alert">
+          <InlineEmptyState
+            icon="triangle-alert"
+            heading="Couldn't load risk events"
+            description="Check your connection, then try again."
+            action={
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void eventsQuery.refetch()}
+              >
+                <Button.Text>Retry</Button.Text>
+              </Button>
+            }
+          />
         </div>
+      ) : events.length === 0 ? (
+        <InlineEmptyState
+          icon="shield-check"
+          heading="No risk events on this server"
+          description="When a guardrail flags or blocks a tool call here, it shows up in this list."
+        />
       ) : (
         <div className="border-border divide-border divide-y border">
           {events.map((event) => {

@@ -199,7 +199,7 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	if err != nil {
 		return nil, err
 	}
-	return detailed.Result, nil
+	return s.withVersionStatus(ctx, detailed.Result), nil
 }
 
 func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *AuthenticatedIngestResult, err error) {
@@ -305,6 +305,16 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 		// cached copy refreshes on this exchange like any other.
 		if !s.isHookDuplicate(ctx) {
 			s.recordDeliveryFailure(context.WithoutCancel(ctx), payload, authCtx, actor, replayed)
+		}
+		return &AuthenticatedIngestResult{
+			Result: s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalAllowResult(), nil),
+			Actor:  ResolvedActor(actor),
+		}, nil
+	}
+
+	if isInstallFailureReport(payload) {
+		if !s.isHookDuplicate(ctx) {
+			s.recordInstallFailure(context.WithoutCancel(ctx), payload, authCtx, actor)
 		}
 		return &AuthenticatedIngestResult{
 			Result: s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalAllowResult(), nil),
@@ -651,7 +661,10 @@ func validateCanonicalIngestPayload(payload *gen.IngestPayload) error {
 	if strings.TrimSpace(payload.SchemaVersion) != hookIngestSchemaV1 {
 		return oops.E(oops.CodeInvalid, nil, "unsupported hook schema_version")
 	}
-	return validateDeliveryFailurePayload(payload)
+	if err := validateDeliveryFailurePayload(payload); err != nil {
+		return err
+	}
+	return validateInstallFailurePayload(payload)
 }
 
 func isReservedServerAdapter(adapter string) bool {
@@ -1295,6 +1308,13 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 		GramOrgID:           authCtx.ActiveOrganizationID,
 		ProjectID:           authCtx.ProjectID.String(),
 	}
+	// A Cowork event names its surface itself. The relay skips SessionStart
+	// inside the Cowork VM and sends the generic "claude" adapter slug, so
+	// without this the session reads as Claude Code until Claude's OTEL
+	// stream reaches the server, while its transcript rows say cowork.
+	if fromCowork(payload) {
+		metadata.ServiceName = agentVariantCowork
+	}
 	if metadata.SessionID == "" {
 		return metadata
 	}
@@ -1306,8 +1326,9 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 		}
 		// Surface-specificity merge: the OTEL path caches "cowork" from the
 		// resource service.name, which must survive this event's re-cache —
-		// cowork ships the same "claude-code-desktop" adapter slug as Claude
-		// Code Desktop, so the adapter alone can never downgrade it. See
+		// Cowork events from the desktop hook client carry no session.surface
+		// and ship the same "claude-code-desktop" adapter slug as Claude Code
+		// Desktop, so the adapter alone can never downgrade it. See
 		// claudeServiceNameSpecificity for the full ranking.
 		metadata.ServiceName = preferClaudeServiceName(metadata.ServiceName, cached.ServiceName)
 		metadata.Provider = cached.Provider

@@ -14,6 +14,10 @@ vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => false }),
 }));
 
+vi.mock("@/hooks/useScopeCatalogue", () => ({
+  useScopeCatalogue: () => ({ catalogue: new Map(), tasks: [] }),
+}));
+
 vi.mock("@gram/client/react-query/requestAccess.js", () => ({
   useRequestAccessMutation: () => ({
     mutateAsync: requestAccess.mutateAsync,

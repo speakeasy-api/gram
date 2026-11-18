@@ -2092,13 +2092,6 @@ WHERE candidates.indexed IS NULL
             AND definitions.deleted IS FALSE
       )
   )
-  -- An external MCP URN resolves to no tool definition, so a version that still
-  -- selects one has tools the index could never cover.
-  AND NOT EXISTS (
-      SELECT 1
-      FROM unnest(candidates.tool_urns) selected(tool_urn)
-      WHERE selected.tool_urn LIKE 'tools:externalmcp:%'
-  )
 ORDER BY hashtextextended(candidates.id::text, $1), candidates.id
 LIMIT $2
 `

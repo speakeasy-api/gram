@@ -120,6 +120,7 @@ async function $do(
     "cursor": payload?.cursor,
     "gateway_id": payload?.gateway_id,
     "limit": payload?.limit,
+    "project_id": payload?.project_id,
     "provider_id": payload?.provider_id,
     "search": payload?.search,
     "server_id": payload?.server_id,

@@ -71,6 +71,11 @@ type Service struct {
 	projects     *projectsRepo.Queries
 	repo         *repo.Queries
 	audit        *audit.Logger
+
+	// functionsAvailable is whether this deployment can run Functions. It
+	// comes from the Functions provider, so it is the same for every
+	// organization.
+	functionsAvailable bool
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -91,6 +96,7 @@ func NewService(
 	jwtSecret string,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	functionsAvailable bool,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("assets"))
 
@@ -107,6 +113,8 @@ func NewService(
 		projects:       projectsRepo.New(db),
 		repo:           repo.New(db),
 		audit:          auditLogger,
+
+		functionsAvailable: functionsAvailable,
 	}
 }
 
@@ -353,6 +361,13 @@ func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFuncti
 	}
 
 	logger := s.logger
+
+	// Refused before the body is read, so a disabled deployment never buffers
+	// an archive it cannot run. The message matches functions.ErrFunctionsDisabled,
+	// which this package cannot import because functions imports assets.
+	if !s.functionsAvailable {
+		return nil, oops.E(oops.CodeNotImplemented, nil, "functions are not available on this deployment").LogWarn(ctx, logger)
+	}
 
 	result, err := s.downloadPendingAsset(ctx, reader, &downloadAuthorizedAssetParams{
 		maxLength:     MaxFileSizeFunctions,

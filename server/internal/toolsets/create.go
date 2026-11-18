@@ -1,4 +1,4 @@
-//nolint:exhaustruct // The audit actor carries only the identity a toolset creation records.
+//nolint:exhaustruct_v5 // The audit actor carries only the identity a toolset creation records.
 package toolsets
 
 import (
@@ -260,8 +260,6 @@ func ensureGeneratedMcpSlug(ctx context.Context, dbtx pgx.Tx, logger *slog.Logge
 			Slug:                     slug,
 			CustomDomainID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			OrganizationID:           orgID,
-			ExcludeToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			ExcludeMcpServerID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			SkipDomainOwnershipCheck: false,
 		})
 		if err != nil {

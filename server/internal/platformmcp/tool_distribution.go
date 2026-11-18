@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP SDK manifests intentionally rely on documented zero-value optional fields.
+//nolint:exhaustruct_v5 // MCP SDK manifests intentionally rely on documented zero-value optional fields.
 package platformmcp
 
 import (
@@ -12,7 +12,7 @@ import (
 )
 
 type DistributeMCPToolInput struct {
-	ProjectSlug string `json:"project_slug" jsonschema:"explicit project slug selected by the user"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	MCPID       string `json:"mcp_id" jsonschema:"exact MCP server ID in that project, as returned by find_mcp or get_mcp; there is no implicit default"`
 	Plugin      string `json:"plugin" jsonschema:"exact existing plugin in the project, by ID, slug, or name, as returned by list_plugins; there is no implicit default"`
 }

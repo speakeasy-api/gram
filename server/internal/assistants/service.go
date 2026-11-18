@@ -189,6 +189,27 @@ func (s *ServiceCore) configuredIdleExpiringBackends() []string {
 	return backends
 }
 
+// RuntimeAvailable reports whether this deployment can admit new assistant
+// runtimes. It is false when the process runs with the disabled runtime
+// provider; callers that would start, drive, or schedule runtime work check it
+// up front and report ErrRuntimeDisabled.
+func (s *ServiceCore) RuntimeAvailable() bool {
+	return s.runtime.Backend() != RuntimeProviderDisabled
+}
+
+// RuntimeHasBackends reports whether any runtime backend is reachable from
+// this process. Every other provider requires its target backend, so this
+// differs from RuntimeAvailable only for the disabled provider: a deployment
+// switched to disabled while a GKE cluster or the local backend is still
+// configured keeps reaping the rows those backends own, and one with no
+// backend at all has no runtime sweep to run.
+func (s *ServiceCore) RuntimeHasBackends() bool {
+	if s.RuntimeAvailable() {
+		return true
+	}
+	return s.runtime.SupportsBackend(runtimeBackendGKE) || s.runtime.SupportsBackend(runtimeBackendLocal)
+}
+
 func assistantValidationError(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", errAssistantValidation, fmt.Sprintf(format, args...))
 }
@@ -273,6 +294,7 @@ type assistantMCPServerRow struct {
 	Visibility             string
 	EndpointSlug           string
 	EndpointDomain         string // custom-domain host; "" for platform endpoints
+	EndpointIsDomainRoot   bool   // the endpoint serves at its custom domain's root
 	DefaultEnvironmentSlug pgtype.Text
 	EnvironmentID          uuid.NullUUID
 	EnvironmentSlug        pgtype.Text
@@ -740,6 +762,9 @@ type ReapStuckRuntimesResult struct {
 // than locks so a live turn is never interrupted.
 func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesResult, error) {
 	var out ReapStuckRuntimesResult
+	if !s.RuntimeHasBackends() {
+		return out, nil
+	}
 	var errs []error
 	now := time.Now().UTC()
 	affected := map[uuid.UUID]struct{}{}
@@ -1083,21 +1108,10 @@ func (s *ServiceCore) resolveToolsetRefsForWrite(
 	if len(toolsetSlugs) == 0 {
 		return nil, nil
 	}
-	var aliasCandidates []uuid.UUID
-	for _, row := range toolsetRows {
-		if row.DisabledWrapper && !row.EnablesMcp {
-			aliasCandidates = append(aliasCandidates, row.ID)
-		}
-	}
-	// A disabled hosted server with only its legacy alias still serves once enabled.
-	aliased, err := hasLegacyAlias(ctx, tx, projectID, aliasCandidates)
-	if err != nil {
-		return nil, err
-	}
 	enablesMCP := map[uuid.UUID]bool{}
 	for _, row := range toolsetRows {
 		toolsetIDs[row.Slug] = row.ID
-		enablesMCP[row.ID] = row.EnablesMcp || aliased[row.ID]
+		enablesMCP[row.ID] = row.EnablesMcp
 	}
 	for _, slug := range toolsetSlugs {
 		if _, ok := toolsetIDs[slug]; !ok {
@@ -1309,7 +1323,7 @@ func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uui
 	if len(assistantIDs) == 0 {
 		return out, nil
 	}
-	rows, err := loadAssistantMcpServers(ctx, s.db, assistantrepo.LoadAssistantMcpServersParams{
+	rows, err := assistantrepo.New(s.db).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{
 		AssistantIds: assistantIDs,
 		ProjectID:    projectID,
 	})
@@ -1324,6 +1338,7 @@ func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uui
 			Visibility:             row.Visibility,
 			EndpointSlug:           row.EndpointSlug,
 			EndpointDomain:         row.EndpointDomain,
+			EndpointIsDomainRoot:   row.EndpointIsDomainRoot,
 			DefaultEnvironmentSlug: row.DefaultEnvironmentSlug,
 			EnvironmentID:          row.EnvironmentID,
 			EnvironmentSlug:        row.EnvironmentSlug,
@@ -1962,7 +1977,7 @@ func (s *ServiceCore) UpdateAssistant(
 			checkKitAttachments = checkKitAttachments || runtime.RuntimeVersion == 3
 		}
 		if checkKitAttachments {
-			kitAttachmentsBefore, err = loadAssistantMcpServers(ctx, tx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: projectID, AssistantIds: []uuid.UUID{assistantID}})
+			kitAttachmentsBefore, err = assistantrepo.New(tx).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: projectID, AssistantIds: []uuid.UUID{assistantID}})
 			if err != nil {
 				return assistantRecord{}, fmt.Errorf("read Kit attachments before edit: %w", err)
 			}
@@ -2032,7 +2047,7 @@ func (s *ServiceCore) UpdateAssistant(
 	}
 
 	if checkKitAttachments {
-		after, err := loadAssistantMcpServers(ctx, tx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: projectID, AssistantIds: []uuid.UUID{assistantID}})
+		after, err := assistantrepo.New(tx).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: projectID, AssistantIds: []uuid.UUID{assistantID}})
 		if err != nil {
 			return assistantRecord{}, fmt.Errorf("read Kit attachments after edit: %w", err)
 		}
@@ -2234,6 +2249,9 @@ type ReapInactiveAssistantRuntimesParams struct {
 // never an orphan candidate: inactivity alone does not discard its workspace.
 // The sweep also collects stopped rows on superseded backends and retired Kit rows.
 func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params ReapInactiveAssistantRuntimesParams) (ReapAssistantRuntimesResult, error) {
+	if !s.RuntimeHasBackends() {
+		return ReapAssistantRuntimesResult{Reaped: 0, Errors: 0}, nil
+	}
 	if params.InactivityThreshold <= 0 {
 		return ReapAssistantRuntimesResult{}, fmt.Errorf("inactivity threshold must be positive")
 	}
@@ -2295,6 +2313,9 @@ type ReapStoppedAssistantRuntimesParams struct {
 // sibling activity on the same assistant. Each backend tears down the
 // stopped runtime resource before its row is marked reaped.
 func (s *ServiceCore) ReapStoppedAssistantRuntimes(ctx context.Context, params ReapStoppedAssistantRuntimesParams) (ReapAssistantRuntimesResult, error) {
+	if !s.RuntimeHasBackends() {
+		return ReapAssistantRuntimesResult{Reaped: 0, Errors: 0}, nil
+	}
 	if params.StoppedTTL <= 0 {
 		return ReapAssistantRuntimesResult{}, fmt.Errorf("stopped TTL must be positive")
 	}
@@ -2388,6 +2409,9 @@ type RecycleAssistantRuntimeImagesParams struct {
 // inactivity janitor to reap it, so without this sweep it would stay on its
 // admission-time image across deploys indefinitely.
 func (s *ServiceCore) RecycleActiveRuntimeImages(ctx context.Context, params RecycleAssistantRuntimeImagesParams) (RecycleAssistantRuntimeImagesResult, error) {
+	if !s.RuntimeAvailable() {
+		return RecycleAssistantRuntimeImagesResult{Recycled: 0, Skipped: 0, Errors: 0}, nil
+	}
 	queries := assistantrepo.New(s.db)
 	rows, err := queries.ListActiveAssistantRuntimes(ctx, runtimeStateActive)
 	if err != nil {
@@ -2572,6 +2596,15 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	assistantID, err := uuid.Parse(task.TargetRef)
 	if err != nil {
 		return EnqueueResult{}, fmt.Errorf("parse assistant id: %w", err)
+	}
+	if !s.RuntimeAvailable() {
+		// Nothing could ever run the task, so retrying won't help: drop it so
+		// the activity succeeds instead of spending its retry budget.
+		s.logger.WarnContext(ctx, "skipping trigger dispatch: assistants are not available on this deployment",
+			attr.SlogAssistantID(assistantID.String()),
+			attr.SlogTriggerInstanceID(task.TriggerInstanceID),
+		)
+		return EnqueueResult{AssistantID: uuid.Nil, ThreadID: uuid.Nil, ShouldSignal: false}, nil
 	}
 	assistant, err := s.getAssistantForDispatch(ctx, assistantID)
 	switch {
@@ -2909,6 +2942,15 @@ func (s *ServiceCore) AdmitPendingThreads(ctx context.Context, assistantID uuid.
 		return AdmitPendingThreadsResult{}, err
 	}
 	if assistant.Status != StatusActive {
+		return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
+	}
+	if !s.RuntimeAvailable() {
+		// Pending events stay pending rather than failing, so they run if the
+		// deployment turns assistants back on. Returning an error would only
+		// burn the coordinator's retries.
+		s.logger.WarnContext(ctx, "skipping assistant admission: assistants are not available on this deployment",
+			attr.SlogAssistantID(assistantID.String()),
+		)
 		return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
 	}
 
@@ -4064,9 +4106,12 @@ func unreachableReason(m assistantMCPServerRow) string {
 	return "disabled"
 }
 
-// endpointURL is the server's own MCP address; platform endpoints live under base.
-// Platform-first selection (not endpointaddr.PrimaryEndpoint) keeps existing URLs stable.
+// endpointURL is the server's own MCP address; platform endpoints live under base. A hosted row's domain root is the
+// bare domain, as endpointaddr.EndpointURL renders it; other rows keep /mcp/{slug} so configured Kit resources match.
 func (m assistantMCPServerRow) endpointURL(base *url.URL) *url.URL {
+	if m.EndpointDomain != "" && m.EndpointIsDomainRoot && m.ToolsetSlug.Valid {
+		return &url.URL{Scheme: "https", Host: m.EndpointDomain}
+	}
 	if m.EndpointDomain != "" {
 		return (&url.URL{Scheme: "https", Host: m.EndpointDomain}).JoinPath("mcp", m.EndpointSlug)
 	}

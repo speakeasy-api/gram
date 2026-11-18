@@ -2335,28 +2335,6 @@ func (q *Queries) GetPlatformMCPCatalogRegistrationForLifecycle(ctx context.Cont
 	return i, err
 }
 
-const getPlatformMCPCatalogRegistrationProject = `-- name: GetPlatformMCPCatalogRegistrationProject :one
-SELECT project_id
-FROM platform_mcp_catalog_registrations
-WHERE id = $1
-  AND organization_id = $2
-  AND deleted IS FALSE
-`
-
-type GetPlatformMCPCatalogRegistrationProjectParams struct {
-	ID             uuid.UUID
-	OrganizationID string
-}
-
-// The project a live registration belongs to, so a caller can name the
-// server it added by registration ID alone.
-func (q *Queries) GetPlatformMCPCatalogRegistrationProject(ctx context.Context, arg GetPlatformMCPCatalogRegistrationProjectParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, getPlatformMCPCatalogRegistrationProject, arg.ID, arg.OrganizationID)
-	var project_id uuid.UUID
-	err := row.Scan(&project_id)
-	return project_id, err
-}
-
 const getPlatformMCPConnectionForUpdate = `-- name: GetPlatformMCPConnectionForUpdate :one
 SELECT connection.id, connection.organization_id, connection.subject_urn, connection.oauth_client_id, connection.active_generation, connection.authorized_at, connection.reauthorized_at, connection.authorization_expires_at, connection.reauthorization_required_at, connection.reauthorization_reason, connection.revoked_at, connection.created_at, connection.updated_at, client.client_id, client.revoked_at AS client_revoked_at
 FROM platform_mcp_connections AS connection
@@ -3199,6 +3177,7 @@ SELECT
     p.description,
     p.auto_created,
     p.auto_sync_enabled,
+    p.auto_add_servers_enabled,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (
@@ -3263,6 +3242,7 @@ type GetPlatformMCPPluginInventoryItemRow struct {
 	Description             pgtype.Text
 	AutoCreated             bool
 	AutoSyncEnabled         pgtype.Bool
+	AutoAddServersEnabled   bool
 	IsDefault               bool
 	ServerCount             int64
 	SkillCount              int64
@@ -3283,6 +3263,7 @@ func (q *Queries) GetPlatformMCPPluginInventoryItem(ctx context.Context, arg Get
 		&i.Description,
 		&i.AutoCreated,
 		&i.AutoSyncEnabled,
+		&i.AutoAddServersEnabled,
 		&i.IsDefault,
 		&i.ServerCount,
 		&i.SkillCount,
@@ -3713,6 +3694,96 @@ func (q *Queries) GetPlatformMCPServer(ctx context.Context, arg GetPlatformMCPSe
 		&i.Slug,
 		&i.Visibility,
 	)
+	return i, err
+}
+
+const getPlatformMCPServerProject = `-- name: GetPlatformMCPServerProject :one
+SELECT m.project_id
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = $1
+ AND project.deleted IS FALSE
+WHERE m.id = $2
+  AND m.deleted IS FALSE
+`
+
+type GetPlatformMCPServerProjectParams struct {
+	OrganizationID string
+	McpServerID    uuid.UUID
+}
+
+// The live project a live MCP server belongs to, so a caller can name a
+// server by its ID alone.
+func (q *Queries) GetPlatformMCPServerProject(ctx context.Context, arg GetPlatformMCPServerProjectParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPServerProject, arg.OrganizationID, arg.McpServerID)
+	var project_id uuid.UUID
+	err := row.Scan(&project_id)
+	return project_id, err
+}
+
+const getPlatformMCPServerRegistrationForCaller = `-- name: GetPlatformMCPServerRegistrationForCaller :one
+SELECT
+    m.id AS mcp_server_id,
+    COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
+    COALESCE(
+        registration.user_id = $1
+        OR (registration.user_id IS NULL AND created_connection.subject_urn = $2),
+        FALSE
+    )::boolean AS added_by_caller
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = $3
+ AND project.deleted IS FALSE
+LEFT JOIN LATERAL (
+    SELECT registration.id, registration.user_id, registration.connection_id
+    FROM platform_mcp_catalog_registrations AS registration
+    WHERE registration.organization_id = $3
+      AND registration.project_id = m.project_id
+      AND registration.mcp_server_id = m.id
+      AND registration.deleted IS FALSE
+    ORDER BY registration.created_at DESC, registration.id DESC
+    LIMIT 1
+) AS registration ON TRUE
+LEFT JOIN platform_mcp_connections AS created_connection
+  ON created_connection.id = registration.connection_id
+ AND created_connection.organization_id = $3
+WHERE m.id = $4
+  AND m.project_id = $5
+  AND m.deleted IS FALSE
+`
+
+type GetPlatformMCPServerRegistrationForCallerParams struct {
+	UserID         pgtype.Text
+	SubjectUrn     string
+	OrganizationID string
+	McpServerID    uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+type GetPlatformMCPServerRegistrationForCallerRow struct {
+	McpServerID    uuid.UUID
+	RegistrationID uuid.UUID
+	AddedByCaller  bool
+}
+
+// The Platform setup record behind an MCP server named by its ID: the newest
+// live registration of that server, as GetPlatformMCPInventoryItem picks it.
+// registration_id is the nil UUID when the server was not added through
+// Platform setup. added_by_caller applies the same ownership rule as
+// GetPlatformMCPCatalogRegistrationForLifecycle, so a refusal can say the
+// server belongs to another member instead of calling it unknown.
+func (q *Queries) GetPlatformMCPServerRegistrationForCaller(ctx context.Context, arg GetPlatformMCPServerRegistrationForCallerParams) (GetPlatformMCPServerRegistrationForCallerRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPServerRegistrationForCaller,
+		arg.UserID,
+		arg.SubjectUrn,
+		arg.OrganizationID,
+		arg.McpServerID,
+		arg.ProjectID,
+	)
+	var i GetPlatformMCPServerRegistrationForCallerRow
+	err := row.Scan(&i.McpServerID, &i.RegistrationID, &i.AddedByCaller)
 	return i, err
 }
 
@@ -6224,6 +6295,7 @@ SELECT
     p.description,
     p.auto_created,
     p.auto_sync_enabled,
+    p.auto_add_servers_enabled,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (
@@ -6292,6 +6364,7 @@ type ListPlatformMCPPluginInventoryRow struct {
 	Description             pgtype.Text
 	AutoCreated             bool
 	AutoSyncEnabled         pgtype.Bool
+	AutoAddServersEnabled   bool
 	IsDefault               bool
 	ServerCount             int64
 	SkillCount              int64
@@ -6332,6 +6405,7 @@ func (q *Queries) ListPlatformMCPPluginInventory(ctx context.Context, arg ListPl
 			&i.Description,
 			&i.AutoCreated,
 			&i.AutoSyncEnabled,
+			&i.AutoAddServersEnabled,
 			&i.IsDefault,
 			&i.ServerCount,
 			&i.SkillCount,
@@ -6371,8 +6445,6 @@ SELECT
     COALESCE(ps.mcp_server_id, ps.meta_mcp_server_id) AS target_id,
     (COALESCE(t.id, s.id, gateway.id) IS NOT NULL)::boolean AS target_resolved,
     COALESCE(ep.slug, gateway_ep.slug, '')::text AS mcp_slug,
-    -- legacyalias: drop with AIM-670.
-    t.id AS alias_toolset_id,
     COALESCE(s.visibility <> 'disabled', gateway.visibility <> 'disabled', FALSE)::boolean AS enabled,
     membership_version.value AS membership_version
 FROM plugin_servers ps
@@ -6439,7 +6511,6 @@ type ListPlatformMCPPluginMembershipsRow struct {
 	TargetID          uuid.NullUUID
 	TargetResolved    bool
 	McpSlug           string
-	AliasToolsetID    uuid.NullUUID
 	Enabled           bool
 	MembershipVersion string
 }
@@ -6475,7 +6546,6 @@ func (q *Queries) ListPlatformMCPPluginMemberships(ctx context.Context, arg List
 			&i.TargetID,
 			&i.TargetResolved,
 			&i.McpSlug,
-			&i.AliasToolsetID,
 			&i.Enabled,
 			&i.MembershipVersion,
 		); err != nil {
@@ -6497,8 +6567,6 @@ SELECT
     ps.sort_order,
     (ps.meta_mcp_server_id IS NOT NULL)::boolean AS gateway_backed,
     COALESCE(ep.slug, gateway_ep.slug, '')::text AS mcp_slug,
-    -- legacyalias: drop with AIM-670.
-    t.id AS alias_toolset_id,
     COALESCE(s.visibility <> 'disabled', gateway.visibility <> 'disabled', FALSE)::boolean AS enabled
 FROM plugin_servers ps
 JOIN plugins p
@@ -6508,10 +6576,6 @@ LEFT JOIN mcp_servers s
   ON s.id = ps.mcp_server_id
   AND s.project_id = p.project_id
   AND s.deleted IS FALSE
-LEFT JOIN toolsets t
-  ON t.id = (CASE WHEN s.toolset_id = s.id THEN s.id END)
-  AND t.project_id = p.project_id
-  AND t.deleted IS FALSE
 LEFT JOIN meta_mcp_servers gateway
   ON gateway.id = ps.meta_mcp_server_id
   AND gateway.project_id = p.project_id
@@ -6546,20 +6610,17 @@ type ListPlatformMCPPluginServersParams struct {
 }
 
 type ListPlatformMCPPluginServersRow struct {
-	ID             uuid.UUID
-	DisplayName    string
-	Policy         string
-	SortOrder      int32
-	GatewayBacked  bool
-	McpSlug        string
-	AliasToolsetID uuid.NullUUID
-	Enabled        bool
+	ID            uuid.UUID
+	DisplayName   string
+	Policy        string
+	SortOrder     int32
+	GatewayBacked bool
+	McpSlug       string
+	Enabled       bool
 }
 
 // Member-facing compatibility projection. It deliberately omits membership and
 // backend IDs, which are administrative identity and must not cross this path.
-// A canonical wrapper with no endpoint falls back to its toolset's legacy alias,
-// which the caller reads through legacyalias for alias_toolset_id.
 func (q *Queries) ListPlatformMCPPluginServers(ctx context.Context, arg ListPlatformMCPPluginServersParams) ([]ListPlatformMCPPluginServersRow, error) {
 	rows, err := q.db.Query(ctx, listPlatformMCPPluginServers,
 		arg.PluginID,
@@ -6581,7 +6642,6 @@ func (q *Queries) ListPlatformMCPPluginServers(ctx context.Context, arg ListPlat
 			&i.SortOrder,
 			&i.GatewayBacked,
 			&i.McpSlug,
-			&i.AliasToolsetID,
 			&i.Enabled,
 		); err != nil {
 			return nil, err

@@ -1,4 +1,3 @@
-import { MCPToolsetIcon } from "@/components/mcp/MCPToolsetIcon";
 import { SourceMcpIcon } from "@/components/sources/SourceCard";
 import { McpEntityCard } from "@/components/mcp/McpEntityCard";
 import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
@@ -72,7 +71,7 @@ import { Stack } from "@/components/ui/Stack";
 import { Switch } from "@/components/ui/Switch";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { Trash2 } from "lucide-react";
+import { Network, Trash2 } from "lucide-react";
 import {
   Fragment,
   useCallback,
@@ -528,6 +527,48 @@ function PluginDetailContent({
     });
   };
 
+  const autoAddServersMutation = useUpdatePluginMutation({
+    onSuccess: (updated) => {
+      void invalidateAll();
+      const enabled = updated.autoAddServersEnabled;
+      const message = enabled
+        ? "Automatic MCP servers turned on"
+        : "Automatic MCP servers turned off";
+      // Turning it on can add servers, so say where those changes go, like any
+      // other content edit. Turning it off changes no servers.
+      if (enabled && publishStatus?.configured) {
+        offerPublish(message);
+        return;
+      }
+      toast.success(message, {
+        description: enabled
+          ? "Added the MCP servers this plugin's roles can use. Access changes now update the list."
+          : "The server list now changes only when someone edits it.",
+      });
+    },
+    onError: (error) => {
+      handleError(error, { title: "Couldn't change automatic MCP servers" });
+    },
+  });
+
+  // Sends the plugin's current details back unchanged, like the auto sync
+  // switch, so only this setting changes.
+  const handleAutoAddServersChange = (enabled: boolean) => {
+    if (!canPublish) return;
+    autoAddServersMutation.mutate({
+      security: { sessionHeaderGramSession: "" },
+      request: {
+        updatePluginForm: {
+          id: pluginId!,
+          name: plugin.name,
+          slug: plugin.slug,
+          description: plugin.description || undefined,
+          autoAddServersEnabled: enabled,
+        },
+      },
+    });
+  };
+
   const handleDelete = () => {
     if (!canPublish) return;
     deleteMutation.mutate({
@@ -672,11 +713,7 @@ function PluginDetailContent({
         value: serverOptionKey(o.kind, o.id),
         label: o.name,
         icon: toolset ? (
-          <MCPToolsetIcon
-            toolset={toolset}
-            className="size-6 shrink-0"
-            fallbackClassName="size-6"
-          />
+          <Network className="text-muted-foreground size-6 shrink-0" />
         ) : (
           <SourceMcpIcon
             mcpServerId={o.id}
@@ -1094,6 +1131,34 @@ function PluginDetailContent({
                 </SettingsSection.Panel>
               </SettingsSection>
 
+              <SettingsSection>
+                <SettingsSection.Header>
+                  <SettingsSection.Title>MCP servers</SettingsSection.Title>
+                </SettingsSection.Header>
+                <SettingsSection.Panel>
+                  <SettingsSection.Body>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <Label id="plugin-auto-add-servers-label">
+                          Add MCP servers automatically
+                        </Label>
+                        <Text small muted className="max-w-xl">
+                          {plugin.autoAddServersEnabled
+                            ? "Role and access changes add or remove this plugin's MCP servers, including when you share it with a new role. Turning this off keeps the current list."
+                            : "Only people who edit this plugin change its MCP servers. Turning this on adds the servers this plugin's roles can use now, then keeps the list in step with role and access changes."}
+                        </Text>
+                      </div>
+                      <Switch
+                        aria-labelledby="plugin-auto-add-servers-label"
+                        checked={plugin.autoAddServersEnabled === true}
+                        onCheckedChange={handleAutoAddServersChange}
+                        disabled={autoAddServersMutation.isPending}
+                      />
+                    </div>
+                  </SettingsSection.Body>
+                </SettingsSection.Panel>
+              </SettingsSection>
+
               <DangerSettingsSection>
                 <DangerSettingsSection.Header>
                   <DangerSettingsSection.Title>
@@ -1413,6 +1478,7 @@ export function PluginInstallControl({
               name: plugin.name,
               slug: plugin.slug,
               description: plugin.description,
+              agentPluginsV1Compatible: plugin.agentPluginsV1Compatible,
             },
           ]}
         />
@@ -1560,7 +1626,7 @@ function PluginServerCard({
       onClick={isClickable ? handleClick : undefined}
       icon={
         toolset ? (
-          <MCPToolsetIcon toolset={toolset} />
+          <Network className="text-muted-foreground h-8 w-8" />
         ) : (
           <SourceMcpIcon
             mcpServerId={server.mcpServerId}

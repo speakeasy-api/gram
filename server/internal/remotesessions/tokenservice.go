@@ -53,6 +53,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urls"
@@ -624,6 +625,35 @@ func requiredServerClients(ctx context.Context, q *remotesessions_repo.Queries, 
 	return own, association, nil
 }
 
+// BoundUserSessionIssuerClients lists the clients bound to userSessionIssuerID
+// that serving admits for a server in projectID. A hosted server resolves
+// every one of them; a proxied server narrows them with RequiredServerClients.
+// It reads through dbtx, so a caller holding a transaction sees its own
+// uncommitted writes.
+func BoundUserSessionIssuerClients(ctx context.Context, dbtx remotesessions_repo.DBTX, organizationID string, projectID, userSessionIssuerID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := listRemoteSessionClientRows(ctx, dbtx, projectID, organizationID, userSessionIssuerID, false)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]uuid.UUID, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.ClientID)
+	}
+	return ids, nil
+}
+
+// RequiredServerClients reports which of boundClientIDs, the clients
+// BoundUserSessionIssuerClients lists for the server's project, a proxied MCP
+// server's callers need, by the rule serving applies. It reads through dbtx,
+// so a caller holding a transaction sees its own uncommitted writes.
+func RequiredServerClients(ctx context.Context, dbtx remotesessions_repo.DBTX, organizationID string, userSessionIssuerID, mcpServerID uuid.UUID, boundClientIDs []uuid.UUID) ([]uuid.UUID, error) {
+	required, _, err := requiredServerClients(ctx, remotesessions_repo.New(dbtx), organizationID, userSessionIssuerID, mcpServerID, boundClientIDs)
+	if err != nil {
+		return nil, err
+	}
+	return required, nil
+}
+
 // clientUnclaimed reports that nothing says whether a bound client is the
 // configured server's: it has no association, no other server has one, and the
 // server has not explicitly detached it.
@@ -761,6 +791,39 @@ func (m *ChallengeManager) ResolveClientAccessTokens(
 		return nil, ErrChosenClientUnbound
 	}
 	return m.resolveClientTokens(ctx, attribution, lookupSignIn, projectID, organizationID, userSessionIssuerID, subject, chosen, skipUnusable)
+}
+
+// ResolveAssociatedAccessTokens resolves the caller's credentials for the
+// clients associated with one MCP server, with the per-client behavior of
+// ResolveAccessTokens, or of ResolveAvailableAccessTokens when skipUnusable
+// is set. Only associated clients the user session issuer still binds for the
+// project are resolved, since the caller signs in to them through it. Clients
+// the issuer binds for other servers are never resolved, so they cannot
+// collide with this server's credentials.
+func (m *ChallengeManager) ResolveAssociatedAccessTokens(
+	ctx context.Context,
+	attribution RefreshAttribution,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	subject urn.SessionSubject,
+	associatedClientIDs map[uuid.UUID]bool,
+	skipUnusable bool,
+) (map[uuid.UUID]UpstreamToken, error) {
+	if len(associatedClientIDs) == 0 {
+		return nil, nil
+	}
+	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, false)
+	if err != nil {
+		return nil, fmt.Errorf("list remote_session_clients: %w", err)
+	}
+	clients = slices.DeleteFunc(clients, func(c remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow) bool {
+		return !associatedClientIDs[c.ClientID]
+	})
+	if len(clients) == 0 {
+		return nil, nil
+	}
+	return m.resolveClientTokens(ctx, attribution, lookupSignIn, projectID, organizationID, userSessionIssuerID, subject, clients, skipUnusable)
 }
 
 func (m *ChallengeManager) resolveBoundAccessTokens(
@@ -1321,10 +1384,15 @@ func (s *RefreshService) refreshSessionTokens(
 	}
 
 	var clientSecret string
-	if client.ClientSecretEncrypted.Valid && client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
-		clientSecret, err = s.enc.Decrypt(client.ClientSecretEncrypted.String)
-		if err != nil {
+	if stored := clientsecrets.Stored(client.ClientSecretEncrypted, client.ClientSecretOrgEncrypted); clientsecrets.Has(stored) && client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
+		clientSecret, err = s.secrets.Open(ctx, nil, clientsecrets.OwnerOf(client.ClientOrganizationID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}), stored)
+		switch {
+		case clientsecrets.IsUnreadable(err):
 			return zero, noToken, newTokenRefreshError("the client secret could not be read; check the issuer's configuration", err, refreshRemedyAdministrator)
+		case err != nil:
+			// The grant is intact; the client secret only could not be opened
+			// right now, so the user is never asked to sign in again.
+			return zero, noToken, newTokenRefreshError("the client secret could not be opened right now; try again shortly", err, refreshRemedyRetry)
 		}
 	}
 
@@ -1532,7 +1600,7 @@ func (s *RefreshService) restateIdentity(
 	needsIdentity := identity == nil && (!sess.IdentitySource.Valid || slices.Contains(overwritableIdentitySources(IdentitySourceJWTAccessToken), sess.IdentitySource.String))
 	needsScope := !tok.ScopeReported()
 	if s.enricher != nil && !idTokenRejected && (needsIdentity || needsScope) {
-		target := enrichmentTargetFromClient(client, "")
+		target := enrichmentTargetFromClient(client, "", s.secrets)
 		target.resource = conv.FromPGTextOrEmpty[string](sess.Resource)
 		access = s.enricher.jwtAccessToken(ctx, target, tok.AccessToken)
 		s.enricher.rejectJWTForOtherSubject(ctx, target, &access, previousSubject)

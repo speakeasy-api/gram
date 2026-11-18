@@ -65,10 +65,6 @@ type Client struct {
 	// removeOAuthServer endpoint.
 	RemoveOAuthServerDoer goahttp.Doer
 
-	// SetUserSessionIssuer Doer is the HTTP client used to make requests to the
-	// setUserSessionIssuer endpoint.
-	SetUserSessionIssuerDoer goahttp.Doer
-
 	// SetToolVariationsGroup Doer is the HTTP client used to make requests to the
 	// setToolVariationsGroup endpoint.
 	SetToolVariationsGroupDoer goahttp.Doer
@@ -105,7 +101,6 @@ func NewClient(
 		AddExternalOAuthServerDoer:     doer,
 		UpdateExternalOAuthServerDoer:  doer,
 		RemoveOAuthServerDoer:          doer,
-		SetUserSessionIssuerDoer:       doer,
 		SetToolVariationsGroupDoer:     doer,
 		RestoreResponseBody:            restoreBody,
 		scheme:                         scheme,
@@ -398,30 +393,6 @@ func (c *Client) RemoveOAuthServer() goa.Endpoint {
 		resp, err := c.RemoveOAuthServerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("toolsets", "removeOAuthServer", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// SetUserSessionIssuer returns an endpoint that makes HTTP requests to the
-// toolsets service setUserSessionIssuer server.
-func (c *Client) SetUserSessionIssuer() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeSetUserSessionIssuerRequest(c.encoder)
-		decodeResponse = DecodeSetUserSessionIssuerResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildSetUserSessionIssuerRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.SetUserSessionIssuerDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("toolsets", "setUserSessionIssuer", err)
 		}
 		return decodeResponse(resp)
 	}

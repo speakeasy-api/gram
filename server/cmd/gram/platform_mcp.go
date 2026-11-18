@@ -1,4 +1,4 @@
-//nolint:exhaustruct,wrapcheck // Composition intentionally relies on documented optional zero values.
+//nolint:exhaustruct_v5,wrapcheck // Composition intentionally relies on documented optional zero values.
 package gram
 
 import (
@@ -122,6 +122,8 @@ type platformMCPConfig struct {
 	AccessRoles            access.RoleProvider
 	PluginPublisher        *plugins.Service
 	PluginManagement       *plugins.Service
+	// DataExportRouteTests is shared with the dashboard, so both spend the same allowances.
+	DataExportRouteTests *dataexports.RouteTestCore
 	// DirectoryReview backs the directory review tools with the dashboard's
 	// access service, so they share its authorization, checks and audit.
 	DirectoryReview        platformmcp.DirectoryReviewBackend
@@ -151,6 +153,9 @@ type platformMCPConfig struct {
 	// CodeModeAvailable lets gateway connection settings report whether Code
 	// Mode is served. Nil reports it unavailable.
 	CodeModeAvailable platformmcp.CodeModeAvailability
+	// FunctionsDisabled is true when the deployment runs with the disabled
+	// Functions provider, so creating an MCP server from functions refuses.
+	FunctionsDisabled bool
 	// CodeExecutor runs Platform MCP execute programs for connections the
 	// discovery flag serves Code Mode. Nil keeps Code Mode unavailable.
 	CodeExecutor codemode.Executor
@@ -561,6 +566,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithCustomDomainTargetSuffix(config.CustomDomainTargetSuffix).
 		WithCodeModeAvailability(config.CodeModeAvailable).
+		WithFunctionsDisabled(config.FunctionsDisabled).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithInternalSessionIssuer(config.IssuerGate).
 		WithInboundEMATrust(config.InboundEMAUserIssuers, config.InboundEMARemoteIssuers).
@@ -571,6 +577,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithDataExportRouteToggle(newPlatformMCPDataExportRouteToggle(config, authorizer, limitStore)).
+		WithDataExportTestEvent(platformmcp.NewDataExportTestEventService(config.Logger, config.DB, config.DataExportRouteTests, authorizer)).
 		WithCanonicalIdentityGate(config.CanonicalIdentity).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
 		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).
@@ -688,8 +695,7 @@ func withPlatformMCPSkills(runtime *platformmcp.Runtime, config platformMCPConfi
 // success would report them unavailable whenever an unrelated Shadow MCP
 // dependency is missing. Callers attach the two independently.
 func attachShadowInventory(reader *platformmcp.PostgresReader, config platformMCPConfig, budget platformmcp.OperationBudget) bool {
-	organizationSlugs := platformmcp.NewPostgresOrganizationSlugResolver(config.DB)
-	shadowInventory, err := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, organizationSlugs, platformrepo.New(config.DB), budget, config.JWTSigningKey)
+	shadowInventory, err := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, platformrepo.New(config.DB), budget, config.JWTSigningKey)
 	if err != nil {
 		config.Logger.WarnContext(context.Background(), "platform mcp shadow inventory unavailable", attr.SlogError(err))
 		return false
@@ -1355,6 +1361,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithCustomDomainTargetSuffix(config.CustomDomainTargetSuffix).
 		WithCodeModeAvailability(config.CodeModeAvailable).
+		WithFunctionsDisabled(config.FunctionsDisabled).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithInternalSessionIssuer(config.IssuerGate).
 		WithInboundEMATrust(config.InboundEMAUserIssuers, config.InboundEMARemoteIssuers).
@@ -1365,6 +1372,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithDataExportRouteToggle(newPlatformMCPDataExportRouteToggle(config, authorizer, limitStore)).
+		WithDataExportTestEvent(platformmcp.NewDataExportTestEventService(config.Logger, config.DB, config.DataExportRouteTests, authorizer)).
 		WithCanonicalIdentityGate(config.CanonicalIdentity).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
 		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).
@@ -1392,7 +1400,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics, config.ProductFeatures).WithConversationAccess(config.ConversationAccess))
 	platformReader.WithWidgets(platformmcp.NewWidgetService(config.Logger, config.Widgets, platformReader, config.Authz, config.FeatureFlags, organizationSlugs, config.JWTSigningKey))
 	platformReader.WithDashboards(platformmcp.NewDashboardsService(config.Logger, config.Dashboards, platformReader, config.Authz, config.FeatureFlags, organizationSlugs, config.JWTSigningKey))
-	shadowInventory, shadowErr := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, organizationSlugs, platformrepo.New(config.DB), budgets.SensitiveDiagnostics, config.JWTSigningKey)
+	shadowInventory, shadowErr := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, platformrepo.New(config.DB), budgets.SensitiveDiagnostics, config.JWTSigningKey)
 	if shadowErr != nil {
 		config.Logger.WarnContext(context.Background(), "platform mcp shadow inventory unavailable", attr.SlogError(shadowErr))
 	} else {

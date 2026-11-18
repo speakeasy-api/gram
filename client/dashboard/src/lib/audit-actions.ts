@@ -87,6 +87,7 @@ export const AUDIT_ACTIONS = [
   "chat_session:recall",
   "custom_domains:create",
   "custom_domains:delete",
+  "custom_domains:reconcile",
   "custom_domains:update",
   "dashboard:create",
   "dashboard:delete",
@@ -98,6 +99,7 @@ export const AUDIT_ACTIONS = [
   "data_export_route:delete",
   "data_export_route:pause",
   "data_export_route:resume",
+  "data_export_route:test",
   "data_export_route:update",
   "deployments:create",
   "deployments:evolve",
@@ -219,6 +221,11 @@ export const AUDIT_ACTIONS = [
   "organization_encryption_config:rollback_switch",
   "organization_encryption_config:suspend",
   "organization_encryption_config:switch_key",
+  "organization_encryption_transition:clear_platform_copies",
+  "organization_encryption_transition:enroll",
+  "organization_encryption_transition:finalize",
+  "organization_encryption_transition:rollback",
+  "organization_encryption_transition:start_org_kms",
   "organization_invitation:create",
   "organization_invitation:revoke",
   "organization_invitation:update_role",
@@ -257,6 +264,7 @@ export const AUDIT_ACTIONS = [
   "remote-mcp:delete",
   "remote-mcp:update",
   "remote-session-client:attach-json-web-key-set",
+  "remote-session-client:attach-mcp-server",
   "remote-session-client:attach-user-session-issuer",
   "remote-session-client:create",
   "remote-session-client:delete",
@@ -301,6 +309,7 @@ export const AUDIT_ACTIONS = [
   "risk_result:unmask",
   "session_quarantine:open",
   "session_quarantine:release",
+  "shadow_mcp_official_server:set",
   "sigint-sensor:create",
   "sigint-sensor:delete",
   "sigint-sensor:update",
@@ -337,6 +346,7 @@ export const AUDIT_ACTIONS = [
   "toolset:detach_external_oauth",
   "toolset:detach_oauth_proxy",
   "toolset:migrate_to_remote_mcp",
+  "toolset:move_legacy_alias",
   "toolset:update",
   "toolset:update_external_oauth_issuer",
   "toolset:update_oauth_proxy",
@@ -631,6 +641,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated custom domain";
     case "custom_domains:delete":
       return "removed custom domain";
+    case "custom_domains:reconcile":
+      return "reconciled custom domain";
 
     case "data_export_route:create":
       return "created data export route";
@@ -642,6 +654,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "paused data export route";
     case "data_export_route:resume":
       return "resumed data export route";
+    case "data_export_route:test":
+      return "sent a test event for data export route";
 
     case "network_ingress:create":
       return "created private network ingress";
@@ -943,6 +957,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "attached a JSON Web Key Set to";
     case "remote-session-client:detach-json-web-key-set":
       return "detached a JSON Web Key Set from";
+    case "remote-session-client:attach-mcp-server":
+      return "attached an MCP server to";
     case "remote-session-client:detach-mcp-server":
       return "detached an MCP server from";
     case "remote-session-client:revoke-sessions":
@@ -999,6 +1015,11 @@ export function staticActionPhrase(action: AuditAction): string {
       return "saved an evaluation review for";
     case "risk_policy:eval_review_delete":
       return "deleted an evaluation review for";
+
+    // One action records linking, switching the link off or on, and
+    // removing it, so the phrase names the link rather than one of them.
+    case "shadow_mcp_official_server:set":
+      return "changed the official server link of Shadow MCP server";
 
     case "risk_result:dismiss":
       return "dismissed risk finding";
@@ -1099,6 +1120,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "detached an OAuth proxy from";
     case "toolset:migrate_to_remote_mcp":
       return "migrated the external MCP server";
+    case "toolset:move_legacy_alias":
+      return "moved the legacy address";
 
     case "trigger-instance:create":
       return "created trigger";
@@ -1191,6 +1214,18 @@ export function staticActionPhrase(action: AuditAction): string {
       return "suspended";
     case "organization_encryption_config:resume":
       return "resumed";
+    // Internal staff-only entries; the subject names the use case being moved,
+    // as "Organization encryption: <use case>".
+    case "organization_encryption_transition:enroll":
+      return "enrolled";
+    case "organization_encryption_transition:rollback":
+      return "rolled back";
+    case "organization_encryption_transition:finalize":
+      return "finalized";
+    case "organization_encryption_transition:start_org_kms":
+      return "started using organization keys for";
+    case "organization_encryption_transition:clear_platform_copies":
+      return "cleared platform-key copies for";
 
     default:
       return assertNever(action);

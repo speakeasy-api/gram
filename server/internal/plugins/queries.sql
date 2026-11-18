@@ -3,8 +3,10 @@
 
 -- name: CreatePlugin :one
 -- A NULL auto_sync_enabled means the plugin's changes publish automatically.
-INSERT INTO plugins (organization_id, project_id, name, slug, description, auto_sync_enabled)
-VALUES (@organization_id, @project_id, @name, @slug, sqlc.narg('description'), sqlc.narg('auto_sync_enabled'))
+-- A NULL auto_add_servers_enabled leaves automatic server adding off.
+INSERT INTO plugins (organization_id, project_id, name, slug, description, auto_sync_enabled, auto_add_servers_enabled)
+VALUES (@organization_id, @project_id, @name, @slug, sqlc.narg('description'), sqlc.narg('auto_sync_enabled'),
+  COALESCE(sqlc.narg('auto_add_servers_enabled')::boolean, FALSE))
 RETURNING *;
 
 -- name: CreateDefaultPlugin :one
@@ -180,12 +182,14 @@ WHERE project_id = @project_id
 ORDER BY slug ASC;
 
 -- name: UpdatePlugin :one
--- A NULL auto_sync_enabled argument keeps the plugin's current setting.
+-- A NULL auto_sync_enabled or auto_add_servers_enabled argument keeps the
+-- plugin's current setting.
 UPDATE plugins
 SET name = @name,
     slug = @slug,
     description = sqlc.narg('description'),
     auto_sync_enabled = COALESCE(sqlc.narg('auto_sync_enabled')::boolean, auto_sync_enabled),
+    auto_add_servers_enabled = COALESCE(sqlc.narg('auto_add_servers_enabled')::boolean, auto_add_servers_enabled),
     updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id
@@ -553,9 +557,7 @@ WHERE p.project_id = @project_id
 ORDER BY t.id, ec.variable_name ASC, ec.header_display_name ASC;
 
 -- name: ListPluginsWithMcpServersForProject :many
--- Plugin generation for mcp_server-keyed entries. A canonical wrapper with no
--- usable endpoint is returned with needs_alias, and the caller resolves its
--- toolset's legacy alias through legacyalias, dropping it when it has none. Each other server resolves to
+-- Plugin generation for mcp_server-keyed entries. Each server resolves to
 -- a single usable endpoint: custom-domain endpoints win over platform
 -- endpoints, then oldest created_at.
 -- Resolving the host inside the selection keeps endpoint choice and URL-host
@@ -585,8 +587,6 @@ SELECT
   (s.user_session_issuer_id IS NOT NULL)::bool AS mcp_server_is_oauth,
   COALESCE(ep.slug, '')::text AS endpoint_slug,
   ep.custom_domain AS endpoint_custom_domain,
-  -- legacyalias: drop with AIM-670.
-  (s.id = s.toolset_id AND ep.slug IS NULL AND mts.id IS NOT NULL)::bool AS needs_alias,
   ump.url AS unproxied_url,
   s.network_access_mode,
   COALESCE(private_ep.slug, '') AS private_endpoint_slug,
@@ -630,7 +630,7 @@ LEFT JOIN toolsets envt ON envt.id = (CASE WHEN s.id = s.toolset_id THEN mts.id 
 WHERE p.project_id = @project_id
   AND p.deleted IS FALSE
   AND (COALESCE(cardinality(@plugin_ids::uuid[]), 0) = 0 OR p.id = ANY(@plugin_ids::uuid[]))
-  AND (ep.slug IS NOT NULL OR (s.id = s.toolset_id AND mts.id IS NOT NULL) OR private_ep.slug IS NOT NULL OR ump.url IS NOT NULL OR s.network_access_mode IS NOT NULL)
+  AND (ep.slug IS NOT NULL OR private_ep.slug IS NOT NULL OR ump.url IS NOT NULL OR s.network_access_mode IS NOT NULL)
   AND (
     (s.remote_mcp_server_id IS NOT NULL AND rms.id IS NOT NULL)
     OR (s.tunneled_mcp_server_id IS NOT NULL AND tms.id IS NOT NULL)
@@ -1289,17 +1289,21 @@ ORDER BY p.id;
 
 -- name: ListRoleDeliveryPlugins :many
 -- Organization-scoped role event discovery; locks and writes retain exact project scope.
+-- Only plugins that opted in to automatic server adding take part.
 SELECT p.id, p.project_id
 FROM plugins p JOIN projects project ON project.id = p.project_id
 WHERE p.organization_id = @organization_id AND project.organization_id = @organization_id
   AND p.deleted IS FALSE AND project.deleted IS FALSE
+  AND p.auto_add_servers_enabled IS TRUE
   AND EXISTS (SELECT 1 FROM plugin_assignments a WHERE a.plugin_id = p.id
     AND a.organization_id = @organization_id AND a.principal_urn = @principal_urn)
 ORDER BY p.project_id, p.id;
 
 -- name: ListProjectRoleDeliveryPluginsForUpdate :many
+-- Only plugins that opted in to automatic server adding take part.
 SELECT p.id FROM plugins p
 WHERE p.organization_id = @organization_id AND p.project_id = @project_id AND p.deleted IS FALSE
+  AND p.auto_add_servers_enabled IS TRUE
   AND EXISTS (SELECT 1 FROM plugin_assignments a WHERE a.plugin_id = p.id AND a.organization_id = @organization_id
     AND (a.principal_urn LIKE 'role:organization:%' OR a.principal_urn LIKE 'role:global:%'))
 ORDER BY p.id FOR UPDATE OF p;
@@ -1440,7 +1444,7 @@ UPDATE toolset_versions SET deleted_at = clock_timestamp() WHERE toolset_id = @t
 -- name: LockPluginForAssignments :one
 -- Locks one exact live plugin. Dashboard and Platform MCP assignment writes
 -- share this lock so concurrent replacements are serialized.
-SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_add_servers_enabled, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE id = @id
   AND organization_id = @organization_id

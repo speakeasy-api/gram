@@ -124,7 +124,7 @@ func (s *Service) readMetaSkill(ctx context.Context, logger *slog.Logger, metaSe
 	}
 	// The read's attribution for the logs: the gateway, its session and the
 	// caller. No single member served it, so no server is recorded.
-	attribution := &mcpInputs{ //nolint:exhaustruct // only the attribution fields matter here
+	attribution := &mcpInputs{ //nolint:exhaustruct_v5 // only the attribution fields matter here
 		projectID:       gate.projectID,
 		organizationID:  gate.organizationID,
 		authenticated:   gate.authenticated,

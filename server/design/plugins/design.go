@@ -356,7 +356,7 @@ var _ = Service("plugins", func() {
 		Payload(func() {
 			Attribute("platform", String, func() {
 				Description("Target platform.")
-				Enum("claude", "cursor", "codex", "opencode", "copilot", "openclaw", "pi")
+				Enum("claude", "cursor", "codex", "opencode", "copilot", "openclaw", "pi", "vibe")
 			})
 			Required("platform")
 			security.SessionPayload()
@@ -573,7 +573,7 @@ var PluginAudienceModel = Type("PluginAudience", func() {
 
 // PluginModel is the full plugin representation.
 var PluginModel = Type("Plugin", func() {
-	Required("id", "name", "slug", "auto_created", "auto_sync_enabled", "agent_plugins_v1_compatible", "created_at", "updated_at")
+	Required("id", "name", "slug", "auto_created", "auto_sync_enabled", "auto_add_servers_enabled", "agent_plugins_v1_compatible", "created_at", "updated_at")
 
 	Attribute("id", String, func() {
 		Description("Unique plugin identifier.")
@@ -585,6 +585,7 @@ var PluginModel = Type("Plugin", func() {
 	Attribute("is_default", Boolean, "Whether this is the project's fallback plugin that new servers attach to.")
 	Attribute("auto_created", Boolean, "Whether automatic role distribution created this plugin. Read-only; preserved after edits and reuse.")
 	Attribute("auto_sync_enabled", Boolean, "Whether changes to this plugin publish to the marketplace automatically. When false, they wait until someone syncs the marketplace by hand.")
+	Attribute("auto_add_servers_enabled", Boolean, "Whether the plugin's role audiences add and remove its MCP servers automatically, based on the MCP servers those roles can use. When false, only manual changes alter the plugin's server list.")
 	Attribute("server_count", Int64, "Number of active servers in this plugin.")
 	Attribute("skill_count", Int64, "Number of active skills in this plugin.")
 	Attribute("assignment_count", Int64, "Number of role/user assignments.")
@@ -608,6 +609,7 @@ var CreatePluginForm = Type("CreatePluginForm", func() {
 	Attribute("slug", String, "Optional URL-safe identifier. Auto-generated from name if omitted.")
 	Attribute("description", String, "Optional description.")
 	Attribute("auto_sync_enabled", Boolean, "Whether changes to this plugin publish to the marketplace automatically. Defaults to true. When false, the plugin stays out of the marketplace until someone syncs it by hand.")
+	Attribute("auto_add_servers_enabled", Boolean, "Whether the plugin's role audiences add and remove its MCP servers automatically. Defaults to false.")
 })
 
 var UpdatePluginForm = Type("UpdatePluginForm", func() {
@@ -620,6 +622,7 @@ var UpdatePluginForm = Type("UpdatePluginForm", func() {
 	Attribute("slug", String, "Updated slug.")
 	Attribute("description", String, "Updated description.")
 	Attribute("auto_sync_enabled", Boolean, "Whether changes to this plugin publish to the marketplace automatically. Omit to keep the current setting. Turning it off is refused while the plugin has changes that haven't been synced, and the slug can't change while it is off.")
+	Attribute("auto_add_servers_enabled", Boolean, "Whether the plugin's role audiences add and remove its MCP servers automatically. Omit to keep the current setting. Turning it on adds the MCP servers its assigned roles can use now, except ones an admin removed before.")
 })
 
 var AddPluginServerForm = Type("AddPluginServerForm", func() {
@@ -708,6 +711,8 @@ var PublishStatusResult = Type("PublishStatusResult", func() {
 	Attribute("claude_observability_plugin", String, "Slug of the generated Claude Code observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.")
 	Attribute("codex_observability_plugin", String, "Slug of the generated Codex observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.")
 	Attribute("cursor_observability_plugin", String, "Slug of the generated Cursor observability plugin in the published marketplace — the value to mark required in Cursor's team marketplace. Present when connected.")
+	Attribute("vibe_observability_available", Boolean, "Whether the Mistral Vibe observability plugin ZIP can be downloaded right now: the pinned hooks release's relay carries the vibe provider and the org name satisfies the Agent Plugins 1.0 name schema. Present (true or false) when connected and observability is enabled for the project.")
+	Attribute("vibe_observability_plugin", String, "Slug of the generated Mistral Vibe observability plugin's install directory (`~/.vibe/plugins/<slug>`) — present only when connected, observability is enabled, the vibe package is available, and the stored published hooks version equals the current generator version, i.e. the published marketplace repo actually carries the package. The marketplace repo directory is `<slug>-vibe`.")
 	Attribute("has_collaborators", Boolean, "Whether the repo has at least one directly-added GitHub collaborator (excludes access granted via org membership/teams). Absent when the project is not connected.")
 	Attribute("up_to_date", Boolean, "Whether the project's current plugin state matches what was last published to GitHub, including changes of plugins whose auto sync is off that wait for a manual sync. Absent when the project is not connected, or when the connection predates content fingerprinting (freshness can't be determined).")
 	Attribute("automatic_sync_pending", Boolean, "Whether an automatic publish would change the published marketplace. False while the only pending changes belong to plugins whose auto sync is off, which publish only on a manual sync. Absent when up_to_date is absent.")

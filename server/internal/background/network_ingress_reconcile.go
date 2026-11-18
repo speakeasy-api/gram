@@ -25,8 +25,22 @@ const (
 	// an ingress is never left without a pending retry for long.
 	networkIngressReconcileActivityRetryBudget = 55 * time.Minute
 	networkIngressReconcileActivityMaxBackoff  = 2 * time.Minute
-	networkIngressReconcileWorkflowRunTimeout  = 60 * time.Minute
-	networkIngressReconcileExecutionTimeout    = 6 * time.Hour
+
+	// networkIngressDeletionPendingRetryDelay is how long a teardown waiting on
+	// Kubernetes deletions (deletion_pending) waits before checking again.
+	// Deleting an Ingress, Deployment, ProxyGroup or namespace usually finishes
+	// within seconds, and each teardown step needs at least one more check,
+	// so the exponential backoff above would leave most of a teardown idle.
+	networkIngressDeletionPendingRetryDelay = 5 * time.Second
+
+	// networkIngressDeletionPendingFastAttempts is how many attempts retry
+	// deletion_pending after networkIngressDeletionPendingRetryDelay: about
+	// two minutes, enough for a normal teardown. A teardown still pending
+	// after that is likely stuck on a finalizer, so it falls back to the
+	// capped exponential backoff instead of polling every few seconds.
+	networkIngressDeletionPendingFastAttempts = 24
+	networkIngressReconcileWorkflowRunTimeout = 60 * time.Minute
+	networkIngressReconcileExecutionTimeout   = 6 * time.Hour
 )
 
 // NetworkIngressReconcileParams deliberately excludes provider state and secrets.

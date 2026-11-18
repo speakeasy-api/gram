@@ -384,6 +384,76 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *orggen.ListMcpSer
 	return &orggen.ListUserSessionIssuerMcpServersResult{Items: items, NextCursor: nextCursor}, nil
 }
 
+// ListRemoteSessionClientBindings lists the remote session clients an issuer
+// in the caller's organization binds, and those its live MCP servers are
+// associated with.
+func (s *Service) ListRemoteSessionClientBindings(ctx context.Context, payload *orggen.ListRemoteSessionClientBindingsPayload) (*orggen.UserSessionIssuerRemoteSessionClientBindings, error) {
+	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgRead)
+	if err != nil {
+		return nil, err
+	}
+
+	issuerID, err := uuid.Parse(payload.UserSessionIssuerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").LogWarn(ctx, s.logger)
+	}
+
+	q := repo.New(s.db)
+	if _, err := q.GetOrganizationManagedUserSessionIssuerByID(ctx, repo.GetOrganizationManagedUserSessionIssuerByIDParams{
+		ID:             issuerID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogWarn(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization user session issuer").LogError(ctx, s.logger)
+	}
+
+	boundRows, err := q.ListUserSessionIssuerBoundRemoteSessionClients(ctx, repo.ListUserSessionIssuerBoundRemoteSessionClientsParams{
+		UserSessionIssuerID: issuerID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list user session issuer bound remote session clients").LogError(ctx, s.logger)
+	}
+	serverRows, err := q.ListUserSessionIssuerServerRemoteSessionClients(ctx, repo.ListUserSessionIssuerServerRemoteSessionClientsParams{
+		UserSessionIssuerID: issuerID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list user session issuer server remote session clients").LogError(ctx, s.logger)
+	}
+
+	bound := make([]*orggen.UserSessionIssuerRemoteSessionClient, len(boundRows))
+	for i, row := range boundRows {
+		bound[i] = &orggen.UserSessionIssuerRemoteSessionClient{
+			ID:                      row.ID.String(),
+			ClientID:                row.ClientID,
+			RemoteSessionIssuerID:   row.RemoteSessionIssuerID.String(),
+			RemoteSessionIssuerName: row.RemoteSessionIssuerName,
+			RemoteSessionIssuerURL:  row.RemoteSessionIssuerUrl,
+		}
+	}
+	servers := make([]*orggen.UserSessionIssuerServerRemoteSessionClient, len(serverRows))
+	for i, row := range serverRows {
+		servers[i] = &orggen.UserSessionIssuerServerRemoteSessionClient{
+			McpServerID:   row.McpServerID.String(),
+			McpServerName: row.McpServerName,
+			ProjectID:     row.ProjectID.String(),
+			ProjectName:   row.ProjectName,
+			RemoteSessionClient: &orggen.UserSessionIssuerRemoteSessionClient{
+				ID:                      row.ID.String(),
+				ClientID:                row.ClientID,
+				RemoteSessionIssuerID:   row.RemoteSessionIssuerID.String(),
+				RemoteSessionIssuerName: row.RemoteSessionIssuerName,
+				RemoteSessionIssuerURL:  row.RemoteSessionIssuerUrl,
+			},
+		}
+	}
+
+	return &orggen.UserSessionIssuerRemoteSessionClientBindings{BoundClients: bound, ServerClients: servers}, nil
+}
+
 // UpdateIssuer patches an organization-owned issuer.
 func (s *Service) UpdateIssuer(ctx context.Context, payload *orggen.UpdateIssuerPayload) (*types.UserSessionIssuer, error) {
 	return s.updateIssuer(ctx, payload, nil)

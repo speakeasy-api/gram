@@ -381,6 +381,7 @@ type PostgresReader struct {
 	dataExports               *DataExportReadService
 	dataExportMutations       *dataExportMutationService
 	dataExportRouteToggle     *DataExportRouteToggleService
+	dataExportTestEvent       *DataExportTestEventService
 	recentToolCalls           *RecentToolCallReadService
 	networkTraffic            MCPNetworkTrafficReader
 	networkTrafficLogsEnabled FeatureChecker
@@ -405,6 +406,10 @@ type PostgresReader struct {
 	widgets                   *WidgetService
 	dashboards                *DashboardsService
 	codeModeAvailable         CodeModeAvailability
+
+	// functionsDisabled is true when the deployment runs with the disabled
+	// Functions provider, so tools that work with function tools refuse.
+	functionsDisabled bool
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
@@ -432,6 +437,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		dataExports:               nil,
 		dataExportMutations:       nil,
 		dataExportRouteToggle:     nil,
+		dataExportTestEvent:       nil,
 		recentToolCalls:           nil,
 		networkTraffic:            nil,
 		networkTrafficLogsEnabled: nil,
@@ -458,12 +464,22 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		widgets:                   nil,
 		dashboards:                nil,
 		codeModeAvailable:         nil,
+		functionsDisabled:         false,
 	}
 }
 
 // WithCustomDomainTargetSuffix supplies the deployment's normalized CNAME suffix.
 func (r *PostgresReader) WithCustomDomainTargetSuffix(suffix string) *PostgresReader {
 	r.customDomainTargetSuffix = suffix
+	return r
+}
+
+// WithFunctionsDisabled marks a deployment that runs with the disabled
+// Functions provider, so creating an MCP server from functions refuses.
+func (r *PostgresReader) WithFunctionsDisabled(disabled bool) *PostgresReader {
+	if r != nil {
+		r.functionsDisabled = disabled
+	}
 	return r
 }
 
@@ -483,8 +499,8 @@ func (r *PostgresReader) WithAuthorization(engine *authz.Engine) *PostgresReader
 	return r
 }
 
-// WithCanonicalIdentityGate folds a member's own-scope email through the same
-// rollout switch the telemetry APIs use, so their hook rows match either way.
+// WithCanonicalIdentityGate folds a member's own-scope email the same way the
+// telemetry APIs do, so their hook rows match either way.
 func (r *PostgresReader) WithCanonicalIdentityGate(gate CanonicalIdentityGate) *PostgresReader {
 	if r != nil {
 		r.identityGate = gate

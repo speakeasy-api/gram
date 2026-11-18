@@ -120,10 +120,10 @@ func TestMCPAuthClientCheckRejectsMissingDimensions(t *testing.T) {
 		"personal wildcard upstream":  MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: AuthClientTypeRemoteSession, ProjectID: authProjectP, ConnectionOwner: sessionUserID, UpstreamClient: "*"}),
 		"shared client with upstream": MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: authProjectP, ConnectionOwner: "", UpstreamClient: authUpstreamU}),
 		"shared client with owner":    MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: AuthClientTypeEMA, ProjectID: authProjectP, ConnectionOwner: sessionUserID, UpstreamClient: ""}),
-		"extra dimension":             {Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: authClientA, Dimensions: map[string]string{SelectorKeyClientType: AuthClientTypeServiceAccount, SelectorKeyProjectID: authProjectP, SelectorKeyTool: "x"}, selectorMatch: selectorMatchStrict, representedUser: ""},
-		"wrong resource kind":         {Scope: ScopeMCPAuth, ResourceKind: ResourceKindMCP, ResourceID: authClientA, Dimensions: map[string]string{SelectorKeyClientType: AuthClientTypeServiceAccount, SelectorKeyProjectID: authProjectP}, selectorMatch: selectorMatchStrict, representedUser: ""},
-		"dimensionless auth scope":    {Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: authClientA, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""},
-		"dimensionless block scope":   {Scope: ScopeMCPBlockedAuth, ResourceKind: "", ResourceID: authClientA, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""},
+		"extra dimension":             {Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: authClientA, Dimensions: map[string]string{SelectorKeyClientType: AuthClientTypeServiceAccount, SelectorKeyProjectID: authProjectP, SelectorKeyTool: "x"}, selectorMatch: selectorMatchStrict, representedUser: "", probe: false, anyOf: nil},
+		"wrong resource kind":         {Scope: ScopeMCPAuth, ResourceKind: ResourceKindMCP, ResourceID: authClientA, Dimensions: map[string]string{SelectorKeyClientType: AuthClientTypeServiceAccount, SelectorKeyProjectID: authProjectP}, selectorMatch: selectorMatchStrict, representedUser: "", probe: false, anyOf: nil},
+		"dimensionless auth scope":    {Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: authClientA, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil},
+		"dimensionless block scope":   {Scope: ScopeMCPBlockedAuth, ResourceKind: "", ResourceID: authClientA, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil},
 	}
 	for name, check := range invalid {
 		_, err := GrantsAuthorize(grants, check)

@@ -18,7 +18,9 @@ import (
 const setAssistantReasoningEffortToolName = "set_assistant_reasoning_effort"
 
 type SetAssistantReasoningEffortInput struct {
-	ProjectID       string `json:"project_id" jsonschema:"exact project UUID; never inferred"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID       string `json:"-"`
 	AssistantID     string `json:"assistant_id" jsonschema:"exact assistant UUID"`
 	ReasoningEffort string `json:"reasoning_effort" jsonschema:"reasoning effort: none, low, medium, or high"`
 	Confirmed       bool   `json:"confirmed" jsonschema:"false previews the current preference; true only after confirmation of this exact assistant, project and reasoning effort"`
@@ -103,11 +105,11 @@ func registerAssistantReasoningEffortTool(reg *Registrar, service *AssistantIden
 	addTool(reg, &mcp.Tool{
 		Meta: nil, OutputSchema: nil, Icons: nil,
 		InputSchema: closedObject(map[string]*jsonschema.Schema{
-			"project_id":       uuidSchema("Exact project UUID; never inferred."),
+			"project_slug":     stringSchema(projectSlugDescription, 1, 0),
 			"assistant_id":     uuidSchema("Exact assistant UUID."),
 			"reasoning_effort": {Type: "string", Enum: []any{"none", "low", "medium", "high"}},
 			"confirmed":        {Type: "boolean", Description: "False previews; true requires explicit confirmation of the exact target and reasoning effort."},
-		}, []string{"project_id", "assistant_id", "reasoning_effort", "confirmed"}),
+		}, []string{"project_slug", "assistant_id", "reasoning_effort", "confirmed"}),
 		Name:        setAssistantReasoningEffortToolName,
 		Title:       "Set an Assistant's Reasoning Effort",
 		Description: "Configure reasoning effort for one assistant in an exact project: none, low, medium, or high. The none setting is only available on the default runtime (2) with compatible models; Kit (3) requires low, medium, or high. First call with confirmed:false to inspect the current preference and runtime_version, then obtain explicit confirmation of the exact assistant and desired value before confirmed:true. If the current runtime is Kit, choose low, medium, or high, or explicitly switch to the default runtime before setting none. Requires organization administrator access and assistant:write authorization. Omits all unrelated configuration, preserving model, runtime and attachments. Returns committed configuration only, not inference support or runtime readiness. Managed assistants cannot change their own configuration through this tool.",
@@ -129,7 +131,7 @@ func assistantReasoningEffortToolResult(err error) (*mcp.CallToolResult, bool) {
 	} else if shared, ok := errors.AsType[*oops.ShareableError](err); ok {
 		switch shared.Code {
 		case oops.CodeBadRequest, oops.CodeInvalid:
-			result.Code, result.Message = "invalid_request", "Provide exact project and assistant UUIDs, a supported reasoning effort and explicit confirmation. Kit requires low, medium, or high; none is only available on the default runtime with compatible models. Preview the runtime and choose a supported effort or explicitly switch runtimes first."
+			result.Code, result.Message = "invalid_request", "Provide the project_slug, the exact assistant UUID, a supported reasoning effort and explicit confirmation. Kit requires low, medium, or high; none is only available on the default runtime with compatible models. Preview the runtime and choose a supported effort or explicitly switch runtimes first."
 		case oops.CodeForbidden, oops.CodeUnauthorized:
 			result.Code, result.Message = "permission_denied", "Reasoning configuration requires organization administrator access, assistant:write on the selected assistant and a user identity."
 		case oops.CodeNotFound:

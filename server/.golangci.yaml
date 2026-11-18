@@ -14,6 +14,9 @@ run:
     - demoseed_safety
 
 linters:
+  # gochecksumtype is left out: it only checks types marked //sumtype:decl,
+  # and no package in the lint closure has one, yet its fact type makes it run
+  # on every dependency package.
   enable:
     - bodyclose
     - containedctx
@@ -23,11 +26,10 @@ linters:
     - errname
     - errorlint
     - exhaustive
-    - exhaustruct
+    - exhaustruct_v5
     - exptostd
     - forbidigo
     - forcetypeassert
-    - gochecksumtype
     - gocritic
     - gosec
     - glint
@@ -66,13 +68,13 @@ linters:
       - path: cmd/|internal/dns/
         linters:
           - forbidigo
-      # Bench commands and dev-mcp are developer CLIs (not part of the server
+      # Bench commands, dev-mcp and mock-mcp are developer CLIs (not part of the server
       # binary). Like test files, they favor terse partial structs and direct
       # error returns over production-grade hardening, so exempt them from the
       # same dev-tooling linters we exempt tests from.
-      - path: cmd/(riskjudge|skillefficacy|skillsuggest)bench/|cmd/dev-mcp/
+      - path: cmd/(riskjudge|skillefficacy|skillsuggest)bench/|cmd/dev-mcp/|cmd/mock-mcp/
         linters:
-          - exhaustruct
+          - exhaustruct_v5
           - wrapcheck
           - predeclared
           - sloglint
@@ -89,20 +91,20 @@ linters:
       # exists to prevent. Every other field of the struct stays enforced.
       - path: internal/audit/
         linters:
-          - exhaustruct
+          - exhaustruct_v5
         text: InsertAuditLogParams is missing fields ActingSurface, ActingClientID
       # The analytics catalog declares each field with only what it has; an
       # omitted field is its zero value by design, and spelling every empty
       # one out hides the declaration behind noise.
       - path: internal/telemetry/analytics/datasets\.go
         linters:
-          - exhaustruct
+          - exhaustruct_v5
       - path: internal/dns/net_resolver\.go
         linters:
           - wrapcheck
       - path: _test\.go|internal/oauthtest|internal/identityproviderconnections/provisiontest
         linters:
-          - exhaustruct
+          - exhaustruct_v5
           - gosec
       # gosec stays on for testenv; exempt only G306 (the Temporal dev server
       # shim has to carry the exec bit, and it is written 0700 into a 0700
@@ -360,6 +362,23 @@ linters:
         - "-ST1020"
         - "-ST1021"
         - "-ST1022"
+        # The five checks below are the only staticcheck checks that use
+        # cross-package facts, and those fact passes need staticcheck's IR, so
+        # keeping any of them builds IR for every dependency package. They
+        # reported nothing on this codebase when they were disabled.
+        # SA4023 (comparing an interface with untyped nil) uses nilness facts,
+        # the largest fact set in the run. Reconsider it once
+        # golangci/golangci-lint#6822 is fixed.
+        - "-SA4023"
+        # SA4017 (discarded result of a side-effect-free call), SA4018
+        # (self-assignment) and S1011 (loop append that could be one append)
+        # use purity facts.
+        - "-SA4017"
+        - "-SA4018"
+        - "-S1011"
+        # SA5012 (odd-length slice passed where pairs are expected) exports
+        # its own facts.
+        - "-SA5012"
     spancheck:
       checks:
         - end
@@ -369,19 +388,23 @@ linters:
     gocritic:
       disabled-checks:
         - ifElseChain
-    exhaustruct:
-      exclude:
+    exhaustruct_v5:
+      # Each pattern must match the whole type path.
+      ignore-patterns:
         - '^crypto/tls\.Config$'
         - '^net\.Dialer$'
         - '^net/url\.URL$'
         - '^net/http\.Server$'
         - '^net/http\.Client$'
+        # An alias of net/http.Client, which is excluded above.
+        - '^github\.com/speakeasy-api/gram/server/internal/guardian\.HTTPClient$'
         - '^net/http\.Transport$'
         - '^github.com/charmbracelet/log\.Options$'
         - '^github.com/urfave/cli/v2\.App$'
         - '^github.com/urfave/cli/v2\.Command$'
         - '^github.com/urfave/cli/v2\..*Flag$'
         - '^gopkg.in/yaml.v3\.Node$'
+        - '^tailscale\.com/tsnet\.Server$'
         - '^github.com/redis/go-redis/v9\.Options$'
         - '^github.com/testcontainers/testcontainers-go\.GenericContainerRequest$'
         - '^github.com/testcontainers/testcontainers-go\.ContainerRequest$'
@@ -395,6 +418,10 @@ linters:
         - '^go.temporal.io/sdk/internal\.ScheduleWorkflowAction$'
         - '^go.temporal.io/sdk/contrib/opentelemetry\..+Options$'
         - '^go.temporal.io/sdk/testsuite\.DevServerOptions$'
+        # The public Temporal packages re-export the internal types above as
+        # aliases, and patterns match the name a literal is written with.
+        - '^go\.temporal\.io/sdk/(activity|client|temporal|worker|workflow)\..*Options$'
+        - '^go\.temporal\.io/sdk/(client|temporal|workflow)\.(RetryPolicy|ScheduleSpec|ScheduleIntervalSpec|ScheduleWorkflowAction)$'
         - '^k8s.io/apimachinery/pkg/apis/meta/v1\..+$'
         - '^k8s.io/api/networking/v1\..+$'
         - '^sigs.k8s.io/gateway-api/apis/v1\..+$'
@@ -411,6 +438,9 @@ linters:
         - '^github\.com/aws/aws-sdk-go-v2/service/s3\..+Options$'
         - '^cloud\.google\.com/go/storage\.SignedURLOptions$'
         - '^github.com/google/jsonschema-go/jsonschema\.Schema$'
+        # Each AHP effect is a union with one Optional field per variant, and a
+        # literal sets exactly the one variant it returns.
+        - '^github\.com/agenthooksprotocol/go-sdk\.(ContextCompactAfter|ContextCompactBefore|ModelRequestBefore|ModelResponseAfter|ToolAfter|ToolBefore|ToolPermissionRequest|TurnStart|UserMessageInbound|UserMessageOutbound)Effect$'
         # Declarative classifier table: each entry intentionally sets only the
         # one classification field (Source, RuleIDs, or RulePrefix) plus the
         # always-present metadata. Filter is the runtime output struct, same
@@ -418,6 +448,12 @@ linters:
         - '^github\.com/speakeasy-api/gram/server/internal/risk/categories\.Definition$'
         - '^github\.com/speakeasy-api/gram/server/internal/risk/categories\.Filter$'
         - '^github\.com/speakeasy-api/gram/infra/gen/gram/.+'
+      # Fields here are optional for every literal of their type. A field-level
+      # //exhaustruct:optional directive would only be honored where the
+      # declaring package is loaded from source, which a warm cache skips.
+      optional-patterns:
+        - '^github\.com/speakeasy-api/gram/server/internal/assistants\.kitMCPConnection#ProjectID$'
+        - '^github\.com/speakeasy-api/gram/server/internal/platformtools/core\.ToolDescriptor#ThreadContext$'
     exhaustive:
       check:
         - switch

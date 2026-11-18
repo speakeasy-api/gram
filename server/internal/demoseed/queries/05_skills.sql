@@ -80,7 +80,7 @@ VALUES
 
 -- Skills served over MCP: the refunds and triage skills on Acme Support
 -- Tools' own server (its id is the toolset id), triage and the runbook on the
--- Acme Agent Gateway, and the runbook on the organization gateway. Links
+-- Multi-Server Gateway, and the runbook on the organization gateway. Links
 -- cascade with the project and with the gateway, which both clear every run.
 -- name: SkillsInsertMCPSkillLinks :execrows
 INSERT INTO mcp_skill_links (id, organization_id, project_id, skill_id,

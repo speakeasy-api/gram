@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	gen "github.com/speakeasy-api/gram/server/gen/data_exports"
 	"github.com/stretchr/testify/require"
@@ -17,7 +18,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/otelsink"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -40,8 +45,11 @@ func TestMain(m *testing.M) {
 
 type testInstance struct {
 	service *dataexports.Service
-	conn    *pgxpool.Pool
-	enc     *encryption.Client
+
+	// serviceWithoutTests is service composed without the test event sender.
+	serviceWithoutTests *dataexports.Service
+	conn                *pgxpool.Pool
+	enc                 *encryption.Client
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -61,8 +69,22 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	enc := testenv.NewEncryptionClient(t)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
-	service := dataexports.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), enc)
-	return ctx, &testInstance{service: service, conn: conn, enc: enc}
+	// Unsafe so tests can reach httptest servers on loopback.
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, nil)
+	require.NoError(t, err)
+	meterProvider := testenv.NewMeterProvider(t)
+	sender, err := otelsvc.NewRouteTester(policy, append(otelsvc.NewRouteTestSources(logger, meterProvider), otelsink.NewTestSource(otelsvc.NewConnectionLogTestRequestBuilder(logger, meterProvider), "gram-server"))...)
+	require.NoError(t, err)
+	store := ratelimit.NewRedisStore(redisClient)
+	// Every test shares one organization ID and one Redis, so each gets its own organization bucket.
+	routeTests := dataexports.NewRouteTestCore(logger, conn, audit.NewLogger(), enc, sender, dataexports.RouteTestLimits{
+		Route:        ratelimit.New(store, dataexports.RouteTestLimitName, ratelimit.PerMinute(dataexports.RouteTestsPerMinute)),
+		Organization: ratelimit.New(store, dataexports.RouteTestOrganizationLimitName+":"+uuid.NewString(), ratelimit.PerMinute(dataexports.RouteTestsPerOrganizationPerMinute)),
+	})
+
+	service := dataexports.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), enc, routeTests)
+	serviceWithoutTests := dataexports.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), enc, nil)
+	return ctx, &testInstance{service: service, serviceWithoutTests: serviceWithoutTests, conn: conn, enc: enc}
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {

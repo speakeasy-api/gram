@@ -22,6 +22,9 @@ var infra *testenv.Environment
 // testAssistantIssuerURL stands in for the deployment's signing issuer origin.
 const testAssistantIssuerURL = "https://issuer.demoseed.test"
 
+// testServerURL stands in for the deployment's own URL (GRAM_SERVER_URL).
+const testServerURL = "https://speakeasy.demoseed.test"
+
 func TestMain(m *testing.M) {
 	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{
 		Postgres:   true,

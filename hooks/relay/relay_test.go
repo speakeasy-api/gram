@@ -2177,3 +2177,54 @@ func writeTestFile(t *testing.T, path, content string) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
 }
+
+// TestJoinMCPServerCommandPreservesArgBoundaries: flattening argv with raw
+// spaces would let a secret argument containing whitespace leak its remaining
+// words when redactCommand re-tokenizes the command — each argument is
+// shell-quoted, and redaction masks a quoted argument whole.
+func TestJoinMCPServerCommandPreservesArgBoundaries(t *testing.T) {
+	joined := joinMCPServerCommand("npx", []string{"-y", "@example/mcp", "--token", "my secret value"})
+	// shellQuoteArg double-quotes on Windows, so build the expected quoted
+	// argument with it to stay platform-neutral; the redaction assertions
+	// below pin the masking independently of the helper.
+	require.Equal(t, "npx -y @example/mcp --token "+shellQuoteArg("my secret value"), joined)
+	redacted := redactCommand(joined)
+	require.NotContains(t, redacted, "secret")
+	require.NotContains(t, redacted, "value")
+	require.Contains(t, redacted, "--token ***")
+	require.Contains(t, redacted, "@example/mcp", "non-secret arguments keep their identity")
+}
+
+// TestRedactCommandMasksSecretsInsideMultiWordFields: the quote-aware
+// splitter can return a field of several words (an unterminated quote
+// swallows the rest of the line; a quoted argument keeps its spaces), and
+// the masking patterns are anchored at a field's start. A secret that is not
+// at the start of such a field must still be masked — the old word-level pass
+// runs over any multi-word field that matched no pattern.
+func TestRedactCommandMasksSecretsInsideMultiWordFields(t *testing.T) {
+	// An apostrophe in a path leaves the quote open, so the rest of the line
+	// (including the secret flag and value) is one field.
+	got := redactCommand(`node /tmp/o'brien/server.js --api-key sk-live-abc123 serve`)
+	require.NotContains(t, got, "sk-live-abc123")
+	require.Contains(t, got, "***")
+	require.Contains(t, got, "node")
+
+	// An apostrophe inside an argument.
+	got = redactCommand(`npx server --token o'secret-99 tail`)
+	require.NotContains(t, got, "secret-99")
+
+	// A quoted sh -c wrapper argument from joinMCPServerCommand.
+	got = redactCommand(`sh -c 'cd /app && API_KEY=sk-live-zzz9 node server.js'`)
+	require.NotContains(t, got, "sk-live-zzz9")
+	require.Contains(t, got, "API_KEY=***")
+}
+
+// TestRedactCommandMasksNewlineSeparatedSecrets: CR/LF are command
+// whitespace, so a newline-separated sh -c wrapper argument is word-level
+// redacted rather than passing as one field.
+func TestRedactCommandMasksNewlineSeparatedSecrets(t *testing.T) {
+	got := redactCommand("sh -c 'true\nAPI_KEY=sk-live-nl99 node server.js'")
+	require.NotContains(t, got, "sk-live-nl99")
+	require.Contains(t, got, "API_KEY=***")
+	require.Contains(t, got, "node server.js")
+}

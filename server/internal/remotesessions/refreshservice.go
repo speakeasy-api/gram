@@ -37,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -183,9 +184,13 @@ func (e *RefreshError) Is(target error) bool {
 // deliberately constructible without any HTTP-serving context so the
 // background worker can hold one alongside the request-path callers.
 type RefreshService struct {
-	logger  *slog.Logger
-	db      *pgxpool.Pool
-	enc     *encryption.Client
+	logger *slog.Logger
+	db     *pgxpool.Pool
+	enc    *encryption.Client
+
+	// secrets opens the client secret a refresh authenticates with.
+	secrets *clientsecrets.Secrets
+
 	policy  *guardian.Policy
 	tunnels *tunnelrouting.HTTPClient
 	locks   cache.Cache
@@ -223,6 +228,17 @@ type identityRestatement struct {
 
 // RefreshOption configures optional RefreshService behaviour.
 type RefreshOption func(*RefreshService)
+
+// WithRefreshClientSecrets installs the process's client secret seam, which
+// knows the organization encryption configured in the process. Without it the
+// service opens client secrets as a process without organization encryption:
+// platform_key works and every other transition state fails closed.
+// Production wiring always passes it.
+func WithRefreshClientSecrets(secrets *clientsecrets.Secrets) RefreshOption {
+	return func(s *RefreshService) {
+		s.secrets = secrets
+	}
+}
 
 // WithRefreshIDTokenVerifier restates a session's upstream identity from the
 // ID token a refresh grant returns.
@@ -269,6 +285,7 @@ func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, 
 		logger:         logger.With(attr.SlogComponent("remotesessions_refresh")),
 		db:             db,
 		enc:            enc,
+		secrets:        nil,
 		policy:         policy,
 		tunnels:        tunnels,
 		locks:          locks,
@@ -284,6 +301,9 @@ func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, 
 	}
 	for _, opt := range opts {
 		opt(s)
+	}
+	if s.secrets == nil {
+		s.secrets = clientsecrets.WithoutOrganizationEncryption(logger, db, enc)
 	}
 	if s.enricher == nil && policy != nil {
 		s.enricher = NewSessionEnricher(logger, enc, policy, nil, nil, tunnels, s.issuerMetadata)
@@ -1162,7 +1182,7 @@ func (s *RefreshService) refresh(
 	if !accessTokenLive(latest, time.Now()) {
 		return zero, &client, nil, refreshErr
 	}
-	plain, err := s.enc.Decrypt(latest.AccessTokenEncrypted)
+	plain, err := s.enc.Decrypt(latest.AccessTokenEncrypted.String)
 	if err != nil {
 		return zero, &client, nil, refreshErr
 	}
@@ -1239,7 +1259,7 @@ func (s *RefreshService) rereadActiveSession(ctx context.Context, q *remotesessi
 		return none, nil, fmt.Errorf("re-read active remote_session: %w", err)
 	}
 	if current.UpdatedAt.Time.After(snapshotAt) && accessTokenLive(current, time.Now()) {
-		if plain, derr := s.enc.Decrypt(current.AccessTokenEncrypted); derr == nil {
+		if plain, derr := s.enc.Decrypt(current.AccessTokenEncrypted.String); derr == nil {
 			return none, &RefreshResult{Session: current, AccessToken: plain, SourceUpdatedAt: current.UpdatedAt.Time, Outcome: remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, IssuerURL: ""}, nil
 		}
 	}
@@ -1295,7 +1315,7 @@ func (s *RefreshService) awaitRefreshedSession(
 			return zero, false, 0
 		}
 
-		plain, err := s.enc.Decrypt(latest.AccessTokenEncrypted)
+		plain, err := s.enc.Decrypt(latest.AccessTokenEncrypted.String)
 		if err != nil {
 			return zero, false, 0
 		}

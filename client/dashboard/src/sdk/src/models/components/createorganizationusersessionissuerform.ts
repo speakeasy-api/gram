@@ -35,7 +35,7 @@ export type CreateOrganizationUserSessionIssuerForm = {
    */
   slug: string;
   /**
-   * Organization-level remote_session_client Speakeasy uses with the trusted issuer. Must be supplied together with trusted_remote_session_issuer_id.
+   * Organization-level remote_session_client Speakeasy uses with the trusted issuer for browser sign-in. Requires trusted_remote_session_issuer_id; the issuer alone accepts its identity assertions without changing sign-in.
    */
   trustedRemoteSessionClientId?: string | undefined;
   /**
