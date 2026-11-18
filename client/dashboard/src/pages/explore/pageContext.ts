@@ -1,4 +1,7 @@
-import type { DateRangeValue } from "@/components/filters/filter-schema";
+import {
+  customDateRangeBounds,
+  type DateRangeValue,
+} from "@/components/filters/filter-schema";
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import {
   fieldByName,
@@ -65,14 +68,15 @@ export function applyPageContext(
   let changed = false;
 
   const window = page.window;
-  if (window?.customRange) {
-    const { from, to } = window.customRange;
+  const range = customDateRangeBounds(window);
+  if (range) {
+    const { from, to } = range;
     next = {
       ...next,
       range: {
         from: from.getTime(),
         to: to.getTime(),
-        ...(window.customLabel ? { label: window.customLabel } : {}),
+        ...(window?.customLabel ? { label: window.customLabel } : {}),
       },
     };
     changed = true;

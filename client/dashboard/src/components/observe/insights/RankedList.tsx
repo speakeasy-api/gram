@@ -18,6 +18,18 @@ export type RankedRow = {
   secondary?: string;
   /** Renders the row as a link into the logs for this slice. */
   href?: string;
+  /**
+   * Splits the bar into parts that sum to `value`, each with its own fill,
+   * for a card whose count has a breakdown worth seeing on the bar itself.
+   */
+  segments?: RankedRowSegment[];
+};
+
+type RankedRowSegment = {
+  value: number;
+  color: string;
+  /** Resting fill strength; the parts tell apart by it, not by hue alone. */
+  opacity: number;
 };
 
 /**
@@ -128,11 +140,33 @@ export function RankedList({
 
           const content = (
             <>
-              <span
-                aria-hidden
-                className="absolute inset-y-0 left-0 z-0"
-                style={{ width, backgroundColor: rowColor, opacity }}
-              />
+              {/* Segmented rows skip the rank ramp: their fill strength already
+                  tells the parts apart, so order reads from bar length alone. */}
+              {row.segments ? (
+                <span
+                  aria-hidden
+                  className="absolute inset-y-0 left-0 z-0 flex"
+                  style={{ width }}
+                >
+                  {row.segments.map((segment, segmentIndex) => (
+                    <span
+                      key={segmentIndex}
+                      className="h-full"
+                      style={{
+                        width: `${row.value > 0 ? (segment.value / row.value) * 100 : 0}%`,
+                        backgroundColor: segment.color,
+                        opacity: segment.opacity,
+                      }}
+                    />
+                  ))}
+                </span>
+              ) : (
+                <span
+                  aria-hidden
+                  className="absolute inset-y-0 left-0 z-0"
+                  style={{ width, backgroundColor: rowColor, opacity }}
+                />
+              )}
               <span
                 aria-hidden
                 className="absolute inset-y-0 left-0 z-0 opacity-0 transition-opacity duration-150 group-hover/row:opacity-[0.18]"

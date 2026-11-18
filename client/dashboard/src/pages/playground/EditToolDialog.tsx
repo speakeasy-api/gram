@@ -5,8 +5,8 @@ import { Label } from "@/components/ui/Label";
 import { Switch } from "@/components/ui/Switch";
 import { TextArea } from "@/components/ui/Textarea";
 import { TagsVariationEditor } from "@/components/tool-variation-tags-editor";
+import type { Tool } from "@/lib/toolTypes";
 import {
-  Tool,
   getToolSourceLabel,
   getToolTypeLabel,
   toolSupportsAnnotations,

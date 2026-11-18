@@ -66,6 +66,14 @@ func (s *Service) CreateUserSessionIssuer(ctx context.Context, payload *gen.Crea
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid session_duration_hours: %v", err).LogError(ctx, logger)
 	}
 
+	mode := authserver.ModeEndpoint
+	if payload.AuthorizationServerMode != "" {
+		mode = authserver.Mode(payload.AuthorizationServerMode)
+	}
+	if mode != authserver.ModeEndpoint && mode != authserver.ModeShared {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid authorization_server_mode")
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -73,14 +81,22 @@ func (s *Service) CreateUserSessionIssuer(ctx context.Context, payload *gen.Crea
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	row, err := repo.New(dbtx).CreateUserSessionIssuer(ctx, repo.CreateUserSessionIssuerParams{
-		ProjectID:          *authCtx.ProjectID,
-		OrganizationID:     conv.ToPGText(authCtx.ActiveOrganizationID),
-		Slug:               payload.Slug,
-		AuthnChallengeMode: payload.AuthnChallengeMode,
-		SessionDuration:    pgtype.Interval{Microseconds: dur.Microseconds(), Days: 0, Months: 0, Valid: true},
+		AuthorizationServerMode: conv.ToPGText(string(mode)),
+		UseAuthenticationHost:   pgtype.Bool{Bool: mode == authserver.ModeShared && s.sharedHosts.AuthenticationHostAvailable(), Valid: true},
+		ProjectID:               *authCtx.ProjectID,
+		OrganizationID:          conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                    payload.Slug,
+		AuthnChallengeMode:      payload.AuthnChallengeMode,
+		SessionDuration:         pgtype.Interval{Microseconds: dur.Microseconds(), Days: 0, Months: 0, Valid: true},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create user session issuer").LogError(ctx, logger)
+	}
+
+	if mode == authserver.ModeShared {
+		if _, err := s.sharedHosts.SharedAuthorizationServer(row); err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "shared authorization server is unavailable").LogError(ctx, logger)
+		}
 	}
 
 	if err := s.audit.LogUserSessionIssuerCreate(ctx, dbtx, audit.LogUserSessionIssuerCreateEvent{
@@ -156,17 +172,6 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
-	}
-
-	// Compare under the issuer row lock, which also serializes binding
-	// preparation. Slug-only and no-op patches do not reconfigure bindings.
-	bindingSensitive := (payload.AuthnChallengeMode != nil && *payload.AuthnChallengeMode != existing.AuthnChallengeMode) ||
-		(durPtr != nil && conv.PtrToPGInterval(durPtr) != existing.SessionDuration) ||
-		(payload.ClientIDMetadataAdmissionMode != nil && *payload.ClientIDMetadataAdmissionMode != existing.ClientIDMetadataAdmissionMode.String)
-	if bindingSensitive {
-		if err := guardScopedUserIssuerEMABindings(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, id); err != nil {
-			return nil, err
-		}
 	}
 
 	beforeView := UserSessionIssuerView(existing)
@@ -470,7 +475,7 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 // served depends on the deployment's hosts too, so issuerView adds it to
 // responses and audit snapshots leave it out.
 func UserSessionIssuerView(row repo.UserSessionIssuer) *types.UserSessionIssuer {
-	dur := time.Duration(row.SessionDuration.Microseconds) * time.Microsecond
+	dur, _ := conv.PGIntervalToDuration(row.SessionDuration)
 	// The EFFECTIVE mode, never the raw column: an issuer that has never had
 	// one set stores NULL and reports the resolved default. Clients of this
 	// API — including the audit snapshots built from this view — should never

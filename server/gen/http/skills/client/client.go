@@ -104,6 +104,16 @@ type Client struct {
 	// listDistributions endpoint.
 	ListDistributionsDoer goahttp.Doer
 
+	// Link Doer is the HTTP client used to make requests to the link endpoint.
+	LinkDoer goahttp.Doer
+
+	// Unlink Doer is the HTTP client used to make requests to the unlink endpoint.
+	UnlinkDoer goahttp.Doer
+
+	// ListLinks Doer is the HTTP client used to make requests to the listLinks
+	// endpoint.
+	ListLinksDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -147,6 +157,9 @@ func NewClient(
 		UnshareDoer:                doer,
 		GetSharedDoer:              doer,
 		ListDistributionsDoer:      doer,
+		LinkDoer:                   doer,
+		UnlinkDoer:                 doer,
+		ListLinksDoer:              doer,
 		RestoreResponseBody:        restoreBody,
 		scheme:                     scheme,
 		host:                       host,
@@ -702,6 +715,78 @@ func (c *Client) ListDistributions() goa.Endpoint {
 		resp, err := c.ListDistributionsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("skills", "listDistributions", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Link returns an endpoint that makes HTTP requests to the skills service link
+// server.
+func (c *Client) Link() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeLinkRequest(c.encoder)
+		decodeResponse = DecodeLinkResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildLinkRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.LinkDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "link", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Unlink returns an endpoint that makes HTTP requests to the skills service
+// unlink server.
+func (c *Client) Unlink() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUnlinkRequest(c.encoder)
+		decodeResponse = DecodeUnlinkResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUnlinkRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UnlinkDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "unlink", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListLinks returns an endpoint that makes HTTP requests to the skills service
+// listLinks server.
+func (c *Client) ListLinks() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListLinksRequest(c.encoder)
+		decodeResponse = DecodeListLinksResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListLinksRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListLinksDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "listLinks", err)
 		}
 		return decodeResponse(resp)
 	}

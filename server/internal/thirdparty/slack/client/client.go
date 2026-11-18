@@ -105,6 +105,34 @@ func (s *SlackClient) Unfurl(ctx context.Context, accessToken string, input Slac
 	return nil
 }
 
+type SlackPublishViewInput struct {
+	UserID string
+	// View is the view payload accepted by views.publish, e.g. a Home tab
+	// view of the form {"type": "home", "blocks": [...]}.
+	View map[string]any
+}
+
+// PublishView publishes a view to a user's App Home via views.publish. Slack
+// shows a loading spinner on the Home tab until an app publishes a view for
+// that user, so apps with the Home tab enabled call this on app_home_opened.
+func (s *SlackClient) PublishView(ctx context.Context, accessToken string, input SlackPublishViewInput) error {
+	encoded, err := json.Marshal(input.View)
+	if err != nil {
+		return fmt.Errorf("encode view: %w", err)
+	}
+
+	payload := map[string]any{
+		"user_id": input.UserID,
+		"view":    string(encoded),
+	}
+
+	if _, err := s.api.CallWithToken(ctx, "views.publish", payload, accessToken); err != nil {
+		return fmt.Errorf("publish slack view: %w", err)
+	}
+
+	return nil
+}
+
 type SlackThreadRepliesInput struct {
 	ChannelID string
 	ThreadTS  string

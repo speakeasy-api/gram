@@ -26,13 +26,15 @@ type McpServer struct {
 	RemoteSessionIssuerID uuid.NullUUID
 	// @access: confidential
 	RemoteMcpServerID uuid.NullUUID
-	// Optional backend reference to a tunneled MCP source. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be set.
+	// Optional backend reference to a tunneled MCP source. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, or builtin_backend must be set.
 	// @access: confidential
 	TunneledMcpServerID uuid.NullUUID
 	// @access: confidential
 	ToolsetID uuid.NullUUID
 	// @access: confidential
 	UnproxiedMcpServerID uuid.NullUUID
+	// @access: confidential
+	BuiltinBackend pgtype.Text
 	// @access: confidential
 	ToolVariationsGroupID uuid.NullUUID
 	// @access: confidential
@@ -42,6 +44,8 @@ type McpServer struct {
 	// Whether the upstream needs authentication: true needs it, false explicitly needs none, NULL is undecided.
 	// @access: confidential
 	RequiresUpstreamAuth pgtype.Bool
+	// @access: confidential
+	SetupGuideCompletedAt pgtype.Timestamptz
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

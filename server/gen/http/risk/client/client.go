@@ -129,6 +129,10 @@ type Client struct {
 	// to the createRiskPolicyBypassRequest endpoint.
 	CreateRiskPolicyBypassRequestDoer goahttp.Doer
 
+	// GetRiskPolicyBypassRequestTarget Doer is the HTTP client used to make
+	// requests to the getRiskPolicyBypassRequestTarget endpoint.
+	GetRiskPolicyBypassRequestTargetDoer goahttp.Doer
+
 	// AcknowledgeRiskPolicyChallenge Doer is the HTTP client used to make requests
 	// to the acknowledgeRiskPolicyChallenge endpoint.
 	AcknowledgeRiskPolicyChallengeDoer goahttp.Doer
@@ -164,6 +168,18 @@ type Client struct {
 	// RevokeRiskPolicyBypassRequest Doer is the HTTP client used to make requests
 	// to the revokeRiskPolicyBypassRequest endpoint.
 	RevokeRiskPolicyBypassRequestDoer goahttp.Doer
+
+	// ListRiskPolicyApprovals Doer is the HTTP client used to make requests to the
+	// listRiskPolicyApprovals endpoint.
+	ListRiskPolicyApprovalsDoer goahttp.Doer
+
+	// GetRiskPolicyApproval Doer is the HTTP client used to make requests to the
+	// getRiskPolicyApproval endpoint.
+	GetRiskPolicyApprovalDoer goahttp.Doer
+
+	// DecideRiskPolicyApproval Doer is the HTTP client used to make requests to
+	// the decideRiskPolicyApproval endpoint.
+	DecideRiskPolicyApprovalDoer goahttp.Doer
 
 	// TriggerRiskAnalysis Doer is the HTTP client used to make requests to the
 	// triggerRiskAnalysis endpoint.
@@ -253,65 +269,69 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateRiskPolicyDoer:               doer,
-		ListRiskPoliciesDoer:               doer,
-		ListMCPPlatformToolsetsDoer:        doer,
-		ListRiskPoliciesForMcpServerDoer:   doer,
-		ListBuiltinExclusionsDoer:          doer,
-		GetRiskPolicyDoer:                  doer,
-		UpdateRiskPolicyDoer:               doer,
-		DeleteRiskPolicyDoer:               doer,
-		ListSessionQuarantinesDoer:         doer,
-		ReleaseSessionQuarantineDoer:       doer,
-		ListRiskResultsDoer:                doer,
-		ListRiskResultsForAgentDoer:        doer,
-		UnmaskRiskResultDoer:               doer,
-		RevealRiskResultPayloadDoer:        doer,
-		ListRiskResultsByChatDoer:          doer,
-		MarkRiskResultsFalsePositiveDoer:   doer,
-		UnmarkRiskResultsFalsePositiveDoer: doer,
-		ListDismissedRiskResultsDoer:       doer,
-		GetRiskOverviewDoer:                doer,
-		ListRiskCategoriesDoer:             doer,
-		ListRiskPresetsDoer:                doer,
-		SuggestRiskPolicyDoer:              doer,
-		CompileExprDoer:                    doer,
-		GetRiskUserBreakdownDoer:           doer,
-		GetRiskSignalsDoer:                 doer,
-		GetRiskMcpServerCountsDoer:         doer,
-		GetRiskAnalysisStatusDoer:          doer,
-		CreateRiskPolicyBypassRequestDoer:  doer,
-		AcknowledgeRiskPolicyChallengeDoer: doer,
-		GetRiskPolicyChallengeDoer:         doer,
-		DeclineRiskPolicyChallengeDoer:     doer,
-		GetRiskBlockDoer:                   doer,
-		SubmitRiskBlockFeedbackDoer:        doer,
-		ListRiskPolicyBypassRequestsDoer:   doer,
-		ApproveRiskPolicyBypassRequestDoer: doer,
-		DenyRiskPolicyBypassRequestDoer:    doer,
-		RevokeRiskPolicyBypassRequestDoer:  doer,
-		TriggerRiskAnalysisDoer:            doer,
-		CreateCustomDetectionRuleDoer:      doer,
-		ListCustomDetectionRulesDoer:       doer,
-		GetCustomDetectionRuleDoer:         doer,
-		UpdateCustomDetectionRuleDoer:      doer,
-		DeleteCustomDetectionRuleDoer:      doer,
-		ListRiskExclusionsDoer:             doer,
-		CreateRiskExclusionDoer:            doer,
-		UpdateRiskExclusionDoer:            doer,
-		DeleteRiskExclusionDoer:            doer,
-		SuggestCustomDetectionRuleDoer:     doer,
-		SuggestExclusionDoer:               doer,
-		TestDetectionRuleDoer:              doer,
-		EvaluatePromptGuardrailDoer:        doer,
-		SaveRiskEvalReviewDoer:             doer,
-		ListRiskEvalReviewsDoer:            doer,
-		DeleteRiskEvalReviewDoer:           doer,
-		RestoreResponseBody:                restoreBody,
-		scheme:                             scheme,
-		host:                               host,
-		decoder:                            dec,
-		encoder:                            enc,
+		CreateRiskPolicyDoer:                 doer,
+		ListRiskPoliciesDoer:                 doer,
+		ListMCPPlatformToolsetsDoer:          doer,
+		ListRiskPoliciesForMcpServerDoer:     doer,
+		ListBuiltinExclusionsDoer:            doer,
+		GetRiskPolicyDoer:                    doer,
+		UpdateRiskPolicyDoer:                 doer,
+		DeleteRiskPolicyDoer:                 doer,
+		ListSessionQuarantinesDoer:           doer,
+		ReleaseSessionQuarantineDoer:         doer,
+		ListRiskResultsDoer:                  doer,
+		ListRiskResultsForAgentDoer:          doer,
+		UnmaskRiskResultDoer:                 doer,
+		RevealRiskResultPayloadDoer:          doer,
+		ListRiskResultsByChatDoer:            doer,
+		MarkRiskResultsFalsePositiveDoer:     doer,
+		UnmarkRiskResultsFalsePositiveDoer:   doer,
+		ListDismissedRiskResultsDoer:         doer,
+		GetRiskOverviewDoer:                  doer,
+		ListRiskCategoriesDoer:               doer,
+		ListRiskPresetsDoer:                  doer,
+		SuggestRiskPolicyDoer:                doer,
+		CompileExprDoer:                      doer,
+		GetRiskUserBreakdownDoer:             doer,
+		GetRiskSignalsDoer:                   doer,
+		GetRiskMcpServerCountsDoer:           doer,
+		GetRiskAnalysisStatusDoer:            doer,
+		CreateRiskPolicyBypassRequestDoer:    doer,
+		GetRiskPolicyBypassRequestTargetDoer: doer,
+		AcknowledgeRiskPolicyChallengeDoer:   doer,
+		GetRiskPolicyChallengeDoer:           doer,
+		DeclineRiskPolicyChallengeDoer:       doer,
+		GetRiskBlockDoer:                     doer,
+		SubmitRiskBlockFeedbackDoer:          doer,
+		ListRiskPolicyBypassRequestsDoer:     doer,
+		ApproveRiskPolicyBypassRequestDoer:   doer,
+		DenyRiskPolicyBypassRequestDoer:      doer,
+		RevokeRiskPolicyBypassRequestDoer:    doer,
+		ListRiskPolicyApprovalsDoer:          doer,
+		GetRiskPolicyApprovalDoer:            doer,
+		DecideRiskPolicyApprovalDoer:         doer,
+		TriggerRiskAnalysisDoer:              doer,
+		CreateCustomDetectionRuleDoer:        doer,
+		ListCustomDetectionRulesDoer:         doer,
+		GetCustomDetectionRuleDoer:           doer,
+		UpdateCustomDetectionRuleDoer:        doer,
+		DeleteCustomDetectionRuleDoer:        doer,
+		ListRiskExclusionsDoer:               doer,
+		CreateRiskExclusionDoer:              doer,
+		UpdateRiskExclusionDoer:              doer,
+		DeleteRiskExclusionDoer:              doer,
+		SuggestCustomDetectionRuleDoer:       doer,
+		SuggestExclusionDoer:                 doer,
+		TestDetectionRuleDoer:                doer,
+		EvaluatePromptGuardrailDoer:          doer,
+		SaveRiskEvalReviewDoer:               doer,
+		ListRiskEvalReviewsDoer:              doer,
+		DeleteRiskEvalReviewDoer:             doer,
+		RestoreResponseBody:                  restoreBody,
+		scheme:                               scheme,
+		host:                                 host,
+		decoder:                              dec,
+		encoder:                              enc,
 	}
 }
 
@@ -987,6 +1007,30 @@ func (c *Client) CreateRiskPolicyBypassRequest() goa.Endpoint {
 	}
 }
 
+// GetRiskPolicyBypassRequestTarget returns an endpoint that makes HTTP
+// requests to the risk service getRiskPolicyBypassRequestTarget server.
+func (c *Client) GetRiskPolicyBypassRequestTarget() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetRiskPolicyBypassRequestTargetRequest(c.encoder)
+		decodeResponse = DecodeGetRiskPolicyBypassRequestTargetResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetRiskPolicyBypassRequestTargetRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetRiskPolicyBypassRequestTargetDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "getRiskPolicyBypassRequestTarget", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // AcknowledgeRiskPolicyChallenge returns an endpoint that makes HTTP requests
 // to the risk service acknowledgeRiskPolicyChallenge server.
 func (c *Client) AcknowledgeRiskPolicyChallenge() goa.Endpoint {
@@ -1198,6 +1242,78 @@ func (c *Client) RevokeRiskPolicyBypassRequest() goa.Endpoint {
 		resp, err := c.RevokeRiskPolicyBypassRequestDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "revokeRiskPolicyBypassRequest", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListRiskPolicyApprovals returns an endpoint that makes HTTP requests to the
+// risk service listRiskPolicyApprovals server.
+func (c *Client) ListRiskPolicyApprovals() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListRiskPolicyApprovalsRequest(c.encoder)
+		decodeResponse = DecodeListRiskPolicyApprovalsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListRiskPolicyApprovalsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListRiskPolicyApprovalsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "listRiskPolicyApprovals", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetRiskPolicyApproval returns an endpoint that makes HTTP requests to the
+// risk service getRiskPolicyApproval server.
+func (c *Client) GetRiskPolicyApproval() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetRiskPolicyApprovalRequest(c.encoder)
+		decodeResponse = DecodeGetRiskPolicyApprovalResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetRiskPolicyApprovalRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetRiskPolicyApprovalDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "getRiskPolicyApproval", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DecideRiskPolicyApproval returns an endpoint that makes HTTP requests to the
+// risk service decideRiskPolicyApproval server.
+func (c *Client) DecideRiskPolicyApproval() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDecideRiskPolicyApprovalRequest(c.encoder)
+		decodeResponse = DecodeDecideRiskPolicyApprovalResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDecideRiskPolicyApprovalRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DecideRiskPolicyApprovalDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "decideRiskPolicyApproval", err)
 		}
 		return decodeResponse(resp)
 	}

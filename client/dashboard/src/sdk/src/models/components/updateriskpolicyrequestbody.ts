@@ -16,22 +16,28 @@ import {
   RiskMCPScope$outboundSchema,
 } from "./riskmcpscope.js";
 import {
+  RiskPolicyApprovalConfig,
+  RiskPolicyApprovalConfig$Outbound,
+  RiskPolicyApprovalConfig$outboundSchema,
+} from "./riskpolicyapprovalconfig.js";
+import {
   RiskPolicyModelConfig,
   RiskPolicyModelConfig$Outbound,
   RiskPolicyModelConfig$outboundSchema,
 } from "./riskpolicymodelconfig.js";
 
 /**
- * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.
+ * Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
  */
 export const UpdateRiskPolicyRequestBodyAction = {
   Flag: "flag",
   Warn: "warn",
   Block: "block",
   Quarantine: "quarantine",
+  RequireApproval: "require_approval",
 } as const;
 /**
- * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.
+ * Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
  */
 export type UpdateRiskPolicyRequestBodyAction = ClosedEnum<
   typeof UpdateRiskPolicyRequestBodyAction
@@ -67,9 +73,10 @@ export type UpdateRiskPolicyRequestBodyShadowMcpDisposition = ClosedEnum<
 
 export type UpdateRiskPolicyRequestBody = {
   /**
-   * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.
+   * Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
    */
   action?: UpdateRiskPolicyRequestBodyAction | undefined;
+  approvalConfig?: RiskPolicyApprovalConfig | undefined;
   /**
    * For the account_identity source: corporate email domains considered approved. Omit to preserve the current list; send an empty array to clear it.
    */
@@ -179,6 +186,7 @@ export const UpdateRiskPolicyRequestBodyShadowMcpDisposition$outboundSchema:
 /** @internal */
 export type UpdateRiskPolicyRequestBody$Outbound = {
   action?: string | undefined;
+  approval_config?: RiskPolicyApprovalConfig$Outbound | undefined;
   approved_email_domains?: Array<string> | undefined;
   audience_principal_urns?: Array<string> | undefined;
   audience_type?: string | undefined;
@@ -211,6 +219,7 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     action: z.optional(UpdateRiskPolicyRequestBodyAction$outboundSchema),
+    approvalConfig: z.optional(RiskPolicyApprovalConfig$outboundSchema),
     approvedEmailDomains: z.optional(z.array(z.string())),
     audiencePrincipalUrns: z.optional(z.array(z.string())),
     audienceType: z.optional(
@@ -241,6 +250,7 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      approvalConfig: "approval_config",
       approvedEmailDomains: "approved_email_domains",
       audiencePrincipalUrns: "audience_principal_urns",
       audienceType: "audience_type",

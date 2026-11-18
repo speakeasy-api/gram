@@ -31,6 +31,10 @@ type Expectation struct {
 	// Audiences are the endpoint identifiers this grant accepts.
 	Audiences []string
 
+	// AllowAssertionReuse permits repeated minted identifiers while still reserving
+	// them, so disabling the policy restores replay refusal immediately.
+	AllowAssertionReuse bool
+
 	// MaxLifetime is the platform-specific assertion lifetime ceiling.
 	MaxLifetime time.Duration
 }

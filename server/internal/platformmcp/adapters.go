@@ -17,12 +17,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/management/readmodel"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -160,7 +162,7 @@ func (s *LiveOrganizationSelector) EligibleOrganizations(ctx context.Context, us
 			}
 			return nil, fmt.Errorf("check organization membership eligibility: %w", err)
 		}
-		options = append(options, OrganizationOption{ID: organization.ID, Name: organization.Name})
+		options = append(options, OrganizationOption{ID: organization.ID, Name: organization.Name, WorkOSID: organization.WorkosID.String})
 	}
 	return options, nil
 }
@@ -353,6 +355,8 @@ func (r *PostgresReadinessRecorder) RecordReady(ctx context.Context, principal P
 }
 
 type PostgresReader struct {
+	// customDomainTargetSuffix is the normalized parent of designated CNAME destinations.
+	customDomainTargetSuffix  string
 	xaaReadiness              *xaaReadinessService
 	issuerGate                *internalsessionissuers.Gate
 	logger                    *slog.Logger
@@ -367,33 +371,46 @@ type PostgresReader struct {
 	riskFindingList           riskFindingListLister
 	chatMetadata              *ChatMetadataService
 	chatSearch                *ChatSearchService
+	teamMemory                *TeamMemoryService
 	organizationGateway       *OrganizationGatewayService
+	inboundEMATrust           *InboundEMATrustService
+	gatewayProxy              *GatewayProxyService
+	gatewaySessions           GatewaySessionManagement
+	agentIdentityReads        *AgentIdentityReadService
+	channelsAccess            *ChannelsAccessService
 	dataExports               *DataExportReadService
 	dataExportMutations       *dataExportMutationService
 	dataExportRouteToggle     *DataExportRouteToggleService
+	dataExportTestEvent       *DataExportTestEventService
 	recentToolCalls           *RecentToolCallReadService
 	networkTraffic            MCPNetworkTrafficReader
 	networkTrafficLogsEnabled FeatureChecker
 	eventFeed                 *EventFeedReadService
 	networkIngress            *NetworkIngressStatusService
 	authz                     *authz.Engine
+	identityGate              CanonicalIdentityGate
 	shadowInventory           *ShadowInventoryService
 	shadowDecisions           *ShadowDecisionService
 	shadowAI                  *ShadowAIService
+	deviceCoverage            *DeviceCoverageService
+	gatewayActivity           *OrganizationGatewayActivityService
 	reviewRequests            MCPReviewRequestService
 	reviewRequestBudget       OperationBudget
 	reviewLinks               ShadowMCPReviewLinker
 	toolExposure              *MCPToolExposureService
 	gateways                  *GatewayService
 	deploymentRedeploy        *DeploymentRedeployService
+	workloadAssertionReuse    *WorkloadAssertionReuseService
 	projectLifecycle          *ProjectLifecycleService
 	analytics                 *AnalyticsService
 	widgets                   *WidgetService
 	dashboards                *DashboardsService
+	codeModeAvailable         CodeModeAvailability
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 	return &PostgresReader{
+		customDomainTargetSuffix:  "",
 		logger:                    logger.With(attr.SlogComponent("platformmcp")),
 		db:                        db,
 		reader:                    readmodel.New(db),
@@ -406,10 +423,17 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		riskFindingList:           nil,
 		chatMetadata:              nil,
 		chatSearch:                nil,
+		teamMemory:                nil,
 		organizationGateway:       nil,
+		inboundEMATrust:           nil,
+		gatewayProxy:              nil,
+		gatewaySessions:           nil,
+		agentIdentityReads:        nil,
+		channelsAccess:            nil,
 		dataExports:               nil,
 		dataExportMutations:       nil,
 		dataExportRouteToggle:     nil,
+		dataExportTestEvent:       nil,
 		recentToolCalls:           nil,
 		networkTraffic:            nil,
 		networkTrafficLogsEnabled: nil,
@@ -418,25 +442,54 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		xaaReadiness:              nil,
 		issuerGate:                nil,
 		authz:                     nil,
+		identityGate:              nil,
 		shadowInventory:           nil,
 		shadowDecisions:           nil,
 		shadowAI:                  nil,
+		deviceCoverage:            nil,
+		gatewayActivity:           nil,
 		reviewRequests:            nil,
 		reviewRequestBudget:       OperationBudget{Connection: nil, Organization: nil},
 		reviewLinks:               nil,
 		toolExposure:              nil,
 		gateways:                  nil,
 		deploymentRedeploy:        nil,
+		workloadAssertionReuse:    nil,
 		projectLifecycle:          nil,
 		analytics:                 nil,
 		widgets:                   nil,
 		dashboards:                nil,
+		codeModeAvailable:         nil,
 	}
+}
+
+// WithCustomDomainTargetSuffix supplies the deployment's normalized CNAME suffix.
+func (r *PostgresReader) WithCustomDomainTargetSuffix(suffix string) *PostgresReader {
+	r.customDomainTargetSuffix = suffix
+	return r
+}
+
+// WithCodeModeAvailability lets gateway connection settings report the
+// discovery mode a gateway serves while Code Mode is unavailable.
+func (r *PostgresReader) WithCodeModeAvailability(check CodeModeAvailability) *PostgresReader {
+	if r != nil {
+		r.codeModeAvailable = check
+	}
+	return r
 }
 
 func (r *PostgresReader) WithAuthorization(engine *authz.Engine) *PostgresReader {
 	if r != nil {
 		r.authz = engine
+	}
+	return r
+}
+
+// WithCanonicalIdentityGate folds a member's own-scope email the same way the
+// telemetry APIs do, so their hook rows match either way.
+func (r *PostgresReader) WithCanonicalIdentityGate(gate CanonicalIdentityGate) *PostgresReader {
+	if r != nil {
+		r.identityGate = gate
 	}
 	return r
 }
@@ -632,6 +685,14 @@ func (r *PostgresReader) WithChatSearch(service *ChatSearchService) *PostgresRea
 	return r
 }
 
+// WithTeamMemory attaches the project team memory tools.
+func (r *PostgresReader) WithTeamMemory(service *TeamMemoryService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.teamMemory = service
+	}
+	return r
+}
+
 // WithOrganizationGateway serves get_my_organization_gateway.
 func (r *PostgresReader) WithOrganizationGateway(service *OrganizationGatewayService) *PostgresReader {
 	if r != nil && service.valid() {
@@ -640,9 +701,36 @@ func (r *PostgresReader) WithOrganizationGateway(service *OrganizationGatewaySer
 	return r
 }
 
+// WithChannelsAccess serves get_my_channels_access. A nil or incomplete
+// service leaves the tool registered as a stub, so it does not appear on and
+// disappear from the catalogue as the rollout flips.
+func (r *PostgresReader) WithChannelsAccess(service *ChannelsAccessService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.channelsAccess = service
+	}
+	return r
+}
+
 func (r *PostgresReader) WithShadowAI(service *ShadowAIService) *PostgresReader {
 	if r != nil && service.valid() {
 		r.shadowAI = service
+	}
+	return r
+}
+
+// WithOrganizationGatewayActivity serves the organization-wide gateway
+// activity read.
+func (r *PostgresReader) WithOrganizationGatewayActivity(service *OrganizationGatewayActivityService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.gatewayActivity = service
+	}
+	return r
+}
+
+// WithDeviceCoverage serves the MDM coverage reads.
+func (r *PostgresReader) WithDeviceCoverage(service *DeviceCoverageService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.deviceCoverage = service
 	}
 	return r
 }
@@ -1001,6 +1089,43 @@ func (r *PostgresReader) ResolveProjectLogRead(ctx context.Context, principal Pr
 	return r.resolveProjectWithScope(ctx, principal, input, authz.ScopeLogRead)
 }
 
+// ResolveProjectLogScope resolves one exact project and decides how much of its
+// tool calls the caller may list: everything with log:read, otherwise a member's
+// own sessions and owned agents, the rule the management API's Tool Logs apply.
+func (r *PostgresReader) ResolveProjectLogScope(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, *telemetryrepo.OwnScope, error) {
+	if r == nil || r.reader == nil || r.authz == nil || r.db == nil {
+		return ResolvedProject{}, nil, ErrUnavailable
+	}
+	// Only the OAuth-authenticated member surface reads as a person; the
+	// assistant runtime keeps the plain check whatever its context carries.
+	if principal.surface() != SurfacePlatformMCP {
+		project, err := r.ResolveProjectLogRead(ctx, principal, input)
+		return project, nil, err
+	}
+	project, err := r.resolveInventoryProject(ctx, principal.OrganizationID, input)
+	if err != nil {
+		return ResolvedProject{}, nil, err
+	}
+	readScope, err := r.authz.ResolveReadScope(ctx, authz.ScopeLogRead, project.ID.String())
+	if err != nil {
+		if isAuthorizationDenied(err) {
+			return ResolvedProject{}, nil, ErrForbidden
+		}
+		return ResolvedProject{}, nil, fmt.Errorf("resolve tool log scope: %w", err)
+	}
+	if readScope.Unrestricted() {
+		return project, nil, nil
+	}
+	return project, telemetryrepo.OwnScopeFrom(readScope, r.canonicalIdentityOrg(ctx, principal.OrganizationID)), nil
+}
+
+func (r *PostgresReader) canonicalIdentityOrg(ctx context.Context, organizationID string) string {
+	if r == nil || r.identityGate == nil {
+		return ""
+	}
+	return r.identityGate.CanonicalOrgFor(ctx, organizationID)
+}
+
 func (r *PostgresReader) resolveProjectWithScope(ctx context.Context, principal Principal, input FindMCPInput, scope authz.Scope) (ResolvedProject, error) {
 	if r == nil || r.reader == nil || r.authz == nil {
 		return ResolvedProject{}, ErrUnavailable
@@ -1103,10 +1228,41 @@ func inventoryQueryResult(mcps []MCP, query string, limit int) []MCP {
 	if len(mcps) == 0 {
 		return mcps
 	}
-	if mcps[0].ID == query || strings.EqualFold(mcps[0].Name, query) || strings.EqualFold(mcps[0].Slug, query) {
-		if len(mcps) == 1 || (mcps[1].ID != query && !strings.EqualFold(mcps[1].Name, query) && !strings.EqualFold(mcps[1].Slug, query)) {
+	if inventoryExactMatch(mcps[0], query) {
+		if len(mcps) == 1 || !inventoryExactMatch(mcps[1], query) {
 			return mcps[:1]
 		}
 	}
 	return mcps[:min(len(mcps), limit)]
+}
+
+// WithGatewayProxy serves the caller's own MCP servers through their
+// organization gateway. Call it after WithOrganizationGateway, whose
+// availability answer the proxy tools share.
+func (r *PostgresReader) WithGatewayProxy(proxy GatewayProxy, flags feature.Provider) *PostgresReader {
+	if r != nil {
+		r.gatewayProxy = &GatewayProxyService{gateway: r.organizationGateway, proxy: proxy, flags: flags}
+	}
+	return r
+}
+
+// WithGatewaySessions shares the dashboard gateway connection reads.
+func (r *PostgresReader) WithGatewaySessions(service GatewaySessionManagement) *PostgresReader {
+	if r != nil {
+		r.gatewaySessions = service
+	}
+	return r
+}
+
+// WithAgentIdentityReads serves an agent identity's MCP servers and
+// authorization checks.
+func (r *PostgresReader) WithAgentIdentityReads(service *AgentIdentityReadService) *PostgresReader {
+	if r != nil {
+		r.agentIdentityReads = service
+	}
+	return r
+}
+
+func inventoryExactMatch(mcp MCP, query string) bool {
+	return mcp.ID == query || strings.EqualFold(mcp.Name, query) || strings.EqualFold(mcp.Slug, query) || strings.EqualFold(mcp.Source.Reference, query)
 }

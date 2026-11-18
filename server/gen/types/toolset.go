@@ -31,8 +31,6 @@ type Toolset struct {
 	ServerVariables []*ServerVariable
 	// The function environment variables that are relevant to the toolset
 	FunctionEnvironmentVariables []*FunctionEnvironmentVariable
-	// The external MCP header definitions that are relevant to the toolset
-	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinition
 	// The metadata surrounding oauth enabled tools within this server
 	OauthEnablementMetadata *OAuthEnablementMetadata
 	// The tools in this toolset
@@ -64,8 +62,8 @@ type Toolset struct {
 	Origin *ToolsetOrigin
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServer
-	// The id of the user_session_issuer wired to this toolset. Set via
-	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	// The id of the user_session_issuer wired to this toolset's hosted MCP server.
+	// Set via mcpServers.update; null when no USI is linked.
 	UserSessionIssuerID *string
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.

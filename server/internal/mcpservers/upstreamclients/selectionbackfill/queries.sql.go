@@ -13,25 +13,140 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const approveConsentCatalogFixture = `-- name: ApproveConsentCatalogFixture :exec
+UPDATE user_sessions
+SET tool_selection = jsonb_build_object('version', 2, 'catalog', jsonb_build_object('id', $1::uuid, 'mode', 'live', 'all_tools', TRUE))
+WHERE id = $2
+`
+
+type ApproveConsentCatalogFixtureParams struct {
+	CatalogID uuid.UUID
+	ID        uuid.UUID
+}
+
+// Gives the session the policy a gateway consent issues, naming the catalog of
+// servers it approved.
+func (q *Queries) ApproveConsentCatalogFixture(ctx context.Context, arg ApproveConsentCatalogFixtureParams) error {
+	_, err := q.db.Exec(ctx, approveConsentCatalogFixture, arg.CatalogID, arg.ID)
+	return err
+}
+
+const copyServerHeadersFixture = `-- name: CopyServerHeadersFixture :exec
+INSERT INTO mcp_auth_client_headers (auth_client_id, organization_id, name, is_required, is_secret, value, value_from_request_header)
+SELECT $1, $2, h.name, h.is_required, h.is_secret, h.value, h.value_from_request_header
+FROM mcp_servers AS s
+JOIN remote_mcp_server_headers AS h
+  ON h.remote_mcp_server_id = s.remote_mcp_server_id
+ AND h.deleted IS FALSE
+WHERE s.id = $3
+`
+
+type CopyServerHeadersFixtureParams struct {
+	AuthClientID   uuid.UUID
+	OrganizationID string
+	McpServerID    uuid.UUID
+}
+
+func (q *Queries) CopyServerHeadersFixture(ctx context.Context, arg CopyServerHeadersFixtureParams) error {
+	_, err := q.db.Exec(ctx, copyServerHeadersFixture, arg.AuthClientID, arg.OrganizationID, arg.McpServerID)
+	return err
+}
+
+const forwardServerHeaderFixture = `-- name: ForwardServerHeaderFixture :exec
+UPDATE remote_mcp_server_headers
+SET value = NULL, is_secret = FALSE, value_from_request_header = $1
+WHERE id = $2
+`
+
+type ForwardServerHeaderFixtureParams struct {
+	ValueFromRequestHeader pgtype.Text
+	ID                     uuid.UUID
+}
+
+func (q *Queries) ForwardServerHeaderFixture(ctx context.Context, arg ForwardServerHeaderFixtureParams) error {
+	_, err := q.db.Exec(ctx, forwardServerHeaderFixture, arg.ValueFromRequestHeader, arg.ID)
+	return err
+}
+
+const getSelectionAuthClientFixture = `-- name: GetSelectionAuthClientFixture :one
+SELECT auth_client_id, no_auth
+FROM upstream_client_selections
+WHERE credential_kind = $1
+  AND credential_id = $2
+  AND mcp_server_id = $3
+  AND deleted IS FALSE
+`
+
+type GetSelectionAuthClientFixtureParams struct {
+	CredentialKind string
+	CredentialID   uuid.UUID
+	McpServerID    uuid.UUID
+}
+
+type GetSelectionAuthClientFixtureRow struct {
+	AuthClientID uuid.NullUUID
+	NoAuth       bool
+}
+
+func (q *Queries) GetSelectionAuthClientFixture(ctx context.Context, arg GetSelectionAuthClientFixtureParams) (GetSelectionAuthClientFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getSelectionAuthClientFixture, arg.CredentialKind, arg.CredentialID, arg.McpServerID)
+	var i GetSelectionAuthClientFixtureRow
+	err := row.Scan(&i.AuthClientID, &i.NoAuth)
+	return i, err
+}
+
+const linkAuthClientFixture = `-- name: LinkAuthClientFixture :execrows
+INSERT INTO mcp_server_auth_clients (project_id, organization_id, mcp_server_id, auth_client_id, client_attachment_scope, source)
+SELECT $1, $2, $3, ac.id, ac.attachment_scope, 'admin'
+FROM mcp_auth_clients AS ac
+WHERE ac.id = $4
+`
+
+type LinkAuthClientFixtureParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	McpServerID    uuid.UUID
+	AuthClientID   uuid.UUID
+}
+
+func (q *Queries) LinkAuthClientFixture(ctx context.Context, arg LinkAuthClientFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, linkAuthClientFixture,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.McpServerID,
+		arg.AuthClientID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const listLiveUserSessionCredentials = `-- name: ListLiveUserSessionCredentials :many
 SELECT DISTINCT ON (COALESCE(s.credential_id, s.id))
        COALESCE(s.credential_id, s.id)::uuid AS credential_id,
        s.user_session_issuer_id,
-       COALESCE(usi.organization_id, p.organization_id, '')::text AS organization_id
+       COALESCE(CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END, '')::text AS organization_id,
+       COALESCE(jsonb_typeof(s.tool_selection -> 'catalog') = 'object', FALSE)::boolean AS consent_scoped
 FROM user_sessions AS s
 JOIN user_session_issuers AS usi
   ON usi.id = s.user_session_issuer_id
 LEFT JOIN projects AS p
   ON p.id = usi.project_id
-WHERE s.deleted IS FALSE
+WHERE usi.deleted IS FALSE
+  AND (usi.project_id IS NULL OR p.deleted IS FALSE)
+  AND (s.organization_id IS NULL OR s.organization_id = CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END)
+  AND s.deleted IS FALSE
   AND s.refresh_expires_at > clock_timestamp()
-  AND COALESCE(s.credential_id, s.id) > $1::uuid
-  AND ($2::text = '' OR COALESCE(usi.organization_id, p.organization_id) = $2::text)
+  AND ($1::uuid IS NULL OR s.user_session_issuer_id = $1::uuid)
+  AND COALESCE(s.credential_id, s.id) > $2::uuid
+  AND ($3::text = '' OR CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END = $3::text)
 ORDER BY COALESCE(s.credential_id, s.id), s.created_at DESC
-LIMIT $3::int
+LIMIT $4::int
 `
 
 type ListLiveUserSessionCredentialsParams struct {
+	IssuerID       uuid.NullUUID
 	Cursor         uuid.UUID
 	OrganizationID string
 	PageSize       int32
@@ -41,15 +156,23 @@ type ListLiveUserSessionCredentialsRow struct {
 	CredentialID        uuid.UUID
 	UserSessionIssuerID uuid.UUID
 	OrganizationID      string
+	ConsentScoped       bool
 }
 
 // One row per live user session credential after the cursor: the lineage of
 // rows refresh rotation continues, named by COALESCE(credential_id, id). A
 // credential is live while a row of it is not deleted and can still refresh.
 // Its organization is its issuer's, which a project issuer takes from its
-// project.
+// project. consent_scoped is read from the credential's newest live row: its
+// session policy names the catalog of servers approved at consent, which is
+// all issuance recorded choices for.
 func (q *Queries) ListLiveUserSessionCredentials(ctx context.Context, arg ListLiveUserSessionCredentialsParams) ([]ListLiveUserSessionCredentialsRow, error) {
-	rows, err := q.db.Query(ctx, listLiveUserSessionCredentials, arg.Cursor, arg.OrganizationID, arg.PageSize)
+	rows, err := q.db.Query(ctx, listLiveUserSessionCredentials,
+		arg.IssuerID,
+		arg.Cursor,
+		arg.OrganizationID,
+		arg.PageSize,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +180,12 @@ func (q *Queries) ListLiveUserSessionCredentials(ctx context.Context, arg ListLi
 	var items []ListLiveUserSessionCredentialsRow
 	for rows.Next() {
 		var i ListLiveUserSessionCredentialsRow
-		if err := rows.Scan(&i.CredentialID, &i.UserSessionIssuerID, &i.OrganizationID); err != nil {
+		if err := rows.Scan(
+			&i.CredentialID,
+			&i.UserSessionIssuerID,
+			&i.OrganizationID,
+			&i.ConsentScoped,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -116,11 +244,12 @@ const listUpstreamClientSelectionCoverage = `-- name: ListUpstreamClientSelectio
 WITH session_issuer AS (
     SELECT usi.id,
            usi.project_id,
-           COALESCE(usi.organization_id, p.organization_id) AS organization_id
+           CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END AS organization_id
     FROM user_session_issuers AS usi
     LEFT JOIN projects AS p ON p.id = usi.project_id
-    WHERE usi.id = $3
+    WHERE usi.id = $4
       AND usi.deleted IS FALSE
+      AND (usi.project_id IS NULL OR p.deleted IS FALSE)
 ),
 reachable AS (
     SELECT s.id, s.project_id
@@ -146,19 +275,97 @@ reachable AS (
             AND g.user_session_issuer_id = si.id
         )
       )
+),
+offered_oauth AS (
+    SELECT l.mcp_server_id,
+           ac.id AS auth_client_id,
+           ac.client_type,
+           ac.remote_session_client_id
+    FROM mcp_server_auth_clients AS l
+    JOIN reachable AS r
+      ON r.id = l.mcp_server_id
+    JOIN mcp_auth_clients AS ac
+      ON ac.id = l.auth_client_id
+     AND ac.organization_id = l.organization_id
+     AND (ac.project_id IS NULL OR ac.project_id = r.project_id)
+     AND ac.deleted IS FALSE
+     AND ac.enabled
+     AND ac.client_type NOT IN ('static_credential', 'pass_through')
+    WHERE l.deleted IS FALSE
+      AND l.organization_id = (SELECT organization_id FROM session_issuer)
+),
+typed_eligible AS (
+    SELECT o.mcp_server_id,
+           o.remote_session_client_id
+    FROM offered_oauth AS o
+    JOIN remote_session_clients AS c
+      ON c.id = o.remote_session_client_id
+     AND c.deleted IS FALSE
+    JOIN remote_session_issuers AS rsi
+      ON rsi.id = c.remote_session_issuer_id
+     AND rsi.deleted IS FALSE
+    JOIN remote_session_client_user_session_issuers AS binding
+      ON binding.remote_session_client_id = o.remote_session_client_id
+     AND binding.user_session_issuer_id = $4
+    WHERE o.client_type IN ('remote_session', 'service_account')
+    GROUP BY o.mcp_server_id, o.remote_session_client_id
+    HAVING count(DISTINCT o.auth_client_id) = 1
 )
 SELECT r.id AS mcp_server_id,
-       -- A recorded choice counts only while it is usable, by the predicate
-       -- GetUpstreamClientSelection serves with; the two must stay identical.
+       -- A recorded choice counts only while it is usable. Without typed_only
+       -- that is the predicate GetUpstreamClientSelection serves with; the two
+       -- must stay identical. With it, a choice naming an auth client counts
+       -- while that client is live, enabled and offered (and, for one backed by
+       -- a registration, while the registration and its issuer are live, as the
+       -- resolver requires), a no-auth choice while
+       -- the server offers no enabled OAuth-backed client, and an unmapped
+       -- client choice while it could be decided today.
        EXISTS (
          SELECT 1
          FROM upstream_client_selections AS sel
+         LEFT JOIN mcp_auth_clients AS headers_only
+           ON headers_only.id = sel.auth_client_id
+          AND sel.remote_session_client_id IS NULL
+          AND headers_only.organization_id = sel.organization_id
+          AND (headers_only.project_id IS NULL OR headers_only.project_id = sel.project_id)
+          AND headers_only.client_type IN ('static_credential', 'pass_through')
          WHERE sel.credential_kind = $1::text
            AND sel.credential_id = $2::uuid
            AND sel.mcp_server_id = r.id
            AND sel.deleted IS FALSE
            AND CASE
-             WHEN sel.no_auth THEN NOT EXISTS (
+             WHEN $3::boolean AND sel.auth_client_id IS NOT NULL THEN EXISTS (
+               SELECT 1
+               FROM mcp_server_auth_clients AS l
+               JOIN mcp_auth_clients AS ac
+                 ON ac.id = l.auth_client_id
+                AND ac.organization_id = l.organization_id
+                AND (ac.project_id IS NULL OR ac.project_id = r.project_id)
+                AND ac.deleted IS FALSE
+                AND ac.enabled
+               WHERE l.mcp_server_id = r.id
+                 AND l.auth_client_id = sel.auth_client_id
+                 AND l.deleted IS FALSE
+                 AND (ac.client_type NOT IN ('remote_session', 'service_account') OR EXISTS (
+                   SELECT 1
+                   FROM remote_session_clients AS reg
+                   JOIN remote_session_issuers AS rsi
+                     ON rsi.id = reg.remote_session_issuer_id
+                    AND rsi.deleted IS FALSE
+                   WHERE reg.id = ac.remote_session_client_id
+                     AND reg.deleted IS FALSE
+                 ))
+             )
+             WHEN $3::boolean AND sel.no_auth THEN NOT EXISTS (
+               SELECT 1 FROM offered_oauth AS o WHERE o.mcp_server_id = r.id
+             )
+             WHEN $3::boolean THEN EXISTS (
+               SELECT 1
+               FROM typed_eligible AS e
+               WHERE e.mcp_server_id = r.id
+                 AND e.remote_session_client_id = sel.remote_session_client_id
+             )
+             WHEN sel.no_auth OR headers_only.id IS NOT NULL THEN NOT EXISTS (
                SELECT 1
                FROM mcp_server_remote_session_clients AS a
                WHERE a.mcp_server_id = r.id
@@ -172,18 +379,30 @@ SELECT r.id AS mcp_server_id,
                 AND c.deleted IS FALSE
                JOIN remote_session_client_user_session_issuers AS link
                  ON link.remote_session_client_id = a.remote_session_client_id
-                AND link.user_session_issuer_id = $3
+                AND link.user_session_issuer_id = $4
                WHERE a.mcp_server_id = r.id
                  AND a.remote_session_client_id = sel.remote_session_client_id
                  AND a.deleted IS FALSE
              )
            END
        )::boolean AS selected,
+       -- Any recorded choice, usable or not: the credential was issued a
+       -- choice for this server, so the server was within what it was issued
+       -- for.
+       EXISTS (
+         SELECT 1
+         FROM upstream_client_selections AS sel
+         WHERE sel.credential_kind = $1::text
+           AND sel.credential_id = $2::uuid
+           AND sel.mcp_server_id = r.id
+           AND sel.deleted IS FALSE
+       )::boolean AS recorded,
        -- Any client choice, usable or not. A client choice is never replaced
        -- by another client, so one that is not also selected is resolved only
        -- by a reconnection. A no-auth choice is not one: when unusable,
        -- RecordUpstreamClientSelections replaces it once a client is decided,
-       -- so it is classified like a missing choice.
+       -- so it is classified like a missing choice. A header-only auth client
+       -- choice is never replaced either, so it counts as a client choice.
        EXISTS (
          SELECT 1
          FROM upstream_client_selections AS sel
@@ -194,22 +413,30 @@ SELECT r.id AS mcp_server_id,
            AND NOT sel.no_auth
        )::boolean AS chose_client,
        (
-         SELECT count(*)
-         FROM mcp_server_remote_session_clients AS a
-         JOIN remote_session_clients AS c
-           ON c.id = a.remote_session_client_id
-          AND c.deleted IS FALSE
-         JOIN remote_session_client_user_session_issuers AS link
-           ON link.remote_session_client_id = a.remote_session_client_id
-          AND link.user_session_issuer_id = $3
-         WHERE a.mcp_server_id = r.id
-           AND a.deleted IS FALSE
+         CASE WHEN $3::boolean THEN (
+           SELECT count(*) FROM typed_eligible AS e WHERE e.mcp_server_id = r.id
+         ) ELSE (
+           SELECT count(*)
+           FROM mcp_server_remote_session_clients AS a
+           JOIN remote_session_clients AS c
+             ON c.id = a.remote_session_client_id
+            AND c.deleted IS FALSE
+           JOIN remote_session_client_user_session_issuers AS link
+             ON link.remote_session_client_id = a.remote_session_client_id
+            AND link.user_session_issuer_id = $4
+           WHERE a.mcp_server_id = r.id
+             AND a.deleted IS FALSE
+         ) END
        )::bigint AS eligible_clients,
        (
-         SELECT count(*)
-         FROM mcp_server_remote_session_clients AS a
-         WHERE a.mcp_server_id = r.id
-           AND a.deleted IS FALSE
+         CASE WHEN $3::boolean THEN (
+           SELECT count(*) FROM offered_oauth AS o WHERE o.mcp_server_id = r.id
+         ) ELSE (
+           SELECT count(*)
+           FROM mcp_server_remote_session_clients AS a
+           WHERE a.mcp_server_id = r.id
+             AND a.deleted IS FALSE
+         ) END
        )::bigint AS associated_clients
 FROM reachable AS r
 ORDER BY r.id
@@ -218,23 +445,38 @@ ORDER BY r.id
 type ListUpstreamClientSelectionCoverageParams struct {
 	CredentialKind      string
 	CredentialID        uuid.UUID
+	TypedOnly           bool
 	UserSessionIssuerID uuid.UUID
 }
 
 type ListUpstreamClientSelectionCoverageRow struct {
 	McpServerID       uuid.UUID
 	Selected          bool
+	Recorded          bool
 	ChoseClient       bool
 	EligibleClients   int64
 	AssociatedClients int64
 }
 
 // Every server one credential can reach, with its recorded choice and the
-// evidence RecordUpstreamClientSelections decides from. The reach and the
+// evidence RecordUpstreamClientSelectionsForCredentials decides from. The reach and the
 // evidence must stay identical to that statement's, so a prediction made here
-// is what the write records.
+// is what the write records. typed_only means what it does there: the evidence
+// is the auth clients a server offers, not its upstream OAuth client
+// associations, and a recorded choice counts as the typed resolver reads it.
+// The enabled OAuth-backed auth clients each reachable server offers.
+// The registrations of those clients the credential's issuer binds, which is
+// what a choice can be decided from without a person picking it, as
+// RecordUpstreamClientSelections decides it: the registration and its issuer
+// are live, and exactly one offered client uses it. A registration two
+// clients share names neither, so the resolver serves its choice as ambiguous.
 func (q *Queries) ListUpstreamClientSelectionCoverage(ctx context.Context, arg ListUpstreamClientSelectionCoverageParams) ([]ListUpstreamClientSelectionCoverageRow, error) {
-	rows, err := q.db.Query(ctx, listUpstreamClientSelectionCoverage, arg.CredentialKind, arg.CredentialID, arg.UserSessionIssuerID)
+	rows, err := q.db.Query(ctx, listUpstreamClientSelectionCoverage,
+		arg.CredentialKind,
+		arg.CredentialID,
+		arg.TypedOnly,
+		arg.UserSessionIssuerID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -245,6 +487,7 @@ func (q *Queries) ListUpstreamClientSelectionCoverage(ctx context.Context, arg L
 		if err := rows.Scan(
 			&i.McpServerID,
 			&i.Selected,
+			&i.Recorded,
 			&i.ChoseClient,
 			&i.EligibleClients,
 			&i.AssociatedClients,
@@ -257,6 +500,29 @@ func (q *Queries) ListUpstreamClientSelectionCoverage(ctx context.Context, arg L
 		return nil, err
 	}
 	return items, nil
+}
+
+const nameAuthClientOnSelectionFixture = `-- name: NameAuthClientOnSelectionFixture :exec
+UPDATE upstream_client_selections AS sel
+SET auth_client_id = ac.id,
+    auth_client_attachment_scope = ac.attachment_scope,
+    no_auth = FALSE
+FROM mcp_auth_clients AS ac
+WHERE ac.id = $1
+  AND sel.credential_id = $2
+  AND sel.mcp_server_id = $3
+  AND sel.deleted IS FALSE
+`
+
+type NameAuthClientOnSelectionFixtureParams struct {
+	AuthClientID uuid.UUID
+	CredentialID uuid.UUID
+	McpServerID  uuid.UUID
+}
+
+func (q *Queries) NameAuthClientOnSelectionFixture(ctx context.Context, arg NameAuthClientOnSelectionFixtureParams) error {
+	_, err := q.db.Exec(ctx, nameAuthClientOnSelectionFixture, arg.AuthClientID, arg.CredentialID, arg.McpServerID)
+	return err
 }
 
 const removeAssociationFixture = `-- name: RemoveAssociationFixture :exec
@@ -311,6 +577,53 @@ type SeedClientBindingFixtureParams struct {
 
 func (q *Queries) SeedClientBindingFixture(ctx context.Context, arg SeedClientBindingFixtureParams) error {
 	_, err := q.db.Exec(ctx, seedClientBindingFixture, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
+	return err
+}
+
+const seedHeaderAuthClientFixture = `-- name: SeedHeaderAuthClientFixture :one
+INSERT INTO mcp_auth_clients (organization_id, project_id, client_type, source, name)
+VALUES ($1, $2, 'static_credential', 'backfill', 'headers')
+RETURNING id
+`
+
+type SeedHeaderAuthClientFixtureParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+}
+
+func (q *Queries) SeedHeaderAuthClientFixture(ctx context.Context, arg SeedHeaderAuthClientFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedHeaderAuthClientFixture, arg.OrganizationID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedLinkedHeaderAuthClientFixture = `-- name: SeedLinkedHeaderAuthClientFixture :exec
+WITH client AS (
+    INSERT INTO mcp_auth_clients (id, organization_id, project_id, client_type, source, name)
+    VALUES ($2, $3, $4, 'static_credential', 'admin', 'headers')
+    RETURNING id, organization_id, project_id, attachment_scope
+)
+INSERT INTO mcp_server_auth_clients (project_id, organization_id, mcp_server_id, auth_client_id, client_attachment_scope, source)
+SELECT client.project_id, client.organization_id, $1, client.id, client.attachment_scope, 'admin'
+FROM client
+`
+
+type SeedLinkedHeaderAuthClientFixtureParams struct {
+	McpServerID    uuid.UUID
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+}
+
+// A static-credential auth client in the project, linked to one server.
+func (q *Queries) SeedLinkedHeaderAuthClientFixture(ctx context.Context, arg SeedLinkedHeaderAuthClientFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedLinkedHeaderAuthClientFixture,
+		arg.McpServerID,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
 	return err
 }
 
@@ -375,6 +688,33 @@ type SeedMetaMCPServerMemberFixtureParams struct {
 func (q *Queries) SeedMetaMCPServerMemberFixture(ctx context.Context, arg SeedMetaMCPServerMemberFixtureParams) error {
 	_, err := q.db.Exec(ctx, seedMetaMCPServerMemberFixture, arg.ProjectID, arg.MetaMcpServerID, arg.McpServerID)
 	return err
+}
+
+const seedOAuthAuthClientFixture = `-- name: SeedOAuthAuthClientFixture :one
+INSERT INTO mcp_auth_clients (organization_id, project_id, client_type, source, name, remote_session_client_id, client_attachment_scope)
+SELECT $1, $2, $3, 'admin', 'oauth', c.id, c.attachment_scope
+FROM remote_session_clients AS c
+WHERE c.id = $4
+RETURNING id
+`
+
+type SeedOAuthAuthClientFixtureParams struct {
+	OrganizationID        string
+	ProjectID             uuid.NullUUID
+	ClientType            string
+	RemoteSessionClientID uuid.UUID
+}
+
+func (q *Queries) SeedOAuthAuthClientFixture(ctx context.Context, arg SeedOAuthAuthClientFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedOAuthAuthClientFixture,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ClientType,
+		arg.RemoteSessionClientID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const seedOrganizationFixture = `-- name: SeedOrganizationFixture :exec
@@ -460,6 +800,35 @@ func (q *Queries) SeedRemoteSessionIssuerFixture(ctx context.Context, arg SeedRe
 		arg.Issuer,
 	)
 	return err
+}
+
+const seedServerHeaderFixture = `-- name: SeedServerHeaderFixture :one
+INSERT INTO remote_mcp_server_headers (remote_mcp_server_id, name, is_secret, value, value_from_request_header)
+SELECT s.remote_mcp_server_id, $1, $2, $3, $4
+FROM mcp_servers AS s
+WHERE s.id = $5
+RETURNING id
+`
+
+type SeedServerHeaderFixtureParams struct {
+	Name                   string
+	IsSecret               bool
+	Value                  pgtype.Text
+	ValueFromRequestHeader pgtype.Text
+	McpServerID            uuid.UUID
+}
+
+func (q *Queries) SeedServerHeaderFixture(ctx context.Context, arg SeedServerHeaderFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedServerHeaderFixture,
+		arg.Name,
+		arg.IsSecret,
+		arg.Value,
+		arg.ValueFromRequestHeader,
+		arg.McpServerID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const seedUnproxiedMCPServerFixture = `-- name: SeedUnproxiedMCPServerFixture :exec
@@ -550,6 +919,15 @@ func (q *Queries) SeedUserSessionIssuerFixture(ctx context.Context, arg SeedUser
 		arg.OrganizationID,
 		arg.Slug,
 	)
+	return err
+}
+
+const softDeleteUserSessionIssuerFixture = `-- name: SoftDeleteUserSessionIssuerFixture :exec
+UPDATE user_session_issuers SET deleted_at = clock_timestamp() WHERE id = $1
+`
+
+func (q *Queries) SoftDeleteUserSessionIssuerFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, softDeleteUserSessionIssuerFixture, id)
 	return err
 }
 

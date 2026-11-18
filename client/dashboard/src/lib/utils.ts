@@ -176,6 +176,7 @@ export function buildLoginRedirectURL(
   orgName?: string,
   email?: string,
   partnerCode?: string,
+  attribution?: Record<string, string>,
 ): string {
   // The base is only consulted when getServerURL() is relative (empty in
   // tests, per vitest.config.ts) — window.location.origin is always
@@ -202,6 +203,11 @@ export function buildLoginRedirectURL(
   if (email) url.searchParams.set("email", email);
   if (partnerCode?.trim())
     url.searchParams.set("partner_code", partnerCode.trim());
+  // Sign-up only: UTMs and the analytics session id, which the server
+  // attaches to the sign-up events (see lib/signup-attribution.ts).
+  for (const [key, value] of Object.entries(attribution ?? {})) {
+    url.searchParams.set(key, value);
+  }
   return url.toString();
 }
 

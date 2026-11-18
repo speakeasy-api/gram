@@ -23,7 +23,6 @@ func TestServerIdentity_CanonicalWrapperOwnsToolsetIdentityBesideGatewayMember(t
 	toolset, err := toolsetsrepo.New(conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: principal.OrganizationID, ProjectID: project.ID,
 		Name: "Hosted", Slug: "hosted-" + uuid.NewString()[:8],
-		McpSlug: conv.ToPGText("hosted-" + uuid.NewString()[:8]), McpEnabled: true,
 	})
 	require.NoError(t, err)
 	servers := mcpserversrepo.New(conn)
@@ -34,7 +33,7 @@ func TestServerIdentity_CanonicalWrapperOwnsToolsetIdentityBesideGatewayMember(t
 	})
 	require.NoError(t, err)
 	canonical, err := servers.CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID: toolset.ID, ProjectID: project.ID, Name: conv.ToPGText(toolset.Name), Slug: toolset.McpSlug,
+		ID: toolset.ID, ProjectID: project.ID, Name: conv.ToPGText(toolset.Name), Slug: conv.ToPGText("hosted-" + uuid.NewString()[:8]),
 		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Visibility: "private",
 	})
 	require.NoError(t, err)

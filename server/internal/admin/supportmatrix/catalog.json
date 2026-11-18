@@ -477,9 +477,77 @@
       }
     },
     {
+      "id": "cowork-org-instructions",
+      "name": "Cowork organization instructions",
+      "vendor": "Anthropic",
+      "plans": "Team plans: supported; Enterprise plans: unsupported (uses the Compliance API and inference hooks); Personal accounts: unsupported",
+      "facts": {
+        "org": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "role": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "session": {
+          "status": "supported",
+          "note": "via transcripts",
+          "verify": true
+        },
+        "session-cost": {
+          "status": "unimplemented",
+          "note": "transcripts carry no token counts",
+          "verify": false
+        },
+        "session-tokens": {
+          "status": "unimplemented",
+          "note": "transcripts carry no token counts",
+          "verify": false
+        },
+        "cost": {
+          "status": "unimplemented",
+          "note": "transcripts carry no token counts",
+          "verify": false
+        },
+        "tokens": {
+          "status": "unimplemented",
+          "note": "transcripts carry no token counts",
+          "verify": false
+        },
+        "blocking": {
+          "status": "supported",
+          "note": "per-event hooks enforce, as in Claude Code",
+          "verify": true
+        },
+        "mcp-redaction": {
+          "status": "impossible",
+          "note": "tool results are not rewritten in Cowork",
+          "verify": true
+        },
+        "prompt-redaction": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "shadow-mcp": {
+          "status": "unimplemented",
+          "note": "tool calls are in the transcript",
+          "verify": true
+        },
+        "shadow-ai": {
+          "status": "impossible",
+          "note": "",
+          "verify": true
+        }
+      }
+    },
+    {
       "id": "litellm",
       "name": "LiteLLM",
-      "vendor": "Others",
+      "vendor": "LiteLLM",
       "plans": "Source lists MDM under team plans; eligibility needs clarification",
       "facts": {
         "org": {
@@ -597,6 +665,74 @@
         },
         "prompt-redaction": {
           "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "shadow-mcp": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "shadow-ai": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        }
+      }
+    },
+    {
+      "id": "cursor-marketplace",
+      "name": "Cursor Team Marketplace",
+      "vendor": "Cursor",
+      "plans": "Teams and Enterprise; personal accounts not possible",
+      "facts": {
+        "org": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "role": {
+          "status": "supported",
+          "note": "",
+          "verify": true
+        },
+        "session": {
+          "status": "supported",
+          "note": "via hooks",
+          "verify": false
+        },
+        "session-cost": {
+          "status": "supported",
+          "note": "via hooks",
+          "verify": false
+        },
+        "session-tokens": {
+          "status": "supported",
+          "note": "via hooks",
+          "verify": false
+        },
+        "cost": {
+          "status": "unimplemented",
+          "note": "",
+          "verify": false
+        },
+        "tokens": {
+          "status": "unimplemented",
+          "note": "",
+          "verify": false
+        },
+        "blocking": {
+          "status": "supported",
+          "note": "via hooks",
+          "verify": false
+        },
+        "mcp-redaction": {
+          "status": "unimplemented",
+          "note": "",
+          "verify": false
+        },
+        "prompt-redaction": {
+          "status": "impossible",
           "note": "",
           "verify": false
         },
@@ -786,39 +922,53 @@
       "name": "Claude Code · Cloud"
     },
     {
+      "id": "claude-unified-chat-desktop",
+      "vendor": "Anthropic",
+      "family": "Claude · Unified Chat",
+      "surface": "Desktop",
+      "name": "Claude · Unified Chat · Desktop"
+    },
+    {
+      "id": "claude-unified-chat-web",
+      "vendor": "Anthropic",
+      "family": "Claude · Unified Chat",
+      "surface": "Web",
+      "name": "Claude · Unified Chat · Web"
+    },
+    {
       "id": "claude-chat-web",
       "vendor": "Anthropic",
-      "family": "Claude Chat",
+      "family": "Claude Chat (deprecated)",
       "surface": "Web",
-      "name": "Claude Chat · Web"
+      "name": "Claude Chat (deprecated) · Web"
     },
     {
       "id": "claude-chat-desktop",
       "vendor": "Anthropic",
-      "family": "Claude Chat",
+      "family": "Claude Chat (deprecated)",
       "surface": "Desktop",
-      "name": "Claude Chat · Desktop"
+      "name": "Claude Chat (deprecated) · Desktop"
     },
     {
       "id": "cowork-desktop",
       "vendor": "Anthropic",
-      "family": "Cowork",
+      "family": "Cowork (deprecated)",
       "surface": "Desktop",
-      "name": "Cowork · Desktop"
+      "name": "Cowork (deprecated) · Desktop"
     },
     {
       "id": "cowork-cloud",
       "vendor": "Anthropic",
-      "family": "Cowork",
+      "family": "Cowork (deprecated)",
       "surface": "Cloud",
-      "name": "Cowork · Cloud"
+      "name": "Cowork (deprecated) · Cloud"
     },
     {
       "id": "cowork-web",
       "vendor": "Anthropic",
-      "family": "Cowork",
+      "family": "Cowork (deprecated)",
       "surface": "Web",
-      "name": "Cowork · Web"
+      "name": "Cowork (deprecated) · Web"
     },
     {
       "id": "other-claudes-claude-tag",
@@ -917,6 +1067,13 @@
       "family": "GitHub Copilot",
       "surface": "App",
       "name": "GitHub Copilot"
+    },
+    {
+      "id": "litellm-gateway",
+      "vendor": "LiteLLM",
+      "family": "LiteLLM",
+      "surface": "Gateway",
+      "name": "LiteLLM Gateway"
     }
   ],
   "capabilities": [

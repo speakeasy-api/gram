@@ -74,6 +74,10 @@ message Reading {
     string conversation_id = 1;
     // Independent of human attribution; only user/assistant messages are evaluated.
     Role role = 2;
+    int32 generation = 3;
+    int64 sequence = 4;
+    string capture_kind = 5;
+    string original_message_id = 6;
   }
   // Optional execution context for a tool-call source adapter. Event.id is the
   // producer's stable execution identity, not necessarily the protocol call ID.

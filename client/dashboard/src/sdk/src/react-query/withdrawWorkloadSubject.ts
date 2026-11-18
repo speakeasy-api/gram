@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { workloadIdentitiesWithdrawSubject } from "../funcs/workloadIdentitiesWithdrawSubject.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { WorkloadIdentityPolicy } from "../models/components/workloadidentitypolicy.js";
+import { WithdrawnWorkloadSubjectPolicy } from "../models/components/withdrawnworkloadsubjectpolicy.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -37,7 +37,8 @@ export type WithdrawWorkloadSubjectMutationVariables = {
   options?: RequestOptions;
 };
 
-export type WithdrawWorkloadSubjectMutationData = WorkloadIdentityPolicy;
+export type WithdrawWorkloadSubjectMutationData =
+  WithdrawnWorkloadSubjectPolicy;
 
 export type WithdrawWorkloadSubjectMutationError =
   | ServiceError
@@ -54,7 +55,7 @@ export type WithdrawWorkloadSubjectMutationError =
  * withdrawSubject workloadIdentities
  *
  * @remarks
- * Withdraw an admitted subject and its agent assignment, stopping it authenticating. Requires workload:write.
+ * Withdraw an admitted subject and its agent assignment, stopping it authenticating. A subject can be admitted at the organization and in a project independently; withdrawing one leaves the other in force, and the result names the tier removed. Requires workload:write.
  */
 export function useWithdrawWorkloadSubjectMutation(
   options?: MutationHookOptions<

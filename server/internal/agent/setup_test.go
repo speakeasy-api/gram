@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -40,6 +41,9 @@ import (
 )
 
 const testServerURL = "https://app.getgram.ai"
+
+// testSiteURL is the dashboard base that plugin server links are built on.
+const testSiteURL = "https://dashboard.getgram.ai"
 
 var infra *testenv.Environment
 
@@ -84,6 +88,8 @@ type testInstance struct {
 	blobs assets.BlobStore
 	// deviceAgentTokens mints the device-agent tokens the service accepts.
 	deviceAgentTokens *deviceagenttoken.Issuer
+	// redis backs rate limiters a test attaches to the service.
+	redis *redis.Client
 }
 
 // newTestAgentService clones a fresh DB, seeds the mock org + a project (via
@@ -129,7 +135,9 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 
 	serverURL, err := url.Parse(testServerURL)
 	require.NoError(t, err)
-	orgHosts := orghost.New(orghost.Config{ServerURL: serverURL})
+	siteURL, err := url.Parse(testSiteURL)
+	require.NoError(t, err)
+	orgHosts := orghost.New(orghost.Config{ServerURL: serverURL, SiteURL: siteURL})
 	deviceAgentTokens := deviceagenttoken.New(mcpauthztest.NewIssuer(t), conn)
 	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, orgHosts, blobs, telemetryLogger, nil, deviceAgentTokens)
 
@@ -142,6 +150,7 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 		features:          features,
 		blobs:             blobs,
 		deviceAgentTokens: deviceAgentTokens,
+		redis:             redisClient,
 	}
 }
 

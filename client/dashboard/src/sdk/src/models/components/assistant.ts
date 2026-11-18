@@ -36,6 +36,34 @@ export const IdentityState = {
 export type IdentityState = OpenEnum<typeof IdentityState>;
 
 /**
+ * The reasoning effort used by the assistant.
+ */
+export const AssistantReasoningEffort = {
+  None: "none",
+  Low: "low",
+  Medium: "medium",
+  High: "high",
+} as const;
+/**
+ * The reasoning effort used by the assistant.
+ */
+export type AssistantReasoningEffort = OpenEnum<
+  typeof AssistantReasoningEffort
+>;
+
+/**
+ * Desired runtime protocol version: 2 is the default runtime, 3 is Kit. Runtime changes require a settled assistant and available destination.
+ */
+export const RuntimeVersion = {
+  Two: 2,
+  Three: 3,
+} as const;
+/**
+ * Desired runtime protocol version: 2 is the default runtime, 3 is Kit. Runtime changes require a settled assistant and available destination.
+ */
+export type RuntimeVersion = OpenEnum<typeof RuntimeVersion>;
+
+/**
  * The assistant status.
  */
 export const AssistantStatus = {
@@ -93,6 +121,14 @@ export type Assistant = {
    */
   projectId: string;
   /**
+   * The reasoning effort used by the assistant.
+   */
+  reasoningEffort: AssistantReasoningEffort;
+  /**
+   * Desired runtime protocol version: 2 is the default runtime, 3 is Kit. Runtime changes require a settled assistant and available destination.
+   */
+  runtimeVersion: RuntimeVersion;
+  /**
    * Skills attached to the assistant.
    */
   skills: Array<AssistantSkillRef>;
@@ -121,6 +157,18 @@ export const IdentityState$inboundSchema: z.ZodMiniType<
 > = openEnums.inboundSchema(IdentityState);
 
 /** @internal */
+export const AssistantReasoningEffort$inboundSchema: z.ZodMiniType<
+  AssistantReasoningEffort,
+  unknown
+> = openEnums.inboundSchema(AssistantReasoningEffort);
+
+/** @internal */
+export const RuntimeVersion$inboundSchema: z.ZodMiniType<
+  RuntimeVersion,
+  unknown
+> = openEnums.inboundSchemaInt(RuntimeVersion);
+
+/** @internal */
 export const AssistantStatus$inboundSchema: z.ZodMiniType<
   AssistantStatus,
   unknown
@@ -144,6 +192,8 @@ export const Assistant$inboundSchema: z.ZodMiniType<Assistant, unknown> = z
       model: z.string(),
       name: z.string(),
       project_id: z.string(),
+      reasoning_effort: AssistantReasoningEffort$inboundSchema,
+      runtime_version: RuntimeVersion$inboundSchema,
       skills: z.array(AssistantSkillRef$inboundSchema),
       status: AssistantStatus$inboundSchema,
       toolsets: z.array(AssistantToolsetRef$inboundSchema),
@@ -162,6 +212,8 @@ export const Assistant$inboundSchema: z.ZodMiniType<Assistant, unknown> = z
         "max_concurrency": "maxConcurrency",
         "mcp_servers": "mcpServers",
         "project_id": "projectId",
+        "reasoning_effort": "reasoningEffort",
+        "runtime_version": "runtimeVersion",
         "updated_at": "updatedAt",
         "warm_ttl_seconds": "warmTtlSeconds",
       });

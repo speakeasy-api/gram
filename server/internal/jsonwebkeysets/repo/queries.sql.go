@@ -334,7 +334,7 @@ func (q *Queries) GetActiveJsonWebKey(ctx context.Context, arg GetActiveJsonWebK
 
 const getExternalKeyForMint = `-- name: GetExternalKeyForMint :one
 SELECT
-  ek.id, ek.organization_id, ek.project_id, ek.external_credential_id, ek.provider, ek.algorithm, ek.name, ek.customer_grant_reference, ek.identity_provider_connection_id, ek.created_at, ek.updated_at, ek.deleted_at, ek.deleted,
+  ek.id, ek.organization_id, ek.project_id, ek.external_credential_id, ek.provider, ek.purpose, ek.algorithm, ek.name, ek.customer_grant_reference, ek.identity_provider_connection_id, ek.created_at, ek.updated_at, ek.deleted_at, ek.deleted,
   gcp.resource_name,
   is_internal_session_issuer_external_key(ek.organization_id, ek.id) AS ema_issuer_managed,
   ec.id AS credential_id,
@@ -403,6 +403,7 @@ func (q *Queries) GetExternalKeyForMint(ctx context.Context, arg GetExternalKeyF
 		&i.ExternalKey.ProjectID,
 		&i.ExternalKey.ExternalCredentialID,
 		&i.ExternalKey.Provider,
+		&i.ExternalKey.Purpose,
 		&i.ExternalKey.Algorithm,
 		&i.ExternalKey.Name,
 		&i.ExternalKey.CustomerGrantReference,

@@ -2,8 +2,10 @@ package demoseed
 
 import (
 	"context"
+	"encoding/base32"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -44,6 +46,12 @@ func (s *seeder) seedOrg(ctx context.Context) error {
 	}
 	if err := s.orgFeaturesAndUsers(ctx); err != nil {
 		return err
+	}
+	domainID := s.det("custom-domain")
+	// Ten base32 characters give each tenant a stable, valid DNS target label.
+	targetToken := strings.ToLower(base32.StdEncoding.EncodeToString(domainID[:]))[:10]
+	if err := s.q.OrgSeedCustomDomain(ctx, repo.OrgSeedCustomDomainParams{ID: domainID, OrgID: s.orgID(), Domain: s.spec.CustomDomain, DnsTargetToken: pgtype.Text{String: targetToken, Valid: true}}); err != nil {
+		return fmt.Errorf("seed custom domain diagnostics: %w", err)
 	}
 	return s.orgMemberships(ctx)
 }
@@ -107,7 +115,7 @@ func (s *seeder) orgMetadata(ctx context.Context) error {
 func (s *seeder) orgPurge(ctx context.Context) error {
 	org := s.orgID()
 	proj := s.projectID()
-	return runOrgSteps([]orgStep{
+	if err := runOrgSteps([]orgStep{
 		// Killswitch aggregates retain canonical MCP server keys in immutable
 		// snapshots. Clear every org-scoped aggregate and replay receipt before
 		// the referenced servers/toolsets, including rows created by local
@@ -177,6 +185,7 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 		// cascade. mcp_servers in turn pins its toolset with RESTRICT, so it
 		// must still go before the toolsets delete.
 		{"delete assistant mcp servers", func() error { return s.q.OrgDeleteAssistantMCPServers(ctx, org) }},
+		{"delete catalogue promotion candidates", func() error { return s.q.OrgDeleteRegistryPromotionCandidates(ctx, org) }},
 		// Toolsets are cleared across the organization, including other
 		// projects. Clear their plugin attachments across the same scope before
 		// deleting them.
@@ -217,6 +226,9 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 			return s.q.OrgDeleteExternalOAuthServerMetadata(ctx, repo.OrgDeleteExternalOAuthServerMetadataParams{ProjectID: proj, OrgID: org})
 		}},
 		{"delete toolsets", func() error { return s.q.OrgDeleteToolsets(ctx, org) }},
+		// Domain SET NULL references must be gone before deleting their domain:
+		// root endpoints require it and toolset slugs can collide without it.
+		{"delete custom domains", func() error { return s.q.OrgDeleteCustomDomains(ctx, org) }},
 		// environments.project_id is NOT NULL but its FK is ON DELETE SET NULL,
 		// so the projects delete below fails outright on any environment row.
 		// The demo tenant seeds none, but the local development tenant does
@@ -242,10 +254,14 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 		{"delete policy bypass grants", func() error {
 			return s.q.OrgDeletePolicyBypassGrants(ctx, repo.OrgDeletePolicyBypassGrantsParams{OrgID: org, PolicyID: s.policySM().String()})
 		}},
-		{"delete github grants", func() error {
+		{"delete seeded direct user grants", func() error {
 			return s.q.OrgDeleteGrantsByID(ctx, repo.OrgDeleteGrantsByIDParams{
 				OrgID: org,
-				Ids:   []uuid.UUID{s.det("github-direct-grant"), s.det("github-wildcard-grant")},
+				Ids: append([]uuid.UUID{
+					s.det("github-direct-grant"), s.det("github-wildcard-grant"),
+					s.det("inference-owner-grant"),
+					s.det("auth-client-github-token-use"), s.det("auth-client-github-token-block"),
+				}, s.globalToolBlockIDs()...),
 			})
 		}},
 		// Workload trust is organization-scoped: an organization-tier issuer or
@@ -260,6 +276,9 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 		// Sigint ownership/reference FKs use ON DELETE SET NULL with non-null
 		// columns, so every row in the org's projects, including tombstones,
 		// must be physically removed child-first before the projects delete.
+		{"delete sigint definition snapshots", func() error {
+			return s.q.OrgDeleteSigintDefinitionSnapshots(ctx, org)
+		}},
 		{"delete sigint sensor signals", func() error {
 			return s.q.OrgDeleteSigintSensorSignals(ctx, org)
 		}},
@@ -269,6 +288,13 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 		{"delete sigint custom signals", func() error {
 			return s.q.OrgDeleteSigintCustomSignals(ctx, org)
 		}},
+	}); err != nil {
+		return err
+	}
+	if err := runOrgSteps(s.channelsPurgeSteps(ctx)); err != nil {
+		return err
+	}
+	return runOrgSteps([]orgStep{
 		{"delete projects", func() error { return s.q.OrgDeleteProjects(ctx, org) }},
 	})
 }
@@ -287,25 +313,7 @@ func (s *seeder) orgProject(ctx context.Context) error {
 	// by two sensors, while Draft campaign intentionally has no memberships so
 	// the incomplete authoring state remains visible. An empty criteria or
 	// instructions string is written as NULL.
-	signals := []struct{ key, name, desc, criteria string }{
-		{"api", "API", "Requests involving the public or internal API.",
-			"The conversation concerns API endpoints, requests, responses, or contracts."},
-		{"database", "Database", "Requests involving persistent data stores.",
-			"The conversation concerns queries, migrations, schemas, or database operations."},
-		{"authentication", "Authentication", "Requests involving identity and authentication.",
-			"The conversation concerns sign-in, credentials, sessions, or identity providers."},
-		{"worker", "Worker", "Requests primarily involving asynchronous workers.",
-			"The conversation concerns background jobs, queues, or worker processes."},
-		{"low", "Low", "Little or no customer impact.",
-			"The issue is cosmetic or has a straightforward workaround."},
-		{"medium", "Medium", "Noticeable but bounded customer impact.",
-			"The issue impairs a workflow but does not make the product broadly unavailable."},
-		{"high", "High", "Severe or widespread customer impact.",
-			"The issue blocks a critical workflow or affects many customers."},
-		{"launch", "Launch", "A future product launch campaign.", ""},
-		{"renewal", "Renewal", "A future customer renewal campaign.", ""},
-	}
-	for _, sig := range signals {
+	for _, sig := range demoSigintSignals {
 		if err := s.q.OrgInsertSigintCustomSignal(ctx, repo.OrgInsertSigintCustomSignalParams{
 			ID:                 s.det("sigint-signal-" + sig.key),
 			ProjectID:          proj,
@@ -352,6 +360,27 @@ func (s *seeder) orgProject(ctx context.Context) error {
 			return fmt.Errorf("insert demo sigint membership %s: %w", m.key, err)
 		}
 	}
+	for _, sensor := range demoSigintSensors {
+		if !sensor.enabled {
+			continue
+		}
+		definition, hash, err := s.sigintDemoDefinition(sensor)
+		if err != nil {
+			return err
+		}
+		if err := s.q.OrgInsertSigintDefinitionSnapshot(ctx, repo.OrgInsertSigintDefinitionSnapshotParams{
+			ProjectID: proj, SensorID: s.det("sigint-sensor-" + sensor.key), DefinitionHash: hash, Definition: definition,
+		}); err != nil {
+			return fmt.Errorf("seed sensor definition: %w", err)
+		}
+	}
+	count, err := s.q.OrgCountSigintDefinitionSnapshots(ctx, proj)
+	if err != nil {
+		return fmt.Errorf("count seeded sensor definitions: %w", err)
+	}
+	if count != 3 {
+		return fmt.Errorf("seed sensor definitions: expected three snapshots, got %d", count)
+	}
 	return nil
 }
 
@@ -361,8 +390,13 @@ func (s *seeder) orgFeaturesAndUsers(ctx context.Context) error {
 	// authz.ShouldEnforce is false and chatVisibilityScope falls back to
 	// own-sessions-only, hiding every seeded chat (owned by the seeded users).
 	if err := s.q.OrgInsertFeatures(ctx, repo.OrgInsertFeaturesParams{
-		OrgID:    org,
-		Features: []string{"logs", "tool_io_logs", "session_capture", "skills", "rbac", "signals_intelligence"},
+		OrgID: org,
+		// upstream_auth_enforced: the seeded org runs on typed upstream auth, so
+		// the demo and local orgs do not exercise the legacy resolver. The seed
+		// sets the feature directly, skipping the admin enable endpoint's audit
+		// record and blocker checks (see docs/rbac.md); upstreamAuthReadiness
+		// fails the run if the typed auth it records is incomplete.
+		Features: []string{"logs", "tool_io_logs", "session_capture", "skills", "rbac", "signals_intelligence", "upstream_auth_enforced"},
 	}); err != nil {
 		return fmt.Errorf("insert demo features: %w", err)
 	}
@@ -377,7 +411,7 @@ func (s *seeder) orgFeaturesAndUsers(ctx context.Context) error {
 		return fmt.Errorf("insert demo hooks_fail_open feature: %w", err)
 	}
 
-	for _, u := range demoUsers {
+	for _, u := range demoMembers() {
 		id := s.userID(u.handle)
 		if err := s.q.OrgUpsertUser(ctx, repo.OrgUpsertUserParams{
 			ID:          id,
@@ -411,13 +445,14 @@ func (s *seeder) orgMemberships(ctx context.Context) error {
 	org := s.orgID()
 	if err := runOrgSteps([]orgStep{
 		{"delete agent grants", func() error { return s.q.OrgDeleteAgentGrants(ctx, org) }},
+		{"delete auth permission provisions", func() error { return s.q.OrgDeleteAuthPermissionProvisions(ctx, org) }},
 		{"delete agents", func() error { return s.q.OrgDeleteAgents(ctx, org) }},
 		{"delete slack identity mappings", func() error { return s.q.OrgDeleteSlackIdentityMappings(ctx, org) }},
 		{"delete memberships", func() error { return s.q.OrgDeleteMemberships(ctx, org) }},
 	}); err != nil {
 		return err
 	}
-	for i, u := range demoUsers {
+	for i, u := range demoMembers() {
 		id := s.userID(u.handle)
 		if err := s.q.OrgInsertMembership(ctx, repo.OrgInsertMembershipParams{
 			OrgID:              org,
@@ -434,7 +469,8 @@ func (s *seeder) orgMemberships(ctx context.Context) error {
 	// Existing fictional owners exercise name/initials rendering without
 	// adding external avatar dependencies. The two active release agents
 	// receive only project/server-scoped direct grants alongside their inert
-	// attachments.
+	// attachments. The fifth belongs to the agent owner persona, whose only
+	// way into its sessions and tool logs is owning it.
 	if err := s.q.OrgInsertManagedAgents(ctx, repo.OrgInsertManagedAgentsParams{
 		Agent1: s.det("managed-agent-1"),
 		OrgID:  org,
@@ -444,6 +480,8 @@ func (s *seeder) orgMemberships(ctx context.Context) error {
 		Agent3: s.det("managed-agent-3"),
 		Owner3: s.userID(demoUsers[2].handle),
 		Agent4: s.det("managed-agent-4"),
+		Agent5: s.ownerAgentID(),
+		Owner5: s.userID(demoAgentOwner.handle),
 	}); err != nil {
 		return fmt.Errorf("insert demo managed agents: %w", err)
 	}
@@ -464,7 +502,7 @@ func (s *seeder) orgMemberships(ctx context.Context) error {
 	if adminURN == "" || memberURN == "" {
 		return nil
 	}
-	for _, u := range demoUsers {
+	for _, u := range demoMembers() {
 		id := s.userID(u.handle)
 		role := memberURN
 		if id == s.userID("lucas") || id == s.userID("priya") {
@@ -494,6 +532,27 @@ func (s *seeder) orgGlobalRoleURN(ctx context.Context, slug string) (string, err
 	default:
 		return urn, nil
 	}
+}
+
+// demoSigintSignals supplies both the current configuration and its historical
+// synthetic definitions so inspection retains the exact criteria behind readings.
+var demoSigintSignals = []struct{ key, name, desc, criteria string }{
+	{"api", "API", "Requests involving the public or internal API.",
+		"The conversation concerns API endpoints, requests, responses, or contracts."},
+	{"database", "Database", "Requests involving persistent data stores.",
+		"The conversation concerns queries, migrations, schemas, or database operations."},
+	{"authentication", "Authentication", "Requests involving identity and authentication.",
+		"The conversation concerns sign-in, credentials, sessions, or identity providers."},
+	{"worker", "Worker", "Requests primarily involving asynchronous workers.",
+		"The conversation concerns background jobs, queues, or worker processes."},
+	{"low", "Low", "Little or no customer impact.",
+		"The issue is cosmetic or has a straightforward workaround."},
+	{"medium", "Medium", "Noticeable but bounded customer impact.",
+		"The issue impairs a workflow but does not make the product broadly unavailable."},
+	{"high", "High", "Severe or widespread customer impact.",
+		"The issue blocks a critical workflow or affects many customers."},
+	{"launch", "Launch", "A future product launch campaign.", ""},
+	{"renewal", "Renewal", "A future customer renewal campaign.", ""},
 }
 
 // demoSigintSensor is one seeded signals intelligence sensor.

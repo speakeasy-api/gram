@@ -1,10 +1,18 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@/contexts/Sdk", () => ({
-  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
+const routeSlugs = vi.hoisted(() => ({
+  orgSlug: "org",
+  projectSlug: "project" as string | undefined,
 }));
+vi.mock("@/contexts/Sdk", () => ({ useSlugs: () => routeSlugs }));
 
 import { LegacyDataRedirect } from "./pages/data-exports/LegacyDataRedirect";
 import {
@@ -24,7 +32,11 @@ function ProjectRouteHrefs(): JSX.Element {
   return (
     <output data-testid="project-route-hrefs">
       {Object.values(routes)
-        .map((route) => route.href())
+        .map((route) =>
+          route === routes.toolset
+            ? route.href("example-toolset")
+            : route.href(),
+        )
         .join("\n")}
     </output>
   );
@@ -79,6 +91,14 @@ function GoToExploreDemo(): JSX.Element {
 }
 
 describe("project routes", () => {
+  it("marks Agent Identity as beta in shared navigation metadata", () => {
+    const { result } = renderHook(() => useRoutes(), {
+      wrapper: MemoryRouter,
+    });
+
+    expect(result.current.identities.agents.stage).toBe("beta");
+  });
+
   it("exposes the standalone guide route", () => {
     render(
       <MemoryRouter initialEntries={["/org/projects/project"]}>
@@ -136,48 +156,21 @@ describe("project routes", () => {
   });
 
   // Shadow AI lives in Guardrails: every tool index page of the old section
-  // sends a pasted link there.
+  // sends a pasted link to its Shadow AI targets tab.
   it.each([
     "shadow-ai",
     "shadow-ai/harnesses",
     "shadow-ai/assistants",
     "shadow-ai/models",
-  ])("redirects /%s to Guardrails", async (path) => {
-    const view = render(
-      <MemoryRouter initialEntries={[`/org/projects/project/${path}`]}>
-        <Routes>
-          <Route
-            path={`/org/projects/project/${path}`}
-            element={<ShadowAISectionRedirect />}
-          />
-          <Route path="*" element={<LocationPath />} />
-        </Routes>
-      </MemoryRouter>,
-    );
-
-    expect(
-      await within(view.container).findByText(
-        "/org/projects/project/risk-policies",
-      ),
-    ).toBeTruthy();
-  });
-
-  // The MCPs index and the older Shadow MCP index were the approvals queue,
-  // so a pasted link lands on the MCP approvals tab. Their query and fragment
-  // named filters of the old page and are dropped rather than carried over.
-  it.each(["shadow-ai/mcps", "shadow-mcp"])(
-    "redirects /%s to the MCP approvals tab of Guardrails",
+  ])(
+    "redirects /%s to the Shadow AI targets tab of Guardrails",
     async (path) => {
       const view = render(
-        <MemoryRouter
-          initialEntries={[
-            `/org/projects/project/${path}?status=blocked#tools`,
-          ]}
-        >
+        <MemoryRouter initialEntries={[`/org/projects/project/${path}`]}>
           <Routes>
             <Route
               path={`/org/projects/project/${path}`}
-              element={<ShadowMCPIndexRedirect />}
+              element={<ShadowAISectionRedirect />}
             />
             <Route path="*" element={<LocationPath />} />
           </Routes>
@@ -186,11 +179,38 @@ describe("project routes", () => {
 
       expect(
         await within(view.container).findByText(
-          "/org/projects/project/risk-policies?tab=mcp-approvals",
+          "/org/projects/project/risk-policies?tab=shadow-ai-targets",
         ),
       ).toBeTruthy();
     },
   );
+
+  // The MCPs index of the section was the approvals queue, so a pasted link
+  // lands on the Shadow MCP page. Its query and fragment named filters of the
+  // old page and are dropped rather than carried over.
+  it("redirects /shadow-ai/mcps to the Shadow MCP page", async () => {
+    const view = render(
+      <MemoryRouter
+        initialEntries={[
+          "/org/projects/project/shadow-ai/mcps?status=blocked#tools",
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/org/projects/project/shadow-ai/mcps"
+            element={<ShadowMCPIndexRedirect />}
+          />
+          <Route path="*" element={<LocationPath />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(
+      await within(view.container).findByText(
+        "/org/projects/project/shadow-mcp",
+      ),
+    ).toBeTruthy();
+  });
 
   // Block messages and bookmarks carry the old server paths with a query and
   // a fragment; both must survive the redirect or the deep link lands at the
@@ -264,4 +284,28 @@ it("removes platform issuer management while preserving tenant and other admin r
   expect(orgRoutePaths).toContain("remote-identity-providers/*");
   expect(orgRoutePaths).toContain("platform-admin");
   expect(orgRoutePaths).toContain("platform-admin/openrouter-keys");
+});
+
+function OrganizationConnectionsHref(): JSX.Element {
+  const routes = useRoutes({ projectSlug: "default" });
+  return (
+    <output data-testid="org-connections">
+      {routes.mcp.organizationGateway.href()}?tab=connections
+    </output>
+  );
+}
+it("builds organization connections from an org-only route using an explicit project", () => {
+  routeSlugs.projectSlug = undefined;
+  try {
+    render(
+      <MemoryRouter initialEntries={["/org/settings"]}>
+        <OrganizationConnectionsHref />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId("org-connections").textContent).toBe(
+      "/org/projects/default/mcp/organization-gateway?tab=connections",
+    );
+  } finally {
+    routeSlugs.projectSlug = "project";
+  }
 });

@@ -102,7 +102,7 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.GetProjectMetricsSummaryPayload, {
+  const body = encodeJSON("body", payload.GetProjectOverviewPayload, {
     explode: true,
   });
 

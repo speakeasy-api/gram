@@ -335,6 +335,7 @@ func (p *Provisioner) provisionSecretClient(ctx context.Context, params Provisio
 	}
 
 	client, err := remotesessionsrepo.New(dbtx).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ForwardClientName:               false,
 		ProjectID:                       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OrganizationID:                  conv.ToPGText(params.OrganizationID),
 		RemoteSessionIssuerID:           issuer.ID,
@@ -469,6 +470,7 @@ func (p *Provisioner) provisionRows(ctx context.Context, params ProvisionClientP
 	}
 
 	client, err := remotesessionsrepo.New(dbtx).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ForwardClientName:               false,
 		ProjectID:                       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OrganizationID:                  conv.ToPGText(params.OrganizationID),
 		RemoteSessionIssuerID:           issuer.ID,
@@ -1985,7 +1987,7 @@ func (p *Provisioner) openKMSClient(ctx context.Context) (gcpkms.ProvisioningCli
 // createSigningKey creates one KMS key, grants the signer on it alone, and
 // mints the JWK to publish. A key left unusable by a later step is disabled.
 func (p *Provisioner) createSigningKey(ctx context.Context, logger *slog.Logger, client gcpkms.ProvisioningClient, provider string, connectionID uuid.UUID, signer *signingCredential) (*createdKey, error) {
-	keyID, err := gcpkms.NewSigningKeyID(provider)
+	keyID, err := gcpkms.NewKeyID(provider)
 	if err != nil {
 		return nil, fmt.Errorf("name managed signing key: %w", err)
 	}

@@ -581,3 +581,121 @@ LEFT JOIN killswitch_prescription_versions AS v
  AND v.version = p.current_version
 GROUP BY requested.user_id
 ORDER BY requested.user_id;
+
+-- Test fixtures. Constraint tests insert deliberately invalid rows through
+-- these; production writes go through the lifecycle queries above.
+
+-- name: InsertKillswitchPrescriptionRowFixture :exec
+INSERT INTO killswitch_prescriptions (id, organization_id, definition_key, principal_kind, principal_key, resource_kind, current_version)
+VALUES (@id, @organization_id, @definition_key, @principal_kind, @principal_key, @resource_kind, @current_version);
+
+-- name: InsertKillswitchPrescriptionSeriesFixture :exec
+INSERT INTO killswitch_prescriptions (organization_id, definition_key, principal_kind, principal_key, resource_kind, current_version)
+SELECT @organization_id::text, 'block-tools', 'user', @principal_key::text, 'tool', 1
+FROM generate_series(1, @row_count::int);
+
+-- name: InsertKillswitchPlanVersionsFixture :exec
+INSERT INTO killswitch_prescription_versions (
+  organization_id, prescription_id, version, state, resource_scope, starts_at, expires_at, activated_at, internal_note, external_note
+)
+SELECT organization_id, id, 1, 'active', 'selected',
+  clock_timestamp() - INTERVAL '1 hour', NULL, clock_timestamp() - INTERVAL '1 hour',
+  'private plan fixture', 'Plan fixture.'
+FROM killswitch_prescriptions
+WHERE organization_id IN (@organization_id::text, @other_organization_id::text) AND principal_key IN ('user:plan', 'user:noise');
+
+-- name: InsertKillswitchPlanVersionResourcesFixture :exec
+INSERT INTO killswitch_prescription_version_resources (organization_id, prescription_id, version, resource_key)
+SELECT organization_id, id, 1,
+  CASE principal_key WHEN 'user:plan' THEN 'tool:plan' ELSE 'tool:noise' END
+FROM killswitch_prescriptions
+WHERE organization_id IN (@organization_id::text, @other_organization_id::text) AND principal_key IN ('user:plan', 'user:noise');
+
+-- name: InsertKillswitchPrescriptionVersionRowFixture :exec
+INSERT INTO killswitch_prescription_versions (
+  organization_id, prescription_id, version, state, resource_scope, starts_at, expires_at, internal_note, external_note
+) VALUES (@organization_id, @prescription_id, @version, @state, @resource_scope, @starts_at, @expires_at, @internal_note, @external_note);
+
+-- name: InsertActiveKillswitchPrescriptionVersionNowFixture :exec
+INSERT INTO killswitch_prescription_versions (
+  organization_id, prescription_id, version, state, resource_scope, starts_at, internal_note, external_note
+) VALUES (@organization_id, @prescription_id, 1, 'active', 'selected', clock_timestamp(), 'internal', 'external');
+
+-- name: InsertKillswitchVersionResourceFixture :exec
+INSERT INTO killswitch_prescription_version_resources (organization_id, prescription_id, version, resource_key)
+VALUES (@organization_id, @prescription_id, 1, @resource_key);
+
+-- name: InsertKillswitchExpiryEventFixture :exec
+INSERT INTO killswitch_expiry_events (organization_id, prescription_id, version)
+VALUES (@organization_id, @prescription_id, 1);
+
+-- name: InsertKillswitchOperationFixture :exec
+INSERT INTO killswitch_operations (organization_id, operation_id, actor_user_id, operation, request_hash, status, response, expires_at)
+VALUES (@organization_id, @operation_id, @actor_user_id, @operation, @request_hash, @status, @response, @expires_at);
+
+-- name: InsertKillswitchOperationExpiringInFixture :exec
+INSERT INTO killswitch_operations (organization_id, operation_id, actor_user_id, operation, request_hash, expires_at)
+VALUES (@organization_id, @operation_id, @actor_user_id, @operation, @request_hash, clock_timestamp() + @expires_in::interval);
+
+-- name: DeleteKillswitchOrganizationFixture :exec
+DELETE FROM organization_metadata WHERE id = @id;
+
+-- name: CountAllKillswitchRowsFixture :one
+SELECT
+  (SELECT count(*) FROM killswitch_prescriptions)
+  + (SELECT count(*) FROM killswitch_prescription_versions)
+  + (SELECT count(*) FROM killswitch_prescription_version_resources)
+  + (SELECT count(*) FROM killswitch_expiry_events)
+  + (SELECT count(*) FROM killswitch_operations) AS remaining_rows;
+
+-- name: CountKillswitchPrescriptionsFixture :one
+SELECT count(*) FROM killswitch_prescriptions WHERE organization_id = @organization_id;
+
+-- name: CountKillswitchOperationsFixture :one
+SELECT count(*) FROM killswitch_operations WHERE organization_id = @organization_id;
+
+-- name: CountKillswitchExpiryEventsFixture :one
+SELECT count(*) FROM killswitch_expiry_events WHERE organization_id = @organization_id;
+
+-- name: CountKillswitchExpiryEventsForPrescriptionFixture :one
+SELECT count(*) FROM killswitch_expiry_events WHERE prescription_id = @prescription_id;
+
+-- name: GetKillswitchOperationIDFixture :one
+SELECT operation_id FROM killswitch_operations WHERE organization_id = @organization_id;
+
+-- name: GetKillswitchOperationReceiptShapeFixture :one
+SELECT (expires_at = created_at + interval '30 days')::boolean AS exact_retention,
+       (response ?& ARRAY['response_version', 'prescription_id', 'prescription_version', 'state']
+         AND (SELECT count(*) FROM jsonb_object_keys(response)) = 4)::boolean AS bounded_response
+FROM killswitch_operations
+WHERE organization_id = @organization_id AND operation_id = @operation_id;
+
+-- name: ExpireKillswitchOperationFixture :exec
+UPDATE killswitch_operations SET expires_at = clock_timestamp() - interval '1 second' WHERE organization_id = @organization_id AND operation_id = @operation_id;
+
+-- name: ResetKillswitchOperationToPendingFixture :exec
+UPDATE killswitch_operations
+SET status = 'pending', response = NULL
+WHERE organization_id = @organization_id AND operation_id = @operation_id;
+
+-- name: CompleteKillswitchOperationWithFutureResponseFixture :exec
+UPDATE killswitch_operations
+SET status = 'completed',
+    response = jsonb_build_object('response_version', 'future', 'prescription_id', @prescription_id::text, 'prescription_version', 1, 'state', 'active')
+WHERE organization_id = @organization_id AND operation_id = @operation_id;
+
+-- name: CompareKillswitchEvaluationBoundariesFixture :one
+WITH evaluation_clock AS MATERIALIZED (
+  SELECT clock_timestamp() AS database_now
+), boundaries AS (
+  SELECT database_now AS starts_at, database_now AS expires_at
+  FROM evaluation_clock
+)
+SELECT
+  (boundaries.starts_at <= evaluation_clock.database_now)::boolean AS starts_at_matches,
+  (boundaries.expires_at > evaluation_clock.database_now)::boolean AS expires_at_matches
+FROM boundaries
+CROSS JOIN evaluation_clock;
+
+-- name: CountAuditLogsContainingFixture :one
+SELECT count(*) FROM audit_logs WHERE organization_id = @organization_id AND audit_logs::text LIKE '%' || @needle::text || '%';

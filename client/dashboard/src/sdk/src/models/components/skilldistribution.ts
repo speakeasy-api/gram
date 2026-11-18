@@ -51,6 +51,10 @@ export type SkillDistribution = {
    */
   id: string;
   /**
+   * When an agent last loaded the skill over MCP from a Speakeasy-hosted server, absent when it never has. Loads are counted per skill, not per distribution.
+   */
+  lastLoadedOverMcpAt?: Date | undefined;
+  /**
    * The pinned version, absent when tracking the latest valid version.
    */
   pinnedVersionId?: string | undefined;
@@ -107,6 +111,9 @@ export const SkillDistribution$inboundSchema: z.ZodMiniType<
     ),
     created_by_user_id: z.string(),
     id: z.string(),
+    last_loaded_over_mcp_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     pinned_version_id: z.optional(z.string()),
     plugin_id: z.optional(z.string()),
     plugin_name: z.optional(z.string()),
@@ -126,6 +133,7 @@ export const SkillDistribution$inboundSchema: z.ZodMiniType<
       "assistant_name": "assistantName",
       "created_at": "createdAt",
       "created_by_user_id": "createdByUserId",
+      "last_loaded_over_mcp_at": "lastLoadedOverMcpAt",
       "pinned_version_id": "pinnedVersionId",
       "plugin_id": "pluginId",
       "plugin_name": "pluginName",

@@ -26,15 +26,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-type RegistryBackend interface {
-	Match(req *http.Request) bool
-	Authorize(req *http.Request) error
-}
-
 // RegistryReader is the narrow, normalized registry contract consumed by both
-// dashboard and Platform MCP catalogue projections. RegistryClient remains the
-// Pulse-compatible transport implementation; CatalogService selects an adapter
-// before delegating to it.
+// dashboard and Platform MCP catalogue projections. RegistryClient implements
+// it over HTTP for code-defined registries such as the local fixture.
 type RegistryReader interface {
 	ListServers(ctx context.Context, registry Registry, params ListServersParams) (ListServersResult, error)
 	GetServerDetails(ctx context.Context, registry Registry, serverName string, allowedRemoteURLs []string) (*ServerDetails, error)
@@ -45,19 +39,17 @@ type RegistryClient struct {
 	policy       *guardian.Policy
 	httpClient   *guardian.HTTPClient
 	logger       *slog.Logger
-	backend      RegistryBackend
 	listCache    cache.TypedCacheObject[CachedListServers]
 	detailsCache cache.TypedCacheObject[CachedServerDetailsResponse]
 	listFlight   singleflight.Group
 }
 
 // NewRegistryClient creates a new registry client.
-func NewRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, backend RegistryBackend, cacheImpl cache.Cache) *RegistryClient {
+func NewRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, cacheImpl cache.Cache) *RegistryClient {
 	return &RegistryClient{
 		policy:     guardianPolicy,
 		httpClient: guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig()),
 		logger:     logger.With(attr.SlogComponent("mcp_registry_client")),
-		backend:    backend,
 		listCache: cache.NewTypedObjectCache[CachedListServers](
 			logger.With(attr.SlogCacheNamespace("registry-list")),
 			cacheImpl,
@@ -83,7 +75,6 @@ func (c *RegistryClient) WithAllowedCIDRBlocks(cidrs ...string) *RegistryClient 
 		policy:     c.policy,
 		httpClient: c.policy.PooledClient(guardian.WithDefaultRetryConfig(), guardian.WithAllowedCIDRBlocks(cidrs...)),
 		logger:     c.logger,
-		backend:    c.backend,
 		// Cache keys include the registry URL; share cache entries while changing
 		// only the trusted fixture client's egress policy.
 		listCache:    c.listCache,
@@ -149,33 +140,34 @@ type listResponse struct {
 }
 
 type serverEntry struct {
-	Server serverJSON         `json:"server"`
-	Meta   pulseMCPServerMeta `json:"_meta"`
+	Server serverJSON        `json:"server"`
+	Meta   catalogServerMeta `json:"_meta"`
 }
 
-type pulseMCPServerMeta struct {
-	Server  serverMetaServer  `json:"com.pulsemcp/server"`
-	Version serverMetaVersion `json:"com.pulsemcp/server-version"`
+type catalogServerMeta struct {
+	// Raw preserves opaque metadata; only the typed fields inform capabilities.
+	Raw map[string]any `json:"-"`
+	// Catalog contains only staff-curated public capabilities.
+	Catalog *catalogCapabilities `json:"com.speakeasy.ai/catalog,omitempty"`
+
+	Version serverMetaVersion `json:"io.modelcontextprotocol.registry/official"`
 }
 
-type serverMetaServer struct {
-	VisitorsEstimateMostRecentWeek int  `json:"visitorsEstimateMostRecentWeek"`
-	VisitorsEstimateLastFourWeeks  int  `json:"visitorsEstimateLastFourWeeks"`
-	VisitorsEstimateTotal          int  `json:"visitorsEstimateTotal"`
-	IsOfficial                     bool `json:"isOfficial"`
+func (m *catalogServerMeta) UnmarshalJSON(data []byte) error {
+	type typedMeta catalogServerMeta
+	var decoded typedMeta
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return fmt.Errorf("decode catalog metadata: %w", err)
+	}
+	if err := json.Unmarshal(data, &decoded.Raw); err != nil {
+		return fmt.Errorf("decode raw catalog metadata: %w", err)
+	}
+	*m = catalogServerMeta(decoded)
+	return nil
 }
 
 type serverMetaVersion struct {
-	Source       string           `json:"source"`
-	Status       string           `json:"status"`
-	PublishedAt  string           `json:"publishedAt"`
-	UpdatedAt    string           `json:"updatedAt"`
-	IsLatest     bool             `json:"isLatest"`
-	FirstRemote  serverRemoteMeta `json:"remotes[0]"`
-	SecondRemote serverRemoteMeta `json:"remotes[1]"`
-	ThirdRemote  serverRemoteMeta `json:"remotes[2]"`
-	FourthRemote serverRemoteMeta `json:"remotes[3]"`
-	FifthRemote  serverRemoteMeta `json:"remotes[4]"`
+	Status string `json:"status,omitempty"`
 }
 
 type serverJSON struct {
@@ -293,46 +285,49 @@ type RemoteVariable struct {
 	Choices     []string `json:"choices,omitempty"`
 }
 
-type serverRemoteMeta struct {
-	AuthOptions []serverRemoteMetaAuthOptions `json:"authOptions"`
-	Tools       []serverTool                  `json:"tools"`
+type catalogCapabilities struct {
+	// SupportsDCR records a positive automatic OAuth capability hint.
+	SupportsDCR *bool `json:"supportsDcr,omitempty"`
+	// SupportsCIMD records compatible public-client metadata support.
+	SupportsCIMD bool `json:"supportsCimd,omitempty"`
+	// AuthSetup records complete evidence for manual setup or explicit no-auth selection.
+	AuthSetup string `json:"authSetup,omitempty"`
 }
 
-type serverRemoteMetaAuthOptions struct {
-	Type   string                     `json:"type"`
-	Detail serverRemoteMetaAuthDetail `json:"detail"`
-}
-
-type serverRemoteMetaAuthDetail struct {
-	// AuthorizationServerMetadata is PulseMCP's embedded RFC 8414 discovery
-	// result for OAuth remotes. A non-empty registration_endpoint means the
-	// upstream authorization server supports dynamic client registration (DCR).
-	// Note: we deliberately read registration_endpoint here rather than
-	// clientRegistration.dynamic.supported, which PulseMCP reports
-	// optimistically (true even when the AS exposes no registration endpoint).
-	AuthorizationServerMetadata struct {
-		RegistrationEndpoint string `json:"registration_endpoint"`
-	} `json:"authorizationServerMetadata"`
+func projectCatalogAuth(catalog *catalogCapabilities) (bool, bool, string) {
+	dcr, cimd := false, false
+	setup := "unknown"
+	if catalog != nil {
+		if catalog.SupportsDCR != nil {
+			dcr = *catalog.SupportsDCR
+		}
+		cimd = catalog.SupportsCIMD
+		// dcr and cimd come only from their support flags below, so the setup
+		// classification never contradicts the advertised capabilities.
+		if catalog.AuthSetup == "none" || catalog.AuthSetup == "manual" {
+			setup = catalog.AuthSetup
+		}
+	}
+	if dcr {
+		setup = "dcr"
+	} else if cimd {
+		setup = "cimd"
+	}
+	return dcr, cimd, setup
 }
 
 // serverDetailsEntry represents the response from the server details endpoint
 type serverDetailsEntry struct {
-	Server serverDetailsJSON  `json:"server"`
-	Meta   pulseMCPServerMeta `json:"_meta"`
+	Server serverDetailsJSON `json:"server"`
+	Meta   catalogServerMeta `json:"_meta"`
 }
 
 type serverDetailsJSON struct {
 	Name        string             `json:"name"`
+	Title       *string            `json:"title"`
 	Description string             `json:"description"`
 	Version     string             `json:"version"`
 	Remotes     []serverRemoteJSON `json:"remotes"`
-}
-
-type serverTool struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	InputSchema json.RawMessage `json:"inputSchema"`
-	Annotations map[string]any  `json:"annotations"`
 }
 
 // toCacheSafeAny round-trips v through JSON so the resulting value is built
@@ -437,11 +432,6 @@ func (c *RegistryClient) fetchAllServers(ctx context.Context, registry Registry,
 		req, err := c.newListServersRequest(ctx, registry.URL, cursor)
 		if err != nil {
 			return CachedListServers{}, false, err
-		}
-		if c.backend.Match(req) {
-			if err := c.backend.Authorize(req); err != nil {
-				return CachedListServers{}, false, fmt.Errorf("authorize list servers request: %w", err)
-			}
 		}
 
 		page, err := c.fetchListServersPage(ctx, req)
@@ -572,7 +562,7 @@ func filterServers(servers []*types.ExternalMCPServerEntry, search string) []*ty
 func convertListServers(registryUUID uuid.UUID, entries []serverEntry) ([]*types.ExternalMCPServerEntry, error) {
 	servers := make([]*types.ExternalMCPServerEntry, 0, len(entries))
 	for _, entry := range entries {
-		// Legacy lifecycle filtering does not apply to native discovery records.
+		// Discovery omits entries explicitly marked deleted.
 		if entry.Meta.Version.Status == "deleted" {
 			continue
 		}
@@ -592,43 +582,6 @@ func projectListServer(registryUUID uuid.UUID, s serverEntry) (*types.ExternalMC
 		iconURL = &s.Server.Icons[0].Src
 	}
 
-	// The catalog list view needs only a tool count and a read-only flag
-	// (for the card badge and the tool-behavior filter); it never reads the
-	// tool definitions, whose JSON Schemas dominate the registry payload
-	// (repeated in the top-level tools list and across every _meta remote
-	// slot). Compute the two scalars the list needs, then drop the tools from
-	// the _meta blob and omit the top-level tools array entirely. The detail
-	// page fetches full tools via getServerDetails.
-	listTools := s.Meta.Version.FirstRemote.Tools
-	toolCount := len(listTools)
-	isReadOnly := toolCount > 0
-	for _, tool := range listTools {
-		if readOnly, _ := tool.Annotations["readOnlyHint"].(bool); !readOnly {
-			isReadOnly = false
-			break
-		}
-	}
-
-	// A server supports DCR when any remote's OAuth auth option carries a
-	// non-empty registration endpoint in the legacy catalog's embedded discovery
-	// result. Computed in the same pass that strips per-remote tools.
-	supportsDCR := false
-	for _, remote := range []*serverRemoteMeta{
-		&s.Meta.Version.FirstRemote,
-		&s.Meta.Version.SecondRemote,
-		&s.Meta.Version.ThirdRemote,
-		&s.Meta.Version.FourthRemote,
-		&s.Meta.Version.FifthRemote,
-	} {
-		for _, auth := range remote.AuthOptions {
-			if auth.Detail.AuthorizationServerMetadata.RegistrationEndpoint != "" {
-				supportsDCR = true
-				break
-			}
-		}
-		remote.Tools = nil
-	}
-
 	var remotes []*types.ExternalMCPRemote
 	for _, r := range s.Server.Remotes {
 		remotes = append(remotes, &types.ExternalMCPRemote{
@@ -639,11 +592,16 @@ func projectListServer(registryUUID uuid.UUID, s serverEntry) (*types.ExternalMC
 		})
 	}
 
-	meta, err := toCacheSafeAny(&s.Meta)
+	var metadata any = &s.Meta
+	if s.Meta.Raw != nil {
+		metadata = s.Meta.Raw
+	}
+	meta, err := toCacheSafeAny(metadata)
 	if err != nil {
 		return nil, fmt.Errorf("convert meta: %w", err)
 	}
 
+	supportsDCR, supportsCIMD, authSetup := projectCatalogAuth(s.Meta.Catalog)
 	return &types.ExternalMCPServerEntry{
 		Repository:        toExternalMCPRepository(s.Server.Repository),
 		Packages:          toExternalMCPPackages(s.Server.Packages),
@@ -656,10 +614,11 @@ func projectListServer(registryUUID uuid.UUID, s serverEntry) (*types.ExternalMC
 		Title:             s.Server.Title,
 		IconURL:           iconURL,
 		Meta:              meta,
-		ToolCount:         toolCount,
-		IsReadOnly:        isReadOnly,
+		ToolCount:         nil,
+		IsReadOnly:        nil,
 		SupportsDcr:       supportsDCR,
-		Remotes:           remotes,
+		SupportsCimd:      new(supportsCIMD), AuthSetup: new(authSetup),
+		Remotes: remotes,
 	}, nil
 }
 
@@ -732,12 +691,21 @@ func reviewedRegistryDetailsURL(rawURL string) (*url.URL, error) {
 // must still validate configuration values against these declarations; they must
 // never treat the registry response as permission to accept arbitrary endpoints.
 type ServerDetails struct {
-	Name          string
+	// SupportsDCR records advertised dynamic registration support.
+	SupportsDCR bool
+	// SupportsCIMD records compatible metadata document support.
+	SupportsCIMD bool
+	// AuthSetup distinguishes unknown evidence from manual setup.
+	AuthSetup string
+
+	Name string
+	// Title is the registry's human-readable name, such as "Linear" for
+	// app.linear/mcp; empty when the registry gives none.
+	Title         string
 	Description   string
 	Version       string
 	RemoteURL     string
 	TransportType externalmcptypes.TransportType
-	Tools         []serverTool
 	Headers       []RemoteHeader
 	Variables     map[string]RemoteVariable
 }
@@ -758,12 +726,6 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 		return nil, oops.Permanent(fmt.Errorf("create external mcp server details request: %w", err))
 	}
 
-	if c.backend.Match(req) {
-		if err := c.backend.Authorize(req); err != nil {
-			return nil, fmt.Errorf("authorize external mcp server details request: %w", err)
-		}
-	}
-
 	// Build cache key including allowedRemoteURLs filter
 	buildCacheKey := func() string {
 		baseKey := registryCacheKey("details", req)
@@ -777,7 +739,7 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 		return fmt.Sprintf("%s:filter:%s", baseKey, strings.Join(sortedURLs, ","))
 	}
 
-	// Check cache after authorization so headers are populated.
+	// Serve cached details before fetching from the registry.
 	cacheKey := buildCacheKey()
 	cached, err := c.detailsCache.Get(ctx, cacheKey)
 	if err == nil {
@@ -825,13 +787,13 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 
 // projectServerDetails selects the first allowed HTTP remote, or the last allowed SSE remote.
 func projectServerDetails(record serverDetailsEntry, allowedRemoteURLs []string) *ServerDetails {
-	details := &ServerDetails{
+	details := &ServerDetails{SupportsDCR: false, SupportsCIMD: false, AuthSetup: "unknown",
 		Name:          record.Server.Name,
+		Title:         conv.PtrValOr(record.Server.Title, ""),
 		Description:   record.Server.Description,
 		Version:       record.Server.Version,
 		RemoteURL:     "",
 		TransportType: "",
-		Tools:         nil,
 		Headers:       nil,
 		Variables:     nil,
 	}
@@ -853,6 +815,7 @@ func projectServerDetails(record serverDetailsEntry, allowedRemoteURLs []string)
 		}
 	}
 	if selected < 0 {
+		details.SupportsDCR, details.SupportsCIMD, details.AuthSetup = projectCatalogAuth(record.Meta.Catalog)
 		return details
 	}
 	remote := record.Server.Remotes[selected]
@@ -860,9 +823,6 @@ func projectServerDetails(record serverDetailsEntry, allowedRemoteURLs []string)
 	details.TransportType = externalmcptypes.TransportType(remote.Type)
 	details.Headers = remote.Headers
 	details.Variables = remote.Variables
-	remotes := []serverRemoteMeta{record.Meta.Version.FirstRemote, record.Meta.Version.SecondRemote, record.Meta.Version.ThirdRemote, record.Meta.Version.FourthRemote, record.Meta.Version.FifthRemote}
-	if selected < len(remotes) {
-		details.Tools = remotes[selected].Tools
-	}
+	details.SupportsDCR, details.SupportsCIMD, details.AuthSetup = projectCatalogAuth(record.Meta.Catalog)
 	return details
 }

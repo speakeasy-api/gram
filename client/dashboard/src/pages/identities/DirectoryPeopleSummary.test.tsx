@@ -1,4 +1,5 @@
 import { cleanup, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const { scopes, query } = vi.hoisted(() => ({
@@ -14,22 +15,13 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "default",
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "default" }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     hasScope: (scope: string, resourceId?: string) =>
       scopes.has(`${scope}@${resourceId}`),
   }),
-}));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    identities: { people: { href: () => "/org/default/identities/people" } },
-  }),
-}));
-vi.mock("react-router", () => ({
-  Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
-    <a href={to}>{children}</a>
-  ),
 }));
 vi.mock("@gram/client/react-query/directoryPeople.js", () => ({
   useDirectoryPeople: (
@@ -67,7 +59,9 @@ beforeEach(() => {
 it("shows nothing and reads nothing without org:admin", () => {
   scopes.add("org:read@org-1");
   scopes.add("project:read@project-1");
-  const { container } = render(<DirectoryPeopleSummary />);
+  const { container } = render(<DirectoryPeopleSummary />, {
+    wrapper: MemoryRouter,
+  });
   expect(query.enabled).toHaveBeenCalledWith(false);
   expect(container.textContent).toBe("");
 });
@@ -75,7 +69,7 @@ it("shows nothing and reads nothing without org:admin", () => {
 it("links an admin who can open Identities to the filtered list", () => {
   scopes.add("org:admin@org-1");
   scopes.add("project:read@project-1");
-  render(<DirectoryPeopleSummary />);
+  render(<DirectoryPeopleSummary />, { wrapper: MemoryRouter });
   expect(
     screen.getByText(/3 people in your directory aren't members yet/),
   ).toBeDefined();
@@ -83,12 +77,12 @@ it("links an admin who can open Identities to the filtered list", () => {
     screen
       .getByRole("link", { name: "View in Identities" })
       .getAttribute("href"),
-  ).toContain("/org/default/identities/people?directory_state=");
+  ).toContain("/org/projects/default/identities/people?directory_state=");
 });
 
 it("keeps the count but drops the link without project:read", () => {
   scopes.add("org:admin@org-1");
-  render(<DirectoryPeopleSummary />);
+  render(<DirectoryPeopleSummary />, { wrapper: MemoryRouter });
   expect(
     screen.getByText(/3 people in your directory aren't members yet/),
   ).toBeDefined();
@@ -99,6 +93,8 @@ it("hides a stale count when the latest read failed", () => {
   scopes.add("org:admin@org-1");
   scopes.add("project:read@project-1");
   query.isError = true;
-  const { container } = render(<DirectoryPeopleSummary />);
+  const { container } = render(<DirectoryPeopleSummary />, {
+    wrapper: MemoryRouter,
+  });
   expect(container.textContent).toBe("");
 });

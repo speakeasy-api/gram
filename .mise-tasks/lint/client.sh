@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-#MISE description="Run linting on all client projects using aube"
+#MISE description="Run lint scripts across workspace packages using aube"
 
 set -e
 
-exec aube run lint
+exec aube run -r --if-present lint

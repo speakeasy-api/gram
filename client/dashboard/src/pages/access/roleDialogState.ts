@@ -5,6 +5,7 @@ import {
 } from "./types";
 import type { PolicyEffect, ResourceType, RoleGrant } from "./types";
 import type { Selector } from "@gram/client/models/components/selector.js";
+import { isProjectWideSelector } from "./computePanelState";
 
 type ProjectRef = { id: string; name: string };
 
@@ -15,6 +16,8 @@ export interface SaveButtonInput {
   isEditing: boolean;
   /** True when the role being edited is a system role (Member/Admin) */
   isSystemRole: boolean;
+  /** True when the upstream credential rules differ from the saved role */
+  clientTypesChanged?: boolean;
   /** Current form values */
   name: string;
   description: string;
@@ -39,6 +42,8 @@ export function visiblePermissionCount(
     (grant) =>
       grant.scope !== undefined &&
       !grant.scope.startsWith("risk_policy:") &&
+      // Auth client permissions are provisioned, not edited in the role dialog.
+      grant.scope !== "mcp:auth" &&
       !grant.scope.includes(":blocked_"),
   ).length;
 }
@@ -68,29 +73,33 @@ function selectorIdentity(s: Selector): string {
   ]);
 }
 
-/** Sorted, comma-joined grant keys for cheap equality check.
- *  Encodes what each effect covers — every selector, not how the rules group
- *  them — so swapping one server for another marks the form dirty while
- *  regrouping the same selectors does not. */
+/** What one permission covers, as a single comparable string, or null when the
+ *  form holds no entry for it — which is not the same as an entry whose rules
+ *  cover nothing. Encodes what each effect covers — every selector, not how
+ *  the rules group them — so swapping one server for another counts as a
+ *  change while regrouping the same selectors does not. */
+export function grantSummaryKey(grant: RoleGrant | undefined): string | null {
+  if (!grant) return null;
+  return (["allow", "deny"] as const)
+    .flatMap((effect) => {
+      const rules = grant.rules.filter((r) => r.effect === effect);
+      if (rules.length === 0) return [];
+      if (rules.some((r) => r.selectors === null)) return [`${effect}:*`];
+      const ids = [
+        ...new Set(
+          rules.flatMap((r) => (r.selectors ?? []).map(selectorIdentity)),
+        ),
+      ].sort();
+      return [`${effect}:${ids.join("|")}`];
+    })
+    .join("+");
+}
+
+/** Sorted, comma-joined grant keys for cheap equality check. */
 export function grantKeysString(grants: Record<string, RoleGrant>): string {
   return Object.entries(grants)
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, g]) => {
-      const summary = (["allow", "deny"] as const)
-        .flatMap((effect) => {
-          const rules = g.rules.filter((r) => r.effect === effect);
-          if (rules.length === 0) return [];
-          if (rules.some((r) => r.selectors === null)) return [`${effect}:*`];
-          const ids = [
-            ...new Set(
-              rules.flatMap((r) => (r.selectors ?? []).map(selectorIdentity)),
-            ),
-          ].sort();
-          return [`${effect}:${ids.join("|")}`];
-        })
-        .join("+");
-      return `${key}[${summary}]`;
-    })
+    .map(([key, grant]) => `${key}[${grantSummaryKey(grant) ?? ""}]`)
     .join(",");
 }
 
@@ -102,6 +111,7 @@ export function hasFormChanges(input: SaveButtonInput): boolean {
     membersHaveChanged(input.selectedAgents, input.initial.agents) ||
     input.name !== input.initial.name ||
     input.description !== input.initial.description ||
+    input.clientTypesChanged === true ||
     grantKeysString(input.grants) !== input.initial.grantKeys
   );
 }
@@ -139,6 +149,7 @@ const DISPOSITION_LABELS_LOWER: Record<string, string> = {
 };
 
 function projectResourceNoun(resourceType: ResourceType): string | null {
+  if (resourceType === "inference") return "inference";
   if (resourceType === "skill") return "skills";
   if (resourceType === "assistant") return "assistants";
   return null;
@@ -151,6 +162,7 @@ export function computeRuleLabel(
   projects: ProjectRef[],
 ): string {
   if (selectors === null) {
+    if (resourceType === "inference") return "All projects";
     if (isProjectFilteredResourceType(resourceType)) return "All assistants";
     return isProjectScopedResourceType(resourceType)
       ? "All projects"
@@ -173,7 +185,7 @@ export function computeRuleLabel(
     return `${tools.length} tools`;
   }
 
-  const projectSels = selectors.filter((s) => s.projectId);
+  const projectSels = selectors.filter(isProjectWideSelector);
   if (projectSels.length > 0) {
     if (projectSels.length === 1) {
       const name = projects.find(
@@ -239,12 +251,15 @@ export function computeRuleTooltip(
     return `${verb} access to ${tools.length} tools`;
   }
 
-  const projectSels = selectors.filter((s) => s.projectId);
+  const projectSels = selectors.filter(isProjectWideSelector);
   if (projectSels.length > 0) {
     if (projectSels.length === 1) {
       const name = projects.find(
         (p) => p.id === projectSels[0]!.projectId!,
       )?.name;
+      if (resourceType === "inference") {
+        return `${verb} access to inference in ${name ?? "1 project"}`;
+      }
       const resources = isProjectFilteredResourceType(resourceType)
         ? `${resourceType}s`
         : "servers";

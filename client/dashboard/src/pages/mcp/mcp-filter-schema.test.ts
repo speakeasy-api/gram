@@ -1,3 +1,4 @@
+// @vitest-environment node
 import {
   listedMcpServers,
   type ListedMcpServer,

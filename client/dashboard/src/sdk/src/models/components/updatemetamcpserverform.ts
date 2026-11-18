@@ -12,6 +12,7 @@ import { ClosedEnum } from "../../types/enums.js";
 export const UpdateMetaMcpServerFormDiscoveryMode = {
   Progressive: "progressive",
   Direct: "direct",
+  CodeMode: "code_mode",
 } as const;
 /**
  * The default discovery mode for connections without an explicit override. Omit to preserve the stored default.

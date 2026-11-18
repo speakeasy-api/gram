@@ -31,6 +31,7 @@ type WorkloadIssuerSnapshot struct {
 	Description            string   `json:"description,omitempty"`
 	Tags                   []string `json:"tags"`
 	AllowWildcardAdmission bool     `json:"allow_wildcard_admission"`
+	AllowAssertionReuse    bool     `json:"allow_assertion_reuse"`
 	// Tier is "organization" or "project". Recorded because the same issuer name
 	// can exist at both, and the tier decides who the issuer is trusted by.
 	Tier string `json:"tier"`
@@ -48,6 +49,10 @@ type LogWorkloadIssuerCreateEvent struct {
 	IssuerName string
 
 	IssuerSnapshotAfter *WorkloadIssuerSnapshot
+
+	// Metadata is optional context for the entry, such as what triggered a
+	// system actor to create the issuer.
+	Metadata map[string]any
 }
 
 func (l *Logger) LogWorkloadIssuerCreate(ctx context.Context, dbtx repo.DBTX, event LogWorkloadIssuerCreateEvent) error {
@@ -57,8 +62,16 @@ func (l *Logger) LogWorkloadIssuerCreate(ctx context.Context, dbtx repo.DBTX, ev
 	if err != nil {
 		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
 	}
+	var metadata []byte
+	if len(event.Metadata) > 0 {
+		metadata, err = marshalAuditPayload(event.Metadata)
+		if err != nil {
+			return fmt.Errorf("marshal %s metadata: %w", action, err)
+		}
+	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 
@@ -74,7 +87,7 @@ func (l *Logger) LogWorkloadIssuerCreate(ctx context.Context, dbtx repo.DBTX, ev
 		SubjectDisplayName: conv.ToPGTextEmpty(event.IssuerName),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 
-		Metadata:       nil,
+		Metadata:       metadata,
 		BeforeSnapshot: nil,
 		AfterSnapshot:  after,
 	}
@@ -111,6 +124,7 @@ func (l *Logger) LogWorkloadIssuerUpdate(ctx context.Context, dbtx repo.DBTX, ev
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 
@@ -157,6 +171,7 @@ func (l *Logger) LogWorkloadIssuerDelete(ctx context.Context, dbtx repo.DBTX, ev
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 

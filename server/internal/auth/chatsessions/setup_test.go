@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -30,11 +32,13 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func newTestManager(t *testing.T) *chatsessions.Manager {
+func newTestManager(t *testing.T) (*chatsessions.Manager, *sessions.Manager) {
 	t.Helper()
 
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	return chatsessions.NewManager(testenv.NewLogger(t), redisClient, "test-jwt-secret")
+	logger := testenv.NewLogger(t)
+	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), nil, redisClient, cache.SuffixNone, nil, nil, nil)
+	return chatsessions.NewManager(logger, redisClient, "test-jwt-secret", sessionManager), sessionManager
 }

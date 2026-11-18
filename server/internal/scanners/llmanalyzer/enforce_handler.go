@@ -222,7 +222,9 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.LLMEnforcement, m
 			ConsumerId:      new(h.consumerID),
 			DeliveryAttempt: new(deliveryAttempt),
 		}.Build(),
-		PolicyId: new(""),
+		PolicyId:         new(""),
+		ContentTruncated: new(m.GetContentTruncated() || analysis.Truncated),
+		Incomplete:       new(!analysis.Result.Completed),
 	}.Build()
 
 	outcome := enforceOutcome(status)

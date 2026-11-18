@@ -70,7 +70,7 @@ func registerToolExposureTools(reg *Registrar, service *MCPToolExposureService, 
 	}
 	addTool(reg, &mcp.Tool{
 		Name:  addToolsToMCPToolName,
-		Title: "Put Tools on an MCP Server",
+		Title: "Add Tools to an MCP Server",
 		Description: "Add named tools to one exact MCP server in an explicit project, without disturbing the tools it already exposes. " +
 			"Supply exact tool URNs from list_project_tools, the exposure_version from the page that completes the latest get_mcp read of that server, an idempotency key, and confirmed: true only after the user confirms the exact server and tool list. " +
 			toolExposureBlastRadiusNote + " " +
@@ -81,7 +81,7 @@ func registerToolExposureTools(reg *Registrar, service *MCPToolExposureService, 
 	}, meta, addTools)
 	addTool(reg, &mcp.Tool{
 		Name:  removeToolsFromMCPToolName,
-		Title: "Take Tools off an MCP Server",
+		Title: "Remove Tools from an MCP Server",
 		Description: "Remove named tools from one exact MCP server in an explicit project, leaving the rest of its tools in place. " +
 			"Supply exact tool URNs, the exposure_version from the page that completes the latest get_mcp read of that server, an idempotency key, and confirmed: true only after the user confirms the exact server and tool list. " +
 			toolExposureBlastRadiusNote + " " +

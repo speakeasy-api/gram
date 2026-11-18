@@ -5,6 +5,8 @@ description: Guide an organization administrator through Speakeasy AI Control Pl
 
 # Set up enterprise-managed authorization
 
+If this connection lists `call_platform_tool` instead of the tools this workflow names, find each named tool with `search_platform_tools`, describe it with `describe_platform_tool`, then run it with `call_platform_tool` and the same arguments. Whether a tool exists for you is decided by `describe_platform_tool` with its exact name, not by `tools/list` or one page of search results: a name returned in `not_found` is unavailable to you, so say so rather than guess. The call itself still checks your access. When `execute` is also listed, a multi-step read may run in `execute` with `tools.search`, `tools.describe` and `tools.call` on `platform--<tool name>` paths. End each `execute` run at a confirmation point and ask the user before any write.
+
 Use the executing client's authenticated Speakeasy AI Control Plane (AICP)
 Platform MCP connection. This workflow retrieves one organization's issuer and
 guides its administrator through dashboard setup. The available issuer tool is
@@ -15,7 +17,7 @@ read-only; it cannot enable, disable, rotate, or replace an issuer.
 1. Successfully call `list_projects` through this same connection to establish
    authenticated discovery. Package installation or another client's login is
    not authority. This issuer is organization-scoped; do not choose a project
-   or pass a project ID to its getter.
+   or pass a project to its getter.
 2. Call `get_internal_session_issuer` with `{}`. Use its exact `organization_id`,
    `state`, `can_enable`, optional `issuer`, and `next_step`. Match any organization the user
    specified; otherwise ask the user to confirm the returned organization.
@@ -103,9 +105,10 @@ saved list that leaves out a server's provider leaves that server with nobody
 to vouch; the dashboard flags such servers as needing attention. The MCP server's **Settings** page
 turns enterprise-managed authorization on or off for that server and shows the
 sign-in, who vouches, and what the vendor has to trust.
-Then call `get_xaa_readiness` with the exact project and MCP server IDs for
-enterprise authorization readiness. Do not substitute a Platform MCP registration
-ID or generic registration readiness for this check.
+Then call `get_xaa_readiness` with the project's `project_slug` and the exact
+`mcp_server_id` for enterprise authorization readiness. Pass only the MCP
+server's own ID as `mcp_server_id`, never another identifier, and do not
+substitute generic MCP readiness for this check.
 An enabled issuer or a saved vendor setting does not prove live user access.
 Only a separately authorized test using the connected MCP can establish that;
 never impersonate another user or create test data without permission.

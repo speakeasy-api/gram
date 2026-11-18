@@ -1,8 +1,9 @@
-import { Gram } from "@gram/client";
+import { Plugins } from "@gram/client/sdk/plugins.js";
 import { HTTPClient } from "@gram/client/lib/http.js";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  type PluginsClient,
   downloadPluginPackage,
   usePluginPackageDownload,
 } from "./downloadPluginPackage";
@@ -29,17 +30,19 @@ describe("downloadPluginPackage", () => {
     "sends selected project and session on real SDK %s ZIP requests",
     async (platform) => {
       const requests: Request[] = [];
-      const client = new Gram({
-        serverURL: "https://gram.example",
-        httpClient: new HTTPClient({
-          fetcher: async (request) => {
-            requests.push(request as Request);
-            return new Response(new Uint8Array([0x50, 0x4b, 3, 4]), {
-              headers: { "Content-Type": "application/zip" },
-            });
-          },
+      const client: PluginsClient = {
+        plugins: new Plugins({
+          serverURL: "https://gram.example",
+          httpClient: new HTTPClient({
+            fetcher: async (request) => {
+              requests.push(request as Request);
+              return new Response(new Uint8Array([0x50, 0x4b, 3, 4]), {
+                headers: { "Content-Type": "application/zip" },
+              });
+            },
+          }),
         }),
-      });
+      };
       vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:scoped");
       vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
       const click = vi

@@ -62,6 +62,8 @@ This produces migrations in **two flavors** that must always stay in sync:
 
 **No semicolons in `COMMENT '...'` strings.** golang-migrate splits statements naively, so a semicolon inside a column/table comment breaks its parser and the local migrations fail to replay. Rephrase the comment instead.
 
+**No backfills in migrations.** Migrations ship DDL only: tables, views, materialized views and their grants. Populating a new table or materialized view from existing rows is an operator step that a human runs outside Atlas, in chunks. A backfill statement inside a migration can take down the replica executing it, and the file then stays partially applied and blocks every later migration.
+
 Three CI checks guard this on every PR:
 
 - **atlas-lint** — runs the Atlas migration linter, plus a porcelain check that migrations were generated and are up to date with both the Postgres and ClickHouse schemas. If you edited `schema.sql` without running `mise run clickhouse:diff`, this fails.
@@ -85,7 +87,7 @@ The pre-aggregated **materialized views are the default read path** for anything
 - arbitrary user-supplied attribute-path filters (e.g. `@user.region`) that a fixed-column summary cannot express,
 - an event shape not yet captured by any summary (e.g. traceless trigger events).
 
-**Why it matters:** raw `telemetry_logs` reads are full-range table scans with per-row JSON extraction; the summary views are pre-aggregated and cheap. A filter dropdown, summary card, count, or default list that scans raw logs on every page load is a **performance bug** — the unified Tool Logs page regressed exactly this way before being moved back onto `trace_summaries`. If a summary is missing a column you need, prefer **extending the MV (+ a backfill migration)** over falling back to a raw-log scan.
+**Why it matters:** raw `telemetry_logs` reads are full-range table scans with per-row JSON extraction; the summary views are pre-aggregated and cheap. A filter dropdown, summary card, count, or default list that scans raw logs on every page load is a **performance bug** — the unified Tool Logs page regressed exactly this way before being moved back onto `trace_summaries`. If a summary is missing a column you need, prefer **extending the MV (+ an operator-run backfill, see "No backfills in migrations")** over falling back to a raw-log scan.
 
 **Reading `trace_summaries`** (one row per `trace_id`, `AggregatingMergeTree`): `GROUP BY trace_id`, use `*Merge` combinators for `AggregateFunction` columns (`anyIfMerge(http_status_code)`) and plain `any()`/`min()`/`sum()`/`max()` for `SimpleAggregateFunction` columns. Tool calls carry a real `trace_id` (recorded by the gateway in `ToolProxy.Do`), so hosted MCP, shadow MCP, skill, and local tool events are all present in the view.
 

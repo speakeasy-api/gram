@@ -14,8 +14,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/idpmanagedresources"
 	"github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
-	"github.com/speakeasy-api/gram/server/internal/managedrows"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -52,7 +52,7 @@ func (s *Service) PublishKey(ctx context.Context, payload *gensvc.PublishKeyPayl
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading key set").LogError(ctx, logger)
 	}
 
-	if err := managedrows.RequireUnmanaged(set.IdentityProviderConnectionID, "this key set"); err != nil {
+	if err := idpmanagedresources.RequireUnmanaged(set.IdentityProviderConnectionID, "this key set"); err != nil {
 		return nil, err
 	}
 
@@ -319,7 +319,7 @@ func (s *Service) beginKeyTransition(ctx context.Context, rawID string) (*contex
 		return nil, logger, noKey, nil, err
 	}
 
-	if err := managedrows.RequireUnmanaged(set.IdentityProviderConnectionID, "this key set"); err != nil {
+	if err := idpmanagedresources.RequireUnmanaged(set.IdentityProviderConnectionID, "this key set"); err != nil {
 		return nil, logger, noKey, nil, err
 	}
 

@@ -43,10 +43,11 @@ type Service interface {
 	// Returns the whole policy, so a caller replaces its view rather than merging
 	// into it.
 	RegisterIssuer(context.Context, *RegisterIssuerPayload) (res *WorkloadIdentityPolicy, err error)
-	// Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields
-	// are left unchanged. The issuer URL and the wildcard admission setting are
-	// fixed at registration. Requires workload:write. Returns the whole policy, so
-	// a caller replaces its view rather than merging into it.
+	// Edit a trusted issuer's name, description, tags, JWKS URI, or assertion
+	// reuse setting. Omitted fields are left unchanged. The issuer URL and the
+	// wildcard admission setting are fixed at registration. Requires
+	// workload:write. Returns the whole policy, so a caller replaces its view
+	// rather than merging into it.
 	UpdateIssuer(context.Context, *UpdateIssuerPayload) (res *WorkloadIdentityPolicy, err error)
 	// Stop trusting an issuer. Every subject admitted under it is withdrawn in the
 	// same transaction, so no admission can outlive the issuer it names. Requires
@@ -65,8 +66,10 @@ type Service interface {
 	// policy, so a caller replaces its view rather than merging into it.
 	UpdateSubject(context.Context, *UpdateSubjectPayload) (res *WorkloadIdentityPolicy, err error)
 	// Withdraw an admitted subject and its agent assignment, stopping it
-	// authenticating. Requires workload:write.
-	WithdrawSubject(context.Context, *WithdrawSubjectPayload) (res *WorkloadIdentityPolicy, err error)
+	// authenticating. A subject can be admitted at the organization and in a
+	// project independently; withdrawing one leaves the other in force, and the
+	// result names the tier removed. Requires workload:write.
+	WithdrawSubject(context.Context, *WithdrawSubjectPayload) (res *WithdrawnWorkloadSubjectPolicy, err error)
 	// Create a single-use join token that enrolls one headless box with no
 	// platform identity as a workload assigned to an agent. The token is returned
 	// once and only its hash is kept. Only a person can create one: a key backed
@@ -134,8 +137,9 @@ type AdmitSubjectPayload struct {
 	// The agent whose policy the admitted workload inherits.
 	AgentID string
 	// Admit the subject for the selected project alone rather than the whole
-	// organization. Requires a caller that names a project; a dashboard session
-	// does not. Defaults to false.
+	// organization. Requires an explicitly selected project via the Gram-Project
+	// header or a project-bound API key. Dashboard sessions require access to that
+	// project. Defaults to false.
 	ProjectScoped bool
 }
 
@@ -211,6 +215,10 @@ type RegisterIssuerPayload struct {
 	// Where the issuer publishes the keys its assertions are signed with. Must be
 	// an https URL on a fully qualified domain name.
 	JwksURI string
+	// Allow valid assertions with jti or uti identifiers to be exchanged
+	// repeatedly until expiry. Defaults to false. Tokens without replay
+	// identifiers retain existing exact-token compatibility.
+	AllowAssertionReuse *bool
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	// Defaults to true. Checked when a wildcard rule is admitted and again on
 	// every lookup, so clearing it makes wildcard rules already written inert
@@ -224,8 +232,9 @@ type RegisterIssuerPayload struct {
 	// tags of at most 64 characters each.
 	Tags []string
 	// Register the issuer for the selected project alone rather than the whole
-	// organization. Requires a caller that names a project; a dashboard session
-	// does not. Defaults to false.
+	// organization. Requires an explicitly selected project via the Gram-Project
+	// header or a project-bound API key. Dashboard sessions require access to that
+	// project. Defaults to false.
 	ProjectScoped bool
 }
 
@@ -249,6 +258,11 @@ type UpdateIssuerPayload struct {
 	// de-duplicated on write, then limited to 40 tags of at most 64 characters
 	// each.
 	Tags []string `json:"tags,omitzero"`
+	// Allow valid assertions with jti or uti identifiers to be exchanged
+	// repeatedly until expiry. Omit to preserve the current setting; false
+	// disables this opt-in. Tokens without replay identifiers retain existing
+	// exact-token compatibility.
+	AllowAssertionReuse *bool
 }
 
 // UpdateSubjectPayload is the payload type of the workloadIdentities service
@@ -289,6 +303,17 @@ type WithdrawSubjectPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+// WithdrawnWorkloadSubjectPolicy is the result type of the workloadIdentities
+// service withdrawSubject method.
+type WithdrawnWorkloadSubjectPolicy struct {
+	// The tier of the admission that was withdrawn: organization or project.
+	WithdrawnTier string
+	// Trusted issuers, organization tier first.
+	Issuers []*types.WorkloadIssuer
+	// Admitted subjects.
+	Admissions []*types.WorkloadAdmission
 }
 
 // WorkloadCustomFlows is the result type of the workloadIdentities service
@@ -430,8 +455,27 @@ type WorkloadPlatformConstant struct {
 	Visibility string
 }
 
-// The access rule a catalog platform produces.
+// The access rule a catalog platform produces by default, and the others the
+// operator may choose instead.
 type WorkloadPlatformSubject struct {
+	// The subject with {key} placeholders for rule-tier variables; the stem, for a
+	// wildcard rule.
+	Template string
+	// Whether the rule is the filled template followed by *.
+	Wildcard bool
+	// Names the default rule beside its alternatives. Empty where there are none.
+	Label string
+	// Other rules the operator may choose instead, in the order they are offered.
+	// Absent where there are none.
+	Alternatives []*WorkloadPlatformSubjectAlternative
+}
+
+// An access rule a catalog platform offers in place of its default.
+type WorkloadPlatformSubjectAlternative struct {
+	// Identifies the choice within the platform.
+	Key string
+	// What the operator chooses it by.
+	Label string
 	// The subject with {key} placeholders for rule-tier variables; the stem, for a
 	// wildcard rule.
 	Template string

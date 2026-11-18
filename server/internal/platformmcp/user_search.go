@@ -76,7 +76,9 @@ func (s *DiagnosticsService) userSearchValid() bool {
 // project's telemetry. The query is required and must be specific enough to
 // name someone rather than everyone.
 type SearchUsersInput struct {
-	ProjectID string `json:"project_id" jsonschema:"project ID to search"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 	Query     string `json:"query" jsonschema:"partial identity to match, case-insensitive, at least 3 characters: part of an email address, external user id, or user id"`
 	UserType  string `json:"user_type,omitempty" jsonschema:"which people to search: internal (default) for the organization's own people, or external for end users of hosted MCP servers"`
 	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h, 24h, 7d (default), or 30d"`
@@ -264,7 +266,7 @@ func normalizeUserSearch(input SearchUsersInput) (userSearch, error) {
 		limit:     input.Limit,
 	}
 	if search.projectID == "" {
-		return userSearch{}, fmt.Errorf("%w: project_id is required", ErrUserSearchInvalid)
+		return userSearch{}, fmt.Errorf("%w: project_slug is required", ErrUserSearchInvalid)
 	}
 	if length := utf8.RuneCountInString(search.query); length < minUserSearchQueryLength || length > maxUserSearchQueryLength {
 		return userSearch{}, fmt.Errorf("%w: query must be between %d and %d characters", ErrUserSearchInvalid, minUserSearchQueryLength, maxUserSearchQueryLength)
@@ -480,7 +482,9 @@ func (s *DiagnosticsService) decodeUserSearchCursor(cursor string, principal Pri
 // minted, never by an email, account id, or name: the caller asks about
 // someone it was shown, not about someone it can describe.
 type GetUserMetricsSummaryInput struct {
-	ProjectID     string `json:"project_id" jsonschema:"project ID to summarize"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID     string `json:"-"`
 	UserReference string `json:"user_reference" jsonschema:"person reference from search_users, or from list_mcp_usage_users when the same mcp_id and window are supplied"`
 	Window        string `json:"window,omitempty" jsonschema:"observation window: 1h, 24h, 7d (default), or 30d"`
 	MCPID         string `json:"mcp_id,omitempty" jsonschema:"configured MCP ID that minted the reference through list_mcp_usage_users; only needed for such a reference, and the summary itself stays project-wide"`
@@ -531,7 +535,7 @@ func (s *DiagnosticsService) GetUserMetricsSummary(ctx context.Context, principa
 	projectID := strings.TrimSpace(input.ProjectID)
 	mcpID := strings.TrimSpace(input.MCPID)
 	if projectID == "" || strings.TrimSpace(input.UserReference) == "" {
-		return GetUserMetricsSummaryOutput{}, fmt.Errorf("%w: project_id and user_reference are required", ErrUserSearchInvalid)
+		return GetUserMetricsSummaryOutput{}, fmt.Errorf("%w: project_slug and user_reference are required", ErrUserSearchInvalid)
 	}
 	now := s.now()
 	window, err := resolveWindow(input.Window, now, userSearchWindowSpec)

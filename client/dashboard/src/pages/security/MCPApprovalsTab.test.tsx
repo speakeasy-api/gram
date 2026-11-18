@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MCPApprovalsTab } from "./MCPApprovalsTab";
 
@@ -8,7 +8,6 @@ const mocks = vi.hoisted(() => ({
   useMembers: vi.fn(),
   useRiskListPolicies: vi.fn(),
   useRoles: vi.fn(),
-  goToServer: vi.fn(),
   refetchPolicies: vi.fn(),
   insightsConfig: vi.fn(),
 }));
@@ -38,17 +37,8 @@ vi.mock("@/components/insights-dock", () => ({
   },
 }));
 
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    shadowAI: {
-      mcps: {
-        detail: {
-          href: (serverSlug: string) => `/shadow-ai/mcps/${serverSlug}`,
-          goTo: mocks.goToServer,
-        },
-      },
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
 // The table's own behavior is covered by its dedicated tests; this file
@@ -97,6 +87,11 @@ vi.mock("@/contexts/Auth", () => ({
   useProject: mocks.useProject,
 }));
 
+function LocationDisplay() {
+  const location = useLocation();
+  return <output data-testid="location">{location.pathname}</output>;
+}
+
 describe("MCPApprovalsTab", () => {
   afterEach(() => {
     cleanup();
@@ -137,23 +132,20 @@ describe("MCPApprovalsTab", () => {
     });
   });
 
-  it("renders the inventory with the policy status beside the heading", () => {
+  it("renders the inventory under its description, with no policy card", () => {
     render(
       <MemoryRouter>
         <MCPApprovalsTab />
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("heading", { name: "MCP approvals" })).toBeTruthy();
+    // The page title and tab name it; the tab adds no heading of its own.
+    expect(screen.queryByRole("heading")).toBeNull();
     expect(
       screen.getByText(/Every MCP server this project knows about/),
     ).toBeTruthy();
-    expect(screen.getByText("No Policy")).toBeTruthy();
-    expect(
-      screen.getByText(
-        "No policy is enabled. All Shadow MCP servers are allowed.",
-      ),
-    ).toBeTruthy();
+    // The mode lives in the page header, so the tab shows no policy card.
+    expect(screen.queryByText("No Policy")).toBeNull();
     expect(screen.getByText("Shadow MCP inventory for project-1")).toBeTruthy();
     expect(screen.getByText("Shadow MCP policies: none")).toBeTruthy();
     expect(
@@ -175,7 +167,7 @@ describe("MCPApprovalsTab", () => {
       expect.objectContaining({
         title: "MCP approval insights",
         contextInfo: expect.stringContaining(
-          "Page: Guardrails, MCP approvals tab. Shadow MCP policy posture: none.",
+          "Page: Shadow MCP. Shadow MCP policy posture: none.",
         ),
       }),
     );
@@ -223,12 +215,6 @@ describe("MCPApprovalsTab", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("Blocking")).toBeTruthy();
-    expect(
-      screen.getByText(
-        "Block policy is enabled. Servers without allow rules are blocked for the policy's audience.",
-      ),
-    ).toBeTruthy();
     expect(
       screen.getByText("Shadow MCP policies: block-policy-1"),
     ).toBeTruthy();
@@ -240,12 +226,15 @@ describe("MCPApprovalsTab", () => {
     render(
       <MemoryRouter>
         <MCPApprovalsTab />
+        <LocationDisplay />
       </MemoryRouter>,
     );
 
-    screen.getByRole("button", { name: "Open server" }).click();
+    fireEvent.click(screen.getByRole("button", { name: "Open server" }));
 
-    expect(mocks.goToServer).toHaveBeenCalledWith("server-slug");
+    expect(screen.getByTestId("location").textContent).toBe(
+      "/org/projects/project/shadow-ai/mcps/server-slug",
+    );
   });
 
   it("keeps the inventory browsable but pauses deciding when the policy list fails", () => {

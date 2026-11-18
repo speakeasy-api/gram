@@ -97,6 +97,11 @@ func ListScopesAccessPath() string {
 	return "/rpc/access.listScopes"
 }
 
+// ListAgentPolicyScopesAccessPath returns the URL path to the access service listAgentPolicyScopes HTTP endpoint.
+func ListAgentPolicyScopesAccessPath() string {
+	return "/rpc/access.listAgentPolicyScopes"
+}
+
 // ListMembersAccessPath returns the URL path to the access service listMembers HTTP endpoint.
 func ListMembersAccessPath() string {
 	return "/rpc/access.listMembers"
@@ -125,6 +130,11 @@ func GetShadowMCPInventoryServerAccessPath() string {
 // UpdateShadowMCPInventoryServerNameAccessPath returns the URL path to the access service updateShadowMCPInventoryServerName HTTP endpoint.
 func UpdateShadowMCPInventoryServerNameAccessPath() string {
 	return "/rpc/access.updateShadowMCPInventoryServerName"
+}
+
+// SetShadowMCPOfficialServerAccessPath returns the URL path to the access service setShadowMCPOfficialServer HTTP endpoint.
+func SetShadowMCPOfficialServerAccessPath() string {
+	return "/rpc/access.setShadowMCPOfficialServer"
 }
 
 // ListShadowMCPInventoryUsersAccessPath returns the URL path to the access service listShadowMCPInventoryUsers HTTP endpoint.
@@ -205,4 +215,24 @@ func ResolveChallengeAccessPath() string {
 // ListIdentityAccessAccessPath returns the URL path to the access service listIdentityAccess HTTP endpoint.
 func ListIdentityAccessAccessPath() string {
 	return "/rpc/access.listIdentityAccess"
+}
+
+// CreateTemporaryGrantAccessPath returns the URL path to the access service createTemporaryGrant HTTP endpoint.
+func CreateTemporaryGrantAccessPath() string {
+	return "/rpc/access.createTemporaryGrant"
+}
+
+// ListTemporaryGrantsAccessPath returns the URL path to the access service listTemporaryGrants HTTP endpoint.
+func ListTemporaryGrantsAccessPath() string {
+	return "/rpc/access.listTemporaryGrants"
+}
+
+// RenewTemporaryGrantAccessPath returns the URL path to the access service renewTemporaryGrant HTTP endpoint.
+func RenewTemporaryGrantAccessPath() string {
+	return "/rpc/access.renewTemporaryGrant"
+}
+
+// RevokeTemporaryGrantAccessPath returns the URL path to the access service revokeTemporaryGrant HTTP endpoint.
+func RevokeTemporaryGrantAccessPath() string {
+	return "/rpc/access.revokeTemporaryGrant"
 }

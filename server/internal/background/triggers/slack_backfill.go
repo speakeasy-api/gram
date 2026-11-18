@@ -30,7 +30,7 @@ const (
 // Slack task's event. A failure to read the thread marks the context
 // unavailable instead of failing the dispatch.
 func (a *App) backfillSlackThread(ctx context.Context, task Task) (Task, error) {
-	if task.ThreadBackfill == nil || task.DefinitionSlug != DefinitionSlugSlack || a.slackClient == nil {
+	if task.ThreadBackfill == nil || !isSlackDefinition(task.DefinitionSlug) || a.slackClient == nil {
 		return task, nil
 	}
 
@@ -101,6 +101,9 @@ func (a *App) slackBotToken(ctx context.Context, triggerInstanceID string) (stri
 	instance, err := a.repo.GetTriggerInstanceByIDPublic(ctx, instanceID)
 	if err != nil {
 		return "", fmt.Errorf("get trigger instance: %w", err)
+	}
+	if instance.DefinitionSlug == DefinitionSlugSpeakeasySlack {
+		return a.speakeasySlackToken(ctx, instance)
 	}
 	if !instance.EnvironmentID.Valid {
 		return "", nil

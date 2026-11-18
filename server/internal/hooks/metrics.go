@@ -3,18 +3,38 @@ package hooks
 import (
 	"context"
 	"log/slog"
+	"regexp"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 )
 
 const (
 	meterHooksEventDuration = "hooks.event.duration"
+	// meterHooksDeliveryFailure counts device-side delivery failure reports
+	// (client.delivery_failed) as they arrive. Reports are spooled on the
+	// device and drained once it reconnects, so the series lags the failures
+	// it counts; the telemetry row carries the device-side attempt time.
+	meterHooksDeliveryFailure = "hooks.delivery_failure"
+	// meterHooksInstallFailure counts bootstrap install failure reports
+	// (client.install_failed).
+	meterHooksInstallFailure = "hooks.install_failure"
+
+	// hookMetricDimensionUnknown fills a delivery failure device dimension the
+	// report left empty or outside the known set, so a missing value is still
+	// a bucket rather than an absent tag that would make per-dimension totals
+	// disagree with the overall one.
+	hookMetricDimensionUnknown = "unknown"
+	// hookInstallVersionOlder buckets install failures for any release before
+	// the pinned one.
+	hookInstallVersionOlder = "older"
 
 	hookMetricOutcomeAccepted        = "accepted"
 	hookMetricOutcomeFailure         = "failure"
@@ -37,7 +57,44 @@ const (
 )
 
 type metrics struct {
-	eventDuration metric.Float64Histogram
+	eventDuration    metric.Float64Histogram
+	deliveryFailures metric.Int64Counter
+	installFailures  metric.Int64Counter
+}
+
+// installFailureMetricParams are the dimensions of one install failure report.
+type installFailureMetricParams struct {
+	Cause   string
+	Harness string
+	OS      string
+	Version string
+	OrgSlug string
+}
+
+// deliveryFailureMetricParams are the dimensions of one delivery failure
+// report. Arch is left off the metric: it adds little beyond OS for
+// alerting and the telemetry row keeps it for investigation.
+type deliveryFailureMetricParams struct {
+	// EventType is the canonical type of the event whose delivery failed.
+	EventType string
+
+	// Phase is live or drain.
+	Phase string
+
+	// Cause is the failure class the client observed.
+	Cause string
+
+	// Harness is the coding agent harness the hook ran under.
+	Harness string
+
+	// OS is the device operating system.
+	OS string
+
+	// BinaryVersion is the speakeasy-hooks build that made the attempt.
+	BinaryVersion string
+
+	// OrgSlug is the reporting organization; omitted when empty.
+	OrgSlug string
 }
 
 func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metrics {
@@ -54,9 +111,135 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterHooksEventDuration), attr.SlogError(err))
 	}
 
-	return &metrics{
-		eventDuration: eventDuration,
+	deliveryFailures, err := meter.Int64Counter(
+		meterHooksDeliveryFailure,
+		metric.WithDescription("Device-side hook delivery failures reported by the speakeasy-hooks binary"),
+		metric.WithUnit("{failure}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterHooksDeliveryFailure), attr.SlogError(err))
 	}
+
+	installFailures, err := meter.Int64Counter(
+		meterHooksInstallFailure,
+		metric.WithDescription("Hooks binary install failures reported by plugin bootstrap scripts"),
+		metric.WithUnit("{failure}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterHooksInstallFailure), attr.SlogError(err))
+	}
+
+	return &metrics{
+		eventDuration:    eventDuration,
+		deliveryFailures: deliveryFailures,
+		installFailures:  installFailures,
+	}
+}
+
+func (m *metrics) RecordInstallFailure(ctx context.Context, params installFailureMetricParams) {
+	if m == nil || m.installFailures == nil {
+		return
+	}
+	attrs := []attribute.KeyValue{
+		attr.HookInstallCause(params.Cause),
+		attr.HookDeviceHarness(boundedInstallHarness(params.Harness)),
+		attr.HookDeviceOS(boundedDeviceOS(params.OS)),
+		attr.HookInstallVersion(boundedInstallVersion(params.Version)),
+	}
+	if params.OrgSlug != "" {
+		attrs = append(attrs, attr.OrganizationSlug(params.OrgSlug))
+	}
+	m.installFailures.Add(ctx, 1, metric.WithAttributes(attrs...))
+}
+
+func (m *metrics) RecordDeliveryFailure(ctx context.Context, params deliveryFailureMetricParams) {
+	if m == nil || m.deliveryFailures == nil {
+		return
+	}
+
+	// EventType, Phase, and Cause are enum-validated before a report is
+	// recorded, so they are used as-is. The device dimensions are free-form on
+	// the wire and bounded here; the telemetry row keeps the raw values.
+	attrs := []attribute.KeyValue{
+		attr.HookDeliveryEventType(params.EventType),
+		attr.HookDeliveryPhase(params.Phase),
+		attr.HookDeliveryCause(params.Cause),
+		attr.HookDeviceHarness(conv.Default(params.Harness, hookMetricDimensionUnknown)),
+		attr.HookDeviceOS(boundedDeviceOS(params.OS)),
+		attr.HookDeviceBinaryVersion(boundedBinaryVersion(params.BinaryVersion)),
+	}
+	if params.OrgSlug != "" {
+		attrs = append(attrs, attr.OrganizationSlug(params.OrgSlug))
+	}
+	m.deliveryFailures.Add(ctx, 1, metric.WithAttributes(attrs...))
+}
+
+// knownDeviceOS is the set of Go GOOS values: the speakeasy-hooks binary
+// reports runtime.GOOS, so anything else is not a real platform.
+var knownDeviceOS = map[string]struct{}{
+	"aix": {}, "android": {}, "darwin": {}, "dragonfly": {}, "freebsd": {}, "illumos": {}, "ios": {},
+	"js": {}, "linux": {}, "netbsd": {}, "openbsd": {}, "plan9": {}, "solaris": {}, "wasip1": {}, "windows": {},
+}
+
+// releaseVersionPattern matches the versions goreleaser stamps into the
+// speakeasy-hooks binary (1.4.0, v1.4.0, 1.4.0-rc.1); "dev" is the
+// unstamped local build.
+var releaseVersionPattern = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]{1,32})?$`)
+
+const devBinaryVersion = "dev"
+
+// knownInstallHarnesses are the --provider values the bootstrap scripts are
+// launched with; the install report's harness is free-form otherwise.
+var knownInstallHarnesses = map[string]struct{}{
+	"claude": {}, "claude-code": {}, "codex": {}, "copilot": {}, "cursor": {}, "openclaw": {}, "opencode": {},
+}
+
+func boundedInstallHarness(v string) string {
+	if _, ok := knownInstallHarnesses[v]; ok {
+		return v
+	}
+	return hookMetricDimensionUnknown
+}
+
+// boundedDeviceOS maps a reported OS onto a known GOOS or "unknown", keeping
+// the counter's OS series finite.
+func boundedDeviceOS(v string) string {
+	if _, ok := knownDeviceOS[v]; ok {
+		return v
+	}
+	return hookMetricDimensionUnknown
+}
+
+// boundedInstallVersion keeps the series finite: the pinned release keeps its
+// version, any earlier release becomes "older", and everything else "unknown".
+// The diagnostic row still carries the exact version.
+func boundedInstallVersion(v string) string {
+	latest := plugins.LatestHooksVersion()
+	if v == latest {
+		return v
+	}
+	if !releaseVersionPattern.MatchString(v) {
+		return hookMetricDimensionUnknown
+	}
+	reported, err := semver.NewVersion(v)
+	if err != nil {
+		return hookMetricDimensionUnknown
+	}
+	pinned, err := semver.NewVersion(latest)
+	if err != nil || !reported.LessThan(pinned) {
+		return hookMetricDimensionUnknown
+	}
+	return hookInstallVersionOlder
+}
+
+// boundedBinaryVersion keeps a reported version only when it has the shape
+// of a release (or is the dev build), so a malformed or arbitrary value
+// cannot mint a new series.
+func boundedBinaryVersion(v string) string {
+	if v == devBinaryVersion || releaseVersionPattern.MatchString(v) {
+		return v
+	}
+	return hookMetricDimensionUnknown
 }
 
 func (m *metrics) RecordHookEventDuration(ctx context.Context, source string, eventName string, outcome string, decision string, orgSlug string, riskScanned bool, duration time.Duration) {

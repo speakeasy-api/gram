@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { AgentPolicyGrantEffect$inboundSchema } from "@gram/client/models/components/agentpolicygrant.js";
 import { KillswitchSchedule$inboundSchema } from "@gram/client/models/components/killswitchschedule.js";
 import { KillswitchScope$inboundSchema } from "@gram/client/models/components/killswitchscope.js";

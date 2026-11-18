@@ -1,6 +1,7 @@
 import * as React from "react";
 
-import { AppRoute, useOrgRoutes } from "@/routes";
+import type { AppRoute } from "@/routes";
+import { useOrgRoutes } from "@/routes";
 import { NavButton, NavGroupProvider } from "@/components/nav-menu";
 import {
   Sidebar,
@@ -14,7 +15,7 @@ import { useIsPlatformAdmin, useOrganization } from "@/contexts/Auth";
 import { DevSidebarSlot } from "@/dev/sidebar-slot";
 import { Icon } from "@/components/ui/Icon";
 import { RequireScope } from "@/components/require-scope";
-import { Scope } from "@gram/client/models/components/rolegrant.js";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { ScopeGatedNavGroup } from "@/components/scope-gated-nav-group";
 import { SidebarBrandHeader } from "./sidebar-brand-header";
 import { SidebarFooterAction } from "./sidebar-footer-action";
@@ -25,8 +26,6 @@ import { Wrench } from "lucide-react";
 import { useCanSetUpOrg } from "@/hooks/useCanSetUpOrg";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 
 /** Scopes that make an org-level nav item visible. */
 const orgReadOrAdmin: Scope[] = ["org:read", "org:admin"];
@@ -72,9 +71,6 @@ export function OrgSidebar({
   );
   const productFeatures = canReadFeatures ? featuresData : undefined;
   const isPlatformAdmin = useIsPlatformAdmin();
-  const isUserSessionIssuersEnabled =
-    useFeatureFlag(FEATURE_FLAGS.userSessionIssuerDashboard).status ===
-    "enabled";
 
   const settingsActive = [
     orgRoutes.billing,
@@ -197,15 +193,6 @@ export function OrgSidebar({
                   { item: orgRoutes.skills, scope: "org:admin" },
                   { item: orgRoutes.aiIntegrations, scope: orgReadOrAdmin },
                   { item: orgRoutes.webhooks, scope: orgReadOrAdmin },
-                  ...(isUserSessionIssuersEnabled
-                    ? [
-                        {
-                          item: orgRoutes.userSessionIssuers,
-                          scope: orgReadOrAdmin,
-                          label: "Authorization Servers",
-                        },
-                      ]
-                    : []),
                 ]}
               />
 

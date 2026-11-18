@@ -56,6 +56,7 @@ export function ServiceAccountPanel({
   customerManagedKeys,
   providersHref,
   clientHref,
+  compact = false,
 }: {
   format: ServiceAccountFormat;
   onFormatChange: (format: ServiceAccountFormat) => void;
@@ -67,6 +68,11 @@ export function ServiceAccountPanel({
   customerManagedKeys: boolean;
   providersHref: string;
   clientHref: (issuerId: string, clientId: string) => string;
+  /**
+   * For narrow hosts such as a dialog: the formats become a grid of
+   * title-only tiles above the fields rather than a column beside them.
+   */
+  compact?: boolean;
 }): JSX.Element {
   const choose = (next: string) => {
     const picked = next as ServiceAccountFormat;
@@ -79,72 +85,97 @@ export function ServiceAccountPanel({
     isOAuthFormat(format) && clientDraft.showingBound(format);
 
   return (
-    <div className="flex flex-wrap items-start gap-x-8 gap-y-6">
-      {showingSaved ? null : (
-        <div className="flex max-w-[280px] min-w-[240px] flex-1 flex-col gap-4">
-          <FormatGroup
-            label="Static"
-            value={format}
-            onChange={choose}
-            disabled={disabled}
-            options={[
-              {
-                value: "bearer",
-                title: "Bearer",
-                description: "A token sent after the Bearer prefix.",
-              },
-              {
-                value: "basic",
-                title: "Basic",
-                description: "A username and password.",
-              },
-              {
-                value: "manual",
-                title: "Manual",
-                description: "Any header value you type.",
-              },
-            ]}
-          />
-          <FormatGroup
-            label="OAuth"
-            value={format}
-            onChange={choose}
-            disabled={disabled}
-            options={[
-              {
-                value: "client-secret",
-                title: "Client Secret",
-                description:
-                  "Paste a client ID and secret from the authorization server.",
-              },
-              {
-                value: "signing-key",
-                title: "Signing Client",
-                description:
-                  "Speakeasy signs its token requests with a key in your KMS.",
-                unavailable: customerManagedKeys ? undefined : "Requires KMS",
-              },
-            ]}
-          />
-        </div>
-      )}
-
-      <div className="flex min-w-0 flex-[999_1_480px] flex-col gap-4">
-        {isOAuthFormat(format) ? (
-          <OAuthClientFields
-            format={format}
-            draft={clientDraft}
-            disabled={disabled}
-            providersHref={providersHref}
-            clientHref={clientHref}
-          />
-        ) : (
-          <StaticCredentialFields
-            draft={agentDraft}
-            disabled={disabled}
-            upstreamName={upstreamName}
-          />
+    // Wide panels keep the formats in a column beside the fields. Narrow ones
+    // stack them above the fields as rows of cards, static credentials then
+    // service accounts, rather than one long column of tiles.
+    <div className={cn(!compact && "@container")}>
+      <div
+        className={cn(
+          compact
+            ? "flex flex-col gap-4"
+            : "flex flex-col gap-6 @3xl:flex-row @3xl:items-start @3xl:gap-8",
         )}
+      >
+        {showingSaved ? null : (
+          <div
+            className={cn(
+              "flex flex-col",
+              compact ? "gap-3" : "gap-4 @3xl:w-[260px] @3xl:shrink-0",
+            )}
+          >
+            <FormatGroup
+              compact={compact}
+              label="Static credential"
+              value={format}
+              onChange={choose}
+              disabled={disabled}
+              options={[
+                {
+                  value: "bearer",
+                  title: "Bearer",
+                  description: "A token sent after the Bearer prefix.",
+                },
+                {
+                  value: "basic",
+                  title: "Basic",
+                  description: "A username and password.",
+                },
+                {
+                  value: "manual",
+                  title: "Manual",
+                  description: "Any header value you type.",
+                },
+              ]}
+            />
+            <FormatGroup
+              compact={compact}
+              label="Service account"
+              value={format}
+              onChange={choose}
+              disabled={disabled}
+              options={[
+                {
+                  value: "client-secret",
+                  title: "Client Secret",
+                  description:
+                    "Paste a client ID and secret from the authorization server.",
+                },
+                {
+                  value: "signing-key",
+                  title: "Signing Client",
+                  description:
+                    "Speakeasy signs its token requests with a key in your KMS.",
+                  unavailable: customerManagedKeys ? undefined : "Requires KMS",
+                },
+              ]}
+            />
+          </div>
+        )}
+
+        <div
+          className={cn(
+            "flex min-w-0 flex-col gap-4",
+            // Compact stacks the fields under the format tiles, so they sit in
+            // their own inset panel to read as a separate step.
+            compact ? "border-border bg-muted/40 border p-4" : "@3xl:flex-1",
+          )}
+        >
+          {isOAuthFormat(format) ? (
+            <OAuthClientFields
+              format={format}
+              draft={clientDraft}
+              disabled={disabled}
+              providersHref={providersHref}
+              clientHref={clientHref}
+            />
+          ) : (
+            <StaticCredentialFields
+              draft={agentDraft}
+              disabled={disabled}
+              upstreamName={upstreamName}
+            />
+          )}
+        </div>
       </div>
     </div>
   );
@@ -156,6 +187,7 @@ function FormatGroup({
   onChange,
   disabled,
   options,
+  compact,
 }: {
   label: string;
   value: ServiceAccountFormat;
@@ -167,17 +199,29 @@ function FormatGroup({
     description: string;
     unavailable?: string;
   }[];
+  /** Title-only tiles in a row; the description moves to a tooltip. */
+  compact: boolean;
 }): JSX.Element {
   // Both groups are one choice, so each shows nothing selected while the
   // other holds it.
   const inGroup = options.some((option) => option.value === value);
   return (
-    <div className="flex flex-col gap-2">
+    <div className={cn("flex flex-col", compact ? "gap-1.5" : "gap-2")}>
       <span className="text-eyebrow">{label}</span>
       <RadioCardGroup
-        aria-label={`${label} credential`}
+        aria-label={label}
         size="sm"
         showIndicator={false}
+        className={
+          compact
+            ? cn(
+                "grid gap-2",
+                options.length >= 3 ? "grid-cols-3" : "grid-cols-2",
+              )
+            : // Three across when stacked, so the service accounts line up
+              // under the static credentials; one column beside the fields.
+              "grid grid-cols-1 gap-2 @md:grid-cols-3 @3xl:grid-cols-1"
+        }
         value={inGroup ? value : null}
         onValueChange={onChange}
         disabled={disabled}
@@ -188,7 +232,10 @@ function FormatGroup({
             value={option.value}
             disabled={!!option.unavailable}
             title={
-              <span className="flex flex-wrap items-center gap-2">
+              <span
+                className="flex flex-wrap items-center gap-2"
+                title={compact ? option.description : undefined}
+              >
                 {option.title}
                 {option.unavailable ? (
                   <AvailabilityBadge>{option.unavailable}</AvailabilityBadge>
@@ -196,7 +243,7 @@ function FormatGroup({
               </span>
             }
           >
-            {option.description}
+            {compact ? null : option.description}
           </RadioCard>
         ))}
       </RadioCardGroup>

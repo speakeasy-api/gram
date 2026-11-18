@@ -201,7 +201,7 @@ function Grid({
                     height={height}
                     title={`${row.name}, ${shortDay(day)}`}
                   />
-                  <div className="text-muted-foreground mt-0.5 text-center text-[11px]">
+                  <div className="text-muted-foreground mt-0.5 min-h-4 text-center text-[11px] leading-4">
                     {cell && !cell.stale ? cell.label : ""}
                   </div>
                 </div>

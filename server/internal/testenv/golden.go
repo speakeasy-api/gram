@@ -35,11 +35,7 @@ var goldenUpdates = struct {
 // captured JSON values agree when updating it.
 func RequireYAMLGolden(t *testing.T, fixturePath string, actualJSON []byte) {
 	t.Helper()
-	decoder := json.NewDecoder(bytes.NewReader(actualJSON))
-	decoder.UseNumber()
-	var value any
-	require.NoError(t, decoder.Decode(&value))
-	require.ErrorIs(t, decoder.Decode(new(any)), io.EOF)
+	value := decodeGoldenJSON(t, actualJSON)
 	path, err := filepath.Abs(fixturePath)
 	require.NoError(t, err)
 	if *updateGoldens {
@@ -63,6 +59,47 @@ func RequireYAMLGolden(t *testing.T, fixturePath string, actualJSON []byte) {
 	require.ErrorIs(t, fixtureDecoder.Decode(new(yaml.Node)), io.EOF)
 	expected := goldenYAMLValue(t, &document)
 	require.Equal(t, expected, value, "golden fixture: %s", fixturePath)
+}
+
+// RequireJSONGolden compares one captured JSON document against a JSON fixture,
+// for fixtures another toolchain reads as well, such as the dashboard's tests.
+// fixturePath is relative to the calling test's working directory or absolute.
+// Missing or mismatched fixtures fail normal runs. With -args -update, the
+// fixture is written from actualJSON, indented and in its key order, and must
+// be reviewed before committing. Comparison ignores key order and formatting.
+func RequireJSONGolden(t *testing.T, fixturePath string, actualJSON []byte) {
+	t.Helper()
+	value := decodeGoldenJSON(t, actualJSON)
+	path, err := filepath.Abs(fixturePath)
+	require.NoError(t, err)
+	if *updateGoldens {
+		goldenUpdates.mu.Lock()
+		defer goldenUpdates.mu.Unlock()
+		if previous, ok := goldenUpdates.values[path]; ok {
+			require.Equal(t, previous, value, "tests sharing golden %s produced different output", fixturePath)
+		} else {
+			var data bytes.Buffer
+			require.NoError(t, json.Indent(&data, actualJSON, "", "  "))
+			data.WriteByte('\n')
+			require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o750))
+			require.NoError(t, os.WriteFile(path, data.Bytes(), 0o600))
+			goldenUpdates.values[path] = value
+		}
+	}
+	fixture, err := os.ReadFile(filepath.Clean(path))
+	require.NoError(t, err)
+	require.Equal(t, decodeGoldenJSON(t, fixture), value, "golden fixture: %s", fixturePath)
+}
+
+// decodeGoldenJSON reads one JSON document, keeping numbers as their text.
+func decodeGoldenJSON(t *testing.T, data []byte) any {
+	t.Helper()
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var value any
+	require.NoError(t, decoder.Decode(&value))
+	require.ErrorIs(t, decoder.Decode(new(any)), io.EOF)
+	return value
 }
 
 // encodeGoldenYAML parses captured JSON into a syntax tree, preserving scalar

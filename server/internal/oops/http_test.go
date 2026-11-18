@@ -13,6 +13,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	goa "goa.design/goa/v3/pkg"
+
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
 type logEntry struct {
@@ -197,4 +199,21 @@ func TestErrHandle_ContextPropagation(t *testing.T) {
 	require.Equal(t, http.StatusInternalServerError, rec.Code)
 	require.NotEmpty(t, logBuf.String())
 	require.Equal(t, ctxValue, ctxValueReceived, "context should be propagated")
+}
+
+func TestErrHandle_ConnectionReferenceAddsALineAndKeepsTheStatus(t *testing.T) {
+	t.Parallel()
+	logger, _ := captureLogger()
+
+	handler := ErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+		contextvalues.SetConnectionReference(r.Context(), "ref-1")
+		return E(CodeForbidden, nil, "Ask an admin")
+	})
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	var payload goa.ServiceError
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
+	require.Equal(t, "Ask an admin\nReference: ref-1", payload.Message)
 }

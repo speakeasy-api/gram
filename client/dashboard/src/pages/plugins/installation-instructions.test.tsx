@@ -13,12 +13,36 @@ vi.mock("@gram/client/react-query/marketplaceSettings", () => ({
 vi.mock("@gram/client/react-query/plugins", () => ({
   usePlugins: () => ({ data: { plugins: [] } }),
 }));
+const access = vi.hoisted(() => ({ canWritePlugin: false }));
+vi.mock("@/hooks/usePluginWriteAccess", () => ({
+  usePluginWriteAccess: () => access.canWritePlugin,
+}));
+vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }));
+vi.mock("@gram/client/react-query/publishStatus", () => ({
+  usePublishStatus: () => ({
+    data: {
+      vibeObservabilityAvailable: true,
+      vibeObservabilityPlugin: "example-observability",
+    },
+  }),
+  invalidateAllPublishStatus: vi.fn<() => void>(),
+}));
+vi.mock("@gram/client/react-query/publishPlugins", () => ({
+  usePublishPluginsMutation: () => ({
+    mutate: vi.fn<() => void>(),
+    isPending: false,
+  }),
+}));
+vi.mock("./usePluginQueryScope", () => ({
+  usePluginQueryScope: () => ({ gramProject: "default", gramSession: "s" }),
+}));
 vi.mock("@/components/code", () => ({
   CodeBlock: ({ children }: { children: string }) => <pre>{children}</pre>,
 }));
 
 afterEach(() => {
   cleanup();
+  access.canWritePlugin = false;
 });
 
 function bodyText(): string {
@@ -47,6 +71,40 @@ function openProvider(
 }
 
 describe("installation instructions", () => {
+  it("installs the OpenCode plugin package, with observability as a separate optional step", () => {
+    const text = openProvider("opencode");
+    expect(text).toContain(
+      "git clone https://github.com/example-owner/example-org-plugins.git speakeasy-marketplace",
+    );
+    expect(text).toContain(
+      "cp -R speakeasy-marketplace/opencode-plugins/example-plugin/. ~/.config/opencode/",
+    );
+    expect(text).toContain("adds the plugin's MCP servers and skills");
+    expect(text).toContain("Optional: add observability");
+    expect(text).toContain("does not configure any MCP servers");
+    expect(text).not.toContain("<server-name>");
+    expect(text).not.toContain("speakeasy-hooks install");
+  });
+
+  it("tells OpenCode users without plugin write access who can grant repo access", () => {
+    const text = openProvider("opencode");
+    expect(text).toContain(
+      "Ask an org admin, or someone with the plugin:write scope on this project",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Add collaborators" }),
+    ).toBeNull();
+  });
+
+  it("lets OpenCode users with plugin write access add collaborators", () => {
+    access.canWritePlugin = true;
+    const text = openProvider("opencode");
+    expect(text).not.toContain("Ask an org admin");
+    expect(
+      screen.getByRole("button", { name: "Add collaborators" }),
+    ).toBeDefined();
+  });
+
   it("offers Pro/Max personal marketplaces and ZIPs without claiming a vendor restriction", () => {
     const text = openProvider("Claude Cowork");
     expect(text).toContain("On Pro or Max, add a personal marketplace");
@@ -160,6 +218,109 @@ describe("installation instructions", () => {
     const text = openProvider("Cursor", "");
     expect(text).toContain("Open the Install menu on a specific plugin");
     expect(text).not.toContain("GRAM_CURSOR_INSTALL");
+  });
+
+  it("installs the observability plugin into ~/.vibe/plugins for Mistral Vibe", () => {
+    const text = openProvider("Mistral Vibe", "example-observability");
+    // Quick install: the server-generated ZIP for platform=vibe, extracted
+    // straight into the user-scope plugin directory under the real install
+    // name from the publish status.
+    expect(text).toContain("Download Plugin");
+    // The extract path is quoted so the <org>-observability placeholder can
+    // never be read as a shell redirect.
+    expect(text).toContain(
+      'unzip observability-vibe.zip -d ~/.vibe/plugins/"example-observability"',
+    );
+    // Manual install from the marketplace repository's <slug>-vibe/ directory:
+    // clone into a fresh temp dir chained with &&, clear the destination, copy.
+    expect(text).toContain("( tmp=$(mktemp -d)");
+    expect(text).toContain(`trap 'rm -rf "$tmp"' EXIT`);
+    expect(text).toContain(
+      'git clone https://github.com/example-owner/example-org-plugins "$tmp/marketplace"',
+    );
+    expect(text).toContain("rm -rf ~/.vibe/plugins/example-observability");
+    expect(text).toContain(
+      'cp -R "$tmp/marketplace/example-observability-vibe" ~/.vibe/plugins/example-observability',
+    );
+    expect(text).toContain("/reload-plugins");
+    expect(text).toContain("ai.mistral.vibe/hooks.toml");
+    // MCP servers are added with `vibe mcp add` (which writes the OAuth auth
+    // table) and signed in with /mcp login — not a hand-written block.
+    expect(text).toContain("vibe mcp add <server-name> --url <mcp-server-url>");
+    expect(text).toContain("/mcp login <server-name>");
+    expect(text).toContain("~/.vibe/config.toml");
+  });
+
+  it("offers Mistral Vibe without the disabled Mistral coming-soon tile", () => {
+    render(
+      <TooltipProvider>
+        <InstallInstructionsDialog
+          open
+          onOpenChange={vi.fn<() => void>()}
+          repoOwner="example-owner"
+          repoName="example-org-plugins"
+          marketplaceUrl="https://example.invalid/marketplace"
+          pluginName="Example plugin"
+          pluginSlug="example-plugin"
+        />
+      </TooltipProvider>,
+    );
+    const mistralButtons = screen.getAllByRole("button", { name: /^Mistral/ });
+    expect(mistralButtons.map((b) => b.textContent?.trim())).toEqual([
+      "Mistral Vibe",
+    ]);
+    // The surviving Mistral tile must be enabled, not another coming-soon entry.
+    expect(mistralButtons[0]?.getAttribute("disabled")).toBeNull();
+  });
+
+  it("keeps the feature plugin's <slug>-vibe copy steps alongside the Quick install for Mistral Vibe", () => {
+    // A specific feature plugin installs from the marketplace repo's
+    // <slug>-vibe/ directory under its bare slug — and the observability
+    // Quick install still renders, since the org's observability package is
+    // published.
+    const text = openProvider("Mistral Vibe", "example-plugin");
+    expect(text).toContain("Download Plugin");
+    expect(text).toContain("example-plugin-vibe/");
+    expect(text).toContain("rm -rf ~/.vibe/plugins/example-plugin");
+    expect(text).toContain(
+      'cp -R "$tmp/marketplace/example-plugin-vibe" ~/.vibe/plugins/example-plugin',
+    );
+    expect(text).toContain("/reload-plugins");
+    // The feature plugin's manual copy does not claim automatic hooks — that
+    // note belongs to the observability Quick install above it.
+    expect(text).not.toContain("ships with the package");
+    expect(text).toContain("vibe mcp add <server-name> --url <mcp-server-url>");
+  });
+
+  it("shows the reason instead of Vibe copy steps for a plugin that is not AP1.0-portable", () => {
+    render(
+      <TooltipProvider>
+        <InstallInstructionsDialog
+          open
+          onOpenChange={vi.fn<() => void>()}
+          repoOwner="example-owner"
+          repoName="example-org-plugins"
+          marketplaceUrl="https://example.invalid/marketplace"
+          pluginName="Example plugin"
+          pluginSlug="example-plugin"
+          candidatePlugins={[
+            {
+              name: "Example plugin",
+              slug: "example-plugin",
+              agentPluginsV1Compatible: false,
+            },
+          ]}
+        />
+      </TooltipProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Mistral Vibe/ }));
+    const text = document.body.textContent!.replace(/\s+/g, " ");
+    expect(text).toContain(
+      "not published as a portable Agent Plugins 1.0 package",
+    );
+    // The reason names the missing package directory, but no copy command.
+    expect(text).not.toContain("cp -R");
+    expect(text).not.toContain("git clone");
   });
 
   it.each(["publish", "manage"] as const)(

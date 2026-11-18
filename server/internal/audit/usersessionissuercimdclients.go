@@ -68,6 +68,7 @@ func (l *Logger) LogUserSessionIssuerCimdClientAdd(ctx context.Context, dbtx rep
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -122,6 +123,7 @@ func (l *Logger) LogUserSessionIssuerCimdClientRemove(ctx context.Context, dbtx 
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

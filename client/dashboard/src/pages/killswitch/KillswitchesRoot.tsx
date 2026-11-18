@@ -1,6 +1,7 @@
 import { killswitchRecordHref } from "@/components/killswitch/killswitch-routing";
 import { useSession } from "@/contexts/Auth";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
+import { SplashScreen } from "@/components/ui/LogoLoader";
 import { useKillswitchAccess } from "@/hooks/useKillswitchAccess";
 import { useRBAC } from "@/hooks/useRBAC";
 import { withIdentityWindow } from "@/lib/identity-urn";
@@ -31,11 +32,7 @@ function KillswitchNotice({
 export function KillswitchesRoot(): JSX.Element {
   const access = useKillswitchAccess();
   if (access.isLoading) {
-    return (
-      <div className="p-8 text-sm text-muted-foreground">
-        Checking Killswitch access…
-      </div>
-    );
+    return <SplashScreen />;
   }
   if (!access.canAccess) {
     return (
@@ -109,11 +106,7 @@ export function KillswitchRecordRedirect(): JSX.Element {
   );
 
   if (detailQuery.isLoading) {
-    return (
-      <div className="p-8 text-sm text-muted-foreground">
-        Opening Killswitch…
-      </div>
-    );
+    return <SplashScreen />;
   }
 
   const userId = detailQuery.data?.userId;

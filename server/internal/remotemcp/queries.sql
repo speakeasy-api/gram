@@ -63,6 +63,18 @@ FROM remote_mcp_server_headers
 WHERE remote_mcp_server_id = @remote_mcp_server_id AND deleted IS FALSE
 ORDER BY name;
 
+-- name: ListServerHeaderMetadata :many
+-- Discovery checks header sources without reading credential values.
+SELECT h.remote_mcp_server_id, h.name, h.is_required, h.is_secret, h.value_from_request_header,
+       (h.value IS NOT NULL)::boolean AS has_stored_value
+FROM remote_mcp_server_headers AS h
+JOIN remote_mcp_servers AS r ON r.id = h.remote_mcp_server_id AND r.deleted IS FALSE
+JOIN projects AS p ON p.id = r.project_id AND p.deleted IS FALSE
+WHERE h.remote_mcp_server_id = ANY(@remote_mcp_server_ids::uuid[])
+  AND p.organization_id = @organization_id
+  AND h.deleted IS FALSE
+ORDER BY h.name;
+
 -- name: ListServerHeaders :many
 SELECT *
 FROM remote_mcp_server_headers
@@ -415,3 +427,28 @@ FROM remote_protected_resources
 WHERE project_id = @project_id
     AND resource_identifier = @resource_identifier::text
     AND deleted IS FALSE;
+
+-- name: LockLiveProjectForRemoteMCPProvisioning :one
+SELECT id
+FROM projects
+WHERE id = @project_id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: ListLiveRemoteBackedMcpServers :many
+-- Every live, enabled MCP server in the project that proxies to a remote URL.
+-- Shadow MCP reads this to tell a directly-used server URL that the project
+-- already serves through Speakeasy from one it does not.
+SELECT
+    m.id AS mcp_server_id,
+    m.name AS mcp_server_name,
+    m.slug AS mcp_server_slug,
+    rms.name AS remote_name,
+    rms.url AS remote_url
+FROM mcp_servers AS m
+JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
+WHERE m.project_id = @project_id
+    AND m.deleted IS FALSE
+    AND m.visibility <> 'disabled'
+ORDER BY m.created_at, m.id;

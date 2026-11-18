@@ -109,6 +109,11 @@ func TestLogSafeURL(t *testing.T) {
 			want: "/rpc/chat.listChats?search=REDACTED&limit=10",
 		},
 		{
+			name: "command resource query redacted",
+			in:   "/rpc/commandSearch.search?q=sensitive-resource",
+			want: "/rpc/commandSearch.search?q=REDACTED",
+		},
+		{
 			name: "credential and personal data redacted together",
 			in:   "/rpc/auth.login?email=dev%40acme.corp&token=supersecret",
 			want: "/rpc/auth.login?email=REDACTED&token=REDACTED",
@@ -117,6 +122,11 @@ func TestLogSafeURL(t *testing.T) {
 			name: "empty email query parameter still redacted",
 			in:   "/rpc/auth.login?email=",
 			want: "/rpc/auth.login?email=REDACTED",
+		},
+		{
+			name: "login analytics session id redacted, utm params kept",
+			in:   "/rpc/auth.login?utm_source=linkedin&analytics_session_id=sess-123",
+			want: "/rpc/auth.login?utm_source=linkedin&analytics_session_id=REDACTED",
 		},
 		{
 			name: "unlisted parameter carrying an address untouched",

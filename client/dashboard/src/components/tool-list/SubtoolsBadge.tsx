@@ -1,4 +1,4 @@
-import { Tool } from "@/lib/toolTypes";
+import type { Tool } from "@/lib/toolTypes";
 import { Badge } from "@/components/ui/Badge";
 import { Stack } from "@/components/ui/Stack";
 import {

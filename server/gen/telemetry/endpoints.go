@@ -27,6 +27,8 @@ type Endpoints struct {
 	GetObservabilityOverview         goa.Endpoint
 	GetMcpNetworkTraffic             goa.Endpoint
 	GetMetaMcpServerUsage            goa.Endpoint
+	GetProjectGatewayOverview        goa.Endpoint
+	GetProjectGatewayUsage           goa.Endpoint
 	GetProjectOverview               goa.Endpoint
 	GetUnproxiedMcpServerUsage       goa.Endpoint
 	GetUnproxiedMcpServerToolUsage   goa.Endpoint
@@ -51,6 +53,7 @@ type Endpoints struct {
 	ListToolUsageTraces              goa.Endpoint
 	GetToolUsageFilterOptions        goa.Endpoint
 	GetMcpServerActivity             goa.Endpoint
+	GetOrgMcpServerActivity          goa.Endpoint
 	ListHooksTraces                  goa.Endpoint
 }
 
@@ -70,6 +73,8 @@ func NewEndpoints(s Service) *Endpoints {
 		GetObservabilityOverview:         NewGetObservabilityOverviewEndpoint(s, a.APIKeyAuth),
 		GetMcpNetworkTraffic:             NewGetMcpNetworkTrafficEndpoint(s, a.APIKeyAuth),
 		GetMetaMcpServerUsage:            NewGetMetaMcpServerUsageEndpoint(s, a.APIKeyAuth),
+		GetProjectGatewayOverview:        NewGetProjectGatewayOverviewEndpoint(s, a.APIKeyAuth),
+		GetProjectGatewayUsage:           NewGetProjectGatewayUsageEndpoint(s, a.APIKeyAuth),
 		GetProjectOverview:               NewGetProjectOverviewEndpoint(s, a.APIKeyAuth),
 		GetUnproxiedMcpServerUsage:       NewGetUnproxiedMcpServerUsageEndpoint(s, a.APIKeyAuth),
 		GetUnproxiedMcpServerToolUsage:   NewGetUnproxiedMcpServerToolUsageEndpoint(s, a.APIKeyAuth),
@@ -94,6 +99,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListToolUsageTraces:              NewListToolUsageTracesEndpoint(s, a.APIKeyAuth),
 		GetToolUsageFilterOptions:        NewGetToolUsageFilterOptionsEndpoint(s, a.APIKeyAuth),
 		GetMcpServerActivity:             NewGetMcpServerActivityEndpoint(s, a.APIKeyAuth),
+		GetOrgMcpServerActivity:          NewGetOrgMcpServerActivityEndpoint(s, a.APIKeyAuth),
 		ListHooksTraces:                  NewListHooksTracesEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -111,6 +117,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetObservabilityOverview = m(e.GetObservabilityOverview)
 	e.GetMcpNetworkTraffic = m(e.GetMcpNetworkTraffic)
 	e.GetMetaMcpServerUsage = m(e.GetMetaMcpServerUsage)
+	e.GetProjectGatewayOverview = m(e.GetProjectGatewayOverview)
+	e.GetProjectGatewayUsage = m(e.GetProjectGatewayUsage)
 	e.GetProjectOverview = m(e.GetProjectOverview)
 	e.GetUnproxiedMcpServerUsage = m(e.GetUnproxiedMcpServerUsage)
 	e.GetUnproxiedMcpServerToolUsage = m(e.GetUnproxiedMcpServerToolUsage)
@@ -135,6 +143,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListToolUsageTraces = m(e.ListToolUsageTraces)
 	e.GetToolUsageFilterOptions = m(e.GetToolUsageFilterOptions)
 	e.GetMcpServerActivity = m(e.GetMcpServerActivity)
+	e.GetOrgMcpServerActivity = m(e.GetOrgMcpServerActivity)
 	e.ListHooksTraces = m(e.ListHooksTraces)
 }
 
@@ -796,6 +805,76 @@ func NewGetMetaMcpServerUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 			return nil, err
 		}
 		return s.GetMetaMcpServerUsage(ctx, p)
+	}
+}
+
+// NewGetProjectGatewayOverviewEndpoint returns an endpoint function that calls
+// the method "getProjectGatewayOverview" of service "telemetry".
+func NewGetProjectGatewayOverviewEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetProjectGatewayOverviewPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetProjectGatewayOverview(ctx, p)
+	}
+}
+
+// NewGetProjectGatewayUsageEndpoint returns an endpoint function that calls
+// the method "getProjectGatewayUsage" of service "telemetry".
+func NewGetProjectGatewayUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetProjectGatewayUsagePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetProjectGatewayUsage(ctx, p)
 	}
 }
 
@@ -2105,6 +2184,29 @@ func NewGetMcpServerActivityEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 			return nil, err
 		}
 		return s.GetMcpServerActivity(ctx, p)
+	}
+}
+
+// NewGetOrgMcpServerActivityEndpoint returns an endpoint function that calls
+// the method "getOrgMcpServerActivity" of service "telemetry".
+func NewGetOrgMcpServerActivityEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetOrgMcpServerActivityPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetOrgMcpServerActivity(ctx, p)
 	}
 }
 

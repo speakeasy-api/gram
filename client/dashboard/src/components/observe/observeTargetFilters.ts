@@ -1,3 +1,4 @@
+import { PENDING_DOT_CLASS } from "@/components/chart/palette";
 import type {
   FilterChip,
   ObserveStatusFilterValue,
@@ -19,6 +20,7 @@ const HOOK_SOURCE_FILTER_PATH = "gram.hook.source";
 const HOSTED_SERVER_PREFIX = "hosted:";
 const SHADOW_SERVER_PREFIX = "shadow:";
 const GATEWAY_SERVER_PREFIX = "gateway:";
+const MCP_SERVER_PREFIX = "mcp_server:";
 
 // Local tools are excluded by default: they dominate event volume and drown
 // out the MCP server and skill usage these pages are meant to surface. Users
@@ -62,15 +64,17 @@ export const TOOL_USAGE_STATUS_OPTIONS: Array<{
   /** The dot a row with this status carries, so the two agree on sight. */
   dotClassName: string;
 }> = [
-  { label: "Error", value: "error", dotClassName: "bg-rose-500" },
-  { label: "Success", value: "success", dotClassName: "bg-emerald-500" },
-  // Amber, not red: a denial is the policy working, not the call failing, and
+  { label: "Error", value: "error", dotClassName: "bg-destructive-default" },
+  { label: "Success", value: "success", dotClassName: "bg-success-default" },
+  // Orange, not red: a denial is the policy working, not the call failing, and
   // a reader scanning for breakage should not be pulled to it.
-  { label: "Blocked", value: "blocked", dotClassName: "bg-amber-500" },
+  { label: "Blocked", value: "blocked", dotClassName: "bg-warning-default" },
+  // The filter matches every call with no result: still running (Pending)
+  // or long ended without one (Unknown).
   {
-    label: "Pending",
+    label: "Pending or unknown",
     value: "pending",
-    dotClassName: "bg-muted-foreground/30",
+    dotClassName: PENDING_DOT_CLASS,
   },
 ];
 
@@ -84,12 +88,28 @@ export function toStatuses(
 }
 
 export type ParsedTargetFilter =
+  | { type: "mcp_server"; id: string }
   | { type: "hosted"; id: string }
   | { type: "shadow"; id: string }
   | { type: "gateway"; id: string };
 
-export function encodeHostedServerFilter(slug: string): string {
-  return `${HOSTED_SERVER_PREFIX}${slug}`;
+// Keyed by toolset slug; links made before servers were filtered by id use it.
+export function encodeHostedServerFilter(toolsetSlug: string): string {
+  return `${HOSTED_SERVER_PREFIX}${toolsetSlug}`;
+}
+
+export function encodeMcpServerFilter(mcpServerId: string): string {
+  return `${MCP_SERVER_PREFIX}${mcpServerId}`;
+}
+
+/** Hosted option value; a selected legacy slug value is kept so it stays selected. */
+export function hostedServerFilterValue(
+  server: { toolsetSlug: string; mcpServerId?: string | undefined },
+  selectedValues: string[],
+): string {
+  const legacy = encodeHostedServerFilter(server.toolsetSlug);
+  if (!server.mcpServerId || selectedValues.includes(legacy)) return legacy;
+  return encodeMcpServerFilter(server.mcpServerId);
 }
 
 export function encodeShadowServerFilter(name: string): string {
@@ -102,6 +122,9 @@ export function encodeGatewayServerFilter(metaMcpServerId: string): string {
 }
 
 export function parseTargetFilter(value: string): ParsedTargetFilter {
+  if (value.startsWith(MCP_SERVER_PREFIX)) {
+    return { type: "mcp_server", id: value.slice(MCP_SERVER_PREFIX.length) };
+  }
   if (value.startsWith(HOSTED_SERVER_PREFIX)) {
     return { type: "hosted", id: value.slice(HOSTED_SERVER_PREFIX.length) };
   }
@@ -112,6 +135,20 @@ export function parseTargetFilter(value: string): ParsedTargetFilter {
     return { type: "gateway", id: value.slice(GATEWAY_SERVER_PREFIX.length) };
   }
   return { type: "shadow", id: value };
+}
+
+/** Splits server filters into server ids and legacy toolset slugs. */
+export function splitHostedTargets(filters: ParsedTargetFilter[]): {
+  mcpServerIds: string[];
+  hostedToolsetSlugs: string[];
+} {
+  const mcpServerIds: string[] = [];
+  const hostedToolsetSlugs: string[] = [];
+  for (const filter of filters) {
+    if (filter.type === "mcp_server") mcpServerIds.push(filter.id);
+    if (filter.type === "hosted") hostedToolsetSlugs.push(filter.id);
+  }
+  return { mcpServerIds, hostedToolsetSlugs };
 }
 
 export function selectedTargetValues(activeFilters: FilterChip[]): string[] {
@@ -136,13 +173,35 @@ export function selectedHookSources(activeFilters: FilterChip[]): string[] {
     .filter(Boolean);
 }
 
+/**
+ * Whether the selection is the view's default. Views default differently (one
+ * scoped to an identity starts from every type), so each passes its own
+ * defaults: the page-wide `TOOL_USAGE_DEFAULT_TYPES` or a scoped list.
+ */
 export function isDefaultToolUsageTypeSelection(
   selectedTypes: ObserveTypeFilterValue[],
+  defaultTypes: ObserveTypeFilterValue[],
 ): boolean {
   return (
-    selectedTypes.length === TOOL_USAGE_DEFAULT_TYPES.length &&
-    TOOL_USAGE_DEFAULT_TYPES.every((type) => selectedTypes.includes(type))
+    selectedTypes.length === defaultTypes.length &&
+    defaultTypes.every((type) => selectedTypes.includes(type))
   );
+}
+
+/** Every tool type but local tools, for an identity view that hides them. */
+export const TOOL_USAGE_TYPES_WITHOUT_LOCAL_TOOLS: ObserveTypeFilterValue[] =
+  TOOL_USAGE_VALID_TYPES.filter((type) => type !== "local_tool");
+
+/**
+ * The type selection a view scoped to one identity starts from. It shows
+ * every type unless the page hides local tools. Both lists are module
+ * constants, so the reference stays stable across renders.
+ */
+export function scopedToolUsageDefaultTypes(
+  includeLocalTools: boolean,
+): ObserveTypeFilterValue[] {
+  if (includeLocalTools) return TOOL_USAGE_VALID_TYPES;
+  return TOOL_USAGE_TYPES_WITHOUT_LOCAL_TOOLS;
 }
 
 export function toTargetTypes(
@@ -171,8 +230,9 @@ export function buildServerOptionGroups({
   const shadow = new Map<string, { label: string; count: number }>();
   const gateway = new Map<string, { label: string; count: number }>();
 
+  const selectedValues = selectedTargetValues(activeFilters);
   for (const server of hostedServers) {
-    hosted.set(encodeHostedServerFilter(server.toolsetSlug), {
+    hosted.set(hostedServerFilterValue(server, selectedValues), {
       label: server.toolsetName || server.toolsetSlug,
       count: server.eventCount,
     });
@@ -194,9 +254,12 @@ export function buildServerOptionGroups({
     });
   }
 
-  for (const value of selectedTargetValues(activeFilters)) {
+  for (const value of selectedValues) {
     const parsed = parseTargetFilter(value);
-    if (parsed.type === "hosted" && !hosted.has(value)) {
+    if (
+      (parsed.type === "hosted" || parsed.type === "mcp_server") &&
+      !hosted.has(value)
+    ) {
       hosted.set(value, { label: parsed.id, count: 0 });
     }
     if (parsed.type === "gateway" && !gateway.has(value)) {

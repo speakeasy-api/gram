@@ -1,15 +1,16 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { Button } from "@/components/ui/Button";
 import { Label } from "@/components/ui/Label";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
-import { Toolset } from "@/lib/toolTypes";
+import type { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
 import { Badge } from "@/components/ui/Badge";
 import { Stack } from "@/components/ui/Stack";
-import { CheckCircle, ExternalLink, Loader2 } from "lucide-react";
+import { CheckCircle, ExternalLink } from "lucide-react";
 import { useEffect, useState } from "react";
 import { usePlaygroundEnvironment } from "./usePlaygroundEnvironment";
 import {
@@ -78,7 +79,7 @@ function IssuerLoginConnection({
               role="status"
               className="text-muted-foreground flex items-center gap-2"
             >
-              <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+              <Spinner className="mr-0 size-4" />
               <Text variant="small">Checking connection…</Text>
             </span>
           ) : isError ? (
@@ -338,9 +339,7 @@ export function PlaygroundAuth({
           onClick={() => void handleSave()}
           disabled={editedKeys.size === 0 || playgroundEnv.isSaving}
         >
-          {playgroundEnv.isSaving ? (
-            <Loader2 className="mr-2 size-3 animate-spin" />
-          ) : null}
+          {playgroundEnv.isSaving ? <Spinner className="size-3" /> : null}
           Save
         </Button>
       )}
@@ -351,13 +350,13 @@ export function PlaygroundAuth({
         </Text>
       )}
       <Text variant="small" className="text-muted-foreground pt-2">
-        <routes.mcp.details.Link
+        <routes.toolset.Link
           params={[toolset.slug]}
           hash="authentication"
           className="hover:text-foreground underline"
         >
           Configure auth
-        </routes.mcp.details.Link>
+        </routes.toolset.Link>
       </Text>
     </div>
   );

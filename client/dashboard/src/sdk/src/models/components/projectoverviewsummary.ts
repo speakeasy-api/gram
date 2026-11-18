@@ -7,12 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
-import {
-  LLMClientUsage,
-  LLMClientUsage$inboundSchema,
-} from "./llmclientusage.js";
 import { TopServer, TopServer$inboundSchema } from "./topserver.js";
-import { TopUser, TopUser$inboundSchema } from "./topuser.js";
 
 /**
  * Aggregated project-level summary metrics for a time period
@@ -23,33 +18,13 @@ export type ProjectOverviewSummary = {
    */
   activeServersCount: number;
   /**
-   * Number of unique users with activity in the time period
-   */
-  activeUsersCount: number;
-  /**
-   * Number of failed chat sessions
-   */
-  failedChats: number;
-  /**
    * Number of failed tool calls
    */
   failedToolCalls: number;
   /**
-   * Breakdown of messages/activity by LLM client/agent
-   */
-  llmClientBreakdown: Array<LLMClientUsage>;
-  /**
-   * Number of resolved chat sessions
-   */
-  resolvedChats: number;
-  /**
    * Top 10 MCP servers by tool call count
    */
   topServers: Array<TopServer>;
-  /**
-   * Top 10 users by activity (# of messages or tool calls depending on metrics_mode)
-   */
-  topUsers: Array<TopUser>;
   /**
    * Total number of chat sessions
    */
@@ -67,26 +42,16 @@ export const ProjectOverviewSummary$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     active_servers_count: z.int(),
-    active_users_count: z.int(),
-    failed_chats: z.int(),
     failed_tool_calls: z.int(),
-    llm_client_breakdown: z.array(LLMClientUsage$inboundSchema),
-    resolved_chats: z.int(),
     top_servers: z.array(TopServer$inboundSchema),
-    top_users: z.array(TopUser$inboundSchema),
     total_chats: z.int(),
     total_tool_calls: z.int(),
   }),
   z.transform((v) => {
     return remap$(v, {
       "active_servers_count": "activeServersCount",
-      "active_users_count": "activeUsersCount",
-      "failed_chats": "failedChats",
       "failed_tool_calls": "failedToolCalls",
-      "llm_client_breakdown": "llmClientBreakdown",
-      "resolved_chats": "resolvedChats",
       "top_servers": "topServers",
-      "top_users": "topUsers",
       "total_chats": "totalChats",
       "total_tool_calls": "totalToolCalls",
     });

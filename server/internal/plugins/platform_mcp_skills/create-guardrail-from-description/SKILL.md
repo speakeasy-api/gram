@@ -5,13 +5,15 @@ description: Use when an administrator of a Speakeasy AI Control Plane project s
 
 # Create a guardrail from a description
 
+If this connection lists `call_platform_tool` instead of the tools this workflow names, find each named tool with `search_platform_tools`, describe it with `describe_platform_tool`, then run it with `call_platform_tool` and the same arguments. Whether a tool exists for you is decided by `describe_platform_tool` with its exact name, not by `tools/list` or one page of search results: a name returned in `not_found` is unavailable to you, so say so rather than guess. The call itself still checks your access. When `execute` is also listed, a multi-step read may run in `execute` with `tools.search`, `tools.describe` and `tools.call` on `platform--<tool name>` paths. End each `execute` run at a confirmation point and ask the user before any write.
+
 Turn "stop agents deleting anything in production" into a reviewed policy: map the description to a preset, show the administrator exactly what the policy will do, and create it only after they confirm.
 
 ## Scope and prerequisites
 
 - Use the executing client's authenticated Platform MCP connection. Installing this skill or signing in to the dashboard does not establish MCP authorization.
 - Policy writes need `org:admin` in the connected organization and require an explicit project slug. Do not silently choose the Default project; a request that explicitly names it is sufficient.
-- Never request or expose credentials. If authentication or permissions fail, stop and ask the user to reconnect or obtain access through the approved setup flow.
+- Never request or expose credentials. If authentication fails, stop and follow the `platform-sign-in` workflow to sign this client in. If permissions fail, stop and ask the user to obtain access through the approved setup flow.
 - This skill creates one policy. It does not edit existing policies, create exclusions, or change MCP configuration.
 
 ## Workflow

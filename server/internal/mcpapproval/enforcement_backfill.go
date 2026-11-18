@@ -33,12 +33,14 @@ import (
 // blocking policy means no other blocking policy existed, so every standing
 // decision's grant state on this policy is derived here from nothing.
 //
-// One combination aborts the creation rather than being approximated,
-// mirroring decision-time enforcement: an allow_all policy cannot express an
-// approval narrower than everyone. Widening it silently would make the
-// recorded decision lie about who was given access, so the policy creation
-// fails and names the servers; the admin re-decides them or picks
-// block-by-default.
+// Two combinations abort the creation rather than being approximated,
+// mirroring decision-time enforcement. An allow_all policy cannot express an
+// approval narrower than everyone: widening it silently would make the
+// recorded decision lie about who was given access. A block_all policy that
+// covers everyone blocks a denied server for everyone, so a standing denial
+// narrowed to some people would understate who is blocked. Either way the
+// policy creation fails and names the servers; the admin re-decides them or
+// picks a policy that can express them.
 func (s *Service) ReconcileStandingDecisionsForPolicy(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, policyID uuid.UUID) error {
 	// The same lock decision-time enforcement takes, so a decision recorded
 	// concurrently with this policy's creation is either fully enforced
@@ -85,8 +87,28 @@ func (s *Service) ReconcileStandingDecisionsForPolicy(ctx context.Context, tx pg
 			}
 		}
 		if len(narrow) > 0 {
-			return oops.E(oops.CodeBadRequest, nil,
+			return oops.E(oops.CodeBadRequest, ErrNarrowApprovalUnderAllowAll,
 				"This project has standing approvals scoped to specific people (%s), and an allow-by-default policy can only clear blocks for everyone. Re-decide those servers for everyone, or create the policy as block-by-default.",
+				strings.Join(narrow, ", "))
+		}
+	}
+	if policyDisposition(policy) != shadowmcp.DispositionAllowAll && policy.AudienceType == policyAudienceEveryone {
+		var narrow []string
+		for _, row := range standing {
+			if row.Decision == decisionApproved {
+				continue
+			}
+			principals, err := standingDecisionPrincipals(row)
+			if err != nil {
+				return err
+			}
+			if len(principals) > 0 && !principalsAreEveryone(principals) {
+				narrow = append(narrow, row.TargetRaw)
+			}
+		}
+		if len(narrow) > 0 {
+			return oops.E(oops.CodeBadRequest, ErrNarrowDenialUnderEveryoneBlockAll,
+				"This project has standing denials scoped to specific people (%s), and a block-by-default policy for everyone blocks those servers for everyone. Re-decide those servers as denied for everyone, or create the policy for specific people.",
 				strings.Join(narrow, ", "))
 		}
 	}

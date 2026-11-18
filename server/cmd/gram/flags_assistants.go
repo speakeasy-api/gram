@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/url"
+	"regexp"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/urfave/cli/v2"
@@ -17,20 +18,22 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 )
 
+var assistantRuntimeImageTagPattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
+
 // Flag groups are built per call rather than kept in package-level slices
 // because urfave/cli writes the resolved value back onto the flag when it is
 // applied to a flag set. Sharing definitions across flag sets means sharing
 // mutable state.
 func assistantRuntimeFlags() []cli.Flag {
-	return []cli.Flag{
+	return append([]cli.Flag{
 		&cli.StringFlag{
 			Name:    "assistant-runtime-provider",
-			Usage:   "Assistant runtime provider. Allowed values: gke, local.",
+			Usage:   "Assistant runtime provider. Allowed values: gke, local, disabled. disabled turns assistants off for the deployment and needs no cluster or Kit settings.",
 			Value:   assistants.RuntimeProviderGKE,
 			EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_PROVIDER"},
 			Action: func(_ *cli.Context, val string) error {
 				switch val {
-				case "", assistants.RuntimeProviderGKE, assistants.RuntimeProviderLocal:
+				case "", assistants.RuntimeProviderGKE, assistants.RuntimeProviderLocal, assistants.RuntimeProviderDisabled:
 					return nil
 				default:
 					return fmt.Errorf("invalid assistant runtime provider: %s", val)
@@ -77,7 +80,12 @@ func assistantRuntimeFlags() []cli.Flag {
 			Usage:   "The OCI image repository for the assistant runtime image. It must not include a tag.",
 			EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_OCI_IMAGE"},
 		},
-	}
+		&cli.StringFlag{
+			Name:    "assistant-runtime-image-tag",
+			Usage:   "Optional assistant runtime image tag. Defaults to the compiled assistant runtime image hash.",
+			EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_IMAGE_TAG"},
+		},
+	}, assistantKitRuntimeFlags()...)
 }
 
 func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistants.RuntimeBackendConfig, error) {
@@ -94,12 +102,21 @@ func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistan
 	switch provider {
 	case "", assistants.RuntimeProviderGKE:
 		provider = assistants.RuntimeProviderGKE
-	case assistants.RuntimeProviderLocal:
+	case assistants.RuntimeProviderLocal, assistants.RuntimeProviderDisabled:
 	default:
 		return assistants.RuntimeBackendConfig{}, fmt.Errorf("invalid assistant runtime provider: %s", provider)
 	}
 
+	imageTag := c.String("assistant-runtime-image-tag")
+	if imageTag == "" {
+		imageTag = AssistantRuntimeImageHash
+	}
+	if !assistantRuntimeImageTagPattern.MatchString(imageTag) {
+		return assistants.RuntimeBackendConfig{}, fmt.Errorf("invalid assistant runtime image tag: %q", imageTag)
+	}
+
 	environment := c.String("environment")
+	ociImage := c.String("assistant-runtime-oci-image")
 
 	// Containers cannot reach the host's loopback URL, so unless a runtime
 	// server URL was set explicitly, the local backend rewrites the host to
@@ -130,19 +147,21 @@ func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistan
 			Namespace:        gkeNamespace,
 			SandboxTemplate:  c.String("assistant-runtime-gke-sandbox-template"),
 			GuestPort:        0,
-			OCIImage:         c.String("assistant-runtime-oci-image"),
-			ImageTag:         AssistantRuntimeImageHash,
+			OCIImage:         ociImage,
+			ImageTag:         imageTag,
 			ServerURL:        resolvedServerURL,
 			RunnerCIDRBlocks: c.StringSlice("assistant-runtime-gke-runner-cidr"),
 		},
 		// Enabled whenever the process runs in the local environment (not only
 		// when local is the target) so locally created runtime rows stay
-		// routable for cleanup while experimenting with other targets.
+		// routable for cleanup while experimenting with other targets. With
+		// the disabled target it also needs a runtime image, so a local stack
+		// can run disabled without one.
 		Local: assistants.LocalRuntimeConfig{
-			Enabled:         provider == assistants.RuntimeProviderLocal || environment == "local",
+			Enabled:         provider == assistants.RuntimeProviderLocal || (environment == "local" && (provider != assistants.RuntimeProviderDisabled || ociImage != "")),
 			Environment:     environment,
-			OCIImage:        c.String("assistant-runtime-oci-image"),
-			ImageTag:        AssistantRuntimeImageHash,
+			OCIImage:        ociImage,
+			ImageTag:        imageTag,
 			GuestPort:       0,
 			ServerURL:       localRuntimeServerURL,
 			ExtraCACertFile: c.String("assistant-runtime-local-ca-file"),
@@ -174,7 +193,7 @@ func newAssistantRuntime(
 		if err != nil {
 			return nil, fmt.Errorf("decode --assistant-runtime-gke-cluster-ca: %w", err)
 		}
-		dynamicClient, err := k8s.NewRemoteDynamicClient(ctx, endpoint, caCert)
+		dynamicClient, err := k8s.NewRemoteDynamicClient(ctx, endpoint, caCert, k8s.RemoteClientOptions{QPS: 0, Burst: 0})
 		if err != nil {
 			return nil, fmt.Errorf("build assistant cluster client: %w", err)
 		}
@@ -182,9 +201,9 @@ func newAssistantRuntime(
 	}
 
 	// GKE runtimes must call back to a publicly reachable server URL.
-	// The local backend's URL is exempt: its host gateway alias only resolves
-	// inside containers, never from the host.
-	if cfg.Provider != assistants.RuntimeProviderLocal {
+	// Other targets are exempt: the local backend's host gateway alias only
+	// resolves inside containers, and the disabled target launches nothing.
+	if cfg.Provider == assistants.RuntimeProviderGKE {
 		if err := guardianPolicy.ValidateHost(ctx, cfg.GKE.ServerURL.Hostname()); err != nil {
 			return nil, fmt.Errorf("assistant runtime requires a public --assistant-runtime-server-url or --server-url; got %q: %w", cfg.GKE.ServerURL.String(), err)
 		}

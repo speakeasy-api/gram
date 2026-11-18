@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { RequireScope } from "@/components/require-scope";
 import { Checkbox } from "@/components/ui/Checkbox";
 import type { FailedSource } from "@/components/sources/useFailedDeploymentSources";
@@ -15,9 +16,7 @@ import {
   CircleAlert,
   Code,
   FileCode,
-  Loader2,
   Network,
-  Server,
   Wrench,
 } from "lucide-react";
 import { useRoutes } from "@/routes";
@@ -49,7 +48,6 @@ function unusedSourceIds(
 const SOURCE_ICONS = {
   openapi: FileCode,
   function: Code,
-  externalmcp: Server,
   // Remote/tunneled/unproxied MCP servers are project-scoped, not
   // deployment-bound, so they cannot appear in failed deployment sources —
   // but the icon map must cover the full SourceType union for the indexed
@@ -137,7 +135,6 @@ export function FailedSourcesSection({
     try {
       const excludeOpenapiv3Assets: string[] = [];
       const excludeFunctions: string[] = [];
-      const excludeExternalMcps: string[] = [];
 
       for (const source of selectedSources) {
         switch (source.type) {
@@ -146,9 +143,6 @@ export function FailedSourcesSection({
             break;
           case "function":
             excludeFunctions.push(source.id);
-            break;
-          case "externalmcp":
-            excludeExternalMcps.push(source.slug);
             break;
           case "remotemcp":
             break;
@@ -167,7 +161,6 @@ export function FailedSourcesSection({
             excludeOpenapiv3Assets,
           }),
           ...(excludeFunctions.length > 0 && { excludeFunctions }),
-          ...(excludeExternalMcps.length > 0 && { excludeExternalMcps }),
         },
       });
 
@@ -240,11 +233,7 @@ export function FailedSourcesSection({
                       {source.name}
                     </span>
                     <span className="text-muted-foreground text-xs">
-                      {source.type === "openapi"
-                        ? "API Source"
-                        : source.type === "function"
-                          ? "Function"
-                          : "External MCP"}{" "}
+                      {source.type === "openapi" ? "API Source" : "Function"}{" "}
                       &middot;{" "}
                       {`${source.errors.length} error${source.errors.length !== 1 ? "s" : ""}`}
                     </span>
@@ -315,7 +304,7 @@ export function FailedSourcesSection({
               >
                 {pending && (
                   <Button.LeftIcon>
-                    <Loader2 className="size-4 animate-spin" />
+                    <Spinner className="mr-0 size-4" />
                   </Button.LeftIcon>
                 )}
                 <Button.Text>

@@ -55,12 +55,16 @@ type Service struct {
 	// for apex domains, which cannot carry a CNAME.
 	expectedTargetCNAME string
 	expectedARecords    []netip.Addr
+	// dnsTargetSuffix is the normalized parent DNS name of per-domain CNAME
+	// targets (<token>.<suffix>); empty disables them.
+	dnsTargetSuffix string
 }
 
 type NetworkIngressPinChecker func(ctx context.Context, dbtx pgx.Tx, organizationID string, customDomainID uuid.UUID) (bool, error)
 
 type TemporalClient interface {
 	GetWorkflowInfo(ctx context.Context, orgID string, domain string, customDomainID uuid.UUID) (*workflowservice.DescribeWorkflowExecutionResponse, error)
+	GetReconcileWorkflowInfo(ctx context.Context, customDomainID uuid.UUID) (*workflowservice.DescribeWorkflowExecutionResponse, error)
 	ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string, customDomainID uuid.UUID, createdBy urn.Principal, createdByName *string, provisionerKind k8s.ProvisionerKind, ipAllowlist []string) (client.WorkflowRun, error)
 	TerminateCustomDomainRegistration(ctx context.Context, orgID string, domain string, customDomainID uuid.UUID, reason string) error
 	ExecuteCustomDomainDeletion(ctx context.Context, orgID, domain, ingressName, certSecretName string, provisionerKind k8s.ProvisionerKind) (client.WorkflowRun, error)
@@ -82,6 +86,7 @@ func NewService(
 	networkIngressPins NetworkIngressPinChecker,
 	expectedTargetCNAME string,
 	expectedARecords []netip.Addr,
+	dnsTargetSuffix string,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("custom_domains"))
 
@@ -97,6 +102,7 @@ func NewService(
 		publicationRequests: nil,
 		expectedTargetCNAME: expectedTargetCNAME,
 		expectedARecords:    expectedARecords,
+		dnsTargetSuffix:     dnsTargetSuffix,
 	}
 }
 
@@ -109,17 +115,25 @@ func (s *Service) WithPublicationRequests(requester OrganizationPublicationReque
 	return s
 }
 
-// domainView builds the API view of a custom domain, annotated with the DNS
+// domainView builds the API view of a custom domain, annotated with the
+// deployment's DNS settings: its per-domain CNAME target and the DNS
 // record-type suggestion for its hostname. The suggestion is a publicsuffix
 // heuristic: an apex-looking domain gets "a" only when static ingress IPs are
-// configured, everything else gets "cname".
-func (s *Service) domainView(domain repo.CustomDomain, isUpdating bool, rootMcpEndpointID uuid.UUID) *gen.CustomDomain {
+// configured, everything else gets "cname". This service's audit snapshots use
+// this view too, so they record the target the customer was shown; snapshots
+// built by other services from mv.BuildCustomDomainView carry the token only.
+func (s *Service) domainView(domain repo.CustomDomain, isUpdating, isReconciling bool, reconciliationStatus string, rootMcpEndpointID uuid.UUID) *gen.CustomDomain {
 	view := mv.BuildCustomDomainView(domain, isUpdating, rootMcpEndpointID)
+	view.IsReconciling = isReconciling
+	view.ReconciliationStatus = reconciliationStatus
 	suggested := "cname"
 	if len(s.expectedARecords) > 0 && IsProbablyApexDomain(domain.Domain) {
 		suggested = "a"
 	}
 	view.SuggestedRecordType = suggested
+	if target, ok := DNSTarget(s.dnsTargetSuffix, domain.DnsTargetToken); ok {
+		view.DNSTarget = &target
+	}
 	return view
 }
 
@@ -155,9 +169,9 @@ func (s *Service) GetDomain(ctx context.Context, payload *gen.GetDomainPayload) 
 		return nil, err
 	}
 
-	repo := repo.New(s.db)
+	repository := repo.New(s.db)
 
-	domain, err := repo.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
+	domain, err := repository.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "no custom domain found for organization").LogError(ctx, s.logger)
 	}
@@ -166,13 +180,17 @@ func (s *Service) GetDomain(ctx context.Context, payload *gen.GetDomainPayload) 
 	if workflowInfo, _ := s.temporalClient.GetWorkflowInfo(ctx, authCtx.ActiveOrganizationID, domain.Domain, domain.ID); workflowInfo != nil {
 		isUpdating = workflowInfo.GetWorkflowExecutionInfo().GetStatus() == enums.WORKFLOW_EXECUTION_STATUS_RUNNING
 	}
+	isReconciling, reconciliationStatus := s.customDomainReconciliationState(ctx, domain.ID)
 
-	route, err := repo.GetCustomDomainRouteConfig(ctx, domain.ID)
+	route, err := repository.GetCustomDomainRouteConfig(ctx, repo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load custom domain route").LogError(ctx, s.logger)
 	}
 
-	return s.domainView(domain, isUpdating, route.RootMcpEndpointID), nil
+	return s.domainView(domain, isUpdating, isReconciling, reconciliationStatus, route.RootMcpEndpointID), nil
 }
 
 func (s *Service) ListDomains(ctx context.Context, _ *gen.ListDomainsPayload) (*gen.ListCustomDomainsResult, error) {
@@ -184,9 +202,9 @@ func (s *Service) ListDomains(ctx context.Context, _ *gen.ListDomainsPayload) (*
 		return nil, err
 	}
 
-	repo := repo.New(s.db)
+	repository := repo.New(s.db)
 
-	domain, err := repo.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
+	domain, err := repository.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return &gen.ListCustomDomainsResult{Domains: []*gen.CustomDomain{}, DNSConfig: s.dnsConfig()}, nil
 	}
@@ -198,14 +216,18 @@ func (s *Service) ListDomains(ctx context.Context, _ *gen.ListDomainsPayload) (*
 	if workflowInfo, _ := s.temporalClient.GetWorkflowInfo(ctx, authCtx.ActiveOrganizationID, domain.Domain, domain.ID); workflowInfo != nil {
 		isUpdating = workflowInfo.GetWorkflowExecutionInfo().GetStatus() == enums.WORKFLOW_EXECUTION_STATUS_RUNNING
 	}
+	isReconciling, reconciliationStatus := s.customDomainReconciliationState(ctx, domain.ID)
 
-	route, err := repo.GetCustomDomainRouteConfig(ctx, domain.ID)
+	route, err := repository.GetCustomDomainRouteConfig(ctx, repo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load custom domain route").LogError(ctx, s.logger)
 	}
 
 	return &gen.ListCustomDomainsResult{
-		Domains:   []*gen.CustomDomain{s.domainView(domain, isUpdating, route.RootMcpEndpointID)},
+		Domains:   []*gen.CustomDomain{s.domainView(domain, isUpdating, isReconciling, reconciliationStatus, route.RootMcpEndpointID)},
 		DNSConfig: s.dnsConfig(),
 	}, nil
 }
@@ -281,6 +303,16 @@ func (s *Service) CreateDomain(ctx context.Context, payload *gen.CreateDomainPay
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get custom domain").LogError(ctx, s.logger)
 	}
 
+	// New rows get their token here; a reverify backfills a row created before
+	// tokens existed.
+	if !domain.DnsTargetToken.Valid {
+		token, err := EnsureDNSTargetToken(ctx, dbtx, domain.OrganizationID, domain.ID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to assign custom domain dns target").LogError(ctx, s.logger)
+		}
+		domain.DnsTargetToken = conv.ToPGTextEmpty(token)
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to save custom domain").LogError(ctx, s.logger)
 	}
@@ -310,13 +342,16 @@ func (s *Service) CreateDomain(ctx context.Context, payload *gen.CreateDomainPay
 	// A reverify of an existing domain keeps its root mapping; the response
 	// must not present it as unmapped.
 	rootMcpEndpointID := uuid.Nil
-	if route, err := repo.New(s.db).GetCustomDomainRouteConfig(ctx, domain.ID); err == nil {
+	if route, err := repo.New(s.db).GetCustomDomainRouteConfig(ctx, repo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	}); err == nil {
 		rootMcpEndpointID = route.RootMcpEndpointID
 	} else {
 		s.logger.WarnContext(ctx, "failed to load root endpoint for registration response", attr.SlogError(err), attr.SlogURLDomain(domain.Domain))
 	}
 
-	return s.domainView(domain, true, rootMcpEndpointID), nil
+	return s.domainView(domain, true, false, "not_started", rootMcpEndpointID), nil
 }
 
 func canCreateCustomDomain(accountType string) bool {
@@ -366,11 +401,14 @@ func (s *Service) UpdateDomain(ctx context.Context, payload *gen.UpdateDomainPay
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "no custom domain found for organization").LogError(ctx, s.logger)
 	}
-	routeBefore, err := repository.GetCustomDomainRouteConfig(ctx, domain.ID)
+	routeBefore, err := repository.GetCustomDomainRouteConfig(ctx, repo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load custom domain route before update").LogError(ctx, s.logger)
 	}
-	beforeView := mv.BuildCustomDomainView(domain, false, routeBefore.RootMcpEndpointID)
+	beforeView := s.domainView(domain, false, false, "not_started", routeBefore.RootMcpEndpointID)
 
 	domain, err = repository.UpdateCustomDomainSettings(ctx, repo.UpdateCustomDomainSettingsParams{
 		UpdateIpAllowlist:              payload.IPAllowlist != nil,
@@ -382,7 +420,7 @@ func (s *Service) UpdateDomain(ctx context.Context, payload *gen.UpdateDomainPay
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update custom domain settings").LogError(ctx, s.logger)
 	}
-	afterView := mv.BuildCustomDomainView(domain, false, routeBefore.RootMcpEndpointID)
+	afterView := s.domainView(domain, false, false, "not_started", routeBefore.RootMcpEndpointID)
 
 	if err := s.audit.LogCustomDomainUpdate(ctx, dbtx, audit.LogCustomDomainUpdateEvent{
 		OrganizationID:             authCtx.ActiveOrganizationID,
@@ -406,7 +444,7 @@ func (s *Service) UpdateDomain(ctx context.Context, payload *gen.UpdateDomainPay
 		}
 	}
 
-	return s.domainView(domain, false, routeBefore.RootMcpEndpointID), nil
+	return s.domainView(domain, false, false, "reconciled", routeBefore.RootMcpEndpointID), nil
 }
 
 func validateOpenAIAppsChallengeToken(token *string) error {
@@ -471,11 +509,14 @@ func (s *Service) SetRootMcpEndpoint(ctx context.Context, payload *gen.SetRootMc
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock custom domain for root endpoint update").LogError(ctx, s.logger)
 	}
-	beforeRoute, err := repository.GetCustomDomainRouteConfig(ctx, domain.ID)
+	beforeRoute, err := repository.GetCustomDomainRouteConfig(ctx, repo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load current root endpoint").LogError(ctx, s.logger)
 	}
-	beforeView := mv.BuildCustomDomainView(domain, false, beforeRoute.RootMcpEndpointID)
+	beforeView := s.domainView(domain, false, false, "not_started", beforeRoute.RootMcpEndpointID)
 
 	if rootServerID != uuid.Nil {
 		// Custom domains are org-scoped, so the org:admin gate above
@@ -500,9 +541,9 @@ func (s *Service) SetRootMcpEndpoint(ctx context.Context, payload *gen.SetRootMc
 		case err == nil:
 			targetID = endpoint.ID
 		case errors.Is(err, pgx.ErrNoRows):
-			// A hosted MCP's address belongs to its toolset, which keeps exactly one endpoint.
+			// Hosted addresses follow the hosted address rules, so the root maps only an endpoint the server already has.
 			if server.ToolsetID.Valid && server.ToolsetID.UUID == server.ID {
-				return nil, oops.E(oops.CodeInvalid, nil, "hosted mcp server is not served on this domain; move it to this domain before mapping the root").LogError(ctx, s.logger)
+				return nil, oops.E(oops.CodeInvalid, nil, "hosted MCP server is not served on this domain; add an endpoint on this domain before mapping the root").LogWarn(ctx, s.logger)
 			}
 			if !server.Slug.Valid || server.Slug.String == "" {
 				return nil, oops.E(oops.CodeBadRequest, nil, "mcp server has no slug to name its domain endpoint; attach an endpoint to the domain first").LogError(ctx, s.logger)
@@ -515,13 +556,11 @@ func (s *Service) SetRootMcpEndpoint(ctx context.Context, payload *gen.SetRootMc
 			}); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "lock mcp endpoint slug scope").LogError(ctx, s.logger)
 			}
-			available, err := mcpendpointsrepo.New(dbtx).CheckUnifiedSlugAvailability(ctx, mcpendpointsrepo.CheckUnifiedSlugAvailabilityParams{
-				Slug:               server.Slug.String,
-				CustomDomainID:     uuid.NullUUID{UUID: domain.ID, Valid: true},
-				OrganizationID:     authCtx.ActiveOrganizationID,
-				ExcludeToolsetID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-				ExcludeMcpServerID: uuid.NullUUID{UUID: rootServerID, Valid: true},
-				SkipDomainCheck:    false,
+			available, err := mcpendpointsrepo.New(dbtx).CheckEndpointSlugAvailability(ctx, mcpendpointsrepo.CheckEndpointSlugAvailabilityParams{
+				Slug:            server.Slug.String,
+				CustomDomainID:  uuid.NullUUID{UUID: domain.ID, Valid: true},
+				OrganizationID:  authCtx.ActiveOrganizationID,
+				SkipDomainCheck: false,
 			})
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "check mcp endpoint slug availability").LogError(ctx, s.logger)
@@ -601,7 +640,7 @@ func (s *Service) SetRootMcpEndpoint(ctx context.Context, payload *gen.SetRootMc
 		}
 	}
 
-	afterView := mv.BuildCustomDomainView(domain, false, targetID)
+	afterView := s.domainView(domain, false, false, "not_started", targetID)
 	if err := s.audit.LogCustomDomainUpdate(ctx, dbtx, audit.LogCustomDomainUpdateEvent{
 		OrganizationID:             authCtx.ActiveOrganizationID,
 		Actor:                      urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -626,7 +665,32 @@ func (s *Service) SetRootMcpEndpoint(ctx context.Context, payload *gen.SetRootMc
 	if err := s.reconcileCustomDomain(ctx, domain.ID); err != nil {
 		return nil, err
 	}
-	return s.domainView(domain, false, targetID), nil
+	return s.domainView(domain, false, false, "reconciled", targetID), nil
+}
+
+func (s *Service) customDomainReconciliationState(ctx context.Context, customDomainID uuid.UUID) (bool, string) {
+	workflowInfo, err := s.temporalClient.GetReconcileWorkflowInfo(ctx, customDomainID)
+	if err != nil || workflowInfo == nil {
+		return false, "not_started"
+	}
+
+	switch workflowInfo.GetWorkflowExecutionInfo().GetStatus() {
+	case enums.WORKFLOW_EXECUTION_STATUS_RUNNING:
+		return true, "applying"
+	case enums.WORKFLOW_EXECUTION_STATUS_COMPLETED:
+		return false, "reconciled"
+	case enums.WORKFLOW_EXECUTION_STATUS_FAILED, enums.WORKFLOW_EXECUTION_STATUS_CANCELED, enums.WORKFLOW_EXECUTION_STATUS_TERMINATED, enums.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+		return false, "failed"
+	default:
+		return false, "not_started"
+	}
+}
+
+func (s *Service) startCustomDomainReconciliation(ctx context.Context, customDomainID uuid.UUID) error {
+	if _, err := s.temporalClient.ExecuteCustomDomainReconcile(ctx, customDomainID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to start custom domain reconciliation").LogError(ctx, s.logger)
+	}
+	return nil
 }
 
 func (s *Service) reconcileCustomDomain(ctx context.Context, customDomainID uuid.UUID) error {
@@ -638,6 +702,54 @@ func (s *Service) reconcileCustomDomain(ctx context.Context, customDomainID uuid
 		return oops.E(oops.CodeUnexpected, err, "custom domain reconciliation failed").LogError(ctx, s.logger)
 	}
 	return nil
+}
+
+func (s *Service) ReconcileDomain(ctx context.Context, _ *gen.ReconcileDomainPayload) (*gen.CustomDomain, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	repository := repo.New(s.db)
+	domain, err := repository.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "no custom domain found for organization").LogError(ctx, s.logger)
+	}
+	if !domain.Verified {
+		return nil, oops.E(oops.CodeBadRequest, errors.New("custom domain is not verified"), "verify the custom domain before reconciling it").LogError(ctx, s.logger)
+	}
+
+	if err := s.audit.LogCustomDomainReconcile(ctx, s.db, audit.LogCustomDomainReconcileEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		CustomDomainURN:  urn.NewCustomDomain(domain.ID),
+		DomainName:       domain.Domain,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log custom domain reconciliation").LogError(ctx, s.logger)
+	}
+
+	if err := s.startCustomDomainReconciliation(ctx, domain.ID); err != nil {
+		return nil, err
+	}
+
+	domain, err = repository.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "reload reconciled custom domain").LogError(ctx, s.logger)
+	}
+	route, err := repository.GetCustomDomainRouteConfig(ctx, repo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load reconciled custom domain route").LogError(ctx, s.logger)
+	}
+
+	return s.domainView(domain, false, true, "applying", route.RootMcpEndpointID), nil
 }
 
 func (s *Service) CheckHealth(ctx context.Context, _ *gen.CheckHealthPayload) (*gen.CustomDomain, error) {
@@ -673,11 +785,15 @@ func (s *Service) CheckHealth(ctx context.Context, _ *gen.CheckHealthPayload) (*
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get custom domain after health check").LogError(ctx, s.logger)
 	}
-	route, err := repository.GetCustomDomainRouteConfig(ctx, domain.ID)
+	route, err := repository.GetCustomDomainRouteConfig(ctx, repo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load custom domain route after health check").LogError(ctx, s.logger)
 	}
-	return s.domainView(domain, false, route.RootMcpEndpointID), nil
+	isReconciling, reconciliationStatus := s.customDomainReconciliationState(ctx, domain.ID)
+	return s.domainView(domain, false, isReconciling, reconciliationStatus, route.RootMcpEndpointID), nil
 }
 
 func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) (err error) {
@@ -735,6 +851,18 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 		return oops.E(oops.CodeConflict, nil, "custom domain is pinned by an active network ingress")
 	}
 
+	// Snapshot before the cascade below clears the root mapping and the delete
+	// clears the DNS target token, so the audit log keeps the token-to-domain
+	// mapping.
+	routeBefore, err := repo.New(dbtx).GetCustomDomainRouteConfig(ctx, repo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "load custom domain route before deletion").LogError(ctx, s.logger)
+	}
+	beforeView := s.domainView(domain, false, false, "not_started", routeBefore.RootMcpEndpointID)
+
 	// The mcp_endpoints.custom_domain_id FK has ON DELETE SET NULL, but that
 	// only fires for hard deletes. Soft-delete the child endpoints explicitly
 	// so they don't outlive the tombstoned custom domain. The cascade spans
@@ -786,8 +914,9 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 		ActorDisplayName: authCtx.Email,
 		ActorSlug:        nil,
 
-		CustomDomainURN: urn.NewCustomDomain(domain.ID),
-		DomainName:      domain.Domain,
+		CustomDomainURN:            urn.NewCustomDomain(domain.ID),
+		DomainName:                 domain.Domain,
+		CustomDomainSnapshotBefore: beforeView,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to create custom domain deletion audit log").LogError(ctx, s.logger)
 	}

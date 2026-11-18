@@ -1,3 +1,4 @@
+import { useRiskContentRestricted } from "./use-risk-content-restricted";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import type { RiskRevealPayloadResult } from "@gram/client/models/components/riskrevealpayloadresult.js";
 import { useRiskRevealResultPayloadMutation } from "@gram/client/react-query/riskRevealResultPayload.js";
@@ -22,6 +23,7 @@ export type ExecutionPayload = {
 export function useExecutionPayload(
   result: RiskResult | null,
 ): ExecutionPayload {
+  const restricted = useRiskContentRestricted();
   const { mutate, isPending, isError } = useRiskRevealResultPayloadMutation();
   const [cache, setCache] = useState<Map<string, RiskRevealPayloadResult>>(
     () => new Map(),
@@ -30,10 +32,10 @@ export function useExecutionPayload(
   const [requestKey, setRequestKey] = useState<string | null>(null);
   const key = result ? payloadKey(result) : null;
   const isOwnRequest = key !== null && requestKey === key;
-  const data = key ? cache.get(key) : undefined;
+  const data = key && !restricted ? cache.get(key) : undefined;
 
   const reveal = useCallback(() => {
-    if (!result || !key || cache.has(key) || isPending) return;
+    if (restricted || !result || !key || cache.has(key) || isPending) return;
     setRequestKey(key);
     mutate(
       { request: { riskIDRequestBody: { id: result.id } } },
@@ -41,7 +43,7 @@ export function useExecutionPayload(
         onSuccess: (res) => setCache((prev) => new Map(prev).set(key, res)),
       },
     );
-  }, [result, key, cache, isPending, mutate]);
+  }, [result, key, cache, isPending, mutate, restricted]);
 
   return {
     data,

@@ -3,6 +3,7 @@ package analytics
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -19,33 +20,50 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	signalquery "github.com/speakeasy-api/gram/server/internal/telemetry/analytics/signals"
 )
 
 // Service is the analytics query API: query and describe over the catalog.
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	auth   *auth.Auth
-	authz  *authz.Engine
-	engine *Engine
+	tracer             trace.Tracer
+	logger             *slog.Logger
+	auth               *auth.Auth
+	authz              *authz.Engine
+	engine             *Engine
+	signalFeatures     SignalFeatures
+	conversationAccess ConversationAccess
+}
+
+// SignalFeatures resolves the durable organization entitlement shared by surfaces.
+type SignalFeatures interface {
+	IsFeatureEnabled(context.Context, string, productfeatures.Feature) (bool, error)
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, ch Querier, sessions *sessions.Manager, authzEngine *authz.Engine) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, ch Querier, sessions *sessions.Manager, authzEngine *authz.Engine, signalFeatures SignalFeatures) *Service {
 	logger = logger.With(attr.SlogComponent("analytics"))
 	engine, err := NewEngine(db, ch)
 	if err != nil {
 		panic(err)
 	}
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry/analytics"),
-		logger: logger,
-		auth:   auth.New(logger, db, sessions, authzEngine),
-		authz:  authzEngine,
-		engine: engine,
+		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry/analytics"),
+		logger:             logger,
+		auth:               auth.New(logger, db, sessions, authzEngine),
+		authz:              authzEngine,
+		engine:             engine,
+		signalFeatures:     signalFeatures,
+		conversationAccess: nil,
 	}
+}
+
+// WithConversationAccess binds the same exact-resource gate as transcript reads.
+func (s *Service) WithConversationAccess(access ConversationAccess) *Service {
+	s.conversationAccess = access
+	return s
 }
 
 // Engine is the query path this service answers through, for a surface that
@@ -79,6 +97,44 @@ func (s *Service) authorize(ctx context.Context) (*contextvalues.AuthContext, er
 	return authCtx, nil
 }
 
+// authorizeDataset requires what a dataset asks of its readers beyond reading
+// the project. An unknown dataset is left for the compiler to name.
+func (s *Service) authorizeDataset(ctx context.Context, authCtx *contextvalues.AuthContext, dataset string) error {
+	ds, ok := s.engine.Catalog().Dataset(dataset)
+	if !ok {
+		return nil
+	}
+	check, restricted := ds.AccessCheck(authCtx.ActiveOrganizationID)
+	if !restricted {
+		return nil
+	}
+	return s.authz.Require(ctx, check)
+}
+
+// readableDatasets splits the catalog's datasets, in declaration order, into
+// the ones the caller may read and the names of the rest. A dataset they
+// cannot read is not described to them, only named.
+func (s *Service) readableDatasets(ctx context.Context, authCtx *contextvalues.AuthContext) ([]*Dataset, []string, error) {
+	datasets := s.engine.Catalog().Datasets()
+	readable := make([]*Dataset, 0, len(datasets))
+	restricted := make([]string, 0)
+	for _, ds := range datasets {
+		check, needsCheck := ds.AccessCheck(authCtx.ActiveOrganizationID)
+		if needsCheck {
+			allowed, err := s.authz.Evaluate(ctx, check)
+			if err != nil {
+				return nil, nil, fmt.Errorf("evaluate dataset %s access: %w", ds.Name, err)
+			}
+			if !allowed {
+				restricted = append(restricted, ds.Name)
+				continue
+			}
+		}
+		readable = append(readable, ds)
+	}
+	return readable, restricted, nil
+}
+
 // failure maps an engine error onto the API: a request the compiler rejected
 // is the caller's to correct, anything else is unexpected and logged.
 func (s *Service) failure(ctx context.Context, err error, message string) error {
@@ -93,6 +149,14 @@ func (s *Service) Query(ctx context.Context, payload *gen.QueryPayload) (*gen.An
 	authCtx, err := s.authorize(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if err := s.authorizeDataset(ctx, authCtx, payload.Dataset); err != nil {
+		return nil, err
+	}
+	if payload.Dataset == signalquery.Dataset {
+		if err := s.requireSignals(ctx, authCtx.ActiveOrganizationID); err != nil {
+			return nil, err
+		}
 	}
 
 	req, err := requestFromPayload(payload)
@@ -109,15 +173,32 @@ func (s *Service) Query(ctx context.Context, payload *gen.QueryPayload) (*gen.An
 	for i, row := range result.Rows {
 		out[i] = row
 	}
-	return &gen.AnalyticsQueryResult{Dataset: result.Dataset, Plan: result.Plan, Rows: out}, nil
+	return &gen.AnalyticsQueryResult{Dataset: result.Dataset, Plan: result.Plan, Rows: out, SignalResult: signalResultView(result.SignalResult)}, nil
 }
 
 // Describe serves the catalog: every dataset and what each field admits.
 func (s *Service) Describe(ctx context.Context, _ *gen.DescribePayload) (*gen.AnalyticsDescribeResult, error) {
-	if _, err := s.authorize(ctx); err != nil {
+	authCtx, err := s.authorize(ctx)
+	if err != nil {
 		return nil, err
 	}
-	return &gen.AnalyticsDescribeResult{Datasets: describeDatasets(s.engine.Catalog())}, nil
+	datasets, restricted, err := s.readableDatasets(ctx, authCtx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to read the analytics catalog").LogError(ctx, s.logger)
+	}
+	out := &gen.AnalyticsDescribeResult{Datasets: describeDatasets(s.engine.Catalog(), datasets), RestrictedDatasets: restricted, SignalMetrics: nil}
+	enabled, err := s.signalsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	if enabled {
+		catalog, err := s.engine.DescribeSignals(ctx, Tenant{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: authCtx.ProjectID.String()})
+		if err != nil {
+			return nil, s.failure(ctx, err, "could not describe signal measurements")
+		}
+		out.SignalMetrics = signalCatalogView(catalog)
+	}
+	return out, nil
 }
 
 func requestFromPayload(payload *gen.QueryPayload) (Request, error) {
@@ -139,9 +220,16 @@ func requestFromPayload(payload *gen.QueryPayload) (Request, error) {
 		OrderBy:      make([]OrderBy, 0, len(payload.OrderBy)),
 		Limit:        payload.Limit,
 		Ungrouped:    payload.Ungrouped,
+		SignalQuery:  nil,
+	}
+	req.SignalQuery, err = signalRequestFromPayload(payload.SignalQuery)
+	if err != nil {
+		return zero, err
 	}
 	if payload.Grain != nil {
 		req.Grain = TimeGrain(*payload.Grain)
+	} else if req.SignalQuery != nil {
+		req.Grain = ""
 	}
 	for _, m := range payload.Measures {
 		if m == nil {
@@ -164,8 +252,7 @@ func requestFromPayload(payload *gen.QueryPayload) (Request, error) {
 	return req, nil
 }
 
-func describeDatasets(catalog *Catalog) []*gen.AnalyticsDataset {
-	datasets := catalog.Datasets()
+func describeDatasets(catalog *Catalog, datasets []*Dataset) []*gen.AnalyticsDataset {
 	out := make([]*gen.AnalyticsDataset, 0, len(datasets))
 	for _, ds := range datasets {
 		fields := make([]*gen.AnalyticsField, 0, len(ds.Fields))

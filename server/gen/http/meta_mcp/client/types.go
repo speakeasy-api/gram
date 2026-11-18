@@ -95,6 +95,10 @@ type CreateMetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Speakeasy's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Whether this gateway can select Code Mode. True only when the code runtime
+	// is available, the organization has Code Mode, and the gateway requires
+	// sign-in through a user session issuer.
+	CodeModeEnabled *bool `form:"code_mode_enabled,omitempty" json:"code_mode_enabled,omitempty" xml:"code_mode_enabled,omitempty"`
 	// The effective default discovery mode. Unconfigured connections follow this
 	// value.
 	DiscoveryMode *string `form:"discovery_mode,omitempty" json:"discovery_mode,omitempty" xml:"discovery_mode,omitempty"`
@@ -128,6 +132,10 @@ type GetMetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Speakeasy's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Whether this gateway can select Code Mode. True only when the code runtime
+	// is available, the organization has Code Mode, and the gateway requires
+	// sign-in through a user session issuer.
+	CodeModeEnabled *bool `form:"code_mode_enabled,omitempty" json:"code_mode_enabled,omitempty" xml:"code_mode_enabled,omitempty"`
 	// The effective default discovery mode. Unconfigured connections follow this
 	// value.
 	DiscoveryMode *string `form:"discovery_mode,omitempty" json:"discovery_mode,omitempty" xml:"discovery_mode,omitempty"`
@@ -167,6 +175,10 @@ type UpdateMetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Speakeasy's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Whether this gateway can select Code Mode. True only when the code runtime
+	// is available, the organization has Code Mode, and the gateway requires
+	// sign-in through a user session issuer.
+	CodeModeEnabled *bool `form:"code_mode_enabled,omitempty" json:"code_mode_enabled,omitempty" xml:"code_mode_enabled,omitempty"`
 	// The effective default discovery mode. Unconfigured connections follow this
 	// value.
 	DiscoveryMode *string `form:"discovery_mode,omitempty" json:"discovery_mode,omitempty" xml:"discovery_mode,omitempty"`
@@ -1910,6 +1922,10 @@ type MetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Speakeasy's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Whether this gateway can select Code Mode. True only when the code runtime
+	// is available, the organization has Code Mode, and the gateway requires
+	// sign-in through a user session issuer.
+	CodeModeEnabled *bool `form:"code_mode_enabled,omitempty" json:"code_mode_enabled,omitempty" xml:"code_mode_enabled,omitempty"`
 	// The effective default discovery mode. Unconfigured connections follow this
 	// value.
 	DiscoveryMode *string `form:"discovery_mode,omitempty" json:"discovery_mode,omitempty" xml:"discovery_mode,omitempty"`
@@ -2007,6 +2023,7 @@ func NewCreateMetaMcpServerMetaMcpServerOK(body *CreateMetaMcpServerResponseBody
 		Visibility:          types.MetaMcpServerVisibility(*body.Visibility),
 		NetworkAccessMode:   types.NetworkAccessMode(*body.NetworkAccessMode),
 		Instructions:        body.Instructions,
+		CodeModeEnabled:     body.CodeModeEnabled,
 		DiscoveryMode:       *body.DiscoveryMode,
 		CreatedAt:           *body.CreatedAt,
 		UpdatedAt:           *body.UpdatedAt,
@@ -2178,6 +2195,7 @@ func NewGetMetaMcpServerMetaMcpServerOK(body *GetMetaMcpServerResponseBody) *typ
 		Visibility:          types.MetaMcpServerVisibility(*body.Visibility),
 		NetworkAccessMode:   types.NetworkAccessMode(*body.NetworkAccessMode),
 		Instructions:        body.Instructions,
+		CodeModeEnabled:     body.CodeModeEnabled,
 		DiscoveryMode:       *body.DiscoveryMode,
 		CreatedAt:           *body.CreatedAt,
 		UpdatedAt:           *body.UpdatedAt,
@@ -2515,6 +2533,7 @@ func NewUpdateMetaMcpServerMetaMcpServerOK(body *UpdateMetaMcpServerResponseBody
 		Visibility:          types.MetaMcpServerVisibility(*body.Visibility),
 		NetworkAccessMode:   types.NetworkAccessMode(*body.NetworkAccessMode),
 		Instructions:        body.Instructions,
+		CodeModeEnabled:     body.CodeModeEnabled,
 		DiscoveryMode:       *body.DiscoveryMode,
 		CreatedAt:           *body.CreatedAt,
 		UpdatedAt:           *body.UpdatedAt,
@@ -3518,8 +3537,8 @@ func ValidateCreateMetaMcpServerResponseBody(body *CreateMetaMcpServerResponseBo
 		}
 	}
 	if body.DiscoveryMode != nil {
-		if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct"}))
+		if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct" || *body.DiscoveryMode == "code_mode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct", "code_mode"}))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -3581,8 +3600,8 @@ func ValidateGetMetaMcpServerResponseBody(body *GetMetaMcpServerResponseBody) (e
 		}
 	}
 	if body.DiscoveryMode != nil {
-		if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct"}))
+		if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct" || *body.DiscoveryMode == "code_mode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct", "code_mode"}))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -3660,8 +3679,8 @@ func ValidateUpdateMetaMcpServerResponseBody(body *UpdateMetaMcpServerResponseBo
 		}
 	}
 	if body.DiscoveryMode != nil {
-		if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct"}))
+		if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct" || *body.DiscoveryMode == "code_mode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct", "code_mode"}))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -5941,8 +5960,8 @@ func ValidateMetaMcpServerResponseBody(body *MetaMcpServerResponseBody) (err err
 		}
 	}
 	if body.DiscoveryMode != nil {
-		if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct"}))
+		if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct" || *body.DiscoveryMode == "code_mode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct", "code_mode"}))
 		}
 	}
 	if body.CreatedAt != nil {

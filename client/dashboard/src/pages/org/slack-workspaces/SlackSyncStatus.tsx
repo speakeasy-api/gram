@@ -1,7 +1,7 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { useOrganization } from "@/contexts/Auth";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { syncInProgress } from "./syncView";
-import { LoaderCircle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ApiErrorAlert } from "@/components/api-error-alert";
@@ -75,10 +75,7 @@ export function SlackSyncStatus({
       )}
       {running && (
         <div role="status" className="flex items-center gap-2">
-          <LoaderCircle
-            className="size-4 shrink-0 animate-spin"
-            aria-hidden="true"
-          />
+          <Spinner className="mr-0 size-4 shrink-0" />
           <span>
             {progress}{" "}
             {connection.syncPages

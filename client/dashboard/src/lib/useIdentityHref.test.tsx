@@ -6,6 +6,7 @@ import { useIdentityHrefBuilder } from "./useIdentityHref";
 
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "default",
+  useSlugs: () => ({ orgSlug: "acme", projectSlug: "current" }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
@@ -16,19 +17,6 @@ vi.mock("@/hooks/useRBAC", () => ({
     grants: [],
     error: null,
   }),
-}));
-vi.mock("@/routes", () => ({
-  useRoutes: (overrides?: { projectSlug?: string }) => {
-    const section = (name: string) => ({
-      href: (urn: string) =>
-        `/acme/projects/${overrides?.projectSlug}/identities/${urn}/${name}`,
-    });
-    return {
-      identities: {
-        detail: { overview: section("overview"), access: section("access") },
-      },
-    };
-  },
 }));
 
 function buildAt(

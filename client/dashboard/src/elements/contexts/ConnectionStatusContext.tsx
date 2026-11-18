@@ -27,7 +27,7 @@ interface ConnectionStatusContextValue {
   reset: () => void;
 }
 
-const ConnectionStatusContext =
+export const ConnectionStatusContext =
   createContext<ConnectionStatusContextValue | null>(null);
 
 interface ConnectionStatusProviderProps {

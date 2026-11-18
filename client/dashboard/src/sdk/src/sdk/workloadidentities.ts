@@ -16,6 +16,7 @@ import { workloadIdentitiesWithdrawIssuer } from "../funcs/workloadIdentitiesWit
 import { workloadIdentitiesWithdrawSubject } from "../funcs/workloadIdentitiesWithdrawSubject.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { RegisterDeviceRequestBody } from "../models/components/registerdevicerequestbody.js";
+import { WithdrawnWorkloadSubjectPolicy } from "../models/components/withdrawnworkloadsubjectpolicy.js";
 import { WorkloadCustomFlows } from "../models/components/workloadcustomflows.js";
 import { WorkloadDeviceJoinToken } from "../models/components/workloaddevicejointoken.js";
 import { WorkloadDeviceRegistration } from "../models/components/workloaddeviceregistration.js";
@@ -223,7 +224,7 @@ export class WorkloadIdentities extends ClientSDK {
    * updateIssuer workloadIdentities
    *
    * @remarks
-   * Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
+   * Edit a trusted issuer's name, description, tags, JWKS URI, or assertion reuse setting. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
    */
   async updateIssuer(
     request: UpdateWorkloadIssuerRequest,
@@ -280,13 +281,13 @@ export class WorkloadIdentities extends ClientSDK {
    * withdrawSubject workloadIdentities
    *
    * @remarks
-   * Withdraw an admitted subject and its agent assignment, stopping it authenticating. Requires workload:write.
+   * Withdraw an admitted subject and its agent assignment, stopping it authenticating. A subject can be admitted at the organization and in a project independently; withdrawing one leaves the other in force, and the result names the tier removed. Requires workload:write.
    */
   async withdrawSubject(
     request: WithdrawWorkloadSubjectRequest,
     security?: WithdrawWorkloadSubjectSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<WorkloadIdentityPolicy> {
+  ): Promise<WithdrawnWorkloadSubjectPolicy> {
     return unwrapAsync(workloadIdentitiesWithdrawSubject(
       this,
       request,

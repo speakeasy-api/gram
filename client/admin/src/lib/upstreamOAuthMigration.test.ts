@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 
 import type { AdminUpstreamOAuthMigrationStatus } from "@gram/admin-client/models/components/adminupstreamoauthmigrationstatus";
@@ -17,6 +18,7 @@ function status(
     unresolvedServers: [],
     credentials: 0,
     pendingSelections: 0,
+    consentScopedSelections: 0,
     reconnectCredentials: 0,
     authClients:
       authClientsComplete === undefined
@@ -35,11 +37,29 @@ function status(
             warnings: [],
             kinds: [],
             failedPhases: [],
+            selectionsComplete: true,
+            pendingSelectionMappings: 0,
+            pendingGrants: 0,
+            selectionClasses: [],
+            selectionGaps: [],
+            selectionGapCount: 0,
           },
   };
 }
 
 describe("needsMigrationRun", () => {
+  it("reads a status from a server that predates selection coverage", () => {
+    const s = status(true, true);
+    if (s.authClients) {
+      delete s.authClients.selectionsComplete;
+      delete s.authClients.pendingSelectionMappings;
+      delete s.authClients.selectionClasses;
+      delete s.authClients.selectionGaps;
+      delete s.authClients.selectionGapCount;
+    }
+    expect(needsMigrationRun(s)).toBe(false);
+  });
+
   it("includes a migrated organization whose auth clients are incomplete", () => {
     expect(needsMigrationRun(status(true, false))).toBe(true);
   });
@@ -58,15 +78,6 @@ describe("needsMigrationRun", () => {
     expect(needsMigrationRun(s)).toBe(false);
   });
 
-  it("includes an organization with servers to mark", () => {
-    const s = status(true, false);
-    if (s.authClients) {
-      s.authClients.pendingClients = 0;
-      s.authClients.pendingMarkedServers = 1;
-    }
-    expect(needsMigrationRun(s)).toBe(true);
-  });
-
   it("includes an organization with headers to update or a failed phase", () => {
     const headers = status(true, false);
     const failed = status(true, false);
@@ -78,6 +89,86 @@ describe("needsMigrationRun", () => {
     }
     expect(needsMigrationRun(headers)).toBe(true);
     expect(needsMigrationRun(failed)).toBe(true);
+  });
+
+  it("includes an organization with credential choices to map", () => {
+    const s = status(true, false);
+    if (s.authClients) {
+      s.authClients.pendingClients = 0;
+      s.authClients.pendingSelectionMappings = 1;
+    }
+    expect(needsMigrationRun(s)).toBe(true);
+  });
+
+  it("includes an organization with default permissions to grant", () => {
+    const s = status(true, true);
+    if (s.authClients) s.authClients.pendingGrants = 2;
+    expect(needsMigrationRun(s)).toBe(true);
+  });
+
+  it("skips an organization whose only choice gaps need a reconnect", () => {
+    const s = status(true, false);
+    if (s.authClients) {
+      s.authClients.pendingClients = 0;
+      s.authClients.selectionsComplete = false;
+      s.authClients.selectionGapCount = 3;
+    }
+    expect(needsMigrationRun(s)).toBe(false);
+  });
+
+  it("includes an organization with execution profiles to record", () => {
+    const s = status(true, true);
+    s.executionProfiles = {
+      complete: false,
+      targets: 1,
+      pendingVersions: 2,
+      unexercisedVersions: 0,
+      gaps: [],
+    };
+    expect(needsMigrationRun(s)).toBe(true);
+  });
+
+  it("skips an organization whose profiles no turn has used yet", () => {
+    const s = status(true, true);
+    s.executionProfiles = {
+      complete: true,
+      targets: 1,
+      pendingVersions: 0,
+      unexercisedVersions: 2,
+      gaps: [],
+    };
+    expect(needsMigrationRun(s)).toBe(false);
+  });
+
+  it("skips an organization whose only profile gaps need configuring", () => {
+    const s = status(true, true);
+    s.executionProfiles = {
+      complete: false,
+      targets: 1,
+      pendingVersions: 0,
+      unexercisedVersions: 0,
+      gaps: [
+        {
+          executionContext: "userless",
+          reason: "personal_requires_user",
+          servers: 1,
+        },
+      ],
+    };
+    expect(needsMigrationRun(s)).toBe(false);
+  });
+
+  it("skips profiles to record while a run records auth clients", () => {
+    const s = status(true, true);
+    if (s.authClients) s.authClients.inProgress = true;
+    s.executionProfiles = {
+      complete: false,
+      targets: 1,
+      pendingVersions: 2,
+      unexercisedVersions: 0,
+      gaps: [],
+    };
+    expect(needsMigrationRun(s)).toBe(false);
   });
 
   it("skips an organization whose auth clients a run is recording", () => {

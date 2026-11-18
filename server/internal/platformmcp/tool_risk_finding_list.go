@@ -29,14 +29,14 @@ func registerRiskFindingListTools(reg *Registrar, service riskFindingListLister)
 		return service.List(ctx, principal, input)
 	})
 	registerRiskFindingListTool(reg, &mcp.Tool{
-		Name: riskFindingByChatToolName, Title: "List Risk Findings By Chat",
+		Name: riskFindingByChatToolName, Title: "List Risk Findings by Chat",
 		Description: "List chat sessions with live risk findings in an exact project or the organization's literal default project, with each chat's finding count, latest detection time and an organization-scoped user pseudonym. Pages by chat id with an opaque cursor, 25 per page by default and at most 50. Use list_risk_findings with chat_id to read one chat's findings.",
 		Annotations: readOnlyAnnotations(), InputSchema: riskFindingByChatSchema(),
 	}, available, func(ctx context.Context, principal Principal, input ListRiskFindingsByChatInput) (ListRiskFindingsByChatOutput, error) {
 		return service.ListByChat(ctx, principal, input)
 	})
 	registerRiskFindingListTool(reg, &mcp.Tool{
-		Name: riskRuleBreakdownToolName, Title: "Get Risk Rule Breakdown",
+		Name: riskRuleBreakdownToolName, Title: "Break Down Risk Findings by Rule",
 		Description: "Count live risk findings per rule and detection source for one category over a detection-time window, defaulting to the last seven days and capped at 31 days, in an exact project or the organization's literal default project. Answers volume questions in one small call instead of paginating list_risk_findings. Unlike list_watchdog_findings it filters by category rather than severity band, and returns up to 1000 rules with explicit truncation.",
 		Annotations: readOnlyAnnotations(), InputSchema: riskRuleBreakdownSchema(),
 	}, available, func(ctx context.Context, principal Principal, input GetRiskRuleBreakdownInput) (GetRiskRuleBreakdownOutput, error) {

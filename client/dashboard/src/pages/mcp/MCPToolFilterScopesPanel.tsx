@@ -8,8 +8,8 @@ import { Badge } from "@/components/ui/Badge";
 import { Text } from "@/components/ui/Text";
 import { toolVariationsGroupDisplayName } from "@/lib/toolVariationGroups";
 import { cn } from "@/lib/utils";
-import { ListToolFiltersResult } from "@gram/client/models/components/listtoolfiltersresult.js";
-import { ToolFilterTool } from "@gram/client/models/components/toolfiltertool.js";
+import type { ListToolFiltersResult } from "@gram/client/models/components/listtoolfiltersresult.js";
+import type { ToolFilterTool } from "@gram/client/models/components/toolfiltertool.js";
 import { Stack } from "@/components/ui/Stack";
 
 // Sentinel value identifying the "available only without filtering" grouping in

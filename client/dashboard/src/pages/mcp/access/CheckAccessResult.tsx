@@ -1,7 +1,8 @@
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Column, Table } from "@/components/ui/Table";
+import type { Column } from "@/components/ui/Table";
+import { Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import type { ExplainedAccessLevel } from "@gram/client/models/components/explainedaccesslevel.js";

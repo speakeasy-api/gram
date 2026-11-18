@@ -3,14 +3,20 @@ package feature
 type Flag string
 
 const (
-	// FlagGramMCPCatalog temporarily selects the Speakeasy MCP catalog per organization.
-	FlagGramMCPCatalog Flag = "gram-mcp-catalog"
-
+	// FlagChannels gates the Channels rollout for an organization.
+	FlagChannels Flag = "channels"
 	// FlagPromptPolicies gates the natural-language / LLM-judge ("prompt
 	// based") risk policy MVP. While set, only opted-in organizations can
 	// create or update nl-type risk policies and have them enforced. The
 	// dashboard gates the matching UI behind the same key.
 	FlagPromptPolicies Flag = "gram-prompt-policies"
+	// FlagToolApprovals gates creating require_approval risk policies (tool
+	// approvals) and the dashboard's approval wizard and Tool approvals tab.
+	// Evaluated server-side on policy create and update and in the dashboard;
+	// targeted by PostHog organization group (org slug). Fails closed. Existing
+	// approval policies keep enforcing and their requests stay decidable when
+	// the flag is off. Removed once tool approvals are GA.
+	FlagToolApprovals Flag = "risk-tool-approvals"
 	// FlagBudgets gates the Budgets (spend control) rollout end to end with
 	// one key: the dashboard hides the Budgets tab on the Costs page behind
 	// it, and the background spend-rule evaluator skips organizations
@@ -19,7 +25,15 @@ const (
 	// cannot see the feature. Targeted by PostHog organization group (org
 	// slug), the same way the dashboard evaluates it.
 	FlagBudgets Flag = "gram-budgets"
-	// FlagRiskEnforcementPubsub routes realtime gitleaks and Presidio scans over Pub/Sub.
+	// FlagPrivateNetworkGateway chooses which runtime hosts an organization's
+	// new private network connection: the tsnet tailnet gateway when enabled,
+	// the Tailscale Kubernetes operator otherwise. Evaluated server-side when a
+	// connection is created, and by the dashboard to show the matching setup
+	// steps until one exists. Targeted by PostHog organization group (org
+	// slug). Fails closed to the operator. Existing connections keep the
+	// runtime they were created with. Removed once the gateway is the default.
+	FlagPrivateNetworkGateway Flag = "private-network-gateway"
+	// FlagRiskEnforcementPubsub routes applicable realtime scanner lanes over Pub/Sub.
 	FlagRiskEnforcementPubsub Flag = "risk-enforcement-pubsub"
 	// FlagRiskEnforcementMaxContentBytes overrides the realtime enforcement
 	// truncation limit globally. Evaluated server-side with no targeting. The
@@ -36,11 +50,6 @@ const (
 	// Targeted by PostHog organization group (org slug), like FlagBudgets.
 	// Removed once device-level matching is GA.
 	FlagDeviceLevelCoverage Flag = "device-level-coverage"
-
-	// FlagRiskFindingsClickHouseCutover means the organization is on the ClickHouse findings path:
-	// batch judges run in the analysis handlers, and finding reads and webhooks use ClickHouse.
-	// Server-side org-group targeting fails closed to the Postgres path.
-	FlagRiskFindingsClickHouseCutover Flag = "risk-findings-clickhouse-cutover"
 
 	// FlagPlatformMCPRiskMutations is the exact-project kill switch for risk
 	// policy and exclusion writes exposed through Platform MCP. It is evaluated
@@ -93,25 +102,6 @@ const (
 	// entitlement if the analyzer becomes a sold capability.
 	FlagRiskLLMAnalyzer Flag = "gram-risk-llm-analyzer"
 
-	// FlagCanonicalIdentityFold serves cost analytics (telemetry.query /
-	// telemetry.listSessions) email filters and group-bys through the
-	// ClickHouse identity_map fold, so one employee's directory, personal,
-	// and case-variant emails read as one identity. Targeted by PostHog
-	// organization group (org slug), like FlagBudgets. Removed once the fold
-	// is GA (DNO-856).
-	FlagCanonicalIdentityFold Flag = "canonical-identity-fold"
-	// FlagCanonicalIdentityFoldShadow runs the folded variant of the
-	// telemetry.query table read alongside the literal one — serving the
-	// literal result — and logs divergence, validating the fold on real
-	// traffic before FlagCanonicalIdentityFold enables it anywhere. Ignored
-	// when the fold flag is on. Same targeting; removed with the fold flag.
-	FlagCanonicalIdentityFoldShadow Flag = "canonical-identity-fold-shadow"
-
-	// FlagPaygSelfServeBilling gates the self-serve Stripe Checkout rollout.
-	// Targeted by PostHog organization group (org slug) and removed once PAYG
-	// billing is generally available.
-	FlagPaygSelfServeBilling Flag = "gram-payg-self-serve-billing"
-
 	// FlagAssistantOAuthCIMD gates outbound Client ID Metadata Document
 	// (CIMD) support for assistant MCP OAuth clients. When on, and the
 	// upstream authorization server advertises
@@ -124,30 +114,22 @@ const (
 	// (org slug). Removed once CIMD is GA.
 	FlagAssistantOAuthCIMD Flag = "assistant-oauth-cimd"
 
-	// FlagMCPApproval gates the MCP approval workflow end to end: the
-	// approval queue, evidence gathering, deciding, and the promotion of
-	// blocked-server redemptions into approval requests (orgs off the flag
-	// fall back to legacy bypass requests). Targeted by PostHog organization
-	// group (org slug), like FlagBudgets. A rollout gate while the workflow
-	// is dogfooded; if approval becomes a sold capability the durable
-	// entitlement returns through productfeatures alongside this flag.
-	FlagMCPApproval Flag = "gram-mcp-approval"
-
-	// FlagMCPResearch gates the MCP research agent within an approval-enabled
-	// organization: starting runs and executing queued ones. Targeted by
-	// PostHog organization group like FlagMCPApproval, and separate from it
-	// so research — the spend-heavy, web-facing piece — rolls out to a
-	// narrower set than the approval workflow. Fails closed: a flag-service
-	// error reads as off.
-	FlagMCPResearch Flag = "gram-mcp-research"
-
 	// FlagMCPResearchKill is the research kill switch: affirmatively on means
-	// no research runs anywhere, checked before the rollout flag. It exists
-	// apart from FlagMCPResearch so an emergency stop never touches the
-	// rollout flag's org targeting — un-killing restores exactly the release
-	// state from before. Fails closed: research must not run while the state
-	// of its stop control is unknown.
+	// no research runs anywhere. Fails closed: research must not run while
+	// the state of its stop control is unknown.
 	FlagMCPResearchKill Flag = "gram-mcp-research-kill"
+
+	// FlagSkillsOverMCP gates serving managed skills over MCP (the
+	// `io.modelcontextprotocol/skills` extension) end to end with one key:
+	// the hosted and platform toolset surfaces advertise the extension,
+	// answer `skills/list` and `skills/get`, and serve `skill://` resources
+	// only for organizations with it, and the dashboard shows the matching
+	// MCP serving hints behind the same key. Off, the extension is absent
+	// from capabilities, its methods answer method-not-found, and
+	// `skill://` reads are not found. Targeted by PostHog
+	// organization group (org slug), like FlagBudgets. A rollout gate while
+	// client support matures; removed once the extension is GA.
+	FlagSkillsOverMCP Flag = "skills-over-mcp"
 
 	// FlagHooksRollout gates the phased rollout of new observability (hooks)
 	// plugin generator versions. Unlike the other flags it is consulted via its
@@ -160,10 +142,6 @@ const (
 	// plugins.canaryHooksOrgSlugs), independent of this flag, so a PostHog outage
 	// can't strand it on stale hooks.
 	FlagHooksRollout Flag = "hooks-rollout"
-
-	// FlagOktaConnections gates the Okta integration while it is dogfooded:
-	// creating connections, resource connections and server suggestions.
-	FlagOktaConnections Flag = "okta-connections"
 
 	// FlagSignInEnforcement turns on, per organization (keyed by its id),
 	// linking MCP grants to sign-ins, sign-in evidence lookups, sign out
@@ -189,6 +167,16 @@ const (
 	// or an organization group to pause one organization.
 	FlagInternalSessionIssuerSigningPaused Flag = "internal-session-issuer-signing-paused"
 
+	// FlagWorkloadPlatformGitHubActions offers the GitHub Actions workload
+	// platform to an organization before its catalog entry is enabled, so it
+	// can be tried in production. Evaluated server-side when the platform
+	// catalog is listed (workloadpolicy), so the catalog reports the entry as
+	// enabled and the picker, Command K and preselected setup links offer it.
+	// Targeted by PostHog organization group (org slug). Fails closed: off,
+	// missing or failing, the entry stays "Coming soon". Removed once the entry
+	// is enabled.
+	FlagWorkloadPlatformGitHubActions Flag = "workload-platform-github-actions"
+
 	// FlagAuthClientResolver makes the typed auth client resolver
 	// authoritative for an organization's direct proxied servers. Off, the
 	// upstream client choice keeps serving and is the rollback.
@@ -208,6 +196,69 @@ const (
 	// and logs where they disagree. Ignored while FlagAuthClientResolver is on.
 	// Targeted the same way as FlagAuthClientResolver.
 	FlagAuthClientResolverShadow Flag = "auth-client-resolver-shadow"
+
+	// FlagMandatoryAuthzShadow evaluates the mandatory server and auth client
+	// check beside today's decision for an organization's MCP requests and
+	// records where they disagree, without changing any response. Auth clients
+	// are only evaluated where FlagAuthClientResolver or its shadow is on.
+	// Targeted the same way as FlagAuthClientResolver.
+	FlagMandatoryAuthzShadow Flag = "mandatory-authz-shadow"
+
+	// FlagUpstreamIssuerFromAssociations makes an MCP server's upstream
+	// clients the source of its upstream issuer for an organization: the one
+	// provider among the server's live client associations routes its
+	// credentials and is hashed into its consent evidence, in place of the
+	// denormalized mcp_servers.remote_session_issuer_id. Off, the column
+	// keeps serving and is the rollback. Either way both values are compared
+	// wherever a request reads the server's associations and no credential
+	// choice governs; elsewhere the request is recorded as a governing choice
+	// or as not having read the associations, and keeps the column.
+	// Targeted the same way as FlagAuthClientResolver.
+	FlagUpstreamIssuerFromAssociations Flag = "upstream-issuer-from-associations"
+
+	// FlagAuthClientUpstreamSelectorWrites lets an organization write grants
+	// whose selector names upstream_client: such grants, connection owner
+	// blocks, agent keys copying them and the attachment backfill. Replicas
+	// older than the dimension drop these restrictions and their policy edits
+	// do not protect owner blocks, so enable it only once every replica reads
+	// them; that release is then the rollback floor. Off, unavailable or
+	// failing, no such grant is written; reading and enforcing existing ones,
+	// and protecting existing blocks, never depend on it. Targeted the same
+	// way as FlagAuthClientResolver.
+	FlagAuthClientUpstreamSelectorWrites Flag = "auth-client-upstream-selector-writes"
+
+	// FlagPlatformMCPDiscoveryMode picks the tool surface a Platform MCP
+	// connection is served: the full flat catalogue, or a small fixed surface
+	// for hosts with a tool budget (see the PlatformMCPDiscovery variants).
+	// Evaluated server-side and locally on every Platform MCP request, with the
+	// organization ID as distinct ID and the person properties "harness" (the
+	// aivendors product ID of the connection's verified CIMD client, or
+	// "unknown") and "organization_id". Release conditions match on those
+	// person properties, so a harness joins or leaves the treatment by editing
+	// a condition. Fails closed to the full catalogue. ChatGPT always gets the
+	// full catalogue, because the ChatGPT app directory rejects tools that run
+	// other tools by name.
+	FlagPlatformMCPDiscoveryMode Flag = "platform-mcp-discovery-mode"
+
+	// FlagPlatformMCPGatewayProxy lets a Platform MCP connection use the
+	// person's own MCP servers through list_my_servers, search_my_tools,
+	// describe_tools and execute_tool, which run the organization gateway's
+	// tools as that person, and names those servers in the connection's
+	// instructions. Evaluated server-side on every call with the organization
+	// ID as distinct ID. Off, unavailable or failing, the tools refuse.
+	FlagPlatformMCPGatewayProxy Flag = "platform-mcp-gateway-proxy"
+)
+
+// Variants of FlagPlatformMCPDiscoveryMode. Anything else — no variant, an
+// unrecognized key, an unavailable provider, or an evaluation error — serves
+// the full flat catalogue, which is the pre-rollout behaviour.
+const (
+	// VariantPlatformMCPDiscoveryProgressive serves the search, describe and
+	// call meta-tools instead of the catalogue.
+	VariantPlatformMCPDiscoveryProgressive Variant = "progressive"
+	// VariantPlatformMCPDiscoveryCodeMode adds the execute tool to the
+	// progressive surface when the organization can use Code Mode.
+	VariantPlatformMCPDiscoveryCodeMode Variant = "code_mode"
 )
 
 // Variants of FlagAssistantPlatformMCP. Anything else — no variant, an

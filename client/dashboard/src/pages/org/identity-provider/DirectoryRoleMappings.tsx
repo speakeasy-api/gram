@@ -6,7 +6,6 @@ import {
 import {
   Check,
   ChevronRight,
-  Loader2,
   Plus,
   RefreshCw,
   Trash2,
@@ -53,6 +52,7 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Spinner } from "@/components/ui/Spinner";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
@@ -1101,7 +1101,7 @@ function SyncGroupsButton(): JSX.Element {
     >
       <Button.LeftIcon>
         {sync.isPending ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <Spinner className="mr-0" />
         ) : (
           <RefreshCw className="h-4 w-4" />
         )}

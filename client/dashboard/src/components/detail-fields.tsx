@@ -76,16 +76,20 @@ export function InfoFieldGrid({
 // InfoSection is a titled group of fields stacked below a section heading.
 export function InfoSection({
   title,
+  adornment,
   children,
 }: {
   title: string;
+  /** Sits beside the title, such as a status warning. */
+  adornment?: ReactNode;
   children: ReactNode;
 }): JSX.Element {
   return (
     <div>
-      <Heading variant="h4" className="mb-3">
-        {title}
-      </Heading>
+      <div className="mb-3 flex items-center gap-2">
+        <Heading variant="h4">{title}</Heading>
+        {adornment}
+      </div>
       <div className="space-y-4">{children}</div>
     </div>
   );

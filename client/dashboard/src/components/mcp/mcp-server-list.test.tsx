@@ -2,20 +2,10 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({
-  oauthStatus: "not-external-mcp" as string,
-}));
-
-vi.mock("@/components/sources/sources-hooks", () => ({
-  useHostedMcpOAuthConfigStatus: () => mocks.oauthStatus,
-}));
 vi.mock("@/components/sources/SourceCard", () => ({
   SourceMcpIcon: () => null,
-}));
-vi.mock("./MCPToolsetIcon", () => ({
-  ExternalMcpIcon: () => null,
 }));
 vi.mock("@/components/icon-dither", () => ({
   useIconDither: () => ({
@@ -24,21 +14,8 @@ vi.mock("@/components/icon-dither", () => ({
     stop: vi.fn(),
   }),
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    mcp: {
-      details: {
-        href: (slug: string) => `/mcp/${slug}`,
-        authentication: {
-          href: (slug: string) => `/mcp/${slug}/authentication`,
-        },
-      },
-      x: {
-        overview: { href: (slug: string) => `/mcp/x/${slug}` },
-        settings: { href: (slug: string) => `/mcp/x/${slug}/settings` },
-      },
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
 import { MCPServerCard } from "./MCPServerCard";
@@ -46,9 +23,6 @@ import { MCPServerTableRow } from "./mcp-table-rows";
 import { listedMcpServers } from "./mcp-server-kind";
 
 afterEach(cleanup);
-beforeEach(() => {
-  mocks.oauthStatus = "not-external-mcp";
-});
 
 function server(fields: Partial<McpServer>): McpServer {
   return {
@@ -66,8 +40,6 @@ const toolset = {
   slug: "hosted-tools",
   toolCount: 12,
   toolSelectionMode: "static",
-  externalMcpSlugs: [],
-  externalMcpProxyOnly: false,
 };
 
 const HOSTED = server({
@@ -160,7 +132,7 @@ describe("hosted wrappers", () => {
     renderRows([extra("wrapper-2", "Support (gateway)", false), HOSTED]);
     expect(
       screen.getAllByRole("link").map((link) => link.getAttribute("href")),
-    ).toEqual(["/mcp/hosted-tools"]);
+    ).toEqual(["/org/projects/project/mcp/hosted-wrapper/overview"]);
   });
 
   it("hides a toolset's only wrapper when it has no endpoint", () => {
@@ -172,7 +144,10 @@ describe("hosted wrappers", () => {
     renderRows([HOSTED, extra("wrapper-2", "Support (staging)", true)]);
     expect(
       screen.getAllByRole("link").map((link) => link.getAttribute("href")),
-    ).toEqual(["/mcp/hosted-tools", "/mcp/x/wrapper-2"]);
+    ).toEqual([
+      "/org/projects/project/mcp/hosted-wrapper/overview",
+      "/org/projects/project/mcp/wrapper-2/overview",
+    ]);
     expect(screen.getByText("Support (staging)")).toBeTruthy();
   });
 
@@ -181,13 +156,42 @@ describe("hosted wrappers", () => {
     expect(screen.getByText("Support (unknown)")).toBeTruthy();
   });
 
-  it("sends a wrapper with an endpoint waiting on OAuth to its own settings", () => {
-    mocks.oauthStatus = "required-unconfigured";
-    renderCards([extra("wrapper-2", "Support (staging)", true)]);
-    expect(screen.getByText("Set up")).toBeTruthy();
-    expect(screen.getByRole("link").getAttribute("href")).toBe(
-      "/mcp/x/wrapper-2/settings",
+  it("lists the hosting server of a toolset with no canonical wrapper as hosted", () => {
+    renderRows([
+      server({
+        id: "wrapper-2",
+        name: "Support",
+        slug: "wrapper-2",
+        toolsetId: "toolset-1",
+        toolset: { ...toolset, hostingMcpServerId: "wrapper-2" },
+        hasEndpoint: true,
+      }),
+    ]);
+    const link = screen.getByRole("link", {
+      name: "Open MCP server Support",
+    });
+    expect(link.getAttribute("href")).toBe(
+      "/org/projects/project/mcp/wrapper-2/overview",
     );
+    expect(screen.getByText("12 tools")).toBeTruthy();
+  });
+
+  it("keeps a wrapper without an endpoint beside the toolset's named host hidden", () => {
+    const hosted = { ...toolset, hostingMcpServerId: "toolset-1" };
+    renderRows([
+      server({ ...HOSTED, toolset: hosted }),
+      server({
+        id: "wrapper-3",
+        name: "Support (gateway)",
+        slug: "wrapper-3",
+        toolsetId: "toolset-1",
+        toolset: hosted,
+        hasEndpoint: false,
+      }),
+    ]);
+    expect(
+      screen.getAllByRole("link").map((link) => link.getAttribute("href")),
+    ).toEqual(["/org/projects/project/mcp/hosted-wrapper/overview"]);
   });
 });
 
@@ -198,7 +202,9 @@ describe("MCPServerTableRow", () => {
     const hosted = screen.getByRole("link", {
       name: "Open MCP server Hosted tools",
     });
-    expect(hosted.getAttribute("href")).toBe("/mcp/hosted-tools");
+    expect(hosted.getAttribute("href")).toBe(
+      "/org/projects/project/mcp/hosted-wrapper/overview",
+    );
     expect(screen.getByText("Hosted")).toBeTruthy();
     expect(screen.getByText("mcp.example.com/mcp/hosted")).toBeTruthy();
     expect(screen.getByText("12 tools")).toBeTruthy();
@@ -207,7 +213,7 @@ describe("MCPServerTableRow", () => {
       screen
         .getByRole("link", { name: "Open MCP server Docs search" })
         .getAttribute("href"),
-    ).toBe("/mcp/x/remote-a1");
+    ).toBe("/org/projects/project/mcp/remote-a1/overview");
     expect(screen.getByText("app.example.com/mcp/remote-a1")).toBeTruthy();
     expect(screen.getByText("Tunneled")).toBeTruthy();
     expect(screen.getByText("tunneled-b2")).toBeTruthy();
@@ -217,34 +223,15 @@ describe("MCPServerTableRow", () => {
     ).toHaveLength(2);
   });
 
-  it("says a proxy-only hosted server lists its tools after sign-in", () => {
-    renderRows([
-      server({
-        ...HOSTED,
-        toolset: { ...toolset, toolCount: 0, externalMcpProxyOnly: true },
-      }),
-    ]);
-    expect(screen.getByText("Tools listed once you sign in")).toBeTruthy();
-  });
-
   it("falls back to the server page and claims no count without a toolset summary", () => {
     renderRows([server({ ...HOSTED, toolset: undefined })]);
     const link = screen.getByRole("link", {
       name: "Open MCP server Hosted wrapper",
     });
-    expect(link.getAttribute("href")).toBe("/mcp/x/hosted-wrapper");
+    expect(link.getAttribute("href")).toBe(
+      "/org/projects/project/mcp/hosted-wrapper/overview",
+    );
     expect(screen.queryByText(/tools?$/)).toBeNull();
-  });
-
-  it("sends a hosted server still waiting on OAuth to its setup step", () => {
-    mocks.oauthStatus = "required-unconfigured";
-    renderRows([HOSTED]);
-    expect(screen.getByText("OAuth Required")).toBeTruthy();
-    expect(
-      screen
-        .getByRole("link", { name: "Open MCP server Hosted tools" })
-        .getAttribute("href"),
-    ).toBe("/mcp/hosted-tools/authentication");
   });
 });
 
@@ -273,10 +260,10 @@ describe("MCPServerCard", () => {
       .getAllByRole("link")
       .map((link) => link.getAttribute("href"));
     expect(hrefs).toEqual([
-      "/mcp/hosted-tools",
-      "/mcp/x/remote-a1",
-      "/mcp/x/tunneled-b2",
-      "/mcp/x/unproxied-c3",
+      "/org/projects/project/mcp/hosted-wrapper/overview",
+      "/org/projects/project/mcp/remote-a1/overview",
+      "/org/projects/project/mcp/tunneled-b2/overview",
+      "/org/projects/project/mcp/unproxied-c3/overview",
     ]);
   });
 
@@ -306,7 +293,7 @@ describe("MCPServerCard", () => {
     expect(screen.getByText("hosted-wrapper")).toBeTruthy();
     expect(screen.queryByText(/tools?$/)).toBeNull();
     expect(screen.getByRole("link").getAttribute("href")).toBe(
-      "/mcp/x/hosted-wrapper",
+      "/org/projects/project/mcp/hosted-wrapper/overview",
     );
   });
 });

@@ -25,6 +25,20 @@ export const ProbeURLResultOutcome = {
 export type ProbeURLResultOutcome = OpenEnum<typeof ProbeURLResultOutcome>;
 
 /**
+ * How Speakeasy can register as a client with the server's sign-in provider. Present only when authentication is required and the challenge advertised protected resource metadata: dcr (dynamic client registration), cimd (client ID metadata document), manual (a client must be registered by hand), or unknown (the provider's metadata could not be read).
+ */
+export const SignInSetup = {
+  Dcr: "dcr",
+  Cimd: "cimd",
+  Manual: "manual",
+  Unknown: "unknown",
+} as const;
+/**
+ * How Speakeasy can register as a client with the server's sign-in provider. Present only when authentication is required and the challenge advertised protected resource metadata: dcr (dynamic client registration), cimd (client ID metadata document), manual (a client must be registered by hand), or unknown (the provider's metadata could not be read).
+ */
+export type SignInSetup = OpenEnum<typeof SignInSetup>;
+
+/**
  * Structured outcome of probing a remote MCP server URL. Variant-specific fields are populated only when applicable.
  */
 export type ProbeURLResult = {
@@ -44,6 +58,10 @@ export type ProbeURLResult = {
    * Stable machine-readable reason code. Present only when outcome is unreachable; currently timeout, rate_limited, server_error, dns_error, tls_error, guardian_rejected, or transport_error.
    */
   reason?: string | undefined;
+  /**
+   * How Speakeasy can register as a client with the server's sign-in provider. Present only when authentication is required and the challenge advertised protected resource metadata: dcr (dynamic client registration), cimd (client ID metadata document), manual (a client must be registered by hand), or unknown (the provider's metadata could not be read).
+   */
+  signInSetup?: SignInSetup | undefined;
 };
 
 /** @internal */
@@ -51,6 +69,10 @@ export const ProbeURLResultOutcome$inboundSchema: z.ZodMiniType<
   ProbeURLResultOutcome,
   unknown
 > = openEnums.inboundSchema(ProbeURLResultOutcome);
+
+/** @internal */
+export const SignInSetup$inboundSchema: z.ZodMiniType<SignInSetup, unknown> =
+  openEnums.inboundSchema(SignInSetup);
 
 /** @internal */
 export const ProbeURLResult$inboundSchema: z.ZodMiniType<
@@ -62,11 +84,13 @@ export const ProbeURLResult$inboundSchema: z.ZodMiniType<
     outcome: ProbeURLResultOutcome$inboundSchema,
     protected_resource_metadata_url: z.optional(z.string()),
     reason: z.optional(z.string()),
+    sign_in_setup: z.optional(SignInSetup$inboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {
       "http_status": "httpStatus",
       "protected_resource_metadata_url": "protectedResourceMetadataUrl",
+      "sign_in_setup": "signInSetup",
     });
   }),
 );

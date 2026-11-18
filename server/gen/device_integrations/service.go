@@ -50,6 +50,14 @@ type Service interface {
 	// Summarize agent coverage across the org's connected MDM inventories,
 	// optionally scoped to one provider.
 	GetCoverage(context.Context, *GetCoveragePayload) (res *DeviceIntegrationCoverage, err error)
+	// Page through every device the org can see, newest first: its connected MDM
+	// inventories plus the machines running the agent that no inventory holds,
+	// each with its coverage bucket and policy state.
+	ListFleetDevices(context.Context, *ListFleetDevicesPayload) (res *ListFleetDevicesResult, err error)
+	// Summarize agent coverage and policy enforcement across every device the org
+	// can see, with or without a connected MDM, optionally scoped to one
+	// provider's inventory.
+	GetFleetCoverage(context.Context, *GetFleetCoveragePayload) (res *FleetCoverage, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -72,7 +80,7 @@ const ServiceName = "deviceIntegrations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"listProviders", "getConfig", "upsertConfig", "deleteConfig", "testConnection", "listSchedules", "setScheduleEnabled", "retrySchedule", "listManagedDevices", "getCoverage"}
+var MethodNames = [12]string{"listProviders", "getConfig", "upsertConfig", "deleteConfig", "testConnection", "listSchedules", "setScheduleEnabled", "retrySchedule", "listManagedDevices", "getCoverage", "listFleetDevices", "getFleetCoverage"}
 
 // DeleteConfigPayload is the payload type of the deviceIntegrations service
 // deleteConfig method.
@@ -121,14 +129,14 @@ type DeviceIntegrationCoverage struct {
 	// set as a whole supports only the weaker claim that assigned users ran the
 	// agent somewhere.
 	Attestation string
-	// Devices with an agent heartbeat within the window. What that attests depends
-	// on the matching mode and, per device, on whether the match was by serial or
-	// by email — compare against agent_active_device_attested.
+	// Devices with an agent heartbeat or state report within the window. What that
+	// attests depends on the matching mode and, per device, on whether the match
+	// was by serial or by email — compare against agent_active_device_attested.
 	AgentActive int64
-	// How many of agent_active are backed by that machine's OWN heartbeat (serial
-	// match). Under user-level matching this is 0; under device-level matching a
-	// value below agent_active means some devices fell back to the assigned-user
-	// email, which is the weaker claim.
+	// How many of agent_active are backed by that machine's OWN heartbeat or state
+	// report (serial match). Under user-level matching this is 0; under
+	// device-level matching a value below agent_active means some devices fell
+	// back to the assigned-user email, which is the weaker claim.
 	AgentActiveDeviceAttested int64
 	// Devices with a known agent that went quiet — the drift/disable case.
 	AgentStale int64
@@ -149,6 +157,18 @@ type DeviceIntegrationCoverage struct {
 	// Agent users with no matching device in any connected MDM inventory — shadow
 	// devices or fleets outside MDM.
 	UnmanagedAgentUsers int64
+	// agent_active devices whose latest report applies the policy last served to
+	// the reporting user.
+	PolicyAttested int64
+	// agent_active devices that report a different policy, or none.
+	PolicyOutdated int64
+	// agent_active devices with no state report within the window, typically an
+	// agent that predates reporting.
+	PolicyUnreported int64
+	// agent_active devices whose latest state report says the kill switch halted
+	// enforcement, because the reporting agent's build was blocked when it
+	// reported.
+	EnforcementHalted int64
 }
 
 // A vendor the device integrations framework can connect to.
@@ -229,6 +249,125 @@ type DeviceIntegrationTestConnectionResult struct {
 	Message *string
 }
 
+// FleetCoverage is the result type of the deviceIntegrations service
+// getFleetCoverage method.
+type FleetCoverage struct {
+	// Organization the coverage describes.
+	OrganizationID string
+	// Freshness window: an agent counts as active when its heartbeat or state
+	// report is within this many minutes.
+	ActiveWindowMinutes int
+	// True when the organization has a connected MDM integration (the one named by
+	// provider, when set). Without one, the gap buckets are always 0 because
+	// nothing lists the devices that lack the agent.
+	MdmConnected bool
+	// The strongest claim that holds for EVERY active device in this response —
+	// not merely the org's matching mode. "device": every active device was
+	// matched on its own hardware serial, so each one ran the agent. "user": at
+	// least one active device was matched only on its assigned-user email, so the
+	// set as a whole supports only the weaker claim that assigned users ran the
+	// agent somewhere.
+	Attestation string
+	// Devices with an agent heartbeat or state report within the window,
+	// agent-only machines included.
+	AgentActive int64
+	// How many of agent_active are backed by that machine's own heartbeat or state
+	// report.
+	AgentActiveDeviceAttested int64
+	// Devices with a known agent that went quiet.
+	AgentStale int64
+	// MDM devices whose assigned user runs the agent, but not on this machine.
+	// Device-level matching only.
+	AgentOtherDevice int64
+	// MDM devices whose assigned email resolves to an org member with no agent at
+	// all.
+	NoAgent int64
+	// MDM devices with no assigned-user email.
+	NoEmail int64
+	// MDM devices whose assigned email matches neither an agent user nor an org
+	// member.
+	UnresolvedEmail int64
+	// MDM devices absent from the latest completed inventory snapshot.
+	Missing int64
+	// Machines running the agent that no connected MDM inventory holds. Always 0
+	// when provider is set.
+	AgentOnlyDevices int64
+	// Every device counted here, missing and agent-only ones included.
+	TotalDevices int64
+	// agent_active devices whose latest report applies the policy last served to
+	// the reporting user.
+	PolicyAttested int64
+	// agent_active devices that report a different policy, or none.
+	PolicyOutdated int64
+	// agent_active devices with no state report within the window.
+	PolicyUnreported int64
+	// agent_active devices whose latest state report says the kill switch halted
+	// enforcement.
+	EnforcementHalted int64
+}
+
+// One device the organization can see: a device from a connected MDM's
+// inventory, or a machine running the Speakeasy device agent that no connected
+// inventory holds. MDM devices carry the same coverage bucket as
+// listManagedDevices; agent-only devices are only ever agent_active or
+// agent_stale, classified by their own heartbeat and state reports.
+type FleetDevice struct {
+	// Stable device ID: mdm:<uuid> for an MDM device, agent:<uuid> for an
+	// agent-only machine.
+	ID string
+	// True when a connected MDM's inventory holds this device. False for a machine
+	// only its agent reports.
+	InInventory bool
+	// Provider the device was synced from. Omitted for an agent-only machine.
+	Provider *string
+	// The MDM's identifier for the device. Omitted for an agent-only machine.
+	ExternalID *string
+	// Hardware serial number, from the MDM or the agent. Omitted when neither
+	// reported one.
+	SerialNumber *string
+	// Device hostname, from the MDM or the agent.
+	Hostname *string
+	// Operating system name as the MDM reports it. Omitted for an agent-only
+	// machine; agent_state.os carries the agent's.
+	OsName *string
+	// Operating system version as the MDM reports it. Omitted for an agent-only
+	// machine.
+	OsVersion *string
+	// The MDM's assigned user, or for an agent-only machine the user its agent
+	// runs as.
+	UserEmail *string
+	// Resolved Speakeasy user for user_email. Omitted when it does not resolve to
+	// an org member.
+	UserID *string
+	// Last device check-in as reported by the MDM.
+	MdmLastCheckInAt *string
+	// The latest sign of life that classified this device, a policy poll or a
+	// state report. Omitted when no agent has ever synced.
+	AgentLastSeenAt *string
+	// Coverage classification for the device. What agent_active attests depends on
+	// the org's matching mode and on whether this device matched by serial or by
+	// assigned-user email.
+	CoverageBucket string
+	// When the device went absent from the MDM inventory. Omitted while present,
+	// and for an agent-only machine.
+	MissingSince *string
+	// Whether the agent that answers for an agent_active device verifiably applies
+	// its policy; agent_state.attestation says whether that agent runs on this
+	// machine. attested: its latest report applies the policy last served to the
+	// reporting user. outdated: it reports a different policy, or none.
+	// unreported: no report within the window, from an agent that predates
+	// reporting or has stopped sending. halted: the reporting agent's kill switch
+	// stopped enforcement on a blocked build. Omitted for every other bucket.
+	PolicyState *string
+	// The latest state report that classified this device. Omitted when its agent
+	// has never reported.
+	AgentState *ManagedDeviceAgentState
+	// When the MDM or the agent first reported this device.
+	FirstSeenAt string
+	// When the MDM or the agent last reported this device.
+	LastSeenAt string
+}
+
 // GetConfigPayload is the payload type of the deviceIntegrations service
 // getConfig method.
 type GetConfigPayload struct {
@@ -244,6 +383,16 @@ type GetCoveragePayload struct {
 	ApikeyToken  *string
 	SessionToken *string
 	// Optionally scope coverage to one provider (e.g. jamf).
+	Provider *string
+}
+
+// GetFleetCoveragePayload is the payload type of the deviceIntegrations
+// service getFleetCoverage method.
+type GetFleetCoveragePayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// Optionally scope coverage to one provider's inventory (e.g. jamf), which
+	// excludes agent-only machines.
 	Provider *string
 }
 
@@ -265,6 +414,38 @@ type ListDeviceIntegrationSchedulesResult struct {
 	Schedules []*DeviceIntegrationScheduleState
 }
 
+// ListFleetDevicesPayload is the payload type of the deviceIntegrations
+// service listFleetDevices method.
+type ListFleetDevicesPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// Only devices synced from this provider. Excludes agent-only machines.
+	Provider *string
+	// true for devices a connected MDM holds, false for agent-only machines.
+	InInventory *bool
+	// Only devices in this coverage bucket.
+	CoverageBucket *string
+	// Only agent_active devices in this policy state.
+	PolicyState *string
+	// Only devices of these Speakeasy users. Combined with user_emails as an OR.
+	UserIds []string
+	// Only devices whose user_email is one of these, matched case-insensitively.
+	UserEmails []string
+	// Pagination cursor from a previous page.
+	Cursor *string
+	// Page size. Defaults to 50, maximum 200.
+	Limit int
+}
+
+// ListFleetDevicesResult is the result type of the deviceIntegrations service
+// listFleetDevices method.
+type ListFleetDevicesResult struct {
+	// Devices, newest first.
+	Devices []*FleetDevice
+	// Cursor for the next page. Omitted on the last page.
+	NextCursor *string
+}
+
 // ListManagedDevicesPayload is the payload type of the deviceIntegrations
 // service listManagedDevices method.
 type ListManagedDevicesPayload struct {
@@ -274,6 +455,8 @@ type ListManagedDevicesPayload struct {
 	Provider *string
 	// Only devices in this coverage bucket.
 	CoverageBucket *string
+	// Only agent_active devices in this policy state.
+	PolicyState *string
 	// Only devices assigned to these Speakeasy users. Combined with user_emails as
 	// an OR, because a device only carries a resolved user id when the MDM's
 	// reported email matched a member.
@@ -342,9 +525,9 @@ type ManagedDevice struct {
 	UserID *string
 	// Last device check-in as reported by the MDM.
 	MdmLastCheckInAt *string
-	// The device-agent heartbeat that classified this device: the machine's own
-	// under device-level matching, otherwise its assigned user's. Omitted when no
-	// agent has ever synced.
+	// The latest sign of life that classified this device, a policy poll or a
+	// state report: the machine's own under device-level matching, otherwise its
+	// assigned user's. Omitted when no agent has ever synced.
 	AgentLastSeenAt *string
 	// Coverage classification for the device. What agent_active attests depends on
 	// the org's matching mode and on whether this device matched by serial or by
@@ -352,8 +535,96 @@ type ManagedDevice struct {
 	CoverageBucket string
 	// When the device went absent from the MDM inventory. Omitted while present.
 	MissingSince *string
-	FirstSeenAt  string
-	LastSeenAt   string
+	// Whether the agent that answers for an agent_active device verifiably applies
+	// its policy; agent_state.attestation says whether that agent runs on this
+	// machine. attested: its latest report applies the policy last served to the
+	// reporting user. outdated: it reports a different policy, or none.
+	// unreported: no report within the window, from an agent that predates
+	// reporting or has stopped sending. halted: the reporting agent's kill switch
+	// stopped enforcement on a blocked build. Omitted for every other bucket.
+	PolicyState *string
+	// The latest state report that classified this device. Omitted when its agent
+	// has never reported.
+	AgentState  *ManagedDeviceAgentState
+	FirstSeenAt string
+	LastSeenAt  string
+}
+
+// What a device's agent last reported it enforces. Carries no error text or
+// user-facing message.
+type ManagedDeviceAgentState struct {
+	// When the control plane received the report.
+	ReportedAt string
+	// device when this machine's own agent sent the report, matched by serial.
+	// user when the assigned user's agent sent it, which may run on another
+	// machine.
+	Attestation string
+	// Etag of the policy the agent last applied.
+	AppliedEtag *string
+	// When the agent first applied that etag.
+	AppliedAt *string
+	// True when the kill switch has halted policy enforcement.
+	EnforcementHalted bool
+	// True when the agent build is in blocked_versions.
+	CurrentBlocked bool
+	// Version of the speakeasyd daemon.
+	SpeakeasydVersion *string
+	// Version of the speakeasy CLI.
+	SpeakeasyVersion *string
+	// Version of the menu bar app.
+	SpeakeasyUIVersion *string
+	// Operating system, e.g. darwin.
+	Os *string
+	// CPU architecture, e.g. arm64.
+	Arch *string
+	// Each managed tool's outcome from the agent's last reconcile.
+	Tools []*ManagedDeviceTool
+	// Start of the window tools[].drift_corrections counts over. Omitted when no
+	// tool measures drift.
+	DriftCountingSince *string
+	// Resolved update mode: automatic, notify, or disabled.
+	AutoUpdate *string
+	// Update channel the agent follows, e.g. stable.
+	UpdateChannel *string
+	// Version the organization pinned the fleet to, when set.
+	PinnedTarget *string
+	// The agent's most recent self-rollback after a failed update.
+	LastRollback *ManagedDeviceRollback
+}
+
+// A self-rollback: the updated build failed to start, so the agent restored
+// the previous one.
+type ManagedDeviceRollback struct {
+	// When the rollback happened.
+	At string
+	// Version the agent rolled back from.
+	From *string
+	// Version the agent rolled back to.
+	To *string
+}
+
+// One managed tool's enforcement state on a device.
+type ManagedDeviceTool struct {
+	// Stable tool id, e.g. claude_code.
+	Tool string
+	// Enforcement layer: user, managed, off, or unknown.
+	Layer string
+	// Reconcile outcome: armed, pending, skipped (tool not installed), error,
+	// unmanaged, or unknown.
+	Outcome string
+	// Why a pending tool is not enforcing yet: privileged_writer_not_ready,
+	// plugin_bundle_not_cloned, or unknown.
+	PendingReason *string
+	// Class of a reconcile error: permission_denied, not_found, invalid_config, or
+	// unknown.
+	ErrorKind *string
+	// True when the tool loads the agent's changes only after it restarts.
+	RestartRequired bool
+	// True when a problem the user can fix is blocking this tool.
+	ActionRequired bool
+	// Times the agent restored what it owns in this tool since
+	// drift_counting_since. Omitted when not measured.
+	DriftCorrections *int
 }
 
 // RetrySchedulePayload is the payload type of the deviceIntegrations service

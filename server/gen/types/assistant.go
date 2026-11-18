@@ -25,6 +25,8 @@ type Assistant struct {
 	Name string
 	// The model identifier used by the assistant.
 	Model string
+	// The reasoning effort used by the assistant.
+	ReasoningEffort string
 	// The system instructions for the assistant.
 	Instructions string
 	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
@@ -39,6 +41,9 @@ type Assistant struct {
 	WarmTTLSeconds int
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency int
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Runtime changes require a settled assistant and available destination.
+	RuntimeVersion int
 	// The assistant status.
 	Status string
 	// Creation timestamp.

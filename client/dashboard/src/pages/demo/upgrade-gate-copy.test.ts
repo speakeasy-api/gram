@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getGateCopy } from "./upgrade-gate-copy";
 

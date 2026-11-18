@@ -218,7 +218,10 @@ func TestMarkEnterpriseTrialConverted_CancellationDuringPostCommitCacheRefreshDo
 		require.FailNow(t, "conversion never attempted its post-commit cache refresh")
 	}
 	select {
-	case <-converted:
+	case callErr := <-converted:
+		if callErr != nil {
+			require.ErrorIs(t, callErr, context.Canceled)
+		}
 	case <-time.After(3 * time.Second):
 		require.FailNow(t, "conversion did not return after request cancellation")
 	}
@@ -269,7 +272,10 @@ func TestMarkEnterpriseTrialConverted_RetryCancellationDuringCacheRefreshDoesNot
 		require.FailNow(t, "conversion retry never attempted its cache refresh")
 	}
 	select {
-	case <-retried:
+	case callErr := <-retried:
+		if callErr != nil {
+			require.ErrorIs(t, callErr, context.Canceled)
+		}
 	case <-time.After(3 * time.Second):
 		require.FailNow(t, "conversion retry did not return after request cancellation")
 	}

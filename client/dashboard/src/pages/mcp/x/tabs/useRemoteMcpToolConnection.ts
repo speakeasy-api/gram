@@ -15,6 +15,7 @@ import {
 } from "@/lib/utils";
 import { useEffect, useMemo } from "react";
 
+import { useChatSessionHeaders } from "../../inspect/useChatSessionHeaders";
 import { useSyncToolMetadata } from "./useSyncToolMetadata";
 
 export interface RemoteMcpToolConnectionOptions {
@@ -37,6 +38,11 @@ export interface RemoteMcpToolConnectionOptions {
   project?: { id: string; slug: string };
   /** False while the inputs above are still loading. */
   enabled?: boolean;
+  /**
+   * Authenticate with a dashboard chat session when there's no issuer, the
+   * way hosted servers accept the chat. Off for callers that only list.
+   */
+  chatSession?: boolean;
 }
 
 export interface RemoteMcpToolConnection {
@@ -58,6 +64,11 @@ export interface RemoteMcpToolConnection {
   /** Make the stored tool metadata mirror the session. */
   sync: () => void;
   isSyncing: boolean;
+  /** This viewer can change the stored tool metadata. */
+  canWrite: boolean;
+  /** Where and how to send further MCP requests on this connection. */
+  connectUrl: string | undefined;
+  headers: Record<string, string> | undefined;
 }
 
 /**
@@ -79,6 +90,7 @@ export function useRemoteMcpToolConnection({
   visibility,
   project,
   enabled = true,
+  chatSession = false,
 }: RemoteMcpToolConnectionOptions): RemoteMcpToolConnection {
   const isIssuerGated = !!userSessionIssuerId;
   const canFirstPartyConnect = supportsFirstPartyConnect({
@@ -102,23 +114,37 @@ export function useRemoteMcpToolConnection({
 
   // Issuer-gated servers must wait for the JWT before connecting, otherwise the
   // unauthenticated request 401s and caches a spurious `needsAuth`.
+  const usesChatSession = chatSession && !isIssuerGated;
+  const chat = useChatSessionHeaders(enabled && usesChatSession);
   const headers = useMemo(
     () =>
-      accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
-    [accessToken],
+      accessToken
+        ? { Authorization: `Bearer ${accessToken}` }
+        : usesChatSession
+          ? chat.headers
+          : undefined,
+    [accessToken, usesChatSession, chat.headers],
   );
-  const connectionEnabled = enabled && (!isIssuerGated || !!accessToken);
+  const connectionEnabled =
+    enabled &&
+    (isIssuerGated ? !!accessToken : !usesChatSession || !!chat.headers);
 
   // Connect through the dev proxy origin (same-origin) so the AI SDK transport
   // carries the gram_session cookie and the gateway's proxied SSE response
   // isn't dropped on a cross-origin hop. No-op in prod / for custom domains.
   const connectUrl = useMemo(() => mcpConnectionUrl(mcpUrl), [mcpUrl]);
 
-  const { tools, isLoading, needsAuth, isError, refetch } = useProxiedMcpTools(
+  const {
+    tools,
+    isLoading,
+    needsAuth,
+    isError: isListError,
+    refetch: refetchTools,
+  } = useProxiedMcpTools(
     connectUrl,
     // Every failure stays inline as `isError`, so each consumer can offer its
     // own retry instead of an error boundary.
-    { headers, enabled: connectionEnabled, throwOnError: false },
+    { headers, enabled: connectionEnabled, throwOnError: false, inspect: true },
   );
 
   // The first-party connect page is opened as a top-level new tab, so it rides
@@ -129,6 +155,13 @@ export function useRemoteMcpToolConnection({
     return firstPartyConnectUrl(`${getServerURL()}/mcp/${platformSlug}`);
   }, [canFirstPartyConnect, platformSlug]);
 
+  // A chat session that couldn't be created leaves nothing to connect with;
+  // report it as a failed listing so the retry mints a new one. A failed
+  // background refresh keeps the previous token, so it is not fatal.
+  const chatFailed = usesChatSession && !!chat.error && !chat.headers;
+  const isError = isListError || chatFailed;
+  const refetch = chatFailed ? chat.refetch : refetchTools;
+
   // When the user comes back from the connect tab, re-attempt the listing so a
   // freshly linked session surfaces without a manual refresh.
   useEffect(() => {
@@ -138,11 +171,16 @@ export function useRemoteMcpToolConnection({
     return () => window.removeEventListener("focus", onFocus);
   }, [needsAuth, refetch]);
 
-  const loading = !enabled || isTokenLoading || isLoading || isMetadataLoading;
+  const loading =
+    !enabled ||
+    isTokenLoading ||
+    chat.isLoading ||
+    isLoading ||
+    isMetadataLoading;
 
   // Only remote-backed servers carry tool metadata, and there is nothing to
   // reconcile until both the session and the stored set have loaded.
-  const { sync, isSyncing } = useSyncToolMetadata({
+  const { sync, isSyncing, canWrite } = useSyncToolMetadata({
     mcpServerId,
     live: tools,
     stored: metadataByTool,
@@ -163,5 +201,8 @@ export function useRemoteMcpToolConnection({
       : undefined,
     sync,
     isSyncing,
+    canWrite,
+    connectUrl,
+    headers,
   };
 }

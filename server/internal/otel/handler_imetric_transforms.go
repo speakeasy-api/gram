@@ -40,17 +40,9 @@ func NewMetricTransformHandler(
 }
 
 func (h *MetricTransformHandler) Handle(ctx context.Context, item *otelv1.InboundMetric, _ gcp.MessageMetadata) error {
-	out, err := metricFromInbound(item)
+	out, err := transformInboundMetric(ctx, h.instruments, item, h.enrichers)
 	if err != nil {
-		return fmt.Errorf("convert inbound metric: %w", o11y.LogError(ctx, h.logger, err, "failed to convert inbound metric"))
-	}
-
-	enrichments, err := enrich.Metric(ctx, h.instruments, item, h.enrichers)
-	if err != nil {
-		return fmt.Errorf("enrich metric: %w", o11y.LogError(ctx, h.logger, err, "failed to enrich metric"))
-	}
-	if err := applyMetricResourceEnrichments(out, enrichments); err != nil {
-		return fmt.Errorf("apply metric enrichments: %w", o11y.LogError(ctx, h.logger, err, "failed to apply metric enrichments"))
+		return o11y.LogError(ctx, h.logger, err, "failed to transform inbound metric")
 	}
 
 	result := h.metricPublisher.Publish(ctx, out)
@@ -59,6 +51,24 @@ func (h *MetricTransformHandler) Handle(ctx context.Context, item *otelv1.Inboun
 	}
 
 	return nil
+}
+
+// transformInboundMetric turns an inbound metric into what every consumer and relay receives.
+func transformInboundMetric(ctx context.Context, instruments *enrich.Instruments, item *otelv1.InboundMetric, enrichers []enrich.MetricEnricher) (*otelv1.Metric, error) {
+	out, err := metricFromInbound(item)
+	if err != nil {
+		return nil, fmt.Errorf("convert inbound metric: %w", err)
+	}
+	stripMetricTestEventMarks(out)
+
+	enrichments, err := enrich.Metric(ctx, instruments, item, enrichers)
+	if err != nil {
+		return nil, fmt.Errorf("enrich metric: %w", err)
+	}
+	if err := applyMetricResourceEnrichments(out, enrichments); err != nil {
+		return nil, fmt.Errorf("apply metric enrichments: %w", err)
+	}
+	return out, nil
 }
 
 func applyMetricResourceEnrichments(out *otelv1.Metric, enrichments []otelattr.KeyValue) error {
@@ -153,6 +163,20 @@ func metricAnyValue(value otelattr.Value) (*otelv1.Metric_AnyValue, error) {
 		}
 		return (&otelv1.Metric_AnyValue_builder{
 			ArrayValue: (&otelv1.Metric_ArrayValue_builder{Values: values}).Build(),
+		}).Build(), nil
+	case otelattr.MAP:
+		input := value.AsMap()
+		values := make([]*otelv1.Metric_KeyValue, len(input))
+		for i, item := range input {
+			converted, err := metricAnyValue(item.Value)
+			if err != nil {
+				return nil, fmt.Errorf("convert map item %d: %w", i, err)
+			}
+			key := string(item.Key)
+			values[i] = (&otelv1.Metric_KeyValue_builder{Key: &key, Value: converted}).Build()
+		}
+		return (&otelv1.Metric_AnyValue_builder{
+			KvlistValue: (&otelv1.Metric_KeyValueList_builder{Values: values}).Build(),
 		}).Build(), nil
 	case otelattr.EMPTY:
 		return (&otelv1.Metric_AnyValue_builder{}).Build(), nil

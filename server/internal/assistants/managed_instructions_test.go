@@ -50,9 +50,9 @@ func TestBuildThreadBootstrapRefreshesOnlyManagedAssistantPrompt(t *testing.T) {
 
 	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test", false)
 	require.NoError(t, err)
-	_, err = svc.core.UpdateAssistant(ctx, projectID, managed.ID, nil, nil, &old, nil, nil, nil, nil, nil, nil)
+	_, err = svc.core.UpdateAssistant(ctx, projectID, managed.ID, nil, nil, &old, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
-	custom, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Custom assistant", "test-model", old, nil, nil, 60, 1, StatusActive, false, nil)
+	custom, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Custom assistant", "test-model", old, nil, nil, 60, 1, StatusActive, false, nil, nil)
 	require.NoError(t, err)
 
 	bootstrap := func(assistantID uuid.UUID, correlationID string) string {

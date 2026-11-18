@@ -66,7 +66,6 @@ func newRequest(content string) *riskv1.PromptPolicyAnalysis {
 		OriginRiskPolicyId:      new("018ffad2-1c32-7f73-8a54-85306c37a315"),
 		OriginRiskPolicyVersion: new(int64(3)),
 		ExecutionPath:           new("async"),
-		RunJudge:                new(true),
 	}.Build()
 }
 
@@ -96,8 +95,7 @@ func TestHandle_PublishesPromptPolicyFinding(t *testing.T) {
 		}, nil
 	}
 	realScanner := promptpolicy.NewScanner(testenv.NewLogger(t), evaluator)
-	stubScanner := promptpolicy.NewScanner(testenv.NewLogger(t), promptpolicy.NoopEvaluator)
-	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, stubScanner, pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 
 	require.NoError(t, h.Handle(t.Context(), newRequest("delete production"), gcp.MessageMetadata{}))
 
@@ -121,7 +119,7 @@ func TestHandle_ToolRequestPublishesRenderedEventMatch(t *testing.T) {
 		return &promptpolicy.Verdict{Matched: true, Confidence: 0.9, Rationale: "matched", CostUSD: 0, PromptTokens: 0, CompletionTokens: 0, TotalTokens: 0, STokens: 1, Completed: true, Model: "test", Provider: "test"}, nil
 	}
 	realScanner := promptpolicy.NewScanner(testenv.NewLogger(t), evaluator)
-	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, nil, pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 
 	req := newRequest("")
 	req.SetMessageType("tool_request")
@@ -159,8 +157,7 @@ func TestHandle_CleanPromptPolicyContentPublishesNothing(t *testing.T) {
 		}, nil
 	}
 	realScanner := promptpolicy.NewScanner(testenv.NewLogger(t), evaluator)
-	stubScanner := promptpolicy.NewScanner(testenv.NewLogger(t), promptpolicy.NoopEvaluator)
-	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, stubScanner, pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 
 	require.NoError(t, h.Handle(t.Context(), newRequest("hello world"), gcp.MessageMetadata{}))
 	require.Empty(t, *published)
@@ -187,7 +184,7 @@ func TestHandle_LegacyPolicyFieldsPublishFindingAndUsage(t *testing.T) {
 		}, nil
 	}
 	scanner := promptpolicy.NewScanner(testenv.NewLogger(t), evaluator)
-	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), scanner, nil, pub, metering.NewRiskRecorder(meterPub))
+	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), scanner, pub, metering.NewRiskRecorder(meterPub))
 	request := newRequest("delete production")
 	request.ClearOriginRiskPolicyId()
 	request.SetOriginRiskPolicyVersion(0)
@@ -219,29 +216,10 @@ func TestHandle_MalformedMeteringMetadataDoesNotSuppressFinding(t *testing.T) {
 		}, nil
 	}
 	scanner := promptpolicy.NewScanner(testenv.NewLogger(t), evaluator)
-	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), scanner, nil, pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), scanner, pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 	request := newRequest("delete production")
 	request.SetOriginRiskPolicyId("not-a-uuid")
 
 	require.NoError(t, h.Handle(t.Context(), request, gcp.MessageMetadata{}))
 	require.Len(t, *findings, 1)
-}
-
-func TestHandle_RequestWithoutJudgeUsesStubPromptPolicyScanner(t *testing.T) {
-	t.Parallel()
-
-	pub, published := capturingPub(t)
-	meterPub, readings := capturingMeterPub(t)
-	realScanner := promptpolicy.NewScanner(testenv.NewLogger(t), func(context.Context, promptpolicy.Input) (*promptpolicy.Verdict, error) {
-		t.Fatal("real scanner must not be invoked when run_judge is false")
-		return nil, nil
-	})
-	stubScanner := promptpolicy.NewScanner(testenv.NewLogger(t), promptpolicy.NoopEvaluator)
-	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, stubScanner, pub, metering.NewRiskRecorder(meterPub))
-	request := newRequest("delete production")
-	request.SetRunJudge(false)
-
-	require.NoError(t, h.Handle(t.Context(), request, gcp.MessageMetadata{}))
-	require.Empty(t, *published)
-	require.Empty(t, *readings)
 }

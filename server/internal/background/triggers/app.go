@@ -48,11 +48,21 @@ const (
 	DefinitionSlugCron      = "cron"
 	DefinitionSlugWake      = "wake"
 	DefinitionSlugDashboard = "dashboard"
+
+	// DefinitionSlugSpeakeasySlack routes mentions and direct messages sent to
+	// the Speakeasy Slack app to a project's managed assistant. Its instances
+	// are system-managed and have no environment: the bot token comes from the
+	// organization's Slack workspace connection.
+	DefinitionSlugSpeakeasySlack = "speakeasy_slack"
 )
 
 var (
 	ErrBadRequest = errors.New("trigger bad request")
 	ErrAuthFailed = errors.New("trigger webhook authentication failed")
+
+	// ErrTargetUnavailable reports that this deployment cannot run the
+	// trigger's target kind, so the trigger is refused rather than stored.
+	ErrTargetUnavailable = errors.New("trigger target is not available on this deployment")
 )
 
 type DeliveryStatus string
@@ -74,6 +84,13 @@ type DeliveryLogger interface {
 type Dispatcher interface {
 	Kind() string
 	Dispatch(context.Context, Task) error
+}
+
+// TargetAvailabilityReporter is implemented by dispatchers whose target kind
+// a deployment can turn off. Create and Update refuse triggers for a target
+// kind whose dispatcher reports it unavailable.
+type TargetAvailabilityReporter interface {
+	TargetAvailable() bool
 }
 
 type TriggerDeliveryLog struct {
@@ -158,6 +175,11 @@ type App struct {
 	audit         *audit.Logger
 	slackClient   *slackclient.SlackClient
 
+	// speakeasySlackTokens resolves the Speakeasy Slack app's bot token for
+	// speakeasy_slack instances. Nil leaves those instances without Slack
+	// access, which only costs the loading indicator and thread backfill.
+	speakeasySlackTokens SpeakeasySlackTokens
+
 	slackBotIdentities cache.TypedCacheObject[slackBotIdentity]
 }
 
@@ -234,7 +256,8 @@ func NewApp(
 		audit:          auditLogger,
 		slackClient:    slackClient,
 
-		slackBotIdentities: cache.NewTypedObjectCache[slackBotIdentity](logger.With(attr.SlogCacheNamespace("slack_bot_identity")), cacheImpl, cache.SuffixNone),
+		speakeasySlackTokens: nil,
+		slackBotIdentities:   cache.NewTypedObjectCache[slackBotIdentity](logger.With(attr.SlogCacheNamespace("slack_bot_identity")), cacheImpl, cache.SuffixNone),
 	}
 }
 
@@ -267,6 +290,9 @@ func (a *App) Create(ctx context.Context, params CreateParams, hooks ...Instance
 	}
 	if err := ValidateTargetKind(params.TargetKind); err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: %w", ErrBadRequest, err)
+	}
+	if err := a.requireTargetAvailable(params.TargetKind); err != nil {
+		return triggerrepo.TriggerInstance{}, err
 	}
 	if params.Config == nil {
 		params.Config = map[string]any{}
@@ -335,6 +361,9 @@ func (a *App) Update(ctx context.Context, params UpdateParams, hooks ...Instance
 	}
 	if err := ValidateTargetKind(params.TargetKind); err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: %w", ErrBadRequest, err)
+	}
+	if err := a.requireTargetAvailable(params.TargetKind); err != nil {
+		return triggerrepo.TriggerInstance{}, err
 	}
 	if params.Config == nil {
 		params.Config = map[string]any{}
@@ -483,6 +512,13 @@ func (a *App) SetStatus(ctx context.Context, projectID uuid.UUID, id uuid.UUID, 
 	if err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("set trigger status: %w", err)
 	}
+	// Resuming would recreate the trigger's schedule for a target that can
+	// never run; pausing stays allowed so it can be wound down.
+	if status == StatusActive {
+		if err := a.requireTargetAvailable(item.TargetKind); err != nil {
+			return triggerrepo.TriggerInstance{}, err
+		}
+	}
 
 	for _, hook := range hooks {
 		if err := hook(ctx, tx, item); err != nil {
@@ -527,6 +563,9 @@ func (a *App) CreateWakeInstance(ctx context.Context, params CreateWakeInstanceP
 	if params.AssistantID == uuid.Nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: assistant_id is required", ErrBadRequest)
 	}
+	if err := a.requireTargetAvailable(TargetKindAssistant); err != nil {
+		return triggerrepo.TriggerInstance{}, err
+	}
 	if strings.TrimSpace(params.CorrelationID) == "" {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: correlation_id is required", ErrBadRequest)
 	}
@@ -535,12 +574,29 @@ func (a *App) CreateWakeInstance(ctx context.Context, params CreateWakeInstanceP
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: %w", ErrBadRequest, err)
 	}
 
-	owner, err := assistantrepo.New(a.db).GetAssistant(ctx, assistantrepo.GetAssistantParams{ProjectID: params.ProjectID, AssistantID: params.AssistantID})
+	tx, err := a.db.Begin(ctx)
+	if err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("begin wake create transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	assistants := assistantrepo.New(tx)
+	if err := assistants.AcquireAssistantAdvisoryLock(ctx, params.AssistantID.String()); err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("lock wake assistant authority: %w", err)
+	}
+
+	owner, err := assistants.GetAssistant(ctx, assistantrepo.GetAssistantParams{ProjectID: params.ProjectID, AssistantID: params.AssistantID})
 	if err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("resolve wake owner: %w", err)
 	}
 	if owner.OrganizationID != params.OrganizationID {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: wake organization mismatch", ErrBadRequest)
+	}
+	if owner.Status != "active" {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: wake assistant is not active", ErrBadRequest)
+	}
+	if err := validateWakeRuntimeAuthority(ctx, tx, params); err != nil {
+		return triggerrepo.TriggerInstance{}, err
 	}
 	userID := owner.CreatedByUserID.String
 	credential, hasCredential := contextvalues.PrincipalCredentialAuthorization(ctx)
@@ -582,12 +638,6 @@ func (a *App) CreateWakeInstance(ctx context.Context, params CreateWakeInstanceP
 	if err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("marshal wake config: %w", err)
 	}
-
-	tx, err := a.db.Begin(ctx)
-	if err != nil {
-		return triggerrepo.TriggerInstance{}, fmt.Errorf("begin wake create transaction: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	item, err := triggerrepo.New(tx).CreateTriggerInstance(ctx, triggerrepo.CreateTriggerInstanceParams{
 		OrganizationID: params.OrganizationID,
@@ -814,6 +864,12 @@ func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []b
 		return nil, fmt.Errorf("%w: %w", ErrAuthFailed, err)
 	}
 
+	return a.ingestWebhook(ctx, instance, definition, config, envMap, body, headers)
+}
+
+// ingestWebhook turns an authenticated webhook delivery into a dispatched task.
+// envMap supplies the Slack bot token for Slack definitions.
+func (a *App) ingestWebhook(ctx context.Context, instance triggerrepo.TriggerInstance, definition Definition, config Config, envMap map[string]string, body []byte, headers http.Header) (*WebhookIngressResult, error) {
 	result, err := definition.HandleWebhook(body, headers, config)
 	if err != nil {
 		return nil, fmt.Errorf("handle webhook: %w", err)
@@ -843,6 +899,9 @@ func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []b
 	// assistant subscribes to link_shared (ProcessEvent would filter the event
 	// out and return a nil task).
 	a.unfurlSlackGramLinks(ctx, instance, envMap, body, *result.Event)
+	// Same reasoning: the Home tab spins until a view is published, whether or
+	// not an assistant subscribes to app_home_opened.
+	a.publishSlackAppHome(ctx, instance, envMap, body, *result.Event)
 
 	task, err := a.ProcessEvent(ctx, instance, *result.Event)
 	if err != nil {
@@ -884,7 +943,7 @@ func (a *App) clearSlackThreadStatus(ctx context.Context, instance triggerrepo.T
 }
 
 func (a *App) setSlackThreadStatus(ctx context.Context, instance triggerrepo.TriggerInstance, env map[string]string, event EventEnvelope, status string, loadingMessages []string) {
-	if a.slackClient == nil || instance.DefinitionSlug != DefinitionSlugSlack {
+	if a.slackClient == nil || !isSlackDefinition(instance.DefinitionSlug) {
 		return
 	}
 	if !slackEventExpectsReply(event) {
@@ -1094,6 +1153,21 @@ func (a *App) IngestDirect(ctx context.Context, instanceID uuid.UUID, payload []
 
 func (a *App) RegisterDispatcher(dispatcher Dispatcher) {
 	a.dispatchers[dispatcher.Kind()] = dispatcher
+}
+
+// requireTargetAvailable refuses a target kind whose registered dispatcher
+// reports it unavailable on this deployment. A kind with no dispatcher in
+// this process, or whose dispatcher cannot be turned off, is accepted.
+func (a *App) requireTargetAvailable(targetKind string) error {
+	dispatcher, ok := a.dispatchers[targetKind]
+	if !ok {
+		return nil
+	}
+	reporter, ok := dispatcher.(TargetAvailabilityReporter)
+	if !ok || reporter.TargetAvailable() {
+		return nil
+	}
+	return fmt.Errorf("%w: %s", ErrTargetUnavailable, targetKind)
 }
 
 func (a *App) Dispatch(ctx context.Context, input Task) error {

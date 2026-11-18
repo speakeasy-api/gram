@@ -51,6 +51,7 @@ export function buildChallengesQuery(
       outcome: request?.outcome,
       principalUrn: request?.principalUrn,
       scope: request?.scope,
+      excludeScopes: request?.excludeScopes,
       projectId: request?.projectId,
       resolved: request?.resolved,
       ids: request?.ids,
@@ -90,6 +91,7 @@ export function queryKeyChallenges(
     outcome?: QueryParamOutcome | undefined;
     principalUrn?: string | undefined;
     scope?: string | undefined;
+    excludeScopes?: Array<string> | undefined;
     projectId?: string | undefined;
     resolved?: boolean | undefined;
     ids?: Array<string> | undefined;

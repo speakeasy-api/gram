@@ -8,10 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_registries"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	externalrepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	registryrepo "github.com/speakeasy-api/gram/server/internal/mcpregistry/repo"
 )
@@ -83,9 +81,6 @@ func TestNativeDashboardDetailsRejectUnpublishedSelection(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestExternalMCPService(t)
 	require.NoError(t, externalmcp.EnsureNativeCatalogSource(ctx, ti.conn))
-	auth, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	ti.feature.SetFlag(feature.FlagGramMCPCatalog, auth.ActiveOrganizationID, true)
 	id := uuid.New()
 	raw := []byte(`{"server":{"name":"io.example/selection","description":"Selection","version":"1.0.0","remotes":[{"type":"streamable-http","url":"https://example.com/mcp"}]},"_meta":{"io.modelcontextprotocol.registry/official":{"status":"active"}}}`)
 	require.NoError(t, registryrepo.New(ti.conn).InsertRegistryEntryFixture(ctx, registryrepo.InsertRegistryEntryFixtureParams{ID: id, Data: raw, Published: true}))

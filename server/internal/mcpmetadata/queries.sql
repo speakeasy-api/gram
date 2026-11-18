@@ -1,7 +1,6 @@
 -- name: GetMetadataByBackendID :one
 -- Addressed by toolset id, the row counts only under the toolset's canonical wrapper, which shares its id.
 SELECT id,
-       toolset_id,
        mcp_server_id,
        project_id,
        external_documentation_url,
@@ -39,7 +38,6 @@ DO UPDATE SET project_id = EXCLUDED.project_id,
               installation_override_url = EXCLUDED.installation_override_url,
               updated_at = clock_timestamp()
 RETURNING id,
-          toolset_id,
           mcp_server_id,
           project_id,
           external_documentation_url,
@@ -67,7 +65,6 @@ DO UPDATE SET logo_id = EXCLUDED.logo_id,
               updated_at = clock_timestamp()
 WHERE mcp_metadata.logo_id IS NULL
 RETURNING id,
-          toolset_id,
           mcp_server_id,
           project_id,
           external_documentation_url,
@@ -86,7 +83,6 @@ SET header_display_names = @header_display_names
 WHERE id = @id
   AND project_id = @project_id
 RETURNING id,
-          toolset_id,
           mcp_server_id,
           project_id,
           external_documentation_url,
@@ -102,7 +98,6 @@ RETURNING id,
 -- name: LockMetadataByBackendID :one
 -- The same match as GetMetadataByBackendID.
 SELECT id,
-       toolset_id,
        mcp_server_id,
        project_id,
        external_documentation_url,

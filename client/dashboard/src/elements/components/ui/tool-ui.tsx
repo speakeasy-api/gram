@@ -6,6 +6,7 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   ChevronUpIcon,
+  CircleHelpIcon,
   CopyIcon,
   EyeIcon,
   EyeOffIcon,
@@ -16,7 +17,8 @@ import {
   XIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { codeToHtml, BundledLanguage } from "shiki";
+import type { BundledLanguage } from "shiki";
+import { codeToHtml } from "shiki";
 import { Button } from "./button";
 import { Popover, PopoverAnchor, PopoverContent } from "./popover";
 
@@ -34,6 +36,7 @@ const statusVariants = cva(
         complete: "text-green-600 dark:text-green-500",
         error: "text-destructive",
         approval: "text-amber-500",
+        unknown: "text-muted-foreground",
       },
     },
     defaultVariants: {
@@ -46,7 +49,14 @@ const statusVariants = cva(
  * Types
  * -------------------------------------------------------------------------- */
 
-type ToolStatus = "pending" | "running" | "complete" | "error" | "approval";
+type ToolStatus =
+  | "pending"
+  | "running"
+  | "complete"
+  | "error"
+  | "approval"
+  // The call ended without reporting a result, so its outcome is not known.
+  | "unknown";
 
 type ContentItem =
   | { type: "text"; text: string; _meta?: { "getgram.ai/mime-type"?: string } }
@@ -132,6 +142,9 @@ interface ToolUIProps {
   provider?: string;
   /** Current status of the tool execution */
   status?: ToolStatus;
+  /** Optional word shown beside the name to spell the status out (for
+   * example "Pending" or "Failed"), where the icon alone is ambiguous. */
+  statusLabel?: string;
   /** Request/input data - can be string or object */
   request?: string | Record<string, unknown>;
   /** Result/output data - can be string, object, or structured content array */
@@ -239,11 +252,16 @@ function StatusIndicator({
   status: ToolStatus;
 }): React.JSX.Element {
   return (
-    <div className={cn(statusVariants({ status }))}>
+    <div
+      role="img"
+      aria-label={`Tool ${status}`}
+      className={cn(statusVariants({ status }))}
+    >
       {status === "pending" && null}
       {status === "running" && <LoaderIcon className="size-4 animate-spin" />}
       {status === "complete" && <CheckIcon className="size-4" />}
       {status === "error" && <XIcon className="size-4" />}
+      {status === "unknown" && <CircleHelpIcon className="size-4" />}
       {status === "approval" && (
         <LoaderIcon className="size-4 animate-spin text-muted-foreground" />
       )}
@@ -656,7 +674,7 @@ function ResourceLinkContent({
   item: Extract<ContentItem, { type: "resource_link" }>;
 }): React.JSX.Element {
   // Only http(s) resources are somewhere a browser can go. Scheme-specific URIs
-  // like gram:// address a document on the MCP server, so they are shown and
+  // like speakeasy:// address a document on the MCP server, so they are shown and
   // copyable rather than dressed up as a link that would fail to open.
   const href = /^https?:\/\//i.test(item.uri) ? item.uri : undefined;
   const label = item.title ?? item.name ?? item.uri;
@@ -940,6 +958,7 @@ function ToolUI({
   icon,
   provider,
   status = "complete",
+  statusLabel,
   request,
   result,
   defaultExpanded = false,
@@ -1036,6 +1055,16 @@ function ToolUI({
         >
           {highlightLabel(displayName, nameQuery, nameActiveOccurrence)}
         </span>
+        {statusLabel && (
+          <span
+            className={cn(
+              "shrink-0 text-xs",
+              status === "error" ? "text-destructive" : "text-muted-foreground",
+            )}
+          >
+            {statusLabel}
+          </span>
+        )}
         {hasContent && (
           <ChevronDownIcon
             className={cn(
@@ -1227,7 +1256,7 @@ interface ToolUIGroupProps {
   /** Optional icon */
   icon?: React.ReactNode;
   /** Overall status of the group */
-  status?: "running" | "complete";
+  status?: "pending" | "running" | "complete" | "error" | "unknown";
   /** Whether the group starts expanded */
   defaultExpanded?: boolean;
   /** Render without the group header, showing children directly. */
@@ -1265,11 +1294,7 @@ function ToolUIGroup({
           aria-expanded={isExpanded}
           className="flex w-fit cursor-pointer items-center gap-1.5 py-1 text-left"
         >
-          {icon || (
-            <StatusIndicator
-              status={status === "running" ? "running" : "complete"}
-            />
-          )}
+          {icon || <StatusIndicator status={status} />}
           <span
             className={cn(
               "text-sm font-medium text-muted-foreground",

@@ -58,7 +58,7 @@ func TestRefreshNow_ReconnectNeverAdoptsReplacement(t *testing.T) {
 				require.NoError(t, err)
 				replacement, err := env.q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
 					SubjectUrn: env.subject, UserSessionIssuerID: env.session.UserSessionIssuerID,
-					RemoteSessionClientID: env.clientID, AccessTokenEncrypted: env.session.AccessTokenEncrypted,
+					RemoteSessionClientID: env.clientID, AccessTokenEncrypted: env.session.AccessTokenEncrypted.String,
 					AccessExpiresAt:       conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
 					RefreshTokenEncrypted: env.session.RefreshTokenEncrypted, Scopes: []string{},
 				})
@@ -76,7 +76,7 @@ func TestRefreshNow_ReconnectNeverAdoptsReplacement(t *testing.T) {
 				done := make(chan struct{})
 				go func() {
 					defer close(done)
-					result, refreshErr = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled)
+					result, refreshErr = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 				}()
 				select {
 				case <-arrived:
@@ -94,7 +94,7 @@ func TestRefreshNow_ReconnectNeverAdoptsReplacement(t *testing.T) {
 				require.EqualValues(t, 1, attempts.Load())
 			} else {
 				replacement = reconnect()
-				result, refreshErr = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled)
+				result, refreshErr = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 				require.Zero(t, attempts.Load(), "replacement credentials must never reach the token endpoint")
 			}
 			require.NoError(t, refreshErr)

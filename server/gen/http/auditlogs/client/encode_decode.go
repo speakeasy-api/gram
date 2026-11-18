@@ -80,6 +80,10 @@ func EncodeListRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 		if p.To != nil {
 			values.Add("to", *p.To)
 		}
+		values.Add("category", p.Category)
+		if p.Origin != nil {
+			values.Add("origin", *p.Origin)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -319,6 +323,10 @@ func EncodeListFacetsRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 		if p.ProjectSlug != nil {
 			values.Add("project_slug", *p.ProjectSlug)
 		}
+		values.Add("category", p.Category)
+		if p.Origin != nil {
+			values.Add("origin", *p.Origin)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -537,6 +545,7 @@ func unmarshalAuditLogResponseBodyToAuditlogsAuditLog(v *AuditLogResponseBody) *
 		Action:             *v.Action,
 		ActingSurface:      *v.ActingSurface,
 		ActingClientID:     v.ActingClientID,
+		Category:           v.Category,
 		SubjectID:          *v.SubjectID,
 		SubjectType:        *v.SubjectType,
 		SubjectDisplayName: v.SubjectDisplayName,

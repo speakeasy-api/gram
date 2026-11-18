@@ -13,11 +13,25 @@ export const DataSource = {
   ProductTelemetry: "product_telemetry",
   RiskFindings: "risk_findings",
   ToolCallLogs: "tool_call_logs",
+  McpConnectionLogs: "mcp_connection_logs",
 } as const;
 /**
  * Class of data exported by this route.
  */
 export type DataSource = ClosedEnum<typeof DataSource>;
+
+/**
+ * Lowest level this route sends. Only for mcp_connection_logs; defaults to error.
+ */
+export const MinSeverity = {
+  Info: "info",
+  Warn: "warn",
+  Error: "error",
+} as const;
+/**
+ * Lowest level this route sends. Only for mcp_connection_logs; defaults to error.
+ */
+export type MinSeverity = ClosedEnum<typeof MinSeverity>;
 
 /**
  * Form for creating the selected data source's export route.
@@ -32,6 +46,10 @@ export type CreateDataExportRouteForm = {
    */
   enabled?: boolean | undefined;
   /**
+   * Lowest level this route sends. Only for mcp_connection_logs; defaults to error.
+   */
+  minSeverity?: MinSeverity | undefined;
+  /**
    * OTEL destination configured on this route. Required when enabled.
    */
   otelDestinationId?: string | undefined;
@@ -42,9 +60,14 @@ export const DataSource$outboundSchema: z.ZodMiniEnum<typeof DataSource> = z
   .enum(DataSource);
 
 /** @internal */
+export const MinSeverity$outboundSchema: z.ZodMiniEnum<typeof MinSeverity> = z
+  .enum(MinSeverity);
+
+/** @internal */
 export type CreateDataExportRouteForm$Outbound = {
   data_source: string;
   enabled: boolean;
+  min_severity?: string | undefined;
   otel_destination_id?: string | undefined;
 };
 
@@ -56,11 +79,13 @@ export const CreateDataExportRouteForm$outboundSchema: z.ZodMiniType<
   z.object({
     dataSource: DataSource$outboundSchema,
     enabled: z._default(z.boolean(), true),
+    minSeverity: z.optional(MinSeverity$outboundSchema),
     otelDestinationId: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       dataSource: "data_source",
+      minSeverity: "min_severity",
       otelDestinationId: "otel_destination_id",
     });
   }),

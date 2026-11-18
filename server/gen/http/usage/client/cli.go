@@ -10,6 +10,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"unicode/utf8"
 
 	usage "github.com/speakeasy-api/gram/server/gen/usage"
 	goa "goa.design/goa/v3/pkg"
@@ -299,16 +300,29 @@ func BuildCreateCustomerSessionPayload(usageCreateCustomerSessionSessionToken st
 	return v, nil
 }
 
-// BuildCreateCheckoutPayload builds the payload for the usage createCheckout
-// endpoint from CLI flags.
-func BuildCreateCheckoutPayload(usageCreateCheckoutSessionToken string) (*usage.CreateCheckoutPayload, error) {
-	var sessionToken *string
+// BuildGetStripeCheckoutStatusPayload builds the payload for the usage
+// getStripeCheckoutStatus endpoint from CLI flags.
+func BuildGetStripeCheckoutStatusPayload(usageGetStripeCheckoutStatusSessionID string, usageGetStripeCheckoutStatusSessionToken string) (*usage.GetStripeCheckoutStatusPayload, error) {
+	var err error
+	var sessionID string
 	{
-		if usageCreateCheckoutSessionToken != "" {
-			sessionToken = &usageCreateCheckoutSessionToken
+		sessionID = usageGetStripeCheckoutStatusSessionID
+		err = goa.MergeErrors(err, goa.ValidatePattern("session_id", sessionID, "^cs_[A-Za-z0-9_]+$"))
+		if utf8.RuneCountInString(sessionID) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("session_id", sessionID, utf8.RuneCountInString(sessionID), 255, false))
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
-	v := &usage.CreateCheckoutPayload{}
+	var sessionToken *string
+	{
+		if usageGetStripeCheckoutStatusSessionToken != "" {
+			sessionToken = &usageGetStripeCheckoutStatusSessionToken
+		}
+	}
+	v := &usage.GetStripeCheckoutStatusPayload{}
+	v.SessionID = sessionID
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -316,7 +330,20 @@ func BuildCreateCheckoutPayload(usageCreateCheckoutSessionToken string) (*usage.
 
 // BuildCreateStripeCheckoutPayload builds the payload for the usage
 // createStripeCheckout endpoint from CLI flags.
-func BuildCreateStripeCheckoutPayload(usageCreateStripeCheckoutSessionToken string) (*usage.CreateStripeCheckoutPayload, error) {
+func BuildCreateStripeCheckoutPayload(usageCreateStripeCheckoutTheme string, usageCreateStripeCheckoutSessionToken string) (*usage.CreateStripeCheckoutPayload, error) {
+	var err error
+	var theme string
+	{
+		if usageCreateStripeCheckoutTheme != "" {
+			theme = usageCreateStripeCheckoutTheme
+			if !(theme == "light" || theme == "dark") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("theme", theme, []any{"light", "dark"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if usageCreateStripeCheckoutSessionToken != "" {
@@ -324,6 +351,7 @@ func BuildCreateStripeCheckoutPayload(usageCreateStripeCheckoutSessionToken stri
 		}
 	}
 	v := &usage.CreateStripeCheckoutPayload{}
+	v.Theme = theme
 	v.SessionToken = sessionToken
 
 	return v, nil

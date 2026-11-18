@@ -1,0 +1,42 @@
+{
+  "org:device_agent_sync": {
+    "requested": [
+      {
+        "scope": "org:device_agent_sync",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "org"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "org:device_agent_sync",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "org"
+        }
+      }
+    ]
+  },
+  "org:hooks_ingest": {
+    "requested": [
+      {
+        "scope": "org:hooks_ingest",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "org"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "org:hooks_ingest",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "org"
+        }
+      }
+    ]
+  }
+}

@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -20,13 +21,13 @@ func TestSetMcpMetadata_SerializesConcurrentSaves(t *testing.T) {
 
 	ctx, ti := newTestMCPMetadataService(t)
 	toolset := createHostedToolset(t, ctx, ti, "hosted-save-lock")
-	createCanonicalWrapper(t, ctx, ti, toolset)
+	createCanonicalWrapper(t, ctx, ti, toolset, mcpservers.VisibilityPrivate)
 
 	tx := testenv.BeginTx(t, ctx, ti.conn)
 	other := repo.New(tx)
 	require.NoError(t, other.AcquireMetadataBackendLock(ctx, repo.AcquireMetadataBackendLockParams{ProjectID: toolset.ProjectID, BackendID: toolset.ID}))
 	inserted, err := other.UpsertMetadataByMcpServerID(ctx, repo.UpsertMetadataByMcpServerIDParams{
-		McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ProjectID: toolset.ProjectID,
+		McpServerID: toolset.ID, ProjectID: toolset.ProjectID,
 		ExternalDocumentationUrl: pgtype.Text{String: "", Valid: false}, ExternalDocumentationText: pgtype.Text{String: "", Valid: false},
 		LogoID: uuid.NullUUID{}, Instructions: conv.ToPGText("other"), DefaultEnvironmentID: uuid.NullUUID{},
 		InstallationOverrideUrl: pgtype.Text{String: "", Valid: false},

@@ -11,7 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 // newClientInfoStore reads the same records the server writes, so these tests
@@ -54,7 +53,7 @@ func TestServePublic_InitializeCachesClientInfo(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "client-info-capture")
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "client-info-capture")
 
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
 	require.NoError(t, err)
@@ -82,7 +81,7 @@ func TestServePublic_InitializeBoundsCachedClientInfo(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "client-info-bounds")
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "client-info-bounds")
 
 	body := makeInitializeBodyWithClientInfo(t, "ev\x00il\nclient"+strings.Repeat("x", 200), "1.\t0")
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, body, "", nil)
@@ -113,7 +112,7 @@ func TestServePublic_InitializeWithoutClientInfoCachesProtocolVersionOnly(t *tes
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "client-info-absent")
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "client-info-absent")
 
 	body := makeInitializeBodyWithClientInfo(t, "", "")
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, body, "", nil)

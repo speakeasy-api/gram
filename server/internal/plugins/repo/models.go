@@ -28,6 +28,8 @@ type Plugin struct {
 	// @access: confidential
 	AutoCreated bool
 	// @access: confidential
+	AutoSyncEnabled pgtype.Bool
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
@@ -88,8 +90,6 @@ type PluginServer struct {
 	PluginID uuid.UUID
 	// @access: confidential
 	ProjectID uuid.NullUUID
-	// @access: confidential
-	ToolsetID uuid.NullUUID
 	// @access: confidential
 	McpServerID uuid.NullUUID
 	// @access: confidential

@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	organizationremotesessions "github.com/speakeasy-api/gram/server/gen/organization_remote_sessions"
 	types "github.com/speakeasy-api/gram/server/gen/types"
@@ -38,12 +39,17 @@ func DecodeListClientSessionsRequest(mux goahttp.Muxer, decoder func(*http.Reque
 	return func(r *http.Request) (*organizationremotesessions.ListClientSessionsPayload, error) {
 		var payload *organizationremotesessions.ListClientSessionsPayload
 		var (
-			clientID     string
-			cursor       *string
-			limit        *int
-			sessionToken *string
-			apikeyToken  *string
-			err          error
+			clientID      string
+			search        *string
+			status        *string
+			createdAfter  *string
+			createdBefore *string
+			sort          *string
+			cursor        *string
+			limit         *int
+			sessionToken  *string
+			apikeyToken   *string
+			err           error
 		)
 		qp := r.URL.Query()
 		clientID = qp.Get("client_id")
@@ -51,6 +57,47 @@ func DecodeListClientSessionsRequest(mux goahttp.Muxer, decoder func(*http.Reque
 			err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "query string"))
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("client_id", clientID, goa.FormatUUID))
+		searchRaw := qp.Get("search")
+		if searchRaw != "" {
+			search = &searchRaw
+		}
+		if search != nil {
+			if utf8.RuneCountInString(*search) > 200 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("search", *search, utf8.RuneCountInString(*search), 200, false))
+			}
+		}
+		statusRaw := qp.Get("status")
+		if statusRaw != "" {
+			status = &statusRaw
+		}
+		if status != nil {
+			if !(*status == "active" || *status == "expired" || *status == "all") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("status", *status, []any{"active", "expired", "all"}))
+			}
+		}
+		createdAfterRaw := qp.Get("created_after")
+		if createdAfterRaw != "" {
+			createdAfter = &createdAfterRaw
+		}
+		if createdAfter != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("created_after", *createdAfter, goa.FormatDateTime))
+		}
+		createdBeforeRaw := qp.Get("created_before")
+		if createdBeforeRaw != "" {
+			createdBefore = &createdBeforeRaw
+		}
+		if createdBefore != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("created_before", *createdBefore, goa.FormatDateTime))
+		}
+		sortRaw := qp.Get("sort")
+		if sortRaw != "" {
+			sort = &sortRaw
+		}
+		if sort != nil {
+			if !(*sort == "newest" || *sort == "oldest" || *sort == "last_used" || *sort == "expiry") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort", *sort, []any{"newest", "oldest", "last_used", "expiry"}))
+			}
+		}
 		cursorRaw := qp.Get("cursor")
 		if cursorRaw != "" {
 			cursor = &cursorRaw
@@ -77,7 +124,7 @@ func DecodeListClientSessionsRequest(mux goahttp.Muxer, decoder func(*http.Reque
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListClientSessionsPayload(clientID, cursor, limit, sessionToken, apikeyToken)
+		payload = NewListClientSessionsPayload(clientID, search, status, createdAfter, createdBefore, sort, cursor, limit, sessionToken, apikeyToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -899,20 +946,22 @@ func EncodeRevokeAllClientSessionsError(encoder func(context.Context, http.Respo
 // *RemoteSessionResponseBody from a value of type *types.RemoteSession.
 func marshalTypesRemoteSessionToRemoteSessionResponseBody(v *types.RemoteSession) *RemoteSessionResponseBody {
 	res := &RemoteSessionResponseBody{
-		ID:                    v.ID,
-		SubjectUrn:            v.SubjectUrn,
-		SubjectDisplayName:    v.SubjectDisplayName,
-		SubjectEmail:          v.SubjectEmail,
-		UpstreamEmail:         v.UpstreamEmail,
-		UpstreamDisplayName:   v.UpstreamDisplayName,
-		IdentitySource:        v.IdentitySource,
-		UserSessionIssuerID:   v.UserSessionIssuerID,
-		RemoteSessionClientID: v.RemoteSessionClientID,
-		AccessExpiresAt:       v.AccessExpiresAt,
-		RefreshExpiresAt:      v.RefreshExpiresAt,
-		HasRefreshToken:       v.HasRefreshToken,
-		CreatedAt:             v.CreatedAt,
-		UpdatedAt:             v.UpdatedAt,
+		ID:                     v.ID,
+		SubjectUrn:             v.SubjectUrn,
+		SubjectDisplayName:     v.SubjectDisplayName,
+		SubjectEmail:           v.SubjectEmail,
+		UpstreamEmail:          v.UpstreamEmail,
+		UpstreamDisplayName:    v.UpstreamDisplayName,
+		IdentitySource:         v.IdentitySource,
+		UserSessionIssuerID:    v.UserSessionIssuerID,
+		RemoteSessionClientID:  v.RemoteSessionClientID,
+		AccessExpiresAt:        v.AccessExpiresAt,
+		RefreshExpiresAt:       v.RefreshExpiresAt,
+		AuthorizationExpiresAt: v.AuthorizationExpiresAt,
+		LastUsedAt:             v.LastUsedAt,
+		HasRefreshToken:        v.HasRefreshToken,
+		CreatedAt:              v.CreatedAt,
+		UpdatedAt:              v.UpdatedAt,
 	}
 	if v.Scopes != nil {
 		res.Scopes = make([]string, len(v.Scopes))

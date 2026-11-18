@@ -120,6 +120,11 @@ type BindingConnection struct {
 	// advertised scopes, as ChallengeManager.ResourceScopeDiscoveryEnabled
 	// does for logins.
 	Discover bool
+
+	// FromAssociations attaches each client to the servers it is associated
+	// with when ownership of the resource is decided, instead of every server
+	// on the user session issuers it is bound to.
+	FromAssociations bool
 }
 
 // ConnectionScopes resolves, from cached rows only, what a sign-in through
@@ -172,7 +177,7 @@ func ConnectionScopes(ctx context.Context, db repo.DBTX, b BindingConnection) (*
 	}
 	owns := false
 	if b.Discover {
-		owners, err := ResourceOwnersAmong(ctx, db, b.OrganizationID, ids, resourceURL)
+		owners, err := ResourceOwnersAmong(ctx, db, b.OrganizationID, ids, resourceURL, b.FromAssociations)
 		if err != nil {
 			return nil, fmt.Errorf("decide resource ownership: %w", err)
 		}

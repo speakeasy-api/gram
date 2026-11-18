@@ -1,5 +1,6 @@
 import { Alert } from "@/components/ui/Alert";
 import { Dialog } from "@/components/ui/Dialog";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { Button } from "@/components/ui/Button";
 
@@ -14,6 +15,7 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel,
+  cancelLabel = "Cancel",
   pendingLabel = "Working…",
   onConfirm,
   isPending,
@@ -21,12 +23,15 @@ export function ConfirmDialog({
   error,
   confirmDisabled = false,
   confirmVariant = "destructive-primary",
+  children,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
   description: React.ReactNode;
   confirmLabel: string;
+  // The button that backs out, when "Cancel" would misread ("Keep editing").
+  cancelLabel?: string;
   // Shown on the confirm button while the action runs. Name the action in
   // progress ("Deleting…") rather than leaving the generic default.
   pendingLabel?: string;
@@ -56,6 +61,9 @@ export function ConfirmDialog({
   // default; a lifecycle step that is safe but still worth a pause (activating
   // a key) reads wrong in red.
   confirmVariant?: "destructive-primary" | "primary";
+  // Inputs the confirmation depends on, such as a choice between two ways to
+  // perform the action, rendered between the description and the impact.
+  children?: React.ReactNode;
 }): JSX.Element {
   return (
     <Dialog
@@ -70,12 +78,13 @@ export function ConfirmDialog({
           <Dialog.Title>{title}</Dialog.Title>
           <Dialog.Description>{description}</Dialog.Description>
         </Dialog.Header>
+        {children}
         {impact && (
           <div>
             {impact.isLoading ? (
-              <Text small muted>
-                Checking impact…
-              </Text>
+              <div role="status" aria-label="Checking impact">
+                <Skeleton className="h-5 w-3/4" />
+              </div>
             ) : (
               <>
                 <Text>{impact.summary}</Text>
@@ -114,7 +123,7 @@ export function ConfirmDialog({
             onClick={() => onOpenChange(false)}
             disabled={isPending}
           >
-            <Button.Text>Cancel</Button.Text>
+            <Button.Text>{cancelLabel}</Button.Text>
           </Button>
           <Button
             variant={confirmVariant}

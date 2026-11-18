@@ -130,7 +130,15 @@ func (s *Service) UpdateOnboardingPlaybook(ctx context.Context, payload *gen.Upd
 	if err != nil {
 		return nil, err
 	}
-	playbook, err := organizations.UpdateOnboardingPlaybook(ctx, s.db, id, payload.Name, conv.PtrValOr(payload.Description, ""), conv.PtrValOr(payload.IsDefault, false), payload.StepSlugs)
+	var organizationID *string
+	if payload.OrganizationID != nil {
+		canonicalID, err := s.canonicalAdminOrganizationForRequest(ctx, *payload.OrganizationID)
+		if err != nil {
+			return nil, err
+		}
+		organizationID = &canonicalID
+	}
+	playbook, err := organizations.UpdateOnboardingPlaybook(ctx, s.db, id, organizationID, payload.Name, conv.PtrValOr(payload.Description, ""), conv.PtrValOr(payload.IsDefault, false), payload.StepSlugs)
 	if err != nil {
 		return nil, fmt.Errorf("update onboarding playbook: %w", err)
 	}

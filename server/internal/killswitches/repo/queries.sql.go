@@ -176,6 +176,32 @@ func (q *Queries) ClaimKillswitchOperation(ctx context.Context, arg ClaimKillswi
 	return operation_id, err
 }
 
+const compareKillswitchEvaluationBoundariesFixture = `-- name: CompareKillswitchEvaluationBoundariesFixture :one
+WITH evaluation_clock AS MATERIALIZED (
+  SELECT clock_timestamp() AS database_now
+), boundaries AS (
+  SELECT database_now AS starts_at, database_now AS expires_at
+  FROM evaluation_clock
+)
+SELECT
+  (boundaries.starts_at <= evaluation_clock.database_now)::boolean AS starts_at_matches,
+  (boundaries.expires_at > evaluation_clock.database_now)::boolean AS expires_at_matches
+FROM boundaries
+CROSS JOIN evaluation_clock
+`
+
+type CompareKillswitchEvaluationBoundariesFixtureRow struct {
+	StartsAtMatches  bool
+	ExpiresAtMatches bool
+}
+
+func (q *Queries) CompareKillswitchEvaluationBoundariesFixture(ctx context.Context) (CompareKillswitchEvaluationBoundariesFixtureRow, error) {
+	row := q.db.QueryRow(ctx, compareKillswitchEvaluationBoundariesFixture)
+	var i CompareKillswitchEvaluationBoundariesFixtureRow
+	err := row.Scan(&i.StartsAtMatches, &i.ExpiresAtMatches)
+	return i, err
+}
+
 const completeKillswitchOperation = `-- name: CompleteKillswitchOperation :execrows
 UPDATE killswitch_operations
 SET status = 'completed',
@@ -208,6 +234,24 @@ func (q *Queries) CompleteKillswitchOperation(ctx context.Context, arg CompleteK
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const completeKillswitchOperationWithFutureResponseFixture = `-- name: CompleteKillswitchOperationWithFutureResponseFixture :exec
+UPDATE killswitch_operations
+SET status = 'completed',
+    response = jsonb_build_object('response_version', 'future', 'prescription_id', $1::text, 'prescription_version', 1, 'state', 'active')
+WHERE organization_id = $2 AND operation_id = $3
+`
+
+type CompleteKillswitchOperationWithFutureResponseFixtureParams struct {
+	PrescriptionID string
+	OrganizationID string
+	OperationID    uuid.UUID
+}
+
+func (q *Queries) CompleteKillswitchOperationWithFutureResponseFixture(ctx context.Context, arg CompleteKillswitchOperationWithFutureResponseFixtureParams) error {
+	_, err := q.db.Exec(ctx, completeKillswitchOperationWithFutureResponseFixture, arg.PrescriptionID, arg.OrganizationID, arg.OperationID)
+	return err
 }
 
 const copyKillswitchPrescriptionVersionResources = `-- name: CopyKillswitchPrescriptionVersionResources :execrows
@@ -248,6 +292,82 @@ func (q *Queries) CopyKillswitchPrescriptionVersionResources(ctx context.Context
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const countAllKillswitchRowsFixture = `-- name: CountAllKillswitchRowsFixture :one
+SELECT
+  (SELECT count(*) FROM killswitch_prescriptions)
+  + (SELECT count(*) FROM killswitch_prescription_versions)
+  + (SELECT count(*) FROM killswitch_prescription_version_resources)
+  + (SELECT count(*) FROM killswitch_expiry_events)
+  + (SELECT count(*) FROM killswitch_operations) AS remaining_rows
+`
+
+func (q *Queries) CountAllKillswitchRowsFixture(ctx context.Context) (int32, error) {
+	row := q.db.QueryRow(ctx, countAllKillswitchRowsFixture)
+	var remaining_rows int32
+	err := row.Scan(&remaining_rows)
+	return remaining_rows, err
+}
+
+const countAuditLogsContainingFixture = `-- name: CountAuditLogsContainingFixture :one
+SELECT count(*) FROM audit_logs WHERE organization_id = $1 AND audit_logs::text LIKE '%' || $2::text || '%'
+`
+
+type CountAuditLogsContainingFixtureParams struct {
+	OrganizationID string
+	Needle         string
+}
+
+func (q *Queries) CountAuditLogsContainingFixture(ctx context.Context, arg CountAuditLogsContainingFixtureParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countAuditLogsContainingFixture, arg.OrganizationID, arg.Needle)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countKillswitchExpiryEventsFixture = `-- name: CountKillswitchExpiryEventsFixture :one
+SELECT count(*) FROM killswitch_expiry_events WHERE organization_id = $1
+`
+
+func (q *Queries) CountKillswitchExpiryEventsFixture(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countKillswitchExpiryEventsFixture, organizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countKillswitchExpiryEventsForPrescriptionFixture = `-- name: CountKillswitchExpiryEventsForPrescriptionFixture :one
+SELECT count(*) FROM killswitch_expiry_events WHERE prescription_id = $1
+`
+
+func (q *Queries) CountKillswitchExpiryEventsForPrescriptionFixture(ctx context.Context, prescriptionID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countKillswitchExpiryEventsForPrescriptionFixture, prescriptionID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countKillswitchOperationsFixture = `-- name: CountKillswitchOperationsFixture :one
+SELECT count(*) FROM killswitch_operations WHERE organization_id = $1
+`
+
+func (q *Queries) CountKillswitchOperationsFixture(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countKillswitchOperationsFixture, organizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countKillswitchPrescriptionsFixture = `-- name: CountKillswitchPrescriptionsFixture :one
+SELECT count(*) FROM killswitch_prescriptions WHERE organization_id = $1
+`
+
+func (q *Queries) CountKillswitchPrescriptionsFixture(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countKillswitchPrescriptionsFixture, organizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const createKillswitchPrescriptionHeader = `-- name: CreateKillswitchPrescriptionHeader :one
@@ -442,6 +562,15 @@ func (q *Queries) DeleteExpiredKillswitchOperationsGlobal(ctx context.Context, b
 	return result.RowsAffected(), nil
 }
 
+const deleteKillswitchOrganizationFixture = `-- name: DeleteKillswitchOrganizationFixture :exec
+DELETE FROM organization_metadata WHERE id = $1
+`
+
+func (q *Queries) DeleteKillswitchOrganizationFixture(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, deleteKillswitchOrganizationFixture, id)
+	return err
+}
+
 const evaluateCurrentPrescriptions = `-- name: EvaluateCurrentPrescriptions :one
 WITH evaluation_clock AS MATERIALIZED (
   SELECT clock_timestamp() AS database_now
@@ -563,6 +692,20 @@ func (q *Queries) EvaluateCurrentPrescriptions(ctx context.Context, arg Evaluate
 	return i, err
 }
 
+const expireKillswitchOperationFixture = `-- name: ExpireKillswitchOperationFixture :exec
+UPDATE killswitch_operations SET expires_at = clock_timestamp() - interval '1 second' WHERE organization_id = $1 AND operation_id = $2
+`
+
+type ExpireKillswitchOperationFixtureParams struct {
+	OrganizationID string
+	OperationID    uuid.UUID
+}
+
+func (q *Queries) ExpireKillswitchOperationFixture(ctx context.Context, arg ExpireKillswitchOperationFixtureParams) error {
+	_, err := q.db.Exec(ctx, expireKillswitchOperationFixture, arg.OrganizationID, arg.OperationID)
+	return err
+}
+
 const getKillswitchCurrentPrescription = `-- name: GetKillswitchCurrentPrescription :one
 SELECT
   prescription.id,
@@ -657,6 +800,42 @@ func (q *Queries) GetKillswitchDatabaseTime(ctx context.Context) (pgtype.Timesta
 	return column_1, err
 }
 
+const getKillswitchOperationIDFixture = `-- name: GetKillswitchOperationIDFixture :one
+SELECT operation_id FROM killswitch_operations WHERE organization_id = $1
+`
+
+func (q *Queries) GetKillswitchOperationIDFixture(ctx context.Context, organizationID string) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getKillswitchOperationIDFixture, organizationID)
+	var operation_id uuid.UUID
+	err := row.Scan(&operation_id)
+	return operation_id, err
+}
+
+const getKillswitchOperationReceiptShapeFixture = `-- name: GetKillswitchOperationReceiptShapeFixture :one
+SELECT (expires_at = created_at + interval '30 days')::boolean AS exact_retention,
+       (response ?& ARRAY['response_version', 'prescription_id', 'prescription_version', 'state']
+         AND (SELECT count(*) FROM jsonb_object_keys(response)) = 4)::boolean AS bounded_response
+FROM killswitch_operations
+WHERE organization_id = $1 AND operation_id = $2
+`
+
+type GetKillswitchOperationReceiptShapeFixtureParams struct {
+	OrganizationID string
+	OperationID    uuid.UUID
+}
+
+type GetKillswitchOperationReceiptShapeFixtureRow struct {
+	ExactRetention  bool
+	BoundedResponse bool
+}
+
+func (q *Queries) GetKillswitchOperationReceiptShapeFixture(ctx context.Context, arg GetKillswitchOperationReceiptShapeFixtureParams) (GetKillswitchOperationReceiptShapeFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getKillswitchOperationReceiptShapeFixture, arg.OrganizationID, arg.OperationID)
+	var i GetKillswitchOperationReceiptShapeFixtureRow
+	err := row.Scan(&i.ExactRetention, &i.BoundedResponse)
+	return i, err
+}
+
 const getKillswitchPrescriptionIdentity = `-- name: GetKillswitchPrescriptionIdentity :one
 SELECT
   id,
@@ -740,6 +919,229 @@ func (q *Queries) GetKillswitchPrescriptionVersion(ctx context.Context, arg GetK
 		&i.ExternalNote,
 	)
 	return i, err
+}
+
+const insertActiveKillswitchPrescriptionVersionNowFixture = `-- name: InsertActiveKillswitchPrescriptionVersionNowFixture :exec
+INSERT INTO killswitch_prescription_versions (
+  organization_id, prescription_id, version, state, resource_scope, starts_at, internal_note, external_note
+) VALUES ($1, $2, 1, 'active', 'selected', clock_timestamp(), 'internal', 'external')
+`
+
+type InsertActiveKillswitchPrescriptionVersionNowFixtureParams struct {
+	OrganizationID string
+	PrescriptionID uuid.UUID
+}
+
+func (q *Queries) InsertActiveKillswitchPrescriptionVersionNowFixture(ctx context.Context, arg InsertActiveKillswitchPrescriptionVersionNowFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertActiveKillswitchPrescriptionVersionNowFixture, arg.OrganizationID, arg.PrescriptionID)
+	return err
+}
+
+const insertKillswitchExpiryEventFixture = `-- name: InsertKillswitchExpiryEventFixture :exec
+INSERT INTO killswitch_expiry_events (organization_id, prescription_id, version)
+VALUES ($1, $2, 1)
+`
+
+type InsertKillswitchExpiryEventFixtureParams struct {
+	OrganizationID string
+	PrescriptionID uuid.UUID
+}
+
+func (q *Queries) InsertKillswitchExpiryEventFixture(ctx context.Context, arg InsertKillswitchExpiryEventFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertKillswitchExpiryEventFixture, arg.OrganizationID, arg.PrescriptionID)
+	return err
+}
+
+const insertKillswitchOperationExpiringInFixture = `-- name: InsertKillswitchOperationExpiringInFixture :exec
+INSERT INTO killswitch_operations (organization_id, operation_id, actor_user_id, operation, request_hash, expires_at)
+VALUES ($1, $2, $3, $4, $5, clock_timestamp() + $6::interval)
+`
+
+type InsertKillswitchOperationExpiringInFixtureParams struct {
+	OrganizationID string
+	OperationID    uuid.UUID
+	ActorUserID    string
+	Operation      string
+	RequestHash    string
+	ExpiresIn      pgtype.Interval
+}
+
+func (q *Queries) InsertKillswitchOperationExpiringInFixture(ctx context.Context, arg InsertKillswitchOperationExpiringInFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertKillswitchOperationExpiringInFixture,
+		arg.OrganizationID,
+		arg.OperationID,
+		arg.ActorUserID,
+		arg.Operation,
+		arg.RequestHash,
+		arg.ExpiresIn,
+	)
+	return err
+}
+
+const insertKillswitchOperationFixture = `-- name: InsertKillswitchOperationFixture :exec
+INSERT INTO killswitch_operations (organization_id, operation_id, actor_user_id, operation, request_hash, status, response, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+`
+
+type InsertKillswitchOperationFixtureParams struct {
+	OrganizationID string
+	OperationID    uuid.UUID
+	ActorUserID    string
+	Operation      string
+	RequestHash    string
+	Status         string
+	Response       []byte
+	ExpiresAt      pgtype.Timestamptz
+}
+
+func (q *Queries) InsertKillswitchOperationFixture(ctx context.Context, arg InsertKillswitchOperationFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertKillswitchOperationFixture,
+		arg.OrganizationID,
+		arg.OperationID,
+		arg.ActorUserID,
+		arg.Operation,
+		arg.RequestHash,
+		arg.Status,
+		arg.Response,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
+const insertKillswitchPlanVersionResourcesFixture = `-- name: InsertKillswitchPlanVersionResourcesFixture :exec
+INSERT INTO killswitch_prescription_version_resources (organization_id, prescription_id, version, resource_key)
+SELECT organization_id, id, 1,
+  CASE principal_key WHEN 'user:plan' THEN 'tool:plan' ELSE 'tool:noise' END
+FROM killswitch_prescriptions
+WHERE organization_id IN ($1::text, $2::text) AND principal_key IN ('user:plan', 'user:noise')
+`
+
+type InsertKillswitchPlanVersionResourcesFixtureParams struct {
+	OrganizationID      string
+	OtherOrganizationID string
+}
+
+func (q *Queries) InsertKillswitchPlanVersionResourcesFixture(ctx context.Context, arg InsertKillswitchPlanVersionResourcesFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertKillswitchPlanVersionResourcesFixture, arg.OrganizationID, arg.OtherOrganizationID)
+	return err
+}
+
+const insertKillswitchPlanVersionsFixture = `-- name: InsertKillswitchPlanVersionsFixture :exec
+INSERT INTO killswitch_prescription_versions (
+  organization_id, prescription_id, version, state, resource_scope, starts_at, expires_at, activated_at, internal_note, external_note
+)
+SELECT organization_id, id, 1, 'active', 'selected',
+  clock_timestamp() - INTERVAL '1 hour', NULL, clock_timestamp() - INTERVAL '1 hour',
+  'private plan fixture', 'Plan fixture.'
+FROM killswitch_prescriptions
+WHERE organization_id IN ($1::text, $2::text) AND principal_key IN ('user:plan', 'user:noise')
+`
+
+type InsertKillswitchPlanVersionsFixtureParams struct {
+	OrganizationID      string
+	OtherOrganizationID string
+}
+
+func (q *Queries) InsertKillswitchPlanVersionsFixture(ctx context.Context, arg InsertKillswitchPlanVersionsFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertKillswitchPlanVersionsFixture, arg.OrganizationID, arg.OtherOrganizationID)
+	return err
+}
+
+const insertKillswitchPrescriptionRowFixture = `-- name: InsertKillswitchPrescriptionRowFixture :exec
+
+INSERT INTO killswitch_prescriptions (id, organization_id, definition_key, principal_kind, principal_key, resource_kind, current_version)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+`
+
+type InsertKillswitchPrescriptionRowFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	DefinitionKey  string
+	PrincipalKind  string
+	PrincipalKey   string
+	ResourceKind   string
+	CurrentVersion int64
+}
+
+// Test fixtures. Constraint tests insert deliberately invalid rows through
+// these; production writes go through the lifecycle queries above.
+func (q *Queries) InsertKillswitchPrescriptionRowFixture(ctx context.Context, arg InsertKillswitchPrescriptionRowFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertKillswitchPrescriptionRowFixture,
+		arg.ID,
+		arg.OrganizationID,
+		arg.DefinitionKey,
+		arg.PrincipalKind,
+		arg.PrincipalKey,
+		arg.ResourceKind,
+		arg.CurrentVersion,
+	)
+	return err
+}
+
+const insertKillswitchPrescriptionSeriesFixture = `-- name: InsertKillswitchPrescriptionSeriesFixture :exec
+INSERT INTO killswitch_prescriptions (organization_id, definition_key, principal_kind, principal_key, resource_kind, current_version)
+SELECT $1::text, 'block-tools', 'user', $2::text, 'tool', 1
+FROM generate_series(1, $3::int)
+`
+
+type InsertKillswitchPrescriptionSeriesFixtureParams struct {
+	OrganizationID string
+	PrincipalKey   string
+	RowCount       int32
+}
+
+func (q *Queries) InsertKillswitchPrescriptionSeriesFixture(ctx context.Context, arg InsertKillswitchPrescriptionSeriesFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertKillswitchPrescriptionSeriesFixture, arg.OrganizationID, arg.PrincipalKey, arg.RowCount)
+	return err
+}
+
+const insertKillswitchPrescriptionVersionRowFixture = `-- name: InsertKillswitchPrescriptionVersionRowFixture :exec
+INSERT INTO killswitch_prescription_versions (
+  organization_id, prescription_id, version, state, resource_scope, starts_at, expires_at, internal_note, external_note
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+`
+
+type InsertKillswitchPrescriptionVersionRowFixtureParams struct {
+	OrganizationID string
+	PrescriptionID uuid.UUID
+	Version        int64
+	State          string
+	ResourceScope  string
+	StartsAt       pgtype.Timestamptz
+	ExpiresAt      pgtype.Timestamptz
+	InternalNote   string
+	ExternalNote   string
+}
+
+func (q *Queries) InsertKillswitchPrescriptionVersionRowFixture(ctx context.Context, arg InsertKillswitchPrescriptionVersionRowFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertKillswitchPrescriptionVersionRowFixture,
+		arg.OrganizationID,
+		arg.PrescriptionID,
+		arg.Version,
+		arg.State,
+		arg.ResourceScope,
+		arg.StartsAt,
+		arg.ExpiresAt,
+		arg.InternalNote,
+		arg.ExternalNote,
+	)
+	return err
+}
+
+const insertKillswitchVersionResourceFixture = `-- name: InsertKillswitchVersionResourceFixture :exec
+INSERT INTO killswitch_prescription_version_resources (organization_id, prescription_id, version, resource_key)
+VALUES ($1, $2, 1, $3)
+`
+
+type InsertKillswitchVersionResourceFixtureParams struct {
+	OrganizationID string
+	PrescriptionID uuid.UUID
+	ResourceKey    string
+}
+
+func (q *Queries) InsertKillswitchVersionResourceFixture(ctx context.Context, arg InsertKillswitchVersionResourceFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertKillswitchVersionResourceFixture, arg.OrganizationID, arg.PrescriptionID, arg.ResourceKey)
+	return err
 }
 
 const listCustomerKillswitchHistory = `-- name: ListCustomerKillswitchHistory :many
@@ -1382,6 +1784,22 @@ func (q *Queries) RecordKillswitchExpiryEvent(ctx context.Context, arg RecordKil
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const resetKillswitchOperationToPendingFixture = `-- name: ResetKillswitchOperationToPendingFixture :exec
+UPDATE killswitch_operations
+SET status = 'pending', response = NULL
+WHERE organization_id = $1 AND operation_id = $2
+`
+
+type ResetKillswitchOperationToPendingFixtureParams struct {
+	OrganizationID string
+	OperationID    uuid.UUID
+}
+
+func (q *Queries) ResetKillswitchOperationToPendingFixture(ctx context.Context, arg ResetKillswitchOperationToPendingFixtureParams) error {
+	_, err := q.db.Exec(ctx, resetKillswitchOperationToPendingFixture, arg.OrganizationID, arg.OperationID)
+	return err
 }
 
 const supersedeKillswitchPrescriptionVersion = `-- name: SupersedeKillswitchPrescriptionVersion :execrows

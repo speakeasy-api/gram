@@ -11,7 +11,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { Column, Table } from "@/components/ui/Table";
+import type { Column } from "@/components/ui/Table";
+import { Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import type { RowSelection } from "@/hooks/useRowSelection";
 import { HumanizeDateTime } from "@/lib/dates";
