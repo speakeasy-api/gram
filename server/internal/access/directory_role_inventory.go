@@ -333,7 +333,7 @@ func RunDirectoryRoleInventory(ctx context.Context, logger *slog.Logger, db *pgx
 		return report, errors.New("existing mappings point to missing roles; review stale_mappings before importing, no mappings committed")
 	}
 	writer := &Service{
-		tracer: nil, logger: logger, db: db, chConn: nil, auth: nil,
+		tracer: nil, logger: logger, db: db, chConn: nil, chReadConn: nil, auth: nil,
 		authz: engine, roleMgr: nil, audit: auditLogger, email: nil, orgHosts: nil, foldGate: nil,
 	}
 	for _, group := range groups {
