@@ -7,6 +7,7 @@ import {
   loadProviderProgress,
   providerProgressKey,
   providerSourceFingerprint,
+  guidedSetupStatus,
 } from "./provider-setup";
 
 describe("Salesforce source-bound progress", () => {
@@ -711,5 +712,44 @@ describe("Okta source-bound progress", () => {
     expect(changed.values.oktaAppType).toBe("web");
     expect(changed.step).toBe("enable");
     expect(changed.tested).toBe(false);
+  });
+});
+
+describe("guided setup status", () => {
+  const slack = "https://mcp.slack.com/mcp";
+  it.each([
+    ["no server", undefined, slack, "unavailable"],
+    [
+      "a non-remote server",
+      { remoteMcpServerId: undefined },
+      slack,
+      "unavailable",
+    ],
+    [
+      "an unsupported provider",
+      { remoteMcpServerId: "remote" },
+      "https://other.example/mcp",
+      "unavailable",
+    ],
+    [
+      "no upstream URL yet",
+      { remoteMcpServerId: "remote" },
+      undefined,
+      "unavailable",
+    ],
+    [
+      "a guided server not marked done",
+      { remoteMcpServerId: "remote" },
+      slack,
+      "pending",
+    ],
+    [
+      "a guided server marked done",
+      { remoteMcpServerId: "remote", setupGuideCompletedAt: new Date() },
+      slack,
+      "done",
+    ],
+  ] as const)("reports %s", (_case, server, url, status) => {
+    expect(guidedSetupStatus(server, url)).toBe(status);
   });
 });

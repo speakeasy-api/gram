@@ -191,6 +191,19 @@ it("offers Setup for a supported provider", () => {
     "/example/projects/default/mcp/slack/setup",
   );
 });
+it("hides guided Setup once it is marked done", () => {
+  state.server = { ...REMOTE_SERVER, setupGuideCompletedAt: new Date() };
+  render(<Sidebar />);
+  expect(screen.queryByRole("link", { name: "Setup" })).toBeNull();
+  expect(screen.getByRole("link", { name: "Overview" })).toBeDefined();
+});
+it("keeps a written guide's Setup after it is marked done", () => {
+  state.url = "https://mcp.linear.app/mcp";
+  state.guide = { only: { title: "Linear" }, openGuide: null };
+  state.server = { ...REMOTE_SERVER, setupGuideCompletedAt: new Date() };
+  render(<Sidebar />);
+  expect(screen.getByRole("link", { name: "Setup" })).toBeDefined();
+});
 it("requires write permission to offer Setup", () => {
   state.canWrite = false;
   render(<Sidebar />);

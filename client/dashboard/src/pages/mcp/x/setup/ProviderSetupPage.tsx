@@ -36,6 +36,7 @@ import {
   loadProviderProgress,
   saveProviderProgress,
   providerSourceFingerprint,
+  guidedSetupStatus,
 } from "./provider-setup";
 
 export function ProviderSetupPage({
@@ -274,7 +275,7 @@ function RetainedProviderSetup({
         : undefined,
     );
     // A completed setup reopens on its connection check, not the plan.
-    if (!mcpServer.setupGuideCompletedAt) return progress;
+    if (guidedSetupStatus(mcpServer, serverUrl) !== "done") return progress;
     return {
       ...progress,
       step: "test",

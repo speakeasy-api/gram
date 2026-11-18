@@ -20,6 +20,7 @@ import {
 } from "./useMcpServerReachability";
 import {
   type SetupProvider,
+  guidedSetupStatus,
   setupProviderForUrl,
 } from "@/pages/mcp/x/setup/provider-setup";
 import { useOrganization, useProject } from "@/contexts/Auth";
@@ -318,9 +319,13 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
   // Fixed order, and each check says when it is still loading, so the chip
   // reads the same however the queries race.
   const setupProvider = setupProviderForUrl(upstreamUrl);
+  // Finished guided setup leaves the tabs; Settings can restart it. A
+  // written guide keeps its tab, where it is marked done or reopened.
   const showSetup =
     !!mcpServer?.remoteMcpServerId &&
-    (!!setupProvider || !!setupGuide) &&
+    (setupProvider
+      ? guidedSetupStatus(mcpServer, upstreamUrl) === "pending"
+      : !!setupGuide) &&
     hasScope("mcp:write", mcpServer.id);
   // A provider with a guided setup is set up there, not in Settings: until
   // Speakeasy can sign in to it, the Authentication step and Overview send

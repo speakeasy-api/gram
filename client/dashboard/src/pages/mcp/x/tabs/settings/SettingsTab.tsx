@@ -60,6 +60,8 @@ import {
   UpstreamCredentialsSection,
 } from "./sections/authentication/UpstreamCredentialsSection";
 import { DangerZoneSection } from "./sections/DangerZoneSection";
+import { RestartSetupSection } from "./sections/RestartSetupSection";
+import { guidedSetupStatus } from "@/pages/mcp/x/setup/provider-setup";
 import { NetworkAccessSection } from "./sections/NetworkAccessSection";
 import { MCP_PUBLIC_ACCESS_SECTION_ID } from "./sections/PublicAccessSection";
 import { PublicRateLimitsSection } from "./sections/PublicRateLimitsSection";
@@ -434,6 +436,12 @@ export function SettingsTab({
             ...G.tools,
             content: <ToolFilteringSection mcpServer={mcpServer} />,
           },
+          // Finished guided setup moves here from the Setup tab.
+          guidedSetupStatus(mcpServer, remoteMcpServer?.url) === "done" &&
+            hasScope("mcp:write", mcpServer.id) && {
+              ...G.setup,
+              content: <RestartSetupSection mcpServer={mcpServer} />,
+            },
           { ...G.danger, content: danger },
         ]}
       />

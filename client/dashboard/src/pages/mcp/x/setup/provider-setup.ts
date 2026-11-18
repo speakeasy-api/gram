@@ -3,6 +3,7 @@ import {
   pendingAccountProvider,
 } from "@/pages/catalog/account-provider";
 import type { CatalogServer } from "@/pages/catalog/hooks";
+import type { McpServer } from "@gram/client/models/components/mcpserver";
 import { oktaSelectionForUrl } from "@/pages/catalog/provider-setup/okta";
 import { snowflakeSelectionForUrl } from "@/pages/catalog/provider-setup/snowflake";
 import {
@@ -49,6 +50,22 @@ export function setupProviderForUrl(
   } catch {
     return null;
   }
+}
+export type GuidedSetupStatus = "unavailable" | "pending" | "done";
+/**
+ * The team-wide guided setup state of an installed server: no guided setup,
+ * not yet marked done, or marked done. Per-tab step progress is local to the
+ * Setup page and deliberately not part of this.
+ */
+export function guidedSetupStatus(
+  mcpServer:
+    | Pick<McpServer, "remoteMcpServerId" | "setupGuideCompletedAt">
+    | undefined,
+  upstreamUrl: string | undefined,
+): GuidedSetupStatus {
+  if (!mcpServer?.remoteMcpServerId || !setupProviderForUrl(upstreamUrl))
+    return "unavailable";
+  return mcpServer.setupGuideCompletedAt ? "done" : "pending";
 }
 /** Catalog entries whose installed server opens a guided Setup page. */
 export function catalogServerHasGuidedSetup(server: CatalogServer): boolean {
