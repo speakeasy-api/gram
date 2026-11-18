@@ -613,9 +613,9 @@ function PluginsContent({
                         Add MCP servers automatically
                       </Label>
                       <Text small muted>
-                        When on, sharing this plugin with a role adds the MCP
-                        servers that role can use. When off, only people who
-                        edit this plugin change its servers.
+                        When on, role and access changes add or remove this
+                        plugin's MCP servers. When off, only people who edit
+                        this plugin change its servers.
                       </Text>
                     </div>
                     <Switch

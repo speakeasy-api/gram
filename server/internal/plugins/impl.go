@@ -605,7 +605,19 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 		}
 	}
 
-	updated, err := NewPluginMetadataCore(s.audit, s.publicationRequests).UpdateInTransaction(ctx, tx, UpdatePluginMutation{
+	// Turning on automatic server adding fills the plugin from its role
+	// audiences. Like adding a server by hand, an organization administrator's
+	// own change is recorded as the Shadow MCP approval it stands for.
+	updateCtx := ctx
+	if payload.AutoAddServersEnabled != nil && *payload.AutoAddServersEnabled {
+		admissionCtx, admissionErr := admission.AdministratorWriteContext(ctx, s.authz, ac.ActiveOrganizationID)
+		if admissionErr != nil {
+			return nil, oops.E(oops.CodeUnavailable, admissionErr, "distribution approval could not be verified safely").LogError(ctx, s.logger)
+		}
+		updateCtx = admissionCtx
+	}
+
+	updated, err := NewPluginMetadataCore(s.audit, s.publicationRequests).UpdateInTransaction(updateCtx, tx, UpdatePluginMutation{
 		OrganizationID:        ac.ActiveOrganizationID,
 		ProjectID:             *ac.ProjectID,
 		PluginID:              pluginID,
