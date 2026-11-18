@@ -37,6 +37,7 @@ afterEach(() => {
 });
 
 it("lists sources and downloads bytes using the exact scoped admin target", async () => {
+  const createObjectURL = vi.spyOn(URL, "createObjectURL");
   const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
   fetchMock.mockResolvedValueOnce(
     Response.json({
@@ -59,6 +60,9 @@ it("lists sources and downloads bytes using the exact scoped admin target", asyn
     fireEvent.click(button);
   });
   expect(click).toHaveBeenCalledWith("Example API.yaml", "blob:source");
+  expect(createObjectURL).toHaveBeenCalledExactlyOnceWith(expect.any(Blob));
+  const [blob] = createObjectURL.mock.calls[0]!;
+  expect(await (blob as Blob).text()).toBe("openapi: 3.1.0");
   expect(revoke).not.toHaveBeenCalled();
   await vi.runOnlyPendingTimersAsync();
   expect(revoke).toHaveBeenCalledWith("blob:source");
