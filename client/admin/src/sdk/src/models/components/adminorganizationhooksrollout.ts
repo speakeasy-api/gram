@@ -5,29 +5,16 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
   AdminHooksRolloutPin,
   AdminHooksRolloutPin$inboundSchema,
 } from "./adminhooksrolloutpin.js";
-
-/**
- * What decides an organization's hooks version: canary organizations always get the current version, organization and default name the pin that applies, and legacy_flag means no pin applies yet and the hooks-rollout PostHog flag decides.
- */
-export const AdminHooksRolloutSource = {
-  Canary: "canary",
-  Organization: "organization",
-  Default: "default",
-  LegacyFlag: "legacy_flag",
-} as const;
-/**
- * What decides an organization's hooks version: canary organizations always get the current version, organization and default name the pin that applies, and legacy_flag means no pin applies yet and the hooks-rollout PostHog flag decides.
- */
-export type AdminHooksRolloutSource = ClosedEnum<
-  typeof AdminHooksRolloutSource
->;
+import {
+  AdminHooksRolloutSource,
+  AdminHooksRolloutSource$inboundSchema,
+} from "./adminhooksrolloutsource.js";
 
 /**
  * Hooks version rollout state for one organization.
@@ -57,13 +44,8 @@ export type AdminOrganizationHooksRollout = {
   /**
    * What decides an organization's hooks version: canary organizations always get the current version, organization and default name the pin that applies, and legacy_flag means no pin applies yet and the hooks-rollout PostHog flag decides.
    */
-  adminHooksRolloutSource: AdminHooksRolloutSource;
+  source: AdminHooksRolloutSource;
 };
-
-/** @internal */
-export const AdminHooksRolloutSource$inboundSchema: z.ZodMiniEnum<
-  typeof AdminHooksRolloutSource
-> = z.enum(AdminHooksRolloutSource);
 
 /** @internal */
 export const AdminOrganizationHooksRollout$inboundSchema: z.ZodMiniType<
@@ -85,7 +67,6 @@ export const AdminOrganizationHooksRollout$inboundSchema: z.ZodMiniType<
       "default_pin": "defaultPin",
       "effective_version": "effectiveVersion",
       "organization_id": "organizationId",
-      "source": "adminHooksRolloutSource",
     });
   }),
 );
