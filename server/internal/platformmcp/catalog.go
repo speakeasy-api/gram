@@ -53,6 +53,10 @@ type CatalogCandidate struct {
 	SupportsCIMD bool `json:"supports_cimd"`
 	// AuthSetup distinguishes unknown capability evidence from required manual setup.
 	AuthSetup string `json:"auth_setup" jsonschema:"how the server signs users in: none means no sign-in; dcr or cimd means OAuth whose client is set up automatically, so only the user signs in; manual means an administrator registers an OAuth client or adds a credential by hand; unknown means not yet determined, so check the setup guide with search_speakeasy_docs before saying how it signs in"`
+
+	// iconURL is the registry's icon for the server. It is fetched only to
+	// draw a result card and is never part of the tool output.
+	iconURL string
 }
 
 type CatalogConfigurationField struct {
@@ -422,6 +426,7 @@ func catalogCandidateFromEntry(descriptor CatalogDescriptor, entry *types.Extern
 		Version:     entry.Version,
 		SupportsDCR: entry.SupportsDcr, SupportsCIMD: conv.PtrValOr(entry.SupportsCimd, false), AuthSetup: conv.PtrValOr(entry.AuthSetup, "unknown"),
 		SetupIntent: descriptor.SetupIntent,
+		iconURL:     strings.TrimSpace(conv.PtrValOr(entry.IconURL, "")),
 	}
 }
 

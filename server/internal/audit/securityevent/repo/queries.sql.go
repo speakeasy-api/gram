@@ -216,6 +216,10 @@ WHERE organization_id = $1
     $2::uuid IS NULL
     OR project_id = $2::uuid
   )
+  AND (
+    $3::text IS NULL
+    OR ($3::text = 'system') = (acting_surface IS NOT DISTINCT FROM 'system')
+  )
 GROUP BY action
 ORDER BY count DESC, action ASC
 `
@@ -223,6 +227,7 @@ ORDER BY count DESC, action ASC
 type ListSecurityActionFacetsParams struct {
 	OrganizationID string
 	ProjectID      uuid.NullUUID
+	Origin         pgtype.Text
 }
 
 type ListSecurityActionFacetsRow struct {
@@ -234,7 +239,7 @@ type ListSecurityActionFacetsRow struct {
 // Mirrors ListAuditActionFacets in audit/queries.sql over security_audit_logs; keep
 // the parameters and columns identical so the generated types convert.
 func (q *Queries) ListSecurityActionFacets(ctx context.Context, arg ListSecurityActionFacetsParams) ([]ListSecurityActionFacetsRow, error) {
-	rows, err := q.db.Query(ctx, listSecurityActionFacets, arg.OrganizationID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listSecurityActionFacets, arg.OrganizationID, arg.ProjectID, arg.Origin)
 	if err != nil {
 		return nil, err
 	}
@@ -263,6 +268,10 @@ WITH filtered_logs AS (
     AND (
       $2::uuid IS NULL
       OR project_id = $2::uuid
+    )
+    AND (
+      $3::text IS NULL
+      OR ($3::text = 'system') = (acting_surface IS NOT DISTINCT FROM 'system')
     )
 ), actor_counts AS (
   SELECT
@@ -304,6 +313,7 @@ ORDER BY actor_counts.count DESC, actor_counts.actor_id ASC
 type ListSecurityActorFacetsParams struct {
 	OrganizationID string
 	ProjectID      uuid.NullUUID
+	Origin         pgtype.Text
 }
 
 type ListSecurityActorFacetsRow struct {
@@ -317,7 +327,7 @@ type ListSecurityActorFacetsRow struct {
 // Mirrors ListAuditActorFacets in audit/queries.sql over security_audit_logs; keep
 // the parameters and columns identical so the generated types convert.
 func (q *Queries) ListSecurityActorFacets(ctx context.Context, arg ListSecurityActorFacetsParams) ([]ListSecurityActorFacetsRow, error) {
-	rows, err := q.db.Query(ctx, listSecurityActorFacets, arg.OrganizationID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listSecurityActorFacets, arg.OrganizationID, arg.ProjectID, arg.Origin)
 	if err != nil {
 		return nil, err
 	}
@@ -388,13 +398,19 @@ WHERE a.organization_id = $1
     $11::text IS NULL
     OR COALESCE(a.acting_surface, 'unknown') = $11::text
   )
+  -- Origin splits the log by who initiated a change: 'system' is Speakeasy
+  -- acting on its own (background jobs), 'user' is everything else.
   AND (
-    $12::timestamptz IS NULL
-    OR a.created_at >= $12::timestamptz
+    $12::text IS NULL
+    OR ($12::text = 'system') = (a.acting_surface IS NOT DISTINCT FROM 'system')
   )
   AND (
     $13::timestamptz IS NULL
-    OR a.created_at < $13::timestamptz
+    OR a.created_at >= $13::timestamptz
+  )
+  AND (
+    $14::timestamptz IS NULL
+    OR a.created_at < $14::timestamptz
   )
 ORDER BY a.seq DESC
 LIMIT 51
@@ -412,6 +428,7 @@ type ListSecurityAuditLogsParams struct {
 	SubjectID              pgtype.Text
 	SubjectIds             []string
 	ActingSurface          pgtype.Text
+	Origin                 pgtype.Text
 	CreatedFrom            pgtype.Timestamptz
 	CreatedTo              pgtype.Timestamptz
 }
@@ -457,6 +474,7 @@ func (q *Queries) ListSecurityAuditLogs(ctx context.Context, arg ListSecurityAud
 		arg.SubjectID,
 		arg.SubjectIds,
 		arg.ActingSurface,
+		arg.Origin,
 		arg.CreatedFrom,
 		arg.CreatedTo,
 	)
@@ -514,6 +532,10 @@ WHERE organization_id = $1
     $2::uuid IS NULL
     OR project_id = $2::uuid
   )
+  AND (
+    $3::text IS NULL
+    OR ($3::text = 'system') = (acting_surface IS NOT DISTINCT FROM 'system')
+  )
 GROUP BY COALESCE(acting_surface, 'unknown')
 ORDER BY count DESC, COALESCE(acting_surface, 'unknown') ASC
 `
@@ -521,6 +543,7 @@ ORDER BY count DESC, COALESCE(acting_surface, 'unknown') ASC
 type ListSecuritySurfaceFacetsParams struct {
 	OrganizationID string
 	ProjectID      uuid.NullUUID
+	Origin         pgtype.Text
 }
 
 type ListSecuritySurfaceFacetsRow struct {
@@ -532,7 +555,7 @@ type ListSecuritySurfaceFacetsRow struct {
 // Mirrors ListAuditSurfaceFacets in audit/queries.sql over security_audit_logs; keep
 // the parameters and columns identical so the generated types convert.
 func (q *Queries) ListSecuritySurfaceFacets(ctx context.Context, arg ListSecuritySurfaceFacetsParams) ([]ListSecuritySurfaceFacetsRow, error) {
-	rows, err := q.db.Query(ctx, listSecuritySurfaceFacets, arg.OrganizationID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listSecuritySurfaceFacets, arg.OrganizationID, arg.ProjectID, arg.Origin)
 	if err != nil {
 		return nil, err
 	}

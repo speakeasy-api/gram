@@ -453,6 +453,28 @@ func (q *Queries) GetUsersByWorkosIDs(ctx context.Context, workosIds []string) (
 	return items, nil
 }
 
+const isPlatformAdminEmail = `-- name: IsPlatformAdminEmail :one
+SELECT EXISTS (
+  SELECT 1
+  FROM users
+  WHERE lower(email) = lower($1::text)
+    AND admin IS TRUE
+    AND deleted_at IS NULL
+)::boolean AS is_admin
+`
+
+// Whether a live platform administrator (users.admin) holds this email. The
+// standalone admin transport identifies staff by their verified identity
+// provider email, not by user id, so platform-tier handlers that require the
+// entitlement resolve it here. Matched case-insensitively, as identity
+// provider emails are; users_email_lower_idx serves it.
+func (q *Queries) IsPlatformAdminEmail(ctx context.Context, email string) (bool, error) {
+	row := q.db.QueryRow(ctx, isPlatformAdminEmail, email)
+	var is_admin bool
+	err := row.Scan(&is_admin)
+	return is_admin, err
+}
+
 const lockUserForPlatformAdminCheck = `-- name: LockUserForPlatformAdminCheck :one
 SELECT id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, created_at, updated_at FROM users
 WHERE id = $1

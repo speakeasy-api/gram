@@ -17,8 +17,10 @@ func TestChatSearchToolContractAndDiscovery(t *testing.T) {
 	f := newChatSearchFixture(t)
 	ctx := f.context(t.Context())
 	live := newRegistrar(newTestMCPServer())
+	live.withProjects(&RegistrationStore{db: f.db})
 	registerChatSearchTools(live, f.service)
 	stub := newRegistrar(newTestMCPServer())
+	stub.withProjects(slugProjects{})
 	registerChatSearchTools(stub, nil)
 	for _, name := range []string{searchChatsToolName, readChatToolName} {
 		descriptor := descriptorByName(t, live, name)
@@ -33,13 +35,16 @@ func TestChatSearchToolContractAndDiscovery(t *testing.T) {
 		require.False(t, *descriptor.Annotations.DestructiveHint)
 		require.Contains(t, descriptor.Description, "untrusted")
 	}
+	// Every member discovers both tools: each has their own sessions to search,
+	// and chat:read widens the result at call time rather than at discovery.
 	tools := []*mcp.Tool{{Name: searchChatsToolName}, {Name: readChatToolName}}
 	for _, scope := range []authz.Scope{authz.ScopeChatRead, authz.ScopeChatWrite} {
 		scopeCtx := authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(scope, authz.WildcardResource)})
 		require.Len(t, live.FilterExternalTools(scopeCtx, f.principal, tools), 2)
 	}
 	admin := authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)})
-	require.Empty(t, live.FilterExternalTools(admin, f.principal, tools))
+	require.Len(t, live.FilterExternalTools(admin, f.principal, tools), 2)
+	require.Len(t, live.FilterExternalTools(authz.GrantsToContext(ctx, []authz.Grant{}), f.principal, tools), 2)
 	require.Empty(t, live.For(AudienceAssistant))
 
 	for _, name := range []string{searchChatsToolName, readChatToolName} {
@@ -53,18 +58,32 @@ func TestChatSearchToolContractAndDiscovery(t *testing.T) {
 		require.Equal(t, unavailableCode, refusal.Code)
 		require.True(t, json.Valid([]byte(refusal.Payload)))
 	}
-	_, err := descriptorByName(t, live, searchChatsToolName).Invoke(ctx, json.RawMessage(`{"project_id":"bad","from":"2026-01-05T11:00:00Z","to":"2026-01-05T13:00:00Z"}`))
+	_, err := descriptorByName(t, live, searchChatsToolName).Invoke(ctx, json.RawMessage(`{"project_slug":"`+f.project.Slug+`","from":"2026-01-05T13:00:00Z","to":"2026-01-05T11:00:00Z"}`))
 	var invalid *ToolRefusalError
 	require.ErrorAs(t, err, &invalid)
 	require.Contains(t, invalid.Payload, `"code":"invalid_request"`)
-	args, err := json.Marshal(f.search("no match"))
+	args, err := json.Marshal(f.toolSearch("no match"))
 	require.NoError(t, err)
 	result, err := descriptorByName(t, live, searchChatsToolName).Invoke(ctx, args)
 	require.NoError(t, err)
 	output, ok := result.(SearchChatsOutput)
 	require.True(t, ok)
 	require.Empty(t, output.Hits)
-	_, err = descriptorByName(t, live, searchChatsToolName).Invoke(admin, args)
+	// An administrator without chat:read searches their own scope rather than
+	// being refused: their own chat is found, someone else's is not, and reading
+	// that other chat is refused.
+	other := f.chat(t, ctx, "user_fixture_other_owner", "someone else's")
+	seedRecallMessage(t, ctx, f.db, other, f.project.ID, recallMessageSeed{role: "user", content: "private", at: f.base})
+	own := f.chat(t, ctx, f.principal.UserID, "the admin's own")
+	seedRecallMessage(t, ctx, f.db, own, f.project.ID, recallMessageSeed{role: "user", content: "private", at: f.base})
+	args, err = json.Marshal(f.toolSearch("private"))
+	require.NoError(t, err)
+	result, err = descriptorByName(t, live, searchChatsToolName).Invoke(admin, args)
+	require.NoError(t, err)
+	output, ok = result.(SearchChatsOutput)
+	require.True(t, ok)
+	require.Equal(t, []string{own.String()}, chatIDsOf(output.Hits))
+	_, err = descriptorByName(t, live, readChatToolName).Invoke(admin, json.RawMessage(`{"project_slug":"`+f.project.Slug+`","chat_id":"`+other.String()+`"}`))
 	var denied *ToolRefusalError
 	require.ErrorAs(t, err, &denied)
 	require.Contains(t, denied.Payload, `"required_scope":"chat:read"`)
@@ -84,11 +103,11 @@ func TestChatSearchInputSchemas(t *testing.T) {
 		valid                 bool
 	}{
 		{"search minimal", searchChatsToolName, `{"project_slug":"fixture",` + window + `}`, true},
-		{"search every filter", searchChatsToolName, `{"project_id":"00000000-0000-0000-0000-000000000001",` + window + `,"query":"x","sort_order":"oldest_first","owner_user_id":"user","participant_id":"UEXAMPLE01","participant_provider":"slack","chat_ids":["00000000-0000-0000-0000-000000000001"],"source":"codex","limit":20,"cursor":"c"}`, true},
+		{"search every filter", searchChatsToolName, `{"project_slug":"fixture",` + window + `,"query":"x","sort_order":"oldest_first","owner_user_id":"user","participant_id":"UEXAMPLE01","participant_provider":"slack","chat_ids":["00000000-0000-0000-0000-000000000001"],"source":"codex","limit":20,"cursor":"c"}`, true},
 		{"search unicode query", searchChatsToolName, `{"project_slug":"fixture",` + window + `,"query":"` + strings.Repeat("🙂", 256) + `"}`, true},
 		{"search long query", searchChatsToolName, `{"project_slug":"fixture",` + window + `,"query":"` + strings.Repeat("a", 257) + `"}`, false},
 		{"search no project", searchChatsToolName, `{` + window + `}`, false},
-		{"search both projects", searchChatsToolName, `{"project_slug":"fixture","project_id":"00000000-0000-0000-0000-000000000001",` + window + `}`, false},
+		{"search project id", searchChatsToolName, `{"project_slug":"fixture","project_id":"00000000-0000-0000-0000-000000000001",` + window + `}`, false},
 		{"provider without participant", searchChatsToolName, `{"project_slug":"fixture",` + window + `,"participant_provider":"slack"}`, false},
 		{"search no dates", searchChatsToolName, `{"project_slug":"fixture"}`, false},
 		{"search limit", searchChatsToolName, `{"project_slug":"fixture",` + window + `,"limit":21}`, false},

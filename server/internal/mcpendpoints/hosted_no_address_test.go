@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -47,7 +46,7 @@ func (f *hostedAddressFixture) deleteDomain(t *testing.T, ctx context.Context) {
 	logger := testenv.NewLogger(t)
 	service := customdomains.NewService(logger, testenv.NewTracerProvider(t), f.ti.conn, f.ti.sessionManager, deleteOnlyTemporal{},
 		authz.NewEngine(logger, f.ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), audit.NewLogger(),
-		func(context.Context, pgx.Tx, string, uuid.UUID) (bool, error) { return false, nil }, "cname.example.net.", nil)
+		func(context.Context, pgx.Tx, string, uuid.UUID) (bool, error) { return false, nil }, "cname.example.net.", nil, "")
 	require.NoError(t, service.DeleteDomain(ctx, &domainsgen.DeleteDomainPayload{}))
 }
 
@@ -62,9 +61,6 @@ func TestHostedServerRecoversAddressAfterDomainDelete(t *testing.T) {
 
 	f.deleteDomain(t, ctx)
 	require.Empty(t, f.endpoints(t, ctx))
-	alias, err := legacyalias.Get(ctx, f.ti.conn, f.projectID, f.toolset.ID)
-	require.NoError(t, err)
-	require.Equal(t, legacyalias.None(), alias, "the frozen toolset alias is not written")
 
 	recovered := f.authCtx.OrganizationSlug + "-recovered"
 	_, err = f.ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{McpServerID: new(f.toolset.ID.String()), Slug: types.McpEndpointSlug(recovered)})

@@ -3,12 +3,8 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { generateText, Output } from "ai";
 import { useEffect, useState } from "react";
 import { z } from "zod";
-import {
-  AGENT_EXAMPLES,
-  FRAMEWORKS,
-  SdkFramework,
-  SdkLanguage,
-} from "../sdk/examples";
+import type { SdkFramework, SdkLanguage } from "../sdk/examples";
+import { AGENT_EXAMPLES, FRAMEWORKS } from "../sdk/examples";
 import { useChatMessages } from "./useChatContext";
 import { useMiniModel } from "./Openrouter";
 import { AgentifyContext } from "./useAgentify";

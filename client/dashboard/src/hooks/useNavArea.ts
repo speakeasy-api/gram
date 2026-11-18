@@ -39,6 +39,7 @@ const AREA_BY_PAGE_SLUG: Record<string, NavArea> = {
   plugins: "MCP Gateway",
   environments: "MCP Gateway",
   assistants: "MCP Gateway",
+  channels: "MCP Gateway",
 };
 
 // Org-level pages that should not read as "Organization" administration.

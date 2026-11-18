@@ -71,7 +71,7 @@ func (e *GatewayError) Unwrap() error { return e.Cause }
 // GatewayMemberRefusal is one server that cannot be a member of the gateway.
 type GatewayMemberRefusal struct {
 	MCPID string `json:"mcp_id"`
-	// Reason is one of not_in_project, no_address, unproxied, built_in,
+	// Reason is one of not_in_project, no_address, unproxied,
 	// hosted_toolset_server, duplicate_backend, shadow_review_required, or
 	// approval_check_unavailable.
 	Reason  string `json:"reason"`
@@ -79,13 +79,17 @@ type GatewayMemberRefusal struct {
 }
 
 type CreateGatewayInput struct {
-	ProjectID string   `json:"project_id" jsonschema:"ID of the project the gateway belongs to; every member must be in it"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string   `json:"-"`
 	Name      string   `json:"name" jsonschema:"display name for the gateway, at most 100 characters"`
 	MCPIDs    []string `json:"mcp_ids" jsonschema:"exact IDs of the MCP servers to put behind the gateway, from find_mcp in this project, in the order the gateway lists them; at most 50"`
 }
 
 type SetGatewayMembersInput struct {
-	ProjectID string   `json:"project_id" jsonschema:"ID of the project the gateway belongs to"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string   `json:"-"`
 	GatewayID string   `json:"gateway_id" jsonschema:"exact ID of the gateway to change"`
 	MCPIDs    []string `json:"mcp_ids" jsonschema:"the complete list of MCP servers the gateway should front afterwards, in order; servers left out are removed and an empty list removes them all; at most 50"`
 }
@@ -296,6 +300,9 @@ func (s *GatewayService) setGatewayMembers(ctx context.Context, principal Princi
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
+	if err := metamcp.LockMemberRemovalScope(ctx, tx, actor); err != nil {
+		return GatewayOutput{}, err //nolint:wrapcheck // Already describes the lock.
+	}
 	meta, err := s.writer.LockGateway(ctx, tx, actor, gatewayID)
 	if errors.Is(err, metamcp.ErrGatewayNotFound) {
 		return GatewayOutput{}, gatewayMissing()
@@ -529,7 +536,6 @@ var gatewayMemberReasons = []struct {
 	{metamcp.ErrMemberServerNotInProject, "not_in_project", "This server is not a live MCP server in this project."},
 	{metamcp.ErrMemberServerHasNoSlug, "no_address", "This server has no address yet. Saving its settings once in the dashboard gives it one."},
 	{metamcp.ErrMemberServerUnproxied, "unproxied", "This server is reached directly rather than through Speakeasy, so a gateway cannot serve its tools."},
-	{metamcp.ErrMemberServerBuiltin, "built_in", "This is a server Speakeasy runs itself, such as the approvals server, so a gateway cannot serve its tools."},
 	{metamcp.ErrMemberServerIsHostedToolset, "hosted_toolset_server", "This is a hosted tool list's own server, which cannot sit behind a gateway. Create a separate server for that tool list and add that instead."},
 	{metamcp.ErrMemberSharesBackend, "duplicate_backend", "Another server in this request or already on the gateway fronts the same backend."},
 	{metamcp.ErrMemberAlreadyPresent, "duplicate_backend", "This server is already on the gateway."},
@@ -561,7 +567,7 @@ func gatewayMembersRefused(refusals []GatewayMemberRefusal, outcome string) erro
 func parseGatewayProject(value string) (uuid.UUID, error) {
 	projectID, err := uuid.Parse(strings.TrimSpace(value))
 	if err != nil {
-		return uuid.Nil, gatewayInvalid("Provide an explicit project ID.")
+		return uuid.Nil, gatewayInvalid("Provide the project's slug, as list_projects returns it.")
 	}
 	return projectID, nil
 }

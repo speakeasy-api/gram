@@ -256,9 +256,9 @@ func TestAdmitMetaMembersShadowLeavesAdmissionUnchanged(t *testing.T) {
 		id := uuid.New()
 		return metaMemberCandidate{
 			serverID: id, projectID: project, projectSlug: "p", slug: "s-" + id.String()[:8], name: "s", sortOrder: 0,
-			visibility: visibility, unproxied: false, toolsetID: uuid.NullUUID{}, remoteServerID: uuid.NullUUID{UUID: id, Valid: true},
+			visibility: visibility, toolsetID: uuid.NullUUID{}, remoteServerID: uuid.NullUUID{UUID: id, Valid: true},
 			tunneledServerID: uuid.NullUUID{}, environmentID: uuid.NullUUID{}, toolVariationsGroupID: uuid.NullUUID{},
-			remoteSessionIssuerID: uuid.NullUUID{}, tunneledResourceIdentifier: "",
+			upstreamIssuer: upstreamIssuerKeys{}, tunneledResourceIdentifier: "",
 		}
 	}
 	public, granted, denied := candidate("public"), candidate("private"), candidate("private")
@@ -299,17 +299,20 @@ func TestShadowMandatoryDedupeHoldsUnderConcurrency(t *testing.T) {
 	require.Equal(t, 1, h.logLines("INFO"))
 }
 
-func TestShadowAuthClientUseSkipsPersonalClientsWithoutAUser(t *testing.T) {
+func TestShadowAuthClientUseRefusesPersonalClientsWithoutAnOwner(t *testing.T) {
 	t.Parallel()
 
 	h := newShadowHarness(t, true)
-	project, client := uuid.New(), uuid.New()
-	h.service.shadowAuthClientUse(sessionContext(t, shadowOrg), shadowOrg, true, project, client, uuid.NullUUID{}, authClientTypeRemoteSession, "")
-	h.service.shadowAuthClientUse(sessionContext(t, shadowOrg), shadowOrg, false, project, client, uuid.NullUUID{}, authClientTypeRemoteSession, "")
+	permit := authClientPermitRequest{
+		OrganizationID: shadowOrg, ProjectID: uuid.New(), ServerID: uuid.New(), ClientID: uuid.New(), ClientType: authClientTypeRemoteSession,
+		RegistrationID: uuid.NullUUID{}, CredentialKind: "", CredentialID: uuid.Nil, Subject: urn.NewAgentSubject(uuid.New()), UserSessionIssuerID: uuid.Nil, ConnectionOwner: "",
+	}
+	h.service.shadowAuthClientUse(sessionContext(t, shadowOrg), true, permit)
+	h.service.shadowAuthClientUse(sessionContext(t, shadowOrg), false, permit)
 	require.Equal(t, map[attribute.Set]int64{
-		shadowKey(mandatorySurfaceAuthClient, mandatoryCallerRepresented, "user", true, "skipped", "none", mandatoryReasonNoConnectionOwner):  1,
-		shadowKey(mandatorySurfaceAuthClient, mandatoryCallerRepresented, "user", false, "skipped", "none", mandatoryReasonNoConnectionOwner): 1,
-	}, h.points(t), "a personal client used without a user to own it is not an invalid check, and keeps today's decision")
+		shadowKey(mandatorySurfaceAuthClient, mandatoryCallerRepresented, "user", true, "deny", "none", string(authz.MandatoryDenyReasonNotGranted)):  1,
+		shadowKey(mandatorySurfaceAuthClient, mandatoryCallerRepresented, "user", false, "deny", "none", string(authz.MandatoryDenyReasonNotGranted)): 1,
+	}, h.points(t), "a personal client used without an owner is refused, as enforcement refuses it")
 }
 
 func TestShadowMandatoryNeverRecordsCanceledRequests(t *testing.T) {

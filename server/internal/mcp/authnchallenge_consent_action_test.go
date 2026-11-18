@@ -716,7 +716,7 @@ func TestResourceOwners_MatchesConnectOwnership(t *testing.T) {
 	owner := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim431-owner", "", []uuid.UUID{fx.shared})
 	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim431-shared", "", []uuid.UUID{fx.shared, other})
 
-	owners, err := remotesessions.ResourceOwners(ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.shared, consentUpstreamA)
+	owners, err := remotesessions.ResourceOwners(ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.shared, consentUpstreamA, false)
 	require.NoError(t, err)
 	require.True(t, owners[owner])
 	require.False(t, owners[shared], "a sibling that derives the upstream on its own holds it")
@@ -727,13 +727,13 @@ func TestResourceOwners_MatchesConnectOwnership(t *testing.T) {
 	batch, err := remotesessions.ResourceOwnersForServers(ctx, fx.ti.conn, fx.orgID, []remotesessions.ResourceOwnerQuery{
 		{ServerID: here, ProjectID: fx.projectID, UserSessionIssuerID: fx.shared, Upstream: consentUpstreamA},
 		{ServerID: elsewhere, ProjectID: fx.projectID, UserSessionIssuerID: fx.shared, Upstream: consentUpstreamA},
-	})
+	}, false)
 	require.NoError(t, err)
 	require.Equal(t, owners, batch[here])
 	require.Equal(t, owners, batch[elsewhere])
 	foreign, err := remotesessions.ResourceOwnersForServers(ctx, fx.ti.conn, "org-not-"+fx.orgID, []remotesessions.ResourceOwnerQuery{
 		{ServerID: here, ProjectID: fx.projectID, UserSessionIssuerID: fx.shared, Upstream: consentUpstreamA},
-	})
+	}, false)
 	require.NoError(t, err)
 	require.Empty(t, foreign[here], "another organization's caller sees no clients")
 }

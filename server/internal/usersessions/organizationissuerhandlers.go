@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -179,6 +180,15 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orggen.CreateIssuer
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	// Whether the organization has one organization-level issuer decides
+	// whether its organization gateway fronts every server, so this change
+	// re-decides associations in every project. Their writer scope precedes
+	// every row lock.
+	reconcileScope, err := upstreamclients.LockOrganizationScope(ctx, dbtx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock organization upstream client writer scope").LogError(ctx, logger)
+	}
+
 	if trustedIssuerID.Valid {
 		var trustErr error
 		if trustedClientID.Valid {
@@ -223,6 +233,12 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orggen.CreateIssuer
 		UserSessionIssuerSnapshotAfter: UserSessionIssuerView(row),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log organization user session issuer creation").LogError(ctx, logger)
+	}
+	if err := upstreamclients.ReconcileOrganizationInLockedTransaction(ctx, dbtx, authCtx.ActiveOrganizationID, reconcileScope); err != nil {
+		if errors.Is(err, upstreamclients.ErrScopeChanged) {
+			return nil, err //nolint:wrapcheck // oops errors pass through.
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "reconcile organization upstream clients").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -366,6 +382,76 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *orggen.ListMcpSer
 	}
 
 	return &orggen.ListUserSessionIssuerMcpServersResult{Items: items, NextCursor: nextCursor}, nil
+}
+
+// ListRemoteSessionClientBindings lists the remote session clients an issuer
+// in the caller's organization binds, and those its live MCP servers are
+// associated with.
+func (s *Service) ListRemoteSessionClientBindings(ctx context.Context, payload *orggen.ListRemoteSessionClientBindingsPayload) (*orggen.UserSessionIssuerRemoteSessionClientBindings, error) {
+	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgRead)
+	if err != nil {
+		return nil, err
+	}
+
+	issuerID, err := uuid.Parse(payload.UserSessionIssuerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").LogWarn(ctx, s.logger)
+	}
+
+	q := repo.New(s.db)
+	if _, err := q.GetOrganizationManagedUserSessionIssuerByID(ctx, repo.GetOrganizationManagedUserSessionIssuerByIDParams{
+		ID:             issuerID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogWarn(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization user session issuer").LogError(ctx, s.logger)
+	}
+
+	boundRows, err := q.ListUserSessionIssuerBoundRemoteSessionClients(ctx, repo.ListUserSessionIssuerBoundRemoteSessionClientsParams{
+		UserSessionIssuerID: issuerID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list user session issuer bound remote session clients").LogError(ctx, s.logger)
+	}
+	serverRows, err := q.ListUserSessionIssuerServerRemoteSessionClients(ctx, repo.ListUserSessionIssuerServerRemoteSessionClientsParams{
+		UserSessionIssuerID: issuerID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list user session issuer server remote session clients").LogError(ctx, s.logger)
+	}
+
+	bound := make([]*orggen.UserSessionIssuerRemoteSessionClient, len(boundRows))
+	for i, row := range boundRows {
+		bound[i] = &orggen.UserSessionIssuerRemoteSessionClient{
+			ID:                      row.ID.String(),
+			ClientID:                row.ClientID,
+			RemoteSessionIssuerID:   row.RemoteSessionIssuerID.String(),
+			RemoteSessionIssuerName: row.RemoteSessionIssuerName,
+			RemoteSessionIssuerURL:  row.RemoteSessionIssuerUrl,
+		}
+	}
+	servers := make([]*orggen.UserSessionIssuerServerRemoteSessionClient, len(serverRows))
+	for i, row := range serverRows {
+		servers[i] = &orggen.UserSessionIssuerServerRemoteSessionClient{
+			McpServerID:   row.McpServerID.String(),
+			McpServerName: row.McpServerName,
+			ProjectID:     row.ProjectID.String(),
+			ProjectName:   row.ProjectName,
+			RemoteSessionClient: &orggen.UserSessionIssuerRemoteSessionClient{
+				ID:                      row.ID.String(),
+				ClientID:                row.ClientID,
+				RemoteSessionIssuerID:   row.RemoteSessionIssuerID.String(),
+				RemoteSessionIssuerName: row.RemoteSessionIssuerName,
+				RemoteSessionIssuerURL:  row.RemoteSessionIssuerUrl,
+			},
+		}
+	}
+
+	return &orggen.UserSessionIssuerRemoteSessionClientBindings{BoundClients: bound, ServerClients: servers}, nil
 }
 
 // UpdateIssuer patches an organization-owned issuer.
@@ -585,6 +671,14 @@ func (s *Service) DeleteIssuer(ctx context.Context, payload *orggen.DeleteIssuer
 		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	// Whether the organization has one organization-level issuer decides
+	// whether its organization gateway fronts every server, so this change
+	// re-decides associations in every project. Their writer scope precedes
+	// every row lock.
+	reconcileScope, err := upstreamclients.LockOrganizationScope(ctx, dbtx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock organization upstream client writer scope").LogError(ctx, logger)
+	}
 	txRepo := repo.New(dbtx)
 	if err := guardUserIssuerEMABindings(ctx, dbtx, authCtx.ActiveOrganizationID, id); err != nil {
 		return err
@@ -635,6 +729,12 @@ func (s *Service) DeleteIssuer(ctx context.Context, payload *orggen.DeleteIssuer
 		Slug:                 deleted.Slug,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "log organization user session issuer deletion").LogError(ctx, logger)
+	}
+	if err := upstreamclients.ReconcileOrganizationInLockedTransaction(ctx, dbtx, authCtx.ActiveOrganizationID, reconcileScope); err != nil {
+		if errors.Is(err, upstreamclients.ErrScopeChanged) {
+			return err //nolint:wrapcheck // oops errors pass through.
+		}
+		return oops.E(oops.CodeUnexpected, err, "reconcile organization upstream clients").LogError(ctx, logger)
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)

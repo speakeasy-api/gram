@@ -66,8 +66,10 @@ type Service interface {
 	// policy, so a caller replaces its view rather than merging into it.
 	UpdateSubject(context.Context, *UpdateSubjectPayload) (res *WorkloadIdentityPolicy, err error)
 	// Withdraw an admitted subject and its agent assignment, stopping it
-	// authenticating. Requires workload:write.
-	WithdrawSubject(context.Context, *WithdrawSubjectPayload) (res *WorkloadIdentityPolicy, err error)
+	// authenticating. A subject can be admitted at the organization and in a
+	// project independently; withdrawing one leaves the other in force, and the
+	// result names the tier removed. Requires workload:write.
+	WithdrawSubject(context.Context, *WithdrawSubjectPayload) (res *WithdrawnWorkloadSubjectPolicy, err error)
 	// Create a single-use join token that enrolls one headless box with no
 	// platform identity as a workload assigned to an agent. The token is returned
 	// once and only its hash is kept. Only a person can create one: a key backed
@@ -301,6 +303,17 @@ type WithdrawSubjectPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+// WithdrawnWorkloadSubjectPolicy is the result type of the workloadIdentities
+// service withdrawSubject method.
+type WithdrawnWorkloadSubjectPolicy struct {
+	// The tier of the admission that was withdrawn: organization or project.
+	WithdrawnTier string
+	// Trusted issuers, organization tier first.
+	Issuers []*types.WorkloadIssuer
+	// Admitted subjects.
+	Admissions []*types.WorkloadAdmission
 }
 
 // WorkloadCustomFlows is the result type of the workloadIdentities service

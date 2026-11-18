@@ -109,8 +109,7 @@ const (
 )
 
 // Metrics is the mcp service's full instrument set. A nil *Metrics is valid —
-// metric recording becomes a no-op, but RecordToolsetSlugFallback still emits
-// attribution logs when a logger is supplied. Each method is also
+// metric recording becomes a no-op. Each method is also
 // nil-instrument-safe, so a partially constructed value still records what it can.
 type Metrics struct {
 	// mcpInitializeCounter is the unsampled census of observed handshakes by
@@ -144,6 +143,13 @@ type Metrics struct {
 	// client resolver against the upstream client choice, by whether they
 	// agreed and each side's outcome.
 	authClientParityCounter metric.Int64Counter
+	// upstreamIssuerParityCounter counts comparisons of a server's column
+	// upstream issuer against the one its client associations give, by
+	// surface, site, outcome, authoritative source and resolver mode.
+	upstreamIssuerParityCounter metric.Int64Counter
+	// upstreamIssuerReconsentCounter counts consent checks by whether taking
+	// the upstream issuer from the other source would have forced a new consent.
+	upstreamIssuerReconsentCounter metric.Int64Counter
 	// metaStaleChoiceRefusalCounter counts gateway member calls and describes refused for a stale choice, by reason.
 	metaStaleChoiceRefusalCounter metric.Int64Counter
 	// mandatoryAuthzShadowCounter counts shadowed mandatory checks.
@@ -166,7 +172,6 @@ type Metrics struct {
 	mcpToolCallCounter metric.Int64Counter
 	mcpRequestDuration metric.Float64Histogram
 	identityCoverage   *IdentityCoverageCounter
-	legacyFallback     *LegacyFallbackCounter
 
 	// oauthFlow{Started,Completed,Failed,Declined}Counter instrument the
 	// user-facing OAuth flow as a unit. They decompose a flow's terminal
@@ -392,6 +397,24 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		logger.ErrorContext(context.Background(), "failed to create auth client parity counter", attr.SlogError(err))
 	}
 
+	upstreamIssuerParityCounter, err := meter.Int64Counter(
+		"mcp.upstream_issuer.parity",
+		metric.WithDescription("Comparisons of an MCP server's column upstream issuer against its client associations' provider, by surface, site, outcome, authoritative source and resolver mode"),
+		metric.WithUnit("{comparison}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create upstream issuer parity counter", attr.SlogError(err))
+	}
+
+	upstreamIssuerReconsentCounter, err := meter.Int64Counter(
+		"mcp.upstream_issuer.reconsent_forecast",
+		metric.WithDescription("Consent checks by whether taking the upstream issuer from the other source would force a new consent, by site and outcome"),
+		metric.WithUnit("{check}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create upstream issuer re-consent forecast counter", attr.SlogError(err))
+	}
+
 	metaStaleChoiceRefusalCounter, err := meter.Int64Counter(
 		"mcp.meta.stale_choice_refusal",
 		metric.WithDescription("Calls and describes on a gateway member refused because its stored connection choice is stale, by reason"),
@@ -435,13 +458,14 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		metaMemberDispatchCounter:            metaMemberDispatchCounter,
 		mcpRequestRejectedCounter:            mcpRequestRejectedCounter,
 		authClientParityCounter:              authClientParityCounter,
+		upstreamIssuerParityCounter:          upstreamIssuerParityCounter,
+		upstreamIssuerReconsentCounter:       upstreamIssuerReconsentCounter,
 		metaStaleChoiceRefusalCounter:        metaStaleChoiceRefusalCounter,
 		mandatoryAuthzShadowCounter:          mandatoryAuthzShadowCounter,
 		mcpProtocolVersionRejectedCounter:    mcpProtocolVersionRejectedCounter,
 		mcpSkillReadCounter:                  mcpSkillReadCounter,
 		requestCensus:                        NewRequestCounter(meter, logger),
 		identityCoverage:                     NewIdentityCoverageCounter(meter, logger),
-		legacyFallback:                       NewLegacyFallbackCounter(meter, logger),
 		oauthFlowStartedCounter:              oauthFlowStartedCounter,
 		oauthFlowCompletedCounter:            oauthFlowCompletedCounter,
 		oauthFlowFailedCounter:               oauthFlowFailedCounter,
@@ -546,27 +570,6 @@ func (m *Metrics) RecordKillswitchIdentityCoverage(ctx context.Context, surface 
 	m.identityCoverage.Record(ctx, surface, identity, resource)
 }
 
-// RecordToolsetSlugFallback logs and counts one request served through the
-// legacy toolsets.mcp_slug lookup after an mcp_endpoints address miss. Semantics on
-// [LegacyFallbackCounter.RecordToolsetSlugFallback].
-func (m *Metrics) RecordToolsetSlugFallback(ctx context.Context, logger *slog.Logger, hit ToolsetSlugFallback) {
-	var counter *LegacyFallbackCounter
-	if m != nil {
-		counter = m.legacyFallback
-	}
-	counter.RecordToolsetSlugFallback(ctx, logger, hit)
-}
-
-// RecordLegacyAudienceAccepted logs and counts one bearer accepted via the
-// legacy toolset-URN audience. Semantics on
-// [LegacyFallbackCounter.RecordLegacyAudienceAccepted].
-func (m *Metrics) RecordLegacyAudienceAccepted(ctx context.Context, logger *slog.Logger, hit LegacyAudienceAccepted) {
-	if m == nil {
-		return
-	}
-	m.legacyFallback.RecordLegacyAudienceAccepted(ctx, logger, hit)
-}
-
 // RecordMCPInitialize counts one observed MCP handshake, dimensioned by the
 // protocol revision the client requested and the one it was answered with.
 //
@@ -640,6 +643,52 @@ func (m *Metrics) RecordAuthClientParity(ctx context.Context, agreed bool, outco
 		attr.AuthClientOutcome(outcome),
 		attr.AuthClientLegacyOutcome(legacyOutcome),
 		attr.AuthClientReason(reason),
+	))
+}
+
+// UpstreamIssuerParity is one comparison of a server's column upstream issuer
+// against its associations' provider. Every field is a closed set; there is
+// no organization label because every organization reports.
+type UpstreamIssuerParity struct {
+	// Surface is the serving surface the comparison ran on.
+	Surface string
+
+	// Site is the code site within the surface.
+	Site string
+
+	// Outcome is how the two sources compared.
+	Outcome string
+
+	// Source is which upstream issuer was authoritative: column or associations.
+	Source string
+
+	// ResolverMode is the organization's typed auth client resolver mode.
+	ResolverMode string
+}
+
+// RecordUpstreamIssuerParity counts one upstream issuer comparison.
+func (m *Metrics) RecordUpstreamIssuerParity(ctx context.Context, p UpstreamIssuerParity) {
+	if m == nil || m.upstreamIssuerParityCounter == nil {
+		return
+	}
+	m.upstreamIssuerParityCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.UpstreamIssuerSurface(p.Surface),
+		attr.UpstreamIssuerSite(p.Site),
+		attr.UpstreamIssuerOutcome(p.Outcome),
+		attr.UpstreamIssuerSource(p.Source),
+		attr.AuthClientResolverMode(p.ResolverMode),
+	))
+}
+
+// RecordUpstreamIssuerReconsent counts one consent check of the re-consent
+// forecast. Sites and outcomes are closed sets.
+func (m *Metrics) RecordUpstreamIssuerReconsent(ctx context.Context, site, outcome string) {
+	if m == nil || m.upstreamIssuerReconsentCounter == nil {
+		return
+	}
+	m.upstreamIssuerReconsentCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.UpstreamIssuerSite(site),
+		attr.UpstreamIssuerOutcome(outcome),
 	))
 }
 

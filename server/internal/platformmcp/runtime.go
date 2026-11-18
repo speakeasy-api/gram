@@ -5,8 +5,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -299,6 +301,16 @@ func mustPrincipal(ctx context.Context) Principal {
 func (r *Runtime) WithOAuthTelemetry(telemetry OAuthTelemetry) *Runtime {
 	if telemetry != nil {
 		r.telemetry = telemetry
+	}
+	return r
+}
+
+// WithDashboardLinks lets result cards link to dashboard pages on the
+// dashboard the request arrived for. db resolves a project ID to its slug in
+// the caller's organization; it may be nil.
+func (r *Runtime) WithDashboardLinks(dashboardURL, serverURL *url.URL, db platformrepo.DBTX) *Runtime {
+	if r != nil && r.registrar != nil {
+		r.registrar.withDashboardLinks(newCardLinks(dashboardURL, serverURL, db))
 	}
 	return r
 }

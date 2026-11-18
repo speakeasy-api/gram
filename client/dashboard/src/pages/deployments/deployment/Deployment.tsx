@@ -30,10 +30,8 @@ import { AssetsTabContent } from "./AssetsTabContent";
 import { FailedSourcesSection } from "./FailedSourcesSection";
 import { LogsTabContent } from "./LogsTabContent";
 import { ToolsTabContent } from "./ToolsTabContent";
-import {
-  DeploymentPageSearchParams,
-  useDeploymentSearchParams,
-} from "./use-deployment-search-params";
+import type { DeploymentPageSearchParams } from "./use-deployment-search-params";
+import { useDeploymentSearchParams } from "./use-deployment-search-params";
 
 export default function DeploymentPage(): JSX.Element {
   const { deploymentId } = useParams();
@@ -281,12 +279,9 @@ const StatsSection = ({
   if (deployment.functionsAssets) {
     assetCount += deployment.functionsAssets.length;
   }
-  assetCount += deployment.externalMcps?.length ?? 0;
 
   const toolCount =
-    deployment.openapiv3ToolCount +
-    deployment.functionsToolCount +
-    deployment.externalMcpToolCount;
+    deployment.openapiv3ToolCount + deployment.functionsToolCount;
 
   const statusTone =
     deployment.status === "completed"

@@ -6,7 +6,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { TextArea } from "@/components/ui/Textarea";
 import { Text } from "@/components/ui/Text";
 import { cn, firstPartyHosts } from "@/lib/utils";
-import { ToolCallMessagePartProps } from "@assistant-ui/react";
+import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { Icon } from "@/components/ui/Icon";
 import { Check, Copy, ExternalLink, Shuffle, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";

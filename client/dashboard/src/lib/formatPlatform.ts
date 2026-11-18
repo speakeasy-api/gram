@@ -20,6 +20,8 @@ const PRODUCT_SURFACE_LABELS: Record<string, string> = {
   "claude-code-desktop": "Claude Code Desktop",
   cowork: "Claude Cowork",
   "claude-cowork": "Claude Cowork",
+  kit: "Kit",
+  "ahp-harness:kit": "Kit",
   cursor: "Cursor",
   // The device agent's IDE deeplink target — the same Cursor surface as the
   // cursor CLI, reached via the desktop app.

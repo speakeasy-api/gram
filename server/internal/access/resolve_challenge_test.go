@@ -131,6 +131,99 @@ func TestResolveChallenge_RoleAssignedAddsCustomRoleAndPreservesExistingRoles(t 
 	require.ElementsMatch(t, []string{existingRoleID, targetRoleID}, members.Members[0].RoleIds)
 }
 
+func TestResolveChallenge_ForbiddenWithoutOrgAdminEvenWhenCallerHoldsScope(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newChallengeTestService(t)
+	orgID := challengeAuthContext(t, ctx).ActiveOrganizationID
+	ctx = withRBACGrants(t, ctx,
+		authz.NewGrant(authz.ScopeOrgRead, orgID),
+		authz.NewGrant(authz.ScopeChatRead, authz.WildcardResource),
+	)
+
+	targetRoleID := seedRole(t, ctx, ti.conn, orgID, mockRole("role_reviewer", "Session reviewer", "session-reviewer", "Reads sessions"))
+	seedGrant(t, ctx, ti.conn, orgID, seededRolePrincipal(t, ctx, ti.conn, orgID, "session-reviewer"), authz.ScopeChatRead, authz.WildcardResource)
+	seedConnectedUser(t, ctx, ti.conn, orgID, "denied-user", "denied@example.test", "Denied User", "workos-denied-user", "membership-denied-user")
+
+	challengeID := uuid.NewString()
+	principalURN := "user:denied-user"
+	chatID := uuid.NewString()
+	insertCHChallengeRow(t, ti, orgID, challengeID, "deny", principalURN, string(authz.ScopeChatRead), authz.ResourceKindChat, chatID, nil, nil)
+	roleSlug := "session-reviewer"
+	resourceKind := authz.ResourceKindChat
+
+	_, err := ti.service.ResolveChallenge(ctx, &gen.ResolveChallengePayload{
+		ApikeyToken:             nil,
+		SessionToken:            nil,
+		ChallengeIds:            []string{challengeID},
+		PrincipalUrn:            principalURN,
+		Scope:                   string(authz.ScopeChatRead),
+		ResourceKind:            &resourceKind,
+		ResourceID:              &chatID,
+		ResolutionType:          "role_assigned",
+		RoleSlug:                &roleSlug,
+		RoleAssignmentConfirmed: new(true),
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+
+	members, err := ti.service.roleMgr.ListMembers(ctx, orgID)
+	require.NoError(t, err)
+	for _, member := range members.Members {
+		require.NotContains(t, member.RoleIds, targetRoleID)
+	}
+	resolutions, err := accessrepo.New(ti.conn).ListChallengeResolutions(ctx, accessrepo.ListChallengeResolutionsParams{
+		OrganizationID: orgID,
+		ChallengeIds:   []string{challengeID},
+	})
+	require.NoError(t, err)
+	require.Empty(t, resolutions)
+}
+
+// No system role holds chat:read, so org:admin is what lets an admin grant
+// it; requiring the granter to hold it would make it impossible to grant.
+func TestResolveChallenge_OrgAdminCanGrantScopeTheyDoNotHold(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newChallengeTestService(t)
+	orgID := challengeAuthContext(t, ctx).ActiveOrganizationID
+	ctx = withRBACGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, orgID))
+
+	targetRoleID := seedRole(t, ctx, ti.conn, orgID, mockRole("role_reviewer", "Session reviewer", "session-reviewer", "Reads sessions"))
+	seedGrant(t, ctx, ti.conn, orgID, seededRolePrincipal(t, ctx, ti.conn, orgID, "session-reviewer"), authz.ScopeChatRead, authz.WildcardResource)
+	seedConnectedUser(t, ctx, ti.conn, orgID, "denied-user", "denied@example.test", "Denied User", "workos-denied-user", "membership-denied-user")
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership-denied-user", []string{"session-reviewer"}).Return(nil, nil).Once()
+
+	challengeID := uuid.NewString()
+	principalURN := "user:denied-user"
+	chatID := uuid.NewString()
+	insertCHChallengeRow(t, ti, orgID, challengeID, "deny", principalURN, string(authz.ScopeChatRead), authz.ResourceKindChat, chatID, nil, nil)
+	roleSlug := "session-reviewer"
+	resourceKind := authz.ResourceKindChat
+
+	result, err := ti.service.ResolveChallenge(ctx, &gen.ResolveChallengePayload{
+		ApikeyToken:             nil,
+		SessionToken:            nil,
+		ChallengeIds:            []string{challengeID},
+		PrincipalUrn:            principalURN,
+		Scope:                   string(authz.ScopeChatRead),
+		ResourceKind:            &resourceKind,
+		ResourceID:              &chatID,
+		ResolutionType:          "role_assigned",
+		RoleSlug:                &roleSlug,
+		RoleAssignmentConfirmed: new(true),
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Resolutions, 1)
+	require.Equal(t, "role_assigned", result.Resolutions[0].ResolutionType)
+
+	members, err := ti.service.roleMgr.ListMembers(ctx, orgID)
+	require.NoError(t, err)
+	require.Len(t, members.Members, 1)
+	require.Equal(t, []string{targetRoleID}, members.Members[0].RoleIds)
+}
+
 func TestResolveChallenge_RoleAssignedRequiresFullRoleConfirmation(t *testing.T) {
 	t.Parallel()
 

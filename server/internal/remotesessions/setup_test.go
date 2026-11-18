@@ -270,11 +270,13 @@ func insertRemoteSession(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 	clientUUID, err := uuid.Parse(clientID)
 	require.NoError(t, err)
 
+	ciphertext, err := testenv.NewEncryptionClient(t).Encrypt([]byte("fixture-access"))
+	require.NoError(t, err)
 	row, err := repo.New(conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
 		SubjectUrn:            principal,
 		UserSessionIssuerID:   userIssuerUUID,
 		RemoteSessionClientID: clientUUID,
-		AccessTokenEncrypted:  "ciphertext",
+		AccessTokenEncrypted:  ciphertext,
 		AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
 		Scopes:                []string{},
 	})

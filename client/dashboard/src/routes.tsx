@@ -1,9 +1,10 @@
-import { Icon, IconProps } from "@/components/ui/Icon";
-import { IconName } from "@/components/ui/Icon/names";
+import type { IconProps } from "@/components/ui/Icon";
+import { Icon } from "@/components/ui/Icon";
+import type { IconName } from "@/components/ui/Icon/names";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import React, { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
-import { ReleaseStage } from "./components/release-stage-badge";
+import type { ReleaseStage } from "./components/release-stage-badge";
 import { useSlugs } from "./contexts/Sdk";
 import { cn } from "./lib/utils";
 
@@ -147,6 +148,12 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
+  channels: {
+    title: "Channels",
+    url: "channels",
+    icon: "messages-square",
+    stage: "beta",
+  },
   assistants: {
     title: "Assistants",
     url: "assistants",
@@ -164,7 +171,7 @@ const ROUTE_STRUCTURE = {
     },
   },
   signalsIntelligence: {
-    title: "Signals intelligence",
+    title: "Signals Intelligence",
     url: "signals-intelligence",
     icon: "radio",
     stage: "preview",
@@ -253,6 +260,12 @@ const ROUTE_STRUCTURE = {
             title: "Add Function",
             url: "function",
           },
+          // Okta applications that match catalog servers. Rolled out behind
+          // okta-mcp-import, which the page checks.
+          okta: {
+            title: "Sync from Okta",
+            url: "sync-from-okta",
+          },
         },
       },
       // The single catalog entry point, and a tab of the MCP index rather than
@@ -288,11 +301,19 @@ const ROUTE_STRUCTURE = {
 
       // The Organization Gateway. A static segment beside `add`,
       // `catalog` and `sources`, with the same latent toolset-slug collision.
-      // It lives under MCP rather than the organization settings because it
-      // is opened from the head of the MCP Servers list.
+      // It lives under MCP rather than the organization settings because the
+      // Project Gateway, opened from the head of the MCP Servers list, shares
+      // its page.
       organizationGateway: {
         title: "Organization Gateway",
         url: "organization-gateway",
+      },
+      // The Organization Gateway limited to this project's servers. It is
+      // opened from the head of the MCP Servers list and is on and off with
+      // the Organization Gateway.
+      projectGateway: {
+        title: "Project Gateway",
+        url: "project-gateway",
       },
       // Gateway Endpoints (meta MCP servers). Addressed by id: a gateway has
       // no slug of its own — routing identity lives on its mcp_endpoints.
@@ -442,8 +463,35 @@ const ROUTE_STRUCTURE = {
     title: "MCP Sessions",
     url: "mcp-sessions",
     icon: "users",
+    subPages: {
+      // One MCP Authentication Provider, chosen with the header's picker.
+      // The index opens the one an old `?issuerId=` link names, else the one
+      // picked last, else the organization's default, else the first.
+      provider: {
+        title: "MCP Authentication Provider",
+        url: ":issuerId",
+        subPages: {
+          connections: { title: "Connections", url: "connections" },
+          mcpServers: { title: "MCP servers", url: "mcp-servers" },
+          settings: { title: "Settings", url: "settings" },
+        },
+      },
+      // The provider list and its detail page before the picker. Static
+      // segments outrank `:issuerId`, so these still resolve.
+      configuration: {
+        title: "Configuration",
+        url: "configuration",
+        legacyRedirect: true,
+        subPages: {
+          issuerDetail: {
+            title: "MCP Authentication Provider",
+            url: ":issuerId",
+            legacyRedirect: true,
+          },
+        },
+      },
+    },
   },
-
   remoteIdentityProviders: {
     title: "Authorization Servers",
     url: "remote-identity-providers",
@@ -510,7 +558,7 @@ const ROUTE_STRUCTURE = {
         title: "Agents",
         url: "agents",
         icon: "bot",
-        stage: "preview",
+        stage: "beta",
         subPages: {
           new: {
             title: "New Agent Identity",
@@ -571,15 +619,35 @@ const ROUTE_STRUCTURE = {
             title: "Agent Permissions",
             url: "permissions",
           },
+          // Which MCP servers the agent calls, and how Speakeasy signs in to
+          // each. Changed here, not by walking the setup wizard again.
+          mcpSignIn: {
+            title: "Agent MCP Sign-in",
+            url: "mcp-sign-in",
+          },
+          // An agent's activity is the changes made to it and by it, so the
+          // tab is named for what it is. People keep `activity`; an agent's
+          // old `activity` links are sent on to this one.
+          auditTrail: {
+            title: "Agent Audit Trail",
+            url: "audit-trail",
+          },
+          // How the agent proves who it is to Speakeasy: its keys, the
+          // platforms that sign in as it, and issuing another key the way
+          // its first one was issued.
           credentials: {
-            title: "Agent Credentials",
+            title: "Agent Sign-in",
+            url: "sign-in",
+          },
+          // The sections this one was renamed from. Kept so the links and
+          // bookmarks that name them still resolve: the page itself sends
+          // the old segment on to the new one.
+          legacyCredentials: {
+            title: "Agent Sign-in",
             url: "credentials",
           },
-          // The section this one was renamed from. Kept so the links and
-          // bookmarks that name it still resolve: the page itself sends the
-          // old segment on to the new one.
           provisioning: {
-            title: "Agent Credentials",
+            title: "Agent Sign-in",
             url: "provisioning",
           },
           sessions: {
@@ -1130,15 +1198,13 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "webhook",
     stage: "beta",
   },
-  // Rolled out behind gram-user-session-issuer-dashboard, which the root
-  // checks; the sidebar hides the entry while it is off.
   userSessionIssuers: {
-    title: "Speakeasy Authorization Servers",
+    title: "MCP Authentication",
     url: "user-session-issuers",
     icon: "key-round",
     subPages: {
       issuerDetail: {
-        title: "Speakeasy Authorization Server",
+        title: "MCP Authentication Provider",
         url: ":issuerId",
       },
     },

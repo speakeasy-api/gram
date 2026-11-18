@@ -1,4 +1,4 @@
-import { GetSessionFn } from "@/elements/types";
+import type { GetSessionFn } from "@/elements/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export function getChatSessionQueryKey(

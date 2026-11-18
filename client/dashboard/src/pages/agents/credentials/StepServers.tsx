@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { useEffect, useId, useState, type JSX } from "react";
-import { KeyCredentialChoice } from "./KeyCredentialChoice";
 import { WizardStepHeader } from "./WizardChrome";
 import type { InventoryServer } from "./useServerInventory";
 
@@ -312,30 +311,6 @@ export function StepServers({
                       </span>
                     </label>
                     <ServerInfoPopover server={server} />
-                    {checked &&
-                      !allServers &&
-                      (server.kind === "Remote" ||
-                        server.kind === "Tunneled") && (
-                        <KeyCredentialChoice
-                          className="w-full px-4 pb-3 pl-12"
-                          serverId={server.id}
-                          serverName={server.name}
-                          value={
-                            selected.find(
-                              (entry) => entry.server.id === server.id,
-                            )?.authClientId
-                          }
-                          onChange={(authClientId) =>
-                            onChange(
-                              selected.map((entry) =>
-                                entry.server.id === server.id
-                                  ? { ...entry, authClientId }
-                                  : entry,
-                              ),
-                            )
-                          }
-                        />
-                      )}
                   </li>
                 );
               })}

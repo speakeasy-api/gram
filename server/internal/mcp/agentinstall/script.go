@@ -314,6 +314,14 @@ install_openclaw_hooks() {
     return 0
   fi
 
+  # A plugin uninstalled and installed again can find its entry left at
+  # enabled false, which OpenClaw keeps, so the reinstalled plugin would load
+  # disabled and record nothing.
+  if ! openclaw config set plugins.entries.speakeasy-observability.enabled true >/dev/null; then
+    hooks_fail "could not enable the plugin in OpenClaw."
+    return 0
+  fi
+
   check_openclaw_hooks "$workdir" "$plugin"
 }
 

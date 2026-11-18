@@ -56,6 +56,7 @@ vi.mock("@/components/page-layout", () => {
       Header: Object.assign(Frame, { Breadcrumbs: () => null }),
       Body: Frame,
     }),
+    useInPageFrame: () => true,
   };
 });
 vi.mock("@/hooks/useScopeCatalogue", () => ({

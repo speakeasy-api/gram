@@ -5,15 +5,22 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/stretchr/testify/require"
+	otellog "go.opentelemetry.io/otel/log"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/tunnel/route"
@@ -21,6 +28,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -112,6 +120,7 @@ func TestRefreshHappened_InternalErrorFollowsTheRemedy(t *testing.T) {
 	}{
 		{name: "administrator", err: newTokenRefreshError("no token endpoint", nil, refreshRemedyAdministrator), want: mcpconnectionattempts.CodeCredentialMisconfigured},
 		{name: "reconnect", err: newTokenRefreshError("unreadable token", nil, refreshRemedyReconnect), want: mcpconnectionattempts.CodeUpstreamReconnectRequired},
+		{name: "stored refresh token unreadable", err: newTokenRefreshError("unreadable token", fmt.Errorf("%w: %w", errStoredTokenUnreadable, errors.New("decrypt")), refreshRemedyReconnect), want: mcpconnectionattempts.CodeStoredSignInUnreadable},
 		{name: "retry", err: newTokenRefreshError("lost the race", nil, refreshRemedyRetry), want: mcpconnectionattempts.CodeInternalError},
 		{name: "plain", err: errors.New("database"), want: mcpconnectionattempts.CodeInternalError},
 	} {
@@ -233,4 +242,120 @@ func TestRefreshFailureRecorded_UnmarkedErrors(t *testing.T) {
 	}
 	require.False(t, RefreshFailureRecorded(nil))
 	require.False(t, RefreshFailureRecorded(fmt.Errorf("unrelated: %w", ErrRemoteSessionUnavailable)))
+}
+
+// stalledPool is a pool whose database accepts connections and never answers.
+func stalledPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	var mu sync.Mutex
+	var held []net.Conn
+	t.Cleanup(func() {
+		_ = listener.Close()
+		mu.Lock()
+		defer mu.Unlock()
+		for _, conn := range held {
+			_ = conn.Close()
+		}
+	})
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			held = append(held, conn)
+			mu.Unlock()
+		}
+	}()
+	pool, err := pgxpool.New(t.Context(), "postgres://stalled:stalled@"+listener.Addr().String()+"/stalled?sslmode=disable")
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+	return pool
+}
+
+func boundSession() remotesessions_repo.RemoteSession {
+	return remotesessions_repo.RemoteSession{RemoteSessionClientID: uuid.New(), UserSessionIssuerID: uuid.New()}
+}
+
+// A database that accepts and never answers holds the refresh only for the lookup's bound.
+func TestInvalidClientHappened_AStalledLookupDoesNotHoldTheRefresh(t *testing.T) {
+	t.Parallel()
+	s := &RefreshService{db: stalledPool(t), connections: mcpconnectionattemptstest.New(t).Recorder}
+
+	started := time.Now()
+	what := s.invalidClientHappened(t.Context(), boundSession())
+
+	require.Equal(t, mcpconnectionattempts.CodeProviderOAuthInvalidClient, what, "an unknown binding never recommends re-registration")
+	require.Less(t, time.Since(started), 3*time.Second, "well under the old 5 second wait")
+}
+
+type refreshExportSink struct {
+	mu      sync.Mutex
+	records []otellog.Record
+}
+
+func (s *refreshExportSink) Publish(_ context.Context, _, _, _ string, record otellog.Record) gcp.PublishResult {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.records = append(s.records, record)
+	return gcp.NewSuccessPublishResult()
+}
+
+func (*refreshExportSink) Close() {}
+
+// storingConn accepts every insert, so the recorder goes on to export.
+type storingConn struct{ driver.Conn }
+
+func (storingConn) PrepareBatch(context.Context, string, ...driver.PrepareBatchOption) (driver.Batch, error) {
+	return storedBatch{}, nil
+}
+
+type storedBatch struct{ driver.Batch }
+
+func (storedBatch) Append(...any) error { return nil }
+func (storedBatch) Send() error         { return nil }
+func (storedBatch) Abort() error        { return nil }
+
+// exportRefresh records one failed refresh through a real recorder and returns its exported attributes.
+func exportRefresh(t *testing.T, outcome remotesessionmetrics.RefreshOutcome, err error) map[string]otellog.Value {
+	t.Helper()
+
+	sink := &refreshExportSink{mu: sync.Mutex{}, records: nil}
+	logsOn := func(context.Context, string) (bool, error) { return true, nil }
+	recorder := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), storingConn{}, logsOn, mcpconnectionattempts.WithExport(sink))
+	s := &RefreshService{connections: recorder}
+	attribution := RefreshIn(mcpconnectionattempts.ServerScope("org-test", uuid.New(), uuid.New(), mcpconnectionattempts.AppDCR))
+	client := remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow{IssuerUrl: "https://login.example.com:8443"}
+
+	standalone, _ := s.recordRefresh(t.Context(), attribution, remotesessions_repo.RemoteSession{}, client, remotesessionmetrics.RefreshTriggerRequest, outcome, err)
+	require.True(t, standalone)
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	require.Len(t, sink.records, 1)
+	got := make(map[string]otellog.Value)
+	sink.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		got[kv.Key] = kv.Value
+		return true
+	})
+	return got
+}
+
+func TestRecordRefresh_UnreadableStoredSignInDoesNotNameTheProvider(t *testing.T) {
+	t.Parallel()
+
+	got := exportRefresh(t, remotesessionmetrics.RefreshOutcomeInternalError, fmt.Errorf("%w: %w", errStoredTokenUnreadable, errors.New("decrypt")))
+	require.Equal(t, mcpconnectionattempts.CodeStoredSignInUnreadable.String(), got[string(attr.ErrorTypeKey)].AsString())
+	require.NotContains(t, got, string(attr.ServerAddressKey))
+	require.NotContains(t, got, string(attr.ServerPortKey))
+}
+
+func TestRecordRefresh_ProviderRefusalNamesTheProvider(t *testing.T) {
+	t.Parallel()
+
+	got := exportRefresh(t, remotesessionmetrics.RefreshOutcomeInvalidGrant, errors.New("invalid_grant"))
+	require.Equal(t, mcpconnectionattempts.CodeInvalidGrant.String(), got[string(attr.ErrorTypeKey)].AsString())
+	require.Equal(t, "login.example.com", got[string(attr.ServerAddressKey)].AsString())
 }

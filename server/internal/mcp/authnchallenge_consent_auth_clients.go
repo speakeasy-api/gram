@@ -193,7 +193,7 @@ func (s *Service) consentAuthChoices(ctx context.Context, organizationID string,
 		ids = append(ids, server.id)
 	}
 	queries := upstreamclientsrepo.New(s.db)
-	rows, err := queries.ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{OrganizationID: organizationID, McpServerIds: ids})
+	offers, err := s.configuredAuthOffers(ctx, organizationID, ids)
 	if err != nil {
 		return nil, fmt.Errorf("list consent auth clients: %w", err)
 	}
@@ -203,12 +203,9 @@ func (s *Service) consentAuthChoices(ctx context.Context, organizationID string,
 		return nil, fmt.Errorf("list remembered auth clients: %w", err)
 	}
 	for _, row := range rememberedRows {
-		remembered[row.McpServerID] = row.AuthClientID
-	}
-
-	byServer := map[uuid.UUID][]upstreamclientsrepo.ListServerConsentAuthClientsRow{}
-	for _, row := range rows {
-		byServer[row.McpServerID] = append(byServer[row.McpServerID], row)
+		if row.AuthClientID.Valid {
+			remembered[row.McpServerID] = row.AuthClientID.UUID
+		}
 	}
 
 	// A personal connection or identity-provider sign-in belongs to a person;
@@ -217,16 +214,14 @@ func (s *Service) consentAuthChoices(ctx context.Context, organizationID string,
 
 	choices := make(map[uuid.UUID]*consentServerAuth, len(servers))
 	for _, server := range servers {
-		serverRows := byServer[server.id]
+		offer, known := offers[server.id]
 		auth := &consentServerAuth{ServerID: server.id, Status: consentAuthChoose, Options: nil}
 		choices[server.id] = auth
 
-		offered := slices.DeleteFunc(slices.Clone(serverRows), func(row upstreamclientsrepo.ListServerConsentAuthClientsRow) bool {
-			return !row.AuthClientID.Valid
-		})
+		offered := offer.clients
 		switch {
 		case len(offered) > 0:
-		case len(serverRows) > 0 && serverRows[0].UpstreamAuthPending:
+		case !known || offer.pending:
 			// Upstream credentials no auth client records yet are incomplete
 			// setup, never a server needing none.
 			auth.Status = consentAuthSetupIncomplete
@@ -295,6 +290,9 @@ func personalReadiness(clientType string, registrationID uuid.NullUUID, cards []
 			continue
 		}
 		status := cardStatus(card)
+		if status == gatewayServerUnavailable && card.reconnectsDespiteOutage() {
+			status = gatewayServerReconnect
+		}
 		if clientType == authz.AuthClientTypeEMA {
 			switch status {
 			case gatewayServerChained, gatewayServerChainPending, gatewayServerUnavailable:
@@ -479,6 +477,90 @@ func (s *Service) gatewayConsentAuthChoices(ctx context.Context, r *http.Request
 		}
 	}
 	return s.consentAuthChoices(ctx, endpoint.OrganizationID, subject, servers, cards, picked, false)
+}
+
+// gatewayConsentServiceChoices offers a choice between a member's connected services where typed auth clients are not enforced.
+// It selects the page's pick, else the person's last approved service, else the first, preferring one not in an outage.
+func (s *Service) gatewayConsentServiceChoices(ctx context.Context, r *http.Request, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, members []metaMember, cards []remoteSessionCard) (map[uuid.UUID]*consentServerAuth, error) {
+	choices := map[uuid.UUID]*consentServerAuth{}
+	outages := map[uuid.UUID]bool{}
+	ids := make([]uuid.UUID, 0, len(members))
+	for _, member := range members {
+		if member.backend != metaMemberBackendProxied {
+			continue
+		}
+		var options []consentAuthClientOption
+		for _, card := range cards {
+			if !usableConsentCard(card) || !cardServesMember(card, member) {
+				continue
+			}
+			id, err := uuid.Parse(card.ClientID)
+			if err != nil {
+				continue
+			}
+			clientType := authz.AuthClientTypeRemoteSession
+			if card.Chained && !card.Connected {
+				clientType = authz.AuthClientTypeEMA
+			}
+			name := card.IssuerDisplay
+			if card.ConnectedAs != "" {
+				name += " (" + card.ConnectedAs + ")"
+			}
+			options = append(options, consentAuthClientOption{ID: id, Name: name, Type: clientType, State: consentClientReady, ConnectClientID: "", Selected: false, registrationID: uuid.NullUUID{UUID: id, Valid: true}})
+			if card.Unavailable {
+				outages[id] = true
+			}
+		}
+		if len(options) < 2 {
+			continue
+		}
+		choices[member.serverID] = &consentServerAuth{ServerID: member.serverID, Status: consentAuthChoose, Options: options}
+		ids = append(ids, member.serverID)
+	}
+	if len(choices) == 0 {
+		return choices, nil
+	}
+	rows, err := upstreamclientsrepo.New(s.db).ListRememberedAuthClients(ctx, upstreamclientsrepo.ListRememberedAuthClientsParams{SubjectUrn: subject.String(), OrganizationID: endpoint.OrganizationID, McpServerIds: ids})
+	if err != nil {
+		return nil, fmt.Errorf("list remembered upstream clients: %w", err)
+	}
+	remembered := make(map[uuid.UUID]uuid.UUID, len(rows))
+	for _, row := range rows {
+		if row.RemoteSessionClientID.Valid {
+			remembered[row.McpServerID] = row.RemoteSessionClientID.UUID
+		}
+	}
+	query := r.URL.Query()
+	for _, member := range members {
+		auth := choices[member.serverID]
+		if auth == nil {
+			continue
+		}
+		picked := uuid.Nil
+		if id, err := uuid.Parse(query.Get(gatewayAuthClientParam + member.slug)); err == nil {
+			picked = id
+		}
+		selectConsentAuthClient(auth, picked, remembered[member.serverID])
+		if selected := auth.Selected(); selected != nil && outages[selected.ID] && selected.ID != picked && selected.ID != remembered[member.serverID] {
+			// A default lands on a working connection when there is one.
+			if healthy := slices.IndexFunc(auth.Options, func(o consentAuthClientOption) bool { return !outages[o.ID] }); healthy >= 0 {
+				selected.Selected = false
+				auth.Options[healthy].Selected = true
+			}
+		}
+	}
+	return choices, nil
+}
+
+// selectedServices is the service each choice selects.
+func selectedServices(choices map[uuid.UUID]*consentServerAuth) map[uuid.UUID]uuid.UUID {
+	selected := make(map[uuid.UUID]uuid.UUID, len(choices))
+	for serverID, auth := range choices {
+		if option := auth.Selected(); option != nil {
+			selected[serverID] = option.ID
+		}
+	}
+	return selected
 }
 
 // resolveMemberAuthChoice is the resolution a gateway member's credential

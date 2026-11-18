@@ -1,12 +1,7 @@
 "use client";
 
-import {
-  PropsWithChildren,
-  useCallback,
-  useEffect,
-  useState,
-  type FC,
-} from "react";
+import type { PropsWithChildren } from "react";
+import { useCallback, useEffect, useState, type FC } from "react";
 import { XIcon, Paperclip, FileText } from "lucide-react";
 import {
   AttachmentPrimitive,

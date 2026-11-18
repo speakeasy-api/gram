@@ -47,6 +47,7 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 			from          *string
 			to            *string
 			category      string
+			origin        *string
 			apikeyToken   *string
 			sessionToken  *string
 			err           error
@@ -107,6 +108,15 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 		if !(category == "configuration" || category == "security") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("category", category, []any{"configuration", "security"}))
 		}
+		originRaw := qp.Get("origin")
+		if originRaw != "" {
+			origin = &originRaw
+		}
+		if origin != nil {
+			if !(*origin == "user" || *origin == "system") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("origin", *origin, []any{"user", "system"}))
+			}
+		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
@@ -118,7 +128,7 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListPayload(cursor, projectSlug, actorID, action, subjectType, subjectID, subjectIds, actingSurface, from, to, category, apikeyToken, sessionToken)
+		payload = NewListPayload(cursor, projectSlug, actorID, action, subjectType, subjectID, subjectIds, actingSurface, from, to, category, origin, apikeyToken, sessionToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -314,6 +324,7 @@ func DecodeListFacetsRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 		var (
 			projectSlug  *string
 			category     string
+			origin       *string
 			apikeyToken  *string
 			sessionToken *string
 			err          error
@@ -332,6 +343,15 @@ func DecodeListFacetsRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 		if !(category == "configuration" || category == "security") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("category", category, []any{"configuration", "security"}))
 		}
+		originRaw := qp.Get("origin")
+		if originRaw != "" {
+			origin = &originRaw
+		}
+		if origin != nil {
+			if !(*origin == "user" || *origin == "system") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("origin", *origin, []any{"user", "system"}))
+			}
+		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
@@ -343,7 +363,7 @@ func DecodeListFacetsRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListFacetsPayload(projectSlug, category, apikeyToken, sessionToken)
+		payload = NewListFacetsPayload(projectSlug, category, origin, apikeyToken, sessionToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

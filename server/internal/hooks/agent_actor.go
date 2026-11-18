@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	redisCache "github.com/go-redis/cache/v9"
-	"github.com/google/uuid"
 	"goa.design/goa/v3/security"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
@@ -42,25 +41,6 @@ func clearAgentAccountIdentity(meta *SessionMetadata) {
 func isAgentActor(ctx context.Context) bool {
 	_, ok := deviceagenttoken.EffectiveAgent(ctx)
 	return ok
-}
-
-// actingAgentID returns the id of the agent the request acts for, for stamping
-// onto the session's chat row. It reads the server-set actor rather than
-// anything the batch reports, because a client that could name its own agent
-// could attribute its session to any agent in the organization. An agent
-// principal's id is validated as a canonical UUID when the actor is parsed, so
-// a parse failure here means the principal was malformed and the session is
-// left unattributed rather than stamped with a guess.
-func actingAgentID(ctx context.Context) (uuid.UUID, bool) {
-	agent, ok := deviceagenttoken.EffectiveAgent(ctx)
-	if !ok {
-		return uuid.Nil, false
-	}
-	id, err := uuid.Parse(agent.ID)
-	if err != nil {
-		return uuid.Nil, false
-	}
-	return id, true
 }
 
 // workloadDevice returns the workload issuer and subject of the device that

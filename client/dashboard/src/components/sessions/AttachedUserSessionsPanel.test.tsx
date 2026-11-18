@@ -64,9 +64,7 @@ describe("AttachedUserSessionsPanel", () => {
     await waitFor(() =>
       expect(save).toHaveBeenCalledWith("session-one", ["agent-two"]),
     );
-    expect(
-      screen.getByText(/does not revoke the shared upstream session/),
-    ).toBeTruthy();
+    expect(screen.getByText(/does not sign the account out/)).toBeTruthy();
   });
   it("respects per-session eligibility", () => {
     render(

@@ -18,7 +18,7 @@ import (
 // when it leaves the server out, and fails on a duplicate list row.
 func eligibleIssuers(t *testing.T, ctx context.Context, si *instance, serverID uuid.UUID) (listed, got uuid.UUID) {
 	t.Helper()
-	rows, err := si.q.ListEligibleServers(ctx, si.orgID)
+	rows, err := si.q.ListEligibleServers(ctx, repo.ListEligibleServersParams{TypedAuthEnforced: false, OrganizationID: si.orgID})
 	require.NoError(t, err)
 	for _, row := range rows {
 		if row.ID == serverID {

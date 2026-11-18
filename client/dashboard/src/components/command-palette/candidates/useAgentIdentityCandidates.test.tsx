@@ -112,6 +112,7 @@ describe("useAgentIdentityCandidates", () => {
         null,
       ],
       enabled: false,
+      staleTime: 30_000,
       retry: false,
       throwOnError: false,
     });
@@ -178,6 +179,7 @@ describe("useAgentIdentityCandidates", () => {
     expect(queryEnabled()).toBe(true);
     expect(result.current.map((candidate) => candidate.id)).toEqual([
       "agent-identity:agent-one",
+      "agent-sign-in:agent-one",
     ]);
     expect(mocks.queryOptions?.queryKey).toContain("rbac-override:none");
   });
@@ -200,7 +202,6 @@ describe("useAgentIdentityCandidates", () => {
       title: "Release Agent",
       detail: "Agent identity",
       keywords: ["agent", "agent/one", "agent:agent/one"],
-      fuzzyOnly: true,
       icon: "bot",
       group: "Identities",
       verbs: ["open"],
@@ -211,7 +212,7 @@ describe("useAgentIdentityCandidates", () => {
       "/acme/projects/request-project/identities/agent%3Aagent%2Fone/overview?range=30d&from=2025-01-01&to=2025-01-31",
     );
   });
-  it("includes later pages and stops fetching when closed or pagination fails", async () => {
+  it("includes later pages and retries failed pagination on the next open", async () => {
     mocks.queryData = {
       pages: [
         { items: [{ id: "first", name: "Build Agent" }] },
@@ -228,7 +229,9 @@ describe("useAgentIdentityCandidates", () => {
     );
     expect(result.current.map((candidate) => candidate.title)).toEqual([
       "Build Agent",
+      "Build Agent · Agent sign-in",
       "Release Agent",
+      "Release Agent · Agent sign-in",
     ]);
     expect(mocks.fetchNextPage).toHaveBeenCalledTimes(1);
     await act(async () => {
@@ -237,10 +240,11 @@ describe("useAgentIdentityCandidates", () => {
     mocks.isFetchNextPageError = true;
     rerender({ enabled: true });
     expect(mocks.fetchNextPage).toHaveBeenCalledTimes(1);
-    mocks.isFetchNextPageError = false;
     rerender({ enabled: false });
     expect(result.current).toEqual([]);
     expect(mocks.fetchNextPage).toHaveBeenCalledTimes(1);
+    rerender({ enabled: true });
+    expect(mocks.fetchNextPage).toHaveBeenCalledTimes(2);
   });
 
   it("does not offer the project-scoped alias in the org shell despite the request default", () => {
@@ -260,6 +264,8 @@ describe("useAgentIdentityCandidates", () => {
     );
     expect(result.current.map((candidate) => candidate.id)).toEqual([
       "agent-identity:editable",
+      "agent-sign-in:editable",
+      "agent-mcp-sign-in:editable",
     ]);
     mocks.routeProjectSlug = "project-one";
     mocks.projectSlug = "project-one";
@@ -293,12 +299,40 @@ describe("useAgentIdentityCandidates", () => {
     expect(aliases).toHaveLength(1);
     expect(aliases[0]).toMatchObject({
       title: "Worker · Permissions",
-      fuzzyOnly: true,
       keywords: expect.arrayContaining(["inference", "permissions"]),
     });
     void aliases[0]!.run("open");
     expect(mocks.navigate).toHaveBeenCalledWith(
       "/acme/projects/project-one/identities/agent%3Aeditable/permissions?range=30d&from=2025-01-01&to=2025-01-31",
+    );
+  });
+
+  it("offers the MCP sign-in tab only for agents the reader can change", () => {
+    mocks.queryData = {
+      pages: [
+        {
+          items: [
+            { id: "read_only", name: "Viewer", permissions: { write: false } },
+            { id: "editable", name: "Worker", permissions: { write: true } },
+          ],
+        },
+      ],
+    };
+    const { result } = renderHook(() =>
+      useAgentIdentityCandidates({ enabled: true }),
+    );
+    const signIns = result.current.filter((candidate) =>
+      candidate.id.startsWith("agent-mcp-sign-in:"),
+    );
+    expect(signIns).toHaveLength(1);
+    expect(signIns[0]).toMatchObject({
+      title: "Worker · MCP sign-in",
+      kind: "person",
+      keywords: expect.arrayContaining(["mcp", "reconnect"]),
+    });
+    void signIns[0]!.run("open");
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      "/acme/projects/project-one/identities/agent%3Aeditable/mcp-sign-in?range=30d&from=2025-01-01&to=2025-01-31",
     );
   });
 });

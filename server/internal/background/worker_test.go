@@ -2,13 +2,18 @@ package background
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/interceptor"
+	"go.temporal.io/sdk/temporal"
 
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -41,6 +46,7 @@ func TestWorkers_Run_RegistersSchedules(t *testing.T) {
 			chatAnalysisSweepScheduleID,
 			aiUsagePollerCoordinatorScheduleID,
 			deviceIntegrationSyncCoordinatorScheduleID,
+			memoryDigestsScheduleID,
 			indexToolsetSweepScheduleID(string(env.Queue())),
 		}, "the long-running worker owns the recurring sweeps")
 	}, 60*time.Second, 250*time.Millisecond, "Run should register the recurring schedules")
@@ -104,46 +110,135 @@ func scheduleIDs(ctx context.Context, c client.Client) ([]string, error) {
 	return ids, nil
 }
 
+// scheduleCreateRecorder is a Temporal client interceptor that records every
+// schedule the client creates. Registration tests read schedule IDs from it
+// instead of from the schedule list: listing is served by eventually
+// consistent visibility, which can briefly omit a schedule that was just
+// created, so an exact-set assertion polled against it can pass while the
+// expected set is stale and then fail on later, unrelated runs.
+type scheduleCreateRecorder struct {
+	interceptor.ClientInterceptorBase
+
+	mu sync.Mutex
+
+	// created holds the IDs of schedules the server created, in order.
+	created []string
+
+	// failed holds creation errors by schedule ID, excluding
+	// temporal.ErrScheduleAlreadyRunning, which re-registration expects.
+	failed map[string]error
+}
+
+func (r *scheduleCreateRecorder) InterceptClient(next interceptor.ClientOutboundInterceptor) interceptor.ClientOutboundInterceptor {
+	return &scheduleCreateRecorderOutbound{
+		ClientOutboundInterceptorBase: interceptor.ClientOutboundInterceptorBase{Next: next},
+		recorder:                      r,
+	}
+}
+
+func (r *scheduleCreateRecorder) record(id string, err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	switch {
+	case err == nil:
+		r.created = append(r.created, id)
+	case errors.Is(err, temporal.ErrScheduleAlreadyRunning):
+	default:
+		r.failed[id] = err
+	}
+}
+
+// requireCreated returns the IDs of the schedules created so far and fails the
+// test if any creation was rejected.
+func (r *scheduleCreateRecorder) requireCreated(t *testing.T) []string {
+	t.Helper()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	require.Empty(t, r.failed, "every schedule registration should succeed")
+	return slices.Clone(r.created)
+}
+
+type scheduleCreateRecorderOutbound struct {
+	interceptor.ClientOutboundInterceptorBase
+
+	recorder *scheduleCreateRecorder
+}
+
+func (o *scheduleCreateRecorderOutbound) CreateSchedule(ctx context.Context, in *interceptor.ScheduleClientCreateInput) (client.ScheduleHandle, error) {
+	handle, err := o.Next.CreateSchedule(ctx, in)
+	o.recorder.record(in.Options.ID, err)
+	if err != nil {
+		return nil, fmt.Errorf("create schedule %s: %w", in.Options.ID, err)
+	}
+	return handle, nil
+}
+
+// withScheduleCreateRecorder returns a copy of env whose client records the
+// schedules it creates. The copy shares env's connection and namespace.
+func withScheduleCreateRecorder(t *testing.T, env *tenv.Environment) (*tenv.Environment, *scheduleCreateRecorder) {
+	t.Helper()
+
+	recorder := &scheduleCreateRecorder{
+		ClientInterceptorBase: interceptor.ClientInterceptorBase{},
+		mu:                    sync.Mutex{},
+		created:               nil,
+		failed:                map[string]error{},
+	}
+	c, err := client.NewClientFromExisting(env.Client(), client.Options{
+		Namespace:    string(env.Namespace()),
+		Logger:       testenv.NewLogger(t),
+		Interceptors: []interceptor.ClientInterceptor{recorder},
+	})
+	require.NoError(t, err, "create recording temporal client")
+	t.Cleanup(c.Close)
+
+	return tenv.NewEnvironment(c, env.Namespace(), env.Queue()), recorder
+}
+
 // PR previews poll their own queue in the dev namespace. They must register
 // only the schedules whose ID names their queue, never the fixed-ID ones that
 // dev owns, or they re-point dev's schedules at the preview queue.
 func TestWorkers_RegisterSchedulesSkipsFleetWideOnPreviewQueue(t *testing.T) {
 	t.Parallel()
-	env, _ := infra.NewTemporalEnv(t)
-	ctx := t.Context()
-	newSchedulingWorkers(t, env).registerSchedules(ctx)
+	previewEnv, _ := infra.NewTemporalEnv(t)
+	env, recorder := withScheduleCreateRecorder(t, previewEnv)
+	newSchedulingWorkers(t, env).registerSchedules(t.Context())
 
 	queue := string(env.Queue())
-	want := []string{
+	require.ElementsMatch(t, []string{
 		slackDirectorySweepScheduleID(env.Queue()),
 		oktaApplicationSyncCoordinatorScheduleID(queue),
 		fmt.Sprintf("v1:trusted-delegation-cleanup:%s", queue),
+		fmt.Sprintf("v1:channels-retention:%s", queue),
 		fmt.Sprintf("v1:tenant-dimensions-sync:%s", queue),
 		indexToolsetSweepScheduleID(queue),
-	}
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		ids, err := scheduleIDs(ctx, env.Client())
-		assert.NoError(c, err)
-		assert.ElementsMatch(c, want, ids)
-	}, 30*time.Second, 250*time.Millisecond)
+	}, recorder.requireCreated(t))
 }
 
 func TestWorkers_RegisterSchedulesPreservesManualPauses(t *testing.T) {
 	t.Parallel()
-	env := newSharedQueueTemporalEnv(t)
+	env, recorder := withScheduleCreateRecorder(t, newSharedQueueTemporalEnv(t))
 	workers := newSchedulingWorkers(t, env)
 	ctx := t.Context()
 	workers.registerSchedules(ctx)
-	var ids []string
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		var err error
-		ids, err = scheduleIDs(ctx, env.Client())
-		assert.NoError(c, err)
-		assert.Len(c, ids, 32, "all unconditional schedules should be registered")
-		assert.Contains(c, ids, fmt.Sprintf("v1:directory-review-emails:%s", env.Queue()), "directory review emails are an unconditional schedule")
-		assert.Contains(c, ids, fmt.Sprintf("v1:trusted-delegation-cleanup:%s", env.Queue()), "delegation cleanup is an unconditional schedule")
-		assert.Contains(c, ids, fmt.Sprintf("v1:mcp-finding-evidence-cleanup:%s", env.Queue()), "MCP finding evidence cleanup is an unconditional schedule")
-	}, 30*time.Second, 250*time.Millisecond)
+
+	ids := recorder.requireCreated(t)
+	queue := string(env.Queue())
+	require.Subset(t, ids, []string{
+		killswitchMaintenanceScheduleID,
+		assistantReaperScheduleID,
+		chatAnalysisSweepScheduleID,
+		organizationEncryptionSweepScheduleID(queue),
+		internalSessionIssuerKeySweepScheduleID(queue),
+		fmt.Sprintf("v1:directory-review-emails:%s", queue),
+		fmt.Sprintf("v1:trusted-delegation-cleanup:%s", queue),
+		fmt.Sprintf("v1:mcp-finding-evidence-cleanup:%s", queue),
+		fmt.Sprintf("v1:channels-retention:%s", queue),
+		indexToolsetSweepScheduleID(queue),
+	}, "the shared queue registers both the fleet-wide and the per-queue schedules")
+
 	sc := env.Client().ScheduleClient()
 	windows := make(map[string]time.Duration, len(ids))
 	for _, id := range ids {
@@ -168,6 +263,7 @@ func TestWorkers_RegisterSchedulesPreservesManualPauses(t *testing.T) {
 		}))
 	}
 	workers.registerSchedules(ctx)
+	require.Equal(t, ids, recorder.requireCreated(t), "re-registration should find every schedule already present")
 	for _, id := range ids {
 		description, err := sc.GetHandle(ctx, id).Describe(ctx)
 		require.NoError(t, err)

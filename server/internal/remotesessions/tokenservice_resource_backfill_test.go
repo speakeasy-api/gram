@@ -62,6 +62,43 @@ func TestResolveAccessToken_RefreshBackfillsNullResource(t *testing.T) {
 	require.Equal(t, spy.form.Get("resource"), conv.FromPGTextOrEmpty[string](sess.Resource), "the stored binding must equal the form resource the grant used")
 }
 
+func TestResolveAccessToken_GlobalIssuerRefreshFallback(t *testing.T) {
+	t.Parallel()
+
+	for _, resource := range []string{"", "https://global-fallback.example.com/mcp"} {
+		t.Run(resource, func(t *testing.T) {
+			t.Parallel()
+			var spy upstreamSpy
+			ctx, mgr, ti, clientID, _ := setupRefreshFixtureWithHandler(t, "global-fallback", pgtype.Text{}, spyRefreshHandler(&spy))
+			// A NULL organization and project represent a platform-global issuer.
+			globalIssuer, err := testrepo.New(ti.conn).InsertOrganizationTierUserSessionIssuerFixture(ctx, testrepo.InsertOrganizationTierUserSessionIssuerFixtureParams{
+				OrganizationID:     pgtype.Text{},
+				Slug:               "global-fallback",
+				AuthnChallengeMode: "interactive",
+				SessionDuration:    pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true},
+			})
+			require.NoError(t, err)
+			organizationID, err := repo.New(ti.conn).GetUserSessionIssuerOrganizationID(ctx, globalIssuer)
+			require.NoError(t, err, "a platform-global issuer must not fail scanning a NULL organization")
+			require.Empty(t, organizationID)
+
+			subject := urn.NewUserSubject("global-fallback-subject")
+			seedExpiredRemoteSession(t, ctx, ti, testenv.NewEncryptionClient(t), subject, globalIssuer, clientID)
+			if resource != "" {
+				attachClientUpstream(t, ctx, ti, clientID, "global-fallback-upstream", resource)
+			}
+			token, err := mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, clientID, subject, "")
+			require.NoError(t, err)
+			require.NoError(t, spy.handlerErr)
+			require.Equal(t, "refreshed-access", token)
+			require.Equal(t, resource, spy.form.Get("resource"))
+			session := getRemoteSessionRow(t, ctx, ti, clientID, subject)
+			require.Equal(t, resource, conv.FromPGTextOrEmpty[string](session.Resource))
+			require.Equal(t, resource != "", session.Resource.Valid)
+		})
+	}
+}
+
 func TestResolveAccessToken_RefreshNeverOverwritesStoredResource(t *testing.T) {
 	t.Parallel()
 

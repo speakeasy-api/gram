@@ -1,6 +1,8 @@
 package mcp
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/google/uuid"
@@ -83,4 +85,65 @@ func TestDirectConsentPickDoesNotBuildCardsForInapplicableEndpoints(t *testing.T
 			require.Nil(t, picks)
 		})
 	}
+}
+
+// A direct server with one healthy and one outage service, and no preference, defaults to the healthy one.
+func TestDirectConsentPickSkipsAnOutageServiceWithoutAPreference(t *testing.T) {
+	t.Parallel()
+	serverID := uuid.New()
+	healthy, outage := uuid.New(), uuid.New()
+	endpoint := &ResolvedMcpEndpoint{McpServerID: validUUID(serverID)}
+	cards := []remoteSessionCard{
+		{ClientID: outage.String(), Connected: true, Unavailable: true},
+		{ClientID: healthy.String(), Connected: true},
+	}
+	require.Equal(t, map[uuid.UUID]uuid.UUID{serverID: healthy}, chooseConsentUpstreamClientPicks(endpoint, nil, cards, nil))
+	require.Equal(t, map[uuid.UUID]uuid.UUID{serverID: outage}, chooseConsentUpstreamClientPicks(endpoint, nil, cards, map[uuid.UUID]uuid.UUID{serverID: outage}), "a preference still picks the outage service")
+}
+
+// A connection the upstream refused stays refused during an outage, so consent neither defaults to it nor offers it.
+func TestConsentSkipsARefusedConnectionInAnOutage(t *testing.T) {
+	t.Parallel()
+	for name, refused := range map[string]remoteSessionCard{
+		"rejected":           {Connected: true, Unavailable: true, Rejected: true},
+		"inactive":           {Connected: true, Unavailable: true, Inactive: true},
+		"identity reconnect": {Connected: true, Unavailable: true, IdentityReconnect: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			serverID := uuid.New()
+			refusedID := uuid.New()
+			refused.ClientID = refusedID.String()
+			endpoint := &ResolvedMcpEndpoint{McpServerID: validUUID(serverID)}
+			require.Empty(t, chooseConsentUpstreamClientPicks(endpoint, nil, []remoteSessionCard{refused}, nil))
+			require.Empty(t, chooseConsentUpstreamClientPicks(endpoint, nil, []remoteSessionCard{refused}, map[uuid.UUID]uuid.UUID{serverID: refusedID}), "a preference can't revive it")
+
+			healthyID := uuid.New()
+			member := metaMember{slug: "db", serverID: serverID, backend: metaMemberBackendProxied, associatedClients: map[uuid.UUID]bool{refusedID: true, healthyID: true}}
+			cards := []remoteSessionCard{refused, {ClientID: healthyID.String(), Connected: true}}
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+			choices, err := (&Service{}).gatewayConsentServiceChoices(t.Context(), request, endpoint, urn.NewUserSubject("user_1"), []metaMember{member}, cards)
+			require.NoError(t, err)
+			require.Empty(t, choices, "one usable connection leaves nothing to choose between")
+		})
+	}
+}
+
+// An outage alone leaves a connection in place: it is still picked and offered.
+func TestConsentKeepsAHealthyConnectionInAnOutage(t *testing.T) {
+	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_consent_outage_offer")
+	require.NoError(t, err)
+	serverID := uuid.New()
+	outageID, healthyID := uuid.New(), uuid.New()
+	outage := remoteSessionCard{ClientID: outageID.String(), Connected: true, Unavailable: true}
+	endpoint := &ResolvedMcpEndpoint{McpServerID: validUUID(serverID), OrganizationID: "org_1"}
+	require.Equal(t, map[uuid.UUID]uuid.UUID{serverID: outageID}, chooseConsentUpstreamClientPicks(endpoint, nil, []remoteSessionCard{outage}, nil))
+
+	member := metaMember{slug: "db", serverID: serverID, backend: metaMemberBackendProxied, associatedClients: map[uuid.UUID]bool{outageID: true, healthyID: true}}
+	cards := []remoteSessionCard{outage, {ClientID: healthyID.String(), Connected: true}}
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	choices, err := (&Service{db: pool}).gatewayConsentServiceChoices(t.Context(), request, endpoint, urn.NewUserSubject("user_1"), []metaMember{member}, cards)
+	require.NoError(t, err)
+	require.Len(t, choices[serverID].Options, 2)
 }

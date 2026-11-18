@@ -118,6 +118,7 @@ export function setGatewaySessionFacetsData(
   queryKeyBase: [
     parameters: {
       gatewayId?: string | undefined;
+      projectId?: string | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
     },
@@ -134,6 +135,7 @@ export function invalidateGatewaySessionFacets(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       gatewayId?: string | undefined;
+      projectId?: string | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
     }]

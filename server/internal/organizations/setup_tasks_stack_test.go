@@ -49,21 +49,23 @@ func TestService_ListSetupTasksHidesCardsTheStackRulesOut(t *testing.T) {
 	everyDefaultCard := []string{
 		"identity-provider", "enable-logging", "anthropic-observability",
 		"agent-observability", "instrument-agents", "confirm-traffic", "additional-agent-config",
-		"mcp-distribution", "create-marketplace", "distribute-servers", "platform-mcp",
-		"anthropic-admin-controls", "configure-policies",
+		"distribute-servers",
+		"claude-desktop", "claude-plugin-registration", "claude-org-instructions",
+		"platform-mcp", "anthropic-admin-controls", "configure-policies",
 	}
 
 	// Without a recorded stack nothing is hidden: an unknown stack is not an
 	// unsupported one.
 	require.Equal(t, everyDefaultCard, listedSetupTaskKeys(ctx, t, ti))
 
-	// Cursor and OpenAI lose the Anthropic cards and keep MCP distribution,
-	// which the device agent delivers on any stack.
+	// Cursor and OpenAI lose the Anthropic cards, including Set up Claude
+	// Desktop, and keep MCP distribution, which the device agent delivers on
+	// any stack.
 	recordStack(ctx, t, ti, ac.ActiveOrganizationID, [2]string{"Cursor", "cursor-teams"}, [2]string{"OpenAI", "openai-enterprise"})
 	require.Equal(t, []string{
 		"identity-provider", "enable-logging",
 		"agent-observability", "instrument-agents", "confirm-traffic", "additional-agent-config",
-		"mcp-distribution", "create-marketplace", "distribute-servers", "platform-mcp",
+		"distribute-servers", "platform-mcp",
 		"configure-policies",
 	}, listedSetupTaskKeys(ctx, t, ti))
 
@@ -73,7 +75,7 @@ func TestService_ListSetupTasksHidesCardsTheStackRulesOut(t *testing.T) {
 	require.Equal(t, []string{
 		"identity-provider", "enable-logging",
 		"agent-observability", "instrument-agents", "confirm-traffic",
-		"mcp-distribution", "create-marketplace", "distribute-servers", "platform-mcp",
+		"distribute-servers", "platform-mcp",
 		"configure-policies",
 	}, listedSetupTaskKeys(ctx, t, ti))
 

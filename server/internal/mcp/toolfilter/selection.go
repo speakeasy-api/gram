@@ -430,9 +430,6 @@ func AnnotationsMatch(annotations *types.ToolAnnotations, values []string) bool 
 // FilterToolsBySelection intersects tools with a session selection: a tool
 // passes iff an allow entry includes it by name or a live annotation grant
 // matches its declared hints. A nil selection returns the slice untouched.
-// Proxy/external-MCP placeholders are dropped from every restrictive
-// selection: their callable names exist only after upstream unfolding, so
-// they fail closed.
 func FilterToolsBySelection(tools []*types.Tool, sel *SessionSelection) []*types.Tool {
 	if sel == nil {
 		return tools
@@ -440,7 +437,7 @@ func FilterToolsBySelection(tools []*types.Tool, sel *SessionSelection) []*types
 
 	filtered := make([]*types.Tool, 0, len(tools))
 	for _, tool := range tools {
-		if tool == nil || conv.IsProxyTool(tool) {
+		if tool == nil {
 			continue
 		}
 		base, err := conv.ToBaseTool(tool)

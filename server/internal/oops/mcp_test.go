@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -582,4 +583,44 @@ func TestNewMissingRequiredClientCapabilityError_MarshalsSpecShape(t *testing.T)
 	status, ok := mcpErr.Code.MandatedHTTPStatus()
 	require.True(t, ok)
 	require.Equal(t, http.StatusBadRequest, status)
+}
+
+func TestMCPErrHandle_ConnectionReferenceOnlyAddsALine(t *testing.T) {
+	t.Parallel()
+	logger, _ := captureLogger()
+
+	handler := MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+		w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="x"`)
+		contextvalues.SetConnectionReference(r.Context(), "ref-1")
+		return E(CodeUnauthorized, nil, "Reconnect it")
+	})
+	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader("{}"))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	require.Equal(t, `Bearer resource_metadata="x"`, rec.Header().Get("WWW-Authenticate"))
+	var body struct {
+		Error struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Equal(t, int(MCPCodeUnauthorized), body.Error.Code)
+	require.Equal(t, "Reconnect it\nReference: ref-1", body.Error.Message)
+}
+
+func TestMCPErrHandle_NoReferenceLeavesTheMessageAlone(t *testing.T) {
+	t.Parallel()
+	logger, _ := captureLogger()
+
+	handler := MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+		return E(CodeUnauthorized, nil, "Reconnect it")
+	})
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader("{}")))
+
+	require.Contains(t, rec.Body.String(), `"message":"Reconnect it"`)
+	require.NotContains(t, rec.Body.String(), "Reference")
 }

@@ -1,5 +1,5 @@
 import { ServerInfoPopover } from "./ServerInfoPopover";
-import { useState, type JSX } from "react";
+import { useEffect, useRef, useState, type JSX, type ReactNode } from "react";
 import {
   Accordion,
   AccordionContent,
@@ -17,6 +17,13 @@ import {
 } from "@/components/sessions/connection-lifetime";
 import { useOAuthPopup } from "@/components/sessions/useOAuthPopup";
 import { AlertTriangle, Check, LockKeyhole, RefreshCw, X } from "lucide-react";
+import {
+  displayedConnections,
+  missingSignInsSentence,
+  serversNeedingConnection,
+} from "./connectionAttention";
+import { KeyCredentialChoice } from "./KeyCredentialChoice";
+import { ACCOUNT_CHOICE } from "./keyCredentialChoices";
 import { SignInPath } from "./SignInPath";
 import { WizardStepHeader } from "./WizardChrome";
 import type { OwnerConnections } from "./useOwnerConnections";
@@ -27,42 +34,72 @@ export function StepAuthentication({
   connections,
   allServers,
   onRemove,
+  onConnected,
+  listAction,
+  credentialChoice,
+  showHeader = true,
 }: {
   servers: InventoryServer[];
   connections: OwnerConnections;
   allServers: boolean;
   onRemove: (id: string) => void;
+  /**
+   * Called once the reader's own connection to a server they just signed in
+   * to is ready, for a page that saves each change as it is made.
+   */
+  onConnected?: () => void;
+  /** Shown at the top right of the server list. */
+  listAction?: ReactNode;
+  /**
+   * How the agent's keys sign in to a server that offers shared credentials,
+   * asked on the server's own row: the sign-in is this step's question, not
+   * the picker's. `show` says which rows ask.
+   */
+  credentialChoice?: {
+    show: (serverId: string) => boolean;
+    value: (serverId: string) => string | undefined;
+    onChange: (serverId: string, authClientId: string) => void;
+  };
+  /** False where the page around it already titles the step. */
+  showHeader?: boolean;
 }): JSX.Element {
   const { user } = useSession();
-  const oauth = useOAuthPopup(connections.refetch);
+  // The server whose sign-in popup is open, and then the one whose connection
+  // is being read back after it closed.
+  const connecting = useRef<string | null>(null);
+  const [reading, setReading] = useState<string | null>(null);
+  const oauth = useOAuthPopup(async (reason) => {
+    // Taken before the refetch: another sign-in opened while it runs must
+    // not replace the server this one was for.
+    const server = reason === "popup-closed" ? connecting.current : null;
+    if (server !== null) connecting.current = null;
+    await connections.refetch();
+    if (server !== null) setReading(server);
+  });
+  // Only a connection that is now usable is worth saving: closing the popup
+  // without signing in changes nothing.
+  const readStatus =
+    reading === null ? undefined : connections.byServer.get(reading)?.status;
+  useEffect(() => {
+    if (reading === null || readStatus === "checking") return;
+    setReading(null);
+    if (readStatus === "ready") onConnected?.();
+  }, [reading, readStatus, onConnected]);
   const [openRows, setOpenRows] = useState<string[]>([]);
   // Editing shows the agent's assigned connection, unless it no longer works
   // and the editor has a usable one: saving assigns that in its place,
-  // exactly as creating does. Until the editor's own connection is known,
-  // its checking or error state stands rather than a premature verdict.
-  const displayedConnections = new Map(connections.byServer);
-  for (const [serverId, assigned] of connections.assignedByServer ?? []) {
-    const own = connections.byServer.get(serverId)?.status;
-    const keepOwn =
-      assigned.status !== "ready" &&
-      assigned.status !== "not-required" &&
-      (own === "ready" || own === "checking" || own === "error");
-    if (!keepOwn) displayedConnections.set(serverId, assigned);
-  }
-  const missing = servers.filter(
-    (server) =>
-      server.issuerId &&
-      ["missing", "ended", "error"].includes(
-        displayedConnections.get(server.id)?.status ?? "checking",
-      ),
-  );
+  // exactly as creating does.
+  const displayed = displayedConnections(connections);
+  const missing = serversNeedingConnection(servers, displayed);
   return (
     <div className="space-y-5">
-      <WizardStepHeader
-        title="MCP sign-in"
-        description="Choose how Speakeasy signs in to each selected MCP server when the agent calls it. Open a row to manage its connection, or remove a server here."
-      />
-      <SignInPath hop="mcp" />
+      {showHeader && (
+        <WizardStepHeader
+          title="MCP sign-in"
+          description="Choose how Speakeasy signs in to each selected MCP server when the agent calls it. Open a row to manage its connection, or remove a server here."
+        />
+      )}
+      <SignInPath hop="mcp" onTab={!showHeader} />
       {allServers && missing.length > 0 && (
         <Text role="alert" warning small>
           No usable connection available for:{" "}
@@ -74,6 +111,14 @@ export function StepAuthentication({
           Allow popups, then try connecting again.
         </Text>
       )}
+      {listAction && (
+        <div className="flex items-center justify-between gap-3">
+          <Text small muted>
+            {servers.length === 1 ? "1 server" : `${servers.length} servers`}
+          </Text>
+          {listAction}
+        </div>
+      )}
       {/* Every row starts closed: its badge already says how Speakeasy signs
           in, and a row opens only to manage that connection. */}
       <Accordion
@@ -83,9 +128,15 @@ export function StepAuthentication({
         className="border-border border"
       >
         {servers.map((server) => {
-          const connection = displayedConnections.get(server.id);
+          const connection = displayed.get(server.id);
           const shared =
             !server.issuerId || connection?.status === "not-required";
+          // The agent's keys use a shared credential chosen on this row, so
+          // nobody's own connection is needed for them.
+          const choice = credentialChoice?.show(server.id)
+            ? credentialChoice.value(server.id)
+            : undefined;
+          const sharedChosen = !shared && !!choice && choice !== ACCOUNT_CHOICE;
           const expired = connection?.status === "ended";
           const sessions =
             connection?.status === "ready" || connection?.status === "ended"
@@ -93,19 +144,23 @@ export function StepAuthentication({
               : [];
           const session = sessions[0];
           const mine = session?.subjectUrn === `user:${user.id}`;
-          const label = shared
-            ? "Shared credential"
-            : expired
-              ? "Expired"
-              : connection?.status === "ready"
-                ? mine
-                  ? "Your connection"
-                  : `${session?.subjectDisplayName || session?.subjectEmail || "Another member"}'s connection`
-                : connection?.status === "checking" || !connection
-                  ? "Checking connection…"
-                  : connection.status === "error"
-                    ? "Could not check connection"
-                    : "Requires connection";
+          const label =
+            shared || sharedChosen
+              ? "Shared credential"
+              : expired
+                ? "Expired"
+                : connection?.status === "ready"
+                  ? mine
+                    ? "Your connection"
+                    : `${session?.subjectDisplayName || session?.subjectEmail || "Another member"}'s connection`
+                  : connection?.status === "checking" || !connection
+                    ? "Checking connection…"
+                    : connection.status === "error"
+                      ? "Could not check connection"
+                      : "Requires connection";
+          const missingSignIns = sharedChosen
+            ? null
+            : missingSignInsSentence(server, connection);
           return (
             <AccordionItem
               key={server.id}
@@ -122,7 +177,7 @@ export function StepAuthentication({
                         {server.name}
                       </span>
                     </span>
-                    {session && (
+                    {session && !sharedChosen && (
                       <IdentityAvatar
                         label={
                           session.subjectDisplayName ||
@@ -138,24 +193,26 @@ export function StepAuthentication({
                       // Blue, like the step's MCP sign-in arrow: each pill
                       // says how Speakeasy signs in to that server.
                       variant={
-                        expired || connection?.status === "missing"
-                          ? "warning"
-                          : shared || connection?.status === "ready"
-                            ? "information"
-                            : "neutral"
+                        sharedChosen
+                          ? "information"
+                          : expired || connection?.status === "missing"
+                            ? "warning"
+                            : shared || connection?.status === "ready"
+                              ? "information"
+                              : "neutral"
                       }
                       size="sm"
                     >
-                      {session && !mine && (
+                      {session && !mine && !sharedChosen && (
                         <LockKeyhole
                           className="mr-1 size-3"
                           aria-hidden="true"
                         />
                       )}
-                      {session && mine && !expired && (
+                      {session && mine && !expired && !sharedChosen && (
                         <Check className="mr-1 size-3" aria-hidden="true" />
                       )}
-                      {expired && (
+                      {expired && !sharedChosen && (
                         <AlertTriangle
                           className="mr-1 size-3"
                           aria-hidden="true"
@@ -177,10 +234,48 @@ export function StepAuthentication({
                 </Button>
               </div>
               <AccordionContent>
-                {shared ? (
+                {credentialChoice?.show(server.id) &&
+                  (server.kind === "Remote" || server.kind === "Tunneled") &&
+                  // Whether it signs in accounts is only known once its
+                  // connection has been read.
+                  (!server.issuerId ||
+                    (connection !== undefined &&
+                      connection.status !== "checking")) && (
+                    <KeyCredentialChoice
+                      className="pb-3"
+                      serverId={server.id}
+                      serverName={server.name}
+                      // A server that signs each caller in also offers the
+                      // account connected for the agent, beside its shared
+                      // credentials.
+                      // Only once its own auth says it signs each person in:
+                      // an issuer alone does not, and offering the account
+                      // there would default a key past its only credential.
+                      accounts={
+                        !!server.issuerId &&
+                        !shared &&
+                        (connection?.status === "missing" ||
+                          connection?.status === "ready" ||
+                          connection?.status === "ended" ||
+                          // A read that failed and is being retried keeps a
+                          // personal connection already picked, rather than
+                          // clearing it as no longer offered.
+                          (connection?.status === "error" &&
+                            choice === ACCOUNT_CHOICE))
+                      }
+                      pickSole
+                      label={`Choose how the agent's keys sign in to ${server.name}`}
+                      value={credentialChoice.value(server.id)}
+                      onChange={(authClientId) =>
+                        credentialChoice.onChange(server.id, authClientId)
+                      }
+                    />
+                  )}
+                {shared || sharedChosen ? (
                   <Text small muted>
-                    This server uses a shared credential. No personal connection
-                    is needed.
+                    {sharedChosen
+                      ? "The agent's keys use the shared credential chosen above. No personal connection is needed."
+                      : "This server uses a shared credential. No personal connection is needed."}
                   </Text>
                 ) : (
                   <div className="flex flex-wrap items-center gap-3 py-1">
@@ -191,6 +286,11 @@ export function StepAuthentication({
                       {session && (
                         <Text small muted className="mt-1 text-xs">
                           {connectionLifetimeLabel(connectionLifetime(session))}
+                        </Text>
+                      )}
+                      {missingSignIns && (
+                        <Text small muted className="mt-1 text-xs">
+                          {missingSignIns}
                         </Text>
                       )}
                     </div>
@@ -206,7 +306,8 @@ export function StepAuthentication({
                               session.remoteSessionClientId,
                             );
                           }
-                          oauth.open(url.toString());
+                          if (oauth.open(url.toString()))
+                            connecting.current = server.id;
                         }}
                       >
                         {session ? "Reauthenticate" : "Connect account"}

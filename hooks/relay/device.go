@@ -122,5 +122,10 @@ func (t *deviceTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			req.Header.Set(wire.HeaderDeviceInstallRoute, hi.installRoute)
 		}
 	}
-	return t.base.RoundTrip(req)
+	snap, hasSnap := stampSnapshotHeaders(req)
+	res, err := t.base.RoundTrip(req)
+	if hasSnap && err == nil && res.StatusCode < 300 {
+		markSnapshotDelivered(snap)
+	}
+	return res, err
 }

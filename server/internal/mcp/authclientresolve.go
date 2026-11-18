@@ -32,6 +32,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
@@ -40,6 +41,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -232,14 +235,15 @@ func (connectPermitter) Permitted(context.Context, authClientPermitRequest) (boo
 }
 
 // mandatoryPermitter decides use of a resolved client with the mandatory
-// mcp:auth check, for organizations with upstream auth enforcement enabled.
+// mcp:auth decision, for organizations with upstream auth enforcement enabled.
 // It admits the caller on its own path, including callers the generic check
 // skips, and a check it cannot evaluate is a refusal, never an allow. It
-// makes the same check the shadow records: a personal client is checked
-// against the user whose connection the resolver loaded and the upstream
-// OAuth client that connection uses.
+// makes the same decision the shadow records, through decideAuthClientUse.
 type mandatoryPermitter struct {
 	engine *authz.Engine
+	// visibility reads a server's visibility for an anonymous caller. Without
+	// it every server is decided as private.
+	visibility serverVisibilityLookup
 }
 
 func (p mandatoryPermitter) Permitted(ctx context.Context, req authClientPermitRequest) (bool, error) {
@@ -247,11 +251,58 @@ func (p mandatoryPermitter) Permitted(ctx context.Context, req authClientPermitR
 	if err != nil {
 		return false, fmt.Errorf("admit caller for auth client: %w", err)
 	}
-	decision, err := authorization.Decide(req.OrganizationID, mandatoryAuthClientCheck(req.ProjectID, req.ClientID, req.RegistrationID, req.ClientType, req.connectionOwner()))
+	decision, err := decideAuthClientUse(ctx, authorization, req, p.visibility)
 	if err != nil {
 		return false, fmt.Errorf("evaluate auth client check: %w", err)
 	}
 	return decision.Allowed, nil
+}
+
+// serverVisibilityLookup reads the visibility a server in an organization is
+// admitted under.
+type serverVisibilityLookup func(ctx context.Context, organizationID string, serverID uuid.UUID) (authz.MandatoryServerVisibility, error)
+
+// mandatoryServerVisibility reads serverID's visibility. A server that no
+// longer exists in organizationID is decided as private.
+func (s *Service) mandatoryServerVisibility(ctx context.Context, organizationID string, serverID uuid.UUID) (authz.MandatoryServerVisibility, error) {
+	server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: serverID, OrganizationID: organizationID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return authz.MandatoryServerPrivate, nil
+	case err != nil:
+		return authz.MandatoryServerPrivate, fmt.Errorf("read server visibility: %w", err)
+	}
+	return mandatoryVisibility(server.Visibility == mcpservers.VisibilityPublic), nil
+}
+
+// decideAuthClientUse is the mandatory decision for using a resolved client,
+// shared by enforcement and the shadow. A public server serves its anonymous
+// caller the client it resolved, as it did before enforcement. Otherwise a
+// personal client is checked against the owner of the connection it serves
+// and the upstream OAuth client that connection uses; one with no owner is
+// refused, since no grant can name it.
+func decideAuthClientUse(ctx context.Context, authorization authz.MandatoryAuthorization, req authClientPermitRequest, visibility serverVisibilityLookup) (authz.MandatoryDecision, error) {
+	admittedUnder := authz.MandatoryServerPrivate
+	if authorization.Caller() == authz.MandatoryCallerAnonymous && visibility != nil {
+		v, err := visibility(ctx, req.OrganizationID, req.ServerID)
+		if err != nil {
+			return authz.MandatoryDecision{}, err
+		}
+		admittedUnder = v
+	}
+	use := mandatoryAuthClientCheck(req.ProjectID, req.ClientID, req.RegistrationID, req.ClientType, req.connectionOwner())
+	if admittedUnder != authz.MandatoryServerPublic && req.ClientType == authClientTypeRemoteSession && req.connectionOwner() == "" {
+		reason := authz.MandatoryDenyReasonNotGranted
+		if authorization.Caller() == authz.MandatoryCallerAnonymous {
+			reason = authz.MandatoryDenyReasonUnauthenticated
+		}
+		return authz.MandatoryDecision{Allowed: false, Source: authz.MandatoryPolicySourceNone, Reason: reason}, nil
+	}
+	decision, err := authorization.DecideAuthClientAdmission(req.OrganizationID, admittedUnder, use)
+	if err != nil {
+		return authz.MandatoryDecision{}, fmt.Errorf("decide auth client admission: %w", err)
+	}
+	return decision, nil
 }
 
 // gapResolution is a choice that cannot be used, for reason.
@@ -392,10 +443,15 @@ func (u *upstreamSelector) resolveAuthClient(ctx context.Context, serverID uuid.
 }
 
 func (u *upstreamSelector) resolveAuthClients(ctx context.Context, serverIDs []uuid.UUID) (map[uuid.UUID]authClientResolution, error) {
+	enforced, err := u.service.authEnforcement.Enforced(ctx, u.organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("read upstream auth enforcement: %w", err)
+	}
 	rows, err := upstreamclientsrepo.New(u.service.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{
-		Proposed: false, ProposedNoAuth: false, ProposedRegistrationID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ProposedAuthClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ProposeAllClients: false,
+		Proposed:          false, ProposedNoAuth: false, ProposedRegistrationID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ProposedAuthClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		CredentialKind: u.credentialKindOrDefault(), CredentialID: u.credentialID,
-		McpServerIds: serverIDs, OrganizationID: u.organizationID,
+		McpServerIds: serverIDs, OrganizationID: u.organizationID, TypedOnly: enforced,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("load auth client choices: %w", err)
@@ -430,7 +486,7 @@ func (s *Service) resolveAuthClientForServing(ctx context.Context, selector *ups
 			// connect-equivalent rule served before it, whichever of the two
 			// decided here.
 			legacyPermitted, _ := connectPermitter{}.Permitted(ctx, permit)
-			s.shadowAuthClientUse(ctx, selector.organizationID, legacyPermitted, projectID, res.clientID, res.choice.clientID, res.clientType, permit.ConnectionOwner)
+			s.shadowAuthClientUse(ctx, legacyPermitted, permit)
 		}
 	})
 }
@@ -451,8 +507,13 @@ func (s *Service) resolveAuthClientChoiceForConsent(ctx context.Context, organiz
 }
 
 func (s *Service) resolveProposedAuthClient(ctx context.Context, organizationID string, serverID, projectID uuid.UUID, registrationID, authClientID uuid.NullUUID, subject urn.SessionSubject) (authClientResolution, error) {
+	enforced, err := s.authEnforcement.Enforced(ctx, organizationID)
+	if err != nil {
+		return gapResolution(authClientReasonMissingChoice), fmt.Errorf("read upstream auth enforcement: %w", err)
+	}
 	rows, err := upstreamclientsrepo.New(s.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{
-		Proposed: true, ProposedNoAuth: false, ProposedRegistrationID: registrationID, ProposedAuthClientID: authClientID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, McpServerIds: []uuid.UUID{serverID}, OrganizationID: organizationID,
+		ProposeAllClients: false,
+		Proposed:          true, ProposedNoAuth: false, ProposedRegistrationID: registrationID, ProposedAuthClientID: authClientID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, McpServerIds: []uuid.UUID{serverID}, OrganizationID: organizationID, TypedOnly: enforced,
 	})
 	if err != nil {
 		return gapResolution(authClientReasonMissingChoice), fmt.Errorf("resolve proposed auth client: %w", err)
@@ -476,9 +537,14 @@ func (s *Service) resolveProposedAuthClient(ctx context.Context, organizationID 
 // is decided, so the server's own credential headers still make it a setup
 // gap. The query must not infer a client whose headers the choice will not send.
 func (s *Service) resolveNoAuthChoice(ctx context.Context, organizationID string, serverID uuid.UUID) (authClientResolution, error) {
+	enforced, err := s.authEnforcement.Enforced(ctx, organizationID)
+	if err != nil {
+		return gapResolution(authClientReasonMissingChoice), fmt.Errorf("read upstream auth enforcement: %w", err)
+	}
 	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	rows, err := upstreamclientsrepo.New(s.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{
-		Proposed: true, ProposedNoAuth: true, ProposedRegistrationID: none, ProposedAuthClientID: none, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, McpServerIds: []uuid.UUID{serverID}, OrganizationID: organizationID,
+		ProposeAllClients: false,
+		Proposed:          true, ProposedNoAuth: true, ProposedRegistrationID: none, ProposedAuthClientID: none, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, McpServerIds: []uuid.UUID{serverID}, OrganizationID: organizationID, TypedOnly: enforced,
 	})
 	if err != nil {
 		return gapResolution(authClientReasonMissingChoice), fmt.Errorf("resolve no-auth choice: %w", err)
@@ -680,7 +746,7 @@ func (s *Service) authClientPermitFor(ctx context.Context, organizationID string
 	if s.authz == nil {
 		return nil, errors.New("upstream auth enforcement needs the authorization engine")
 	}
-	return mandatoryPermitter{engine: s.authz}, nil
+	return mandatoryPermitter{engine: s.authz, visibility: s.mandatoryServerVisibility}, nil
 }
 
 // withoutDeniedSources drops client headers that read a denied inbound header,
@@ -931,14 +997,16 @@ func (s *Service) shadowAuthClient(ctx context.Context, selector *upstreamSelect
 	// the request, any other error is not a decision.
 	legacyDenied := errors.Is(choiceErr, errUpstreamSelectionMissing) || errors.Is(choiceErr, errUpstreamSelectionUnusable)
 	if res.outcome == authClientResolved && (choiceErr == nil || legacyDenied) {
-		connection, err := s.authClientConnection(ctx, authClientPermitRequest{
+		permit := authClientPermitRequest{
 			OrganizationID: selector.organizationID, ProjectID: projectID, ServerID: serverID, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID,
 			CredentialKind: selector.credentialKindOrDefault(), CredentialID: selector.credentialID, Subject: subject, UserSessionIssuerID: selector.userSessionIssuerID, ConnectionOwner: "",
-		})
+		}
+		connection, err := s.authClientConnection(ctx, permit)
 		if err != nil {
 			s.logger.WarnContext(ctx, "auth client shadow could not resolve the connection owner", attr.SlogMcpServerID(serverID.String()), attr.SlogError(err))
 		} else {
-			s.shadowAuthClientUse(ctx, selector.organizationID, choiceErr == nil, projectID, res.clientID, res.choice.clientID, res.clientType, connection.owner)
+			permit.ConnectionOwner = connection.owner
+			s.shadowAuthClientUse(ctx, choiceErr == nil, permit)
 		}
 	}
 	annotateAuthClient(ctx, s.logger, res)

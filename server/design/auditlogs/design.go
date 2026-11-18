@@ -41,6 +41,7 @@ var _ = Service("auditlogs", func() {
 			Param("from")
 			Param("to")
 			Param("category")
+			Param("origin")
 		})
 
 		shared.CursorPagination()
@@ -65,6 +66,7 @@ var _ = Service("auditlogs", func() {
 			security.SessionHeader()
 			Param("project_slug")
 			Param("category")
+			Param("origin")
 		})
 
 		Meta("openapi:operationId", "listAuditLogFacets")
@@ -157,6 +159,10 @@ var ListAuditLogsForm = Type("ListAuditLogsForm", func() {
 		Enum("configuration", "security")
 		Default("configuration")
 	})
+	Attribute("origin", String, func() {
+		Description("Who initiated the entries to list: 'user' for changes initiated by a person, API key, agent or assistant, or 'system' for changes Speakeasy made on its own, such as background jobs. Omit for both.")
+		Enum("user", "system")
+	})
 })
 
 var ListAuditLogsResult = Type("ListAuditLogsResult", func() {
@@ -183,6 +189,10 @@ var ListAuditLogFacetsForm = Type("ListAuditLogFacetsForm", func() {
 		Description("Category of entries to compute facet values from, matching the list being filtered. Defaults to 'configuration'.")
 		Enum("configuration", "security")
 		Default("configuration")
+	})
+	Attribute("origin", String, func() {
+		Description("Who initiated the entries to compute facet values from, matching the list being filtered: 'user' for changes initiated by a person, API key, agent or assistant, or 'system' for changes Speakeasy made on its own, such as background jobs. Omit for both.")
+		Enum("user", "system")
 	})
 })
 

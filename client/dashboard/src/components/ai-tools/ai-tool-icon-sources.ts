@@ -18,6 +18,7 @@ export const ICON_SOURCE_BY_TARGET_ID: Record<string, string> = {
   "chatgpt-classic": "chatgpt",
   codex: "codex",
   cursor: "cursor",
+  kit: "kit",
   opencode: "opencode",
   openclaw: "openclaw",
   "gemini-cli": "gemini",

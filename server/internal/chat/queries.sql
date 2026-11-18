@@ -52,12 +52,21 @@ DO UPDATE SET
 RETURNING id;
 
 -- name: UpsertChat :one
+-- agent_id records the Speakeasy agent a completion acted for, so the agent's
+-- owner can find and open the session and a session list can name the agent.
+-- The id arrives from the server-stamped authenticated actor, never from
+-- client input, and the scalar subquery resolves it against a live agent in the
+-- caller's organization at write time: chats.agent_id carries no foreign key
+-- (agents is declared after chats), so this guard is what keeps the column from
+-- naming a deleted agent or one belonging to another tenant. A human turn passes
+-- NULL and the subquery is never evaluated against the index.
 INSERT INTO chats (
     id
   , project_id
   , organization_id
   , user_id
   , external_user_id
+  , agent_id
   , title
   , created_at
   , updated_at
@@ -68,6 +77,13 @@ VALUES (
     @organization_id,
     @user_id,
     @external_user_id,
+    (
+      SELECT a.id
+      FROM agents a
+      WHERE a.id = sqlc.narg(agent_id)::uuid
+        AND a.organization_id = @organization_id
+        AND a.deleted IS FALSE
+    ),
     @title,
     NOW(),
     NOW()
@@ -93,11 +109,35 @@ ON CONFLICT (id) DO UPDATE SET deleted_at = CASE
     ) THEN NULL
     ELSE chats.deleted_at
 END
+-- agent_id is set on insert only. Naming an agent on an existing session would
+-- hand its owner every earlier turn, including ones the agent never sent.
+-- An existing row keeps its author, except a non-agent turn on an agent-only
+-- session: agent turns without a human identity write NULL user_id, every other
+-- turn a non-NULL one (even ''), so the row is demoted to '' (no author).
+  , user_id = CASE
+      WHEN chats.user_id IS NULL
+        AND COALESCE(chats.external_user_id, '') = ''
+        AND chats.agent_id IS NOT NULL
+        AND (EXCLUDED.user_id IS NOT NULL OR COALESCE(EXCLUDED.external_user_id, '') <> '')
+      THEN ''
+      ELSE chats.user_id
+    END
 -- The conflict target is the bare primary key, so a caller supplying another
 -- project's chat id would otherwise land on that row and get its id back from
 -- RETURNING. Rejecting the conflict yields no row, which the caller maps to an
 -- authorization failure.
+-- Another agent appending to an agent's session is rejected the same way, as is
+-- an identity-less turn whose agent resolved to NULL (deleted or foreign): only
+-- a turn carrying a human identity may join, and that one demotes the row above.
 WHERE chats.project_id = EXCLUDED.project_id
+  AND (
+    chats.agent_id IS NULL
+    OR chats.agent_id = EXCLUDED.agent_id
+    OR (
+      EXCLUDED.agent_id IS NULL
+      AND (EXCLUDED.user_id IS NOT NULL OR COALESCE(EXCLUDED.external_user_id, '') <> '')
+    )
+  )
 RETURNING id;
 
 -- name: UpsertExternalChat :one
@@ -1720,13 +1760,26 @@ SET pinned_at = CASE WHEN @pinned::boolean THEN COALESCE(pinned_at, NOW()) ELSE 
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: UpdateChatSummary :one
--- Persist an on-demand LLM session summary. Project-scoped so a summarize write
--- can never touch another project's chat. Returns the updated row timestamps.
+-- Persist an LLM session summary. Project-scoped so a summarize write can
+-- never touch another project's chat. summary_redacted records whether the
+-- summary was built from the risk-redacted transcript; team memory reads only
+-- redacted summaries. covered_through is the newest message the summary read:
+-- when a newer message landed while the summary was generated, the summary is
+-- stamped with covered_through instead of NOW() so the chat still reads as
+-- changed and is summarized again. Otherwise summary_generated_at is the write
+-- time, which the sweep's daily cap counts. Returns the updated row timestamps.
 UPDATE chats
 SET summary = @summary,
-    summary_generated_at = NOW(),
+    summary_generated_at = CASE
+      WHEN sqlc.narg(covered_through)::timestamptz IS NOT NULL AND EXISTS (
+        SELECT 1 FROM chat_messages m
+        WHERE m.chat_id = chats.id AND m.created_at > sqlc.narg(covered_through)::timestamptz
+      ) THEN sqlc.narg(covered_through)::timestamptz
+      ELSE NOW()
+    END,
+    summary_redacted = @summary_redacted,
     updated_at = NOW()
-WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+WHERE chats.id = @id AND chats.project_id = @project_id AND chats.deleted IS FALSE
 RETURNING summary, summary_generated_at;
 
 -- name: GetToolCallSummaryContext :one
@@ -2320,3 +2373,26 @@ SELECT pg_advisory_lock(@lock_key::bigint);
 
 -- name: ReleaseToolCallSummaryLock :exec
 SELECT pg_advisory_unlock(@lock_key::bigint);
+
+-- name: MarkChatSummaryEmpty :exec
+-- Records that a chat had nothing to summarize, so it reads as covered until
+-- new messages arrive. Project-scoped like UpdateChatSummary.
+UPDATE chats
+SET summary = NULL,
+    summary_generated_at = NOW(),
+    summary_redacted = TRUE,
+    updated_at = NOW()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+
+-- name: GetChatMemorySummaryEligibility :one
+-- Whether the background summary judge may summarize a chat: live, not
+-- excluded from memory, and not a session of a personal account or of an
+-- account whose type is not known yet. Matches the team memory readers' rule.
+SELECT (
+  c.deleted IS FALSE
+  AND c.memory_excluded_at IS NULL
+  AND (ua.id IS NULL OR (ua.account_type IS NOT NULL AND ua.account_type <> 'personal'))
+)::boolean AS eligible
+FROM chats c
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+WHERE c.id = @id AND c.project_id = @project_id;

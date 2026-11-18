@@ -45,6 +45,9 @@
       return;
     }
     let ready = 0, needs = 0, unavailable = 0, hidden = 0, consented = false, needsConsent = false;
+    // An agent's connectUrl is its editors' page, not the caller's own.
+    const agent = data.audience === "agent_editors";
+    const reconnect = agent && data.servers.some((s) => s.reconnect);
     for (const s of data.servers) {
       const li = document.createElement("li");
       const name = document.createElement("div");
@@ -56,12 +59,13 @@
       if (s.status === "verified_at_consent") {
         consented = true;
         ready++;
-        state.textContent = "Verified at consent · " + (s.detail || "Current sign-in has not been checked");
+        state.className = "ok";
+        state.textContent = "Connected";
         li.append(state);
       } else if (s.status === "needs_consent") {
         needsConsent = true;
         state.className = "warn";
-        state.textContent = s.detail || "Reconnect this gateway in your AI app to review access";
+        state.textContent = "Needs Sign-In";
         li.append(state);
       } else if (s.status === "action_required") {
         state.className = "warn";
@@ -71,7 +75,7 @@
         hidden++;
         state.textContent = "Hidden by you";
         li.append(state);
-        if (data.connectUrl) {
+        if (data.connectUrl && !agent) {
           const btn = document.createElement("button");
           btn.textContent = "Show";
           btn.onclick = () => request("ui/open-link", { url: data.connectUrl }).catch(() => {
@@ -82,7 +86,7 @@
       } else if (s.status === "connected" || s.status === "not_required") {
         ready++;
         state.className = "ok";
-        state.textContent = s.status === "connected" ? "Signed in" : "No sign-in needed";
+        state.textContent = "Connected";
         li.append(state);
       } else if (s.status === "unavailable") {
         unavailable++;
@@ -105,11 +109,15 @@
       } else {
         needs++;
         state.className = "warn";
-        state.textContent = s.status === "not_connected" ? "Not signed in" : (s.detail || "Needs attention");
+        // An agent's row names who fixes it, which its hint points to.
+        state.textContent = s.status !== "not_connected" ? (s.detail || "Needs attention")
+          : agent && s.detail ? s.detail : "Needs Sign-In";
         li.append(state);
-        if (data.connectUrl) {
+        // An agent cannot sign in itself: someone who can edit it reconnects on the agent's
+        // page, which fixes only the rows the server marks.
+        if (data.connectUrl && (!agent || s.reconnect)) {
           const btn = document.createElement("button");
-          btn.textContent = "Connect";
+          btn.textContent = agent ? "Reconnect" : "Connect";
           btn.onclick = () => request("ui/open-link", { url: data.connectUrl }).catch(() => {
             state.textContent = "Open " + data.connectUrl + " in your browser";
           });
@@ -124,6 +132,8 @@
     const hint = document.getElementById("hint");
     hint.textContent = needsConsent ? "Reconnect this gateway in your AI app to review access."
       : consented ? "Current sign-in has not been checked. Tool calls check authorization."
+      : needs > 0 && reconnect ? "This agent cannot sign in itself. Someone who can edit it reconnects these servers."
+      : needs > 0 && agent ? "This agent cannot fix these servers itself. Each server says who can, or ask an admin of the server's project."
       : needs > 0 ? "After signing in, ask again to refresh this list."
       : "Ask again shortly to refresh this list.";
     hint.hidden = !consented && !needsConsent && needs === 0 && unavailable === 0;

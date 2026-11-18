@@ -17,7 +17,7 @@ import (
 
 // BuildListPayload builds the payload for the auditlogs list endpoint from CLI
 // flags.
-func BuildListPayload(auditlogsListCursor string, auditlogsListProjectSlug string, auditlogsListActorID string, auditlogsListAction string, auditlogsListSubjectType string, auditlogsListSubjectID string, auditlogsListSubjectIds string, auditlogsListActingSurface string, auditlogsListFrom string, auditlogsListTo string, auditlogsListCategory string, auditlogsListApikeyToken string, auditlogsListSessionToken string) (*auditlogs.ListPayload, error) {
+func BuildListPayload(auditlogsListCursor string, auditlogsListProjectSlug string, auditlogsListActorID string, auditlogsListAction string, auditlogsListSubjectType string, auditlogsListSubjectID string, auditlogsListSubjectIds string, auditlogsListActingSurface string, auditlogsListFrom string, auditlogsListTo string, auditlogsListCategory string, auditlogsListOrigin string, auditlogsListApikeyToken string, auditlogsListSessionToken string) (*auditlogs.ListPayload, error) {
 	var err error
 	var cursor *string
 	{
@@ -108,6 +108,18 @@ func BuildListPayload(auditlogsListCursor string, auditlogsListProjectSlug strin
 			}
 		}
 	}
+	var origin *string
+	{
+		if auditlogsListOrigin != "" {
+			origin = &auditlogsListOrigin
+			if !(*origin == "user" || *origin == "system") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("origin", *origin, []any{"user", "system"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var apikeyToken *string
 	{
 		if auditlogsListApikeyToken != "" {
@@ -132,6 +144,7 @@ func BuildListPayload(auditlogsListCursor string, auditlogsListProjectSlug strin
 	v.From = from
 	v.To = to
 	v.Category = category
+	v.Origin = origin
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
@@ -140,7 +153,7 @@ func BuildListPayload(auditlogsListCursor string, auditlogsListProjectSlug strin
 
 // BuildListFacetsPayload builds the payload for the auditlogs listFacets
 // endpoint from CLI flags.
-func BuildListFacetsPayload(auditlogsListFacetsProjectSlug string, auditlogsListFacetsCategory string, auditlogsListFacetsApikeyToken string, auditlogsListFacetsSessionToken string) (*auditlogs.ListFacetsPayload, error) {
+func BuildListFacetsPayload(auditlogsListFacetsProjectSlug string, auditlogsListFacetsCategory string, auditlogsListFacetsOrigin string, auditlogsListFacetsApikeyToken string, auditlogsListFacetsSessionToken string) (*auditlogs.ListFacetsPayload, error) {
 	var err error
 	var projectSlug *string
 	{
@@ -154,6 +167,18 @@ func BuildListFacetsPayload(auditlogsListFacetsProjectSlug string, auditlogsList
 			category = auditlogsListFacetsCategory
 			if !(category == "configuration" || category == "security") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("category", category, []any{"configuration", "security"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var origin *string
+	{
+		if auditlogsListFacetsOrigin != "" {
+			origin = &auditlogsListFacetsOrigin
+			if !(*origin == "user" || *origin == "system") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("origin", *origin, []any{"user", "system"}))
 			}
 			if err != nil {
 				return nil, err
@@ -175,6 +200,7 @@ func BuildListFacetsPayload(auditlogsListFacetsProjectSlug string, auditlogsList
 	v := &auditlogs.ListFacetsPayload{}
 	v.ProjectSlug = projectSlug
 	v.Category = category
+	v.Origin = origin
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 

@@ -275,30 +275,11 @@ func (s *Service) DetachAuthClientFromMcpServer(ctx context.Context, payload *ge
 		return nil, oops.E(oops.CodeUnexpected, err, "lock auth client").LogError(ctx, logger)
 	}
 
-	detached, err := queries.DetachAuthClientFromServer(ctx, repo.DetachAuthClientFromServerParams{
-		AuthClientID:   clientID,
-		McpServerID:    serverID,
-		OrganizationID: authCtx.ActiveOrganizationID,
-	})
-	if err != nil {
+	if err := DetachMcpServer(ctx, dbtx, s.audit, authCtx, client, serverID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "the mcp server does not offer this auth client").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "detach auth client from mcp server").LogError(ctx, logger)
-	}
-
-	if err := s.audit.LogAuthClientDetachMcpServer(ctx, dbtx, audit.LogAuthClientMcpServerEvent{
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		ProjectID:        detached.ProjectID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName: authCtx.Email,
-		ActorSlug:        nil,
-		AuthClientURN:    urn.NewAuthClient(client.ID),
-		AuthClientName:   client.Name,
-		McpServerURN:     urn.NewMcpServer(serverID),
-		McpServerName:    detached.McpServerName.String,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log auth client detach").LogError(ctx, logger)
 	}
 
 	view, err := s.view(ctx, queries, authCtx.ActiveOrganizationID, client, logger)

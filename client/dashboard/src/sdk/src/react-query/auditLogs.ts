@@ -30,6 +30,7 @@ import { ServiceError } from "../models/errors/serviceerror.js";
 import {
   ListAuditLogsRequest,
   ListAuditLogsSecurity,
+  Origin,
   QueryParamCategory,
 } from "../models/operations/listauditlogs.js";
 import { useGramContext } from "./_context.js";
@@ -209,6 +210,7 @@ export function setAuditLogsData(
       from?: Date | undefined;
       to?: Date | undefined;
       category?: QueryParamCategory | undefined;
+      origin?: Origin | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
     },
@@ -235,6 +237,7 @@ export function invalidateAuditLogs(
       from?: Date | undefined;
       to?: Date | undefined;
       category?: QueryParamCategory | undefined;
+      origin?: Origin | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
     }]

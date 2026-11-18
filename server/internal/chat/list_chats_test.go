@@ -60,18 +60,33 @@ func seedChat(t *testing.T, ctx context.Context, ti *chatTestInstance, userID, e
 	return id
 }
 
+// chatRow reads one chat row from the test project.
+func chatRow(t *testing.T, ti *chatTestInstance, chatID uuid.UUID) repo.GetChatRow {
+	t.Helper()
+	row, err := repo.New(ti.conn).GetChat(t.Context(), repo.GetChatParams{ID: chatID, ProjectID: ti.projectID})
+	require.NoError(t, err)
+	return row
+}
+
 // seedAgent creates an agent owned by ownerUserID in the test organization.
 func seedAgent(t *testing.T, ctx context.Context, ti *chatTestInstance, ownerUserID, name string) uuid.UUID {
 	t.Helper()
+	return seedAgentInOrg(t, ctx, ti, ti.orgID, uuid.NullUUID{UUID: ti.projectID, Valid: true}, ownerUserID, name)
+}
+
+// seedAgentInOrg creates an agent owned by ownerUserID in orgID, which must
+// already exist in the test database.
+func seedAgentInOrg(t *testing.T, ctx context.Context, ti *chatTestInstance, orgID string, projectID uuid.NullUUID, ownerUserID, name string) uuid.UUID {
+	t.Helper()
 	_, err := orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
-		OrganizationID: ti.orgID,
+		OrganizationID: orgID,
 		UserID:         conv.ToPGText(ownerUserID),
 	})
 	require.NoError(t, err)
 	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{
-		OrganizationID: ti.orgID,
+		OrganizationID: orgID,
 		OwnerUserID:    ownerUserID,
-		ProjectID:      uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		ProjectID:      projectID,
 		Name:           name,
 	})
 	require.NoError(t, err)

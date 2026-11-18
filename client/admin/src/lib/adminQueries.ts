@@ -20,6 +20,8 @@ import {
   getSession,
   listOrganizationMembers,
   listOrganizationProjects,
+  listOrganizationAssistants,
+  listAssistantMigrationOrganizations,
   listOrganizations,
   listUsers,
   listUserOrganizations,
@@ -33,11 +35,15 @@ import {
   type AdminStripeSubscription,
   type ListOrganizationMembersResult,
   type ListOrganizationProjectsResult,
+  type AdminOrganizationAssistants,
   type ListOrganizationsParams,
   type ListOrganizationsResult,
   type ListProjectMcpServersResult,
 } from "@/lib/gramAdminApi";
 import { queryKeyAdminListOrganizationActivityInfinite } from "@gram/admin-client/react-query/adminListOrganizationActivity.core";
+import { buildAdminListCustomDomainsQuery } from "@gram/admin-client/react-query/adminListCustomDomains.core";
+import type { AdminListCustomDomainsRequest } from "@gram/admin-client/models/operations/adminlistcustomdomains";
+import { redirecting, redirectingClient } from "@/lib/adminSdkClient";
 
 // What queryOptions infers, named so the exports can carry the return type that
 // `typescript/explicit-module-boundary-types` demands. Writing the shape out by
@@ -131,6 +137,18 @@ export function organizationProjectsQuery(
   return queryOptions({
     queryKey: ["gram-admin-organization-projects", organizationID] as const,
     queryFn: () => listOrganizationProjects(organizationID),
+  });
+}
+
+export function organizationAssistantsQuery(
+  organizationID: string,
+): AdminQuery<
+  AdminOrganizationAssistants,
+  readonly ["gram-admin-organization-assistants", string]
+> {
+  return queryOptions({
+    queryKey: ["gram-admin-organization-assistants", organizationID] as const,
+    queryFn: () => listOrganizationAssistants(organizationID),
   });
 }
 
@@ -399,5 +417,36 @@ export function userOrganizationsListQuery(
   return queryOptions({
     queryKey: ["admin", "user-organizations", params] as const,
     queryFn: ({ signal }) => listUserOrganizations(params, signal),
+  });
+}
+
+function createAdminListCustomDomainsQuery(
+  request: AdminListCustomDomainsRequest,
+) {
+  const generated = buildAdminListCustomDomainsQuery(
+    redirectingClient(),
+    request,
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+// Every live custom domain, or the one an organization owns. Both filters are
+// applied by the server, so the query key carries them.
+export function adminListCustomDomainsQuery(
+  request: AdminListCustomDomainsRequest = {},
+): ReturnType<typeof createAdminListCustomDomainsQuery> {
+  return createAdminListCustomDomainsQuery(request);
+}
+
+export function assistantMigrationOrganizationsQuery(): AdminQuery<
+  Awaited<ReturnType<typeof listAssistantMigrationOrganizations>>,
+  readonly ["admin", "assistant-migration-organizations"]
+> {
+  return queryOptions({
+    queryKey: ["admin", "assistant-migration-organizations"] as const,
+    queryFn: listAssistantMigrationOrganizations,
   });
 }

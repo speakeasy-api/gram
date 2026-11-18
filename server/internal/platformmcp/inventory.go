@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 )
@@ -93,7 +92,7 @@ func inventoryDistributions(rows []platformrepo.ListPlatformMCPInventoryPluginMe
 func mcpFromInventoryRow(row platformrepo.ListPlatformMCPInventoryRow, distributions map[uuid.UUID][]MCPDistribution) MCP {
 	return mcpFromInventory(
 		row.McpServerID, row.ProjectID, row.ProjectName, row.ProjectSlug, row.McpName.String, row.McpSlug.String, row.Visibility,
-		inventoryModel(row.RemoteMcpServerID, row.TunneledMcpServerID, row.UnproxiedMcpServerID), inventoryBackendKind(row.RemoteMcpServerID, row.TunneledMcpServerID, row.ToolsetID, row.UnproxiedMcpServerID, row.BuiltinBackend), row.UpstreamUrl, row.RegistrationID, row.SourceKind, row.CatalogProvider, row.CatalogReference, row.RegistrationStatus,
+		inventoryModel(row.RemoteMcpServerID, row.TunneledMcpServerID, row.UnproxiedMcpServerID), inventoryBackendKind(row.RemoteMcpServerID, row.TunneledMcpServerID, row.ToolsetID, row.UnproxiedMcpServerID), row.UpstreamUrl, row.RegistrationID, row.SourceKind, row.CatalogProvider, row.CatalogReference, row.RegistrationStatus,
 		row.RegistrationRemoteMcpServerID, row.RegistrationUserSessionIssuerID, row.RegistrationMcpServerID, row.RegistrationMcpEndpointID,
 		row.ReadinessState, timestampString(row.ReadinessCheckedAt.Time, row.ReadinessCheckedAt.Valid), timestampString(row.ReadinessExpiresAt.Time, row.ReadinessExpiresAt.Valid), distributions,
 	)
@@ -102,7 +101,7 @@ func mcpFromInventoryRow(row platformrepo.ListPlatformMCPInventoryRow, distribut
 func mcpFromInventoryItem(row platformrepo.GetPlatformMCPInventoryItemRow, distributions map[uuid.UUID][]MCPDistribution) MCP {
 	return mcpFromInventory(
 		row.McpServerID, row.ProjectID, row.ProjectName, row.ProjectSlug, row.McpName.String, row.McpSlug.String, row.Visibility,
-		inventoryModel(row.RemoteMcpServerID, row.TunneledMcpServerID, row.UnproxiedMcpServerID), inventoryBackendKind(row.RemoteMcpServerID, row.TunneledMcpServerID, row.ToolsetID, row.UnproxiedMcpServerID, row.BuiltinBackend), row.UpstreamUrl, row.RegistrationID, row.SourceKind, row.CatalogProvider, row.CatalogReference, row.RegistrationStatus,
+		inventoryModel(row.RemoteMcpServerID, row.TunneledMcpServerID, row.UnproxiedMcpServerID), inventoryBackendKind(row.RemoteMcpServerID, row.TunneledMcpServerID, row.ToolsetID, row.UnproxiedMcpServerID), row.UpstreamUrl, row.RegistrationID, row.SourceKind, row.CatalogProvider, row.CatalogReference, row.RegistrationStatus,
 		row.RegistrationRemoteMcpServerID, row.RegistrationUserSessionIssuerID, row.RegistrationMcpServerID, row.RegistrationMcpEndpointID,
 		row.ReadinessState, timestampString(row.ReadinessCheckedAt.Time, row.ReadinessCheckedAt.Valid), timestampString(row.ReadinessExpiresAt.Time, row.ReadinessExpiresAt.Valid), distributions,
 	)
@@ -166,12 +165,18 @@ func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, s
 		if enabledState != "enabled" {
 			mcp.Readiness = MCPReadiness{State: "unknown", CheckedAt: "", ExpiresAt: ""}
 		}
-		mcp.Operations = []string{"read", "dashboard_setup", "update_mcp_metadata"}
-		switch visibility {
-		case "disabled":
-			mcp.Operations = append(mcp.Operations, "enable_mcp")
-		case "private":
-			mcp.Operations = append(mcp.Operations, "disable_mcp")
+		mcp.Operations = []string{"read", "dashboard_setup"}
+		// The registration record is not serialized, so operations carry its
+		// completion: lifecycle writes refuse a pending or incomplete
+		// registration, and listing them would tell an agent the server is set up.
+		if mcp.Registration.Status == registrationStatusRegistered && mcp.Registration.ComponentsComplete {
+			mcp.Operations = append(mcp.Operations, "update_mcp_metadata")
+			switch visibility {
+			case "disabled":
+				mcp.Operations = append(mcp.Operations, "enable_mcp")
+			case "private":
+				mcp.Operations = append(mcp.Operations, "disable_mcp")
+			}
 		}
 		mcp.DashboardPath = "dashboard_mcp_settings"
 	case model == "dashboard_managed":
@@ -208,10 +213,8 @@ func validInventoryBackend(backend uuid.NullUUID) bool {
 	return backend.Valid && backend.UUID != uuid.Nil
 }
 
-func inventoryBackendKind(remote, tunneled, toolset, unproxied uuid.NullUUID, builtin pgtype.Text) MCPBackendKind {
+func inventoryBackendKind(remote, tunneled, toolset, unproxied uuid.NullUUID) MCPBackendKind {
 	switch {
-	case builtin.Valid:
-		return MCPBackendBuiltin
 	case validInventoryBackend(remote):
 		return MCPBackendRemote
 	case validInventoryBackend(tunneled):

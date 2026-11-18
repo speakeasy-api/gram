@@ -123,25 +123,10 @@ func (s *Service) describeConsentToolset(ctx context.Context, endpoint *Resolved
 	return toolset, nil
 }
 
-func (s *Service) consentToolPickerEligible(ctx context.Context, endpoint *ResolvedMcpEndpoint) (bool, error) {
-	if endpoint.MetaMcpServerID.Valid {
-		return true, nil
-	}
-	if !endpoint.McpServerID.Valid {
-		return false, nil
-	}
-	if !endpoint.ToolsetID.Valid {
-		return true, nil
-	}
-
-	hasProxy, err := toolsets_repo.New(s.db).ToolsetHasExternalMCPProxy(ctx, toolsets_repo.ToolsetHasExternalMCPProxyParams{
-		ToolsetID: endpoint.ToolsetID.UUID,
-		ProjectID: endpoint.ProjectID,
-	})
-	if err != nil {
-		return false, fmt.Errorf("check toolset for external MCP proxy: %w", err)
-	}
-	return !hasProxy, nil
+// consentToolPickerEligible reports whether the endpoint fronts an MCP server
+// whose tools the consent screen can offer for selection.
+func consentToolPickerEligible(endpoint *ResolvedMcpEndpoint) bool {
+	return endpoint.MetaMcpServerID.Valid || endpoint.McpServerID.Valid
 }
 
 // trueAnnotationValues lists the vocabulary values whose raw hint is

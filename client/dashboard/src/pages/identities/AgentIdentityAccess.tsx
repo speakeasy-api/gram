@@ -44,6 +44,7 @@ import { serverLabel } from "@/lib/auth-clients";
 import { mcpServerRouteParam } from "@/lib/sources";
 import type { AuthClient } from "@gram/client/models/components/authclient.js";
 import { Link } from "react-router";
+import { encodeIdentityUrn } from "@/lib/identity-urn";
 
 /**
  * Every narrowing beyond the resource itself, including constraints the
@@ -504,15 +505,19 @@ export function AgentIdentityPermissions({
         <IdentityPanel
           title="MCP servers"
           action={
-            <Button asChild variant="secondary" size="sm">
-              {/* The setup flow's server step, where servers are picked
-                  together with how the agent signs in to each. */}
-              <Link
-                to={`${routes.identities.agents.edit.href(agent.id)}?step=1`}
-              >
-                Edit servers
-              </Link>
-            </Button>
+            agent.permissions.write && (
+              <Button asChild variant="secondary" size="sm">
+                {/* The MCP sign-in tab, where servers are picked together
+                    with how the agent signs in to each. */}
+                <Link
+                  to={routes.identities.detail.mcpSignIn.href(
+                    encodeIdentityUrn(`agent:${agent.id}`),
+                  )}
+                >
+                  Change servers
+                </Link>
+              </Button>
+            )
           }
           loading={grants.isLoading}
           refreshFailed={grants.isError && visible.length > 0}

@@ -84,12 +84,39 @@ type Service interface {
 	// until then the server keeps signing in through its user session issuer's
 	// bindings. Requires mcp:read on the server.
 	ListServerClientAssociations(context.Context, *ListServerClientAssociationsPayload) (res *ListServerClientAssociationsResult, err error)
+	// Associate one MCP server with an upstream OAuth client, naming the client
+	// the server signs in through. The client must already be bound to the
+	// server's own user session issuer, or, for a server with none, to an issuer
+	// of a gateway fronting it. The client is also bound to the issuer of each
+	// gateway fronting the server, so its consent can offer the client. Refused
+	// when the server has another client, when another client of the provider
+	// holds a fronting gateway's issuer, or when the organization's
+	// organization-level issuer lacks the client. A per-user client is also
+	// refused when another proxied server uses it at a different upstream address,
+	// or would pick it up from a gateway's issuer. On a proxied server, a first
+	// association makes earlier no-auth choices unusable, so those people must
+	// reconnect, and other servers on the issuer stop falling back to the client.
+	// Attaching a client the server is already associated with refuses none of
+	// this and only completes the gateway bindings it can. Where upstream auth is
+	// enforced, attaching also restores the server's auth client link that
+	// detaching its own sign-in retired. Requires mcp:write on the server and on
+	// each gateway whose issuer gains the client.
+	AttachServerClientAssociation(context.Context, *AttachServerClientAssociationPayload) (res *AttachServerClientAssociationResult, err error)
 	// Remove one MCP server's association with an upstream OAuth client. The
 	// client and its associations with other servers are untouched. When the
 	// server is the only consumer of its user session issuer, the association
-	// follows the issuer's client binding and is refused here with a conflict:
-	// turn off User Identity on the server instead. Requires mcp:write on the
-	// server.
+	// follows the issuer's client binding: with upstream auth enforcement off,
+	// detach returns a conflict (409) and you must turn off User Identity on the
+	// server instead; with enforcement on, detach retires only the
+	// backfill-derived typed auth-client link and keeps the association. In this
+	// sole-consumer case, repeating detach returns not found (404). For other
+	// servers, detach removes the association (or records an exclusion for an
+	// unclaimed client bound to the server's issuer) and synchronizes the
+	// backfill-derived typed links. Removing an association also releases the
+	// client from a project-level issuer of a fronting gateway when the client
+	// stays bound to the server's own issuer and nothing else on that gateway
+	// issuer signs in through it. Administrator-owned typed links are untouched.
+	// Requires mcp:write on the server.
 	DetachServerClientAssociation(context.Context, *DetachServerClientAssociationPayload) (err error)
 	// List remote_sessions in the caller's project. Supplying both principal_id
 	// and user_session_issuer_id instead lists only the ordinary human caller's
@@ -129,7 +156,7 @@ const ServiceName = "remoteSessions"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [13]string{"beginBindingRefresh", "completeBindingRefresh", "listBindings", "attachBinding", "detachBinding", "testServerConnection", "commitServerIdentityConfiguration", "getServerIdentityImpact", "listServerClientAssociations", "detachServerClientAssociation", "listRemoteSessions", "countRemoteSessions", "revokeRemoteSession"}
+var MethodNames = [14]string{"beginBindingRefresh", "completeBindingRefresh", "listBindings", "attachBinding", "detachBinding", "testServerConnection", "commitServerIdentityConfiguration", "getServerIdentityImpact", "listServerClientAssociations", "attachServerClientAssociation", "detachServerClientAssociation", "listRemoteSessions", "countRemoteSessions", "revokeRemoteSession"}
 
 // AttachBindingPayload is the payload type of the remoteSessions service
 // attachBinding method.
@@ -139,6 +166,28 @@ type AttachBindingPayload struct {
 	RemoteSessionID     string
 	SessionToken        *string
 	ProjectSlugInput    *string
+}
+
+// AttachServerClientAssociationPayload is the payload type of the
+// remoteSessions service attachServerClientAssociation method.
+type AttachServerClientAssociationPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The MCP server.
+	McpServerID string
+	// The remote session client.
+	RemoteSessionClientID string
+}
+
+// AttachServerClientAssociationResult is the result type of the remoteSessions
+// service attachServerClientAssociation method.
+type AttachServerClientAssociationResult struct {
+	// The server's association with the client.
+	Association *ServerClientAssociation
+	// The issuers of gateways fronting the server that this attach bound the
+	// client to. Empty when they already held it.
+	BoundUserSessionIssuerIds []string
 }
 
 // BeginBindingRefreshPayload is the payload type of the remoteSessions service
@@ -186,7 +235,11 @@ type CommitServerIdentityConfigurationPayload struct {
 	// How to provide the OAuth client.
 	ClientMode string
 	// An existing visible remote-session client to link. Required only for
-	// existing mode.
+	// existing mode. Linking shares the client with every server that already uses
+	// it: a person holds one upstream grant per client, so signing in through one
+	// server replaces the grant another server obtained. To give this server its
+	// own client on the same upstream registration, use manual mode with
+	// client_configuration.template_client_id instead.
 	ExistingClientID *string
 	// Client settings for auto or manual mode. Forbidden for existing mode.
 	ClientConfiguration *ServerIdentityClientConfiguration
@@ -378,13 +431,13 @@ type DetachBindingPayload struct {
 // DetachServerClientAssociationPayload is the payload type of the
 // remoteSessions service detachServerClientAssociation method.
 type DetachServerClientAssociationPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 	// The MCP server.
 	McpServerID string
-	// The associated remote session client.
+	// The remote session client.
 	RemoteSessionClientID string
-	SessionToken          *string
-	ApikeyToken           *string
-	ProjectSlugInput      *string
 }
 
 // GetServerIdentityImpactPayload is the payload type of the remoteSessions
@@ -540,14 +593,27 @@ type ServerConnectionTestResult struct {
 }
 
 // Configuration for a newly-created project remote-session client. Manual mode
-// requires client_id. Auto mode forbids client_id and client_secret and uses
-// scope, audience, and token_endpoint_auth_method as registration preferences.
+// requires client_id. Auto mode forbids client_id, client_secret and
+// template_client_id and uses scope, audience, and token_endpoint_auth_method
+// as registration preferences.
 type ServerIdentityClientConfiguration struct {
 	// The out-of-band OAuth client identifier. Manual mode only.
 	ClientID *string
 	// The out-of-band OAuth client secret. Manual mode only; encrypted before
 	// persistence.
 	ClientSecret *string
+	// An existing remote_session_client of the same issuer, visible to the
+	// project, whose upstream registration the new client reuses. The new client
+	// is an independent record with its own id: it copies the template's stored
+	// client_secret, unless client_secret is supplied, and the callback the
+	// template's registration lists. client_id must equal the template's.
+	// Sessions, grants, user_session_issuer attachments and MCP server
+	// associations are not copied, and the template is unchanged. Refused for a
+	// client metadata document client, a private_key_jwt client, a
+	// credential_owner self client, a client managed by an identity provider
+	// connection, a client the issuer has rejected, and a template whose stored
+	// secret has expired unless client_secret is supplied.
+	TemplateClientID *string
 	// How the client authenticates at the provider token endpoint, or the
 	// preferred method for DCR.
 	TokenEndpointAuthMethod *string

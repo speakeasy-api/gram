@@ -24,7 +24,7 @@ type staticWorkloadVerifier struct {
 	token   string
 }
 
-func (v staticWorkloadVerifier) Verify(_ context.Context, token, source string) (Ingress, error) {
+func (v staticWorkloadVerifier) Verify(_ context.Context, token, source, _ string) (Ingress, error) {
 	if token != v.token || source == "" {
 		return Ingress{}, ErrAttestationRejected
 	}

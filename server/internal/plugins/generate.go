@@ -22,6 +22,10 @@ import (
 	domainskills "github.com/speakeasy-api/gram/server/internal/skills"
 )
 
+// speakeasyHomepageURL is the author and homepage URL written into generated
+// plugin manifests and marketplace metadata.
+const speakeasyHomepageURL = "https://speakeasy.com"
+
 // ServerEnvConfig represents a user-facing environment variable required by a server.
 type ServerEnvConfig struct {
 	VariableName string
@@ -399,7 +403,7 @@ const platformMCPGeneratorVersion = "4"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "61"
+const hooksGeneratorVersion = "63"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -424,12 +428,13 @@ const (
 	// of repeating "platform-mcp" twice. Cursor and Codex packages keep a
 	// client suffix because all five package roots share one repository.
 	platformMCPPluginName         = "speakeasy"
-	platformMCPDisplayName        = "Platform MCP"
+	platformMCPDisplayName        = "Speakeasy Platform"
 	platformMCPServerName         = "platform"
 	platformMCPCursorPluginName   = "speakeasy-cursor"
 	platformMCPCodexPluginName    = "speakeasy-codex"
 	platformMCPPluginRoot         = platformMCPPluginName
 	platformMCPDescription        = "Manage MCPs, Risk Policies and explore logs in your favorite agent."
+	platformMCPPrivacyPolicyURL   = "https://www.speakeasy.com/privacy-policy"
 	platformMCPCursorPluginRoot   = cursorPluginRoot + "/" + platformMCPCursorPluginName
 	platformMCPCodexPluginRoot    = platformMCPCodexPluginName
 	platformMCPOpenCodePluginRoot = opencodePluginRoot + "/" + platformMCPPluginName
@@ -443,6 +448,13 @@ const (
 //
 //go:embed platform_mcp_skills/*/SKILL.md
 var platformMCPSkillsFS embed.FS
+
+// platformMCPClaudeIcon is the Speakeasy mark the Claude plugin directory uses
+// as the listing icon. The directory reads .claude-plugin/icon.png and wants a
+// square PNG of 512 to 2048 px under 2 MB.
+//
+//go:embed platform_mcp_assets/icon.png
+var platformMCPClaudeIcon []byte
 
 // PluginMCPFingerprint returns one plugin's entry of publishMCPFingerprints without
 // generating the rest of the project: the fingerprint a publish would record
@@ -939,7 +951,7 @@ func generateReadme(plugins []sharedPluginEntry, cfg GenerateConfig) []byte {
 	var b strings.Builder
 
 	b.WriteString("# " + cfg.OrgName + " Plugins\n\n")
-	b.WriteString("This repository contains plugin packages managed by [Speakeasy](https://getgram.ai). ")
+	b.WriteString("This repository contains plugin packages managed by [Speakeasy](" + speakeasyHomepageURL + "). ")
 	b.WriteString("Each plugin bundles MCP servers for distribution via supported coding agent marketplaces.\n\n")
 	b.WriteString("## How this repo works\n\n")
 	b.WriteString("- **Admin access.** Collaborators are granted admin permission so they can connect this repository to a platform marketplace — several of those setup flows, including Cursor's \"Serve marketplace from Cursor\", are only available to repository admins. Collaborators added before admin became the default keep their original permission until they are re-added from Speakeasy.\n")
@@ -1406,13 +1418,14 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 		name = ClaudeObservabilitySlug(cfg)
 	}
 	pluginJSON, err := marshalJSON(claudePluginMeta{
-		Name:        name,
-		DisplayName: cfg.OrgName + " Observability",
-		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
-		Version:     hooksManifestVersion(cfg),
-		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
-		Homepage:    "https://getgram.ai",
-		UserConfig:  nil,
+		Name:             name,
+		DisplayName:      cfg.OrgName + " Observability",
+		Description:      "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
+		Version:          hooksManifestVersion(cfg),
+		Author:           pluginAuthor{Name: cfg.OrgName, URL: speakeasyHomepageURL},
+		Homepage:         speakeasyHomepageURL,
+		UserConfig:       nil,
+		PrivacyPolicyURL: "",
 	})
 	if err != nil {
 		return fmt.Errorf("marshal plugin.json: %w", err)
@@ -1470,7 +1483,7 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir, nam
 		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
 		Version:     hooksManifestVersion(cfg),
 		Author:      cursorAuthor{Name: cfg.OrgName, Email: cfg.OrgEmail},
-		Homepage:    "https://getgram.ai",
+		Homepage:    speakeasyHomepageURL,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal plugin.json: %w", err)
@@ -3337,18 +3350,20 @@ func emitPlatformMCPSkills(files map[string][]byte) error {
 func generatePlatformMCPPackage(cfg GenerateConfig, platformURL string) (map[string][]byte, error) {
 	files := make(map[string][]byte)
 	meta, err := marshalJSON(claudePluginMeta{
-		Name:        platformMCPPluginName,
-		DisplayName: platformMCPDisplayName,
-		Description: platformMCPDescription,
-		Version:     platformMCPManifestVersion(cfg),
-		Author:      pluginAuthor{Name: "Speakeasy", URL: "https://www.speakeasy.com/"},
-		Homepage:    "https://www.speakeasy.com/product/gram",
-		UserConfig:  nil,
+		Name:             platformMCPPluginName,
+		DisplayName:      platformMCPDisplayName,
+		Description:      platformMCPDescription,
+		Version:          platformMCPManifestVersion(cfg),
+		Author:           pluginAuthor{Name: "Speakeasy", URL: "https://www.speakeasy.com/"},
+		Homepage:         "https://www.speakeasy.com/product/gram",
+		UserConfig:       nil,
+		PrivacyPolicyURL: platformMCPPrivacyPolicyURL,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal Platform MCP plugin.json: %w", err)
 	}
 	files[".claude-plugin/plugin.json"] = meta
+	files[".claude-plugin/icon.png"] = bytes.Clone(platformMCPClaudeIcon)
 
 	mcpConfig, err := marshalJSON(claudeMCPConfig{MCPServers: map[string]claudeMCPServer{
 		platformMCPServerName: {
@@ -3556,13 +3571,14 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	}
 
 	pluginJSON, err := marshalJSON(claudePluginMeta{
-		Name:        p.Slug,
-		DisplayName: p.Name,
-		Description: p.Description,
-		Version:     pluginManifestVersion(cfg),
-		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
-		Homepage:    "https://getgram.ai",
-		UserConfig:  userConfigPtr,
+		Name:             p.Slug,
+		DisplayName:      p.Name,
+		Description:      p.Description,
+		Version:          pluginManifestVersion(cfg),
+		Author:           pluginAuthor{Name: cfg.OrgName, URL: speakeasyHomepageURL},
+		Homepage:         speakeasyHomepageURL,
+		UserConfig:       userConfigPtr,
+		PrivacyPolicyURL: "",
 	})
 	if err != nil {
 		return fmt.Errorf("marshal plugin.json: %w", err)
@@ -3635,7 +3651,7 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 		Description: p.Description,
 		Version:     pluginManifestVersion(cfg),
 		Author:      cursorAuthor{Name: cfg.OrgName, Email: ""},
-		Homepage:    "https://getgram.ai",
+		Homepage:    speakeasyHomepageURL,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal plugin.json: %w", err)
@@ -3871,6 +3887,10 @@ type claudePluginMeta struct {
 	Author      pluginAuthor               `json:"author"`
 	Homepage    string                     `json:"homepage"`
 	UserConfig  map[string]userConfigEntry `json:"userConfig,omitempty"`
+	// PrivacyPolicyURL is read by the Claude plugin directory review; only the
+	// first-party Platform MCP package is listed there, so customer and
+	// observability packages leave it empty.
+	PrivacyPolicyURL string `json:"privacyPolicyUrl,omitempty"`
 }
 
 type userConfigEntry struct {

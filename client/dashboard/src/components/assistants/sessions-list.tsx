@@ -20,7 +20,7 @@ import { UnknownCost } from "@/pages/chatLogs/UnknownCost";
 import { useChatDetailSheet } from "@/pages/chatLogs/useChatDetailSheet";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { useRoutes } from "@/routes";
-import { ChatOverview } from "@gram/client/models/components/chatoverview.js";
+import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import { useAssistantSessionSummary } from "@gram/client/react-query/assistantSessionSummary.js";
 import { useListChats } from "@gram/client/react-query/listChats.js";
 import { format } from "date-fns";

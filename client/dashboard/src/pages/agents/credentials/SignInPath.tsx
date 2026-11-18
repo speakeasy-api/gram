@@ -33,7 +33,22 @@ const HOPS: Record<SignInHop, { label: string; caption: string }> = {
  * it. Laid out like a run graph: solid cards for the parties, arrows for the
  * sign-ins, across the page and down it at phone width.
  */
-export function SignInPath({ hop }: { hop: SignInHop }): JSX.Element {
+export function SignInPath({
+  hop,
+  onTab = false,
+}: {
+  hop: SignInHop;
+  /**
+   * Shown on an existing agent's page rather than in the setup wizard: the
+   * lit sign-in is that tab's, and the other one is not a step still ahead.
+   */
+  onTab?: boolean;
+}): JSX.Element {
+  const caption =
+    onTab && hop === "mcp"
+      ? "This is separate from how the agent signs in to Speakeasy, which is set on its Agent sign-in tab."
+      : HOPS[hop].caption;
+  const marker = onTab ? "This tab" : "This step";
   return (
     <figure
       aria-label={`${HOPS[hop].label}: ${hop === "agent" ? "agent to Speakeasy" : "Speakeasy to MCP servers"}`}
@@ -46,9 +61,9 @@ export function SignInPath({ hop }: { hop: SignInHop }): JSX.Element {
           role="Your runtime"
           on={hop === "agent"}
         />
-        <Hop label={HOPS.agent.label} on={hop === "agent"} />
+        <Hop label={HOPS.agent.label} on={hop === "agent"} marker={marker} />
         <Party icon={Layers} name="Speakeasy" role="Control plane" on />
-        <Hop label={HOPS.mcp.label} on={hop === "mcp"} />
+        <Hop label={HOPS.mcp.label} on={hop === "mcp"} marker={marker} />
         <Party
           icon={Server}
           name="MCP servers"
@@ -58,7 +73,7 @@ export function SignInPath({ hop }: { hop: SignInHop }): JSX.Element {
       </div>
       <figcaption className="border-border mt-4 border-t pt-3">
         <Text muted small>
-          {HOPS[hop].caption}
+          {caption}
         </Text>
       </figcaption>
     </figure>
@@ -109,7 +124,16 @@ function Party({
  * dashed otherwise. Across the page between the cards, or down the page at
  * phone width, where the label sits beside it.
  */
-function Hop({ label, on }: { label: string; on: boolean }): JSX.Element {
+function Hop({
+  label,
+  on,
+  marker,
+}: {
+  label: string;
+  on: boolean;
+  /** What the lit sign-in is called where the path is shown. */
+  marker: string;
+}): JSX.Element {
   const name = (
     <span
       className={cn(
@@ -122,7 +146,7 @@ function Hop({ label, on }: { label: string; on: boolean }): JSX.Element {
   );
   const badge = on && (
     <span className="bg-information-default px-1.5 py-0.5 font-mono text-[10px] tracking-[0.08em] whitespace-nowrap text-white uppercase">
-      This step
+      {marker}
     </span>
   );
   const shaft = on ? "bg-information-default" : "border-border border-dashed";

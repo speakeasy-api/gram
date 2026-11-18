@@ -235,11 +235,34 @@ WITH due AS (
   LEFT JOIN projects AS cp ON cp.id = c.project_id AND cp.deleted IS FALSE
   CROSS JOIN LATERAL (
     SELECT array_agg(DISTINCT COALESCE(p.organization_id, usi.organization_id))::text[] AS organization_ids
-    FROM remote_session_client_user_session_issuers AS link
-    JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id AND usi.deleted IS FALSE
+    FROM (
+      SELECT link.user_session_issuer_id
+      FROM remote_session_client_user_session_issuers AS link
+      WHERE link.remote_session_client_id = c.id
+      UNION
+      SELECT reached.id
+      FROM user_session_issuers AS minted_by
+      LEFT JOIN projects AS minted_project ON minted_project.id = minted_by.project_id
+      JOIN mcp_auth_clients AS ac ON ac.organization_id = COALESCE(minted_project.organization_id, minted_by.organization_id)
+        AND ac.remote_session_client_id = c.id AND ac.enabled AND ac.deleted IS FALSE
+      JOIN organization_features AS enforced ON enforced.organization_id = ac.organization_id
+        AND enforced.feature_name = 'upstream_auth_enforced' AND enforced.deleted IS FALSE
+      JOIN mcp_server_auth_clients AS offer ON offer.auth_client_id = ac.id AND offer.organization_id = ac.organization_id AND offer.deleted IS FALSE
+        AND (ac.project_id IS NULL OR ac.project_id = offer.project_id)
+      JOIN mcp_servers AS offering ON offering.id = offer.mcp_server_id AND offering.project_id = offer.project_id AND offering.deleted IS FALSE
+      JOIN projects AS offering_project ON offering_project.id = offer.project_id
+        AND offering_project.organization_id = offer.organization_id AND offering_project.deleted IS FALSE
+      JOIN user_session_issuers AS reached ON reached.id IN (offering.user_session_issuer_id, minted_by.id) AND reached.deleted IS FALSE
+      LEFT JOIN projects AS reached_project ON reached_project.id = reached.project_id
+      WHERE minted_by.id = s.user_session_issuer_id
+        AND COALESCE(reached_project.organization_id, reached.organization_id) = ac.organization_id
+        AND (c.project_id = offer.project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = ac.organization_id)))
+        AND (i.project_id = offer.project_id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = ac.organization_id)))
+        AND i.deleted IS FALSE
+    ) AS reach
+    JOIN user_session_issuers AS usi ON usi.id = reach.user_session_issuer_id AND usi.deleted IS FALSE
     LEFT JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
-    WHERE link.remote_session_client_id = c.id
-      AND (usi.project_id IS NULL OR p.id IS NOT NULL)
+    WHERE (usi.project_id IS NULL OR p.id IS NOT NULL)
       AND (
         (c.project_id IS NOT NULL AND (c.project_id = usi.project_id OR (usi.project_id IS NULL AND cp.organization_id = usi.organization_id)))
         OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = COALESCE(p.organization_id, usi.organization_id)))
@@ -293,7 +316,7 @@ type ClaimDueRemoteSessionRecheckCandidatesRow struct {
 
 // Idle re-check (AIM-261): grants with no refresh token or expiry are presented to their upstream on a slow cadence, since the refresh sweep never touches them.
 // Due once the verdict (or, before any, the grant) is older than the interval and no claim lease is live; last_refresh_attempt_at is the lease.
-// Routability, not the auto-refresh opt-in, is the population: a bound issuer entitled to the client (project client under its own or an org-tier issuer of its org; org client under either), with a live Speakeasy session for the subject.
+// Routability, not the auto-refresh opt-in, is the population: a bound issuer entitled to the client (project client under its own or an org-tier issuer of its org; org client under either), with a live Speakeasy session for the subject. A bound issuer is one linked to the client or, where typed auth clients are enforced, one a live offer reaches, as ClaimDueRemoteSessionRefreshCandidates describes.
 // Rejected and inactive grants stay in the population and are re-probed each interval until their Speakeasy session lapses.
 // Every organization the grant is eligible under comes back, so the probe can try each one's endpoints; excluded_hosts skips issuer hosts this pass already found rate limited.
 func (q *Queries) ClaimDueRemoteSessionRecheckCandidates(ctx context.Context, arg ClaimDueRemoteSessionRecheckCandidatesParams) ([]ClaimDueRemoteSessionRecheckCandidatesRow, error) {
@@ -337,27 +360,59 @@ WITH due AS (
   FROM remote_sessions AS s
   JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND c.deleted IS FALSE
   JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
+  LEFT JOIN projects AS cp ON cp.id = c.project_id AND cp.deleted IS FALSE
   CROSS JOIN LATERAL (
     -- A project-tier issuer takes its organization from its project; an
     -- organization-tier issuer has no project and carries it on the row.
     SELECT COALESCE(p.organization_id, usi.organization_id) AS organization_id
-    FROM remote_session_client_user_session_issuers AS link
-    JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id AND usi.deleted IS FALSE
+    FROM (
+      SELECT link.user_session_issuer_id
+      FROM remote_session_client_user_session_issuers AS link
+      WHERE link.remote_session_client_id = c.id
+      UNION
+      SELECT reached.id
+      FROM user_session_issuers AS minted_by
+      LEFT JOIN projects AS minted_project ON minted_project.id = minted_by.project_id
+      JOIN mcp_auth_clients AS ac ON ac.organization_id = COALESCE(minted_project.organization_id, minted_by.organization_id)
+        AND ac.remote_session_client_id = c.id AND ac.enabled AND ac.deleted IS FALSE
+      JOIN organization_features AS enforced ON enforced.organization_id = ac.organization_id
+        AND enforced.feature_name = 'upstream_auth_enforced' AND enforced.deleted IS FALSE
+      JOIN mcp_server_auth_clients AS offer ON offer.auth_client_id = ac.id AND offer.organization_id = ac.organization_id AND offer.deleted IS FALSE
+        AND (ac.project_id IS NULL OR ac.project_id = offer.project_id)
+      JOIN mcp_servers AS offering ON offering.id = offer.mcp_server_id AND offering.project_id = offer.project_id AND offering.deleted IS FALSE
+      JOIN projects AS offering_project ON offering_project.id = offer.project_id
+        AND offering_project.organization_id = offer.organization_id AND offering_project.deleted IS FALSE
+      JOIN user_session_issuers AS reached ON reached.id IN (offering.user_session_issuer_id, minted_by.id) AND reached.deleted IS FALSE
+      LEFT JOIN projects AS reached_project ON reached_project.id = reached.project_id
+      WHERE minted_by.id = s.user_session_issuer_id
+        AND COALESCE(reached_project.organization_id, reached.organization_id) = ac.organization_id
+        AND (c.project_id = offer.project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = ac.organization_id)))
+        AND (i.project_id = offer.project_id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = ac.organization_id)))
+        AND i.deleted IS FALSE
+    ) AS reach
+    JOIN user_session_issuers AS usi ON usi.id = reach.user_session_issuer_id AND usi.deleted IS FALSE
     LEFT JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
-    WHERE link.remote_session_client_id = c.id
+    WHERE
       -- A project-tier issuer still requires a live project. The inner join
       -- used to enforce that on its own; the LEFT JOIN no longer does.
-      AND (usi.project_id IS NULL OR p.id IS NOT NULL)
+      (usi.project_id IS NULL OR p.id IS NOT NULL)
       -- The bound issuer must be entitled to the client under the same
       -- tenancy rule the interactive surfaces apply (its project's own
       -- clients, org-level clients of its organization, or clients from the
       -- tenantless global catalog), so a binding row that ever crossed
       -- tenants cannot put this credential under a foreign organization's
-      -- refresh policy. An organization-tier issuer owns no project, so only
-      -- the org-level and global arms can match for one.
+      -- refresh policy. An organization-tier issuer can also reach clients
+      -- owned by a live project in its organization.
       AND (
-        c.project_id = usi.project_id
+        (c.project_id IS NOT NULL AND (c.project_id = usi.project_id OR (usi.project_id IS NULL AND cp.organization_id = usi.organization_id)))
         OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = COALESCE(p.organization_id, usi.organization_id)))
+      )
+      -- A direct binding does not validate the upstream provider's ownership.
+      -- Only the client's own project or an org/global provider available to
+      -- this tenant may receive the stored refresh token.
+      AND (
+        i.project_id = c.project_id
+        OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = COALESCE(p.organization_id, usi.organization_id)))
       )
       AND (
         EXISTS (
@@ -475,6 +530,18 @@ type ClaimDueRemoteSessionRefreshCandidatesRow struct {
 // on reconnect, so requiring that exact issuer to still be live would skip a
 // grant whose minting provider was replaced while another bound issuer still
 // holds the subject's login.
+//
+// Where the organization the grant was consented in enforces typed auth
+// clients, a live, enabled offer of the client within that organization also
+// reaches two issuers, linked or not: the offering server's, and the sign-in the
+// grant was consented through, which is how a gateway login reaches a member's
+// organization-level registration. A project-level registration still needs
+// the tenancy rule below, which an organization-tier sign-in does not meet, so
+// the sweep does not claim that grant. The offer is judged as serving judges it: the registration and
+// its provider are in the offering project's or organization's reach. Everything
+// else about eligibility is the same for these issuers. No agent attachment can
+// name one, because an attachment requires a link, so only a live Speakeasy
+// session keeps such a grant eligible.
 func (q *Queries) ClaimDueRemoteSessionRefreshCandidates(ctx context.Context, arg ClaimDueRemoteSessionRefreshCandidatesParams) ([]ClaimDueRemoteSessionRefreshCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, claimDueRemoteSessionRefreshCandidates,
 		arg.NowTs,
@@ -530,7 +597,7 @@ WHERE s.organization_id = $2::text
         WHERE 'user:' || u.id = $4::text AND u.deleted_at IS NULL
           AND u.workos_deleted_at IS NULL AND m.deleted IS FALSE)
   )
-RETURNING s.id, s.remote_session_client_id, s.organization_id, s.project_id, s.subject_urn, s.identity_assertion_encrypted, s.identity_assertion_expires_at, s.refresh_token_encrypted, s.refresh_expires_at, s.last_refresh_attempt_at, s.offline_access_refused_at, s.offline_access_request_config_hash, s.credential_generation, s.refresh_claim_id, s.upstream_subject_encrypted, s.nonce_encrypted, s.credential_config_hash, s.observation_status, s.observed_at, s.credential_obtained_at, s.last_refresh_succeeded_at, s.retry_after, s.created_at, s.updated_at, s.deleted_at, s.deleted
+RETURNING s.id, s.remote_session_client_id, s.organization_id, s.project_id, s.subject_urn, s.identity_assertion_encrypted, s.identity_assertion_org_encrypted, s.identity_assertion_expires_at, s.refresh_token_encrypted, s.refresh_token_org_encrypted, s.refresh_expires_at, s.last_refresh_attempt_at, s.offline_access_refused_at, s.offline_access_request_config_hash, s.credential_generation, s.refresh_claim_id, s.upstream_subject_encrypted, s.upstream_subject_org_encrypted, s.nonce_encrypted, s.nonce_org_encrypted, s.credential_config_hash, s.observation_status, s.observed_at, s.credential_obtained_at, s.last_refresh_succeeded_at, s.retry_after, s.created_at, s.updated_at, s.deleted_at, s.deleted
 `
 
 type ClaimTrustedDelegationRefreshParams struct {
@@ -560,8 +627,10 @@ func (q *Queries) ClaimTrustedDelegationRefresh(ctx context.Context, arg ClaimTr
 		&i.ProjectID,
 		&i.SubjectUrn,
 		&i.IdentityAssertionEncrypted,
+		&i.IdentityAssertionOrgEncrypted,
 		&i.IdentityAssertionExpiresAt,
 		&i.RefreshTokenEncrypted,
+		&i.RefreshTokenOrgEncrypted,
 		&i.RefreshExpiresAt,
 		&i.LastRefreshAttemptAt,
 		&i.OfflineAccessRefusedAt,
@@ -569,7 +638,9 @@ func (q *Queries) ClaimTrustedDelegationRefresh(ctx context.Context, arg ClaimTr
 		&i.CredentialGeneration,
 		&i.RefreshClaimID,
 		&i.UpstreamSubjectEncrypted,
+		&i.UpstreamSubjectOrgEncrypted,
 		&i.NonceEncrypted,
+		&i.NonceOrgEncrypted,
 		&i.CredentialConfigHash,
 		&i.ObservationStatus,
 		&i.ObservedAt,
@@ -761,17 +832,41 @@ const clearRemoteSessionRecheckLease = `-- name: ClearRemoteSessionRecheckLease 
 UPDATE remote_sessions AS s
 SET last_refresh_attempt_at = NULL
 FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE s.id = $1
   AND s.remote_session_client_id = c.id
   AND c.deleted IS FALSE
   AND s.refresh_token_encrypted IS NULL
   AND EXISTS (
     SELECT 1
-    FROM remote_session_client_user_session_issuers AS link
-    JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id AND usi.deleted IS FALSE
+    FROM (
+      SELECT link.user_session_issuer_id
+      FROM remote_session_client_user_session_issuers AS link
+      WHERE link.remote_session_client_id = c.id
+      UNION
+      SELECT reached.id
+      FROM user_session_issuers AS minted_by
+      LEFT JOIN projects AS minted_project ON minted_project.id = minted_by.project_id
+      JOIN mcp_auth_clients AS ac ON ac.organization_id = COALESCE(minted_project.organization_id, minted_by.organization_id)
+        AND ac.remote_session_client_id = c.id AND ac.enabled AND ac.deleted IS FALSE
+      JOIN organization_features AS enforced ON enforced.organization_id = ac.organization_id
+        AND enforced.feature_name = 'upstream_auth_enforced' AND enforced.deleted IS FALSE
+      JOIN mcp_server_auth_clients AS offer ON offer.auth_client_id = ac.id AND offer.organization_id = ac.organization_id AND offer.deleted IS FALSE
+        AND (ac.project_id IS NULL OR ac.project_id = offer.project_id)
+      JOIN mcp_servers AS offering ON offering.id = offer.mcp_server_id AND offering.project_id = offer.project_id AND offering.deleted IS FALSE
+      JOIN projects AS offering_project ON offering_project.id = offer.project_id
+        AND offering_project.organization_id = offer.organization_id AND offering_project.deleted IS FALSE
+      JOIN user_session_issuers AS reached ON reached.id IN (offering.user_session_issuer_id, minted_by.id) AND reached.deleted IS FALSE
+      LEFT JOIN projects AS reached_project ON reached_project.id = reached.project_id
+      WHERE minted_by.id = s.user_session_issuer_id
+        AND COALESCE(reached_project.organization_id, reached.organization_id) = ac.organization_id
+        AND (c.project_id = offer.project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = ac.organization_id)))
+        AND (i.project_id = offer.project_id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = ac.organization_id)))
+        AND i.deleted IS FALSE
+    ) AS reach
+    JOIN user_session_issuers AS usi ON usi.id = reach.user_session_issuer_id AND usi.deleted IS FALSE
     LEFT JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
-    WHERE link.remote_session_client_id = c.id
-      AND COALESCE(p.organization_id, usi.organization_id) = ANY($2::text[])
+    WHERE COALESCE(p.organization_id, usi.organization_id) = ANY($2::text[])
   )
 `
 
@@ -800,7 +895,7 @@ WHERE id = $1
   AND remote_session_client_id = $3
   AND deleted IS FALSE
   AND updated_at = $4
-RETURNING id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
+RETURNING id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted, access_token_org_encrypted, access_expires_at, refresh_token_encrypted, refresh_token_org_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type ClearRemoteSessionRefreshTokenAfterInvalidGrantParams struct {
@@ -835,9 +930,12 @@ func (q *Queries) ClearRemoteSessionRefreshTokenAfterInvalidGrant(ctx context.Co
 		&i.SubjectUrn,
 		&i.UserSessionIssuerID,
 		&i.RemoteSessionClientID,
+		&i.OrganizationID,
 		&i.AccessTokenEncrypted,
+		&i.AccessTokenOrgEncrypted,
 		&i.AccessExpiresAt,
 		&i.RefreshTokenEncrypted,
+		&i.RefreshTokenOrgEncrypted,
 		&i.AuthorizationExpiresAt,
 		&i.RefreshExpiresAt,
 		&i.Scopes,
@@ -902,7 +1000,7 @@ WHERE s.organization_id = $16::text
         WHERE 'user:' || u.id = $18::text AND u.deleted_at IS NULL
           AND u.workos_deleted_at IS NULL AND m.deleted IS FALSE)
   )
-RETURNING s.id, s.remote_session_client_id, s.organization_id, s.project_id, s.subject_urn, s.identity_assertion_encrypted, s.identity_assertion_expires_at, s.refresh_token_encrypted, s.refresh_expires_at, s.last_refresh_attempt_at, s.offline_access_refused_at, s.offline_access_request_config_hash, s.credential_generation, s.refresh_claim_id, s.upstream_subject_encrypted, s.nonce_encrypted, s.credential_config_hash, s.observation_status, s.observed_at, s.credential_obtained_at, s.last_refresh_succeeded_at, s.retry_after, s.created_at, s.updated_at, s.deleted_at, s.deleted
+RETURNING s.id, s.remote_session_client_id, s.organization_id, s.project_id, s.subject_urn, s.identity_assertion_encrypted, s.identity_assertion_org_encrypted, s.identity_assertion_expires_at, s.refresh_token_encrypted, s.refresh_token_org_encrypted, s.refresh_expires_at, s.last_refresh_attempt_at, s.offline_access_refused_at, s.offline_access_request_config_hash, s.credential_generation, s.refresh_claim_id, s.upstream_subject_encrypted, s.upstream_subject_org_encrypted, s.nonce_encrypted, s.nonce_org_encrypted, s.credential_config_hash, s.observation_status, s.observed_at, s.credential_obtained_at, s.last_refresh_succeeded_at, s.retry_after, s.created_at, s.updated_at, s.deleted_at, s.deleted
 `
 
 type CompleteTrustedDelegationRefreshParams struct {
@@ -963,8 +1061,10 @@ func (q *Queries) CompleteTrustedDelegationRefresh(ctx context.Context, arg Comp
 		&i.ProjectID,
 		&i.SubjectUrn,
 		&i.IdentityAssertionEncrypted,
+		&i.IdentityAssertionOrgEncrypted,
 		&i.IdentityAssertionExpiresAt,
 		&i.RefreshTokenEncrypted,
+		&i.RefreshTokenOrgEncrypted,
 		&i.RefreshExpiresAt,
 		&i.LastRefreshAttemptAt,
 		&i.OfflineAccessRefusedAt,
@@ -972,7 +1072,9 @@ func (q *Queries) CompleteTrustedDelegationRefresh(ctx context.Context, arg Comp
 		&i.CredentialGeneration,
 		&i.RefreshClaimID,
 		&i.UpstreamSubjectEncrypted,
+		&i.UpstreamSubjectOrgEncrypted,
 		&i.NonceEncrypted,
+		&i.NonceOrgEncrypted,
 		&i.CredentialConfigHash,
 		&i.ObservationStatus,
 		&i.ObservedAt,
@@ -1589,7 +1691,7 @@ VALUES (
     -- need not name it. Allowed values are validated in application code.
     COALESCE($18::text, 'subject')
 )
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateRemoteSessionClientParams struct {
@@ -1646,6 +1748,8 @@ func (q *Queries) CreateRemoteSessionClient(ctx context.Context, arg CreateRemot
 		&i.RemoteSessionIssuerID,
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
+		&i.ClientSecretOrgEncrypted,
+		&i.ClientSecretGeneration,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.TokenEndpointAuthMethod,
@@ -1704,7 +1808,7 @@ VALUES (
     $9,
     $10
 )
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateRemoteSessionClientCIMDParams struct {
@@ -1747,6 +1851,8 @@ func (q *Queries) CreateRemoteSessionClientCIMD(ctx context.Context, arg CreateR
 		&i.RemoteSessionIssuerID,
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
+		&i.ClientSecretOrgEncrypted,
+		&i.ClientSecretGeneration,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.TokenEndpointAuthMethod,
@@ -2092,7 +2198,7 @@ const deleteGlobalRemoteSessionClient = `-- name: DeleteGlobalRemoteSessionClien
 UPDATE remote_session_clients
 SET deleted_at = clock_timestamp()
 WHERE id = $1 AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
 `
 
 func (q *Queries) DeleteGlobalRemoteSessionClient(ctx context.Context, id uuid.UUID) (RemoteSessionClient, error) {
@@ -2106,6 +2212,8 @@ func (q *Queries) DeleteGlobalRemoteSessionClient(ctx context.Context, id uuid.U
 		&i.RemoteSessionIssuerID,
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
+		&i.ClientSecretOrgEncrypted,
+		&i.ClientSecretGeneration,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.TokenEndpointAuthMethod,
@@ -2280,7 +2388,7 @@ WHERE c.id = $1
     WHERE usi.trusted_remote_session_client_id = c.id
       AND usi.deleted IS FALSE
   )
-RETURNING c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted
+RETURNING c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_secret_org_encrypted, c.client_secret_generation, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted
 `
 
 type DeleteOrganizationRemoteSessionClientParams struct {
@@ -2303,6 +2411,8 @@ func (q *Queries) DeleteOrganizationRemoteSessionClient(ctx context.Context, arg
 		&i.RemoteSessionIssuerID,
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
+		&i.ClientSecretOrgEncrypted,
+		&i.ClientSecretGeneration,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.TokenEndpointAuthMethod,
@@ -2472,7 +2582,7 @@ const deleteRemoteSessionClient = `-- name: DeleteRemoteSessionClient :one
 UPDATE remote_session_clients
 SET deleted_at = clock_timestamp()
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteRemoteSessionClientParams struct {
@@ -2491,6 +2601,8 @@ func (q *Queries) DeleteRemoteSessionClient(ctx context.Context, arg DeleteRemot
 		&i.RemoteSessionIssuerID,
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
+		&i.ClientSecretOrgEncrypted,
+		&i.ClientSecretGeneration,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.TokenEndpointAuthMethod,
@@ -2813,6 +2925,22 @@ func (q *Queries) DeleteTenantRemoteSessionIssuer(ctx context.Context, id uuid.U
 	return i, err
 }
 
+const deleteUserSessionIssuerAttachmentsForDeletedRemoteSessionClient = `-- name: DeleteUserSessionIssuerAttachmentsForDeletedRemoteSessionClient :exec
+DELETE FROM remote_session_client_user_session_issuers AS link
+USING remote_session_clients AS c
+WHERE link.remote_session_client_id = c.id
+  AND c.id = $1
+  AND c.deleted IS TRUE
+`
+
+// Removes every user session issuer binding of a client the caller has just
+// soft-deleted, in any tenant: the client row's deletion is the authorization,
+// so a live client is never touched.
+func (q *Queries) DeleteUserSessionIssuerAttachmentsForDeletedRemoteSessionClient(ctx context.Context, remoteSessionClientID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserSessionIssuerAttachmentsForDeletedRemoteSessionClient, remoteSessionClientID)
+	return err
+}
+
 const deleteUserSessionIssuerAttachmentsForRemoteSessionClient = `-- name: DeleteUserSessionIssuerAttachmentsForRemoteSessionClient :exec
 DELETE FROM remote_session_client_user_session_issuers AS link
 USING remote_session_clients AS c
@@ -2896,7 +3024,24 @@ SELECT
         )
       )
     ORDER BY a.mcp_server_id
-  )::uuid[] AS other_mcp_server_ids
+  )::uuid[] AS other_mcp_server_ids,
+  ARRAY(
+      SELECT DISTINCT c.remote_session_issuer_id
+      FROM mcp_server_remote_session_clients AS a
+      JOIN remote_session_clients AS c
+        ON c.id = a.remote_session_client_id
+       AND c.deleted IS FALSE
+       AND (c.project_id = a.project_id
+            OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+      JOIN remote_session_issuers AS provider
+        ON provider.id = c.remote_session_issuer_id
+       AND provider.deleted IS FALSE
+       AND (provider.project_id = a.project_id
+            OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+      WHERE a.mcp_server_id = $1::uuid
+        AND a.organization_id = $2::text
+        AND a.deleted IS FALSE
+  )::uuid[] AS association_provider_ids
 FROM unnest($4::uuid[]) AS requested(client_id)
 `
 
@@ -2912,6 +3057,7 @@ type DescribeBoundClientUseRow struct {
 	AssociatedWithMcpServer bool
 	DetachedFromMcpServer   bool
 	OtherMcpServerIds       []uuid.UUID
+	AssociationProviderIds  []uuid.UUID
 }
 
 // For each client bound to one user session issuer, who signs in through it on
@@ -2928,6 +3074,9 @@ type DescribeBoundClientUseRow struct {
 // with the client that reach it through this issuer, as their own issuer, as
 // the issuer of a gateway they are a member of, or as the organization's only
 // organization-level issuer.
+//
+// association_provider_ids: the distinct live providers of the configured
+// server's live client associations, the same on every row.
 //
 // Organization-wide, because an organization-owned client bound to an
 // organization-level issuer serves servers in every project.
@@ -2950,6 +3099,7 @@ func (q *Queries) DescribeBoundClientUse(ctx context.Context, arg DescribeBoundC
 			&i.AssociatedWithMcpServer,
 			&i.DetachedFromMcpServer,
 			&i.OtherMcpServerIds,
+			&i.AssociationProviderIds,
 		); err != nil {
 			return nil, err
 		}
@@ -3218,7 +3368,7 @@ func (q *Queries) ForceRemoteSessionIssuerRegistrationEndpointFixture(ctx contex
 }
 
 const getActiveRemoteSession = `-- name: GetActiveRemoteSession :one
-SELECT id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
+SELECT id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted, access_token_org_encrypted, access_expires_at, refresh_token_encrypted, refresh_token_org_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
 FROM remote_sessions
 WHERE subject_urn = $1
   AND remote_session_client_id = $2
@@ -3242,9 +3392,12 @@ func (q *Queries) GetActiveRemoteSession(ctx context.Context, arg GetActiveRemot
 		&i.SubjectUrn,
 		&i.UserSessionIssuerID,
 		&i.RemoteSessionClientID,
+		&i.OrganizationID,
 		&i.AccessTokenEncrypted,
+		&i.AccessTokenOrgEncrypted,
 		&i.AccessExpiresAt,
 		&i.RefreshTokenEncrypted,
+		&i.RefreshTokenOrgEncrypted,
 		&i.AuthorizationExpiresAt,
 		&i.RefreshExpiresAt,
 		&i.Scopes,
@@ -3269,7 +3422,7 @@ func (q *Queries) GetActiveRemoteSession(ctx context.Context, arg GetActiveRemot
 }
 
 const getActiveRemoteSessionInTenant = `-- name: GetActiveRemoteSessionInTenant :one
-SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted FROM remote_sessions s
+SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_token_org_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted FROM remote_sessions s
 JOIN remote_session_clients c ON c.id = s.remote_session_client_id AND NOT c.deleted
 JOIN remote_session_issuers i ON i.id = c.remote_session_issuer_id AND NOT i.deleted
 JOIN user_session_issuers u ON u.id = s.user_session_issuer_id
@@ -3308,9 +3461,12 @@ func (q *Queries) GetActiveRemoteSessionInTenant(ctx context.Context, arg GetAct
 		&i.SubjectUrn,
 		&i.UserSessionIssuerID,
 		&i.RemoteSessionClientID,
+		&i.OrganizationID,
 		&i.AccessTokenEncrypted,
+		&i.AccessTokenOrgEncrypted,
 		&i.AccessExpiresAt,
 		&i.RefreshTokenEncrypted,
+		&i.RefreshTokenOrgEncrypted,
 		&i.AuthorizationExpiresAt,
 		&i.RefreshExpiresAt,
 		&i.Scopes,
@@ -3457,7 +3613,7 @@ func (q *Queries) GetClientCredentialsGrantClient(ctx context.Context, arg GetCl
 }
 
 const getDueRemoteSessionRecheckCandidate = `-- name: GetDueRemoteSessionRecheckCandidate :one
-SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted, c.remote_session_issuer_id, i.issuer AS issuer_url
+SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_token_org_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted, c.remote_session_issuer_id, i.issuer AS issuer_url
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND c.deleted IS FALSE
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
@@ -3471,11 +3627,34 @@ WHERE s.id = $1
   AND COALESCE(s.last_validated_at, s.created_at) <= $3::timestamptz
   AND EXISTS (
     SELECT 1
-    FROM remote_session_client_user_session_issuers AS link
-    JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id AND usi.deleted IS FALSE
+    FROM (
+      SELECT link.user_session_issuer_id
+      FROM remote_session_client_user_session_issuers AS link
+      WHERE link.remote_session_client_id = c.id
+      UNION
+      SELECT reached.id
+      FROM user_session_issuers AS minted_by
+      LEFT JOIN projects AS minted_project ON minted_project.id = minted_by.project_id
+      JOIN mcp_auth_clients AS ac ON ac.organization_id = COALESCE(minted_project.organization_id, minted_by.organization_id)
+        AND ac.remote_session_client_id = c.id AND ac.enabled AND ac.deleted IS FALSE
+      JOIN organization_features AS enforced ON enforced.organization_id = ac.organization_id
+        AND enforced.feature_name = 'upstream_auth_enforced' AND enforced.deleted IS FALSE
+      JOIN mcp_server_auth_clients AS offer ON offer.auth_client_id = ac.id AND offer.organization_id = ac.organization_id AND offer.deleted IS FALSE
+        AND (ac.project_id IS NULL OR ac.project_id = offer.project_id)
+      JOIN mcp_servers AS offering ON offering.id = offer.mcp_server_id AND offering.project_id = offer.project_id AND offering.deleted IS FALSE
+      JOIN projects AS offering_project ON offering_project.id = offer.project_id
+        AND offering_project.organization_id = offer.organization_id AND offering_project.deleted IS FALSE
+      JOIN user_session_issuers AS reached ON reached.id IN (offering.user_session_issuer_id, minted_by.id) AND reached.deleted IS FALSE
+      LEFT JOIN projects AS reached_project ON reached_project.id = reached.project_id
+      WHERE minted_by.id = s.user_session_issuer_id
+        AND COALESCE(reached_project.organization_id, reached.organization_id) = ac.organization_id
+        AND (c.project_id = offer.project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = ac.organization_id)))
+        AND (i.project_id = offer.project_id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = ac.organization_id)))
+        AND i.deleted IS FALSE
+    ) AS reach
+    JOIN user_session_issuers AS usi ON usi.id = reach.user_session_issuer_id AND usi.deleted IS FALSE
     LEFT JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
-    WHERE link.remote_session_client_id = c.id
-      AND (usi.project_id IS NULL OR p.id IS NOT NULL)
+    WHERE (usi.project_id IS NULL OR p.id IS NOT NULL)
       AND COALESCE(p.organization_id, usi.organization_id) = ANY($4::text[])
       AND (
         (c.project_id IS NOT NULL AND (c.project_id = usi.project_id OR (usi.project_id IS NULL AND cp.organization_id = usi.organization_id)))
@@ -3520,9 +3699,12 @@ func (q *Queries) GetDueRemoteSessionRecheckCandidate(ctx context.Context, arg G
 		&i.RemoteSession.SubjectUrn,
 		&i.RemoteSession.UserSessionIssuerID,
 		&i.RemoteSession.RemoteSessionClientID,
+		&i.RemoteSession.OrganizationID,
 		&i.RemoteSession.AccessTokenEncrypted,
+		&i.RemoteSession.AccessTokenOrgEncrypted,
 		&i.RemoteSession.AccessExpiresAt,
 		&i.RemoteSession.RefreshTokenEncrypted,
+		&i.RemoteSession.RefreshTokenOrgEncrypted,
 		&i.RemoteSession.AuthorizationExpiresAt,
 		&i.RemoteSession.RefreshExpiresAt,
 		&i.RemoteSession.Scopes,
@@ -3549,10 +3731,11 @@ func (q *Queries) GetDueRemoteSessionRecheckCandidate(ctx context.Context, arg G
 }
 
 const getDueRemoteSessionRefreshCandidate = `-- name: GetDueRemoteSessionRefreshCandidate :one
-SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted, c.project_id AS client_project_id
+SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_token_org_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted, c.project_id AS client_project_id
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND c.deleted IS FALSE
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
+LEFT JOIN projects AS cp ON cp.id = c.project_id AND cp.deleted IS FALSE
 WHERE s.id = $1
   AND s.deleted IS FALSE
   AND s.refresh_token_encrypted IS NOT NULL
@@ -3568,17 +3751,48 @@ WHERE s.id = $1
   -- they drift.
   AND EXISTS (
     SELECT 1
-    FROM remote_session_client_user_session_issuers AS link
-    JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id AND usi.deleted IS FALSE
+    FROM (
+      SELECT link.user_session_issuer_id
+      FROM remote_session_client_user_session_issuers AS link
+      WHERE link.remote_session_client_id = c.id
+      UNION
+      SELECT reached.id
+      FROM user_session_issuers AS minted_by
+      LEFT JOIN projects AS minted_project ON minted_project.id = minted_by.project_id
+      JOIN mcp_auth_clients AS ac ON ac.organization_id = COALESCE(minted_project.organization_id, minted_by.organization_id)
+        AND ac.remote_session_client_id = c.id AND ac.enabled AND ac.deleted IS FALSE
+      JOIN organization_features AS enforced ON enforced.organization_id = ac.organization_id
+        AND enforced.feature_name = 'upstream_auth_enforced' AND enforced.deleted IS FALSE
+      JOIN mcp_server_auth_clients AS offer ON offer.auth_client_id = ac.id AND offer.organization_id = ac.organization_id AND offer.deleted IS FALSE
+        AND (ac.project_id IS NULL OR ac.project_id = offer.project_id)
+      JOIN mcp_servers AS offering ON offering.id = offer.mcp_server_id AND offering.project_id = offer.project_id AND offering.deleted IS FALSE
+      JOIN projects AS offering_project ON offering_project.id = offer.project_id
+        AND offering_project.organization_id = offer.organization_id AND offering_project.deleted IS FALSE
+      JOIN user_session_issuers AS reached ON reached.id IN (offering.user_session_issuer_id, minted_by.id) AND reached.deleted IS FALSE
+      LEFT JOIN projects AS reached_project ON reached_project.id = reached.project_id
+      WHERE minted_by.id = s.user_session_issuer_id
+        AND COALESCE(reached_project.organization_id, reached.organization_id) = ac.organization_id
+        AND (c.project_id = offer.project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = ac.organization_id)))
+        AND (i.project_id = offer.project_id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = ac.organization_id)))
+        AND i.deleted IS FALSE
+    ) AS reach
+    JOIN user_session_issuers AS usi ON usi.id = reach.user_session_issuer_id AND usi.deleted IS FALSE
     LEFT JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
-    WHERE link.remote_session_client_id = c.id
+    WHERE
       -- A project-tier issuer still requires a live project. The inner join
       -- used to enforce that on its own; the LEFT JOIN no longer does.
-      AND (usi.project_id IS NULL OR p.id IS NOT NULL)
+      (usi.project_id IS NULL OR p.id IS NOT NULL)
       AND COALESCE(p.organization_id, usi.organization_id) = $4
       AND (
-        c.project_id = usi.project_id
+        (c.project_id IS NOT NULL AND (c.project_id = usi.project_id OR (usi.project_id IS NULL AND cp.organization_id = usi.organization_id)))
         OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = COALESCE(p.organization_id, usi.organization_id)))
+      )
+      -- A direct binding does not validate the upstream provider's ownership.
+      -- Only the client's own project or an org/global provider available to
+      -- this tenant may receive the stored refresh token.
+      AND (
+        i.project_id = c.project_id
+        OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = COALESCE(p.organization_id, usi.organization_id)))
       )
       AND (
         EXISTS (
@@ -3662,9 +3876,12 @@ func (q *Queries) GetDueRemoteSessionRefreshCandidate(ctx context.Context, arg G
 		&i.RemoteSession.SubjectUrn,
 		&i.RemoteSession.UserSessionIssuerID,
 		&i.RemoteSession.RemoteSessionClientID,
+		&i.RemoteSession.OrganizationID,
 		&i.RemoteSession.AccessTokenEncrypted,
+		&i.RemoteSession.AccessTokenOrgEncrypted,
 		&i.RemoteSession.AccessExpiresAt,
 		&i.RemoteSession.RefreshTokenEncrypted,
+		&i.RemoteSession.RefreshTokenOrgEncrypted,
 		&i.RemoteSession.AuthorizationExpiresAt,
 		&i.RemoteSession.RefreshExpiresAt,
 		&i.RemoteSession.Scopes,
@@ -3969,7 +4186,7 @@ func (q *Queries) GetEMAVendorIssuerRecord(ctx context.Context, arg GetEMAVendor
 }
 
 const getGlobalRemoteSessionClientByID = `-- name: GetGlobalRemoteSessionClientByID :one
-SELECT id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
 FROM remote_session_clients
 WHERE id = $1
   AND project_id IS NULL
@@ -3988,6 +4205,8 @@ func (q *Queries) GetGlobalRemoteSessionClientByID(ctx context.Context, id uuid.
 		&i.RemoteSessionIssuerID,
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
+		&i.ClientSecretOrgEncrypted,
+		&i.ClientSecretGeneration,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.TokenEndpointAuthMethod,
@@ -4266,7 +4485,7 @@ func (q *Queries) GetGlobalRemoteSessionIssuerWithClientCountsByID(ctx context.C
 }
 
 const getLocalFixtureOrganizationRemoteSessionClient = `-- name: GetLocalFixtureOrganizationRemoteSessionClient :one
-SELECT id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
 FROM remote_session_clients
 WHERE organization_id = $1
   AND remote_session_issuer_id = $2
@@ -4292,6 +4511,8 @@ func (q *Queries) GetLocalFixtureOrganizationRemoteSessionClient(ctx context.Con
 		&i.RemoteSessionIssuerID,
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
+		&i.ClientSecretOrgEncrypted,
+		&i.ClientSecretGeneration,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.TokenEndpointAuthMethod,
@@ -4322,7 +4543,7 @@ func (q *Queries) GetLocalFixtureOrganizationRemoteSessionClient(ctx context.Con
 }
 
 const getOrganizationRemoteSessionByID = `-- name: GetOrganizationRemoteSessionByID :one
-SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted,
+SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_token_org_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted,
   c.project_id AS client_project_id,
   u.display_name AS subject_display_name,
   u.email AS subject_email
@@ -4364,9 +4585,12 @@ func (q *Queries) GetOrganizationRemoteSessionByID(ctx context.Context, arg GetO
 		&i.RemoteSession.SubjectUrn,
 		&i.RemoteSession.UserSessionIssuerID,
 		&i.RemoteSession.RemoteSessionClientID,
+		&i.RemoteSession.OrganizationID,
 		&i.RemoteSession.AccessTokenEncrypted,
+		&i.RemoteSession.AccessTokenOrgEncrypted,
 		&i.RemoteSession.AccessExpiresAt,
 		&i.RemoteSession.RefreshTokenEncrypted,
+		&i.RemoteSession.RefreshTokenOrgEncrypted,
 		&i.RemoteSession.AuthorizationExpiresAt,
 		&i.RemoteSession.RefreshExpiresAt,
 		&i.RemoteSession.Scopes,
@@ -4395,7 +4619,7 @@ func (q *Queries) GetOrganizationRemoteSessionByID(ctx context.Context, arg GetO
 
 const getOrganizationRemoteSessionClientByID = `-- name: GetOrganizationRemoteSessionClientByID :one
 SELECT
-    c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_secret_org_encrypted, c.client_secret_generation, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
         FROM remote_session_client_user_session_issuers AS link
@@ -4433,6 +4657,8 @@ func (q *Queries) GetOrganizationRemoteSessionClientByID(ctx context.Context, ar
 		&i.RemoteSessionClient.RemoteSessionIssuerID,
 		&i.RemoteSessionClient.ClientID,
 		&i.RemoteSessionClient.ClientSecretEncrypted,
+		&i.RemoteSessionClient.ClientSecretOrgEncrypted,
+		&i.RemoteSessionClient.ClientSecretGeneration,
 		&i.RemoteSessionClient.ClientIDIssuedAt,
 		&i.RemoteSessionClient.ClientSecretExpiresAt,
 		&i.RemoteSessionClient.TokenEndpointAuthMethod,
@@ -4636,7 +4862,7 @@ func (q *Queries) GetOrganizationRemoteSessionIssuerByIDForUpdate(ctx context.Co
 }
 
 const getPrincipalRemoteSessionBinding = `-- name: GetPrincipalRemoteSessionBinding :one
-SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted
+SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_token_org_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted
 FROM principal_remote_session_bindings AS b
 JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
   AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL
@@ -4695,9 +4921,12 @@ func (q *Queries) GetPrincipalRemoteSessionBinding(ctx context.Context, arg GetP
 		&i.SubjectUrn,
 		&i.UserSessionIssuerID,
 		&i.RemoteSessionClientID,
+		&i.OrganizationID,
 		&i.AccessTokenEncrypted,
+		&i.AccessTokenOrgEncrypted,
 		&i.AccessExpiresAt,
 		&i.RefreshTokenEncrypted,
+		&i.RefreshTokenOrgEncrypted,
 		&i.AuthorizationExpiresAt,
 		&i.RefreshExpiresAt,
 		&i.Scopes,
@@ -4919,7 +5148,7 @@ func (q *Queries) GetReachableRemoteSessionClient(ctx context.Context, arg GetRe
 }
 
 const getRemoteSessionByID = `-- name: GetRemoteSessionByID :one
-SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted
+SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_token_org_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
@@ -4948,9 +5177,12 @@ func (q *Queries) GetRemoteSessionByID(ctx context.Context, arg GetRemoteSession
 		&i.SubjectUrn,
 		&i.UserSessionIssuerID,
 		&i.RemoteSessionClientID,
+		&i.OrganizationID,
 		&i.AccessTokenEncrypted,
+		&i.AccessTokenOrgEncrypted,
 		&i.AccessExpiresAt,
 		&i.RefreshTokenEncrypted,
+		&i.RefreshTokenOrgEncrypted,
 		&i.AuthorizationExpiresAt,
 		&i.RefreshExpiresAt,
 		&i.Scopes,
@@ -4975,7 +5207,7 @@ func (q *Queries) GetRemoteSessionByID(ctx context.Context, arg GetRemoteSession
 }
 
 const getRemoteSessionByIDIncludingDeleted = `-- name: GetRemoteSessionByIDIncludingDeleted :one
-SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted
+SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_token_org_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 WHERE s.id = $1
@@ -4997,9 +5229,12 @@ func (q *Queries) GetRemoteSessionByIDIncludingDeleted(ctx context.Context, arg 
 		&i.SubjectUrn,
 		&i.UserSessionIssuerID,
 		&i.RemoteSessionClientID,
+		&i.OrganizationID,
 		&i.AccessTokenEncrypted,
+		&i.AccessTokenOrgEncrypted,
 		&i.AccessExpiresAt,
 		&i.RefreshTokenEncrypted,
+		&i.RefreshTokenOrgEncrypted,
 		&i.AuthorizationExpiresAt,
 		&i.RefreshExpiresAt,
 		&i.Scopes,
@@ -5025,7 +5260,7 @@ func (q *Queries) GetRemoteSessionByIDIncludingDeleted(ctx context.Context, arg 
 
 const getRemoteSessionClientByID = `-- name: GetRemoteSessionClientByID :one
 SELECT
-    c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_secret_org_encrypted, c.client_secret_generation, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     i.tunneled_mcp_server_id,
     (
         SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
@@ -5064,6 +5299,8 @@ func (q *Queries) GetRemoteSessionClientByID(ctx context.Context, arg GetRemoteS
 		&i.RemoteSessionClient.RemoteSessionIssuerID,
 		&i.RemoteSessionClient.ClientID,
 		&i.RemoteSessionClient.ClientSecretEncrypted,
+		&i.RemoteSessionClient.ClientSecretOrgEncrypted,
+		&i.RemoteSessionClient.ClientSecretGeneration,
 		&i.RemoteSessionClient.ClientIDIssuedAt,
 		&i.RemoteSessionClient.ClientSecretExpiresAt,
 		&i.RemoteSessionClient.TokenEndpointAuthMethod,
@@ -5147,7 +5384,7 @@ func (q *Queries) GetRemoteSessionClientForClientMetadataDocument(ctx context.Co
 
 const getRemoteSessionClientForRotation = `-- name: GetRemoteSessionClientForRotation :one
 SELECT
-    c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_secret_org_encrypted, c.client_secret_generation, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     i.issuer                 AS issuer_url,
     i.token_endpoint         AS issuer_token_endpoint,
     i.registration_endpoint  AS issuer_registration_endpoint,
@@ -5210,6 +5447,8 @@ func (q *Queries) GetRemoteSessionClientForRotation(ctx context.Context, id uuid
 		&i.RemoteSessionClient.RemoteSessionIssuerID,
 		&i.RemoteSessionClient.ClientID,
 		&i.RemoteSessionClient.ClientSecretEncrypted,
+		&i.RemoteSessionClient.ClientSecretOrgEncrypted,
+		&i.RemoteSessionClient.ClientSecretGeneration,
 		&i.RemoteSessionClient.ClientIDIssuedAt,
 		&i.RemoteSessionClient.ClientSecretExpiresAt,
 		&i.RemoteSessionClient.TokenEndpointAuthMethod,
@@ -5363,6 +5602,24 @@ func (q *Queries) GetRemoteSessionClientRevocationTargetByID(ctx context.Context
 		&i.RevocationEndpoint,
 	)
 	return i, err
+}
+
+const getRemoteSessionClientTenantOrganizationID = `-- name: GetRemoteSessionClientTenantOrganizationID :one
+SELECT COALESCE(c.organization_id, p.organization_id, '')::text AS organization_id
+FROM remote_session_clients AS c
+LEFT JOIN projects AS p ON p.id = c.project_id
+WHERE c.id = $1
+  AND c.deleted IS FALSE
+`
+
+// The organization a client belongs to: its own for an organization client,
+// its project's for a project client (deleted or not, so the flag still
+// resolves for that organization), and ” for a platform client.
+func (q *Queries) GetRemoteSessionClientTenantOrganizationID(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getRemoteSessionClientTenantOrganizationID, id)
+	var organization_id string
+	err := row.Scan(&organization_id)
+	return organization_id, err
 }
 
 const getRemoteSessionClientWithIssuerByID = `-- name: GetRemoteSessionClientWithIssuerByID :one
@@ -6059,12 +6316,38 @@ func (q *Queries) GetRemoteSessionIssuerForMetadataRefresh(ctx context.Context, 
 const getRemoteSessionRecheckEndpoints = `-- name: GetRemoteSessionRecheckEndpoints :many
 WITH bound AS (
   SELECT usi.id, c.project_id AS client_project_id, COALESCE(p.organization_id, usi.organization_id) AS organization_id
-  FROM remote_session_client_user_session_issuers AS link
-  JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id AND c.deleted IS FALSE
+  FROM remote_session_clients AS c
+  JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
   LEFT JOIN projects AS cp ON cp.id = c.project_id AND cp.deleted IS FALSE
-  JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id AND usi.deleted IS FALSE
+  CROSS JOIN LATERAL (
+    SELECT link.user_session_issuer_id
+    FROM remote_session_client_user_session_issuers AS link
+    WHERE link.remote_session_client_id = c.id
+    UNION
+    SELECT reached.id
+    FROM user_session_issuers AS minted_by
+    LEFT JOIN projects AS minted_project ON minted_project.id = minted_by.project_id
+    JOIN mcp_auth_clients AS ac ON ac.organization_id = COALESCE(minted_project.organization_id, minted_by.organization_id)
+      AND ac.remote_session_client_id = c.id AND ac.enabled AND ac.deleted IS FALSE
+    JOIN organization_features AS enforced ON enforced.organization_id = ac.organization_id
+      AND enforced.feature_name = 'upstream_auth_enforced' AND enforced.deleted IS FALSE
+    JOIN mcp_server_auth_clients AS offer ON offer.auth_client_id = ac.id AND offer.organization_id = ac.organization_id AND offer.deleted IS FALSE
+      AND (ac.project_id IS NULL OR ac.project_id = offer.project_id)
+    JOIN mcp_servers AS offering ON offering.id = offer.mcp_server_id AND offering.project_id = offer.project_id AND offering.deleted IS FALSE
+    JOIN projects AS offering_project ON offering_project.id = offer.project_id
+      AND offering_project.organization_id = offer.organization_id AND offering_project.deleted IS FALSE
+    JOIN user_session_issuers AS reached ON reached.id IN (offering.user_session_issuer_id, minted_by.id) AND reached.deleted IS FALSE
+    LEFT JOIN projects AS reached_project ON reached_project.id = reached.project_id
+    WHERE minted_by.id = $1::uuid
+      AND COALESCE(reached_project.organization_id, reached.organization_id) = ac.organization_id
+      AND (c.project_id = offer.project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = ac.organization_id)))
+      AND (i.project_id = offer.project_id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = ac.organization_id)))
+      AND i.deleted IS FALSE
+  ) AS reach
+  JOIN user_session_issuers AS usi ON usi.id = reach.user_session_issuer_id AND usi.deleted IS FALSE
   LEFT JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
-  WHERE link.remote_session_client_id = $2
+  WHERE c.id = $2
+    AND c.deleted IS FALSE
     AND (usi.project_id IS NULL OR p.id IS NOT NULL)
     AND COALESCE(p.organization_id, usi.organization_id) = ANY($3::text[])
     AND (
@@ -6124,7 +6407,7 @@ type GetRemoteSessionRecheckEndpointsRow struct {
 	OrganizationGateway bool
 }
 
-// Endpoints a keepalive re-check may present the grant through: backed by a server gated on an issuer bound to the client under the interactive tenancy rule, in any claimed organization, with a live Speakeasy session for the subject.
+// Endpoints a keepalive re-check may present the grant through: backed by a server gated on an issuer bound to the client under the interactive tenancy rule, in any claimed organization, with a live Speakeasy session for the subject. user_session_issuer_id is the sign-in the grant was consented through; a bound issuer is one linked to the client or one a live offer reaches, as ClaimDueRemoteSessionRefreshCandidates describes.
 // An organization gateway is a candidate too, addressed by its organization's slug, when the bound issuer is the only organization-level issuer its organization owns, which is when the gateway is served. It has no mcp_endpoints row, so its id and project_id are the nil UUID.
 // Ordered own issuer first, then stored endpoints over the organization gateway, then platform origin over custom domain, then oldest; the caller tries them in turn until one presents the grant.
 func (q *Queries) GetRemoteSessionRecheckEndpoints(ctx context.Context, arg GetRemoteSessionRecheckEndpointsParams) ([]GetRemoteSessionRecheckEndpointsRow, error) {
@@ -6642,7 +6925,7 @@ func (q *Queries) GetTenantRemoteSessionIssuerByIDForUpdate(ctx context.Context,
 }
 
 const getTenantUserRemoteSession = `-- name: GetTenantUserRemoteSession :one
-SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted FROM remote_sessions s
+SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_token_org_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted FROM remote_sessions s
 JOIN remote_session_clients c ON c.id = s.remote_session_client_id AND NOT c.deleted
 JOIN remote_session_issuers i ON i.id = c.remote_session_issuer_id AND NOT i.deleted
 JOIN user_session_issuers u ON u.id = s.user_session_issuer_id AND NOT u.deleted
@@ -6683,9 +6966,12 @@ func (q *Queries) GetTenantUserRemoteSession(ctx context.Context, arg GetTenantU
 		&i.SubjectUrn,
 		&i.UserSessionIssuerID,
 		&i.RemoteSessionClientID,
+		&i.OrganizationID,
 		&i.AccessTokenEncrypted,
+		&i.AccessTokenOrgEncrypted,
 		&i.AccessExpiresAt,
 		&i.RefreshTokenEncrypted,
+		&i.RefreshTokenOrgEncrypted,
 		&i.AuthorizationExpiresAt,
 		&i.RefreshExpiresAt,
 		&i.Scopes,
@@ -6710,7 +6996,7 @@ func (q *Queries) GetTenantUserRemoteSession(ctx context.Context, arg GetTenantU
 }
 
 const getTenantUserRemoteSessionForClient = `-- name: GetTenantUserRemoteSessionForClient :one
-SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted FROM remote_sessions s
+SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_token_org_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted FROM remote_sessions s
 JOIN remote_session_clients c ON c.id = s.remote_session_client_id AND NOT c.deleted
 JOIN remote_session_issuers i ON i.id = c.remote_session_issuer_id AND NOT i.deleted
 JOIN user_session_issuers u ON u.id = s.user_session_issuer_id
@@ -6752,9 +7038,12 @@ func (q *Queries) GetTenantUserRemoteSessionForClient(ctx context.Context, arg G
 		&i.SubjectUrn,
 		&i.UserSessionIssuerID,
 		&i.RemoteSessionClientID,
+		&i.OrganizationID,
 		&i.AccessTokenEncrypted,
+		&i.AccessTokenOrgEncrypted,
 		&i.AccessExpiresAt,
 		&i.RefreshTokenEncrypted,
+		&i.RefreshTokenOrgEncrypted,
 		&i.AuthorizationExpiresAt,
 		&i.RefreshExpiresAt,
 		&i.Scopes,
@@ -6779,7 +7068,7 @@ func (q *Queries) GetTenantUserRemoteSessionForClient(ctx context.Context, arg G
 }
 
 const getTrustedDelegationCredential = `-- name: GetTrustedDelegationCredential :one
-SELECT s.id, s.remote_session_client_id, s.organization_id, s.project_id, s.subject_urn, s.identity_assertion_encrypted, s.identity_assertion_expires_at, s.refresh_token_encrypted, s.refresh_expires_at, s.last_refresh_attempt_at, s.offline_access_refused_at, s.offline_access_request_config_hash, s.credential_generation, s.refresh_claim_id, s.upstream_subject_encrypted, s.nonce_encrypted, s.credential_config_hash, s.observation_status, s.observed_at, s.credential_obtained_at, s.last_refresh_succeeded_at, s.retry_after, s.created_at, s.updated_at, s.deleted_at, s.deleted FROM trusted_issuer_sessions AS s
+SELECT s.id, s.remote_session_client_id, s.organization_id, s.project_id, s.subject_urn, s.identity_assertion_encrypted, s.identity_assertion_org_encrypted, s.identity_assertion_expires_at, s.refresh_token_encrypted, s.refresh_token_org_encrypted, s.refresh_expires_at, s.last_refresh_attempt_at, s.offline_access_refused_at, s.offline_access_request_config_hash, s.credential_generation, s.refresh_claim_id, s.upstream_subject_encrypted, s.upstream_subject_org_encrypted, s.nonce_encrypted, s.nonce_org_encrypted, s.credential_config_hash, s.observation_status, s.observed_at, s.credential_obtained_at, s.last_refresh_succeeded_at, s.retry_after, s.created_at, s.updated_at, s.deleted_at, s.deleted FROM trusted_issuer_sessions AS s
 WHERE s.organization_id = $1::text
   AND s.remote_session_client_id = $2::uuid
   AND s.subject_urn = $3::text AND s.project_id IS NULL AND s.deleted IS FALSE
@@ -6826,8 +7115,10 @@ func (q *Queries) GetTrustedDelegationCredential(ctx context.Context, arg GetTru
 		&i.ProjectID,
 		&i.SubjectUrn,
 		&i.IdentityAssertionEncrypted,
+		&i.IdentityAssertionOrgEncrypted,
 		&i.IdentityAssertionExpiresAt,
 		&i.RefreshTokenEncrypted,
+		&i.RefreshTokenOrgEncrypted,
 		&i.RefreshExpiresAt,
 		&i.LastRefreshAttemptAt,
 		&i.OfflineAccessRefusedAt,
@@ -6835,7 +7126,9 @@ func (q *Queries) GetTrustedDelegationCredential(ctx context.Context, arg GetTru
 		&i.CredentialGeneration,
 		&i.RefreshClaimID,
 		&i.UpstreamSubjectEncrypted,
+		&i.UpstreamSubjectOrgEncrypted,
 		&i.NonceEncrypted,
+		&i.NonceOrgEncrypted,
 		&i.CredentialConfigHash,
 		&i.ObservationStatus,
 		&i.ObservedAt,
@@ -6904,7 +7197,7 @@ func (q *Queries) GetTrustedIssuerJWKSCache(ctx context.Context, arg GetTrustedI
 }
 
 const getTrustedRemoteSessionClientForOrganization = `-- name: GetTrustedRemoteSessionClientForOrganization :one
-SELECT c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted, i.id, i.project_id, i.organization_id, i.attachment_scope, i.slug, i.issuer, i.authorization_endpoint, i.token_endpoint, i.revocation_endpoint, i.registration_endpoint, i.jwks_uri, i.jwks, i.jwks_fetched_at, i.jwks_last_error, i.jwks_last_error_at, i.jwks_cache_expires_at, i.jwks_etag, i.service_documentation, i.op_policy_uri, i.op_tos_uri, i.scopes_supported, i.grant_types_supported, i.authorization_grant_profiles_supported, i.response_types_supported, i.token_endpoint_auth_methods_supported, i.code_challenge_methods_supported, i.client_id_metadata_document_supported, i.userinfo_endpoint, i.introspection_endpoint, i.introspection_endpoint_auth_methods_supported, i.id_token_signing_alg_values_supported, i.claims_supported, i.backchannel_logout_supported, i.authorization_response_iss_parameter_supported, i.scope_override, i.omit_scope_fallback, i.resource_indicator_supported, i.oidc, i.passthrough, i.tunneled_mcp_server_id, i.name, i.logo_asset_id, i.client_setup_documentation_url, i.metadata, i.metadata_fetched_at, i.metadata_last_error, i.metadata_last_error_at, i.metadata_last_error_url, i.created_at, i.updated_at, i.deleted_at, i.deleted
+SELECT c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_secret_org_encrypted, c.client_secret_generation, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted, i.id, i.project_id, i.organization_id, i.attachment_scope, i.slug, i.issuer, i.authorization_endpoint, i.token_endpoint, i.revocation_endpoint, i.registration_endpoint, i.jwks_uri, i.jwks, i.jwks_fetched_at, i.jwks_last_error, i.jwks_last_error_at, i.jwks_cache_expires_at, i.jwks_etag, i.service_documentation, i.op_policy_uri, i.op_tos_uri, i.scopes_supported, i.grant_types_supported, i.authorization_grant_profiles_supported, i.response_types_supported, i.token_endpoint_auth_methods_supported, i.code_challenge_methods_supported, i.client_id_metadata_document_supported, i.userinfo_endpoint, i.introspection_endpoint, i.introspection_endpoint_auth_methods_supported, i.id_token_signing_alg_values_supported, i.claims_supported, i.backchannel_logout_supported, i.authorization_response_iss_parameter_supported, i.scope_override, i.omit_scope_fallback, i.resource_indicator_supported, i.oidc, i.passthrough, i.tunneled_mcp_server_id, i.name, i.logo_asset_id, i.client_setup_documentation_url, i.metadata, i.metadata_fetched_at, i.metadata_last_error, i.metadata_last_error_at, i.metadata_last_error_url, i.created_at, i.updated_at, i.deleted_at, i.deleted
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = $1::uuid
@@ -6946,6 +7239,8 @@ func (q *Queries) GetTrustedRemoteSessionClientForOrganization(ctx context.Conte
 		&i.RemoteSessionClient.RemoteSessionIssuerID,
 		&i.RemoteSessionClient.ClientID,
 		&i.RemoteSessionClient.ClientSecretEncrypted,
+		&i.RemoteSessionClient.ClientSecretOrgEncrypted,
+		&i.RemoteSessionClient.ClientSecretGeneration,
 		&i.RemoteSessionClient.ClientIDIssuedAt,
 		&i.RemoteSessionClient.ClientSecretExpiresAt,
 		&i.RemoteSessionClient.TokenEndpointAuthMethod,
@@ -7161,6 +7456,22 @@ func (q *Queries) GetUserSessionIssuerForProject(ctx context.Context, arg GetUse
 	var i GetUserSessionIssuerForProjectRow
 	err := row.Scan(&i.ID, &i.ProjectID)
 	return i, err
+}
+
+const getUserSessionIssuerOrganizationID = `-- name: GetUserSessionIssuerOrganizationID :one
+SELECT COALESCE(p.organization_id, usi.organization_id, '')::text AS organization_id
+FROM user_session_issuers AS usi
+LEFT JOIN projects AS p ON p.id = usi.project_id
+WHERE usi.id = $1
+`
+
+// The organization a sign-in belongs to. A deleted sign-in still names the
+// organization a grant was consented in.
+func (q *Queries) GetUserSessionIssuerOrganizationID(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getUserSessionIssuerOrganizationID, id)
+	var organization_id string
+	err := row.Scan(&organization_id)
+	return organization_id, err
 }
 
 const hasActiveEMABindingForRefresh = `-- name: HasActiveEMABindingForRefresh :one
@@ -8147,7 +8458,7 @@ func (q *Queries) ListEMAVendorIssuerCandidates(ctx context.Context, organizatio
 }
 
 const listEligiblePrincipalRemoteSessionBindings = `-- name: ListEligiblePrincipalRemoteSessionBindings :many
-SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted
+SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_token_org_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted
 FROM principal_remote_session_bindings AS b
 JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
   AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL
@@ -8209,9 +8520,12 @@ func (q *Queries) ListEligiblePrincipalRemoteSessionBindings(ctx context.Context
 			&i.SubjectUrn,
 			&i.UserSessionIssuerID,
 			&i.RemoteSessionClientID,
+			&i.OrganizationID,
 			&i.AccessTokenEncrypted,
+			&i.AccessTokenOrgEncrypted,
 			&i.AccessExpiresAt,
 			&i.RefreshTokenEncrypted,
+			&i.RefreshTokenOrgEncrypted,
 			&i.AuthorizationExpiresAt,
 			&i.RefreshExpiresAt,
 			&i.Scopes,
@@ -8242,8 +8556,136 @@ func (q *Queries) ListEligiblePrincipalRemoteSessionBindings(ctx context.Context
 	return items, nil
 }
 
+const listGatewayMembersCaptureWouldAddAtAnotherAddress = `-- name: ListGatewayMembersCaptureWouldAddAtAnotherAddress :many
+SELECT DISTINCT member_server.id
+FROM meta_mcp_servers AS gateway
+JOIN meta_mcp_server_members AS member
+  ON member.meta_mcp_server_id = gateway.id
+ AND member.project_id = gateway.project_id
+ AND member.deleted IS FALSE
+JOIN mcp_servers AS member_server
+  ON member_server.id = member.mcp_server_id
+ AND member_server.project_id = member.project_id
+ AND member_server.deleted IS FALSE
+ AND (member_server.remote_mcp_server_id IS NOT NULL OR member_server.tunneled_mcp_server_id IS NOT NULL)
+LEFT JOIN remote_mcp_servers AS remote
+  ON remote.id = member_server.remote_mcp_server_id
+ AND remote.project_id = member_server.project_id
+ AND remote.deleted IS FALSE
+WHERE gateway.user_session_issuer_id = $1::uuid
+  AND gateway.organization_id = $2::text
+  AND gateway.deleted IS FALSE
+  AND member_server.id <> $3::uuid
+  AND member_server.remote_session_issuer_id = $4::uuid
+  AND (remote.url IS NULL OR rtrim(remote.url, '/') <> rtrim($5::text, '/'))
+  AND NOT EXISTS (
+    SELECT 1
+    FROM mcp_server_remote_session_clients AS recorded
+    WHERE recorded.mcp_server_id = member_server.id
+      AND recorded.remote_session_client_id = $6::uuid
+  )
+ORDER BY member_server.id
+`
+
+type ListGatewayMembersCaptureWouldAddAtAnotherAddressParams struct {
+	UserSessionIssuerID   uuid.UUID
+	OrganizationID        string
+	McpServerID           uuid.UUID
+	RemoteSessionIssuerID uuid.UUID
+	UpstreamUrl           string
+	RemoteSessionClientID uuid.UUID
+}
+
+// The other live proxied members of gateways on a user session issuer that
+// reconcile would associate with a client newly bound there, because the issuer
+// then holds a client of their derived provider, and whose upstream address is
+// not the given one. A recorded association or explicit detach for the pair
+// stops that capture. Trailing slashes are ignored, as token routing ignores them.
+func (q *Queries) ListGatewayMembersCaptureWouldAddAtAnotherAddress(ctx context.Context, arg ListGatewayMembersCaptureWouldAddAtAnotherAddressParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listGatewayMembersCaptureWouldAddAtAnotherAddress,
+		arg.UserSessionIssuerID,
+		arg.OrganizationID,
+		arg.McpServerID,
+		arg.RemoteSessionIssuerID,
+		arg.UpstreamUrl,
+		arg.RemoteSessionClientID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGatewaysFrontingMCPServer = `-- name: ListGatewaysFrontingMCPServer :many
+SELECT gateway.id AS meta_mcp_server_id, gateway_issuer.id AS user_session_issuer_id
+FROM meta_mcp_server_members AS member
+JOIN meta_mcp_servers AS gateway
+  ON gateway.id = member.meta_mcp_server_id
+ AND gateway.project_id = member.project_id
+ AND gateway.deleted IS FALSE
+JOIN projects AS project
+  ON project.id = gateway.project_id
+ AND project.organization_id = $1::text
+ AND project.deleted IS FALSE
+JOIN user_session_issuers AS gateway_issuer
+  ON gateway_issuer.id = gateway.user_session_issuer_id
+ AND gateway_issuer.deleted IS FALSE
+ AND (gateway_issuer.project_id = gateway.project_id
+      OR (gateway_issuer.project_id IS NULL AND gateway_issuer.organization_id = project.organization_id))
+WHERE member.mcp_server_id = $2::uuid
+  AND member.project_id = $3::uuid
+  AND member.deleted IS FALSE
+ORDER BY gateway_issuer.id, gateway.id
+`
+
+type ListGatewaysFrontingMCPServerParams struct {
+	OrganizationID string
+	McpServerID    uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+type ListGatewaysFrontingMCPServerRow struct {
+	MetaMcpServerID     uuid.UUID
+	UserSessionIssuerID uuid.UUID
+}
+
+// The live gateways one MCP server is a member of, each with the live user
+// session issuer its consent signs in through. Ordered so callers lock the
+// issuers deterministically.
+func (q *Queries) ListGatewaysFrontingMCPServer(ctx context.Context, arg ListGatewaysFrontingMCPServerParams) ([]ListGatewaysFrontingMCPServerRow, error) {
+	rows, err := q.db.Query(ctx, listGatewaysFrontingMCPServer, arg.OrganizationID, arg.McpServerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListGatewaysFrontingMCPServerRow
+	for rows.Next() {
+		var i ListGatewaysFrontingMCPServerRow
+		if err := rows.Scan(&i.MetaMcpServerID, &i.UserSessionIssuerID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listGlobalRemoteSessionClientsByIssuerID = `-- name: ListGlobalRemoteSessionClientsByIssuerID :many
-SELECT id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
 FROM remote_session_clients
 WHERE remote_session_issuer_id = $1
   AND project_id IS NULL
@@ -8280,6 +8722,8 @@ func (q *Queries) ListGlobalRemoteSessionClientsByIssuerID(ctx context.Context, 
 			&i.RemoteSessionIssuerID,
 			&i.ClientID,
 			&i.ClientSecretEncrypted,
+			&i.ClientSecretOrgEncrypted,
+			&i.ClientSecretGeneration,
 			&i.ClientIDIssuedAt,
 			&i.ClientSecretExpiresAt,
 			&i.TokenEndpointAuthMethod,
@@ -8560,6 +9004,44 @@ func (q *Queries) ListGlobalRemoteSessionIssuersByIssuerURL(ctx context.Context,
 	return items, nil
 }
 
+const listOnlyOrganizationUserSessionIssuer = `-- name: ListOnlyOrganizationUserSessionIssuer :many
+SELECT issuer.id
+FROM user_session_issuers AS issuer
+WHERE issuer.project_id IS NULL
+  AND issuer.organization_id = $1::text
+  AND issuer.deleted IS FALSE
+  AND (
+    SELECT count(*)
+    FROM user_session_issuers AS sibling
+    WHERE sibling.organization_id = issuer.organization_id
+      AND sibling.project_id IS NULL
+      AND sibling.deleted IS FALSE
+  ) = 1
+`
+
+// The organization's organization-level user session issuer when it has exactly
+// one, which is the issuer the organization gateway signs in through. No row
+// when it has none or several.
+func (q *Queries) ListOnlyOrganizationUserSessionIssuer(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listOnlyOrganizationUserSessionIssuer, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOrganizationClientsForUserSessionIssuer = `-- name: ListOrganizationClientsForUserSessionIssuer :many
 SELECT c.id, c.project_id, c.remote_session_issuer_id, c.credential_owner, i.deleted AS provider_deleted
 FROM remote_session_client_user_session_issuers AS link
@@ -8783,6 +9265,73 @@ func (q *Queries) ListOrganizationMcpServerNamesForIssuer(ctx context.Context, r
 	return items, nil
 }
 
+const listOrganizationMcpServersAssociatedWithClients = `-- name: ListOrganizationMcpServersAssociatedWithClients :many
+SELECT DISTINCT
+    a.remote_session_client_id AS client_id,
+    m.id,
+    m.project_id,
+    p.slug AS project_slug,
+    m.name,
+    m.slug,
+    COALESCE(rms.url, '')::text AS url
+FROM mcp_server_remote_session_clients AS a
+JOIN mcp_servers AS m ON m.id = a.mcp_server_id AND m.project_id = a.project_id AND m.deleted IS FALSE
+JOIN projects AS p ON p.id = m.project_id AND p.deleted IS FALSE
+LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
+WHERE a.remote_session_client_id = ANY($1::uuid[])
+  AND a.organization_id = $2::text
+  AND a.deleted IS FALSE
+ORDER BY a.remote_session_client_id ASC, m.id DESC
+`
+
+type ListOrganizationMcpServersAssociatedWithClientsParams struct {
+	RemoteSessionClientIds []uuid.UUID
+	OrganizationID         string
+}
+
+type ListOrganizationMcpServersAssociatedWithClientsRow struct {
+	ClientID    uuid.UUID
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+	ProjectSlug string
+	Name        pgtype.Text
+	Slug        pgtype.Text
+	Url         string
+}
+
+// ListOrganizationMcpServersForClients from each client's own server
+// associations instead of the servers on the user session issuers it is bound
+// to: a client serves the servers it is associated with, whichever issuer
+// fronts them. Same row shape and remote-only URL rule, held to the caller's
+// organization. Servers in deleted projects are left out.
+func (q *Queries) ListOrganizationMcpServersAssociatedWithClients(ctx context.Context, arg ListOrganizationMcpServersAssociatedWithClientsParams) ([]ListOrganizationMcpServersAssociatedWithClientsRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationMcpServersAssociatedWithClients, arg.RemoteSessionClientIds, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationMcpServersAssociatedWithClientsRow
+	for rows.Next() {
+		var i ListOrganizationMcpServersAssociatedWithClientsRow
+		if err := rows.Scan(
+			&i.ClientID,
+			&i.ID,
+			&i.ProjectID,
+			&i.ProjectSlug,
+			&i.Name,
+			&i.Slug,
+			&i.Url,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOrganizationMcpServersForClient = `-- name: ListOrganizationMcpServersForClient :many
 SELECT DISTINCT
     m.id,
@@ -8854,21 +9403,55 @@ func (q *Queries) ListOrganizationMcpServersForClient(ctx context.Context, remot
 
 const listOrganizationMcpServersForClients = `-- name: ListOrganizationMcpServersForClients :many
 SELECT DISTINCT
-    link.remote_session_client_id AS client_id,
+    attached.client_id,
     m.id,
     m.project_id,
     p.slug AS project_slug,
     m.name,
     m.slug,
-    COALESCE(rms.url, '')::text AS url
-FROM remote_session_client_user_session_issuers AS link
-JOIN mcp_servers AS m ON m.user_session_issuer_id = link.user_session_issuer_id
+    COALESCE(rms.url, '')::text AS url,
+    (CASE WHEN attached.offered THEN COALESCE(rms.url, tms.resource_identifier, '') ELSE COALESCE(rms.url, '') END)::text AS resource,
+    attached.offered
+FROM (
+    SELECT link.remote_session_client_id AS client_id,
+           linked.id AS mcp_server_id,
+           FALSE AS offered
+    FROM remote_session_client_user_session_issuers AS link
+    JOIN mcp_servers AS linked ON linked.user_session_issuer_id = link.user_session_issuer_id
+    WHERE link.remote_session_client_id = ANY($1::uuid[])
+    UNION ALL
+    SELECT ac.remote_session_client_id AS client_id,
+           offering.id AS mcp_server_id,
+           TRUE AS offered
+    FROM mcp_auth_clients AS ac
+    JOIN mcp_server_auth_clients AS offer
+      ON offer.auth_client_id = ac.id
+     AND offer.organization_id = ac.organization_id
+     AND offer.deleted IS FALSE
+    JOIN mcp_servers AS offering
+      ON offering.id = offer.mcp_server_id
+     AND offering.project_id = offer.project_id
+    JOIN projects AS offering_project
+      ON offering_project.id = offer.project_id
+     AND offering_project.organization_id = offer.organization_id
+     AND offering_project.deleted IS FALSE
+    JOIN organization_features AS enforced
+      ON enforced.organization_id = ac.organization_id
+     AND enforced.feature_name = 'upstream_auth_enforced'
+     AND enforced.deleted IS FALSE
+    WHERE ac.organization_id = $2::text
+      AND ac.remote_session_client_id = ANY($1::uuid[])
+      AND (ac.project_id IS NULL OR ac.project_id = offer.project_id)
+      AND ac.enabled
+      AND ac.deleted IS FALSE
+) AS attached
+JOIN mcp_servers AS m ON m.id = attached.mcp_server_id
 JOIN projects AS p ON p.id = m.project_id
 LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
-WHERE link.remote_session_client_id = ANY($1::uuid[])
-  AND p.organization_id = $2::text
+LEFT JOIN tunneled_mcp_servers AS tms ON tms.id = m.tunneled_mcp_server_id AND tms.project_id = m.project_id AND tms.deleted IS FALSE
+WHERE p.organization_id = $2::text
   AND m.deleted IS FALSE
-ORDER BY link.remote_session_client_id ASC, m.id DESC
+ORDER BY attached.client_id ASC, attached.offered DESC, m.id DESC
 `
 
 type ListOrganizationMcpServersForClientsParams struct {
@@ -8884,6 +9467,8 @@ type ListOrganizationMcpServersForClientsRow struct {
 	Name        pgtype.Text
 	Slug        pgtype.Text
 	Url         string
+	Resource    string
+	Offered     bool
 }
 
 // ListOrganizationMcpServersForClient for a set of clients in one round trip,
@@ -8891,6 +9476,18 @@ type ListOrganizationMcpServersForClientsRow struct {
 // or a login decides every bound client's resource from one load. Same
 // liveness and remote-only rules as the single-client query, held to the
 // caller's organization so the client ids cannot read another tenant's servers.
+//
+// Where the organization enforces typed auth clients, a server that offers a
+// client through a live, enabled auth client is attached to it as well,
+// whether or not a user session issuer links the two. The offer is judged as
+// the consent screen judges it: the auth client is the organization's and,
+// when it belongs to a project, the server's own. offered marks those rows,
+// which sort first for each client. url is the server's remote URL, for display.
+// resource is what the row contributes to the client's derived resource: an
+// offered tunneled server names its own resource identifier, because serving
+// routes the chosen client by that client's issuer, so the identifier cannot
+// unqualify a sibling's grant, and a provider that requires a resource needs it
+// on the login.
 func (q *Queries) ListOrganizationMcpServersForClients(ctx context.Context, arg ListOrganizationMcpServersForClientsParams) ([]ListOrganizationMcpServersForClientsRow, error) {
 	rows, err := q.db.Query(ctx, listOrganizationMcpServersForClients, arg.RemoteSessionClientIds, arg.OrganizationID)
 	if err != nil {
@@ -8908,6 +9505,8 @@ func (q *Queries) ListOrganizationMcpServersForClients(ctx context.Context, arg 
 			&i.Name,
 			&i.Slug,
 			&i.Url,
+			&i.Resource,
+			&i.Offered,
 		); err != nil {
 			return nil, err
 		}
@@ -8921,7 +9520,7 @@ func (q *Queries) ListOrganizationMcpServersForClients(ctx context.Context, arg 
 
 const listOrganizationRemoteSessionClientsByIssuerID = `-- name: ListOrganizationRemoteSessionClientsByIssuerID :many
 SELECT
-    c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_secret_org_encrypted, c.client_secret_generation, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
         FROM remote_session_client_user_session_issuers AS link
@@ -9033,6 +9632,8 @@ func (q *Queries) ListOrganizationRemoteSessionClientsByIssuerID(ctx context.Con
 			&i.RemoteSessionClient.RemoteSessionIssuerID,
 			&i.RemoteSessionClient.ClientID,
 			&i.RemoteSessionClient.ClientSecretEncrypted,
+			&i.RemoteSessionClient.ClientSecretOrgEncrypted,
+			&i.RemoteSessionClient.ClientSecretGeneration,
 			&i.RemoteSessionClient.ClientIDIssuedAt,
 			&i.RemoteSessionClient.ClientSecretExpiresAt,
 			&i.RemoteSessionClient.TokenEndpointAuthMethod,
@@ -9371,7 +9972,7 @@ func (q *Queries) ListOrganizationRemoteSessionIssuersByIssuerURL(ctx context.Co
 }
 
 const listOrganizationRemoteSessionsByClientID = `-- name: ListOrganizationRemoteSessionsByClientID :many
-SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted,
+SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_token_org_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted,
   u.display_name AS subject_display_name,
   u.email AS subject_email
 FROM remote_sessions AS s
@@ -9450,9 +10051,12 @@ func (q *Queries) ListOrganizationRemoteSessionsByClientID(ctx context.Context, 
 			&i.RemoteSession.SubjectUrn,
 			&i.RemoteSession.UserSessionIssuerID,
 			&i.RemoteSession.RemoteSessionClientID,
+			&i.RemoteSession.OrganizationID,
 			&i.RemoteSession.AccessTokenEncrypted,
+			&i.RemoteSession.AccessTokenOrgEncrypted,
 			&i.RemoteSession.AccessExpiresAt,
 			&i.RemoteSession.RefreshTokenEncrypted,
+			&i.RemoteSession.RefreshTokenOrgEncrypted,
 			&i.RemoteSession.AuthorizationExpiresAt,
 			&i.RemoteSession.RefreshExpiresAt,
 			&i.RemoteSession.Scopes,
@@ -9570,6 +10174,47 @@ func (q *Queries) ListOrganizationTrustedUserSessionIssuersByRemoteSessionIssuer
 	return items, nil
 }
 
+const listOtherProviderClientsBoundToUserSessionIssuer = `-- name: ListOtherProviderClientsBoundToUserSessionIssuer :many
+SELECT client.id
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS client
+  ON client.id = link.remote_session_client_id
+ AND client.deleted IS FALSE
+WHERE link.user_session_issuer_id = $1::uuid
+  AND client.remote_session_issuer_id = $2::uuid
+  AND client.id <> $3::uuid
+ORDER BY client.id
+`
+
+type ListOtherProviderClientsBoundToUserSessionIssuerParams struct {
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionIssuerID uuid.UUID
+	RemoteSessionClientID uuid.UUID
+}
+
+// The live clients of one provider bound to a user session issuer, other than
+// the given client. Reads every tenant tier, because an issuer holds one client
+// per provider whichever project's client that is.
+func (q *Queries) ListOtherProviderClientsBoundToUserSessionIssuer(ctx context.Context, arg ListOtherProviderClientsBoundToUserSessionIssuerParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listOtherProviderClientsBoundToUserSessionIssuer, arg.UserSessionIssuerID, arg.RemoteSessionIssuerID, arg.RemoteSessionClientID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPrincipalRemoteSessionBindings = `-- name: ListPrincipalRemoteSessionBindings :many
 SELECT b.id, b.principal_id, b.user_session_issuer_id, b.remote_session_client_id, b.remote_session_id, b.grant_generation, u.display_name AS subject_display_name, u.email AS subject_email
 FROM principal_remote_session_bindings AS b
@@ -9640,7 +10285,7 @@ func (q *Queries) ListPrincipalRemoteSessionBindings(ctx context.Context, arg Li
 }
 
 const listPrincipalRemoteSessionCandidates = `-- name: ListPrincipalRemoteSessionCandidates :many
-SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted, u.display_name AS subject_display_name, u.email AS subject_email
+SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_token_org_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted, u.display_name AS subject_display_name, u.email AS subject_email
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
@@ -9702,9 +10347,12 @@ func (q *Queries) ListPrincipalRemoteSessionCandidates(ctx context.Context, arg 
 			&i.RemoteSession.SubjectUrn,
 			&i.RemoteSession.UserSessionIssuerID,
 			&i.RemoteSession.RemoteSessionClientID,
+			&i.RemoteSession.OrganizationID,
 			&i.RemoteSession.AccessTokenEncrypted,
+			&i.RemoteSession.AccessTokenOrgEncrypted,
 			&i.RemoteSession.AccessExpiresAt,
 			&i.RemoteSession.RefreshTokenEncrypted,
+			&i.RemoteSession.RefreshTokenOrgEncrypted,
 			&i.RemoteSession.AuthorizationExpiresAt,
 			&i.RemoteSession.RefreshExpiresAt,
 			&i.RemoteSession.Scopes,
@@ -9730,6 +10378,64 @@ func (q *Queries) ListPrincipalRemoteSessionCandidates(ctx context.Context, arg 
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProxiedMCPServersUsingClientAtAnotherAddress = `-- name: ListProxiedMCPServersUsingClientAtAnotherAddress :many
+SELECT other.id
+FROM mcp_server_remote_session_clients AS association
+JOIN mcp_servers AS other
+  ON other.id = association.mcp_server_id
+ AND other.project_id = association.project_id
+ AND other.deleted IS FALSE
+LEFT JOIN remote_mcp_servers AS remote
+  ON remote.id = other.remote_mcp_server_id
+ AND remote.project_id = other.project_id
+ AND remote.deleted IS FALSE
+WHERE association.organization_id = $1::text
+  AND association.remote_session_client_id = $2::uuid
+  AND association.mcp_server_id <> $3::uuid
+  AND association.deleted IS FALSE
+  AND (other.remote_mcp_server_id IS NOT NULL OR other.tunneled_mcp_server_id IS NOT NULL)
+  AND (remote.url IS NULL OR rtrim(remote.url, '/') <> rtrim($4::text, '/'))
+ORDER BY other.id
+`
+
+type ListProxiedMCPServersUsingClientAtAnotherAddressParams struct {
+	OrganizationID        string
+	RemoteSessionClientID uuid.UUID
+	McpServerID           uuid.UUID
+	UpstreamUrl           string
+}
+
+// The other live proxied MCP servers of the organization associated with a
+// client whose upstream address is not the given one. A person holds one grant
+// per client, and that grant records one resource, so only one of these servers
+// can use it at a time. A tunneled server has no fixed address, so it always
+// counts as another address. Trailing slashes are ignored, as token routing
+// ignores them.
+func (q *Queries) ListProxiedMCPServersUsingClientAtAnotherAddress(ctx context.Context, arg ListProxiedMCPServersUsingClientAtAnotherAddressParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listProxiedMCPServersUsingClientAtAnotherAddress,
+		arg.OrganizationID,
+		arg.RemoteSessionClientID,
+		arg.McpServerID,
+		arg.UpstreamUrl,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -10081,7 +10787,7 @@ func (q *Queries) ListRemoteSessionClientIDsForUserSessionIssuers(ctx context.Co
 
 const listRemoteSessionClientsByProjectID = `-- name: ListRemoteSessionClientsByProjectID :many
 SELECT
-    c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_secret_org_encrypted, c.client_secret_generation, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
         FROM remote_session_client_user_session_issuers AS link
@@ -10134,6 +10840,8 @@ func (q *Queries) ListRemoteSessionClientsByProjectID(ctx context.Context, arg L
 			&i.RemoteSessionClient.RemoteSessionIssuerID,
 			&i.RemoteSessionClient.ClientID,
 			&i.RemoteSessionClient.ClientSecretEncrypted,
+			&i.RemoteSessionClient.ClientSecretOrgEncrypted,
+			&i.RemoteSessionClient.ClientSecretGeneration,
 			&i.RemoteSessionClient.ClientIDIssuedAt,
 			&i.RemoteSessionClient.ClientSecretExpiresAt,
 			&i.RemoteSessionClient.TokenEndpointAuthMethod,
@@ -10173,7 +10881,7 @@ func (q *Queries) ListRemoteSessionClientsByProjectID(ctx context.Context, arg L
 
 const listRemoteSessionClientsByProjectIDForUserSessionIssuer = `-- name: ListRemoteSessionClientsByProjectIDForUserSessionIssuer :many
 SELECT
-    c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_secret_org_encrypted, c.client_secret_generation, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         SELECT COALESCE(array_agg(all_link.user_session_issuer_id ORDER BY all_link.user_session_issuer_id), '{}'::uuid[])
         FROM remote_session_client_user_session_issuers AS all_link
@@ -10238,6 +10946,8 @@ func (q *Queries) ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx co
 			&i.RemoteSessionClient.RemoteSessionIssuerID,
 			&i.RemoteSessionClient.ClientID,
 			&i.RemoteSessionClient.ClientSecretEncrypted,
+			&i.RemoteSessionClient.ClientSecretOrgEncrypted,
+			&i.RemoteSessionClient.ClientSecretGeneration,
 			&i.RemoteSessionClient.ClientIDIssuedAt,
 			&i.RemoteSessionClient.ClientSecretExpiresAt,
 			&i.RemoteSessionClient.TokenEndpointAuthMethod,
@@ -10890,6 +11600,8 @@ SELECT
   s.last_validated_at,
   s.validation_status,
   s.validation_reason,
+  s.access_token_encrypted,
+  s.refresh_token_encrypted,
   (s.refresh_token_encrypted IS NOT NULL
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
     AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))::boolean AS can_refresh,
@@ -10948,6 +11660,8 @@ type ListRemoteSessionStatusesForSubjectRow struct {
 	LastValidatedAt        pgtype.Timestamptz
 	ValidationStatus       pgtype.Text
 	ValidationReason       pgtype.Text
+	AccessTokenEncrypted   pgtype.Text
+	RefreshTokenEncrypted  pgtype.Text
 	CanRefresh             bool
 	Status                 string
 }
@@ -11022,6 +11736,8 @@ func (q *Queries) ListRemoteSessionStatusesForSubject(ctx context.Context, arg L
 			&i.LastValidatedAt,
 			&i.ValidationStatus,
 			&i.ValidationReason,
+			&i.AccessTokenEncrypted,
+			&i.RefreshTokenEncrypted,
 			&i.CanRefresh,
 			&i.Status,
 		); err != nil {
@@ -11054,6 +11770,8 @@ SELECT
   s.last_validated_at,
   s.validation_status,
   s.validation_reason,
+  s.access_token_encrypted,
+  s.refresh_token_encrypted,
   (s.refresh_token_encrypted IS NOT NULL
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
     AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))::boolean AS can_refresh,
@@ -11104,6 +11822,8 @@ type ListRemoteSessionStatusesInTenantRow struct {
 	LastValidatedAt        pgtype.Timestamptz
 	ValidationStatus       pgtype.Text
 	ValidationReason       pgtype.Text
+	AccessTokenEncrypted   pgtype.Text
+	RefreshTokenEncrypted  pgtype.Text
 	CanRefresh             bool
 	Status                 string
 }
@@ -11146,6 +11866,8 @@ func (q *Queries) ListRemoteSessionStatusesInTenant(ctx context.Context, arg Lis
 			&i.LastValidatedAt,
 			&i.ValidationStatus,
 			&i.ValidationReason,
+			&i.AccessTokenEncrypted,
+			&i.RefreshTokenEncrypted,
 			&i.CanRefresh,
 			&i.Status,
 		); err != nil {
@@ -11160,7 +11882,7 @@ func (q *Queries) ListRemoteSessionStatusesInTenant(ctx context.Context, arg Lis
 }
 
 const listRemoteSessionsByProjectID = `-- name: ListRemoteSessionsByProjectID :many
-SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted,
+SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_token_org_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted,
   u.display_name AS subject_display_name,
   u.email AS subject_email
 FROM remote_sessions AS s
@@ -11222,9 +11944,12 @@ func (q *Queries) ListRemoteSessionsByProjectID(ctx context.Context, arg ListRem
 			&i.RemoteSession.SubjectUrn,
 			&i.RemoteSession.UserSessionIssuerID,
 			&i.RemoteSession.RemoteSessionClientID,
+			&i.RemoteSession.OrganizationID,
 			&i.RemoteSession.AccessTokenEncrypted,
+			&i.RemoteSession.AccessTokenOrgEncrypted,
 			&i.RemoteSession.AccessExpiresAt,
 			&i.RemoteSession.RefreshTokenEncrypted,
+			&i.RemoteSession.RefreshTokenOrgEncrypted,
 			&i.RemoteSession.AuthorizationExpiresAt,
 			&i.RemoteSession.RefreshExpiresAt,
 			&i.RemoteSession.Scopes,
@@ -11247,6 +11972,56 @@ func (q *Queries) ListRemoteSessionsByProjectID(ctx context.Context, arg ListRem
 			&i.SubjectDisplayName,
 			&i.SubjectEmail,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listServerProjectsOnClientIssuers = `-- name: ListServerProjectsOnClientIssuers :many
+SELECT DISTINCT p.organization_id, s.project_id, link.user_session_issuer_id
+FROM remote_session_client_user_session_issuers AS link
+JOIN mcp_servers AS s
+  ON s.user_session_issuer_id = link.user_session_issuer_id
+ AND s.deleted IS FALSE
+JOIN projects AS p
+  ON p.id = s.project_id
+ AND p.deleted IS FALSE
+WHERE link.remote_session_client_id = $1
+  AND ($2::text IS NULL OR p.organization_id = $2::text)
+ORDER BY p.organization_id, s.project_id, link.user_session_issuer_id
+`
+
+type ListServerProjectsOnClientIssuersParams struct {
+	RemoteSessionClientID uuid.UUID
+	OrganizationID        pgtype.Text
+}
+
+type ListServerProjectsOnClientIssuersRow struct {
+	OrganizationID      string
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.UUID
+}
+
+// Each live project with a live MCP server on a user session issuer the client
+// is bound to, with that issuer, in organization_id, or in any organization
+// when it is null (only a platform-global client reaches several). A writer
+// reads it before it deletes the client's bindings, so that afterwards it can
+// re-derive the upstream issuer of servers that take it from those bindings.
+func (q *Queries) ListServerProjectsOnClientIssuers(ctx context.Context, arg ListServerProjectsOnClientIssuersParams) ([]ListServerProjectsOnClientIssuersRow, error) {
+	rows, err := q.db.Query(ctx, listServerProjectsOnClientIssuers, arg.RemoteSessionClientID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListServerProjectsOnClientIssuersRow
+	for rows.Next() {
+		var i ListServerProjectsOnClientIssuersRow
+		if err := rows.Scan(&i.OrganizationID, &i.ProjectID, &i.UserSessionIssuerID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -11424,7 +12199,7 @@ func (q *Queries) ListTrustedDelegationCleanupOrganizations(ctx context.Context)
 }
 
 const listTrustedRemoteSessionClientsByIssuerID = `-- name: ListTrustedRemoteSessionClientsByIssuerID :many
-SELECT c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted
+SELECT c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_secret_org_encrypted, c.client_secret_generation, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted
 FROM remote_session_clients AS c
 WHERE c.remote_session_issuer_id = $1
   AND c.deleted IS FALSE
@@ -11460,6 +12235,8 @@ func (q *Queries) ListTrustedRemoteSessionClientsByIssuerID(ctx context.Context,
 			&i.RemoteSessionIssuerID,
 			&i.ClientID,
 			&i.ClientSecretEncrypted,
+			&i.ClientSecretOrgEncrypted,
+			&i.ClientSecretGeneration,
 			&i.ClientIDIssuedAt,
 			&i.ClientSecretExpiresAt,
 			&i.TokenEndpointAuthMethod,
@@ -11636,7 +12413,7 @@ func (q *Queries) LockEMABindingForPublish(ctx context.Context, arg LockEMABindi
 }
 
 const lockEMAClient = `-- name: LockEMAClient :one
-SELECT id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted FROM remote_session_clients WHERE remote_session_clients.id = $1 AND remote_session_clients.deleted IS FALSE
+SELECT id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted FROM remote_session_clients WHERE remote_session_clients.id = $1 AND remote_session_clients.deleted IS FALSE
 AND ((remote_session_clients.project_id = $2 AND EXISTS (
     SELECT 1 FROM projects p WHERE p.id = remote_session_clients.project_id
     AND p.organization_id = $3 AND p.deleted IS FALSE FOR SHARE
@@ -11662,6 +12439,8 @@ func (q *Queries) LockEMAClient(ctx context.Context, arg LockEMAClientParams) (R
 		&i.RemoteSessionIssuerID,
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
+		&i.ClientSecretOrgEncrypted,
+		&i.ClientSecretGeneration,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.TokenEndpointAuthMethod,
@@ -12190,6 +12969,67 @@ func (q *Queries) LockRemoteSessionClientForSessionWrite(ctx context.Context, id
 	return id_2, err
 }
 
+const lockRemoteSessionClientTemplate = `-- name: LockRemoteSessionClientTemplate :one
+SELECT c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_secret_org_encrypted, c.client_secret_generation, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted
+FROM remote_session_clients AS c
+WHERE c.id = $1
+  AND (c.project_id = $2::uuid OR (c.project_id IS NULL AND c.organization_id = $3))
+  AND c.deleted IS FALSE
+FOR SHARE
+`
+
+type LockRemoteSessionClientTemplateParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+// Reads the client a new client is created from, holding it against a
+// concurrent secret rotation, re-registration or rejection until the copy
+// commits. FOR SHARE lets other copies and foreign-key checks proceed. Same
+// visibility as GetRemoteSessionClientByID.
+func (q *Queries) LockRemoteSessionClientTemplate(ctx context.Context, arg LockRemoteSessionClientTemplateParams) (RemoteSessionClient, error) {
+	row := q.db.QueryRow(ctx, lockRemoteSessionClientTemplate, arg.ID, arg.ProjectID, arg.OrganizationID)
+	var i RemoteSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.RemoteSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.ClientSecretOrgEncrypted,
+		&i.ClientSecretGeneration,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
+		&i.JsonWebKeySetID,
+		&i.Scope,
+		&i.GrantTypes,
+		&i.Audience,
+		&i.TokenEndpointAuthAudienceFormat,
+		&i.ClientIDMetadataUri,
+		&i.LegacyCallbackUrl,
+		&i.CallbackBaseUrl,
+		&i.ResourceIdentifier,
+		&i.ResourceName,
+		&i.ResourceDocumentation,
+		&i.ResourcePolicyUri,
+		&i.ResourceTosUri,
+		&i.UpstreamRejectedAt,
+		&i.IdentityProviderConnectionID,
+		&i.CredentialOwner,
+		&i.DisplayName,
+		&i.ForwardClientName,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const lockRemoteSessionClientUserSessionIssuerLink = `-- name: LockRemoteSessionClientUserSessionIssuerLink :exec
 SELECT 1
 FROM remote_session_client_user_session_issuers
@@ -12307,7 +13147,7 @@ func (q *Queries) LockRemoteSessionClientsBoundToUserSessionIssuer(ctx context.C
 }
 
 const lockRemoteSessionGrantForBindingRefresh = `-- name: LockRemoteSessionGrantForBindingRefresh :one
-SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted, u.display_name AS subject_display_name, u.email AS subject_email
+SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_token_org_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted, u.display_name AS subject_display_name, u.email AS subject_email
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND NOT c.deleted
 JOIN remote_session_issuers AS ri ON ri.id = c.remote_session_issuer_id AND NOT ri.deleted
@@ -12362,9 +13202,12 @@ func (q *Queries) LockRemoteSessionGrantForBindingRefresh(ctx context.Context, a
 		&i.RemoteSession.SubjectUrn,
 		&i.RemoteSession.UserSessionIssuerID,
 		&i.RemoteSession.RemoteSessionClientID,
+		&i.RemoteSession.OrganizationID,
 		&i.RemoteSession.AccessTokenEncrypted,
+		&i.RemoteSession.AccessTokenOrgEncrypted,
 		&i.RemoteSession.AccessExpiresAt,
 		&i.RemoteSession.RefreshTokenEncrypted,
+		&i.RemoteSession.RefreshTokenOrgEncrypted,
 		&i.RemoteSession.AuthorizationExpiresAt,
 		&i.RemoteSession.RefreshExpiresAt,
 		&i.RemoteSession.Scopes,
@@ -12594,7 +13437,7 @@ func (q *Queries) LockSpeakeasyEMASignIn(ctx context.Context, arg LockSpeakeasyE
 }
 
 const lockTrustedRemoteSessionClientForOrganization = `-- name: LockTrustedRemoteSessionClientForOrganization :one
-SELECT c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted, i.id, i.project_id, i.organization_id, i.attachment_scope, i.slug, i.issuer, i.authorization_endpoint, i.token_endpoint, i.revocation_endpoint, i.registration_endpoint, i.jwks_uri, i.jwks, i.jwks_fetched_at, i.jwks_last_error, i.jwks_last_error_at, i.jwks_cache_expires_at, i.jwks_etag, i.service_documentation, i.op_policy_uri, i.op_tos_uri, i.scopes_supported, i.grant_types_supported, i.authorization_grant_profiles_supported, i.response_types_supported, i.token_endpoint_auth_methods_supported, i.code_challenge_methods_supported, i.client_id_metadata_document_supported, i.userinfo_endpoint, i.introspection_endpoint, i.introspection_endpoint_auth_methods_supported, i.id_token_signing_alg_values_supported, i.claims_supported, i.backchannel_logout_supported, i.authorization_response_iss_parameter_supported, i.scope_override, i.omit_scope_fallback, i.resource_indicator_supported, i.oidc, i.passthrough, i.tunneled_mcp_server_id, i.name, i.logo_asset_id, i.client_setup_documentation_url, i.metadata, i.metadata_fetched_at, i.metadata_last_error, i.metadata_last_error_at, i.metadata_last_error_url, i.created_at, i.updated_at, i.deleted_at, i.deleted
+SELECT c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_secret_org_encrypted, c.client_secret_generation, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted, i.id, i.project_id, i.organization_id, i.attachment_scope, i.slug, i.issuer, i.authorization_endpoint, i.token_endpoint, i.revocation_endpoint, i.registration_endpoint, i.jwks_uri, i.jwks, i.jwks_fetched_at, i.jwks_last_error, i.jwks_last_error_at, i.jwks_cache_expires_at, i.jwks_etag, i.service_documentation, i.op_policy_uri, i.op_tos_uri, i.scopes_supported, i.grant_types_supported, i.authorization_grant_profiles_supported, i.response_types_supported, i.token_endpoint_auth_methods_supported, i.code_challenge_methods_supported, i.client_id_metadata_document_supported, i.userinfo_endpoint, i.introspection_endpoint, i.introspection_endpoint_auth_methods_supported, i.id_token_signing_alg_values_supported, i.claims_supported, i.backchannel_logout_supported, i.authorization_response_iss_parameter_supported, i.scope_override, i.omit_scope_fallback, i.resource_indicator_supported, i.oidc, i.passthrough, i.tunneled_mcp_server_id, i.name, i.logo_asset_id, i.client_setup_documentation_url, i.metadata, i.metadata_fetched_at, i.metadata_last_error, i.metadata_last_error_at, i.metadata_last_error_url, i.created_at, i.updated_at, i.deleted_at, i.deleted
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = $1::uuid
@@ -12635,6 +13478,8 @@ func (q *Queries) LockTrustedRemoteSessionClientForOrganization(ctx context.Cont
 		&i.RemoteSessionClient.RemoteSessionIssuerID,
 		&i.RemoteSessionClient.ClientID,
 		&i.RemoteSessionClient.ClientSecretEncrypted,
+		&i.RemoteSessionClient.ClientSecretOrgEncrypted,
+		&i.RemoteSessionClient.ClientSecretGeneration,
 		&i.RemoteSessionClient.ClientIDIssuedAt,
 		&i.RemoteSessionClient.ClientSecretExpiresAt,
 		&i.RemoteSessionClient.TokenEndpointAuthMethod,
@@ -13240,7 +14085,7 @@ func (q *Queries) PurgeSpeakeasyEMACredentials(ctx context.Context, organization
 }
 
 const readEMAClient = `-- name: ReadEMAClient :one
-SELECT id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted FROM remote_session_clients WHERE remote_session_clients.id = $1 AND remote_session_clients.deleted IS FALSE
+SELECT id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted FROM remote_session_clients WHERE remote_session_clients.id = $1 AND remote_session_clients.deleted IS FALSE
 AND ((remote_session_clients.project_id = $2 AND EXISTS (
     SELECT 1 FROM projects p WHERE p.id = remote_session_clients.project_id
     AND p.organization_id = $3 AND p.deleted IS FALSE
@@ -13264,6 +14109,8 @@ func (q *Queries) ReadEMAClient(ctx context.Context, arg ReadEMAClientParams) (R
 		&i.RemoteSessionIssuerID,
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
+		&i.ClientSecretOrgEncrypted,
+		&i.ClientSecretGeneration,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.TokenEndpointAuthMethod,
@@ -13582,7 +14429,7 @@ WHERE id = $6
   AND deleted IS FALSE
   AND client_id_metadata_uri IS NULL
   AND identity_provider_connection_id IS NULL
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
 `
 
 type ReplaceRemoteSessionClientRegistrationParams struct {
@@ -13634,6 +14481,8 @@ func (q *Queries) ReplaceRemoteSessionClientRegistration(ctx context.Context, ar
 		&i.RemoteSessionIssuerID,
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
+		&i.ClientSecretOrgEncrypted,
+		&i.ClientSecretGeneration,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.TokenEndpointAuthMethod,
@@ -13923,7 +14772,7 @@ WHERE s.id = $1
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
-RETURNING s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted, c.project_id AS client_project_id
+RETURNING s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_token_org_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted, c.project_id AS client_project_id
 `
 
 type RevokeOrganizationRemoteSessionParams struct {
@@ -13932,34 +14781,37 @@ type RevokeOrganizationRemoteSessionParams struct {
 }
 
 type RevokeOrganizationRemoteSessionRow struct {
-	ID                     uuid.UUID
-	GrantGeneration        int64
-	SubjectUrn             urn.SessionSubject
-	UserSessionIssuerID    uuid.UUID
-	RemoteSessionClientID  uuid.UUID
-	AccessTokenEncrypted   string
-	AccessExpiresAt        pgtype.Timestamptz
-	RefreshTokenEncrypted  pgtype.Text
-	AuthorizationExpiresAt pgtype.Timestamptz
-	RefreshExpiresAt       pgtype.Timestamptz
-	Scopes                 []string
-	Resource               pgtype.Text
-	AutoRefresh            bool
-	LastRefreshAttemptAt   pgtype.Timestamptz
-	LastUsedAt             pgtype.Timestamptz
-	UpstreamSubject        pgtype.Text
-	UpstreamEmail          pgtype.Text
-	UpstreamDisplayName    pgtype.Text
-	IdentitySource         pgtype.Text
-	Enrichment             []byte
-	LastValidatedAt        pgtype.Timestamptz
-	ValidationStatus       pgtype.Text
-	ValidationReason       pgtype.Text
-	CreatedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
-	DeletedAt              pgtype.Timestamptz
-	Deleted                bool
-	ClientProjectID        uuid.NullUUID
+	ID                       uuid.UUID
+	GrantGeneration          int64
+	SubjectUrn               urn.SessionSubject
+	UserSessionIssuerID      uuid.UUID
+	RemoteSessionClientID    uuid.UUID
+	OrganizationID           pgtype.Text
+	AccessTokenEncrypted     pgtype.Text
+	AccessTokenOrgEncrypted  pgtype.Text
+	AccessExpiresAt          pgtype.Timestamptz
+	RefreshTokenEncrypted    pgtype.Text
+	RefreshTokenOrgEncrypted pgtype.Text
+	AuthorizationExpiresAt   pgtype.Timestamptz
+	RefreshExpiresAt         pgtype.Timestamptz
+	Scopes                   []string
+	Resource                 pgtype.Text
+	AutoRefresh              bool
+	LastRefreshAttemptAt     pgtype.Timestamptz
+	LastUsedAt               pgtype.Timestamptz
+	UpstreamSubject          pgtype.Text
+	UpstreamEmail            pgtype.Text
+	UpstreamDisplayName      pgtype.Text
+	IdentitySource           pgtype.Text
+	Enrichment               []byte
+	LastValidatedAt          pgtype.Timestamptz
+	ValidationStatus         pgtype.Text
+	ValidationReason         pgtype.Text
+	CreatedAt                pgtype.Timestamptz
+	UpdatedAt                pgtype.Timestamptz
+	DeletedAt                pgtype.Timestamptz
+	Deleted                  bool
+	ClientProjectID          uuid.NullUUID
 }
 
 // Soft-delete a single session. Returns the owning client's project_id so the
@@ -13975,9 +14827,12 @@ func (q *Queries) RevokeOrganizationRemoteSession(ctx context.Context, arg Revok
 		&i.SubjectUrn,
 		&i.UserSessionIssuerID,
 		&i.RemoteSessionClientID,
+		&i.OrganizationID,
 		&i.AccessTokenEncrypted,
+		&i.AccessTokenOrgEncrypted,
 		&i.AccessExpiresAt,
 		&i.RefreshTokenEncrypted,
+		&i.RefreshTokenOrgEncrypted,
 		&i.AuthorizationExpiresAt,
 		&i.RefreshExpiresAt,
 		&i.Scopes,
@@ -14023,7 +14878,7 @@ WHERE s.id = $1
   AND (c.project_id = $2::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $3::text)))
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
-RETURNING s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted
+RETURNING s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_token_org_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted
 `
 
 type RevokeRemoteSessionParams struct {
@@ -14044,9 +14899,12 @@ func (q *Queries) RevokeRemoteSession(ctx context.Context, arg RevokeRemoteSessi
 		&i.SubjectUrn,
 		&i.UserSessionIssuerID,
 		&i.RemoteSessionClientID,
+		&i.OrganizationID,
 		&i.AccessTokenEncrypted,
+		&i.AccessTokenOrgEncrypted,
 		&i.AccessExpiresAt,
 		&i.RefreshTokenEncrypted,
+		&i.RefreshTokenOrgEncrypted,
 		&i.AuthorizationExpiresAt,
 		&i.RefreshExpiresAt,
 		&i.Scopes,
@@ -14126,7 +14984,7 @@ WHERE id = $2
   AND organization_id = $3
   AND remote_session_issuer_id = $4
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
 `
 
 type RotateLocalFixtureOrganizationRemoteSessionClientParams struct {
@@ -14152,6 +15010,8 @@ func (q *Queries) RotateLocalFixtureOrganizationRemoteSessionClient(ctx context.
 		&i.RemoteSessionIssuerID,
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
+		&i.ClientSecretOrgEncrypted,
+		&i.ClientSecretGeneration,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.TokenEndpointAuthMethod,
@@ -14193,7 +15053,7 @@ WHERE id = $5
   AND organization_id = $6
   AND client_id_metadata_uri IS NOT NULL
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
 `
 
 type SetDuplicatedCIMDRemoteSessionClientAuthenticationParams struct {
@@ -14229,6 +15089,8 @@ func (q *Queries) SetDuplicatedCIMDRemoteSessionClientAuthentication(ctx context
 		&i.RemoteSessionIssuerID,
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
+		&i.ClientSecretOrgEncrypted,
+		&i.ClientSecretGeneration,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.TokenEndpointAuthMethod,
@@ -14335,7 +15197,7 @@ WHERE remote_session_clients.id = $2 AND remote_session_clients.deleted IS FALSE
 AND ((remote_session_clients.project_id = $3 AND EXISTS (
     SELECT 1 FROM projects p WHERE p.id = remote_session_clients.project_id
     AND p.organization_id = $4 AND p.deleted IS FALSE FOR SHARE
-)) OR (remote_session_clients.project_id IS NULL AND remote_session_clients.organization_id = $4)) RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
+)) OR (remote_session_clients.project_id IS NULL AND remote_session_clients.organization_id = $4)) RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
 `
 
 type SetEMAClientGrantsParams struct {
@@ -14361,6 +15223,8 @@ func (q *Queries) SetEMAClientGrants(ctx context.Context, arg SetEMAClientGrants
 		&i.RemoteSessionIssuerID,
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
+		&i.ClientSecretOrgEncrypted,
+		&i.ClientSecretGeneration,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.TokenEndpointAuthMethod,
@@ -14454,7 +15318,7 @@ WHERE c.id = $2
   AND c.organization_id = $3
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
-RETURNING c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted
+RETURNING c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_secret_org_encrypted, c.client_secret_generation, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted
 `
 
 type SetOrganizationRemoteSessionClientJsonWebKeySetParams struct {
@@ -14484,6 +15348,8 @@ func (q *Queries) SetOrganizationRemoteSessionClientJsonWebKeySet(ctx context.Co
 		&i.RemoteSessionIssuerID,
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
+		&i.ClientSecretOrgEncrypted,
+		&i.ClientSecretGeneration,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.TokenEndpointAuthMethod,
@@ -14666,6 +15532,56 @@ func (q *Queries) SetRemoteSessionAutoRefresh(ctx context.Context, arg SetRemote
 	return result.RowsAffected(), nil
 }
 
+const setRemoteSessionAutoRefreshInTenant = `-- name: SetRemoteSessionAutoRefreshInTenant :execrows
+UPDATE remote_sessions AS s
+SET auto_refresh = $1
+FROM remote_session_clients AS c,
+     remote_session_issuers AS i,
+     user_session_issuers AS u
+     LEFT JOIN projects AS up ON up.id = u.project_id,
+     projects AS p
+WHERE s.subject_urn = $2
+  AND s.remote_session_client_id = $3
+  AND c.id = s.remote_session_client_id
+  AND i.id = c.remote_session_issuer_id
+  AND i.deleted IS FALSE
+  AND u.id = s.user_session_issuer_id
+  AND p.id = $4::uuid
+  AND p.organization_id = $5::text
+  AND p.deleted IS FALSE
+  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+  AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
+  AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+  AND c.deleted IS FALSE
+  AND s.deleted IS FALSE
+`
+
+type SetRemoteSessionAutoRefreshInTenantParams struct {
+	AutoRefresh           bool
+	SubjectUrn            urn.SessionSubject
+	RemoteSessionClientID uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+}
+
+// SetRemoteSessionAutoRefresh for a registration a server offers through an
+// auth client, scoped as SoftDeleteRemoteSessionBySubjectAndClientInTenant.
+// Does not touch updated_at, which is the refresh CAS token and keepalive
+// clock.
+func (q *Queries) SetRemoteSessionAutoRefreshInTenant(ctx context.Context, arg SetRemoteSessionAutoRefreshInTenantParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setRemoteSessionAutoRefreshInTenant,
+		arg.AutoRefresh,
+		arg.SubjectUrn,
+		arg.RemoteSessionClientID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setRemoteSessionClientJsonWebKeySet = `-- name: SetRemoteSessionClientJsonWebKeySet :one
 UPDATE remote_session_clients
 SET
@@ -14675,7 +15591,7 @@ WHERE id = $2
   AND project_id = $3
   AND organization_id = $4
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
 `
 
 type SetRemoteSessionClientJsonWebKeySetParams struct {
@@ -14709,6 +15625,8 @@ func (q *Queries) SetRemoteSessionClientJsonWebKeySet(ctx context.Context, arg S
 		&i.RemoteSessionIssuerID,
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
+		&i.ClientSecretOrgEncrypted,
+		&i.ClientSecretGeneration,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.TokenEndpointAuthMethod,
@@ -15038,7 +15956,7 @@ type SoftDeleteRemoteSessionBySubjectAndClientParams struct {
 
 type SoftDeleteRemoteSessionBySubjectAndClientRow struct {
 	RemoteSessionClientID uuid.UUID
-	AccessTokenEncrypted  string
+	AccessTokenEncrypted  pgtype.Text
 	RefreshTokenEncrypted pgtype.Text
 }
 
@@ -15072,6 +15990,87 @@ func (q *Queries) SoftDeleteRemoteSessionBySubjectAndClient(ctx context.Context,
 	var items []SoftDeleteRemoteSessionBySubjectAndClientRow
 	for rows.Next() {
 		var i SoftDeleteRemoteSessionBySubjectAndClientRow
+		if err := rows.Scan(&i.RemoteSessionClientID, &i.AccessTokenEncrypted, &i.RefreshTokenEncrypted); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const softDeleteRemoteSessionBySubjectAndClientInTenant = `-- name: SoftDeleteRemoteSessionBySubjectAndClientInTenant :many
+UPDATE remote_sessions AS s
+SET deleted_at = clock_timestamp(),
+    -- Tombstones keep credentials for upstream revocation but no identity.
+    upstream_subject = NULL,
+    upstream_email = NULL,
+    upstream_display_name = NULL,
+    identity_source = NULL,
+    enrichment = NULL,
+    -- The credential is gone, so nothing it was observed doing survives it.
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL
+FROM remote_session_clients AS c,
+     remote_session_issuers AS i,
+     -- A deleted sign-in still names the organization the consent was made in.
+     user_session_issuers AS u
+     LEFT JOIN projects AS up ON up.id = u.project_id,
+     projects AS p
+WHERE s.subject_urn = $1
+  AND s.remote_session_client_id = $2
+  AND c.id = s.remote_session_client_id
+  AND i.id = c.remote_session_issuer_id
+  AND i.deleted IS FALSE
+  AND u.id = s.user_session_issuer_id
+  AND p.id = $3::uuid
+  AND p.organization_id = $4::text
+  AND p.deleted IS FALSE
+  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+  AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
+  AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+  AND c.deleted IS FALSE
+  AND s.deleted IS FALSE
+RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted
+`
+
+type SoftDeleteRemoteSessionBySubjectAndClientInTenantParams struct {
+	SubjectUrn            urn.SessionSubject
+	RemoteSessionClientID uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+}
+
+type SoftDeleteRemoteSessionBySubjectAndClientInTenantRow struct {
+	RemoteSessionClientID uuid.UUID
+	AccessTokenEncrypted  pgtype.Text
+	RefreshTokenEncrypted pgtype.Text
+}
+
+// SoftDeleteRemoteSessionBySubjectAndClient for a registration a server offers
+// through an auth client, which no user session issuer need link. The caller
+// has checked that offer; the write stays within the tenant as
+// GetActiveRemoteSessionInTenant reads: the client's reach pins a project
+// registration to its project, and the consent must have come through a
+// sign-in of the server's organization. Returns the stored credentials it
+// tombstones, for upstream revocation.
+func (q *Queries) SoftDeleteRemoteSessionBySubjectAndClientInTenant(ctx context.Context, arg SoftDeleteRemoteSessionBySubjectAndClientInTenantParams) ([]SoftDeleteRemoteSessionBySubjectAndClientInTenantRow, error) {
+	rows, err := q.db.Query(ctx, softDeleteRemoteSessionBySubjectAndClientInTenant,
+		arg.SubjectUrn,
+		arg.RemoteSessionClientID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SoftDeleteRemoteSessionBySubjectAndClientInTenantRow
+	for rows.Next() {
+		var i SoftDeleteRemoteSessionBySubjectAndClientInTenantRow
 		if err := rows.Scan(&i.RemoteSessionClientID, &i.AccessTokenEncrypted, &i.RefreshTokenEncrypted); err != nil {
 			return nil, err
 		}
@@ -15184,7 +16183,7 @@ RETURNING remote_session_client_id, access_token_encrypted, refresh_token_encryp
 
 type SoftDeleteRemoteSessionsByClientIDRow struct {
 	RemoteSessionClientID uuid.UUID
-	AccessTokenEncrypted  string
+	AccessTokenEncrypted  pgtype.Text
 	RefreshTokenEncrypted pgtype.Text
 }
 
@@ -15228,7 +16227,7 @@ RETURNING remote_session_client_id, access_token_encrypted, refresh_token_encryp
 
 type SoftDeleteRemoteSessionsByClientIDsRow struct {
 	RemoteSessionClientID uuid.UUID
-	AccessTokenEncrypted  string
+	AccessTokenEncrypted  pgtype.Text
 	RefreshTokenEncrypted pgtype.Text
 }
 
@@ -15302,7 +16301,7 @@ type SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerParams struct {
 
 type SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow struct {
 	RemoteSessionClientID uuid.UUID
-	AccessTokenEncrypted  string
+	AccessTokenEncrypted  pgtype.Text
 	RefreshTokenEncrypted pgtype.Text
 }
 
@@ -15470,7 +16469,7 @@ SET
     legacy_callback_url = COALESCE($6, legacy_callback_url),
     updated_at = clock_timestamp()
 WHERE id = $7 AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateGlobalRemoteSessionClientParams struct {
@@ -15505,6 +16504,8 @@ func (q *Queries) UpdateGlobalRemoteSessionClient(ctx context.Context, arg Updat
 		&i.RemoteSessionIssuerID,
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
+		&i.ClientSecretOrgEncrypted,
+		&i.ClientSecretGeneration,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.TokenEndpointAuthMethod,
@@ -15829,7 +16830,7 @@ WHERE c.id = $10
   AND (i.organization_id = $11 OR c.organization_id = $11)
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
-RETURNING c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted
+RETURNING c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_secret_org_encrypted, c.client_secret_generation, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted
 `
 
 type UpdateOrganizationRemoteSessionClientParams struct {
@@ -15875,6 +16876,8 @@ func (q *Queries) UpdateOrganizationRemoteSessionClient(ctx context.Context, arg
 		&i.RemoteSessionIssuerID,
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
+		&i.ClientSecretOrgEncrypted,
+		&i.ClientSecretGeneration,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.TokenEndpointAuthMethod,
@@ -16203,7 +17206,7 @@ SET
     forward_client_name = COALESCE($10, forward_client_name),
     updated_at = clock_timestamp()
 WHERE id = $11 AND project_id = $12 AND deleted IS FALSE
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateRemoteSessionClientParams struct {
@@ -16250,6 +17253,8 @@ func (q *Queries) UpdateRemoteSessionClient(ctx context.Context, arg UpdateRemot
 		&i.RemoteSessionIssuerID,
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
+		&i.ClientSecretOrgEncrypted,
+		&i.ClientSecretGeneration,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.TokenEndpointAuthMethod,
@@ -16291,7 +17296,7 @@ SET
 WHERE id = $6
   AND (project_id = $7::uuid OR (project_id IS NULL AND organization_id = $8::text))
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateRemoteSessionClientResourceDisplayParams struct {
@@ -16327,6 +17332,8 @@ func (q *Queries) UpdateRemoteSessionClientResourceDisplay(ctx context.Context, 
 		&i.RemoteSessionIssuerID,
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
+		&i.ClientSecretOrgEncrypted,
+		&i.ClientSecretGeneration,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.TokenEndpointAuthMethod,
@@ -16450,7 +17457,7 @@ WHERE id = $8
   AND remote_session_client_id = $10
   AND deleted IS FALSE
   AND updated_at = $11
-RETURNING id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
+RETURNING id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted, access_token_org_encrypted, access_expires_at, refresh_token_encrypted, refresh_token_org_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateRemoteSessionIdentityParams struct {
@@ -16504,9 +17511,12 @@ func (q *Queries) UpdateRemoteSessionIdentity(ctx context.Context, arg UpdateRem
 		&i.SubjectUrn,
 		&i.UserSessionIssuerID,
 		&i.RemoteSessionClientID,
+		&i.OrganizationID,
 		&i.AccessTokenEncrypted,
+		&i.AccessTokenOrgEncrypted,
 		&i.AccessExpiresAt,
 		&i.RefreshTokenEncrypted,
+		&i.RefreshTokenOrgEncrypted,
 		&i.AuthorizationExpiresAt,
 		&i.RefreshExpiresAt,
 		&i.Scopes,
@@ -17029,7 +18039,9 @@ func (q *Queries) UpdateRemoteSessionIssuerDiscoveredMetadata(ctx context.Contex
 const updateRemoteSessionTokensIfUnchanged = `-- name: UpdateRemoteSessionTokensIfUnchanged :one
 UPDATE remote_sessions
 SET
-    access_token_encrypted = $1,
+    -- Cast for the same reason as in UpsertRemoteSession: switch to sqlc.narg
+    -- when finalized organizations write NULL, and never write '' instead.
+    access_token_encrypted = $1::text,
     access_expires_at = $2,
     refresh_token_encrypted = $3,
     authorization_expires_at = $4,
@@ -17060,7 +18072,7 @@ WHERE subject_urn = $9
   AND remote_session_client_id = $10
   AND deleted IS FALSE
   AND updated_at = $11
-RETURNING id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
+RETURNING id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted, access_token_org_encrypted, access_expires_at, refresh_token_encrypted, refresh_token_org_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateRemoteSessionTokensIfUnchangedParams struct {
@@ -17107,9 +18119,12 @@ func (q *Queries) UpdateRemoteSessionTokensIfUnchanged(ctx context.Context, arg 
 		&i.SubjectUrn,
 		&i.UserSessionIssuerID,
 		&i.RemoteSessionClientID,
+		&i.OrganizationID,
 		&i.AccessTokenEncrypted,
+		&i.AccessTokenOrgEncrypted,
 		&i.AccessExpiresAt,
 		&i.RefreshTokenEncrypted,
+		&i.RefreshTokenOrgEncrypted,
 		&i.AuthorizationExpiresAt,
 		&i.RefreshExpiresAt,
 		&i.Scopes,
@@ -17358,6 +18373,7 @@ INSERT INTO remote_sessions (
     subject_urn,
     user_session_issuer_id,
     remote_session_client_id,
+    organization_id,
     access_token_encrypted,
     access_expires_at,
     refresh_token_encrypted,
@@ -17376,7 +18392,18 @@ VALUES (
     $1,
     $2,
     $3,
-    $4,
+    (
+        SELECT org.id
+        FROM remote_session_clients AS client
+        LEFT JOIN projects AS project ON project.id = client.project_id
+        JOIN organization_metadata AS org ON org.id = COALESCE(project.organization_id, client.organization_id)
+        WHERE client.id = $3
+    ),
+    -- The column is nullable, but every writer still stores a platform-key
+    -- token, so the cast keeps the parameter a string. Switch it to
+    -- sqlc.narg when a finalized organization starts writing NULL here; never
+    -- write '' in place of NULL.
+    $4::text,
     $5,
     $6,
     $7,
@@ -17393,6 +18420,9 @@ VALUES (
 ON CONFLICT (subject_urn, remote_session_client_id) WHERE deleted IS FALSE
 DO UPDATE SET
     grant_generation = remote_sessions.grant_generation + 1,
+    -- Same client, so the same organization; this fills rows written before
+    -- the column existed.
+    organization_id = EXCLUDED.organization_id,
     access_token_encrypted = EXCLUDED.access_token_encrypted,
     access_expires_at = EXCLUDED.access_expires_at,
     refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
@@ -17410,7 +18440,7 @@ DO UPDATE SET
     validation_status = NULL,
     validation_reason = NULL,
     updated_at = clock_timestamp()
-RETURNING id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
+RETURNING id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted, access_token_org_encrypted, access_expires_at, refresh_token_encrypted, refresh_token_org_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type UpsertRemoteSessionParams struct {
@@ -17440,6 +18470,10 @@ type UpsertRemoteSessionParams struct {
 // UpdateRemoteSessionTokensIfUnchanged and never advances this generation. A
 // soft-deleted row falls outside the partial index, so a re-auth after
 // revocation inserts a fresh active row alongside the tombstone.
+// organization_id is the client's organization, through its project first,
+// never the sign-in's: the issuer only records where the grant was made.
+// Joining organization_metadata leaves it NULL rather than failing the
+// sign-in when a project names an organization with no metadata row.
 func (q *Queries) UpsertRemoteSession(ctx context.Context, arg UpsertRemoteSessionParams) (RemoteSession, error) {
 	row := q.db.QueryRow(ctx, upsertRemoteSession,
 		arg.SubjectUrn,
@@ -17466,9 +18500,12 @@ func (q *Queries) UpsertRemoteSession(ctx context.Context, arg UpsertRemoteSessi
 		&i.SubjectUrn,
 		&i.UserSessionIssuerID,
 		&i.RemoteSessionClientID,
+		&i.OrganizationID,
 		&i.AccessTokenEncrypted,
+		&i.AccessTokenOrgEncrypted,
 		&i.AccessExpiresAt,
 		&i.RefreshTokenEncrypted,
+		&i.RefreshTokenOrgEncrypted,
 		&i.AuthorizationExpiresAt,
 		&i.RefreshExpiresAt,
 		&i.Scopes,
@@ -17652,7 +18689,7 @@ DO UPDATE SET
   refresh_claim_id = NULL, updated_at = clock_timestamp()
 WHERE s.organization_id = $1::text AND s.project_id IS NULL
   AND COALESCE(s.credential_generation, 1) = $19::bigint
-RETURNING s.id, s.remote_session_client_id, s.organization_id, s.project_id, s.subject_urn, s.identity_assertion_encrypted, s.identity_assertion_expires_at, s.refresh_token_encrypted, s.refresh_expires_at, s.last_refresh_attempt_at, s.offline_access_refused_at, s.offline_access_request_config_hash, s.credential_generation, s.refresh_claim_id, s.upstream_subject_encrypted, s.nonce_encrypted, s.credential_config_hash, s.observation_status, s.observed_at, s.credential_obtained_at, s.last_refresh_succeeded_at, s.retry_after, s.created_at, s.updated_at, s.deleted_at, s.deleted
+RETURNING s.id, s.remote_session_client_id, s.organization_id, s.project_id, s.subject_urn, s.identity_assertion_encrypted, s.identity_assertion_org_encrypted, s.identity_assertion_expires_at, s.refresh_token_encrypted, s.refresh_token_org_encrypted, s.refresh_expires_at, s.last_refresh_attempt_at, s.offline_access_refused_at, s.offline_access_request_config_hash, s.credential_generation, s.refresh_claim_id, s.upstream_subject_encrypted, s.upstream_subject_org_encrypted, s.nonce_encrypted, s.nonce_org_encrypted, s.credential_config_hash, s.observation_status, s.observed_at, s.credential_obtained_at, s.last_refresh_succeeded_at, s.retry_after, s.created_at, s.updated_at, s.deleted_at, s.deleted
 `
 
 type UpsertTrustedDelegationCredentialParams struct {
@@ -17710,8 +18747,10 @@ func (q *Queries) UpsertTrustedDelegationCredential(ctx context.Context, arg Ups
 		&i.ProjectID,
 		&i.SubjectUrn,
 		&i.IdentityAssertionEncrypted,
+		&i.IdentityAssertionOrgEncrypted,
 		&i.IdentityAssertionExpiresAt,
 		&i.RefreshTokenEncrypted,
+		&i.RefreshTokenOrgEncrypted,
 		&i.RefreshExpiresAt,
 		&i.LastRefreshAttemptAt,
 		&i.OfflineAccessRefusedAt,
@@ -17719,7 +18758,9 @@ func (q *Queries) UpsertTrustedDelegationCredential(ctx context.Context, arg Ups
 		&i.CredentialGeneration,
 		&i.RefreshClaimID,
 		&i.UpstreamSubjectEncrypted,
+		&i.UpstreamSubjectOrgEncrypted,
 		&i.NonceEncrypted,
+		&i.NonceOrgEncrypted,
 		&i.CredentialConfigHash,
 		&i.ObservationStatus,
 		&i.ObservedAt,
@@ -17732,4 +18773,54 @@ func (q *Queries) UpsertTrustedDelegationCredential(ctx context.Context, arg Ups
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const userSessionIssuerHasConsumersWithoutAssociations = `-- name: UserSessionIssuerHasConsumersWithoutAssociations :one
+SELECT (
+  EXISTS (
+    SELECT 1
+    FROM mcp_servers AS direct
+    JOIN projects AS project
+      ON project.id = direct.project_id
+     AND project.organization_id = $1::text
+     AND project.deleted IS FALSE
+    WHERE direct.user_session_issuer_id = $2::uuid
+      AND direct.deleted IS FALSE
+  ) OR EXISTS (
+    SELECT 1
+    FROM meta_mcp_servers AS gateway
+    JOIN meta_mcp_server_members AS member
+      ON member.meta_mcp_server_id = gateway.id
+     AND member.project_id = gateway.project_id
+     AND member.deleted IS FALSE
+    JOIN mcp_servers AS hosted
+      ON hosted.id = member.mcp_server_id
+     AND hosted.project_id = member.project_id
+     AND hosted.deleted IS FALSE
+     AND hosted.remote_mcp_server_id IS NULL
+     AND hosted.tunneled_mcp_server_id IS NULL
+    WHERE gateway.user_session_issuer_id = $2::uuid
+      AND gateway.organization_id = $1::text
+      AND gateway.deleted IS FALSE
+      AND hosted.id <> $3::uuid
+  )
+)::boolean AS has_consumers
+`
+
+type UserSessionIssuerHasConsumersWithoutAssociationsParams struct {
+	OrganizationID      string
+	UserSessionIssuerID uuid.UUID
+	McpServerID         uuid.UUID
+}
+
+// Whether anything signs in through a user session issuer's bindings without an
+// association to show for it, besides one gateway member giving up a client: a
+// server on the issuer itself, which can fall back to an unclaimed client, or a
+// hosted member of a gateway on the issuer, which serves from every client the
+// issuer binds.
+func (q *Queries) UserSessionIssuerHasConsumersWithoutAssociations(ctx context.Context, arg UserSessionIssuerHasConsumersWithoutAssociationsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, userSessionIssuerHasConsumersWithoutAssociations, arg.OrganizationID, arg.UserSessionIssuerID, arg.McpServerID)
+	var has_consumers bool
+	err := row.Scan(&has_consumers)
+	return has_consumers, err
 }

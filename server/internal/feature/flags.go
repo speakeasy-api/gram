@@ -3,6 +3,8 @@ package feature
 type Flag string
 
 const (
+	// FlagChannels gates the Channels rollout for an organization.
+	FlagChannels Flag = "channels"
 	// FlagPromptPolicies gates the natural-language / LLM-judge ("prompt
 	// based") risk policy MVP. While set, only opted-in organizations can
 	// create or update nl-type risk policies and have them enforced. The
@@ -23,6 +25,14 @@ const (
 	// cannot see the feature. Targeted by PostHog organization group (org
 	// slug), the same way the dashboard evaluates it.
 	FlagBudgets Flag = "gram-budgets"
+	// FlagPrivateNetworkGateway chooses which runtime hosts an organization's
+	// new private network connection: the tsnet tailnet gateway when enabled,
+	// the Tailscale Kubernetes operator otherwise. Evaluated server-side when a
+	// connection is created, and by the dashboard to show the matching setup
+	// steps until one exists. Targeted by PostHog organization group (org
+	// slug). Fails closed to the operator. Existing connections keep the
+	// runtime they were created with. Removed once the gateway is the default.
+	FlagPrivateNetworkGateway Flag = "private-network-gateway"
 	// FlagRiskEnforcementPubsub routes applicable realtime scanner lanes over Pub/Sub.
 	FlagRiskEnforcementPubsub Flag = "risk-enforcement-pubsub"
 	// FlagRiskEnforcementMaxContentBytes overrides the realtime enforcement
@@ -92,25 +102,6 @@ const (
 	// entitlement if the analyzer becomes a sold capability.
 	FlagRiskLLMAnalyzer Flag = "gram-risk-llm-analyzer"
 
-	// FlagCanonicalIdentityFold serves cost analytics (telemetry.query /
-	// telemetry.listSessions) email filters and group-bys through the
-	// ClickHouse identity_map fold, so one employee's directory, personal,
-	// and case-variant emails read as one identity. Targeted by PostHog
-	// organization group (org slug), like FlagBudgets. Removed once the fold
-	// is GA (DNO-856).
-	FlagCanonicalIdentityFold Flag = "canonical-identity-fold"
-	// FlagCanonicalIdentityFoldShadow runs the folded variant of the
-	// telemetry.query table read alongside the literal one — serving the
-	// literal result — and logs divergence, validating the fold on real
-	// traffic before FlagCanonicalIdentityFold enables it anywhere. Ignored
-	// when the fold flag is on. Same targeting; removed with the fold flag.
-	FlagCanonicalIdentityFoldShadow Flag = "canonical-identity-fold-shadow"
-
-	// FlagPaygSelfServeBilling gates the self-serve Stripe Checkout rollout.
-	// Targeted by PostHog organization group (org slug) and removed once PAYG
-	// billing is generally available.
-	FlagPaygSelfServeBilling Flag = "gram-payg-self-serve-billing"
-
 	// FlagAssistantOAuthCIMD gates outbound Client ID Metadata Document
 	// (CIMD) support for assistant MCP OAuth clients. When on, and the
 	// upstream authorization server advertises
@@ -123,29 +114,9 @@ const (
 	// (org slug). Removed once CIMD is GA.
 	FlagAssistantOAuthCIMD Flag = "assistant-oauth-cimd"
 
-	// FlagMCPApproval gates the MCP approval workflow end to end: the
-	// approval queue, evidence gathering, deciding, and the promotion of
-	// blocked-server redemptions into approval requests (orgs off the flag
-	// fall back to legacy bypass requests). Targeted by PostHog organization
-	// group (org slug), like FlagBudgets. A rollout gate while the workflow
-	// is dogfooded; if approval becomes a sold capability the durable
-	// entitlement returns through productfeatures alongside this flag.
-	FlagMCPApproval Flag = "gram-mcp-approval"
-
-	// FlagMCPResearch gates the MCP research agent within an approval-enabled
-	// organization: starting runs and executing queued ones. Targeted by
-	// PostHog organization group like FlagMCPApproval, and separate from it
-	// so research — the spend-heavy, web-facing piece — rolls out to a
-	// narrower set than the approval workflow. Fails closed: a flag-service
-	// error reads as off.
-	FlagMCPResearch Flag = "gram-mcp-research"
-
 	// FlagMCPResearchKill is the research kill switch: affirmatively on means
-	// no research runs anywhere, checked before the rollout flag. It exists
-	// apart from FlagMCPResearch so an emergency stop never touches the
-	// rollout flag's org targeting — un-killing restores exactly the release
-	// state from before. Fails closed: research must not run while the state
-	// of its stop control is unknown.
+	// no research runs anywhere. Fails closed: research must not run while
+	// the state of its stop control is unknown.
 	FlagMCPResearchKill Flag = "gram-mcp-research-kill"
 
 	// FlagSkillsOverMCP gates serving managed skills over MCP (the
@@ -171,10 +142,6 @@ const (
 	// plugins.canaryHooksOrgSlugs), independent of this flag, so a PostHog outage
 	// can't strand it on stale hooks.
 	FlagHooksRollout Flag = "hooks-rollout"
-
-	// FlagOktaConnections gates the Okta integration while it is dogfooded:
-	// creating connections, resource connections and server suggestions.
-	FlagOktaConnections Flag = "okta-connections"
 
 	// FlagSignInEnforcement turns on, per organization (keyed by its id),
 	// linking MCP grants to sign-ins, sign-in evidence lookups, sign out
@@ -237,6 +204,18 @@ const (
 	// Targeted the same way as FlagAuthClientResolver.
 	FlagMandatoryAuthzShadow Flag = "mandatory-authz-shadow"
 
+	// FlagUpstreamIssuerFromAssociations makes an MCP server's upstream
+	// clients the source of its upstream issuer for an organization: the one
+	// provider among the server's live client associations routes its
+	// credentials and is hashed into its consent evidence, in place of the
+	// denormalized mcp_servers.remote_session_issuer_id. Off, the column
+	// keeps serving and is the rollback. Either way both values are compared
+	// wherever a request reads the server's associations and no credential
+	// choice governs; elsewhere the request is recorded as a governing choice
+	// or as not having read the associations, and keeps the column.
+	// Targeted the same way as FlagAuthClientResolver.
+	FlagUpstreamIssuerFromAssociations Flag = "upstream-issuer-from-associations"
+
 	// FlagAuthClientUpstreamSelectorWrites lets an organization write grants
 	// whose selector names upstream_client: such grants, connection owner
 	// blocks, agent keys copying them and the attachment backfill. Replicas
@@ -256,7 +235,9 @@ const (
 	// aivendors product ID of the connection's verified CIMD client, or
 	// "unknown") and "organization_id". Release conditions match on those
 	// person properties, so a harness joins or leaves the treatment by editing
-	// a condition. Fails closed to the full catalogue.
+	// a condition. Fails closed to the full catalogue. ChatGPT always gets the
+	// full catalogue, because the ChatGPT app directory rejects tools that run
+	// other tools by name.
 	FlagPlatformMCPDiscoveryMode Flag = "platform-mcp-discovery-mode"
 
 	// FlagPlatformMCPGatewayProxy lets a Platform MCP connection use the

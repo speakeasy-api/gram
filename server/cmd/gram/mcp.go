@@ -19,7 +19,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
 	"github.com/urfave/cli/v2"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
@@ -33,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -297,15 +297,19 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	// Shutdown funcs run concurrently, so everything publishing through
 	// psbroker stops in order inside its close.
 	var drainRisk func(context.Context) error
+	var shutdownConnections func(context.Context) error
 	stopPubSub := shutdown.funcs[pubsubShutdown]
 	shutdown.funcs[pubsubShutdown] = func(ctx context.Context) error {
 		var errs []error
+		// The recorder publishes its exports, so only the publishers wait for it.
+		waitConnections := startShutdown(ctx, shutdownConnections)
 		if drainRisk != nil {
 			errs = append(errs, drainRisk(ctx))
 		}
 		if enforcementShutdown != nil {
 			errs = append(errs, enforcementShutdown(ctx))
 		}
+		errs = append(errs, waitConnections())
 		return errors.Join(append(errs, stopPublishers(ctx), stopPubSub(ctx))...)
 	}
 
@@ -315,7 +319,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	telemLogger, stop := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cacheImpl, chDB, logsEnabled, toolIOLogsEnabled,
 		tm.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs))
 	shutdown.funcs = append(shutdown.funcs, stop)
-	telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessions, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine, featureFlags)
+	telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessions, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
 
 	// Platform memory tools and dynamic tool search need a completions client.
 	// The chat writer captures any transcript they produce but carries none of
@@ -355,6 +359,10 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	}
 	clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 	clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
+	orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
+	if err != nil {
+		return err
+	}
 	issuerGate := newInternalSessionIssuerGate(c, db, featureFlags, false)
 	issuerSigner := internalsessionissuers.NewSigner(logger, tracerProvider, meterProvider, db, issuerGate, gcpIdentity, kmsSigningClients, internalIssuerSignerConfig(c, callbackOrigins.Outbound))
 	issuerGate.SetSigningAuthority(issuerSigner.CheckAuthority)
@@ -365,9 +373,9 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		return fmt.Errorf("build tunnel http client: %w", err)
 	}
 	protectedResources := protectedresource.NewProber(db, guardianPolicy)
-	connectionRecorder := mcpconnectionattempts.NewRecorder(logger, meterProvider, chDB, logsEnabled, connectionDeviceKeys(ctx, logger, c.String("risk-fingerprint-pepper-keyring")))
-	shutdown.funcs = append(shutdown.funcs, connectionRecorder.Shutdown)
-	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags, connectionRecorder)
+	connectionRecorder := mcpconnectionattempts.NewRecorder(logger, meterProvider, chDB, logsEnabled, connectionDeviceKeys(ctx, logger, c.String("risk-fingerprint-pepper-keyring")), newConnectionLogExport(publishers.OTELLogs))
+	shutdownConnections = connectionRecorderShutdown(connectionRecorder)
+	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags, connectionRecorder, orgEncryption)
 	if err != nil {
 		return err
 	}
@@ -406,7 +414,8 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		remotesessions.WithRefreshIssuerMetadataRefresher(remoteSessionDeps.Refresher),
 		remotesessions.WithRefreshSessionEnricher(remoteSessionDeps.Enricher),
 		remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner),
-		remotesessions.WithRefreshConnectionRecorder(connectionRecorder))
+		remotesessions.WithRefreshConnectionRecorder(connectionRecorder),
+		remotesessions.WithRefreshFeatureFlags(featureFlags))
 	remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, enc, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, identityCommitter, remoteSessionsRefresher, productFeatures, protectedResources)
 	remoteSessionsService.SetCallbackOrigins(callbackOrigins)
 	remoteSessionsService.SetFeatureFlags(featureFlags)
@@ -543,12 +552,7 @@ func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serv
 		})
 	})
 	mux.Use(middleware.DropInboundOTelBaggage)
-	mux.Use(func(h http.Handler) http.Handler {
-		return otelhttp.NewHandler(h, "http",
-			otelhttp.WithServerName("gram-mcp"),
-			otelhttp.WithPublicEndpointFn(middleware.IsOTelPublicEndpoint),
-		)
-	})
+	mux.Use(middleware.PublicHTTPTracing("gram-mcp"))
 	mux.Use(middleware.RouteLabelerMiddleware)
 	mux.Use(middleware.MCPProtocolVersionTelemetry)
 	mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
@@ -558,6 +562,13 @@ func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serv
 	if err != nil {
 		return nil, fmt.Errorf("configure mcp security middleware: %w", err)
 	}
+	// Response compression and the request body limit live in the app because
+	// the Gateway edge offers neither. Below CORS so a 413 carries CORS
+	// headers, and outside the bandwidth meter: handlers write uncompressed
+	// bytes into the meter, which forwards them to the compressor, so billed
+	// egress is the size of the uncompressed body.
+	mux.Use(middleware.ResponseCompression())
+	mux.Use(middleware.RequestBodyLimit(logger, constants.MaxRequestBodyBytes))
 	// Below CORS, which browser OAuth clients need on the authentication
 	// host too. Above MCPSecurity, so MCP endpoint paths answer 404 there like
 	// every route the host does not serve, and above customdomains.Middleware,
@@ -565,6 +576,13 @@ func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serv
 	mux.Use(authenticationHost.Middleware)
 	mux.Use(mcpSecurity)
 	mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL, platformHosts))
+	// Middleware outside the meter must not consume request bodies or buffer,
+	// truncate, or replace successful response bodies; those bytes would not
+	// be counted. Two exceptions are deliberate. ResponseCompression
+	// transforms bytes after the meter has counted them. RequestBodyLimit
+	// answers a body that overflows during a read with a 413, so the meter
+	// counts the handler's discarded response (a small error body) rather
+	// than the 413.
 	mux.Use(metering.NewMCPBandwidthMiddleware(logger, publishers.MeterReadings))
 	mux.Use(middleware.SessionMiddleware)
 	return mux, nil

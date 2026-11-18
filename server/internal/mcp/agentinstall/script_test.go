@@ -368,7 +368,7 @@ func TestScriptConfiguresOpenClawAndPassesTheSelfCheck(t *testing.T) {
 	require.Contains(t, out, "Next: restart the OpenClaw Gateway.")
 
 	calls := h.calls(t)
-	require.Len(t, calls, 6, "openclaw calls: %v", calls)
+	require.Len(t, calls, 7, "openclaw calls: %v", calls)
 	require.Equal(t, "config set --help", calls[0])
 	require.True(t, strings.HasPrefix(calls[1], "config set --batch-file "), calls[1])
 	require.Equal(t, "mcp unset gram", calls[2])
@@ -382,6 +382,8 @@ func TestScriptConfiguresOpenClawAndPassesTheSelfCheck(t *testing.T) {
 	require.True(t, strings.HasPrefix(calls[4], "plugins install --force --accept-capabilities "), calls[4])
 	require.True(t, strings.HasSuffix(calls[4], ".zip"), calls[4])
 	require.Equal(t, "config set plugins.entries.speakeasy-observability.hooks.allowConversationAccess true", calls[5])
+	// A reinstall after an uninstall can find the entry left disabled.
+	require.Equal(t, "config set plugins.entries.speakeasy-observability.enabled true", calls[6])
 
 	// OpenClaw got the agent's plugin, and the script cleaned up after itself.
 	installed, err := os.ReadFile(filepath.Join(h.stubDir, "installed.zip"))
@@ -429,7 +431,7 @@ func TestScriptOmitsAcceptCapabilitiesForOlderOpenClaw(t *testing.T) {
 	require.Contains(t, out, "Speakeasy hooks: PASS")
 
 	calls := h.calls(t)
-	require.Len(t, calls, 6, "openclaw calls: %v", calls)
+	require.Len(t, calls, 7, "openclaw calls: %v", calls)
 	require.True(t, strings.HasPrefix(calls[4], "plugins install --force "), calls[4])
 	require.NotContains(t, calls[4], "--accept-capabilities")
 }
@@ -641,7 +643,7 @@ func TestScriptOmitsUnsupportedPluginFlags(t *testing.T) {
 	out := h.run(t, renderScript(t, testParams()))
 	require.Contains(t, out, "Speakeasy hooks: PASS")
 	calls := h.calls(t)
-	require.Len(t, calls, 6, "openclaw calls: %v", calls)
+	require.Len(t, calls, 7, "openclaw calls: %v", calls)
 	require.NotContains(t, calls[4], "--force")
 	require.NotContains(t, calls[4], "--accept-capabilities")
 }

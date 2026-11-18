@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -261,7 +262,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	// always ask for the request's scopes.
 	var connection *ScopeResolution
 	if selected != uuid.Nil {
-		connection, err = ConnectionScopes(ctx, tx, BindingConnection{ProjectID: project, OrganizationID: org, UserSessionIssuerID: in.UserSessionIssuerID, ClientID: selected, Resource: in.Resource, Discover: s.resources != nil})
+		connection, err = ConnectionScopes(ctx, tx, BindingConnection{ProjectID: project, OrganizationID: org, UserSessionIssuerID: in.UserSessionIssuerID, ClientID: selected, Resource: in.Resource, Discover: s.resources != nil, FromAssociations: feature.UpstreamIssuerFromAssociations(ctx, s.featureFlags, org)})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "resolve identity chaining scopes").LogError(ctx, s.logger)
 		}

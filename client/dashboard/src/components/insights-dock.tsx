@@ -62,14 +62,8 @@ import {
   Terminal,
   X,
 } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  ReactElement,
-} from "react";
+import type { ReactElement } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { InsightsConfigOptions } from "./insights-context";
 import { InsightsContext, useInsightsState } from "./insights-context";
 import { InsightsShortcutKeys } from "./insights-dock-shortcut-hint";
@@ -529,12 +523,18 @@ function InsightsDock({
       isFirstLocation.current = false;
       return;
     }
+    // Settings pages are long forms with a Save button per section; an
+    // expanded dock would sit over them, so they always open on the pill.
+    if (/\/settings(\/|$)/.test(location.pathname)) {
+      collapseNow();
+      return;
+    }
     cancelCollapse();
     if (Date.now() - collapsedAt.current < DOCK_REOPEN_WINDOW_MS) {
       collapsedAt.current = 0;
       setExpanded(true);
     }
-  }, [location.pathname, cancelCollapse]);
+  }, [location.pathname, cancelCollapse, collapseNow]);
 
   // After surviving a navigation the dock is expanded without holding focus,
   // so blur can never fire again — collapse on pointerdown outside the card
@@ -1005,6 +1005,7 @@ export function InsightsProvider({
     ready: assistantReady,
     allowed: assistantAllowed,
     error: assistantError,
+    retry: retryAssistant,
     needsAdmin: assistantNeedsAdmin,
   } = useServerAssistantTransport(mcpConfig.projectSlug, true, {
     getSkillIds: getSelectedSkillIds,
@@ -1126,6 +1127,9 @@ export function InsightsProvider({
   // useHideInsightsDock layout effect can register with this parent.
   const pageOwnsRuntime =
     routes.playground.active ||
+    // Inspect's Chat tab mounts its own provider.
+    routes.mcp.details.inspect.active ||
+    routes.mcp.gateway.inspect.active ||
     routes.assistants.newAssistant.active ||
     routes.assistants.detail.active;
   const shouldMountRuntime = assistantReady && !pageOwnsRuntime;
@@ -1499,7 +1503,16 @@ export function InsightsProvider({
       {assistantError && (
         <div className="border-destructive/40 bg-destructive/10 text-destructive mx-4 mt-1 flex items-start gap-2 border px-3 py-2 text-xs">
           <Terminal className="mt-0.5 size-3.5 shrink-0" />
-          <span>{assistantError}</span>
+          <span>
+            {assistantError}{" "}
+            <button
+              type="button"
+              onClick={retryAssistant}
+              className="cursor-pointer font-medium underline underline-offset-2"
+            >
+              Try again
+            </button>
+          </span>
         </div>
       )}
 

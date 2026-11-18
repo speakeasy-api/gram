@@ -90,6 +90,12 @@ WHERE a.organization_id = @organization_id
     sqlc.narg(acting_surface)::text IS NULL
     OR COALESCE(a.acting_surface, 'unknown') = sqlc.narg(acting_surface)::text
   )
+  -- Origin splits the log by who initiated a change: 'system' is Speakeasy
+  -- acting on its own (background jobs), 'user' is everything else.
+  AND (
+    sqlc.narg(origin)::text IS NULL
+    OR (sqlc.narg(origin)::text = 'system') = (a.acting_surface IS NOT DISTINCT FROM 'system')
+  )
   AND (
     sqlc.narg(created_from)::timestamptz IS NULL
     OR a.created_at >= sqlc.narg(created_from)::timestamptz
@@ -113,6 +119,10 @@ WITH filtered_logs AS (
     AND (
       sqlc.narg(project_id)::uuid IS NULL
       OR project_id = sqlc.narg(project_id)::uuid
+    )
+    AND (
+      sqlc.narg(origin)::text IS NULL
+      OR (sqlc.narg(origin)::text = 'system') = (acting_surface IS NOT DISTINCT FROM 'system')
     )
 ), actor_counts AS (
   SELECT
@@ -165,6 +175,10 @@ WHERE organization_id = @organization_id
     sqlc.narg(project_id)::uuid IS NULL
     OR project_id = sqlc.narg(project_id)::uuid
   )
+  AND (
+    sqlc.narg(origin)::text IS NULL
+    OR (sqlc.narg(origin)::text = 'system') = (acting_surface IS NOT DISTINCT FROM 'system')
+  )
 GROUP BY COALESCE(acting_surface, 'unknown')
 ORDER BY count DESC, COALESCE(acting_surface, 'unknown') ASC;
 
@@ -182,6 +196,10 @@ WHERE organization_id = @organization_id
   AND (
     sqlc.narg(project_id)::uuid IS NULL
     OR project_id = sqlc.narg(project_id)::uuid
+  )
+  AND (
+    sqlc.narg(origin)::text IS NULL
+    OR (sqlc.narg(origin)::text = 'system') = (acting_surface IS NOT DISTINCT FROM 'system')
   )
 GROUP BY action
 ORDER BY count DESC, action ASC;

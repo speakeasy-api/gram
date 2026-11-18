@@ -26,11 +26,27 @@ const publishTimeout = 10 * time.Second
 // ErrClosed is returned by Log once the logger is closed.
 var ErrClosed = errors.New("otelpub logger is closed")
 
+// RecordBuilder builds and validates the records a Logger publishes. It cannot
+// publish, so a caller that only needs the record holds no publisher.
+type RecordBuilder struct {
+	resource *resource.Resource
+	scope    string
+	source   string
+}
+
+// NewRecordBuilder returns a builder that stamps the given resource and instrumentation scope.
+func NewRecordBuilder(res *resource.Resource, scope string, opts ...Option) *RecordBuilder {
+	b := &RecordBuilder{resource: res, scope: scope, source: otelsvc.ProvenanceSource}
+	for _, opt := range opts {
+		opt(b)
+	}
+	return b
+}
+
 // Logger writes log records into the OTel pipeline and returns once Pub/Sub has acked them.
 type Logger struct {
 	publisher gcp.Publisher[*otelv1.InboundLogRecord]
-	resource  *resource.Resource
-	scope     string
+	records   *RecordBuilder
 	timeout   time.Duration
 
 	// Log holds the read lock for its whole call, so Close's write lock waits for in-flight calls.
@@ -38,12 +54,21 @@ type Logger struct {
 	closed bool
 }
 
+// Option configures a RecordBuilder.
+type Option func(*RecordBuilder)
+
+// WithProvenanceSource stamps source on every record instead of the ingest
+// edges' otel.ProvenanceSource. The pipeline routes and reserves keys by
+// source, so only a component the source names may use it.
+func WithProvenanceSource(source string) Option {
+	return func(b *RecordBuilder) { b.source = source }
+}
+
 // NewLogger returns a logger that publishes under the given resource and instrumentation scope.
-func NewLogger(publisher gcp.Publisher[*otelv1.InboundLogRecord], res *resource.Resource, scope string) *Logger {
+func NewLogger(publisher gcp.Publisher[*otelv1.InboundLogRecord], res *resource.Resource, scope string, opts ...Option) *Logger {
 	return &Logger{
 		publisher: publisher,
-		resource:  res,
-		scope:     scope,
+		records:   NewRecordBuilder(res, scope, opts...),
 		timeout:   publishTimeout,
 		mu:        sync.RWMutex{},
 		closed:    false,
@@ -61,17 +86,57 @@ func (l *Logger) Log(ctx context.Context, record log.Record) error {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), l.timeout)
 	defer cancel()
 
-	inbound, err := l.inbound(ctx, &record)
+	inbound, err := l.records.Prepare(ctx, &record)
 	if err != nil {
 		return err
-	}
-	if err := otelsvc.ValidateInboundLogRecord(inbound); err != nil {
-		return fmt.Errorf("validate log record: %w", err)
 	}
 	if _, err := l.publisher.Publish(ctx, inbound).Get(ctx); err != nil {
 		return fmt.Errorf("publish log record: %w", err)
 	}
 	return nil
+}
+
+// Publish hands the record to Pub/Sub and returns without waiting for the ack, for
+// callers that must not block. The result settles with what Log would have returned;
+// the caller bounds how long it waits. Close does not wait for outstanding results.
+func (l *Logger) Publish(ctx context.Context, record log.Record) gcp.PublishResult {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	if l.closed {
+		return gcp.NewErrPublishResult(ErrClosed)
+	}
+	inbound, err := l.records.Prepare(ctx, &record)
+	if err != nil {
+		return gcp.NewErrPublishResult(err)
+	}
+	return wrapPublishError{result: l.publisher.Publish(ctx, inbound)}
+}
+
+// Prepare builds and validates the record Log and Publish would send, without sending it.
+func (b *RecordBuilder) Prepare(ctx context.Context, record *log.Record) (*otelv1.InboundLogRecord, error) {
+	inbound, err := b.inbound(ctx, record)
+	if err != nil {
+		return nil, err
+	}
+	if err := otelsvc.ValidateInboundLogRecord(inbound); err != nil {
+		return nil, fmt.Errorf("validate log record: %w", err)
+	}
+	return inbound, nil
+}
+
+// wrapPublishError labels a Pub/Sub failure the way Log always has.
+type wrapPublishError struct {
+	result gcp.PublishResult
+}
+
+func (w wrapPublishError) Ready() <-chan struct{} { return w.result.Ready() }
+
+func (w wrapPublishError) Get(ctx context.Context) (string, error) {
+	id, err := w.result.Get(ctx)
+	if err != nil {
+		return "", fmt.Errorf("publish log record: %w", err)
+	}
+	return id, nil
 }
 
 // Close waits for in-flight Log calls; later calls return ErrClosed.
@@ -81,7 +146,7 @@ func (l *Logger) Close() {
 	l.closed = true
 }
 
-func (l *Logger) inbound(ctx context.Context, record *log.Record) (*otelv1.InboundLogRecord, error) {
+func (b *RecordBuilder) inbound(ctx context.Context, record *log.Record) (*otelv1.InboundLogRecord, error) {
 	t, ok := tenantFrom(ctx)
 	if !ok {
 		return nil, errors.New("no tenancy in context")
@@ -91,7 +156,7 @@ func (l *Logger) inbound(ctx context.Context, record *log.Record) (*otelv1.Inbou
 	if record.Timestamp().IsZero() {
 		record.SetTimestamp(time.Now())
 	}
-	inbound, err := inboundFromRecord(ctx, record, l.resource, l.scope)
+	inbound, err := inboundFromRecord(ctx, record, b.resource, b.scope)
 	if err != nil {
 		return nil, err
 	}
@@ -101,14 +166,14 @@ func (l *Logger) inbound(ctx context.Context, record *log.Record) (*otelv1.Inbou
 		inbound.GetScope().GetAttributes(),
 	} {
 		for _, kv := range attrs {
-			if enrich.IsPipelineKey(kv.GetKey()) {
+			if enrich.IsReservedLogKey(b.source, kv.GetKey()) {
 				return nil, fmt.Errorf("attribute %q is in the reserved namespace", kv.GetKey())
 			}
 		}
 	}
 
 	inbound.SetProvenance((&otelv1.InboundLogRecord_Provenance_builder{
-		Source:         new(otelsvc.ProvenanceSource),
+		Source:         new(b.source),
 		OrganizationId: &t.organizationID,
 		ProjectId:      &t.projectID,
 	}).Build())

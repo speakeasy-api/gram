@@ -119,13 +119,17 @@ function PlatformPresets({
   isError,
   onRetry,
   canFederate,
+  keyOnly,
 }: {
   entries: CatalogEntry[];
   isPending: boolean;
   isError: boolean;
   onRetry: () => void;
   canFederate: boolean;
-}): JSX.Element {
+  /** Platforms are not a choice here, so a failed read is not worth a word. */
+  keyOnly: boolean;
+}): JSX.Element | null {
+  if (isError && keyOnly) return null;
   if (isError) {
     return (
       <div role="alert" className="space-y-2 border p-3">
@@ -193,6 +197,7 @@ export function CredentialPicker({
   onRetry,
   canFederate,
   disabled,
+  keyOnly = false,
   onChooseApiKey,
   onChoosePlatform,
 }: {
@@ -205,6 +210,12 @@ export function CredentialPicker({
   canFederate: boolean;
   /** Settled: the agent already signs in with one of these. */
   disabled: boolean;
+  /**
+   * Issuing another key to an agent that exists: the API key is the choice
+   * and stays live, and only the platforms are out of reach. Greying out the
+   * whole picker read as if no key could be issued at all.
+   */
+  keyOnly?: boolean;
   onChooseApiKey: () => void;
   onChoosePlatform: (key: string) => void;
 }): JSX.Element {
@@ -254,56 +265,97 @@ export function CredentialPicker({
           isPending={isPending}
           isError={isError}
           onRetry={onRetry}
-          canFederate={canFederate}
+          canFederate={canFederate && !keyOnly}
+          keyOnly={keyOnly}
         />
       </div>
-      <Text muted small>
-        <span className="text-foreground font-medium">
-          Presets need no key.
-        </span>{" "}
-        The platform already signs a short-lived token for each run, and
-        Speakeasy trusts that token instead, so there is nothing to mint, store
-        or rotate.
-        {planned.length > 0 &&
-          ` Coming soon: ${planned.map((plan) => plan.displayName).join(", ")}.`}
-        {!canFederate &&
-          " Presets and custom issuers need permission to manage workload identities."}
-      </Text>
-      <Collapsible
-        open={advancedShown}
-        onOpenChange={setAdvancedOpen}
-        disabled={customChosen}
-      >
-        <CollapsibleTrigger className="text-muted-foreground enabled:hover:text-foreground flex items-center gap-1 text-sm">
-          <ChevronRight
-            aria-hidden="true"
-            className={cn(
-              "size-3.5 transition-transform",
-              advancedShown && "rotate-90",
-            )}
-          />
-          Advanced: trust another platform's tokens
-        </CollapsibleTrigger>
-        <CollapsibleContent className="mt-3 sm:w-1/2 sm:pr-1.5">
-          <RadioCard
-            value={PLATFORM_PREFIX + CUSTOM_PLATFORM_KEY}
-            title={<TaggedTitle title="Custom OIDC issuer" tag="Advanced" />}
-            leading={<Waypoints aria-hidden="true" className="size-5" />}
-            disabled={!canFederate}
-            className="p-3"
-          >
-            <Text muted small>
-              Only when your platform already mints signed OIDC tokens for its
-              workloads, such as a CI provider, a cluster or your own identity
-              service. Reuse an issuer you already trust or register a new one.
-              If it mints none, use an API key.
-            </Text>
-            <CredentialMeta>
-              No key minted · reuse or register an issuer
-            </CredentialMeta>
-          </RadioCard>
-        </CollapsibleContent>
-      </Collapsible>
+      {keyOnly ? (
+        <Text muted small>
+          This issues another API key. A platform that signs in as this agent is
+          set up when the agent is created, not from here.
+        </Text>
+      ) : (
+        <PresetsNote planned={planned} canFederate={canFederate} />
+      )}
+      {!keyOnly && (
+        <AdvancedIssuer
+          customChosen={customChosen}
+          advancedShown={advancedShown}
+          setAdvancedOpen={setAdvancedOpen}
+          canFederate={canFederate}
+        />
+      )}
     </RadioCardGroup>
+  );
+}
+
+function PresetsNote({
+  planned,
+  canFederate,
+}: {
+  planned: { displayName: string }[];
+  canFederate: boolean;
+}): JSX.Element {
+  return (
+    <Text muted small>
+      <span className="text-foreground font-medium">Presets need no key.</span>{" "}
+      The platform already signs a short-lived token for each run, and Speakeasy
+      trusts that token instead, so there is nothing to mint, store or rotate.
+      {planned.length > 0 &&
+        ` Coming soon: ${planned.map((plan) => plan.displayName).join(", ")}.`}
+      {!canFederate &&
+        " Presets and custom issuers need permission to manage workload identities."}
+    </Text>
+  );
+}
+
+/** The custom OIDC issuer, folded away under Advanced. */
+function AdvancedIssuer({
+  customChosen,
+  advancedShown,
+  setAdvancedOpen,
+  canFederate,
+}: {
+  customChosen: boolean;
+  advancedShown: boolean;
+  setAdvancedOpen: (open: boolean) => void;
+  canFederate: boolean;
+}): JSX.Element {
+  return (
+    <Collapsible
+      open={advancedShown}
+      onOpenChange={setAdvancedOpen}
+      disabled={customChosen}
+    >
+      <CollapsibleTrigger className="text-muted-foreground enabled:hover:text-foreground flex items-center gap-1 text-sm">
+        <ChevronRight
+          aria-hidden="true"
+          className={cn(
+            "size-3.5 transition-transform",
+            advancedShown && "rotate-90",
+          )}
+        />
+        Advanced: trust another platform's tokens
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-3 sm:w-1/2 sm:pr-1.5">
+        <RadioCard
+          value={PLATFORM_PREFIX + CUSTOM_PLATFORM_KEY}
+          title={<TaggedTitle title="Custom OIDC issuer" tag="Advanced" />}
+          leading={<Waypoints aria-hidden="true" className="size-5" />}
+          disabled={!canFederate}
+          className="p-3"
+        >
+          <Text muted small>
+            Only when your platform already mints signed OIDC tokens for its
+            workloads, such as a CI provider, a cluster or your own identity
+            service. Reuse an issuer you already trust or register a new one. If
+            it mints none, use an API key.
+          </Text>
+          <CredentialMeta>
+            No key minted · reuse or register an issuer
+          </CredentialMeta>
+        </RadioCard>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

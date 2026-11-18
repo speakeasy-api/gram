@@ -176,7 +176,7 @@ func (s *Service) placeRemoteGrant(ctx context.Context, logger *slog.Logger, gra
 
 // probeRemoteGrant runs the probe for the grant's card on the endpoint.
 func (s *Service) probeRemoteGrant(ctx context.Context, logger *slog.Logger, fromRequest mcpconnectionattempts.Option, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, grant remotesessions.RemoteGrant) {
-	clients, err := s.listEndpointClients(ctx, endpoint, challengeState)
+	clients, offered, err := s.listEndpointClientsAndRegistrations(ctx, endpoint, challengeState)
 	if err != nil {
 		logger.WarnContext(ctx, "new remote grant not verified: list clients", attr.SlogError(err))
 		return
@@ -188,7 +188,7 @@ func (s *Service) probeRemoteGrant(ctx context.Context, logger *slog.Logger, fro
 		return
 	}
 	// The probe logs its own refusals; this only says the verdict did not land.
-	if err := s.probeRemoteSession(ctx, consentRefreshAttribution(nil, endpoint, challengeState), logger, fromRequest, endpoint, challengeState, *client, &grant, remotesessionmetrics.ValidationTriggerConnect); err != nil {
+	if err := s.probeRemoteSession(ctx, consentRefreshAttribution(nil, endpoint, challengeState), logger, fromRequest, endpoint, challengeState, *client, offered, &grant, remotesessionmetrics.ValidationTriggerConnect); err != nil {
 		logger.InfoContext(ctx, "new remote grant not verified", attr.SlogError(err))
 	}
 }

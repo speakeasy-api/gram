@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	packages "github.com/speakeasy-api/gram/server/internal/packages"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/templates"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -115,7 +116,8 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), authzEngine, auditLogger)
 	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger)
 	packagesSvc := packages.NewService(logger, tracerProvider, conn, sessionManager, authzEngine)
-	toolsetsSvc := toolsets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, nil, false)
+	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), guardianPolicy, nil)
+	toolsetsSvc := toolsets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, nil, false, revoker)
 	templatesSvc := templates.NewService(logger, tracerProvider, conn, sessionManager, toolsetsSvc, authzEngine, auditLogger)
 
 	return ctx, &testInstance{

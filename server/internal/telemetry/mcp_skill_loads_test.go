@@ -123,6 +123,16 @@ func TestListToolUsageTraces_ClassifiesMCPSkillLoadAsSkill(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, viaMCP.Traces, 1)
 	require.Equal(t, "golang", viaMCP.Traces[0].TargetID)
+
+	viaHook, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{
+		From:        from,
+		To:          to,
+		TargetTypes: []gen.ToolUsageTargetType{"skill"},
+		Filters:     []*gen.LogFilter{{Path: "gram.event.source", Operator: "eq", Values: []string{"hook"}}},
+		Limit:       10,
+	})
+	require.NoError(t, err)
+	require.Empty(t, viaHook.Traces, "no hook reported this skill")
 }
 
 func TestGetToolUsageSummary_CountsMCPSkillLoadUnderSkill(t *testing.T) {
@@ -175,4 +185,20 @@ func TestGetToolUsageSummary_CountsMCPSkillLoadUnderSkill(t *testing.T) {
 	require.NotNil(t, skill)
 	require.Equal(t, int64(2), skill.EventCount, "hook and MCP loads of one skill are one target")
 	require.Equal(t, int64(2), skill.SuccessCount)
+
+	// The Insights page splits skill loads by channel with an event-source
+	// chip. The summary view answers it, so each channel counts once.
+	for op, want := range map[string]int64{"eq": 1, "not_eq": 1} {
+		channel, err := ti.service.GetToolUsageSummary(ctx, &gen.GetToolUsageSummaryPayload{
+			From:        now.Add(-1 * time.Hour).Format(time.RFC3339),
+			To:          now.Add(1 * time.Hour).Format(time.RFC3339),
+			TargetTypes: []gen.ToolUsageTargetType{"skill"},
+			Filters:     []*gen.LogFilter{{Path: "gram.event.source", Operator: op, Values: []string{"hook"}}},
+		})
+		require.NoError(t, err, op)
+		require.Equal(t, want, channel.Totals.EventCount, op)
+		channelTargets := toolUsageTargetsByKey(channel.Targets)
+		require.NotNil(t, channelTargets["skill:skill:golang"], op)
+		require.Equal(t, want, channelTargets["skill:skill:golang"].EventCount, op)
+	}
 }

@@ -109,6 +109,7 @@ async function $do(
 
   const query = encodeFormQuery({
     "category": payload?.category,
+    "origin": payload?.origin,
     "project_slug": payload?.project_slug,
   });
 

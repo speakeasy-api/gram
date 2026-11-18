@@ -4,11 +4,12 @@ export const onboardingPresets = [
     id: "anthropic-enterprise",
     name: "Anthropic Enterprise Rollout",
     description:
-      "Connect identity and logging, then configure Claude administration, observability, and initial security policies.",
+      "Connect identity and logging, then configure Claude administration, capture Claude Desktop conversations, observability, and initial security policies.",
     stepSlugs: [
       "identity-provider",
       "enable-logging",
       "anthropic-admin-controls",
+      "claude-desktop",
       "anthropic-observability",
       "configure-policies",
     ],
@@ -34,7 +35,7 @@ export const onboardingPresets = [
       "identity-provider",
       "enable-logging",
       "configure-policies",
-      "mcp-distribution",
+      "distribute-servers",
     ],
   },
 ] as const;

@@ -1,15 +1,18 @@
 import type { AriaAttributes, JSX } from "react";
 import {
+  BotIcon,
   BuildingIcon,
   ListChecksIcon,
   ChevronLeftIcon,
   CreditCardIcon,
   FolderIcon,
+  GlobeIcon,
   HistoryIcon,
   LayoutGridIcon,
   ServerIcon,
   SlidersHorizontalIcon,
   UsersIcon,
+  WebhookIcon,
 } from "lucide-react";
 import { Link, useMatchRoute } from "@tanstack/react-router";
 import {
@@ -106,6 +109,14 @@ export function RecordNav({
     to: "/organizations/$idOrSlug/mcp-servers",
     params: { idOrSlug },
   });
+  const onAssistants = !!matchRoute({
+    to: "/organizations/$idOrSlug/assistants",
+    params: { idOrSlug },
+  });
+  const onCustomDomain = !!matchRoute({
+    to: "/organizations/$idOrSlug/custom-domain",
+    params: { idOrSlug },
+  });
   const onBilling = !!matchRoute({
     to: "/organizations/$idOrSlug/billing",
     params: { idOrSlug },
@@ -124,6 +135,10 @@ export function RecordNav({
   });
   const onCoverage = !!matchRoute({
     to: "/organizations/$idOrSlug/coverage",
+    params: { idOrSlug },
+  });
+  const onHooks = !!matchRoute({
+    to: "/organizations/$idOrSlug/hooks",
     params: { idOrSlug },
   });
 
@@ -279,6 +294,40 @@ export function RecordNav({
             </SidebarMenuItem>
 
             <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={onAssistants}
+                tooltip="Assistants"
+              >
+                <Link
+                  to="/organizations/$idOrSlug/assistants"
+                  params={{ idOrSlug }}
+                  {...currentProps(onAssistants)}
+                >
+                  <BotIcon />
+                  <span>Assistants</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={onCustomDomain}
+                tooltip="Custom domain"
+              >
+                <Link
+                  to="/organizations/$idOrSlug/custom-domain"
+                  params={{ idOrSlug }}
+                  {...currentProps(onCustomDomain)}
+                >
+                  <GlobeIcon />
+                  <span>Custom domain</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
               <SidebarMenuButton asChild isActive={onBilling} tooltip="Billing">
                 <Link
                   to="/organizations/$idOrSlug/billing"
@@ -321,6 +370,19 @@ export function RecordNav({
                 >
                   <LayoutGridIcon />
                   <span>Coverage</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild isActive={onHooks} tooltip="Hooks">
+                <Link
+                  to="/organizations/$idOrSlug/hooks"
+                  params={{ idOrSlug }}
+                  {...currentProps(onHooks)}
+                >
+                  <WebhookIcon />
+                  <span>Hooks</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

@@ -16,7 +16,9 @@ import { useWithdrawWorkloadSubjectMutation } from "@gram/client/react-query/wit
 import { useQueryClient } from "@tanstack/react-query";
 import { useAgentAdmissions } from "./agentAdmissions";
 import { useState } from "react";
+import { Link } from "react-router";
 import { toast } from "sonner";
+import { useRoutes } from "@/routes";
 
 /**
  * The platforms whose own tokens this agent accepts, and the way back out.
@@ -30,6 +32,7 @@ export function AgentFederatedAccess({
   agent: ManagedAgent;
 }): JSX.Element {
   const queryClient = useQueryClient();
+  const routes = useRoutes();
   const identities = useAgentAdmissions(agent.id);
   const [removing, setRemoving] = useState<WorkloadAdmission | null>(null);
 
@@ -112,6 +115,18 @@ export function AgentFederatedAccess({
                 trailing={
                   <div className="flex items-center gap-2">
                     {row.issuer && <WorkloadIssuerPolicy issuer={row.issuer} />}
+                    {/* The setup flow's Agent sign-in step, which reads the
+                        rule back and replaces it when it changes. */}
+                    {agent.permissions.write && (
+                      <Button asChild variant="secondary" size="sm">
+                        <Link
+                          to={`${routes.identities.agents.edit.href(agent.id)}?step=3`}
+                          aria-label={`Change ${row.admission.issuerName || row.admission.issuer} access`}
+                        >
+                          Change
+                        </Link>
+                      </Button>
+                    )}
                     <RequireScope scope="workload:write" level="component">
                       <Button
                         variant="destructive-secondary"

@@ -306,7 +306,7 @@ func TestConnectionCatalogDirectProgressiveRechecksTypedExecution(t *testing.T) 
 				session, err := usersessionsrepo.New(ti.conn).GetUserSessionByJTI(ctx, usersessionsrepo.GetUserSessionByJTIParams{UserSessionIssuerID: issuer.ID, Jti: claims.ID})
 				require.NoError(t, err)
 				require.NoError(t, fixtures.SwapUpstreamAuthClientFixture(ctx, authclientfixtures.SwapUpstreamAuthClientFixtureParams{AuthClientID: uuid.NullUUID{UUID: replacement, Valid: true}, CredentialID: session.ID, McpServerID: serverID}))
-				require.Contains(t, call(), "authentication changed")
+				require.Contains(t, call(), `The sign-in for the \"source\" server changed since you approved it. Reconnect this gateway in your AI app and approve it again.`)
 				require.Equal(t, before, upstream.requests.Load(), "a different typed client cannot inherit approval")
 			})
 		}
@@ -543,6 +543,7 @@ func TestConnectionCatalogLiveExcludesNewAndPreviouslyUnavailableMembers(t *test
 	require.Contains(t, string(raw), `"members"`)
 	require.NotContains(t, string(raw), `"tools"`, "live records retain only the approved member boundary")
 	require.NotContains(t, string(raw), `"member_outcomes"`)
+	require.Contains(t, string(raw), `"shown_server_ids"`, "live records keep which members consent showed")
 	approved.future.Store(true)
 	unavailable.unavailable.Store(false)
 	added := newCatalogUpstream(t, 1)
@@ -1005,11 +1006,11 @@ func TestConnectionCatalogConfigurationChangeStopsAdvertisingTools(t *testing.T)
 	require.NotContains(t, listed.Body.String(), `"name":"source--tool_000"`)
 	require.Equal(t, before, upstream.requests.Load())
 	require.Zero(t, replacement.requests.Load())
-	require.Contains(t, callGatewayTool(t, ti, slug, connection.token, "source--tool_000", map[string]any{}), "configuration changed")
+	require.Contains(t, callGatewayTool(t, ti, slug, connection.token, "source--tool_000", map[string]any{}), `The settings for the \"source\" server changed since you approved it. Reconnect this gateway in your AI app and approve it again.`)
 	require.Zero(t, replacement.calls.Load())
 	status, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "connection_status", "arguments": map[string]any{}}), progressive.token, nil)
 	require.NoError(t, err)
-	require.Contains(t, status.Body.String(), "configuration changed")
+	require.Contains(t, status.Body.String(), "The settings for this server changed since you approved it.")
 	rec := mcpconnectionattemptstest.New(t)
 	ti.service.SetConnectionRecorder(rec.Recorder)
 	beforeCode := strings.Count(logs.String(), "gateway consent validation failed")
@@ -1049,7 +1050,7 @@ func TestConnectionCatalogTransportChangeRequiresConsent(t *testing.T) {
 	require.NoError(t, err)
 	rec := mcpconnectionattemptstest.New(t)
 	ti.service.SetConnectionRecorder(rec.Recorder)
-	require.Contains(t, callGatewayTool(t, ti, slug, connection.token, "source--tool_000", map[string]any{}), "configuration changed")
+	require.Contains(t, callGatewayTool(t, ti, slug, connection.token, "source--tool_000", map[string]any{}), `The settings for the \"source\" server changed since you approved it. Reconnect this gateway in your AI app and approve it again.`)
 	require.Zero(t, upstream.calls.Load())
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeConsentNotApproved)
 	require.Equal(t, "configuration_changed", row.SubReason)
@@ -1062,28 +1063,54 @@ func TestConnectionCatalogTransportChangeRequiresConsent(t *testing.T) {
 // while discovery still offers only the approved member.
 func TestConnectionCatalogStatusReportsUnapprovedMembers(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
-	auth, _ := contextvalues.GetAuthContext(ctx)
-	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
-	slug := "catalog-unapproved-" + uuid.NewString()
-	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
-	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Source", "source", 1, newCatalogUpstream(t, 1).url)
-	broken := newCatalogUpstream(t, 1)
-	broken.unavailable.Store(true)
-	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Broken", "broken", 2, broken.url)
-	connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeProgressive, nil)
-	broken.unavailable.Store(false)
-	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Added", "added", 3, newCatalogUpstream(t, 1).url)
+	for _, test := range []struct {
+		mode      toolfilter.CatalogMode
+		discovery metamcp.DiscoveryMode
+		source    string
+	}{
+		{toolfilter.CatalogModeCached, metamcp.DiscoveryModeProgressive, "Source: verified at consent"},
+		{toolfilter.CatalogModeLive, metamcp.DiscoveryModeProgressive, "Source: "},
+	} {
+		t.Run(string(test.mode), func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+			auth, _ := contextvalues.GetAuthContext(ctx)
+			_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+			slug := "catalog-unapproved-" + uuid.NewString()
+			gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
+			seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Source", "source", 1, newCatalogUpstream(t, 1).url)
+			broken := newCatalogUpstream(t, 1)
+			broken.unavailable.Store(true)
+			seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Broken", "broken", 2, broken.url)
+			connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, test.mode, test.discovery, nil)
+			broken.unavailable.Store(false)
+			seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Added", "added", 3, newCatalogUpstream(t, 1).url)
 
-	status := callGatewayTool(t, ti, slug, connection.token, "connection_status", map[string]any{})
-	require.Contains(t, status, "Source: verified at consent")
-	require.Contains(t, status, "Broken: new consent required")
-	require.Contains(t, status, "Added: new consent required")
-	listed := callGatewayTool(t, ti, slug, connection.token, "list_servers", map[string]any{})
-	require.Contains(t, listed, `\"slug\":\"source\"`)
-	require.NotContains(t, listed, `\"slug\":\"broken\"`)
-	require.NotContains(t, listed, `\"slug\":\"added\"`)
-	require.Contains(t, callGatewayTool(t, ti, slug, connection.token, "describe_server", map[string]any{"server": "added"}), "unknown server")
+			status := callGatewayTool(t, ti, slug, connection.token, "connection_status", map[string]any{})
+			require.Contains(t, status, test.source)
+			require.Contains(t, status, "Broken: new consent required (This server was left out when this gateway was approved")
+			require.Contains(t, status, "Added: new consent required (This server was added to the gateway after it was approved")
+
+			rpc := decodeRPCResponse(t, mustServeGatewayTool(t, ti, slug, connection.token, "list_servers"))
+			var envelope struct {
+				StructuredContent metamcp.ListServersResult `json:"structuredContent"`
+			}
+			require.NoError(t, json.Unmarshal(rpc["result"], &envelope))
+			listed := envelope.StructuredContent
+			require.Equal(t, []string{"source"}, listedServerSlugs(listed))
+			require.ElementsMatch(t, []metamcp.UnapprovedServer{{Slug: "broken", Name: "Broken"}, {Slug: "added", Name: "Added"}}, listed.Unapproved)
+			require.Contains(t, listed.Note, metamcp.UnapprovedNote)
+			require.Contains(t, callGatewayTool(t, ti, slug, connection.token, "describe_server", map[string]any{"server": "added"}), "unknown server")
+		})
+	}
+}
+
+func mustServeGatewayTool(t *testing.T, ti *testInstance, slug, token, name string) *httptest.ResponseRecorder {
+	t.Helper()
+	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{"name": name, "arguments": map[string]any{}}), token, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
+	return w
 }
 
 func TestGatewayConsentNoAccessRetainsRequestAccessLink(t *testing.T) {

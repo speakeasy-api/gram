@@ -59,7 +59,7 @@ func (s *StaffScopes) Describe(ctx context.Context, target StaffScopeTarget) (*g
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers sharing the protected resource").LogError(ctx, logger)
 	}
-	return readServerScopes(ctx, s.db, logger, target.OrganizationID, target.ProjectID, server, sharing, true)
+	return readServerScopes(ctx, s.db, logger, target.OrganizationID, target.ProjectID, server, sharing, true, false)
 }
 
 // SetPin writes the pin for every server sharing the target's upstream URL,
@@ -86,5 +86,6 @@ func (s *StaffScopes) SetPin(ctx context.Context, pin StaffScopePin) (*gen.Remot
 		target:           server,
 		authorized:       sharing,
 		scopes:           scopes,
+		fromAssociations: false,
 	})
 }

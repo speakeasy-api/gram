@@ -1,6 +1,6 @@
 import { useInsightsDockCta } from "@/hooks/useInsightsDockCta";
 import { cn, isMacPlatform } from "@/lib/utils";
-import { ReactElement } from "react";
+import type { ReactElement } from "react";
 import { useInsightsState } from "./insights-context";
 
 /** Single source of truth for the composer's keyboard shortcut: Cmd+/ on Mac,

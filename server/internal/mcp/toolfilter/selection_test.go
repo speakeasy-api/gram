@@ -33,13 +33,6 @@ func httpToolWithAnnotations(name string, annotations *types.ToolAnnotations) *t
 	}
 }
 
-func proxyTool(name string) *types.Tool {
-	proxy := "proxy"
-	return &types.Tool{
-		ExternalMcpToolDefinition: &types.ExternalMCPToolDefinition{Name: name, Type: &proxy},
-	}
-}
-
 func readOnlyAnnotations() *types.ToolAnnotations {
 	yes := true
 	return &types.ToolAnnotations{
@@ -149,7 +142,7 @@ func TestNewSessionSelection_CanonicalizesAndValidates(t *testing.T) {
 func TestFilterToolsBySelection_NilSelectionPassthrough(t *testing.T) {
 	t.Parallel()
 
-	tools := []*types.Tool{httpTool("a"), proxyTool("p")}
+	tools := []*types.Tool{httpTool("a"), httpTool("p")}
 	require.Equal(t, tools, FilterToolsBySelection(tools, nil))
 }
 
@@ -205,14 +198,6 @@ func TestFilterToolsBySelection_LiveAnnotationTracksHints(t *testing.T) {
 	filtered := FilterToolsBySelection([]*types.Tool{renamed, unhinted}, sel)
 	require.Len(t, filtered, 1)
 	require.Equal(t, "renamed_reader", filtered[0].HTTPToolDefinition.Name)
-}
-
-func TestFilterToolsBySelection_ProxyToolsFailClosed(t *testing.T) {
-	t.Parallel()
-
-	sel, err := ParseSessionSelection(docJSON(`[{"type":"tool","name":"p"}]`))
-	require.NoError(t, err)
-	require.Empty(t, FilterToolsBySelection([]*types.Tool{proxyTool("p")}, sel))
 }
 
 func TestSelectionLargeOverlappingSnapshotsRoundTrip(t *testing.T) {

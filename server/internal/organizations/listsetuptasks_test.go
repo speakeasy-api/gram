@@ -34,17 +34,21 @@ func TestService_ListSetupTasksProjectsCatalog(t *testing.T) {
 	require.Equal(t, []string{
 		"identity-provider", "enable-logging", "anthropic-observability",
 		"agent-observability", "instrument-agents", "confirm-traffic", "additional-agent-config",
-		"mcp-distribution", "create-marketplace", "distribute-servers", "platform-mcp",
-		"anthropic-admin-controls", "configure-policies",
+		"distribute-servers",
+		"claude-desktop", "claude-plugin-registration", "claude-org-instructions",
+		"platform-mcp", "anthropic-admin-controls", "configure-policies",
 	}, keys)
 	require.Nil(t, setupTask(result.Tasks, "litellm"))
 	require.Nil(t, setupTask(result.Tasks, "private-network"))
+	distribute := setupTask(result.Tasks, "distribute-servers")
+	require.Nil(t, distribute.ParentKey, "Distribute MCP servers is a top-level card")
+	require.Equal(t, "Distribute MCP servers", distribute.Title)
 	for _, task := range result.Tasks {
 		switch task.Key {
 		case "confirm-traffic":
 			require.Equal(t, []string{"instrument-agents"}, task.BlockedBy)
-		case "distribute-servers":
-			require.Equal(t, []string{"create-marketplace"}, task.BlockedBy)
+		case "claude-org-instructions":
+			require.Equal(t, []string{"claude-plugin-registration"}, task.BlockedBy)
 		default:
 			require.Empty(t, task.BlockedBy, task.Key)
 		}
@@ -82,7 +86,7 @@ func TestService_ListSetupTasksRevealsDefaultHiddenToPlatformAdmin(t *testing.T)
 	includeHidden := true
 	result, err := ti.service.ListSetupTasks(platformCtx, &gen.ListSetupTasksPayload{IncludeHidden: &includeHidden})
 	require.NoError(t, err)
-	require.Len(t, result.Tasks, 16)
+	require.Len(t, result.Tasks, 17)
 	require.Equal(t, "configure-policies", result.Tasks[len(result.Tasks)-1].Key)
 	require.True(t, setupTask(result.Tasks, "litellm").Hidden)
 	for _, task := range result.Tasks {
@@ -90,7 +94,6 @@ func TestService_ListSetupTasksRevealsDefaultHiddenToPlatformAdmin(t *testing.T)
 			require.False(t, task.Hidden, task.Key)
 		}
 	}
-	require.True(t, setupTask(result.Tasks, "mcp-distribution").Group)
 	keys := make([]string, 0, len(result.Tasks))
 	for _, task := range result.Tasks {
 		keys = append(keys, task.Key)
@@ -98,12 +101,13 @@ func TestService_ListSetupTasksRevealsDefaultHiddenToPlatformAdmin(t *testing.T)
 	require.ElementsMatch(t, []string{
 		"identity-provider", "enable-logging",
 		"anthropic-observability", "agent-observability", "instrument-agents", "confirm-traffic", "litellm",
-		"additional-agent-config", "mcp-distribution", "create-marketplace", "distribute-servers", "platform-mcp", "private-network",
+		"additional-agent-config", "distribute-servers", "platform-mcp", "private-network",
+		"claude-desktop", "claude-plugin-registration", "claude-org-instructions",
 		"anthropic-admin-controls", "cursor-admin-controls", "configure-policies",
 	}, keys)
 	require.True(t, setupTask(result.Tasks, "private-network").Hidden)
 	require.True(t, setupTask(result.Tasks, "cursor-admin-controls").Hidden)
-	require.Equal(t, []string{"create-marketplace"}, setupTask(result.Tasks, "distribute-servers").BlockedBy)
+	require.Empty(t, setupTask(result.Tasks, "distribute-servers").BlockedBy, "the card publishes the marketplace itself")
 }
 
 func TestService_ListSetupTasksAppliesCompletionFactsWithoutWriting(t *testing.T) {
@@ -306,26 +310,20 @@ func TestService_ListSetupTasksPreservesBranchCompletionFactsWithoutWriting(t *t
 	require.NoError(t, orgrepo.New(ti.conn).SetSSOEnabled(ctx, orgrepo.SetSSOEnabledParams{WorkosID: org.WorkosID, Enabled: conv.PtrToPGBool(conv.PtrEmpty(true)), WorkosLastEventID: pgtype.Text{}}))
 	require.NoError(t, orgrepo.New(ti.conn).SetSCIMEnabled(ctx, orgrepo.SetSCIMEnabledParams{WorkosID: org.WorkosID, Enabled: conv.PtrToPGBool(conv.PtrEmpty(true)), WorkosLastEventID: pgtype.Text{}}))
 	require.NotNil(t, authCtx.ProjectID)
-	_, err = pluginsrepo.New(ti.conn).UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{
-		ProjectID: *authCtx.ProjectID, InstallationID: 9001, RepoOwner: "example", RepoName: "setup-board",
-		MarketplaceToken: pgtype.Text{}, PublishedMcpFingerprints: nil, PublishedHooksVersion: pgtype.Text{}, PublishedHooksConfig: nil,
-	})
-	require.NoError(t, err)
-
-	result, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{IncludeHidden: new(true)})
-	require.NoError(t, err)
-	require.False(t, setupTask(result.Tasks, "create-marketplace").CompletedByFact, "a connection without a token is not published")
-	require.Equal(t, "todo", setupTask(result.Tasks, "create-marketplace").Status)
+	// A published marketplace no longer completes anything by itself:
+	// Distribute MCP servers publishes it inline and is still marked done by
+	// hand once servers are chosen.
 	_, err = pluginsrepo.New(ti.conn).UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{
 		ProjectID: *authCtx.ProjectID, InstallationID: 9001, RepoOwner: "example", RepoName: "setup-board",
 		MarketplaceToken: conv.ToPGText("synthetic-marketplace-token"), PublishedMcpFingerprints: nil, PublishedHooksVersion: pgtype.Text{}, PublishedHooksConfig: nil,
 	})
 	require.NoError(t, err)
-	result, err = ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{IncludeHidden: new(true)})
+	result, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{IncludeHidden: new(true)})
 	require.NoError(t, err)
+	require.Nil(t, setupTask(result.Tasks, "create-marketplace"))
+	require.Equal(t, "todo", setupTask(result.Tasks, "distribute-servers").Status)
+	require.False(t, setupTask(result.Tasks, "distribute-servers").CompletedByFact)
 	require.Equal(t, "done", setupTask(result.Tasks, "identity-provider").Status)
-	require.Equal(t, "done", setupTask(result.Tasks, "create-marketplace").Status)
-	require.True(t, setupTask(result.Tasks, "create-marketplace").CompletedByFact)
 	require.False(t, setupTask(result.Tasks, "instrument-agents").CompletedByFact)
 	require.True(t, setupTask(result.Tasks, "identity-provider").CompletedByFact)
 
@@ -397,10 +395,11 @@ func TestService_UpdateSetupTaskCompletesMergedCatalog(t *testing.T) {
 	ctx, ti := newTestOrganizationsService(t)
 	done := "done"
 	for _, key := range []string{
-		"create-marketplace", "enable-logging",
+		"enable-logging",
 		"identity-provider", "anthropic-observability", "anthropic-admin-controls", "cursor-admin-controls",
 		"instrument-agents", "litellm", "additional-agent-config", "confirm-traffic",
 		"distribute-servers", "configure-policies", "platform-mcp", "private-network",
+		"claude-plugin-registration", "claude-org-instructions",
 	} {
 		task, err := ti.service.UpdateSetupTask(ctx, &gen.UpdateSetupTaskPayload{TaskKey: key, Status: &done})
 		require.NoError(t, err, key)
@@ -410,7 +409,7 @@ func TestService_UpdateSetupTaskCompletesMergedCatalog(t *testing.T) {
 
 	result, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Tasks, 13)
+	require.Len(t, result.Tasks, 14)
 	for _, task := range result.Tasks {
 		require.Equal(t, "done", task.Status, task.Key)
 	}

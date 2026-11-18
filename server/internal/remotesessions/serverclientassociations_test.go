@@ -13,9 +13,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -387,6 +390,102 @@ func TestDetachServerClientAssociation_EnforcedOrganization(t *testing.T) {
 	require.Empty(t, offeredAuthClients(t, ctx, ti.conn, first),
 		"both models move together while enforced")
 	require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, second))
+}
+
+// TestDetachServerClientAssociation_EnforcedSoleConsumer proves an enforced
+// organization can stop its issuer's only server offering a bound client:
+// the binding still implies the association, so the association stays for the
+// upstream client choice, while the link the server offers the client through
+// is retired and a later synchronization does not bring it back.
+func TestDetachServerClientAssociation_EnforcedSoleConsumer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+	enforceUpstreamAuth(t, ctx, ti.conn, orgID)
+
+	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-enforced-own")
+	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "enforced-own")
+	clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-enforced-own")
+	resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+	// The fixture binds the client itself, so it captures as a binding writer does.
+	require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, ti.conn, orgID, projectID, []uuid.UUID{userIssuerID}, []uuid.UUID{clientID}))
+	recordTypedClients(t, ctx, ti.conn, orgID, serverID)
+	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, serverID))
+	offered := offeredAuthClients(t, ctx, ti.conn, serverID)
+	require.NotEmpty(t, offered)
+	adminClientID := seedAdministratorAuthClient(t, ctx, ti.conn, orgID, projectID, serverID)
+
+	auditCount := func(action audit.Action) int64 {
+		n, err := audittest.AuditLogCountByAction(ctx, ti.conn, action)
+		require.NoError(t, err)
+		return n
+	}
+	linksBefore, associationsBefore := auditCount(audit.ActionAuthClientDetachMcpServer), auditCount(audit.ActionRemoteSessionClientDetachMcpServer)
+
+	payload := &gen.DetachServerClientAssociationPayload{McpServerID: serverID.String(), RemoteSessionClientID: clientID.String()}
+	require.NoError(t, ti.service.DetachServerClientAssociation(ctx, payload), "the binding must not refuse an enforced organization")
+	require.Equal(t, linksBefore+int64(len(offered)), auditCount(audit.ActionAuthClientDetachMcpServer), "the retired link is what the audit trail records")
+	require.Equal(t, associationsBefore, auditCount(audit.ActionRemoteSessionClientDetachMcpServer), "the association stays, so no detach of it is recorded")
+
+	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, serverID),
+		"the association the binding implies is left for the upstream client choice")
+	require.Equal(t, []uuid.UUID{adminClientID}, offeredAuthClients(t, ctx, ti.conn, serverID),
+		"only the link derived from the association is retired")
+	require.True(t, authClientLive(t, ctx, ti.conn, offered[0]))
+
+	resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+	recordTypedClients(t, ctx, ti.conn, orgID, serverID)
+	require.Equal(t, []uuid.UUID{adminClientID}, offeredAuthClients(t, ctx, ti.conn, serverID),
+		"a later synchronization keeps the detach")
+
+	err := ti.service.DetachServerClientAssociation(ctx, payload)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeNotFound, shareable.Code, "a second detach finds nothing to retire")
+}
+
+// An administrator can attach a backfilled credential independently of the
+// association it came from. Detach must preserve that administrator-owned link.
+func TestDetachServerClientAssociation_KeepsAdministratorLinkToBackfilledClient(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID, orgID := *auth.ProjectID, auth.ActiveOrganizationID
+	enforceUpstreamAuth(t, ctx, ti.conn, orgID)
+	issuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-adminlink")
+	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, issuerID, "adminlink")
+	clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, issuerID, orgID, "rsi-adminlink")
+	resync(t, ctx, ti.conn, orgID, projectID, issuerID)
+	require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, ti.conn, orgID, projectID, []uuid.UUID{issuerID}, []uuid.UUID{clientID}))
+	recordTypedClients(t, ctx, ti.conn, orgID, serverID)
+	offered := offeredAuthClients(t, ctx, ti.conn, serverID)
+	require.Len(t, offered, 1)
+	q := authclientsrepo.New(ti.conn)
+	_, err := q.DetachAuthClientFromServer(ctx, authclientsrepo.DetachAuthClientFromServerParams{
+		AuthClientID: offered[0], McpServerID: serverID, OrganizationID: orgID,
+	})
+	require.NoError(t, err)
+	_, err = q.AttachAuthClientToServer(ctx, authclientsrepo.AttachAuthClientToServerParams{
+		AuthClientID: offered[0], McpServerID: serverID, OrganizationID: orgID,
+	})
+	require.NoError(t, err)
+	err = ti.service.DetachServerClientAssociation(ctx, &gen.DetachServerClientAssociationPayload{
+		McpServerID: serverID.String(), RemoteSessionClientID: clientID.String(),
+	})
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeNotFound, shareable.Code, "no backfill-owned link remains to retire")
+	require.Equal(t, offered, offeredAuthClients(t, ctx, ti.conn, serverID))
+	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, serverID))
+	resync(t, ctx, ti.conn, orgID, projectID, issuerID)
+	recordTypedClients(t, ctx, ti.conn, orgID, serverID)
+	require.Equal(t, offered, offeredAuthClients(t, ctx, ti.conn, serverID))
 }
 
 // TestDetachServerClientAssociation_KeepsAdministratorClients proves the sync

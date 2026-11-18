@@ -1,9 +1,5 @@
 import { Spinner } from "@/components/ui/Spinner";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/Tooltip";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
@@ -84,46 +80,37 @@ export function ToolMetadataDriftPanel({
     <div className="border-border mb-5 border">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b px-4 py-2">
         <Text small as="p" className="text-muted-foreground">
-          <span className="text-foreground font-medium">
-            {drift.length} {drift.length === 1 ? "tool" : "tools"}
-          </span>{" "}
-          {drift.length === 1 ? "differs" : "differ"} from what this server
-          advertises
+          Syncing saves what the server lists now, for everyone in this project.
           {removing > 0 ? (
             <>
-              {" · "}
+              {" "}
               <span className="text-destructive">
-                syncing removes {removing}
+                It removes {removing} {removing === 1 ? "tool" : "tools"} the
+                server no longer lists.
               </span>
             </>
           ) : null}
-          {" · applies to everyone in this project"}
         </Text>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="tertiary"
-              size="sm"
-              className="p-2"
-              disabled={isSyncing}
-              onClick={onSync}
-            >
-              <Button.LeftIcon>
-                {isSyncing ? (
-                  <Spinner className="mr-0 size-4" />
-                ) : (
-                  <RefreshCw className="size-4" />
-                )}
-              </Button.LeftIcon>
-              {/* The panel header already explains what syncing does, so
-                  the label is for screen readers and the tooltip. */}
-              <Button.Text className="sr-only">
-                {isSyncing ? "Syncing annotations" : "Sync annotations"}
-              </Button.Text>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Sync annotations</TooltipContent>
-        </Tooltip>
+        <SimpleTooltip tooltip="Updates Speakeasy's saved copy of these tools and their labels, such as read-only and destructive, to match the server.">
+          <Button
+            variant="secondary"
+            size="sm"
+            className="font-sans text-[13px] font-medium tracking-normal normal-case"
+            disabled={isSyncing}
+            onClick={onSync}
+          >
+            <Button.LeftIcon>
+              {isSyncing ? (
+                <Spinner className="mr-0 size-4" />
+              ) : (
+                <RefreshCw className="size-4" />
+              )}
+            </Button.LeftIcon>
+            <Button.Text>
+              {isSyncing ? "Syncing tool list" : "Sync tool list"}
+            </Button.Text>
+          </Button>
+        </SimpleTooltip>
       </div>
 
       <ul className="divide-border divide-y">

@@ -4,8 +4,8 @@ import { InsightsConfig } from "@/components/insights-dock";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
+import type { FilterChip } from "@/components/observe/ObserveFilterBar";
 import {
-  FilterChip,
   ObserveFilterBar,
   type ObserveTypeFilterValue,
 } from "@/components/observe/ObserveFilterBar";

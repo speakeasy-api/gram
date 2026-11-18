@@ -28,6 +28,12 @@ type RuntimeIdentity struct {
 // ResolveRuntimeLocked uses the lifecycle transaction's assistant lock. Runtime
 // provisioning must not borrow any one trigger's admission or assignment.
 func (s *Service) ResolveRuntimeLocked(ctx context.Context, tx pgx.Tx, org string, project, assistant uuid.UUID) (RuntimeIdentity, error) {
+	return ResolveRuntimeLocked(ctx, tx, org, project, assistant)
+}
+
+// ResolveRuntimeLocked is the identity a runtime of the assistant would boot
+// with, for callers that check readiness without a configured Service.
+func ResolveRuntimeLocked(ctx context.Context, tx pgx.Tx, org string, project, assistant uuid.UUID) (RuntimeIdentity, error) {
 	a, err := repo.New(tx).LockAssistant(ctx, repo.LockAssistantParams{ProjectID: project, AssistantID: assistant})
 	if err != nil {
 		return RuntimeIdentity{}, resourceError("lock runtime identity assistant", err)

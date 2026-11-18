@@ -12,6 +12,42 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const activityCountGeminiComplianceMessages = `-- name: ActivityCountGeminiComplianceMessages :one
+SELECT count(*) FROM chat_messages
+WHERE project_id = $1::uuid AND chat_id = $2::uuid
+  AND source = 'gemini' AND role IN ('user', 'assistant')
+`
+
+type ActivityCountGeminiComplianceMessagesParams struct {
+	ProjectID uuid.UUID
+	ChatID    uuid.UUID
+}
+
+func (q *Queries) ActivityCountGeminiComplianceMessages(ctx context.Context, arg ActivityCountGeminiComplianceMessagesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, activityCountGeminiComplianceMessages, arg.ProjectID, arg.ChatID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const activityCountSafeGeminiComplianceConfig = `-- name: ActivityCountSafeGeminiComplianceConfig :one
+SELECT count(*) FROM ai_integration_configs
+WHERE organization_id = $1 AND project_id = $2
+  AND provider = 'gemini_compliance' AND NOT enabled AND api_key_encrypted = ''
+`
+
+type ActivityCountSafeGeminiComplianceConfigParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) ActivityCountSafeGeminiComplianceConfig(ctx context.Context, arg ActivityCountSafeGeminiComplianceConfigParams) (int64, error) {
+	row := q.db.QueryRow(ctx, activityCountSafeGeminiComplianceConfig, arg.OrganizationID, arg.ProjectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const activityCountSignalMessages = `-- name: ActivityCountSignalMessages :one
 SELECT count(*) FROM chat_messages
 WHERE project_id = $1 AND id = ANY($2::uuid[]) AND capture_kind = 'original'
@@ -51,6 +87,16 @@ func (q *Queries) ActivityDeleteAuditLogs(ctx context.Context, organizationID st
 	return err
 }
 
+const activityDeleteGeminiComplianceConfig = `-- name: ActivityDeleteGeminiComplianceConfig :exec
+DELETE FROM ai_integration_configs WHERE organization_id = $1 AND provider = 'gemini_compliance'
+`
+
+// No real credentials and no polling: this is a paused setup example.
+func (q *Queries) ActivityDeleteGeminiComplianceConfig(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, activityDeleteGeminiComplianceConfig, organizationID)
+	return err
+}
+
 const activityDeleteSecurityAuditLogs = `-- name: ActivityDeleteSecurityAuditLogs :exec
 DELETE FROM security_audit_logs WHERE organization_id = $1
 `
@@ -75,6 +121,41 @@ DELETE FROM spend_rules WHERE organization_id = $1
 
 func (q *Queries) ActivityDeleteSpendRules(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, activityDeleteSpendRules, organizationID)
+	return err
+}
+
+const activityInsertAgentChat = `-- name: ActivityInsertAgentChat :exec
+INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, session_surface, agent_id, created_at, updated_at)
+VALUES ($1, $2, $3, NULL, NULL, $4::text,
+        $5::text, $6::uuid,
+        now() - $7::interval, now() - $8::interval)
+`
+
+type ActivityInsertAgentChatParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Title          string
+	SessionSurface pgtype.Text
+	AgentID        uuid.UUID
+	CreatedAge     pgtype.Interval
+	UpdatedAge     pgtype.Interval
+}
+
+// A session an agent credential drove: the agent is the actor and there is no
+// user to name, as the chat completions path records it. Its owner reads it
+// through ownership rather than chat:read.
+func (q *Queries) ActivityInsertAgentChat(ctx context.Context, arg ActivityInsertAgentChatParams) error {
+	_, err := q.db.Exec(ctx, activityInsertAgentChat,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Title,
+		arg.SessionSurface,
+		arg.AgentID,
+		arg.CreatedAge,
+		arg.UpdatedAge,
+	)
 	return err
 }
 
@@ -159,11 +240,11 @@ func (q *Queries) ActivityInsertChat(ctx context.Context, arg ActivityInsertChat
 }
 
 const activityInsertChatMessage = `-- name: ActivityInsertChatMessage :exec
-INSERT INTO chat_messages (id, chat_id, project_id, role, content, content_raw, tool_calls, source, model, created_at, risk_analyzed_at)
+INSERT INTO chat_messages (id, chat_id, project_id, role, content, content_raw, tool_calls, source, model, tool_call_id, created_at, risk_analyzed_at)
 VALUES ($1, $2, $3::uuid, $4, $5,
         $6::jsonb, $7::jsonb,
-        $8::text, $9::text,
-        now() - $10::interval, now())
+        $8::text, $9::text, $10::text,
+        now() - $11::interval, now())
 `
 
 type ActivityInsertChatMessageParams struct {
@@ -176,11 +257,12 @@ type ActivityInsertChatMessageParams struct {
 	ToolCalls  []byte
 	Source     pgtype.Text
 	Model      pgtype.Text
+	ToolCallID pgtype.Text
 	Age        pgtype.Interval
 }
 
-// Columns a message does not set (content_raw, tool_calls, source, model) are
-// passed as NULL, which is what omitting them wrote.
+// Columns a message does not set (content_raw, tool_calls, source, model,
+// tool_call_id) are passed as NULL, which is what omitting them wrote.
 func (q *Queries) ActivityInsertChatMessage(ctx context.Context, arg ActivityInsertChatMessageParams) error {
 	_, err := q.db.Exec(ctx, activityInsertChatMessage,
 		arg.ID,
@@ -192,6 +274,7 @@ func (q *Queries) ActivityInsertChatMessage(ctx context.Context, arg ActivityIns
 		arg.ToolCalls,
 		arg.Source,
 		arg.Model,
+		arg.ToolCallID,
 		arg.Age,
 	)
 	return err
@@ -257,6 +340,45 @@ func (q *Queries) ActivityInsertClaudeTagSessionLink(ctx context.Context, arg Ac
 	return err
 }
 
+const activityInsertGeminiComplianceConfig = `-- name: ActivityInsertGeminiComplianceConfig :exec
+INSERT INTO ai_integration_configs (id, organization_id, project_id, provider, api_key_encrypted, external_organization_id, enabled)
+VALUES ($1, $2, $3, 'gemini_compliance', '', $4, false)
+`
+
+type ActivityInsertGeminiComplianceConfigParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	MatterID       pgtype.Text
+}
+
+func (q *Queries) ActivityInsertGeminiComplianceConfig(ctx context.Context, arg ActivityInsertGeminiComplianceConfigParams) error {
+	_, err := q.db.Exec(ctx, activityInsertGeminiComplianceConfig,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.MatterID,
+	)
+	return err
+}
+
+const activityInsertGeminiComplianceSync = `-- name: ActivityInsertGeminiComplianceSync :exec
+INSERT INTO ai_integration_syncs (id, ai_integration_config_id, schedule, kind)
+VALUES ($1, $2, 'gemini_compliance', 'cursor')
+`
+
+type ActivityInsertGeminiComplianceSyncParams struct {
+	ID       uuid.UUID
+	ConfigID uuid.UUID
+}
+
+// The dashboard reads a config through its primary sync row, so the paused
+// example needs one. The disabled config keeps it out of poll candidates.
+func (q *Queries) ActivityInsertGeminiComplianceSync(ctx context.Context, arg ActivityInsertGeminiComplianceSyncParams) error {
+	_, err := q.db.Exec(ctx, activityInsertGeminiComplianceSync, arg.ID, arg.ConfigID)
+	return err
+}
+
 const activityInsertKillswitchAuditLog = `-- name: ActivityInsertKillswitchAuditLog :exec
 INSERT INTO audit_logs
   (id, organization_id, project_id, actor_id, actor_type, actor_display_name,
@@ -306,14 +428,14 @@ func (q *Queries) ActivityInsertKillswitchAuditLog(ctx context.Context, arg Acti
 const activityInsertKillswitchExpiredAuditLog = `-- name: ActivityInsertKillswitchExpiredAuditLog :exec
 INSERT INTO audit_logs
   (id, organization_id, project_id, actor_id, actor_type, actor_display_name,
-   action, subject_id, subject_type, after_snapshot, metadata, created_at)
+   action, subject_id, subject_type, after_snapshot, metadata, acting_surface, created_at)
 VALUES
   ($1, $2, NULL,
    'system', 'user', 'System', 'killswitch:expire',
    $3,
    'killswitch_prescription', NULL,
    jsonb_build_object('version', 1, 'expired_at', now() - interval '1 day'),
-   now() - interval '23 hours')
+   'system', now() - interval '23 hours')
 `
 
 type ActivityInsertKillswitchExpiredAuditLogParams struct {
@@ -322,7 +444,8 @@ type ActivityInsertKillswitchExpiredAuditLogParams struct {
 	SubjectID      string
 }
 
-// Expiry carries the version and database-time deadline.
+// Expiry carries the version and database-time deadline. Speakeasy records it
+// on its own, so it lands on the audit log page's System view.
 func (q *Queries) ActivityInsertKillswitchExpiredAuditLog(ctx context.Context, arg ActivityInsertKillswitchExpiredAuditLogParams) error {
 	_, err := q.db.Exec(ctx, activityInsertKillswitchExpiredAuditLog, arg.ID, arg.OrganizationID, arg.SubjectID)
 	return err

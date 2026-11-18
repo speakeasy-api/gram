@@ -24,10 +24,8 @@ import { useMembers } from "@gram/client/react-query/members.js";
 import { useChallenges } from "@gram/client/react-query/challenges.js";
 import { useListChats } from "@gram/client/react-query/listChats.js";
 import { useManagedDevices } from "@gram/client/react-query/managedDevices.js";
-import {
-  buildGetUserMetricsSummaryQuery,
-  useGetUserMetricsSummary,
-} from "@gram/client/react-query/getUserMetricsSummary.js";
+import type { useGetUserMetricsSummary } from "@gram/client/react-query/getUserMetricsSummary.js";
+import { buildGetUserMetricsSummaryQuery } from "@gram/client/react-query/getUserMetricsSummary.js";
 import { buildRiskUserBreakdownQuery } from "@gram/client/react-query/riskUserBreakdown.js";
 import type { RiskOverviewCategory } from "@gram/client/models/components/riskoverviewcategory.js";
 import type { RiskRuleBreakdownEntry } from "@gram/client/models/components/riskrulebreakdownentry.js";
@@ -243,6 +241,14 @@ export function useCanReadRisk(): boolean {
  */
 export function useIsSelf(identity: IdentityModel): boolean {
   const { user } = useSession();
+  return isSelfIdentity(identity, user);
+}
+
+/** {@link useIsSelf} for a caller that already holds the session user. */
+export function isSelfIdentity(
+  identity: Pick<IdentityModel, "userIds" | "emails">,
+  user: { id: string; email: string },
+): boolean {
   if (identity.userIds.includes(user.id)) return true;
   if (identity.userIds.length > 0) return false;
   return identity.emails.some(

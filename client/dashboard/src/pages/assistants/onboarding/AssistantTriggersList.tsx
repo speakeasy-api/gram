@@ -4,11 +4,9 @@ import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { type BadgeVariant } from "@/components/ui/lib/types";
 import { useChatDetailSheet } from "@/pages/chatLogs/useChatDetailSheet";
-import {
-  TriggerEvent,
-  TriggerEventStatus,
-} from "@gram/client/models/components/triggerevent.js";
-import { TriggerInstance } from "@gram/client/models/components/triggerinstance.js";
+import type { TriggerEvent } from "@gram/client/models/components/triggerevent.js";
+import { TriggerEventStatus } from "@gram/client/models/components/triggerevent.js";
+import type { TriggerInstance } from "@gram/client/models/components/triggerinstance.js";
 import { useTriggerEvents } from "@gram/client/react-query/triggerEvents.js";
 import { format } from "date-fns";
 import { useState } from "react";

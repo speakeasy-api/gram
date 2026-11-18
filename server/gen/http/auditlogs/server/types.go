@@ -786,7 +786,7 @@ func NewListFacetsGatewayErrorResponseBody(res *goa.ServiceError) *ListFacetsGat
 }
 
 // NewListPayload builds a auditlogs service list endpoint payload.
-func NewListPayload(cursor *string, projectSlug *string, actorID *string, action *string, subjectType *string, subjectID *string, subjectIds []string, actingSurface *string, from *string, to *string, category string, apikeyToken *string, sessionToken *string) *auditlogs.ListPayload {
+func NewListPayload(cursor *string, projectSlug *string, actorID *string, action *string, subjectType *string, subjectID *string, subjectIds []string, actingSurface *string, from *string, to *string, category string, origin *string, apikeyToken *string, sessionToken *string) *auditlogs.ListPayload {
 	v := &auditlogs.ListPayload{}
 	v.Cursor = cursor
 	v.ProjectSlug = projectSlug
@@ -799,6 +799,7 @@ func NewListPayload(cursor *string, projectSlug *string, actorID *string, action
 	v.From = from
 	v.To = to
 	v.Category = category
+	v.Origin = origin
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
@@ -806,10 +807,11 @@ func NewListPayload(cursor *string, projectSlug *string, actorID *string, action
 }
 
 // NewListFacetsPayload builds a auditlogs service listFacets endpoint payload.
-func NewListFacetsPayload(projectSlug *string, category string, apikeyToken *string, sessionToken *string) *auditlogs.ListFacetsPayload {
+func NewListFacetsPayload(projectSlug *string, category string, origin *string, apikeyToken *string, sessionToken *string) *auditlogs.ListFacetsPayload {
 	v := &auditlogs.ListFacetsPayload{}
 	v.ProjectSlug = projectSlug
 	v.Category = category
+	v.Origin = origin
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 

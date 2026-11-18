@@ -23,9 +23,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -97,6 +99,7 @@ type AgentAuthorizationChecks interface {
 // AgentIdentityReadService backs the agent identity read tools.
 type AgentIdentityReadService struct {
 	db     *pgxpool.Pool
+	enc    *encryption.Client
 	engine deviceCoverageAuthorizer
 	roles  *access.RoleManager
 	checks AgentAuthorizationChecks
@@ -106,9 +109,9 @@ type AgentIdentityReadService struct {
 
 // NewAgentIdentityReadService reads agent policy and connection assignments
 // from Postgres and authorization checks through checks.
-func NewAgentIdentityReadService(logger *slog.Logger, db *pgxpool.Pool, engine *authz.Engine, checks AgentAuthorizationChecks, budget OperationBudget) *AgentIdentityReadService {
+func NewAgentIdentityReadService(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, engine *authz.Engine, checks AgentAuthorizationChecks, budget OperationBudget) *AgentIdentityReadService {
 	if logger == nil {
-		return &AgentIdentityReadService{db: nil, engine: nil, roles: nil, checks: nil, budget: OperationBudget{Connection: nil, Organization: nil}, now: nil}
+		return &AgentIdentityReadService{db: nil, enc: nil, engine: nil, roles: nil, checks: nil, budget: OperationBudget{Connection: nil, Organization: nil}, now: nil}
 	}
 	// A nil engine must stay a nil interface, so the service reports itself
 	// unavailable.
@@ -118,6 +121,7 @@ func NewAgentIdentityReadService(logger *slog.Logger, db *pgxpool.Pool, engine *
 	}
 	return &AgentIdentityReadService{
 		db:     db,
+		enc:    enc,
 		engine: authorizer,
 		roles:  access.NewRoleManager(logger, db, nil, nil, plugins.PublicationRequests{Enabled: false}, nil),
 		checks: checks,
@@ -127,7 +131,7 @@ func NewAgentIdentityReadService(logger *slog.Logger, db *pgxpool.Pool, engine *
 }
 
 func (s *AgentIdentityReadService) valid() bool {
-	return s != nil && s.db != nil && s.engine != nil && s.roles != nil && s.checks != nil && s.budget.valid() && s.now != nil
+	return s != nil && s.db != nil && s.enc != nil && s.engine != nil && s.roles != nil && s.checks != nil && s.budget.valid() && s.now != nil
 }
 
 // AgentIdentityInput names one agent.
@@ -317,7 +321,7 @@ func (s *AgentIdentityReadService) MCPAccess(ctx context.Context, principal Prin
 		output.MissingServerGrants = missingServerGrants(grants, agentPrincipal.String(), servers)
 	}
 
-	credentials := newAgentCredentialReader(s.db, principal.OrganizationID, agent.ID, s.now())
+	credentials := newAgentCredentialReader(s.db, s.enc, principal.OrganizationID, agent.ID, s.now())
 	for _, server := range servers {
 		if !server.access.CanConnect {
 			continue
@@ -537,6 +541,7 @@ func (s *AgentIdentityReadService) mcpNames(ctx context.Context, organizationID 
 // project and user session issuer, which servers can share.
 type agentCredentialReader struct {
 	db             *pgxpool.Pool
+	enc            *encryption.Client
 	organizationID string
 	agentID        uuid.UUID
 	now            time.Time
@@ -549,14 +554,16 @@ type agentAssignments struct {
 	unusable int
 }
 
-func newAgentCredentialReader(db *pgxpool.Pool, organizationID string, agentID uuid.UUID, now time.Time) *agentCredentialReader {
-	return &agentCredentialReader{db: db, organizationID: organizationID, agentID: agentID, now: now, assignments: make(map[string]agentAssignments)}
+func newAgentCredentialReader(db *pgxpool.Pool, enc *encryption.Client, organizationID string, agentID uuid.UUID, now time.Time) *agentCredentialReader {
+	return &agentCredentialReader{db: db, enc: enc, organizationID: organizationID, agentID: agentID, now: now, assignments: make(map[string]agentAssignments)}
 }
 
 // describe sets entry's credential mode, as the dashboard's "Acting on behalf
 // of" reads it: a server that asks no person to sign in uses a shared
 // credential, and otherwise the agent acts for the people whose connections
-// are assigned to it.
+// are assigned to it. connection_expired differs from that panel: it uses the
+// resolution rule, so a connection whose stored tokens can't be read or that
+// stores none is expired, while the panel reads only the expiry fields.
 func (r *agentCredentialReader) describe(ctx context.Context, server platformrepo.ListPlatformMCPInventoryRow, entry *AgentMCPServerAccess) error {
 	auth, err := authclients.ReadServerAuthentication(ctx, r.db, r.organizationID, server.McpServerID)
 	if err != nil {
@@ -609,7 +616,7 @@ func (r *agentCredentialReader) read(ctx context.Context, projectID, issuerID uu
 			assigned.unusable++
 			continue
 		}
-		expired := remoteSessionEnded(source, r.now)
+		expired := !remotesessions.StoredSignInUsable(r.enc, source, r.now)
 		if at, ok := index[source.SubjectUrn.ID]; ok {
 			assigned.people[at].ConnectionExpired = assigned.people[at].ConnectionExpired || expired
 			continue
@@ -653,22 +660,6 @@ func passesCallerCredentialThrough(auth *types.McpServerAuthentication) bool {
 	return slices.ContainsFunc(auth.Clients, func(client *types.AuthClient) bool {
 		return client != nil && client.Enabled && client.ClientType == authz.AuthClientTypePassThrough
 	})
-}
-
-// remoteSessionEnded reports whether a connection no longer works, read from
-// its expiry fields as the dashboard reads them. With a refresh token the
-// refresh deadline matters; without one, the access token's expiry. The
-// authorization deadline caps both.
-func remoteSessionEnded(session remotesessionsrepo.RemoteSession, now time.Time) bool {
-	if session.AuthorizationExpiresAt.Valid && !session.AuthorizationExpiresAt.Time.After(now) {
-		return true
-	}
-	if session.RefreshTokenEncrypted.Valid && session.RefreshTokenEncrypted.String != "" {
-		if !session.RefreshExpiresAt.Valid || session.RefreshExpiresAt.Time.After(now) {
-			return false
-		}
-	}
-	return session.AccessExpiresAt.Valid && !session.AccessExpiresAt.Time.After(now)
 }
 
 func agentIdentity(agent agentsrepo.Agent) AgentIdentity {

@@ -25,7 +25,7 @@ WHERE organization_id = @org_id::text;
 -- name: PostflightSecurityOnboardingInvalid :one
 SELECT (
   (SELECT preset FROM organization_onboarding WHERE organization_id = @org_id::text) IS DISTINCT FROM 'security'
-  OR (SELECT count(*) FROM organization_setup_tasks WHERE organization_id = @org_id::text AND hidden_at IS NULL) <> 9
+  OR (SELECT count(*) FROM organization_setup_tasks WHERE organization_id = @org_id::text AND hidden_at IS NULL) <> 8
   OR EXISTS (SELECT 1 FROM organization_setup_tasks WHERE organization_id = @org_id::text
     AND ((task_key IN ('anthropic-admin-controls', 'platform-mcp')) IS DISTINCT FROM (hidden_at IS NOT NULL)))
 )::boolean AS invalid;
@@ -346,9 +346,25 @@ SELECT count(*)
 FROM chats WHERE project_id = @project_id::uuid AND organization_id <> @org_id::text;
 
 -- name: PostflightCountOwnerlessChats :one
+-- A session driven by an agent credential carries no user ids by design: the
+-- agent is its actor, and its owner reads it through ownership. Only that
+-- shape is exempt; an agent-stamped chat with partial user ids is still flagged.
 SELECT count(*)
 FROM chats WHERE organization_id = @org_id::text
+  AND NOT (agent_id IS NOT NULL AND user_id IS NULL AND external_user_id IS NULL)
   AND (user_id IS NULL OR user_id = '' OR external_user_id IS NULL);
+
+-- name: PostflightCountAgentOwnerSessions :one
+-- Agent-credential sessions the owner persona can read: the join mirrors
+-- ListOwnedAgentIDs (owner match, not deleted, not latched for reassignment).
+SELECT count(*)
+FROM chats c
+JOIN agents a ON a.id = c.agent_id AND a.organization_id = c.organization_id
+WHERE c.project_id = @project_id::uuid AND c.organization_id = @org_id::text
+  AND c.user_id IS NULL AND c.external_user_id IS NULL
+  AND a.owner_user_id = @owner_user_id::text
+  AND a.owner_reassignment_required_at IS NULL
+  AND a.deleted IS FALSE;
 
 -- name: PostflightCountAgentAttributedChats :one
 -- Channel sessions carry the agent that produced them; without that stamp the
@@ -410,18 +426,6 @@ WHERE l.project_id = @project_id::uuid AND l.deleted IS FALSE
     OR (l.target_kind = 'mcp_server' AND ms.id IS NOT NULL)
     OR (l.target_kind = 'meta_mcp_server' AND mm.id IS NOT NULL));
 
--- The approval policy is only usable when the approvals server it points
--- agents at has an endpoint and sits in the Default plugin.
-
--- name: PostflightCountApprovalsServers :one
-SELECT count(*)
-FROM mcp_servers s
-JOIN mcp_endpoints e ON e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE
-JOIN plugin_servers ps ON ps.mcp_server_id = s.id AND ps.deleted IS FALSE
-JOIN plugins p ON p.id = ps.plugin_id AND p.project_id = s.project_id AND p.is_default IS TRUE AND p.deleted IS FALSE
-WHERE s.project_id = @project_id::uuid AND s.builtin_backend = 'approvals'
-  AND s.deleted IS FALSE;
-
 -- A hosted toolset's canonical wrapper mirrors the toolset's name and tool
 -- variations group, and serves from at least one endpoint.
 -- name: PostflightCountHostedToolsetDrift :one
@@ -459,13 +463,6 @@ WHERE m.project_id = @project_id::uuid AND m.deleted IS FALSE
   AND (s.deleted IS TRUE OR s.slug IS NULL
        OR num_nonnulls(s.toolset_id, s.remote_mcp_server_id,
                        s.tunneled_mcp_server_id, s.unproxied_mcp_server_id) <> 1);
-
--- name: PostflightCountTunnelEndpoints :one
-SELECT count(*)
-FROM mcp_endpoints e
-JOIN mcp_servers s ON s.id = e.mcp_server_id
-WHERE e.project_id = @project_id::uuid AND e.deleted IS FALSE
-  AND s.tunneled_mcp_server_id IS NOT NULL;
 
 -- name: PostflightCountActiveQuarantines :one
 SELECT count(*) FROM session_quarantines
@@ -590,3 +587,8 @@ WHERE organization_id = @org_id::text AND deleted IS FALSE;
 -- name: PostflightCountSecurityAuditLogs :one
 SELECT count(*) FROM security_audit_logs
 WHERE organization_id = @org_id::text;
+
+-- name: PostflightCountToolMetadata :one
+-- The Inspect tab's stored annotations for Linear, Slack and GitHub.
+SELECT count(*) FROM mcp_server_tool_metadata
+WHERE project_id = @project_id::uuid AND deleted IS FALSE;

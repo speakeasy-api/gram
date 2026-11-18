@@ -94,10 +94,7 @@ export function EmaServiceWorkspace({
   useScrollToSection(Boolean(row));
   const permissions = useAcceptedProviderPermissions();
   const candidates = useProviderCandidates(permissions.canEdit);
-  const oktaFlag = useFeatureFlag(FEATURE_FLAGS.oktaConnections);
-  const connectedOktaId = useOktaIssuerId(oktaFlag.status === "enabled");
-  const oktaIssuerId =
-    oktaFlag.status === "enabled" ? connectedOktaId : undefined;
+  const oktaIssuerId = useOktaIssuerId();
   const name = row?.name ?? "Service";
 
   return (
@@ -205,10 +202,10 @@ function TrustRow({
   provider: ProviderView;
   isDefault: boolean;
   service: string;
-  /** The Okta connection's issuer, when its Cross App Access view is available. */
+  /** The Okta connection's issuer; undefined without an Okta connection. */
   oktaIssuerId: string | undefined;
 }): JSX.Element {
-  // The Okta fix needs the Okta view, which the rollout can hide.
+  // Without an Okta connection the fix opens the identity providers overview.
   const fixTarget =
     provider.fix === "okta" && !oktaIssuerId
       ? "identity-providers"

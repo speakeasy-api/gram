@@ -195,9 +195,14 @@ describe("standsInForToolset", () => {
 });
 
 describe("tabForServer", () => {
-  it("shows a hosted server's tools instead of Inspect", () => {
-    expect(tabForServer("inspect", true)).toBe("tools");
-    for (const tab of ["tools", "resources", "prompts", "settings"] as const) {
+  it("keeps every tab, Inspect included, for a hosted server", () => {
+    for (const tab of [
+      "inspect",
+      "tools",
+      "resources",
+      "prompts",
+      "settings",
+    ] as const) {
       expect(tabForServer(tab, true)).toBe(tab);
     }
   });

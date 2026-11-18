@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -34,6 +35,9 @@ import (
 const connectionAttemptEndTTL = 2 * time.Hour
 
 const (
+	// attemptEndingReferenceWait is how long a failure response waits for its ending to be accepted.
+	attemptEndingReferenceWait = 200 * time.Millisecond
+
 	// attemptEndingTimeout bounds one claim of an attempt's ending.
 	attemptEndingTimeout = 5 * time.Second
 
@@ -237,10 +241,39 @@ func (s *Service) recordConsentPage(
 		s.recordMemberStatuses(ctx, logger, attempt, statuses, subject, fromRequest)
 	}
 	if problem != nil {
-		s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, problem, subject, fromRequest)
+		s.recordConsentProblem(ctx, logger, attempt, problem, subject, fromRequest)
 	}
 	if challengeState.FirstParty && !challengeState.CodeReconnect.undecidedOrCanceled() && firstPartyConnected(gateway, cards) {
 		s.endAttemptOnce(ctx, logger, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete, subject, fromRequest)
+	}
+}
+
+// recordConsentProblem folds reloads of an expired-catalog page into one row per attempt; a cache failure records it.
+func (s *Service) recordConsentProblem(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, problem mcpconnectionattempts.Happened, opts ...mcpconnectionattempts.Option) {
+	if problem != mcpconnectionattempts.CodeConnectionCatalogExpired || s.userSessionRefreshReplayCoordination == nil || attempt.IsZero() {
+		s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, problem, opts...)
+		return
+	}
+	key := "connectionAttemptCatalogExpired:" + attempt.ID().String()
+	cacheCtx, cancel := context.WithTimeout(ctx, memberStatusTimeout)
+	won, err := s.userSessionRefreshReplayCoordination.Add(cacheCtx, key, connectionAttemptEndTTL)
+	cancel()
+	switch {
+	case err != nil:
+		logger.WarnContext(ctx, "claim expired catalog row", attr.SlogError(err))
+		s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, problem, opts...)
+		return
+	case !won:
+		return
+	}
+	if s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, problem, opts...) {
+		return
+	}
+	// Not accepted, so the next render offers it again.
+	cacheCtx, cancel = context.WithTimeout(ctx, memberStatusTimeout)
+	defer cancel()
+	if err := s.userSessionRefreshReplayCoordination.Delete(cacheCtx, key); err != nil {
+		logger.WarnContext(ctx, "forget expired catalog row", attr.SlogError(err))
 	}
 }
 
@@ -371,17 +404,52 @@ func (s *Service) changedMemberStatuses(ctx context.Context, logger *slog.Logger
 	return changed
 }
 
+func ineligibleConsentKey(attempt mcpconnectionattempts.Attempt, clientID uuid.UUID) string {
+	return "connectionAttemptIneligible:" + attempt.ID().String() + ":" + clientID.String()
+}
+
+// recordIneligibleConsent writes one row per attempt and client, however often the page reloads; a cache failure writes it anyway.
+func (s *Service) recordIneligibleConsent(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, clientID uuid.UUID, opts ...mcpconnectionattempts.Option) {
+	if attempt.IsZero() {
+		return
+	}
+	key := ineligibleConsentKey(attempt, clientID)
+	marked := false
+	if s.userSessionRefreshReplayCoordination != nil {
+		cacheCtx, cancel := context.WithTimeout(ctx, memberStatusTimeout)
+		won, err := s.userSessionRefreshReplayCoordination.Add(cacheCtx, key, connectionAttemptEndTTL)
+		cancel()
+		switch {
+		case err != nil:
+			logger.WarnContext(ctx, "claim ineligible consent row", attr.SlogError(err))
+		case !won:
+			return
+		default:
+			marked = true
+		}
+	}
+	if s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeIneligibleIdentity, opts...) || !marked {
+		return
+	}
+	// Not accepted, so the next render offers it again.
+	cacheCtx, cancel := context.WithTimeout(ctx, memberStatusTimeout)
+	defer cancel()
+	if err := s.userSessionRefreshReplayCoordination.Delete(cacheCtx, key); err != nil {
+		logger.WarnContext(ctx, "forget ineligible consent row", attr.SlogError(err))
+	}
+}
+
 // memberSetupChangedDetail marks a member whose saved choice no longer fits the sign-in setup an admin changed.
 const memberSetupChangedDetail = "setup_changed"
 
-// staleChoiceHappened records whoever the stale choice's message tells to act first.
+// staleChoiceHappened is the code for whoever the stale choice's message tells to act first.
 // An unchecked remedy is our failed lookup, not the person's or an admin's.
 func staleChoiceHappened(remedy staleChoiceRemedy) mcpconnectionattempts.Code {
 	switch remedy {
 	case staleChoiceReconnect, staleChoiceReconnectThenAdmin:
 		return mcpconnectionattempts.CodeNeedsSignIn
 	case staleChoiceAskAdmin:
-		return mcpconnectionattempts.CodeUpstreamSignInNotSetUp
+		return mcpconnectionattempts.CodeApprovalNeedsAdmin
 	case staleChoiceUnchecked:
 	}
 	return mcpconnectionattempts.CodeInternalError
@@ -525,27 +593,53 @@ func (a *attemptEndings) drain(ctx context.Context) error {
 	}
 }
 
-// endAttemptOnce ends an attempt from a path that can repeat, off the request path.
+// endAttemptOnce ends an attempt from a path that can repeat, off the request path. A failure
+// someone will read a reference for waits up to attemptEndingReferenceWait for the ending to be accepted.
 // If the marker can't be read or too many are waiting, the attempt stays open rather than ending twice.
 func (s *Service) endAttemptOnce(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, step mcpconnectionattempts.Step, what mcpconnectionattempts.Happened, opts ...mcpconnectionattempts.Option) {
 	if attempt.IsZero() {
 		return
 	}
-	s.runAttemptEnding(ctx, logger, func(ctx context.Context) {
+	wanted := contextvalues.ConnectionReferenceWanted(ctx) && mcpconnectionattempts.FailureWorthAReference(what)
+	claimed := make(chan struct{})
+	reference := ""
+	if !s.runAttemptEnding(ctx, logger, func(ctx context.Context) {
+		defer close(claimed)
+		// Its own slot, so an ending accepted after the wait can't label a later error.
+		ctx = contextvalues.WithConnectionReferenceSlot(ctx)
 		s.claimAttemptEnding(ctx, logger, attempt, step, what, opts...)
-	})
+		reference = contextvalues.ConnectionReference(ctx)
+	}) {
+		if wanted {
+			contextvalues.SetConnectionReference(ctx, "")
+		}
+		return
+	}
+	if !wanted {
+		return
+	}
+	// The accepted row's id, or none past the wait.
+	select {
+	case <-claimed:
+		contextvalues.SetConnectionReference(ctx, reference)
+	case <-time.After(attemptEndingReferenceWait):
+		contextvalues.SetConnectionReference(ctx, "")
+	case <-ctx.Done():
+		contextvalues.SetConnectionReference(ctx, "")
+	}
 }
 
 // runAttemptEnding bounds all ending work, including readiness reads, off the response path.
-func (s *Service) runAttemptEnding(ctx context.Context, logger *slog.Logger, work func(context.Context)) {
+// It reports whether the work was taken on.
+func (s *Service) runAttemptEnding(ctx context.Context, logger *slog.Logger, work func(context.Context)) bool {
 	if s.connections == nil || s.userSessionRefreshReplayCoordination == nil || s.attemptEndings == nil {
-		return
+		return false
 	}
 	select {
 	case s.attemptEndings.slots <- struct{}{}:
 	default:
 		logger.WarnContext(ctx, "too many connection attempt endings waiting; leaving this one open")
-		return
+		return false
 	}
 	claimCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), attemptEndingTimeout)
 	s.attemptEndings.wg.Go(func() {
@@ -553,6 +647,7 @@ func (s *Service) runAttemptEnding(ctx context.Context, logger *slog.Logger, wor
 		defer func() { <-s.attemptEndings.slots }()
 		work(claimCtx)
 	})
+	return true
 }
 
 func (s *Service) claimAttemptEnding(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, step mcpconnectionattempts.Step, what mcpconnectionattempts.Happened, opts ...mcpconnectionattempts.Option) {
@@ -572,7 +667,8 @@ func (s *Service) claimAttemptEnding(ctx context.Context, logger *slog.Logger, a
 // session mismatch: no browser can complete that expired connection anymore.
 func (s *Service) recordRemoteLoginRefusal(r *http.Request, remote remotesessions.RemoteLoginState, err error) {
 	ctx := r.Context()
-	opts := append(remote.ConnectionOptions(), mcpconnectionattempts.FromRequest(r))
+	// Speakeasy's own checks refused it, not the provider.
+	opts := append(remote.ConnectionOptions(), mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.FailedElsewhere())
 	if errors.Is(err, redisCache.ErrCacheMiss) || errors.Is(err, errRecoveryLoginExpired) {
 		s.endAttemptOnce(ctx, s.logger, remote.Attempt, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeExpired, opts...)
 		return
@@ -615,8 +711,10 @@ func (s *Service) recordTokenClientRefusal(r *http.Request, endpoint *ResolvedMc
 	}
 	app := mcpconnectionattempts.AppUnverified
 	switch what {
-	case mcpconnectionattempts.CodeCIMDMetadataInvalid, mcpconnectionattempts.CodeCIMDAdmissionDenied, mcpconnectionattempts.CodeAIToolBlocked:
-		app = mcpconnectionattempts.AppOf(clientID)
+	case mcpconnectionattempts.CodeCIMDMetadataInvalid, mcpconnectionattempts.CodeCIMDAdmissionDenied:
+		app = mcpconnectionattempts.AppOf(clientID, mcpconnectionattempts.ClientIDNotAdmitted)
+	case mcpconnectionattempts.CodeAIToolBlocked:
+		app = mcpconnectionattempts.AppOf(clientID, mcpconnectionattempts.ClientIDAdmitted)
 	}
 	s.connections.Once(r.Context(), connectionScope(endpoint, app), mcpconnectionattempts.StepInboundToken, what, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(grantType), mcpconnectionattempts.Detail(reason))
 }
@@ -649,11 +747,11 @@ func (s *Service) recordTokenClientFailure(r *http.Request, endpoint *ResolvedMc
 	if grantType != oauthwire.GrantTypeAuthorizationCode {
 		return
 	}
-	what := mcpconnectionattempts.CodeAIToolCheckUnavailable
+	what, check := mcpconnectionattempts.CodeAIToolCheckUnavailable, mcpconnectionattempts.ClientIDAdmitted
 	if reason == mcpmetrics.IDJAGRejectionClientMetadataUnavailable {
-		what = mcpconnectionattempts.CodeCIMDFetchFailed
+		what, check = mcpconnectionattempts.CodeCIMDFetchFailed, mcpconnectionattempts.ClientIDNotAdmitted
 	}
-	s.connections.Once(r.Context(), connectionScope(endpoint, mcpconnectionattempts.AppOf(clientID)), mcpconnectionattempts.StepInboundToken, what, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(grantType))
+	s.connections.Once(r.Context(), connectionScope(endpoint, mcpconnectionattempts.AppOf(clientID, check)), mcpconnectionattempts.StepInboundToken, what, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(grantType))
 }
 
 // recordRemoteSessionVerdict records the check of a provider sign-in on its
@@ -667,19 +765,22 @@ func (s *Service) recordRemoteSessionVerdict(
 	target validationTarget,
 	remoteSessionID uuid.UUID,
 	verdict remotesessions.ValidationOutcome,
+	failure probeFailure,
 	trigger remotesessionmetrics.ValidationTrigger,
 ) {
 	if verdict == remotesessions.ValidationOutcomeUnknown && errors.Is(ctx.Err(), context.Canceled) {
 		return
 	}
-	what := verdictHappened(verdict, target.tunnelID.Valid)
+	what := verdictHappened(verdict, target.tunnelID.Valid, failure)
 	if verdict == remotesessions.ValidationOutcomeUnknown && target.setupFailed {
 		what = mcpconnectionattempts.CodeMemberToolsMissing
 	}
-	s.recordRemoteSessionCheck(ctx, fromRequest, endpoint, challengeState, client, trigger, what,
-		mcpconnectionattempts.Member(target.memberID),
-		mcpconnectionattempts.RemoteSession(remoteSessionID),
-	)
+	opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Member(target.memberID), mcpconnectionattempts.RemoteSession(remoteSessionID)}
+	// Only an inactive verdict came from the issuer; the others are about the MCP server.
+	if verdict != remotesessions.ValidationOutcomeInactive {
+		opts = append(opts, mcpconnectionattempts.FailedElsewhere())
+	}
+	s.recordRemoteSessionCheck(ctx, fromRequest, endpoint, challengeState, client, trigger, what, opts...)
 }
 
 // recordRemoteSessionCheck writes one check's row on the challenge's attempt; a keepalive writes none.
@@ -707,7 +808,7 @@ func (s *Service) recordRemoteSessionCheck(
 	s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepProviderSignIn, what, opts...)
 }
 
-func verdictHappened(verdict remotesessions.ValidationOutcome, tunneled bool) mcpconnectionattempts.Happened {
+func verdictHappened(verdict remotesessions.ValidationOutcome, tunneled bool, failure probeFailure) mcpconnectionattempts.Happened {
 	switch verdict {
 	case remotesessions.ValidationOutcomeValid:
 		return mcpconnectionattempts.ResultAllowed
@@ -718,16 +819,29 @@ func verdictHappened(verdict remotesessions.ValidationOutcome, tunneled bool) mc
 	case remotesessions.ValidationOutcomeUnknown:
 	}
 	if tunneled {
-		return mcpconnectionattempts.CodeTunnelUnavailable
+		return tunneledProbeHappened(failure)
 	}
 	return mcpconnectionattempts.CodeProviderUnavailable
+}
+
+// tunneledProbeHappened blames the tunnel only when it reported the failure itself.
+func tunneledProbeHappened(failure probeFailure) mcpconnectionattempts.Code {
+	if failure.status == 0 && failure.tunnelError == "" && errors.Is(failure.err, context.DeadlineExceeded) {
+		return mcpconnectionattempts.CodeProviderUnreachable
+	}
+	credential := remotemcp.UpstreamCredentialSent{Attached: false, Self: false, Configured: false}
+	if code, ok := remotemcp.UpstreamFailureHappened(failure.status, false, credential, true, failure.tunnelError, failure.err); ok {
+		return code
+	}
+	// It answered, but not with a usable result.
+	return mcpconnectionattempts.CodeProviderServerError
 }
 
 // recordListingFailures writes one row per member a Direct listing lost. Sign-ins not done yet are not failures.
 func (s *Service) recordListingFailures(ctx context.Context, gate *metaGateContext, unavailable []unavailableMember) {
 	app := mcpconnectionattempts.AppUnverified
 	if clientID, ok := contextvalues.GetOAuthClientID(ctx); ok {
-		app = mcpconnectionattempts.AppOf(clientID)
+		app = mcpconnectionattempts.AppOf(clientID, mcpconnectionattempts.ClientIDAdmitted)
 	}
 	scope := mcpconnectionattempts.GatewayScope(gate.organizationID, gate.projectID, gate.metaServerID, app)
 	if gate.projectID == uuid.Nil {
@@ -751,6 +865,9 @@ func listingFailureHappened(err error) (mcpconnectionattempts.Code, bool) {
 	if _, credential := errors.AsType[memberCredentialError](err); credential {
 		return mcpconnectionattempts.Code{}, false
 	}
+	if failure, ok := errors.AsType[memberConnectionError](err); ok && failure.code == mcpconnectionattempts.CodeIneligibleIdentity {
+		return failure.code, true
+	}
 	if denied, ok := errors.AsType[*oops.ShareableError](err); ok && (denied.Code == oops.CodeForbidden || denied.Code == oops.CodeNotFound) {
 		return mcpconnectionattempts.CodeNoServerAccess, true
 	}
@@ -765,4 +882,55 @@ func (s *Service) recordIDPAuthorityRefusal(ctx context.Context, logger *slog.Lo
 		return
 	}
 	s.endAttemptOnce(ctx, logger, state.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundSignIn, code, detail, request)
+}
+
+// refuseWorkloadGrantRow records a refused workload or assistant token grant.
+func refuseWorkloadGrantRow(ctx context.Context, t *mcpconnectionattempts.Tracker, err error) {
+	code, detail := workloadGrantHappened(err)
+	t.Refuse(ctx, code, detail)
+}
+
+// workloadGrantHappened names a refused workload or assistant token grant; the detail is the logged reason.
+// Workload refusals before the assertion's signature verifies never reach it: they are a metric.
+func workloadGrantHappened(err error) (mcpconnectionattempts.Code, mcpconnectionattempts.Option) {
+	if refusal, ok := errors.AsType[*workloadGrantError](err); ok {
+		detail := mcpconnectionattempts.Detail(refusal.reason)
+		switch refusal.reason {
+		case "issuer_untrusted":
+			return mcpconnectionattempts.CodeIssuerNotTrusted, detail
+		case "subject_not_admitted":
+			return mcpconnectionattempts.CodeSubjectNotAdmitted, detail
+		case "endpoint_not_agent_addressable":
+			return mcpconnectionattempts.CodeEndpointNotAgentAddressable, detail
+		case "agent_admission_denied":
+			return mcpconnectionattempts.CodeNoServerAccess, detail
+		case "issuer_policy_changed":
+			return mcpconnectionattempts.CodeTransientFailure, detail
+		}
+		switch refusal.outcome {
+		case workloadGrantUnavailable, workloadGrantRateLimited:
+			return mcpconnectionattempts.CodeAssertionCheckUnavailable, detail
+		case workloadGrantRefused:
+		}
+		if strings.HasPrefix(refusal.reason, "assertion_") {
+			return mcpconnectionattempts.CodeAssertionInvalid, detail
+		}
+		return mcpconnectionattempts.CodeAssertionOther, detail
+	}
+	if problem, ok := errors.AsType[headlessChoiceError](err); ok {
+		detail := mcpconnectionattempts.Detail(string(problem))
+		switch problem {
+		case errChoiceNotSetUp, errChoiceNotReady, errChoiceNoneReady:
+			return mcpconnectionattempts.CodeUpstreamSignInNotSetUp, detail
+		case errChoiceDenied, errChoiceNoneAllowed:
+			return mcpconnectionattempts.CodeUpstreamCredentialDenied, detail
+		case errChoiceNotNamed:
+			return mcpconnectionattempts.CodeUpstreamCredentialNotChosen, detail
+		case errChoiceNotAccepted:
+			return mcpconnectionattempts.CodeUpstreamCredentialChoice, detail
+		case errChoiceServerNotReached, errChoiceTakesNoCredential, errChoiceNeedsCredential:
+			return mcpconnectionattempts.CodeCredentialChoiceInvalid, detail
+		}
+	}
+	return mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("")
 }

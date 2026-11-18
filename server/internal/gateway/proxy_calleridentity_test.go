@@ -76,7 +76,6 @@ func callFunctionToolWithClient(t *testing.T, client toolconfig.MCPClientIdentit
 	err = proxy.Do(t.Context(), httptest.NewRecorder(), bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 		MCPClient:  client,

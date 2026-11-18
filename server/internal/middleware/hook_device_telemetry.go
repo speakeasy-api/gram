@@ -29,6 +29,9 @@ var hookDeviceHeaderAttrs = map[string]attribute.Key{
 	wire.HeaderDeviceHarnessVariant: attr.HookDeviceHarnessVariantKey,
 	wire.HeaderDeviceHarnessVersion: attr.HookDeviceHarnessVersionKey,
 	wire.HeaderDeviceInstallRoute:   attr.HookDeviceInstallRouteKey,
+	wire.HeaderDeviceFailOpen:       attr.HookDeviceFailOpenKey,
+	wire.HeaderDeviceDebugLog:       attr.HookDeviceDebugLogKey,
+	wire.HeaderDeviceSpoolDepth:     attr.HookDeviceSpoolDepthKey,
 }
 
 type hookDeviceContextKey struct{}

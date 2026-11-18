@@ -380,7 +380,7 @@ func (f *ProxyManager) BuildTarget(
 	// private — because the property is Speakeasy's own envelope rather than
 	// anything scoped to an identity or a risk policy. It is a no-op for
 	// the arguments that don't carry it.
-	connections := newToolsCallConnections(options.connections, f.Connections, identity, upstreamURL, upstreamAuth, headers)
+	connections := newRequestConnections(options.connections, f.Connections, identity, upstreamURL, upstreamAuth, headers)
 	toolsCallPreForwardInterceptors := []proxy.ToolsCallRequestInterceptor(nil)
 	if visibility == mcpservers.VisibilityPrivate {
 		// Private calls use a method-level preflight so even malformed params
@@ -410,6 +410,7 @@ func (f *ProxyManager) BuildTarget(
 			organizationID: organizationID,
 			mcpServerID:    identity.McpServerID,
 			projectID:      projectID,
+			metrics:        f.mcpMetrics,
 			listUpstream:   nil,
 		}
 	}
@@ -530,6 +531,7 @@ func (f *ProxyManager) BuildTarget(
 		// nothing to bill, scan, or record as a selected use.
 		ToolsCallFailureInterceptors: connections.withFailures([]proxy.ToolsCallFailureInterceptor{clickHouseLogInterceptor}),
 		ToolsCallRefusalInterceptors: connections.refusals(),
+		RequestFailureInterceptors:   connections.requestFailures(),
 		ToolsListRequestInterceptors: []proxy.ToolsListRequestInterceptor{
 			NewToolsListPostHogEventInterceptor(f.posthog, identity, logger),
 		},

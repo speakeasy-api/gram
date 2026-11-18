@@ -540,3 +540,13 @@ SELECT
       AND enabled IS TRUE
       AND deleted IS FALSE
   )::boolean AS anthropic_inference_hooks;
+
+-- name: ListChatExternalMessageIDs :many
+-- Which of these external message ids the chat already holds. The Claude
+-- transcript upload uses it to tell the prompts it stores for the first time
+-- from those a per-event hook stored before it.
+SELECT external_message_id::text
+FROM chat_messages
+WHERE chat_id = @chat_id
+  AND project_id = @project_id
+  AND external_message_id = ANY(@external_message_ids::text[]);

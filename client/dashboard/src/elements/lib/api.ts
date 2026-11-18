@@ -1,4 +1,4 @@
-import { ElementsConfig } from "@/elements/types";
+import type { ElementsConfig } from "@/elements/types";
 import { getServerURL } from "@/lib/utils";
 
 export function getApiUrl(config: ElementsConfig): string {

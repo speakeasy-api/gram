@@ -103,6 +103,10 @@ export type RemoteSessionClient = {
    */
   id: string;
   /**
+   * The identity provider connection that manages this client. Null for a client administrators manage directly. A managed client is changed through its connection and cannot be duplicated or used as a template.
+   */
+  identityProviderConnectionId?: string | undefined;
+  /**
    * The organization JSON Web Key Set attached to this client, set on create or through attachKeySet and detachKeySet. Null when no key set is attached.
    */
   jsonWebKeySetId?: string | undefined;
@@ -190,6 +194,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
     forward_client_name: z.boolean(),
     grant_types: z.nullable(z.array(z.string())),
     id: z.string(),
+    identity_provider_connection_id: z.optional(z.string()),
     json_web_key_set_id: z.optional(z.string()),
     legacy_callback_url: z.boolean(),
     organization_id: z.string(),
@@ -224,6 +229,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       "federated_callback_url": "federatedCallbackUrl",
       "forward_client_name": "forwardClientName",
       "grant_types": "grantTypes",
+      "identity_provider_connection_id": "identityProviderConnectionId",
       "json_web_key_set_id": "jsonWebKeySetId",
       "legacy_callback_url": "legacyCallbackUrl",
       "organization_id": "organizationId",

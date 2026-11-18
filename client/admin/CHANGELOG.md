@@ -1,5 +1,43 @@
 # admin
 
+## 0.13.1
+
+### Patch Changes
+
+- d077556: Remove the external MCP fields from the API. Deployments no longer list external MCP sources, evolving a deployment ignores `exclude_external_mcps`, toolsets no longer carry external MCP header definitions, and the `externalmcp` tool type is no longer a valid tool filter. The deployment external MCP counts stay, always 0, so older clients keep working. The dashboard drops its external MCP views, warnings and OAuth auto-setup.
+
+## 0.13.0
+
+### Minor Changes
+
+- c696162: Staff can see an organization's hooks installs on a new Hooks tab in admin and through Admin MCP: which versions each machine runs compared with the current release, how they were installed, which hooks endpoints they use, which machines have gone quiet, and how much traffic still reaches the legacy endpoints.
+- e46d4fd: Staff can manage platform GCP credentials from a new Platform credentials section in admin: list them, create one, view its configuration, run a live identity check, edit it and delete it. A platform credential's identity can no longer be changed, and it can no longer be deleted, while Speakeasy-managed organization encryption keys still reach KMS through it. Renames are still allowed. Provisioning a managed organization encryption key now re-checks the platform credential inside its write, so a credential deleted or repointed mid-provision is refused rather than recorded.
+- fb7bab2: Adds an Organizational Memory evals page. Staff can start a run against the demo organization's synthetic corpus with chosen answer, judge, summary and digest models, follow it to completion, and compare runs side by side by accuracy, valid citations, leaks, tokens, cost and latency.
+
+### Patch Changes
+
+- 593ae16: Staff can start Organizational Memory eval runs against the seeded demo corpus and list or read their results through a new admin API. Runs go one at a time, are capped per rolling 24 hours, and a run left unresolved past any workflow's lifetime no longer blocks later starts.
+- fe585ec: The staff admin "Business Memory Extraction" control is now an "Organizational Memory" on/off switch with no cap input. Switching it on keeps a stored daily cap or sets the default of 100, and an organization whose cap is 0 now counts as off for Organizational Memory instead of showing the team memory tools while nothing gets summarized.
+- d9f2b98: The upstream OAuth migration page no longer reports an organization as not migrated because of connections made through a gateway, which only ever need choices for the servers approved when connecting. Once enforcement is on, assistant profiles that no turn has used yet are shown separately instead of as work left to record.
+
+## 0.12.0
+
+### Minor Changes
+
+- fe756cd: Staff can redeploy a project's active deployment from the organization's Projects page and through Admin MCP.
+- 954c4a9: Staff can now view and set an MCP server's pinned login scopes from the admin dashboard's MCP server page, and `describe_mcp_server_health` reports them. Customer Identity settings no longer show pinned or requested scopes.
+
+### Patch Changes
+
+- 846b422: Staff Admin MCP write tools now apply changes directly instead of through stored proposals and browser approval. Each tool is named after its operation, for example `set_organization_feature`. The server instructions and tool descriptions require agents to get explicit user confirmation before every change, and the staff event trail now records each write's operation and target.
+- 3041d9b: The setup wizard has a new Set up Claude Desktop group with two cards.
+  
+  - **Register Speakeasy's plugins in Claude** walks syncing the plugin marketplace in Claude.ai, marking the observability plugin Required, choosing how MCP plugins install, and allowing Speakeasy in Claude's network egress settings. Claude Desktop runs only plugins registered on the Claude organization, not a copy the device agent installs.
+  - **Add Claude organization instructions** gives the organization instruction that moves every conversation in Claude's unified view into Cowork, where the observability plugin captures it, and explains how to check it. It shows only for Claude Team: Enterprise captures Claude sessions through the Compliance API and inference hooks.
+  
+  Both cards complete on their own once the first Cowork transcript arrives. Set up Anthropic admin controls now covers Claude Code server-managed settings, Cowork native monitoring and the Organization Gateway, and its traffic check points Cowork to Agent Sessions. Setup cards can now name the plans they need, so a card shows only when the organization's recorded stack has one of them. The support matrix gains a Cowork organization instructions method, and the Anthropic Enterprise Rollout preset includes the new group.
+- e613d5a: The setup wizard no longer has a separate Create marketplace card or a Distribute MCP servers group. Distribute MCP servers is now a single card that publishes the plugin marketplace and lets you choose the servers to distribute, as every card that needs the marketplace already does. Saved onboarding playbooks that listed the group or the old card move to Distribute MCP servers when the server starts, and older setup links to either one open Distribute MCP servers. The Managed MCP Distribution preset lists the card instead of the group.
+
 ## 0.11.0
 
 ### Minor Changes

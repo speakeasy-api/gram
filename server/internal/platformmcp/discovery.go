@@ -113,12 +113,22 @@ func harnessForClient(clientID string) string {
 
 // discoveryModeFor resolves the surface for one request. Every failure serves
 // the full catalogue, the pre-rollout behaviour.
+//
+// ChatGPT always gets the full catalogue, whatever the flag says. The ChatGPT
+// app directory requires every model-callable operation to be listed upfront
+// as its own tool, so the meta-tools that run other tools by name fail its
+// review. ChatGPT connectors share one client_id per MCP server origin, so the
+// reviewed app cannot be told apart from other ChatGPT connections.
 func (r *Runtime) discoveryModeFor(ctx context.Context, logger *slog.Logger, principal Principal) discoveryMode {
 	if r.discovery.Flags == nil || principal.OrganizationID == "" {
 		return discoveryFull
 	}
+	harness := harnessForClient(principal.ClientID)
+	if harness == chatGPTProductID {
+		return discoveryFull
+	}
 	variant, err := feature.FlagVariantLocal(ctx, r.discovery.Flags, feature.FlagPlatformMCPDiscoveryMode, principal.OrganizationID, nil, map[string]string{
-		"harness":         harnessForClient(principal.ClientID),
+		"harness":         harness,
 		"organization_id": principal.OrganizationID,
 	})
 	if err != nil {
@@ -277,9 +287,8 @@ func (r *Runtime) instructionBudget(logger *slog.Logger) func(context.Context) i
 // discoveryInstructions replace the full server instructions, which Codex cuts
 // to 1 KB. Tool-specific rules travel with describe_platform_tool instead.
 func discoveryInstructions(mode discoveryMode) string {
-	instructions := "Speakeasy's AI Control Plane lets an administrator put MCP servers and skills in front of the people in their organization. This connection lists the tools most people use first; call them directly. " +
-		"For any other Platform tool, find it with search_platform_tools (plain words, such as \"add an MCP server to a plugin\"), call describe_platform_tool for its input schema and rules, then run it with call_platform_tool. Answer how-to and setup questions with search_speakeasy_docs and cite the pages it returns. " +
-		"Write tools preview first: show the user what will change and wait for explicit confirmation before calling again with confirmed set. Never request or accept tokens, passwords or secrets in chat. Do not read tool names, IDs or error codes aloud."
+	instructions := "Speakeasy's AI Control Plane lets an administrator put MCP servers and skills in front of the people in their organization, and manage access, logs, analytics, risk signals, exports, dashboards and Organizational Memory (team decisions). Call the listed tools directly. Before saying something can't be done, find the tool with search_platform_tools in plain words, then describe_platform_tool and call_platform_tool. Answer how-to questions with search_speakeasy_docs and cite its pages. " +
+		"Writes: call with confirmed:false first, even if the user agreed, and show the preview; send confirmed:true only after the user approves it. Never request or accept tokens, passwords or secrets in chat. Do not read tool names, IDs or error codes aloud."
 	if mode == discoveryCode {
 		instructions += " For multi-step work, execute runs Python that can search, describe and call every tool as platform--<tool name>."
 	}
@@ -293,7 +302,7 @@ var (
 	executePlatformCodeSchema  = json.RawMessage(`{"type":"object","properties":{"code":{"type":"string","minLength":1,"maxLength":65536,"description":"Python program; its final JSON-compatible expression is returned."},"tools":{"type":"array","maxItems":10000,"uniqueItems":true,"items":{"type":"string"},"description":"Optional exact platform--<tool> allowlist narrowing this execution. Omit for every permitted tool; [] permits none."}},"required":["code"],"additionalProperties":false}`)
 )
 
-const executePlatformCodeDescription = `Run Python against every Platform tool you may use. Await every helper; top-level await works. Each run starts fresh and returns its final expression as JSON.
+const executePlatformCodeDescription = `Run Python against every Platform tool you may use. Await every helper. Each run starts fresh and returns its final expression as JSON.
 
 Search and describe in one run:
 
@@ -305,7 +314,7 @@ Next run, call with the described inputSchema:
     r = await tools.call("platform--search_mcp_catalog", {"query": "linear"})
     r["data"] if r["ok"] else r
 
-Paths are platform--<tool name>. search(query="", limit=10, cursor=None): an empty query lists every tool, limit is at most 50, page with next_cursor. call returns {ok, data, content, outcome, error?}; check ok. A refused call (unknown tool, invalid arguments) gives ok False, error "tool_call_rejected" and the reason in content.
+Paths are platform--<tool name>. search(query="", limit=10, cursor=None): an empty query lists every tool, limit is at most 50, page with next_cursor. call returns {ok, data, content, outcome, error?}; check ok. A refused call gives ok False, error "tool_call_rejected" and the reason in content.
 
 Write tools keep their safeguards: preview with confirmed false and make a confirmed call only after the user explicitly agrees. Errors and cancellation never undo writes; on an unknown outcome read the state again, never replay.
 
@@ -315,7 +324,7 @@ Python subset; import asyncio for asyncio.gather. No packages, filesystem, envir
 // The first-run tools listed next to them depend on the caller; for every other
 // tool, what a caller may use is decided when it searches, describes or calls.
 func discoveryTools(mode discoveryMode) []*mcp.Tool {
-	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: new(false)}
+	readOnly := readOnlyAnnotations()
 	tools := []*mcp.Tool{
 		{
 			Name:        searchPlatformToolsName,

@@ -79,8 +79,15 @@ type WorkerOptions struct {
 	// FleetHealthCache refreshes the staff dashboard snapshot; nil disables its schedule.
 	FleetHealthCache FleetHealthCacheRefresher
 
+	// HookFleetMetrics emits the per-organization hooks fleet gauges; nil disables its schedule.
+	HookFleetMetrics HookFleetMetricsEmitter
+
 	// CatalogPromotions runs staff catalogue discovery and durable delivery.
 	CatalogPromotions CatalogPromotionJobs
+
+	// MemoryEvals executes staff-started team memory eval runs. Nil makes a
+	// scheduled run fail with a configuration error.
+	MemoryEvals MemoryEvalRunner
 
 	// CatalogPromotionDeliveryPaused suspends external guide writes without dropping jobs.
 	CatalogPromotionDeliveryPaused bool
@@ -107,6 +114,10 @@ type WorkerOptions struct {
 	// ExpectedARecords are the static ingress IPs apex custom domains point A
 	// records at; used alongside ExpectedTargetCNAME for verification/health.
 	ExpectedARecords []netip.Addr
+
+	// CustomDomainTargetSuffix is the normalized parent DNS name of per-domain
+	// CNAME targets (<token>.<suffix>); empty disables per-domain targets.
+	CustomDomainTargetSuffix string
 
 	// GitHubEvidenceToken authenticates the recheck sweep's repository
 	// lookups; empty falls back to GitHub's small unauthenticated budget.
@@ -154,6 +165,10 @@ type WorkerOptions struct {
 	Connections *mcpconnectionattempts.Recorder
 	// IssuerKeySweeper retires expired internal session issuer keys; nil sweeps nothing.
 	IssuerKeySweeper InternalSessionIssuerKeySweeper
+
+	// OrganizationEncryptionSweeper probes organization encryption keys and
+	// disables unused managed ones; nil sweeps nothing.
+	OrganizationEncryptionSweeper OrganizationEncryptionSweeper
 
 	// StartupSeeds is the reference data this worker keeps applied. The
 	// worker kicks one run per seed version when it starts.
@@ -209,7 +224,9 @@ func ForDeploymentProcessing(
 	return &WorkerOptions{
 		PublicationRequests:            plugins.PublicationRequests{Enabled: false},
 		FleetHealthCache:               nil,
+		HookFleetMetrics:               nil,
 		CatalogPromotions:              nil,
+		MemoryEvals:                    nil,
 		CatalogPromotionDeliveryPaused: false,
 		DB:                             db,
 		GuardianPolicy:                 guardianPolicy,
@@ -224,6 +241,7 @@ func ForDeploymentProcessing(
 		RemoteSessionAssertionSigner:   nil,
 		Connections:                    nil,
 		IssuerKeySweeper:               nil,
+		OrganizationEncryptionSweeper:  nil,
 		StartupSeeds:                   nil,
 		SlackClient:                    nil,
 		SlackDirectoryTokenRefresher:   nil,
@@ -234,6 +252,7 @@ func ForDeploymentProcessing(
 		K8sClient:                      nil,
 		ExpectedTargetCNAME:            "",
 		ExpectedARecords:               nil,
+		CustomDomainTargetSuffix:       "",
 		GitHubEvidenceToken:            "",
 		SiteURL:                        nil,
 		ServerURL:                      nil,
@@ -310,7 +329,9 @@ func NewTemporalWorker(
 	opts := &WorkerOptions{
 		PublicationRequests:            plugins.PublicationRequests{Enabled: false},
 		FleetHealthCache:               nil,
+		HookFleetMetrics:               nil,
 		CatalogPromotions:              nil,
+		MemoryEvals:                    nil,
 		CatalogPromotionDeliveryPaused: false,
 		MCPCatalog:                     nil,
 		GuardianPolicy:                 nil,
@@ -328,6 +349,7 @@ func NewTemporalWorker(
 		K8sClient:                      nil,
 		ExpectedTargetCNAME:            "",
 		ExpectedARecords:               nil,
+		CustomDomainTargetSuffix:       "",
 		GitHubEvidenceToken:            "",
 		SiteURL:                        nil,
 		ServerURL:                      nil,
@@ -349,6 +371,7 @@ func NewTemporalWorker(
 		RemoteSessionAssertionSigner:   nil,
 		Connections:                    nil,
 		IssuerKeySweeper:               nil,
+		OrganizationEncryptionSweeper:  nil,
 		StartupSeeds:                   nil,
 		EmailService:                   nil,
 		AssistantsCore:                 nil,
@@ -370,7 +393,9 @@ func NewTemporalWorker(
 	for _, o := range options {
 		opts = &WorkerOptions{
 			FleetHealthCache:               conv.Default(o.FleetHealthCache, opts.FleetHealthCache),
+			HookFleetMetrics:               conv.Default(o.HookFleetMetrics, opts.HookFleetMetrics),
 			CatalogPromotions:              conv.Default(o.CatalogPromotions, opts.CatalogPromotions),
+			MemoryEvals:                    conv.Default(o.MemoryEvals, opts.MemoryEvals),
 			CatalogPromotionDeliveryPaused: o.CatalogPromotionDeliveryPaused || opts.CatalogPromotionDeliveryPaused,
 			GuardianPolicy:                 conv.Default(o.GuardianPolicy, opts.GuardianPolicy),
 			TunnelHTTPClient:               conv.Default(o.TunnelHTTPClient, opts.TunnelHTTPClient),
@@ -387,6 +412,7 @@ func NewTemporalWorker(
 			K8sClient:                      conv.Default(o.K8sClient, opts.K8sClient),
 			ExpectedTargetCNAME:            conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
 			ExpectedARecords:               conv.DefaultSlice(o.ExpectedARecords, opts.ExpectedARecords),
+			CustomDomainTargetSuffix:       conv.Default(o.CustomDomainTargetSuffix, opts.CustomDomainTargetSuffix),
 			GitHubEvidenceToken:            conv.Default(o.GitHubEvidenceToken, opts.GitHubEvidenceToken),
 			SiteURL:                        conv.Default(o.SiteURL, opts.SiteURL),
 			ServerURL:                      conv.Default(o.ServerURL, opts.ServerURL),
@@ -409,6 +435,7 @@ func NewTemporalWorker(
 			RemoteSessionAssertionSigner:   conv.Default(o.RemoteSessionAssertionSigner, opts.RemoteSessionAssertionSigner),
 			Connections:                    conv.Default(o.Connections, opts.Connections),
 			IssuerKeySweeper:               conv.Default(o.IssuerKeySweeper, opts.IssuerKeySweeper),
+			OrganizationEncryptionSweeper:  conv.Default(o.OrganizationEncryptionSweeper, opts.OrganizationEncryptionSweeper),
 			StartupSeeds:                   conv.DefaultSlice(o.StartupSeeds, opts.StartupSeeds),
 			EmailService:                   conv.Default(o.EmailService, opts.EmailService),
 			AssistantsCore:                 conv.Default(o.AssistantsCore, opts.AssistantsCore),
@@ -500,6 +527,7 @@ func NewTemporalWorker(
 		opts.K8sClient,
 		opts.ExpectedTargetCNAME,
 		opts.ExpectedARecords,
+		opts.CustomDomainTargetSuffix,
 		opts.SiteURL,
 		opts.OrgHosts,
 		opts.BillingTracker,
@@ -542,10 +570,16 @@ func NewTemporalWorker(
 		opts.StartupSeeds,
 		signInEpochs(opts.RedisClient),
 	)
+	activities.memoryEvalRunner = opts.MemoryEvals
 
 	if opts.FleetHealthCache != nil {
 		temporalWorker.RegisterActivityWithOptions(opts.FleetHealthCache.Refresh, activity.RegisterOptions{Name: fleetHealthCacheActivity})
 		temporalWorker.RegisterWorkflow(FleetHealthCacheWorkflow)
+	}
+
+	if opts.HookFleetMetrics != nil {
+		temporalWorker.RegisterActivityWithOptions(opts.HookFleetMetrics.Emit, activity.RegisterOptions{Name: hookFleetMetricsActivity})
+		temporalWorker.RegisterWorkflow(HookFleetMetricsWorkflow)
 	}
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -564,6 +598,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivityWithOptions(adminReconciliationActivities.Reconcile, activity.RegisterOptions{Name: OpenRouterAdminReconcileActivityName})
 	issuerKeySweep := NewInternalSessionIssuerKeySweepActivities(logger, meterProvider, opts.IssuerKeySweeper)
 	temporalWorker.RegisterActivityWithOptions(issuerKeySweep.Sweep, activity.RegisterOptions{Name: InternalSessionIssuerKeySweepActivityName})
+	organizationEncryptionSweep := NewOrganizationEncryptionSweepActivities(logger, opts.OrganizationEncryptionSweeper)
+	temporalWorker.RegisterActivityWithOptions(organizationEncryptionSweep.Sweep, activity.RegisterOptions{Name: OrganizationEncryptionSweepActivityName})
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomainV2)
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
@@ -593,10 +629,14 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ListProjectsForToolsetIndexing)
 	temporalWorker.RegisterActivity(activities.ListToolsetsForIndexing)
 	temporalWorker.RegisterActivity(activities.GenerateChatTitle)
+	temporalWorker.RegisterActivity(activities.BuildMemoryDigests)
+	temporalWorker.RegisterActivity(activities.InvalidateMemoryDigests)
 	temporalWorker.RegisterActivity(activities.SyncIdentityMap)
 	temporalWorker.RegisterActivity(activities.SyncTenantDimensions)
 	temporalWorker.RegisterActivity(activities.PromoteStagedTelemetry)
 	temporalWorker.RegisterActivity(activities.ListStagedTelemetryProjects)
+	temporalWorker.RegisterActivity(activities.PlanMCPConnectionOutcomeDays)
+	temporalWorker.RegisterActivity(activities.BuildMCPConnectionOutcomesDay)
 	temporalWorker.RegisterActivity(activities.SegmentChat)
 	temporalWorker.RegisterActivity(activities.DeleteChatResolutions)
 	temporalWorker.RegisterActivity(activities.AnalyzeSegment)
@@ -636,6 +676,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.RecordDueKillswitchExpiries)
 	temporalWorker.RegisterActivity(activities.CleanupExpiredKillswitchOperations)
 	temporalWorker.RegisterActivity(activities.CleanupTrustedDelegationCredentials)
+	temporalWorker.RegisterActivity(activities.CleanupChannelsHistory)
 	temporalWorker.RegisterActivity(activities.CleanupMCPFindingEvidence)
 	temporalWorker.RegisterActivity(activities.SweepDirectoryReviews)
 	temporalWorker.RegisterActivity(activities.SendDirectoryReviewEmails)
@@ -660,6 +701,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.DemoteExpiredTrial)
 	temporalWorker.RegisterActivity(activities.RunMcpResearch)
 	temporalWorker.RegisterActivity(activities.MarkMcpResearchInterrupted)
+	temporalWorker.RegisterActivity(activities.RunMemoryEval)
+	temporalWorker.RegisterActivity(activities.MarkMemoryEvalInterrupted)
 	temporalWorker.RegisterActivity(activities.SendTrialLifecycleEmail)
 	temporalWorker.RegisterActivity(activities.ResolveTrialEndingReminder)
 	temporalWorker.RegisterActivity(activities.SendTrialEndingSoonEmail)
@@ -742,6 +785,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncWorkflow)
 	temporalWorker.RegisterWorkflow(InternalSessionIssuerKeySweepWorkflow)
+	temporalWorker.RegisterWorkflow(OrganizationEncryptionSweepWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerWorkflow)
 	temporalWorker.RegisterWorkflow(WeeklyUsageSummaryWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
@@ -756,10 +800,13 @@ func NewTemporalWorker(
 		temporalWorker.RegisterActivityWithOptions(promotionActivities.dispatch, activity.RegisterOptions{Name: catalogPromotionDispatchActivity})
 	}
 	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
+	temporalWorker.RegisterWorkflow(MemoryDigestsWorkflow)
 	temporalWorker.RegisterWorkflow(SyncIdentityMapWorkflow)
 	temporalWorker.RegisterWorkflow(SyncTenantDimensionsWorkflow)
 	temporalWorker.RegisterWorkflow(PromoteStagedTelemetryWorkflow)
 	temporalWorker.RegisterWorkflow(StagedTelemetrySweepWorkflow)
+	temporalWorker.RegisterWorkflow(MCPConnectionOutcomesSweepWorkflow)
+	temporalWorker.RegisterWorkflow(MCPConnectionOutcomesDayWorkflow)
 	temporalWorker.RegisterWorkflow(AnalyzeChatResolutionsWorkflow)
 	temporalWorker.RegisterWorkflow(DelayedChatResolutionAnalysisWorkflow)
 	// Trigger workflows
@@ -795,6 +842,7 @@ func NewTemporalWorker(
 	// Killswitch expiry history and receipt retention
 	temporalWorker.RegisterWorkflow(KillswitchMaintenanceWorkflow)
 	temporalWorker.RegisterWorkflow(TrustedDelegationCleanupWorkflow)
+	temporalWorker.RegisterWorkflow(ChannelsRetentionWorkflow)
 	temporalWorker.RegisterWorkflow(MCPFindingEvidenceCleanupWorkflow)
 	temporalWorker.RegisterWorkflow(DirectoryReviewSweepWorkflow)
 	temporalWorker.RegisterWorkflow(DirectoryReviewEmailsWorkflow)
@@ -822,6 +870,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(SkillEfficacySweepWorkflow)
 	// Chat analysis workflows
 	temporalWorker.RegisterWorkflow(McpResearchWorkflow)
+	temporalWorker.RegisterWorkflow(MemoryEvalRunWorkflow)
 	temporalWorker.RegisterWorkflow(ChatAnalysisCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(ChatAnalysisSweepWorkflow)
 	// Pre-emptive remote session refresh workflows
@@ -874,6 +923,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		logger.ErrorContext(ctx, "failed to add trusted delegation cleanup schedule", attr.SlogError(err))
 	}
 
+	if err := AddChannelsRetentionSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add channels retention schedule", attr.SlogError(err))
+	}
+
 	if err := AddTenantDimensionsSyncSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add tenant dimension sync schedule", attr.SlogError(err))
 	}
@@ -906,6 +959,12 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		}
 	}
 
+	if opts.HookFleetMetrics != nil {
+		if err := addHookFleetMetricsSchedule(ctx, env); err != nil {
+			logger.ErrorContext(ctx, "register hook fleet metrics schedule", attr.SlogError(err))
+		}
+	}
+
 	if opts.CatalogPromotions != nil {
 		if err := addCatalogPromotionSchedule(ctx, env); err != nil {
 			logger.ErrorContext(ctx, "register catalogue promotion schedule", attr.SlogError(err))
@@ -916,6 +975,12 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 	// so only the shared queue may run it.
 	if err := AddInternalSessionIssuerKeySweepSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add internal session issuer key sweep schedule", attr.SlogError(err))
+	}
+
+	// The sweep suspends organizations and disables managed KMS keys.
+	// Preview databases clone dev's keys, so only the shared queue may run it.
+	if err := AddOrganizationEncryptionSweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add organization encryption sweep schedule", attr.SlogError(err))
 	}
 
 	if err := AddPlatformUsageMetricsSchedule(ctx, env); err != nil {
@@ -950,6 +1015,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(ctx, "failed to add weekly usage summary schedule", attr.SlogError(err))
 		}
+	}
+
+	if err := AddMemoryDigestsSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add memory digests schedule", attr.SlogError(err))
 	}
 
 	if err := AddAssistantReaperSchedule(ctx, env); err != nil {
@@ -1010,6 +1079,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddStagedTelemetrySweepSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add staged telemetry sweep schedule", attr.SlogError(err))
+	}
+
+	if err := AddMCPConnectionOutcomesSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add MCP connection outcomes schedule", attr.SlogError(err))
 	}
 
 	if err := AddIdentityMapSyncSchedule(ctx, env); err != nil {

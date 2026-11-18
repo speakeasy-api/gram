@@ -46,7 +46,7 @@ export type RegistrationMethod = ClosedEnum<typeof RegistrationMethod>;
  */
 export type CommitServerIdentityConfigurationForm = {
   /**
-   * Configuration for a newly-created project remote-session client. Manual mode requires client_id. Auto mode forbids client_id and client_secret and uses scope, audience, and token_endpoint_auth_method as registration preferences.
+   * Configuration for a newly-created project remote-session client. Manual mode requires client_id. Auto mode forbids client_id, client_secret and template_client_id and uses scope, audience, and token_endpoint_auth_method as registration preferences.
    */
   clientConfiguration?: ServerIdentityClientConfiguration | undefined;
   /**
@@ -58,7 +58,7 @@ export type CommitServerIdentityConfigurationForm = {
    */
   createProvider?: CreateRemoteSessionIssuerForm | undefined;
   /**
-   * An existing visible remote-session client to link. Required only for existing mode.
+   * An existing visible remote-session client to link. Required only for existing mode. Linking shares the client with every server that already uses it: a person holds one upstream grant per client, so signing in through one server replaces the grant another server obtained. To give this server its own client on the same upstream registration, use manual mode with client_configuration.template_client_id instead.
    */
   existingClientId?: string | undefined;
   /**

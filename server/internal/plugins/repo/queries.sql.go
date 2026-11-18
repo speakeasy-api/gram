@@ -2617,8 +2617,6 @@ SELECT
   (s.user_session_issuer_id IS NOT NULL)::bool AS mcp_server_is_oauth,
   COALESCE(ep.slug, '')::text AS endpoint_slug,
   ep.custom_domain AS endpoint_custom_domain,
-  -- legacyalias: drop with AIM-670.
-  (s.id = s.toolset_id AND ep.slug IS NULL AND mts.id IS NOT NULL)::bool AS needs_alias,
   ump.url AS unproxied_url,
   s.network_access_mode,
   COALESCE(private_ep.slug, '') AS private_endpoint_slug,
@@ -2662,13 +2660,12 @@ LEFT JOIN toolsets envt ON envt.id = (CASE WHEN s.id = s.toolset_id THEN mts.id 
 WHERE p.project_id = $1
   AND p.deleted IS FALSE
   AND (COALESCE(cardinality($2::uuid[]), 0) = 0 OR p.id = ANY($2::uuid[]))
-  AND (ep.slug IS NOT NULL OR (s.id = s.toolset_id AND mts.id IS NOT NULL) OR private_ep.slug IS NOT NULL OR ump.url IS NOT NULL OR s.network_access_mode IS NOT NULL)
+  AND (ep.slug IS NOT NULL OR private_ep.slug IS NOT NULL OR ump.url IS NOT NULL OR s.network_access_mode IS NOT NULL)
   AND (
     (s.remote_mcp_server_id IS NOT NULL AND rms.id IS NOT NULL)
     OR (s.tunneled_mcp_server_id IS NOT NULL AND tms.id IS NOT NULL)
     OR (s.toolset_id IS NOT NULL AND mts.id IS NOT NULL)
     OR (s.unproxied_mcp_server_id IS NOT NULL AND ump.id IS NOT NULL)
-    OR s.builtin_backend IS NOT NULL
   )
 ORDER BY p.slug, ps.sort_order ASC
 `
@@ -2694,7 +2691,6 @@ type ListPluginsWithMcpServersForProjectRow struct {
 	McpServerIsOauth     bool
 	EndpointSlug         string
 	EndpointCustomDomain pgtype.Text
-	NeedsAlias           bool
 	UnproxiedUrl         pgtype.Text
 	NetworkAccessMode    pgtype.Text
 	PrivateEndpointSlug  string
@@ -2702,17 +2698,14 @@ type ListPluginsWithMcpServersForProjectRow struct {
 	EnvToolsetID         uuid.NullUUID
 }
 
-// Plugin generation for mcp_server-keyed entries. A canonical wrapper with no
-// usable endpoint is returned with needs_alias, and the caller resolves its
-// toolset's legacy alias through legacyalias, dropping it when it has none. Each other server resolves to
+// Plugin generation for mcp_server-keyed entries. Each server resolves to
 // a single usable endpoint: custom-domain endpoints win over platform
 // endpoints, then oldest created_at.
 // Resolving the host inside the selection keeps endpoint choice and URL-host
 // construction in lockstep, so a dangling custom-domain endpoint is never
 // picked and emitted as a (wrong) platform URL. A server backed by an
 // unproxied MCP server never has an mcp_endpoints row, so it's resolved via
-// unproxied_mcp_servers, exposing the vendor's own URL. A built-in server
-// (builtin_backend) is served by Speakeasy itself at its endpoint. Servers
+// unproxied_mcp_servers, exposing the vendor's own URL. Servers
 // with neither a usable endpoint nor an unproxied backing are dropped unless
 // their stored network mode needs fail-closed validation. Private-only
 // endpoints are picked only from the ingress-pinned namespace; absence blocks
@@ -2744,7 +2737,6 @@ func (q *Queries) ListPluginsWithMcpServersForProject(ctx context.Context, arg L
 			&i.McpServerIsOauth,
 			&i.EndpointSlug,
 			&i.EndpointCustomDomain,
-			&i.NeedsAlias,
 			&i.UnproxiedUrl,
 			&i.NetworkAccessMode,
 			&i.PrivateEndpointSlug,

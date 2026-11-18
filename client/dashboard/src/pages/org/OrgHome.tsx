@@ -39,6 +39,7 @@ import {
   getInitials,
   isDisplayableBucket,
 } from "@/pages/access/challengeHelpers";
+import { OrgHomeNoAccess } from "@/pages/org/OrgHomeNoAccess";
 import { OrgWelcomeBanner } from "@/pages/org/OrgWelcomeBanner";
 import { useOrgRoutes } from "@/routes";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
@@ -103,9 +104,12 @@ export default function OrgHome(): JSX.Element {
       {/* fullWidth + noPadding so the welcome banner can run edge to edge;
           everything else re-applies the page column below. */}
       <Page.Body fullWidth noPadding className="gap-0">
+        {/* No project:read here: an unscoped check passes for a grant on any
+            single project, which kept project-only members on this page. */}
         <RequireScope
-          scope={["org:read", "project:read", "org:admin"]}
+          scope={["org:read", "org:admin"]}
           level="page"
+          fallback={<OrgHomeNoAccess />}
         >
           <OrgHomeInner />
         </RequireScope>

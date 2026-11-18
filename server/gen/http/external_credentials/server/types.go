@@ -183,21 +183,21 @@ type UpdateGcpIamCredentialResponseBody struct {
 // ListExternalCredentialsResponseBody is the type of the "externalCredentials"
 // service "listExternalCredentials" endpoint HTTP response body.
 type ListExternalCredentialsResponseBody struct {
-	// The organization's external credentials.
+	// The external credentials.
 	Credentials []*ExternalCredentialSummaryResponseBody `form:"credentials" json:"credentials" xml:"credentials"`
 }
 
 // ListAwsIamCredentialsResponseBody is the type of the "externalCredentials"
 // service "listAwsIamCredentials" endpoint HTTP response body.
 type ListAwsIamCredentialsResponseBody struct {
-	// The organization's external credentials.
+	// The external credentials.
 	Credentials []*ExternalCredentialSummaryResponseBody `form:"credentials" json:"credentials" xml:"credentials"`
 }
 
 // ListGcpIamCredentialsResponseBody is the type of the "externalCredentials"
 // service "listGcpIamCredentials" endpoint HTTP response body.
 type ListGcpIamCredentialsResponseBody struct {
-	// The organization's external credentials.
+	// The external credentials.
 	Credentials []*ExternalCredentialSummaryResponseBody `form:"credentials" json:"credentials" xml:"credentials"`
 }
 

@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -747,6 +748,10 @@ func TestDeleteGlobalClient_StopsServersOfferingItPerOrganization(t *testing.T) 
 	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-global-typed")
 	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "global-typed-server")
 	associate(t, ctx, ti.conn, orgID, projectID, serverID, clientID)
+	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: clientID,
+		UserSessionIssuerID:   userIssuerID,
+	}))
 
 	// A second organization reaching the same platform-global client: the
 	// grouping is what this test is for, so one organization is not enough.
@@ -786,4 +791,7 @@ func TestDeleteGlobalClient_StopsServersOfferingItPerOrganization(t *testing.T) 
 	require.Empty(t, associatedClients(t, ctx, ti.conn, otherProjectID, otherServerID))
 	require.Empty(t, offeredAuthClients(t, ctx, ti.conn, otherServerID),
 		"a second organization on the same global client is reconciled too")
+	bindings, err := fixtures.CountRemoteSessionClientBindingsFixture(ctx, clientID)
+	require.NoError(t, err)
+	require.Zero(t, bindings, "a deleted global client keeps no user session issuer binding")
 }

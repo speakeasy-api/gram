@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * create identityProviderConnections
  *
  * @remarks
- * Create the organization's Okta connection. Discovers the org's authorization server, provisions a signing key and JWKS URL, and returns the console checklist. Requires org:admin and the okta-connections rollout. One live connection per organization; creation is rate limited.
+ * Create the organization's Okta connection. Discovers the org's authorization server, provisions a signing key and JWKS URL, and returns the console checklist. Requires org:admin. One live connection per organization; creation is rate limited.
  */
 export function identityProviderConnectionsCreate(
   client: GramCore,

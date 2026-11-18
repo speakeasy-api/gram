@@ -37,6 +37,15 @@ export function identityRailItems(
         active: detail.overview.active,
       },
       {
+        // Where the agent's servers and their sign-in are changed. Second,
+        // because it is what is most often changed on an agent: a server
+        // added, or an expired connection signed in again.
+        key: "mcp-sign-in",
+        title: "MCP sign-in",
+        href: `${detail.mcpSignIn.href(encodedUrn)}${search}`,
+        active: detail.mcpSignIn.active,
+      },
+      {
         key: "permissions",
         title: "Permissions",
         href: `${detail.permissions.href(encodedUrn)}${search}`,
@@ -49,18 +58,17 @@ export function identityRailItems(
         active: detail.sessions.active,
       },
       {
-        key: "activity",
-        title: "Activity",
-        href: `${detail.activity.href(encodedUrn)}${search}`,
-        active: detail.activity.active,
+        key: "audit-trail",
+        title: "Audit trail",
+        href: `${detail.auditTrail.href(encodedUrn)}${search}`,
+        active: detail.auditTrail.active,
       },
       {
-        // The agent's way in: its endpoint, the keys it holds, and the
-        // platforms that sign in as it. Named for what it carries rather
-        // than for the wizard step that first hands them over — setting an
-        // agent up happens once, holding its credentials is forever.
-        key: "credentials",
-        title: "Credentials",
+        // The agent's way in: the keys it holds and the platforms that sign
+        // in as it. Named like the wizard step that first sets it up, so
+        // issuing another key reads as the same thing as issuing the first.
+        key: "sign-in",
+        title: "Agent sign-in",
         href: `${detail.credentials.href(encodedUrn)}${search}`,
         active: detail.credentials.active,
       },

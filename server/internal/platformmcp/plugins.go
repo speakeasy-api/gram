@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/directory"
@@ -212,13 +213,17 @@ type PluginSkill struct {
 }
 
 type ListPluginsInput struct {
-	ProjectID string `json:"project_id" jsonschema:"project ID whose plugins to list"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 	Limit     int    `json:"limit,omitempty" jsonschema:"maximum number of plugins to return; server clamps this to 50"`
 	Cursor    string `json:"cursor,omitempty" jsonschema:"opaque cursor from a previous list_plugins result"`
 }
 
 type ListPluginAssignmentsInput struct {
-	ProjectID string `json:"project_id" jsonschema:"explicit project ID whose plugin assignment targets to list"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 }
 
 type ListPluginAssignmentsOutput struct {
@@ -241,7 +246,9 @@ type ListPluginsOutput struct {
 }
 
 type GetPluginInput struct {
-	ProjectID        string `json:"project_id" jsonschema:"project ID that owns the plugin"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID        string `json:"-"`
 	Plugin           string `json:"plugin" jsonschema:"exact plugin ID, slug, or name as returned by list_plugins"`
 	MembershipLimit  int    `json:"membership_limit,omitempty" jsonschema:"maximum MCP memberships to return; server clamps this to 100"`
 	MembershipCursor string `json:"membership_cursor,omitempty" jsonschema:"opaque membership cursor from a previous get_plugin result"`
@@ -480,7 +487,7 @@ type PluginsService struct {
 	assignmentReferences *subjectReferenceCodec
 	assignmentVersionKey []byte
 	remoteSessions       MemberMCPConnectionReader
-	authClientFlags      feature.Provider
+	authEnforcement      *authenforcement.Gate
 	identityChaining     IdentityChainingGovernor
 	now                  func() time.Time
 	// recordedPublish reads the project's marketplace connection row, whose
@@ -538,7 +545,7 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 		assignmentReferences:  references,
 		assignmentVersionKey:  versionKey,
 		remoteSessions:        nil,
-		authClientFlags:       nil,
+		authEnforcement:       authenforcement.NewGate(db),
 		identityChaining:      nil,
 		now:                   time.Now,
 		recordedPublish:       pluginsrepo.New(db).GetGitHubConnection,
@@ -594,15 +601,6 @@ func (s *PluginsService) WithRemoteSessions(remoteSessions *remotesessions.Chall
 		return s
 	}
 	return s.withMemberMCPConnectionReader(remoteSessions)
-}
-
-// WithAuthClientResolver reads member connection status as the auth client
-// resolver serves it in organizations where the resolver is enforced.
-func (s *PluginsService) WithAuthClientResolver(flags feature.Provider) *PluginsService {
-	if s != nil {
-		s.authClientFlags = flags
-	}
-	return s
 }
 
 // WithIdentityChaining reports MCP servers that identity chaining serves as
@@ -854,12 +852,6 @@ func (s *PluginsService) GetAssignedPlugin(ctx context.Context, principal Princi
 		return GetPluginOutput{}, fmt.Errorf("list assigned platform mcp plugin skills: %w", err)
 	}
 	servers, serversTruncated := boundedRows(servers, maxPluginMembers)
-	serverAliases, err := pluginMemberAliases(ctx, s.db, project.ID, servers, func(row platformrepo.ListPlatformMCPPluginServersRow) (string, uuid.NullUUID) {
-		return row.McpSlug, row.AliasToolsetID
-	})
-	if err != nil {
-		return GetPluginOutput{}, err
-	}
 	skills, skillsTruncated := boundedRows(skills, maxPluginMembers)
 	output := GetPluginOutput{
 		ProjectID: project.ID.String(),
@@ -872,7 +864,7 @@ func (s *PluginsService) GetAssignedPlugin(ctx context.Context, principal Princi
 		if server.GatewayBacked {
 			backend = "gateway"
 		}
-		output.Servers = append(output.Servers, PluginServer{DisplayName: server.DisplayName, Backend: backend, MCPSlug: memberSlug(server.McpSlug, server.AliasToolsetID, serverAliases), Policy: server.Policy, Enabled: server.Enabled})
+		output.Servers = append(output.Servers, PluginServer{DisplayName: server.DisplayName, Backend: backend, MCPSlug: server.McpSlug, Policy: server.Policy, Enabled: server.Enabled})
 	}
 	for _, skill := range skills {
 		pinned := ""
@@ -980,12 +972,6 @@ func (s *PluginsService) GetPlugin(ctx context.Context, principal Principal, inp
 		return GetPluginOutput{}, fmt.Errorf("list platform mcp plugin memberships: %w", err)
 	}
 	memberships, membershipsMore := boundedRows(memberships, membershipLimit)
-	membershipAliases, err := pluginMemberAliases(ctx, s.db, project.ID, memberships, func(row platformrepo.ListPlatformMCPPluginMembershipsRow) (string, uuid.NullUUID) {
-		return row.McpSlug, row.AliasToolsetID
-	})
-	if err != nil {
-		return GetPluginOutput{}, err
-	}
 	if len(memberships) > 0 && memberships[0].MembershipVersion != membershipVersion {
 		return GetPluginOutput{}, ErrPluginCursorInvalid
 	}
@@ -1057,7 +1043,7 @@ func (s *PluginsService) GetPlugin(ctx context.Context, principal Principal, inp
 		if membership.TargetResolved && membership.TargetID.Valid {
 			targetID = membership.TargetID.UUID.String()
 		}
-		output.Servers = append(output.Servers, PluginServer{MembershipID: membership.MembershipID.String(), DisplayName: membership.DisplayName, Backend: membership.TargetKind, TargetID: targetID, MCPSlug: memberSlug(membership.McpSlug, membership.AliasToolsetID, membershipAliases), Policy: membership.Policy, Enabled: membership.Enabled})
+		output.Servers = append(output.Servers, PluginServer{MembershipID: membership.MembershipID.String(), DisplayName: membership.DisplayName, Backend: membership.TargetKind, TargetID: targetID, MCPSlug: membership.McpSlug, Policy: membership.Policy, Enabled: membership.Enabled})
 	}
 	if membershipsMore && len(memberships) > 0 {
 		last := memberships[len(memberships)-1]

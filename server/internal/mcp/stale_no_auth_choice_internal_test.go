@@ -252,18 +252,20 @@ func TestStaleChoiceFailedLookupOffersOnlyARetry(t *testing.T) {
 	logger := testenv.NewLogger(t)
 	require.Equal(t, want, f.service.memberFailureMessage(t.Context(), logger, gate, member, member.upstreamUnavailable))
 
-	status, detail, outage := f.service.staleMemberStatus(t.Context(), logger, gate, member)
-	require.Nil(t, outage)
-	require.Equal(t, metamcp.SignInActionRequired, status)
-	require.Equal(t, want, detail)
-	text := metamcp.ConnectionStatusResult{ConnectURL: "https://example.com/connect", Servers: []metamcp.ConnectionStatusServer{{Slug: "db", Status: status, Detail: detail}}}.Text()
+	row := f.service.staleMemberStatus(t.Context(), logger, gate, member)
+	require.Nil(t, row.Outage)
+	require.Equal(t, metamcp.SignInActionRequired, row.Status)
+	require.Equal(t, want, row.Detail)
+	require.False(t, row.Reconnect, "a stale choice is not reconnectable")
+	text := metamcp.ConnectionStatusResult{ConnectURL: "https://example.com/connect", Servers: []metamcp.ConnectionStatusServer{{Slug: "db", Status: row.Status, Detail: row.Detail, Reconnect: row.Reconnect}}}.Text()
 	require.NotContains(t, text, "To sign in")
 	require.NotContains(t, text, "Reconnect this gateway")
 
 	backend := &metaCodeBackend{service: f.service}
-	require.Equal(t, want, backend.knownConnectionState(t.Context(), gate, member).Instructions)
+	require.Equal(t, want, backend.knownConnectionState(t.Context(), gate, member, nil).Instructions)
+	_, connectRefused := backend.connectRefusal(t.Context(), gate, member)
 	for name, refusal := range map[string]error{
-		"tools.connect": backend.connectRefusal(t.Context(), gate, member),
+		"tools.connect": connectRefused,
 		"helper":        backend.helperFailure(t.Context(), gate, member, member.upstreamUnavailable),
 	} {
 		refused, ok := errors.AsType[*codemode.MemberRefusalError](refusal)
@@ -277,9 +279,9 @@ func TestStaleChoiceFailedLookupOffersOnlyARetry(t *testing.T) {
 	f.service.telemLogger = noTelemetryLogs(t)
 	gate.metaServerID = uuid.New()
 	require.Contains(t, callApprovedMember(t, f.service, gate, member), want)
-	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInternalError)
-	require.Equal(t, memberSetupChangedDetail, row.SubReason)
-	require.Equal(t, string(mcpconnectionattempts.WhoSpeakeasy), row.WhoFixes, "our failed lookup blames neither the person nor an admin")
+	attempt := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInternalError)
+	require.Equal(t, memberSetupChangedDetail, attempt.SubReason)
+	require.Equal(t, string(mcpconnectionattempts.WhoSpeakeasy), attempt.WhoFixes, "our failed lookup blames neither the person nor an admin")
 	require.Zero(t, f.service.staleChoiceConsent.Len(), "a retry must look again")
 }
 
@@ -323,8 +325,9 @@ func TestConnectOffersNoLinkWhenConsentCannotReplaceTheChoice(t *testing.T) {
 	t.Parallel()
 	backend := &metaCodeBackend{service: &Service{logger: testenv.NewLogger(t)}}
 	gate := &metaGateContext{authentication: &issuerGateAuthentication{subject: urn.NewAgentSubject(uuid.New())}}
-	require.NoError(t, backend.connectRefusal(t.Context(), gate, metaMember{slug: "db"}), "only a stale choice is refused")
-	err := backend.connectRefusal(t.Context(), gate, metaMember{slug: "db", upstreamUnavailable: staleMemberError(authClientReasonNoAuthForbidden)})
+	_, err := backend.connectRefusal(t.Context(), gate, metaMember{slug: "db"})
+	require.NoError(t, err, "only a stale choice is refused")
+	_, err = backend.connectRefusal(t.Context(), gate, metaMember{slug: "db", upstreamUnavailable: staleMemberError(authClientReasonNoAuthForbidden)})
 	refused, ok := errors.AsType[*codemode.MemberRefusalError](err)
 	require.True(t, ok)
 	require.Contains(t, refused.Message, "Ask whoever set this up")
@@ -416,13 +419,13 @@ func TestStaleChoiceCallRecordsTheMessageRemedy(t *testing.T) {
 			gate: func(s *Service) *metaGateContext {
 				return staleChoiceRemedyGate(s, map[uuid.UUID]bool{adminOnly: false})
 			},
-			member: adminOnly, text: "needs your administrator to finish setup", reason: mcpconnectionattempts.CodeUpstreamSignInNotSetUp, who: mcpconnectionattempts.WhoAdmin,
+			member: adminOnly, text: "needs your administrator to finish setup", reason: mcpconnectionattempts.CodeApprovalNeedsAdmin, who: mcpconnectionattempts.WhoAdmin,
 		},
 		"ask whoever set this up": {
 			gate: func(*Service) *metaGateContext {
 				return &metaGateContext{organizationID: "org", projectID: uuid.New(), metaServerID: uuid.New(), authentication: &issuerGateAuthentication{subject: urn.NewAgentSubject(uuid.New())}}
 			},
-			member: uuid.New(), text: "Ask whoever set this up", reason: mcpconnectionattempts.CodeUpstreamSignInNotSetUp, who: mcpconnectionattempts.WhoAdmin,
+			member: uuid.New(), text: "Ask whoever set this up", reason: mcpconnectionattempts.CodeApprovalNeedsAdmin, who: mcpconnectionattempts.WhoAdmin,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -485,11 +488,11 @@ func TestStaleChoiceStatusFollowsTheMessage(t *testing.T) {
 	member := metaMember{slug: "db", serverID: uuid.New(), upstreamUnavailable: staleMemberError(authClientReasonNoAuthForbidden)}
 	unrefreshable := staleChoiceRemedyGate(s, nil)
 	unrefreshable.authentication.refreshableUserSession = false
-	status, detail, _ := s.staleMemberStatus(t.Context(), s.logger, unrefreshable, member)
-	require.Equal(t, metamcp.SignInNeedsConsent, status)
-	require.Contains(t, detail, "If that doesn't help, ask your administrator")
+	row := s.staleMemberStatus(t.Context(), s.logger, unrefreshable, member)
+	require.Equal(t, metamcp.SignInNeedsConsent, row.Status)
+	require.Contains(t, row.Detail, "If that doesn't help, ask your administrator")
 
 	owner := &metaGateContext{authentication: &issuerGateAuthentication{subject: urn.NewAgentSubject(uuid.New())}}
-	status, _, _ = s.staleMemberStatus(t.Context(), s.logger, owner, member)
-	require.Equal(t, metamcp.SignInActionRequired, status)
+	row = s.staleMemberStatus(t.Context(), s.logger, owner, member)
+	require.Equal(t, metamcp.SignInActionRequired, row.Status)
 }

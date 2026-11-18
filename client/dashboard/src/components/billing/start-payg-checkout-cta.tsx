@@ -5,7 +5,7 @@ import {
 import { useSession } from "@/contexts/Auth";
 import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/Button";
-import { ButtonSize } from "@/components/ui/lib/types";
+import type { ButtonSize } from "@/components/ui/lib/types";
 import { cn } from "@/lib/utils";
 
 const CTA_LABEL = "Start pay as you go";

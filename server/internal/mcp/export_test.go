@@ -9,22 +9,28 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/require"
+	otellog "go.opentelemetry.io/otel/log"
 
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	assertioncore "github.com/speakeasy-api/gram/server/internal/usersessions/assertion"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
@@ -86,6 +92,18 @@ var (
 	ErrWorkloadIssuerUntrusted = errWorkloadIssuerUntrusted
 	ErrWorkloadNotAdmitted     = errWorkloadNotAdmitted
 )
+
+// SetWorkloadReplayGuard swaps the workload grant's replay guard, keeping its keys.
+func (s *Service) SetWorkloadReplayGuard(guard assertioncore.ReplayGuard) error {
+	verifier, err := s.workloadGrant.verifier.WithReplayGuard(guard)
+	if err != nil {
+		return fmt.Errorf("swap workload replay guard: %w", err)
+	}
+	grant := *s.workloadGrant
+	grant.verifier = verifier
+	s.workloadGrant = &grant
+	return nil
+}
 
 // AdmitWorkloadAssertion runs the workload grant's verification stages
 // against real rows with the given verifier and an unlimited issuer lookup
@@ -183,6 +201,10 @@ type ConnectionRecoveryLink struct {
 	McpServerID    uuid.UUID
 	AuthClientID   uuid.UUID
 	RegistrationID uuid.UUID
+	// UserSessionIssuerID and UpstreamResource are the server's sign-in and
+	// upstream; a link that names no sign-in gets one that does not exist.
+	UserSessionIssuerID uuid.UUID
+	UpstreamResource    string
 }
 
 // IssueConnectionRecovery stores a connection link and returns its path.
@@ -191,9 +213,13 @@ func (s *Service) IssueConnectionRecovery(ctx context.Context, link ConnectionRe
 	if err != nil {
 		return "", err
 	}
+	signIn := link.UserSessionIssuerID
+	if signIn == uuid.Nil {
+		signIn = uuid.New()
+	}
 	err = s.connectionRecoveryCache.Store(ctx, connectionRecovery{
 		ID: token, OrganizationID: link.OrganizationID, UserID: link.UserID, ProjectID: link.ProjectID,
-		UserSessionIssuerID: uuid.New(), McpServerID: link.McpServerID, McpSlug: "server", ServerName: "Server",
+		UserSessionIssuerID: signIn, McpServerID: link.McpServerID, McpSlug: "server", ServerName: "Server", UpstreamResource: link.UpstreamResource,
 		AuthClientID: link.AuthClientID, RegistrationID: link.RegistrationID, CreatedAt: time.Now(),
 	})
 	if err != nil {
@@ -319,6 +345,12 @@ func (s *Service) RecordAuthClientPermitCallers() func() []string {
 	}
 }
 
+// ReloadAuthEnforcement drops the cached enforcement state, as its expiry would
+// after staff change it.
+func (s *Service) ReloadAuthEnforcement() {
+	s.authEnforcement = authenforcement.NewGate(s.db)
+}
+
 // SetAuthClientPermission installs a mutable permit decision in the test binary.
 func (s *Service) SetAuthClientPermission(allowed func() bool) {
 	s.authClientPermitter = testAuthClientPermission(allowed)
@@ -343,4 +375,18 @@ func (s *Service) SetIDJAGTrust(store idjag.Store) {
 // StaleNoAuthWarned reports whether the stale choice warning already fired for this subject, server and reason.
 func (s *Service) StaleNoAuthWarned(subject string, serverID uuid.UUID, reason string) bool {
 	return s.staleNoAuthLog.seen.Contains(subject + "|" + serverID.String() + "|" + reason)
+}
+
+// NewExportingConnectionRecorder stores every row; exported shuts it down and returns what the export published.
+func NewExportingConnectionRecorder(t *testing.T) (recorder *mcpconnectionattempts.Recorder, exported func() []otellog.Record) {
+	t.Helper()
+	sink := &verdictExportSink{mu: sync.Mutex{}, records: nil}
+	logsOn := func(context.Context, string) (bool, error) { return true, nil }
+	recorder = mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), storingConn{}, logsOn, mcpconnectionattempts.WithExport(sink))
+	return recorder, func() []otellog.Record {
+		require.NoError(t, recorder.Shutdown(t.Context()))
+		sink.mu.Lock()
+		defer sink.mu.Unlock()
+		return slices.Clone(sink.records)
+	}
 }

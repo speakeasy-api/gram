@@ -17,7 +17,8 @@ INSERT INTO network_ingresses (
     'platform',
     true,
     'test-ns',
-    'test-sa',
+    -- Unique per row, so a test can seed several active ingresses.
+    'test-sa-' || CAST(CAST(@id AS uuid) AS text),
     @dns_name
 );
 
@@ -858,6 +859,13 @@ WHERE token = @token;
 INSERT INTO chats (id, project_id, organization_id, user_id, external_chat_id, title, cwd, user_account_id)
 VALUES (@id, @project_id, @organization_id, @user_id, sqlc.narg(external_chat_id), @title, sqlc.narg(cwd), sqlc.narg(user_account_id))
 RETURNING id;
+
+-- name: SetChatAgentFixture :exec
+-- Test-only fixture: attributes a chat to an agent principal, as capture under
+-- an agent credential does, so owner-visibility tests can seed agent sessions.
+UPDATE chats
+SET agent_id = @agent_id
+WHERE id = @id;
 
 -- name: SetCapturedAgentChatSummaryFixture :exec
 -- Test-only fixture: stores a summary so callers can prove metadata reads do not disclose it.
@@ -2604,9 +2612,25 @@ SELECT deleted FROM remote_sessions WHERE id = @id;
 
 -- name: InsertOlderRemoteSessionTombstoneFixture :exec
 -- Test-only fixture: an unrelated tombstone one second older than the source row.
-INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, deleted_at)
-SELECT src.subject_urn, src.user_session_issuer_id, src.remote_session_client_id, 'unrelated-old-access', src.deleted_at - interval '1 second'
+INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted, deleted_at)
+SELECT src.subject_urn, src.user_session_issuer_id, src.remote_session_client_id,
+  (SELECT org.id FROM remote_session_clients AS client
+   LEFT JOIN projects AS project ON project.id = client.project_id
+   JOIN organization_metadata AS org ON org.id = COALESCE(project.organization_id, client.organization_id)
+   WHERE client.id = src.remote_session_client_id),
+  'unrelated-old-access', src.deleted_at - interval '1 second'
 FROM remote_sessions src WHERE src.id = @id::uuid;
+
+-- name: SetRemoteSessionOrganizationFixture :exec
+-- Test-only fixture: NULL reproduces a row written before remote_sessions had
+-- an organization_id; any other value fakes a row that disagrees with its
+-- client.
+UPDATE remote_sessions SET organization_id = sqlc.narg('organization_id')::text WHERE id = @id;
+
+-- name: GetRemoteSessionOrganizationFixture :one
+-- Test-only fixture: reads a session's organization at any client scope,
+-- soft-deleted or not.
+SELECT organization_id, updated_at FROM remote_sessions WHERE id = @id;
 
 -- name: RemoteSessionSharesUserSessionBoundaryFixture :one
 SELECT (r.deleted_at = s.deleted_at)::boolean AS same_boundary
@@ -2643,3 +2667,97 @@ UPDATE device_agent_state_reports
 SET os = @os
 WHERE organization_id = @organization_id
   AND email = @email;
+
+-- name: InsertRetiredApprovalsServerFixture :exec
+-- A project's approvals server as Speakeasy created it before the server was
+-- retired. Such rows stay until a cleanup migration deletes them, and every
+-- read path must treat them as gone.
+INSERT INTO mcp_servers (id, project_id, name, slug, builtin_backend, visibility)
+VALUES (@id, @project_id, 'Speakeasy Approvals', @slug, 'approvals', 'private');
+
+-- name: CountRemoteSessionClientBindingsFixture :one
+-- Counts a client's user session issuer bindings, whether or not the client is
+-- deleted.
+SELECT count(*)
+FROM remote_session_client_user_session_issuers
+WHERE remote_session_client_id = @remote_session_client_id;
+
+-- name: GetRemoteMCPServerURLFixture :one
+-- Reads a remote MCP server's name and upstream URL.
+SELECT name, url FROM remote_mcp_servers WHERE id = @id AND deleted IS FALSE;
+
+-- name: ListRemoteSessionTokensFixture :many
+-- Reads the stored, encrypted tokens of a client's live remote sessions.
+SELECT id, access_token_encrypted, refresh_token_encrypted::text AS refresh_token_encrypted, auto_refresh
+FROM remote_sessions
+WHERE remote_session_client_id = @remote_session_client_id
+  AND deleted IS FALSE
+  AND (access_expires_at IS NULL OR access_expires_at > clock_timestamp())
+ORDER BY id;
+
+-- name: GetAuthClientHeaderFixture :one
+-- Reads an auth client header's stored value and secrecy.
+SELECT value, is_secret FROM mcp_auth_client_headers WHERE id = @id AND deleted IS FALSE;
+
+-- name: GetRemoteMCPServerHeaderFixture :one
+-- Reads a remote MCP server header's static value or forwarding source.
+SELECT name, value, value_from_request_header, is_secret FROM remote_mcp_server_headers WHERE id = @id AND deleted IS FALSE;
+
+-- name: GetEnvironmentEntryFixture :one
+-- Reads one environment entry by environment and name.
+SELECT value, is_secret FROM environment_entries WHERE environment_id = @environment_id AND name = @name;
+
+-- name: GetLocalEMAWiringFixture :one
+-- Reads what the local seed points the Enterprise Sign-In (ID-JAG) Server's
+-- binding at: its resource, the user session issuer's trusted identity
+-- provider and client, and the authorization server and its client.
+SELECT b.resource,
+       idp.issuer AS identity_provider,
+       idp_client.client_id AS identity_provider_client_id,
+       idp_client.client_secret_encrypted AS identity_provider_client_secret,
+       vendor.issuer AS authorization_server,
+       vendor.token_endpoint AS authorization_server_token_endpoint,
+       vendor_client.client_id AS authorization_server_client_id
+FROM remote_session_ema_bindings b
+JOIN user_session_issuers usi ON usi.id = b.user_session_issuer_id
+JOIN remote_session_issuers idp ON idp.id = usi.trusted_remote_session_issuer_id
+JOIN remote_session_clients idp_client ON idp_client.id = usi.trusted_remote_session_client_id
+JOIN remote_session_issuers vendor ON vendor.id = b.remote_session_issuer_id
+JOIN remote_session_clients vendor_client ON vendor_client.id = b.remote_session_client_id
+WHERE b.id = @id;
+
+-- name: GetLocalEMATypedAuthClientResourceFixture :one
+-- Reads the resource of the typed auth client the local seed records for the
+-- Enterprise Sign-In (ID-JAG) Server's client.
+SELECT resource FROM mcp_auth_client_emas
+WHERE remote_session_client_id = @remote_session_client_id
+  AND organization_id = @organization_id AND deleted IS FALSE;
+
+-- name: SetCustomDomainHealthWithoutDNSObservation :exec
+-- Models a worker that does not write the independent DNS observation columns.
+UPDATE custom_domains
+SET health_status = 'unhealthy', health_issue = 'check_failed', health_checked_at = @checked_at
+WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE;
+
+-- name: SetChatMemorySweepFixture :exec
+-- Test-only fixture: backdates a chat and, when given, its summary and
+-- memory-exclusion timestamps so the team memory sweep sees it as idle,
+-- excluded or stale.
+UPDATE chats
+SET updated_at = @updated_at,
+    summary_generated_at = COALESCE(sqlc.narg(summary_generated_at), summary_generated_at),
+    memory_excluded_at = COALESCE(sqlc.narg(memory_excluded_at), memory_excluded_at)
+WHERE id = @id;
+
+-- name: SetChatMessagesCreatedAtFixture :exec
+-- Test-only fixture: backdates every message in a chat so the team memory
+-- sweep reads the chat's last activity as created_at.
+UPDATE chat_messages SET created_at = @created_at WHERE chat_id = @chat_id;
+
+-- name: LapseNetworkIngressCertificateLease :exec
+-- Ages a connection's certificate issuance lease past any lease duration, as
+-- if its holder died or stalled.
+UPDATE network_ingress_certificate_states
+SET updated_at = updated_at - interval '1 hour'
+WHERE network_ingress_id = @network_ingress_id
+  AND state_key = 'issuance-lease';

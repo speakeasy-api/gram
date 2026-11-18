@@ -1,7 +1,7 @@
 import { BOOK_DEMO_URL } from "@/lib/constants";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
-import { IconName } from "@/components/ui/Icon/names";
+import type { IconName } from "@/components/ui/Icon/names";
 import React from "react";
 import { Text } from "@/components/ui/Text";
 import { useProductTier } from "@/hooks/useProductTier";

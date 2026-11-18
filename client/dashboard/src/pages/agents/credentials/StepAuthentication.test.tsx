@@ -1,4 +1,11 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RemoteSession } from "@gram/client/models/components/remotesession.js";
@@ -7,6 +14,36 @@ import type { InventoryServer } from "./useServerInventory";
 
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
+}));
+
+const popup = vi.hoisted(() => ({
+  onComplete: undefined as
+    | undefined
+    | ((reason: "popup-closed" | "focus") => void | Promise<void>),
+}));
+// The real popup hook, with its completion callback kept so a test can say
+// the popup closed.
+vi.mock("@/components/sessions/useOAuthPopup", async (importOriginal) => {
+  const real =
+    await importOriginal<
+      typeof import("@/components/sessions/useOAuthPopup")
+    >();
+  return {
+    useOAuthPopup: (
+      onComplete: (reason: "popup-closed" | "focus") => void | Promise<void>,
+    ) => {
+      popup.onComplete = onComplete;
+      return real.useOAuthPopup(onComplete);
+    },
+  };
+});
+
+// The picker reads the server's credentials itself; here it only has to show
+// where it sits.
+vi.mock("./KeyCredentialChoice", () => ({
+  KeyCredentialChoice: ({ serverName }: { serverName: string }) => (
+    <div>Credential picker for {serverName}</div>
+  ),
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -103,6 +140,90 @@ describe("authentication assignment warnings", () => {
   });
 });
 
+describe("a server still missing other sign-ins", () => {
+  it("names them on the row, not only that it requires a connection", () => {
+    render(
+      <StepAuthentication
+        servers={[server]}
+        allServers={false}
+        onRemove={vi.fn<(id: string) => void>()}
+        connections={{
+          byServer: new Map([
+            [
+              server.id,
+              {
+                status: "missing",
+                signIns: [
+                  { id: "stripe", credentialOwner: "subject", name: "Stripe" },
+                  { id: "vercel", credentialOwner: "subject", name: "Vercel" },
+                ],
+              },
+            ],
+          ]),
+          refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+        }}
+      />,
+      { wrapper: MemoryRouter },
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Example server.*Requires connection/,
+      }),
+    );
+    expect(
+      screen.getByText("Still needs a connection to Stripe and Vercel."),
+    ).toBeTruthy();
+  });
+});
+
+describe("the credential the agent's keys use", () => {
+  const remote = { ...server, kind: "Remote" } as InventoryServer;
+  const row = (value: string | undefined) =>
+    render(
+      <StepAuthentication
+        servers={[remote]}
+        allServers={false}
+        onRemove={vi.fn<(id: string) => void>()}
+        credentialChoice={{
+          show: () => true,
+          value: () => value,
+          onChange: vi.fn<(serverId: string, authClientId: string) => void>(),
+        }}
+        connections={{
+          byServer: new Map([[remote.id, { status: "missing" }]]),
+          refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+        }}
+      />,
+      { wrapper: MemoryRouter },
+    );
+
+  it("asks only once the server's row is open", () => {
+    row("account");
+    expect(
+      screen.queryByText("Credential picker for Example server"),
+    ).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Example server.*Requires connection/,
+      }),
+    );
+    expect(
+      screen.getByText("Credential picker for Example server"),
+    ).toBeTruthy();
+  });
+
+  it("needs no personal connection once a shared credential is chosen", () => {
+    row("token_shared");
+    fireEvent.click(
+      screen.getByRole("button", { name: /Example server.*Shared credential/ }),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Connect account" }),
+    ).toBeNull();
+    expect(screen.getByText(/No personal connection is needed/)).toBeTruthy();
+  });
+});
+
 describe("create connection reauthentication", () => {
   it.each(["ready", "ended", "missing"] as const)(
     "targets the known upstream client for %s connections",
@@ -166,4 +287,63 @@ describe("create connection reauthentication", () => {
       expect(url.searchParams.get("existing")).toBe("keep");
     },
   );
+});
+
+describe("saving after a connection", () => {
+  const fakePopup = () =>
+    ({
+      closed: false,
+      opener: null,
+      location: { href: "" },
+      focus: () => {},
+      close: () => {},
+    }) as unknown as Window;
+  const connectable = { ...server, connectUrl: "https://example.test/connect" };
+  function row(status: "missing" | "ready", onConnected: () => void) {
+    return (
+      <StepAuthentication
+        servers={[connectable]}
+        allServers={false}
+        onRemove={vi.fn<(id: string) => void>()}
+        onConnected={onConnected}
+        connections={{
+          byServer: new Map([
+            [
+              connectable.id,
+              status === "ready"
+                ? { status: "ready", sessions: [mine] }
+                : { status: "missing" },
+            ],
+          ]),
+          refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+        }}
+      />
+    );
+  }
+
+  it("saves once the reader's connection is ready after the sign-in popup closes", async () => {
+    vi.spyOn(window, "open").mockReturnValue(fakePopup());
+    const onConnected = vi.fn<() => void>();
+    const view = render(row("missing", onConnected), { wrapper: MemoryRouter });
+    fireEvent.click(screen.getByText("Example server"));
+    fireEvent.click(screen.getByRole("button", { name: "Connect account" }));
+    // The refetch the popup's close starts reads the new connection.
+    view.rerender(row("ready", onConnected));
+    await act(async () => {
+      await popup.onComplete?.("popup-closed");
+    });
+    await waitFor(() => expect(onConnected).toHaveBeenCalledTimes(1));
+  });
+
+  it("does not save when the popup closes without a connection", async () => {
+    vi.spyOn(window, "open").mockReturnValue(fakePopup());
+    const onConnected = vi.fn<() => void>();
+    render(row("missing", onConnected), { wrapper: MemoryRouter });
+    fireEvent.click(screen.getByText("Example server"));
+    fireEvent.click(screen.getByRole("button", { name: "Connect account" }));
+    await act(async () => {
+      await popup.onComplete?.("popup-closed");
+    });
+    expect(onConnected).not.toHaveBeenCalled();
+  });
 });

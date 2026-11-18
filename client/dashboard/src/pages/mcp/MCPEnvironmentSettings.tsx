@@ -1,5 +1,4 @@
 import { EnvironmentVariableDialog } from "@/components/environments/EnvironmentVariableDialog";
-import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
@@ -12,7 +11,7 @@ import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
-import { Toolset } from "@/lib/toolTypes";
+import type { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import type { McpEnvironmentConfigInput } from "@gram/client/models/components/mcpenvironmentconfiginput.js";
 import { useCreateEnvironmentMutation } from "@gram/client/react-query/createEnvironment.js";
@@ -34,15 +33,18 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle, Link, Plus, Shield } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useReportUnsavedChanges } from "@/components/detail/settings-layout";
 import { AddVariableSheet } from "./AddVariableSheet";
 import { EnvironmentSwitcher } from "./EnvironmentSwitcher";
 import { EnvironmentVariableRow } from "./EnvironmentVariableRow";
 import { OAuthDetailsModal } from "./OAuthDetailsModal";
 import { ConnectOAuthModal } from "./oauth-wizard";
 import { PageSection } from "./PageSection";
-import {
+import type {
   EnvVarState,
   EnvironmentVariable,
+} from "./environmentVariableUtils";
+import {
   getValueForEnvironment,
   hasEntryInEnvironment,
   isSecretInEnvironment,
@@ -468,16 +470,17 @@ export function MCPAuthenticationTab({
   const hasUserEdits = (envVar: EnvironmentVariable): boolean => {
     const entry = environmentConfigs.find((e) => e.variableName === envVar.key);
 
-    // Determine the original state based on environment entry
-    const originalState: EnvVarState =
-      entry?.providedBy === "user"
+    // The original state: the saved entry's, or for a variable with no
+    // entry yet, the state it loaded with.
+    const originalState: EnvVarState | undefined = entry
+      ? entry.providedBy === "user"
         ? "user-provided"
-        : entry?.providedBy === "none"
+        : entry.providedBy === "none"
           ? "omitted"
-          : "system";
+          : "system"
+      : loadedEnvVars.find((loaded) => loaded.id === envVar.id)?.state;
 
-    // Check if state has changed (only if there was an existing entry)
-    if (entry && envVar.state !== originalState) {
+    if (originalState !== undefined && envVar.state !== originalState) {
       return true;
     }
 
@@ -512,14 +515,12 @@ export function MCPAuthenticationTab({
     return false;
   };
 
-  // Check if there are any unsaved changes (including unmapped required vars and user edits)
-  const hasAnyUnsavedChanges = useMemo(
-    () => {
-      return envVars.some(hasUnsavedChanges);
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- hasUnsavedChanges is an inline fn; its reactive deps are listed explicitly
-    [envVars, editingState, environmentConfigs, selectedEnvironmentView],
-  );
+  // Unsaved means the user changed something since load. An unmapped
+  // required variable alone is not an edit, but Save still writes its entry.
+  const hasAnyUnsavedChanges = envVars.some(hasUserEdits);
+  useReportUnsavedChanges(hasAnyUnsavedChanges);
+  // Save still turns on for an unmapped required variable, as before.
+  const hasAnythingToSave = envVars.some(hasUnsavedChanges);
 
   // Save all variables with unsaved changes
   const handleSaveAll = async () => {
@@ -689,7 +690,7 @@ export function MCPAuthenticationTab({
       {showOAuth && <ToolsetOAuthSection toolset={toolset} />}
 
       <PageSection
-        heading="Environment Variables"
+        heading="Environment variables"
         description="Environments store key-value pairs passed to the backend when users connect. They can be shared across multiple MCP servers. Use the state button to set each variable as User Provided (set at runtime), System (set here), or Omitted (not included)."
         headingExtra={
           missingRequiredCount > 0 ? (
@@ -740,7 +741,7 @@ export function MCPAuthenticationTab({
                   toolset.defaultEnvironmentSlug || "default"
                 }
                 requiredVars={requiredVars}
-                hasAnyUserEdits={hasAnyUnsavedChanges}
+                hasAnyUserEdits={hasAnythingToSave}
                 hasExistingConfigs={environmentConfigs.length > 0}
                 onEnvironmentSelect={setSelectedEnvironmentView}
                 onSaveAll={() => void handleSaveAll()}
@@ -989,13 +990,8 @@ function ExternalOAuthSection({ toolset }: OAuthSectionProps) {
   const isOAuthConnected = !!toolset?.externalOauthServer;
   const availableOAuthAuthCode =
     toolset?.oauthEnablementMetadata?.oauth2SecurityCount > 0;
-  const externalMcpOAuthStatus = useExternalMcpOAuthConfigStatus(toolset.slug);
-  const externalMcpRequiresOAuth =
-    externalMcpOAuthStatus === "required-unconfigured";
   const isOAuthEligible =
-    toolset.mcpEnabled &&
-    ((toolset.mcpIsPublic ? availableOAuthAuthCode : true) ||
-      externalMcpRequiresOAuth);
+    toolset.mcpEnabled && (toolset.mcpIsPublic ? availableOAuthAuthCode : true);
 
   const oauthParadigm = getOAuthParadigm(toolset);
 
@@ -1006,9 +1002,7 @@ function ExternalOAuthSection({ toolset }: OAuthSectionProps) {
 
   const disabledTooltipText = !toolset.mcpEnabled
     ? "Enable the MCP server to configure OAuth"
-    : externalMcpOAuthStatus === "unknown"
-      ? "The upstream authentication requirements are unknown; check the provider’s documentation"
-      : "This MCP server does not require the OAuth authorization code flow";
+    : "This MCP server does not require the OAuth authorization code flow";
 
   // The dispatcher sends wired issuers to the manage surface. Keep this
   // defensive check aligned in case the External OAuth section is reused directly.
@@ -1066,8 +1060,6 @@ function ExternalOAuthSection({ toolset }: OAuthSectionProps) {
       <OAuthStatusDisplay
         isOAuthConnected={isOAuthConnected}
         isOAuthEligible={!!isOAuthEligible}
-        externalMcpRequiresOAuth={externalMcpRequiresOAuth}
-        externalMcpAuthUnknown={externalMcpOAuthStatus === "unknown"}
         loginSecured={loginSecured}
         showConfigureAction={!hideConfigureButton}
         oauthParadigm={oauthParadigm}
@@ -1103,8 +1095,6 @@ const PARADIGM_LABELS: Record<OAuthParadigm, string> = {
 function OAuthStatusDisplay({
   isOAuthConnected,
   isOAuthEligible,
-  externalMcpRequiresOAuth,
-  externalMcpAuthUnknown,
   loginSecured,
   showConfigureAction,
   oauthParadigm,
@@ -1113,8 +1103,6 @@ function OAuthStatusDisplay({
 }: {
   isOAuthConnected: boolean;
   isOAuthEligible: boolean;
-  externalMcpRequiresOAuth: boolean;
-  externalMcpAuthUnknown: boolean;
   loginSecured: boolean;
   showConfigureAction: boolean;
   oauthParadigm: OAuthParadigm | null;
@@ -1147,41 +1135,6 @@ function OAuthStatusDisplay({
           Users will authenticate with your external OAuth server before
           accessing this MCP server.
         </p>
-      </div>
-    );
-  }
-
-  if (externalMcpAuthUnknown) {
-    return (
-      <div className="border border-dashed p-4 text-center">
-        <p>Upstream authentication requirements are unknown</p>
-        <p className="text-muted-foreground text-sm">
-          Check the upstream provider’s documentation before configuring access.
-        </p>
-        {isOAuthEligible && showConfigureAction && (
-          <Button variant="secondary" onClick={onConfigureClick}>
-            <Button.Text>Configure OAuth</Button.Text>
-          </Button>
-        )}
-      </div>
-    );
-  }
-
-  if (externalMcpRequiresOAuth) {
-    return (
-      <div className="border-warning-foreground/80 bg-warning dark:bg-warning/10 dark:border-warning-foreground/30 border border-dashed px-6 py-8 text-center">
-        <AlertTriangle className="text-warning mx-auto mb-1 h-5 w-5" />
-        <p className="text-warning-foreground mb-1 font-bold">
-          OAuth setup required
-        </p>
-        <p className="text-warning-foreground/80 mb-3 text-sm">
-          This MCP server requires OAuth configuration before it can be used.
-        </p>
-        {showConfigureAction && (
-          <Button variant="secondary" onClick={onConfigureClick}>
-            <Button.Text>Configure OAuth</Button.Text>
-          </Button>
-        )}
       </div>
     );
   }

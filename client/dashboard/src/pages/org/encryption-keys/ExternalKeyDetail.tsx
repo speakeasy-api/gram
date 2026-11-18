@@ -13,7 +13,7 @@ import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
 import { activeDetailTab } from "@/lib/detail-tabs";
 import { useOrgRoutes } from "@/routes";
-import { Scope } from "@gram/client/models/components/rolegrant.js";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGetGcpKmsKey } from "@gram/client/react-query/getGcpKmsKey";
 import { isNotNotFound } from "@/lib/query-errors";
 import { Link, Navigate, useLocation, useParams } from "react-router";

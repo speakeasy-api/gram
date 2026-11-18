@@ -1,4 +1,3 @@
-import { MCPToolsetIcon } from "@/components/mcp/MCPToolsetIcon";
 import { SourceMcpIcon } from "@/components/sources/SourceCard";
 import { McpEntityCard } from "@/components/mcp/McpEntityCard";
 import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
@@ -72,7 +71,7 @@ import { Stack } from "@/components/ui/Stack";
 import { Switch } from "@/components/ui/Switch";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { Trash2 } from "lucide-react";
+import { Network, Trash2 } from "lucide-react";
 import {
   Fragment,
   useCallback,
@@ -264,22 +263,19 @@ function PluginDetailContent({
     [toolsetsData?.toolsets],
   );
 
-  // Remote MCP-backed and built-in mcp_servers for this project. All of
-  // them back the cards of already-attached plugin servers (an attached
-  // server that's been disabled or lost its endpoints must still resolve for
-  // display), while only non-disabled servers with at least one endpoint are
-  // publishable, mirroring the backend's AddPluginServer check, so the picker
-  // never offers a server the API would reject.
+  // Remote MCP-backed mcp_servers for this project. All of them back the
+  // cards of already-attached plugin servers (an attached server that's been
+  // disabled or lost its endpoints must still resolve for display), while
+  // only non-disabled servers with at least one endpoint are publishable,
+  // mirroring the backend's AddPluginServer check, so the picker never offers
+  // a server the API would reject.
   const { data: mcpServersData, isLoading: isLoadingMcpServers } = serversQuery;
   const { data: mcpEndpointsData, isLoading: isLoadingMcpEndpoints } =
     endpointsQuery;
   const mcpServers = useMemo(
     () =>
       (mcpServersData?.mcpServers ?? []).filter(
-        (s) =>
-          !!s.remoteMcpServerId ||
-          !!s.unproxiedMcpServerId ||
-          !!s.builtinBackend,
+        (s) => !!s.remoteMcpServerId || !!s.unproxiedMcpServerId,
       ),
     [mcpServersData],
   );
@@ -658,11 +654,9 @@ function PluginDetailContent({
         o.kind === "mcpServer" ? mcpServerById.get(o.id) : undefined;
       const kindLabel = toolset
         ? "Hosted"
-        : mcpServer?.builtinBackend
-          ? "Built-in"
-          : mcpServer?.unproxiedMcpServerId
-            ? "Unproxied"
-            : "Remote";
+        : mcpServer?.unproxiedMcpServerId
+          ? "Unproxied"
+          : "Remote";
       const slug = toolset?.slug ?? mcpServer?.slug;
       // Mirrors AddPluginServer: a hosted server needs MCP on and an MCP slug.
       const mcpOff = !!toolset && !toolset.mcpEnabled;
@@ -677,11 +671,7 @@ function PluginDetailContent({
         value: serverOptionKey(o.kind, o.id),
         label: o.name,
         icon: toolset ? (
-          <MCPToolsetIcon
-            toolset={toolset}
-            className="size-6 shrink-0"
-            fallbackClassName="size-6"
-          />
+          <Network className="text-muted-foreground size-6 shrink-0" />
         ) : (
           <SourceMcpIcon
             mcpServerId={o.id}
@@ -1565,7 +1555,7 @@ function PluginServerCard({
       onClick={isClickable ? handleClick : undefined}
       icon={
         toolset ? (
-          <MCPToolsetIcon toolset={toolset} />
+          <Network className="text-muted-foreground h-8 w-8" />
         ) : (
           <SourceMcpIcon
             mcpServerId={server.mcpServerId}
@@ -1601,11 +1591,9 @@ function PluginServerCard({
             // Remote/unproxied MCP servers have no Speakeasy-side tool
             // catalog, so the tool-collection badge is omitted.
             <Badge variant="neutral" className="text-xs">
-              {mcpServer?.builtinBackend
-                ? "Built-in"
-                : mcpServer?.unproxiedMcpServerId
-                  ? "Unproxied MCP · Not proxied"
-                  : "Remote MCP"}
+              {mcpServer?.unproxiedMcpServerId
+                ? "Unproxied MCP · Not proxied"
+                : "Remote MCP"}
             </Badge>
           ) : server.metaMcpServerId ? (
             <Badge variant="neutral" className="text-xs">

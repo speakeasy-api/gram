@@ -7,16 +7,15 @@
  * work live here and are rendered on the agent's own page.
  */
 import { DangerSettingsSection } from "@/components/page-templates";
+import { InlineEditableText } from "@/components/inline-editable-text";
 import { Badge } from "@/components/ui/Badge";
-import { Button, type ButtonProps } from "@/components/ui/Button";
-import { Label } from "@/components/ui/Label";
-import { Dialog } from "@/components/ui/Dialog";
-import { Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { IdentityLink } from "@/components/identity-link";
 import { Text } from "@/components/ui/Text";
 import { dateTimeFormatters } from "@/lib/dates";
+import { encodeIdentityUrn } from "@/lib/identity-urn";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 
 import { useAgentsDeleteMutation } from "@gram/client/react-query/agentsDelete.js";
@@ -27,7 +26,7 @@ import { useRenameAgentMutation } from "@gram/client/react-query/renameAgent.js"
 import { useState, type JSX } from "react";
 import { Link } from "react-router";
 import { useRoutes } from "@/routes";
-import { AlertTriangle, Pencil } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -138,7 +137,9 @@ export function AgentIdentityFacts({
           {agent.permissions.write && (
             <Link
               className="underline underline-offset-4"
-              to={`${routes.identities.agents.edit.href(agent.id)}?step=2`}
+              to={routes.identities.detail.mcpSignIn.href(
+                encodeIdentityUrn(`agent:${agent.id}`),
+              )}
             >
               Review connections
             </Link>
@@ -160,107 +161,74 @@ export function AgentIdentityFacts({
   );
 }
 
-export function RenameAgentButton({
+/**
+ * The agent's name as the page title, renamed in place: a pencil on hover
+ * turns it into a field, Enter or leaving the field saves, Escape cancels.
+ * Renaming is one field, so it gets no dialog and no wizard.
+ *
+ * Someone who may not change the agent sees the plain title.
+ */
+export function AgentName({
   agent,
   refresh,
-  variant = "secondary",
-  size,
-  iconOnly = false,
   className,
 }: {
   agent: ManagedAgent;
-  refresh: () => void;
-  variant?: ButtonProps["variant"];
-  size?: ButtonProps["size"];
-  /** A pencil beside the name rather than a labelled button. */
-  iconOnly?: boolean;
+  /**
+   * Re-reads the agent so the header and breadcrumb show the new name. The
+   * editor stays open until it resolves, so the old name never shows again.
+   */
+  refresh: () => Promise<unknown>;
+  /** The title's typography, shared with every other identity header. */
   className?: string;
-  // Null when the reader may not rename: the control is the whole output.
-}): JSX.Element | null {
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState(agent.name);
-  const rename = useRenameAgentMutation({
-    onSuccess: () => {
-      toast.success("Agent renamed");
-      setOpen(false);
-      refresh();
-    },
-    onError: (error) => toast.error(error.message || "Unable to rename agent"),
-  });
-
-  if (!agent.permissions.write) return null;
+}): JSX.Element {
+  const rename = useRenameAgentMutation();
+  if (!agent.permissions.write)
+    return <h1 className={cn("truncate", className)}>{agent.name}</h1>;
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (rename.isPending) return;
-        setOpen(next);
-        if (next) setName(agent.name);
-      }}
-    >
-      <Dialog.Trigger asChild>
-        {iconOnly ? (
-          <Button
-            variant="tertiary"
-            size="xs"
-            aria-label="Rename agent"
-            title="Rename agent"
-            className={cn("size-7 p-0", className)}
-          >
-            <Pencil aria-hidden="true" />
-          </Button>
-        ) : (
-          <Button variant={variant} size={size} className={className}>
-            Rename
-          </Button>
-        )}
-      </Dialog.Trigger>
-      <Dialog.Content>
-        <Dialog.Header>
-          <Dialog.Title>Rename agent</Dialog.Title>
-          <Dialog.Description>
-            The principal ID and its issued keys are unaffected. The change is
-            recorded in the organization audit log.
-          </Dialog.Description>
-        </Dialog.Header>
-        <div className="space-y-2">
-          <Label htmlFor="managed-agent-name">Name</Label>
-          <Input
-            id="managed-agent-name"
-            value={name}
-            onChange={setName}
-            maxLength={120}
-            disabled={rename.isPending}
-            autoFocus
-          />
-        </div>
-        <Dialog.Footer>
-          <Button
-            variant="secondary"
-            onClick={() => setOpen(false)}
-            disabled={rename.isPending}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={() =>
-              rename.mutate({
-                request: {
-                  renameAgentForm: { id: agent.id, name: name.trim() },
-                },
-              })
-            }
-            disabled={
-              !name.trim() || name.trim() === agent.name || rename.isPending
-            }
-          >
-            Save
-          </Button>
-        </Dialog.Footer>
-      </Dialog.Content>
-    </Dialog>
+    // A heading by role rather than an <h1>: the button and the field it
+    // turns into are not allowed inside a heading element.
+    <div role="heading" aria-level={1} className="min-w-0 max-w-full">
+      <InlineEditableText
+        value={agent.name}
+        inputLabel="Agent name"
+        editTitle="Rename agent"
+        maxLength={NAME_LIMIT}
+        editorClassName="h-12 w-[36rem] max-w-full"
+        inputClassName={cn("h-12", className)}
+        // Long names truncate rather than push the header past the page.
+        buttonClassName="max-w-full"
+        onSubmit={async (name) => {
+          if (!name) {
+            toast.error("An agent needs a name.");
+            return false;
+          }
+          try {
+            await rename.mutateAsync({
+              request: { renameAgentForm: { id: agent.id, name } },
+            });
+          } catch (error) {
+            toast.error(
+              error instanceof Error && error.message
+                ? error.message
+                : "Unable to rename agent",
+            );
+            return false;
+          }
+          // A failed re-read leaves the rename saved; the next read shows it.
+          await refresh().catch(() => undefined);
+          toast.success("Agent renamed");
+          return true;
+        }}
+      >
+        <span className={cn("truncate", className)}>{agent.name}</span>
+      </InlineEditableText>
+    </div>
   );
 }
+
+/** The longest name the server accepts for an agent. */
+const NAME_LIMIT = 120;
 
 export function AgentLifecycle({
   agent,

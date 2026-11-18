@@ -15,8 +15,8 @@ import { useListTools } from "@/hooks/toolTypes";
 import { asTools } from "@/lib/toolTypes";
 import { slugify } from "@/lib/constants";
 import { useRoutes } from "@/routes";
-import { Deployment } from "@gram/client/models/components/deployment.js";
-import { DeploymentLogEvent } from "@gram/client/models/components/deploymentlogevent.js";
+import type { Deployment } from "@gram/client/models/components/deployment.js";
+import type { DeploymentLogEvent } from "@gram/client/models/components/deploymentlogevent.js";
 import { invalidateAllActiveDeployment } from "@gram/client/react-query/activeDeployment.js";
 import { useDeploymentLogs } from "@gram/client/react-query/deploymentLogs.js";
 import { invalidateAllLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
@@ -131,7 +131,7 @@ export default function DeployStep({
   }, [tools, stepper.meta]);
 
   // Auto-create toolset after tools are loaded (regardless of overall deployment status)
-  // The deployment may fail due to unrelated issues (e.g., external MCP), but if tools
+  // The deployment may fail due to unrelated issues, but if tools
   // were created for this asset, we should still create a toolset for them.
   React.useEffect(() => {
     if (gateway?.gatewayId && (deploymentError || deploymentPending)) return;

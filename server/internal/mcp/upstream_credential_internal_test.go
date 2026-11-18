@@ -93,7 +93,7 @@ func TestRouteMetaMemberNamesTheChosenAuthClient(t *testing.T) {
 				return map[uuid.UUID]remotesessions.UpstreamToken{uuid.New(): {Token: "chosen", Resource: resource}}, nil
 			}}
 
-			dial, backend, err := f.service.routeMetaMember(t.Context(), f.service.logger, metaGateContext{agentID: uuid.New(), organizationID: f.orgID, memberChoices: choices}, member, "")
+			dial, backend, err := f.service.routeMetaMember(t.Context(), f.service.logger, metaGateContext{agentID: uuid.New(), organizationID: f.orgID, memberChoices: choices}, member, "", false)
 			require.NoError(t, err)
 			require.Equal(t, "remote", backend)
 			require.Equal(t, contextvalues.UpstreamCredential{AuthClientID: clientID.String(), AuthClientType: tc.clientType, ConnectionOwnerUserID: tc.wantOwner}, dial.credential)

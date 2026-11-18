@@ -210,7 +210,9 @@ type MCPRoleAuthClientAccess struct {
 }
 
 type GetMCPAccessInput struct {
-	ProjectID string `json:"project_id" jsonschema:"project ID that owns the configured MCP"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID returned by find_mcp"`
 }
 
@@ -977,7 +979,7 @@ func matchingDispositionRules(grants []*accessgen.RoleGrant, mcpID, projectID st
 
 func scopeMayAllowConnect(scope string) bool {
 	switch authz.Scope(scope) {
-	case authz.ScopeRoot, authz.ScopeMCPConnect, authz.ScopeMCPRead, authz.ScopeMCPWrite:
+	case authz.ScopeRoot, authz.ScopeMCPConnect:
 		return true
 	default:
 		return false
@@ -986,7 +988,7 @@ func scopeMayAllowConnect(scope string) bool {
 
 func scopeMayBlockConnect(scope string) bool {
 	switch authz.Scope(scope) {
-	case authz.ScopeMCPBlockedConnect, authz.ScopeMCPBlockedRead, authz.ScopeMCPBlockedWrite:
+	case authz.ScopeMCPBlockedConnect:
 		return true
 	default:
 		return false
@@ -1018,8 +1020,6 @@ func accessBackend(row platformrepo.GetPlatformMCPInventoryItemRow) string {
 		return "hosted"
 	case row.UnproxiedMcpServerID.Valid:
 		return "unproxied"
-	case row.BuiltinBackend.Valid:
-		return "built_in"
 	default:
 		return "legacy"
 	}

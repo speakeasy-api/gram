@@ -230,6 +230,10 @@ type GetClientResponseBody struct {
 	// The organization JSON Web Key Set attached to this client, set on create or
 	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -349,6 +353,10 @@ type CreateClientResponseBody struct {
 	// The organization JSON Web Key Set attached to this client, set on create or
 	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -428,6 +436,10 @@ type CreateCimdClientResponseBody struct {
 	// The organization JSON Web Key Set attached to this client, set on create or
 	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -507,6 +519,10 @@ type UpdateClientResponseBody struct {
 	// The organization JSON Web Key Set attached to this client, set on create or
 	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -586,6 +602,10 @@ type AttachClientKeySetResponseBody struct {
 	// The organization JSON Web Key Set attached to this client, set on create or
 	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -665,6 +685,10 @@ type DetachClientKeySetResponseBody struct {
 	// The organization JSON Web Key Set attached to this client, set on create or
 	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -744,6 +768,10 @@ type RotateClientResponseBody struct {
 	// The organization JSON Web Key Set attached to this client, set on create or
 	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -823,6 +851,10 @@ type DuplicateClientResponseBody struct {
 	// The organization JSON Web Key Set attached to this client, set on create or
 	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -3611,6 +3643,10 @@ type RemoteSessionClientResponseBody struct {
 	// The organization JSON Web Key Set attached to this client, set on create or
 	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -3727,6 +3763,7 @@ func NewGetClientResponseBody(res *types.RemoteSessionClient) *GetClientResponse
 		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		IdentityProviderConnectionID:    res.IdentityProviderConnectionID,
 		Audience:                        res.Audience,
 		ForwardClientName:               res.ForwardClientName,
 		LegacyCallbackURL:               res.LegacyCallbackURL,
@@ -3853,6 +3890,7 @@ func NewCreateClientResponseBody(res *types.RemoteSessionClient) *CreateClientRe
 		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		IdentityProviderConnectionID:    res.IdentityProviderConnectionID,
 		Audience:                        res.Audience,
 		ForwardClientName:               res.ForwardClientName,
 		LegacyCallbackURL:               res.LegacyCallbackURL,
@@ -3903,6 +3941,7 @@ func NewCreateCimdClientResponseBody(res *types.RemoteSessionClient) *CreateCimd
 		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		IdentityProviderConnectionID:    res.IdentityProviderConnectionID,
 		Audience:                        res.Audience,
 		ForwardClientName:               res.ForwardClientName,
 		LegacyCallbackURL:               res.LegacyCallbackURL,
@@ -3953,6 +3992,7 @@ func NewUpdateClientResponseBody(res *types.RemoteSessionClient) *UpdateClientRe
 		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		IdentityProviderConnectionID:    res.IdentityProviderConnectionID,
 		Audience:                        res.Audience,
 		ForwardClientName:               res.ForwardClientName,
 		LegacyCallbackURL:               res.LegacyCallbackURL,
@@ -4003,6 +4043,7 @@ func NewAttachClientKeySetResponseBody(res *types.RemoteSessionClient) *AttachCl
 		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		IdentityProviderConnectionID:    res.IdentityProviderConnectionID,
 		Audience:                        res.Audience,
 		ForwardClientName:               res.ForwardClientName,
 		LegacyCallbackURL:               res.LegacyCallbackURL,
@@ -4053,6 +4094,7 @@ func NewDetachClientKeySetResponseBody(res *types.RemoteSessionClient) *DetachCl
 		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		IdentityProviderConnectionID:    res.IdentityProviderConnectionID,
 		Audience:                        res.Audience,
 		ForwardClientName:               res.ForwardClientName,
 		LegacyCallbackURL:               res.LegacyCallbackURL,
@@ -4103,6 +4145,7 @@ func NewRotateClientResponseBody(res *types.RemoteSessionClient) *RotateClientRe
 		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		IdentityProviderConnectionID:    res.IdentityProviderConnectionID,
 		Audience:                        res.Audience,
 		ForwardClientName:               res.ForwardClientName,
 		LegacyCallbackURL:               res.LegacyCallbackURL,
@@ -4153,6 +4196,7 @@ func NewDuplicateClientResponseBody(res *types.RemoteSessionClient) *DuplicateCl
 		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		IdentityProviderConnectionID:    res.IdentityProviderConnectionID,
 		Audience:                        res.Audience,
 		ForwardClientName:               res.ForwardClientName,
 		LegacyCallbackURL:               res.LegacyCallbackURL,

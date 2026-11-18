@@ -178,6 +178,9 @@ func (s *riskPolicyMutationService) createPolicyTool(ctx context.Context, _ *mcp
 	if err := decodeRiskMutationInput(raw, &input); err != nil {
 		return riskMutationToolRefusal[CreateRiskPolicyToolOutput](err)
 	}
+	if err := validateCreateRiskPolicyKind(input); err != nil {
+		return riskMutationToolRefusal[CreateRiskPolicyToolOutput](err)
+	}
 	input, err = applyRiskPolicyPreset(input)
 	if err != nil {
 		return riskMutationToolRefusal[CreateRiskPolicyToolOutput](err)
@@ -298,10 +301,10 @@ func (s *riskPolicyMutationService) mutatePolicyTool(ctx context.Context, raw ma
 	}
 
 	var committed *policycore.MutationResult
-	receipt, err := s.controls.Receipts().Execute(ctx, principal, project, RiskMutationReceiptRequest{
-		Operation: operation, IdempotencyKey: input.IdempotencyKey,
-		Input: map[string]any{"project_slug": project.Slug, "policy_id": policyID.String(), "expected_version": input.ExpectedVersion, "patch": normalizedPatch},
-	}, s.controls.Charge(principal), func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
+	// audienceBefore is the locked audience the delta applies to, kept for the
+	// preview of an unconfirmed audience change.
+	var audienceBefore []string
+	mutate := func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
 		if err := shadowadmission.LockProject(ctx, tx, project.ID); err != nil {
 			return nil, fmt.Errorf("lock shadow mcp admission project for risk policy update: %w", err)
 		}
@@ -331,6 +334,7 @@ func (s *riskPolicyMutationService) mutatePolicyTool(ctx context.Context, raw ma
 				if err := validateRiskPolicyAudienceDeltaTarget(locked.AudienceType, locked.AudiencePrincipalURNs, delta); err != nil {
 					return policycore.Policy{}, err
 				}
+				audienceBefore = locked.AudiencePrincipalURNs
 			}
 			// Include removals; validating only the final audience misses them.
 			for _, target := range append(deltaPrincipals, mutation.AudiencePrincipals...) {
@@ -362,7 +366,35 @@ func (s *riskPolicyMutationService) mutatePolicyTool(ctx context.Context, raw ma
 			return ChangeRiskPolicyAudienceReceiptResult{UpdateRiskPolicyReceiptResult: receiptResult}, nil
 		}
 		return receiptResult, nil
-	})
+	}
+	receiptRequest := RiskMutationReceiptRequest{
+		Operation: operation, IdempotencyKey: input.IdempotencyKey,
+		Input: map[string]any{"project_slug": project.Slug, "policy_id": policyID.String(), "expected_version": input.ExpectedVersion, "patch": normalizedPatch},
+	}
+	if changeAudience && !delta.Confirmed {
+		// A preview refuses the key the confirmed call would refuse, and it
+		// spends the same allowance, since it takes the same locks and writes
+		// before rolling back. It stores nothing.
+		if err := s.controls.Receipts().CheckPreview(ctx, principal, project, receiptRequest); err != nil {
+			return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](err)
+		}
+		if err := s.controls.Charge(principal)(ctx); err != nil {
+			return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](err)
+		}
+		preview, err := s.previewAudienceChange(ctx, mutate, func() ChangeRiskPolicyAudiencePreview {
+			return ChangeRiskPolicyAudiencePreview{
+				Project: riskReceiptProject(project), Policy: riskPolicyReceiptSummary(committed.Row), PolicyName: committed.Row.Name,
+				ExpectedVersion: input.ExpectedVersion, AudienceBefore: canonicalStrings(audienceBefore),
+				AddPrincipals: canonicalStrings(delta.AddPrincipals), RemovePrincipals: canonicalStrings(delta.RemovePrincipals),
+				AudienceAfter: canonicalStrings(committed.AudiencePrincipalURNs),
+			}
+		})
+		if err != nil {
+			return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](err)
+		}
+		return riskPolicyAudiencePreviewRefusal(preview)
+	}
+	receipt, err := s.controls.Receipts().Execute(ctx, principal, project, receiptRequest, s.controls.Charge(principal), mutate)
 	if err != nil {
 		return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](err)
 	}
@@ -1061,6 +1093,66 @@ func mapRiskPolicyMutationError(err error) error {
 	default:
 		return riskMutationUnavailableWithCause(err)
 	}
+}
+
+// validateCreateRiskPolicyKind enforces which fields each kind of create
+// request takes. The input schema is one flat object, because Anthropic
+// rejects a top-level oneOf, so these rules live here with a refusal that
+// says what to fix.
+func validateCreateRiskPolicyKind(input createRiskPolicyInput) error {
+	policyType := strings.TrimSpace(input.PolicyType)
+	if strings.TrimSpace(input.Preset) != "" {
+		if policyType != "" {
+			return invalidRiskPolicyKind("Name either a preset or a policy_type, not both.")
+		}
+		for _, field := range []struct {
+			name string
+			set  bool
+		}{
+			// Presence, not length: an explicit empty list would otherwise be
+			// replaced by the preset's own values without a word.
+			{"sources", input.Sources != nil},
+			{"presidio_score_threshold", input.PresidioScoreThreshold != nil},
+			{"prompt_injection_rules", input.PromptInjectionRules != nil},
+			{"disabled_rules", input.DisabledRules != nil},
+			{"detection_scopes", input.DetectionScopes != nil},
+		} {
+			if field.set {
+				return invalidRiskPolicyKind(field.name + " cannot override a preset. Use policy_type standard to choose detectors by hand.")
+			}
+		}
+		return nil
+	}
+	switch policyType {
+	case "standard", "prompt_based":
+	case "":
+		return invalidRiskPolicyKind("Name a preset, or set policy_type to standard or prompt_based.")
+	default:
+		return invalidRiskPolicyKind("policy_type must be standard or prompt_based.")
+	}
+	if strings.TrimSpace(input.Name) == "" || input.Enabled == nil {
+		return invalidRiskPolicyKind("A policy_type request needs name and enabled.")
+	}
+	if policyType == "standard" {
+		if len(input.Sources) == 0 {
+			return invalidRiskPolicyKind("policy_type standard needs at least one source.")
+		}
+		if strings.TrimSpace(input.Prompt) != "" {
+			return invalidRiskPolicyKind("prompt is only for policy_type prompt_based.")
+		}
+		return nil
+	}
+	if strings.TrimSpace(input.Prompt) == "" {
+		return invalidRiskPolicyKind("policy_type prompt_based needs a prompt.")
+	}
+	if len(input.Sources)+len(input.PresidioEntities)+len(input.PromptInjectionRules)+len(input.DisabledRules)+len(input.ApprovedEmailDomains)+len(input.DetectionScopes) > 0 || input.PresidioScoreThreshold != nil {
+		return invalidRiskPolicyKind("policy_type prompt_based takes no detector settings: leave out sources, presidio_entities, presidio_score_threshold, prompt_injection_rules, disabled_rules, approved_email_domains and detection_scopes.")
+	}
+	return nil
+}
+
+func invalidRiskPolicyKind(message string) error {
+	return &RiskMutationError{Code: "invalid_request", Message: message + " No policy was created.", Cause: ErrRiskMutationInvalid}
 }
 
 func invalidRiskPolicyRequest() error {

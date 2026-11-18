@@ -66,7 +66,7 @@ func TestHostedMemberTokens_SelfCredential(t *testing.T) {
 	}, member)
 	memberErr, ok := errors.AsType[*metaMemberError](err)
 	require.True(t, ok, "error: %v", err)
-	require.Contains(t, memberErr.message, "contact the MCP server administrator", "the member's tools never run without its credential")
+	require.Contains(t, memberErr.message, "Ask an admin of the server's project to fix the server's credential", "the member's tools never run without its credential")
 
 	_, err = hostedMemberTokens(map[uuid.UUID]remotesessions.UpstreamToken{
 		issuerID: {CredentialOwner: remotesessions.CredentialOwnerSelf, ClientCredentialErr: remotesessions.ErrClientCredentialUnavailable},

@@ -14,11 +14,9 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/testmcp"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -96,56 +94,6 @@ func newMetricToolProxy(t *testing.T, reader sdkmetric.Reader) *ToolProxy {
 	)
 }
 
-func newExternalMCPToolDescriptor() *ToolDescriptor {
-	return &ToolDescriptor{
-		ID:               uuid.New().String(),
-		Name:             "notion",
-		Description:      nil,
-		DeploymentID:     uuid.New().String(),
-		ProjectID:        uuid.New().String(),
-		ProjectSlug:      "test-project",
-		OrganizationID:   uuid.New().String(),
-		OrganizationSlug: "test-org",
-		// Proxy tools name the MCP server, not the tool that runs.
-		URN: urn.NewTool(urn.ToolKindExternalMCP, "notion", "proxy"),
-	}
-}
-
-func newExternalMCPTestServer(t *testing.T, isError bool) *httptest.Server {
-	t.Helper()
-
-	server := testmcp.NewStreamableHTTPServer(t, &testmcp.Server{
-		Tools: []testmcp.Tool{{
-			Annotations:  nil,
-			Description:  "Search a workspace",
-			Icons:        nil,
-			InputSchema:  map[string]any{"type": "object"},
-			Meta:         nil,
-			Name:         "search",
-			OutputSchema: nil,
-			Response: testmcp.ToolResponse{
-				Content: []map[string]any{{"type": "text", "text": "result"}},
-				IsError: isError,
-			},
-			Title: "",
-		}},
-	})
-	t.Cleanup(server.Close)
-
-	return server
-}
-
-func externalMCPPlan(remoteURL string) *ExternalMCPToolCallPlan {
-	return &ExternalMCPToolCallPlan{
-		RemoteURL:         remoteURL,
-		ToolName:          "search",
-		Slug:              "notion",
-		RequiresOAuth:     false,
-		TransportType:     externalmcptypes.TransportTypeStreamableHTTP,
-		HeaderDefinitions: nil,
-	}
-}
-
 func callToolProxy(t *testing.T, ctx context.Context, proxy *ToolProxy, plan *ToolCallPlan, body string) (*httptest.ResponseRecorder, error) {
 	t.Helper()
 
@@ -153,7 +101,6 @@ func callToolProxy(t *testing.T, ctx context.Context, proxy *ToolProxy, plan *To
 	err := proxy.Do(ctx, recorder, strings.NewReader(body), toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 		MCPClient:  toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
@@ -172,128 +119,6 @@ func TestToolCallOutcomeForStatus(t *testing.T) {
 	require.Equal(t, toolCallOutcomeSuccess, toolCallOutcomeForStatus(http.StatusFound))
 	require.Equal(t, toolCallOutcomeToolError, toolCallOutcomeForStatus(http.StatusBadRequest))
 	require.Equal(t, toolCallOutcomeToolError, toolCallOutcomeForStatus(http.StatusInternalServerError))
-}
-
-// External MCP executions were absent from tool.call entirely, so the counter
-// undercounted every billable tool call served through an external MCP server.
-func TestToolProxy_Do_ExternalMCP_RecordsToolCall(t *testing.T) {
-	t.Parallel()
-
-	reader := sdkmetric.NewManualReader()
-	proxy := newMetricToolProxy(t, reader)
-	server := newExternalMCPTestServer(t, false)
-	descriptor := newExternalMCPToolDescriptor()
-
-	recorder, err := callToolProxy(t, t.Context(), proxy, NewExternalMCPToolCallPlan(descriptor, externalMCPPlan(server.URL)), `{}`)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, recorder.Code)
-
-	set := onlyToolCallAttributes(t, reader)
-	require.Equal(t, string(urn.ToolKindExternalMCP), attributeValue(t, set, attr.ToolCallKindKey))
-	require.Equal(t, string(toolCallOutcomeSuccess), attributeValue(t, set, attr.OutcomeKey))
-	require.Equal(t, "200", attributeValue(t, set, attribute.Key("http.response.status_code")))
-	require.Equal(t, descriptor.OrganizationID, attributeValue(t, set, attr.OrganizationIDKey))
-}
-
-// The upstream tool name is resolved only when the call is dispatched, so
-// reading it off the proxy tool's URN would label every external MCP series
-// "proxy" and leave dashboards unable to name the tool that ran.
-func TestToolProxy_Do_ExternalMCP_RecordsUpstreamToolName(t *testing.T) {
-	t.Parallel()
-
-	reader := sdkmetric.NewManualReader()
-	proxy := newMetricToolProxy(t, reader)
-	server := newExternalMCPTestServer(t, false)
-	descriptor := newExternalMCPToolDescriptor()
-	require.Equal(t, "proxy", descriptor.URN.Name, "the descriptor must carry the placeholder name this test is about")
-
-	_, err := callToolProxy(t, t.Context(), proxy, NewExternalMCPToolCallPlan(descriptor, externalMCPPlan(server.URL)), `{}`)
-	require.NoError(t, err)
-
-	set := onlyToolCallAttributes(t, reader)
-	require.Equal(t, "search", attributeValue(t, set, attr.ToolNameKey))
-}
-
-// Some upstreams answer an unknown tool name with an errored result rather
-// than a protocol error, which would put the caller's unvalidated string on the
-// metric dimension. Only a name the upstream answered successfully is recorded,
-// so an errored result is attributed to the URN name whatever it was called.
-func TestToolProxy_Do_ExternalMCP_DoesNotRecordToolNameOnErroredResult(t *testing.T) {
-	t.Parallel()
-
-	reader := sdkmetric.NewManualReader()
-	proxy := newMetricToolProxy(t, reader)
-	server := newExternalMCPTestServer(t, true)
-	descriptor := newExternalMCPToolDescriptor()
-
-	_, err := callToolProxy(t, t.Context(), proxy, NewExternalMCPToolCallPlan(descriptor, externalMCPPlan(server.URL)), `{}`)
-	require.NoError(t, err)
-
-	set := onlyToolCallAttributes(t, reader)
-	require.Equal(t, descriptor.URN.Name, attributeValue(t, set, attr.ToolNameKey))
-	require.Equal(t, string(toolCallOutcomeToolError), attributeValue(t, set, attr.OutcomeKey))
-}
-
-// A proxy tool's name is taken from the caller's request without being checked
-// against the upstream's tool list, so a call that never reached a tool must
-// not put that string on a metric dimension.
-func TestToolProxy_Do_ExternalMCP_DoesNotRecordUnreachedToolName(t *testing.T) {
-	t.Parallel()
-
-	reader := sdkmetric.NewManualReader()
-	proxy := newMetricToolProxy(t, reader)
-	server := newExternalMCPTestServer(t, false)
-	descriptor := newExternalMCPToolDescriptor()
-
-	plan := externalMCPPlan(server.URL)
-	plan.ToolName = "no-such-tool-" + uuid.NewString()
-
-	_, err := callToolProxy(t, t.Context(), proxy, NewExternalMCPToolCallPlan(descriptor, plan), `{}`)
-	require.Error(t, err, "the upstream must reject a tool it does not expose")
-
-	set := onlyToolCallAttributes(t, reader)
-	require.Equal(t, descriptor.URN.Name, attributeValue(t, set, attr.ToolNameKey))
-}
-
-// An upstream reporting failure in-band still answers with HTTP 200, so the
-// status code records it as a success. The outcome dimension is the only place
-// this failure class is visible.
-func TestToolProxy_Do_ExternalMCP_RecordsUpstreamErrorResultAsToolError(t *testing.T) {
-	t.Parallel()
-
-	reader := sdkmetric.NewManualReader()
-	proxy := newMetricToolProxy(t, reader)
-	server := newExternalMCPTestServer(t, true)
-
-	recorder, err := callToolProxy(t, t.Context(), proxy, NewExternalMCPToolCallPlan(newExternalMCPToolDescriptor(), externalMCPPlan(server.URL)), `{}`)
-	require.NoError(t, err, "an errored tool result is forwarded to the caller, not raised as a gateway error")
-	require.Equal(t, http.StatusOK, recorder.Code, "the response written to the caller must be unchanged")
-
-	set := onlyToolCallAttributes(t, reader)
-	require.Equal(t, string(toolCallOutcomeToolError), attributeValue(t, set, attr.OutcomeKey))
-	require.Equal(t, "200", attributeValue(t, set, attribute.Key("http.response.status_code")))
-}
-
-// A call that never reaches a working upstream writes no response at all, and
-// is counted apart from a tool that ran and failed. The upstream here answers
-// the MCP handshake with a 404, the shape a misconfigured remote URL takes.
-func TestToolProxy_Do_ExternalMCP_RecordsNoResponseWhenUpstreamRejectsHandshake(t *testing.T) {
-	t.Parallel()
-
-	reader := sdkmetric.NewManualReader()
-	proxy := newMetricToolProxy(t, reader)
-
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	t.Cleanup(upstream.Close)
-
-	_, err := callToolProxy(t, t.Context(), proxy, NewExternalMCPToolCallPlan(newExternalMCPToolDescriptor(), externalMCPPlan(upstream.URL)), `{}`)
-	require.Error(t, err)
-
-	set := onlyToolCallAttributes(t, reader)
-	require.Equal(t, string(toolCallOutcomeNoResponse), attributeValue(t, set, attr.OutcomeKey))
-	require.Equal(t, "0", attributeValue(t, set, attribute.Key("http.response.status_code")))
 }
 
 // The three executors that already recorded tool.call were rewritten onto the
