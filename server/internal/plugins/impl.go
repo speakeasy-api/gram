@@ -619,6 +619,11 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 		Actor:                 PluginMetadataActor{UserID: ac.UserID, DisplayName: ac.Email},
 	})
 	if err != nil {
+		// Turning on automatic server adding fills the plugin from its role
+		// audiences, which the Shadow MCP admission guard can refuse.
+		if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrPrivateGatewayAudience) || errors.Is(err, admission.ErrUnavailable) {
+			return nil, mapDistributionAdmissionError(err)
+		}
 		return nil, s.pluginMetadataError(ctx, err, "update plugin")
 	}
 	if err := tx.Commit(ctx); err != nil {
