@@ -6,39 +6,29 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// TestCreateRiskPolicy_PromptBasedGatedByFlag verifies that creating a
-// prompt_based policy is rejected with Forbidden when the FlagPromptPolicies
-// feature flag is not enabled (the test service is wired with a nil flag
-// provider, so the MVP gate is closed).
-func TestCreateRiskPolicy_PromptBasedGatedByFlag(t *testing.T) {
+func TestCreateRiskPolicy_PromptBased(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
 	name := "Prompt Policy"
 	prompt := "Block destructive deletes"
-	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
 		Name:       &name,
 		PolicyType: "prompt_based",
 		Prompt:     &prompt,
 	})
-	require.Error(t, err)
-
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+	require.NoError(t, err)
+	require.Equal(t, "prompt_based", policy.PolicyType)
+	require.NotNil(t, policy.Prompt)
+	require.Equal(t, prompt, *policy.Prompt)
 }
 
 func TestCreateRiskPolicy_PromptBasedRejectsDetectionSources(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagPromptPolicies, authCtx.ActiveOrganizationID, true)
 
 	name := "Prompt Policy"
 	prompt := "Block destructive deletes"
@@ -79,9 +69,6 @@ func TestUpdateRiskPolicy_StandardRejectsPromptFields(t *testing.T) {
 func TestUpdateRiskPolicy_PromptBasedRejectsDetectionSources(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagPromptPolicies, authCtx.ActiveOrganizationID, true)
 
 	name := "Prompt Policy"
 	prompt := "Block destructive deletes"

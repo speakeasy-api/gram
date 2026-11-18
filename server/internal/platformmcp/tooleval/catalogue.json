@@ -3760,7 +3760,7 @@
     },
     {
       "name": "list_risk_presets",
-      "description": "List the use-case presets a risk policy can start from, with what each one detects, its policy type, default action and severity. Use a preset id with create_risk_policy to create the policy without choosing detectors by hand. can_scope_to_mcp says whether the preset can be limited to chosen MCP servers with create_risk_policy's mcp_scope. Presets marked requires_prompt_policies only work in projects where prompt policies are switched on.",
+      "description": "List the use-case presets a risk policy can start from, with what each one detects, its policy type, default action and severity. Use a preset id with create_risk_policy to create the policy without choosing detectors by hand. can_scope_to_mcp says whether the preset can be limited to chosen MCP servers with create_risk_policy's mcp_scope.",
       "input_schema": {
         "type": "object",
         "properties": {},

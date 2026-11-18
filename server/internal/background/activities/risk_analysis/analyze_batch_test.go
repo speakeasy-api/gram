@@ -711,7 +711,6 @@ func TestAnalyzeBatch_PromptPolicyPublishesJudgeRequests(t *testing.T) {
 	require.NoError(t, err)
 	msgIDs := seedMessages(t, conn, td, 2)
 	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagPromptPolicies, td.orgID, true)
 	promptPolicyPub, published := capturingPromptPolicyPub(t)
 
 	ab, err := risk_analysis.NewAnalyzeBatch(
@@ -781,7 +780,6 @@ func TestAnalyzeBatch_PromptPolicyPublishesPolicyWithoutPrompt(t *testing.T) {
 	require.NoError(t, err)
 	msgIDs := seedMessages(t, conn, td, 2)
 	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagPromptPolicies, td.orgID, true)
 	promptPolicyPub, published := capturingPromptPolicyPub(t)
 
 	ab, err := risk_analysis.NewAnalyzeBatch(
@@ -847,7 +845,6 @@ func TestAnalyzeBatch_PromptPolicyPublishesToolCallPayload(t *testing.T) {
 
 	msgID := insertAssistantToolCallWithArgs(t, conn, td, "Bash", map[string]any{"command": "rm -rf /tmp/data"})
 	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagPromptPolicies, td.orgID, true)
 	promptPolicyPub, published := capturingPromptPolicyPub(t)
 	ab, err := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),

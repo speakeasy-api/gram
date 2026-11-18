@@ -25,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
-	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -236,13 +235,6 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 // A policy without a prompt still publishes: the handler applies the policy's
 // fail mode to it, flagging every message when the policy fails closed.
 func (a *AnalyzeBatch) publishPromptPolicy(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, masks CategoryScopeMasks) error {
-	enabled, err := policyflags.ProjectFlagChecked(ctx, a.logger, repo.New(a.db), a.flags, args.OrganizationID, args.ProjectID, feature.FlagPromptPolicies)
-	if err != nil {
-		return fmt.Errorf("check prompt policies flag: %w", err)
-	}
-	if !enabled {
-		return nil
-	}
 	indices := promptPolicyIndices(messages, masks)
 	if len(indices) == 0 {
 		return nil

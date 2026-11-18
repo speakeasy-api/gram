@@ -16,7 +16,6 @@ export const FEATURE_FLAGS = {
   // UI-only rollout gate for the Sync from Okta option of Add MCP server; the
   // Okta application and suggestion APIs behind it are not gated.
   oktaMcpImport: "okta-mcp-import",
-  promptPolicies: "gram-prompt-policies",
   // Org-targeted, read server-side under the same key when a private network
   // connection is created: the tailnet gateway when enabled, the Tailscale
   // operator otherwise. The setup sheet shows the matching steps.

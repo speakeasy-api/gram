@@ -1,6 +1,5 @@
 import { enumPresentation } from "@/lib/enum";
 import { Page } from "@/components/page-layout";
-import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
@@ -11,7 +10,6 @@ import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { TextArea } from "@/components/ui/Textarea";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { cn } from "@/lib/utils";
@@ -175,11 +173,8 @@ type ReviewState = {
 export function PolicyStartChooser(): JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
-  const telemetry = useTelemetry();
   const gramProject = useProjectSlugForRequests();
   const mode = useDetectorMode();
-  const promptPoliciesEnabled =
-    telemetry.isFeatureEnabled("gram-prompt-policies") ?? false;
   const toolApprovals = useFeatureFlag(FEATURE_FLAGS.toolApprovals);
   const [, setKind] = useQueryState("kind");
   // "Change starting point" hands the state over in the route; otherwise
@@ -201,9 +196,6 @@ export function PolicyStartChooser(): JSX.Element {
   // and opens the Shadow AI editor instead of seeding the standard one.
   const allPresets = (data?.presets ?? []).map(presentShadowAIUseCase);
   const shadowAISlot = useShadowAIPolicySlot();
-  const presets = allPresets.filter(
-    (preset) => promptPoliciesEnabled || preset.policyType !== "prompt_based",
-  );
 
   // A description that names an MCP server starts the scope step limited to
   // it, where the scope step offers that and the project has a server to pick.
@@ -317,7 +309,6 @@ export function PolicyStartChooser(): JSX.Element {
             review={review}
             presets={allPresets}
             mode={mode}
-            promptPoliciesEnabled={promptPoliciesEnabled}
             onOverride={(overridePresetId) =>
               setReview({ ...review, overridePresetId })
             }
@@ -346,12 +337,11 @@ export function PolicyStartChooser(): JSX.Element {
           <Page.Section.Body>
             <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
               <UseCaseTable
-                presets={presets}
+                presets={allPresets}
                 isLoading={isLoading}
                 isError={isError}
                 onRetry={() => void refetch()}
                 mode={mode}
-                promptPoliciesEnabled={promptPoliciesEnabled}
                 shadowAISlot={shadowAISlot}
                 approvalsEnabled={toolApprovals.status === "enabled"}
                 onSelect={(preset) => openDraft(draftFromPreset(preset))}
@@ -379,7 +369,6 @@ function UseCaseTable({
   isError,
   onRetry,
   mode,
-  promptPoliciesEnabled,
   shadowAISlot,
   approvalsEnabled,
   onSelect,
@@ -391,7 +380,6 @@ function UseCaseTable({
   isError: boolean;
   onRetry: () => void;
   mode: DetectorMode;
-  promptPoliciesEnabled: boolean;
   shadowAISlot: ShadowAIPolicySlot;
   approvalsEnabled: boolean;
   onSelect: (preset: RiskPreset) => void;
@@ -500,16 +488,14 @@ function UseCaseTable({
         >
           Built-in detector
         </Button>
-        {promptPoliciesEnabled ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="tertiary"
-            onClick={() => onScratch("prompt")}
-          >
-            Prompt-based
-          </Button>
-        ) : null}
+        <Button
+          type="button"
+          size="sm"
+          variant="tertiary"
+          onClick={() => onScratch("prompt")}
+        >
+          Prompt-based
+        </Button>
         <ShadowAIScratchOption onPick={() => onScratch("shadow-ai")} />
       </div>
     </div>
@@ -683,7 +669,6 @@ export function DraftReview({
   review,
   presets,
   mode,
-  promptPoliciesEnabled,
   onOverride,
   onBack,
   onContinue,
@@ -692,7 +677,6 @@ export function DraftReview({
   review: ReviewState;
   presets: RiskPreset[];
   mode: DetectorMode;
-  promptPoliciesEnabled: boolean;
   onOverride: (presetId: string | null) => void;
   onBack: () => void;
   onContinue: () => void;
@@ -731,13 +715,9 @@ export function DraftReview({
     : bespoke
       ? undefined
       : suggestion.confidence;
-  const blockedByFlag =
-    draft.policyType === "prompt_based" && !promptPoliciesEnabled;
 
   const enabled = (p: RiskPreset | undefined): p is RiskPreset =>
-    !!p &&
-    supportsPolicyDraft(p) &&
-    (promptPoliciesEnabled || p.policyType !== "prompt_based");
+    !!p && supportsPolicyDraft(p);
   // The suggested use case stays on offer after an override, so the swap can
   // be undone from the same list.
   const alsoClose = [
@@ -844,14 +824,6 @@ export function DraftReview({
               </ReviewRow>
             ) : null}
           </dl>
-          {blockedByFlag ? (
-            <Alert variant="warning">
-              Prompt-based policies aren't switched on for this project.
-              {alsoClose.length > 0
-                ? " Pick one of the use cases below instead."
-                : " Start from a use case instead."}
-            </Alert>
-          ) : null}
         </Stack>
       </div>
 
@@ -894,7 +866,7 @@ export function DraftReview({
         <Button type="button" variant="tertiary" onClick={onBack}>
           Browse use cases
         </Button>
-        <Button type="button" onClick={onContinue} disabled={blockedByFlag}>
+        <Button type="button" onClick={onContinue}>
           Continue in wizard
           <ArrowRight className="size-4" />
         </Button>
