@@ -845,6 +845,7 @@ var registry = []Product{
 	{
 		ID:          "vibe",
 		VendorKey:   "mistral",
+		Family:      "",
 		DisplayName: "Mistral Vibe",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -855,6 +856,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"vibe", "mistral-vibe", "Mistral Vibe"},
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
