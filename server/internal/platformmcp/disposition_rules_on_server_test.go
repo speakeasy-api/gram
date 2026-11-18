@@ -88,6 +88,8 @@ func TestDispositionRulesOnServer(t *testing.T) {
 			require.NoError(t, err)
 			require.ElementsMatch(t, tt.wantAllowed, allowed)
 			require.ElementsMatch(t, tt.wantBlocked, blocked)
+			require.NotNil(t, allowed, "an empty list reads [] rather than null")
+			require.NotNil(t, blocked, "an empty list reads [] rather than null")
 		})
 	}
 }

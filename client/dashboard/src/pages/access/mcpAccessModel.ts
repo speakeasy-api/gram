@@ -6,7 +6,10 @@ import { enumPresentation } from "@/lib/enum";
 
 import type { Disposition } from "@gram/client/models/components/selector.js";
 
-import type { ToolAnnotation } from "@/components/tool-selection/annotations";
+import {
+  TOOL_ANNOTATIONS,
+  type ToolAnnotation,
+} from "@/components/tool-selection/annotations";
 
 import type { Server, ServerGroup, ServerTool } from "./serverMerge";
 
@@ -106,7 +109,7 @@ export function toolDispositionAnnotations(tool: {
   annotations?: ToolHints | null;
 }): ToolAnnotation[] {
   const disposition = toolDisposition(tool);
-  return disposition === "unannotated" ? [] : [disposition];
+  return TOOL_ANNOTATIONS.filter((annotation) => annotation === disposition);
 }
 
 /**

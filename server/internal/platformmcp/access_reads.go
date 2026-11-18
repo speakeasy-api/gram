@@ -993,8 +993,9 @@ func dispositionRulesOnServer(grants []authz.Grant, server authz.MCPServerRef) (
 			}
 		}
 	}
-	allowed = slices.Sorted(maps.Keys(allowedSet))
-	blocked = slices.Sorted(maps.Keys(blockedSet))
+	// Empty, not nil, so the output reads [] rather than null.
+	allowed = append([]string{}, slices.Sorted(maps.Keys(allowedSet))...)
+	blocked = append([]string{}, slices.Sorted(maps.Keys(blockedSet))...)
 	return allowed, blocked, nil
 }
 
