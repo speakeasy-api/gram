@@ -74,7 +74,7 @@ func TestOnboardingStackOptionsComeFromTheSupportMatrix(t *testing.T) {
 	require.Len(t, vendors["Google"].Plans, 2)
 	require.Len(t, vendors["GitHub"].Plans, 2)
 	require.Empty(t, vendors["OpenCode"].Plans)
-	require.Len(t, vendors["Anthropic"].Platforms, 12)
+	require.Len(t, vendors["Anthropic"].Platforms, 14)
 	require.Equal(t, "Claude Code", vendors["Anthropic"].Platforms[0].Family)
 
 	mdm := make([]string, 0, len(options.MdmVendors))

@@ -15,12 +15,18 @@
 .support-platform-header[data-family="Claude Code"] {
   --platform-lightness: 78%;
 }
-.support-platform-header[data-family="Claude Chat"] {
-  --platform-lightness: 86%;
+.support-platform-header[data-family="Claude · Unified Chat"] {
+  --platform-lightness: 84%;
 }
-.support-platform-header[data-family="Cowork"] {
+/* Deprecated families keep their hue but fade, so they read as superseded. */
+.support-platform-header[data-family="Claude Chat (deprecated)"] {
+  --platform-saturation: 25%;
+  --platform-lightness: 90%;
+}
+.support-platform-header[data-family="Cowork (deprecated)"] {
   --platform-hue: 34;
-  --platform-lightness: 82%;
+  --platform-saturation: 25%;
+  --platform-lightness: 90%;
 }
 .support-platform-header[data-family="Other Claudes"] {
   --platform-lightness: 92%;
