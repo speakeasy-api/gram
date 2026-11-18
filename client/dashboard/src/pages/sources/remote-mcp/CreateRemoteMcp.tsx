@@ -83,9 +83,9 @@ function CreateRemoteMcpForm() {
   const shadowServerName =
     searchParams.get(SHADOW_MCP_SETUP_PARAMS.name)?.trim() ||
     "this Shadow MCP server";
-  // The name this form filled in itself, which a later check may replace. A
-  // name the person typed, or one a link filled in, is never replaced.
-  const [suggestedName, setSuggestedName] = useState("");
+  // Whether a name was given, typed or by the link. Until one is, each
+  // successful check fills it in; once it is, it is kept.
+  const [nameEdited, setNameEdited] = useState(() => name !== "");
   const [mode, setMode] = useState<ProxyMode>("proxied");
   const [issuerSelection, setIssuerSelection] = useState<string | null>(null);
   const [identityMode, setIdentityMode] =
@@ -157,19 +157,17 @@ function CreateRemoteMcpForm() {
     }
   }, [identityChoiceTouched, verify.result]);
 
-  // Once the URL checks out, an empty name is filled in: with the name the
-  // server reports for itself, or else one read from its address.
+  // Once the URL checks out, the name is filled in: with the name the
+  // server reports for itself, or else one read from the address that was
+  // checked.
   useEffect(() => {
-    if (!verify.result?.verified) return;
+    if (nameEdited || !verify.result?.verified) return;
     const suggestion =
-      verify.result.serverName?.trim() || readableServiceNameFromUrl(url) || "";
-    if (!suggestion) return;
-    setName((current) => {
-      if (current.trim() !== "" && current !== suggestedName) return current;
-      return suggestion;
-    });
-    setSuggestedName(suggestion);
-  }, [verify.result, url, suggestedName]);
+      verify.result.serverName?.trim() ||
+      (verify.result.url && readableServiceNameFromUrl(verify.result.url)) ||
+      "";
+    if (suggestion) setName(suggestion);
+  }, [nameEdited, verify.result]);
 
   const handleVerify = () => {
     setTouched(true);
@@ -298,7 +296,10 @@ function CreateRemoteMcpForm() {
                 autoFocus
                 placeholder="My MCP server"
                 value={name}
-                onChange={setName}
+                onChange={(value) => {
+                  setNameEdited(true);
+                  setName(value);
+                }}
               />
             </Stack>
 

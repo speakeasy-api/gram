@@ -133,7 +133,10 @@ export function issuerFormFromDraft(
     codeChallengeMethodsSupported:
       draft.codeChallengeMethodsSupported ?? undefined,
     clientIdMetadataDocumentSupported: draft.clientIdMetadataDocumentSupported,
+    revocationEndpoint: draft.revocationEndpoint,
     serviceDocumentation: draft.serviceDocumentation,
+    opPolicyUri: draft.opPolicyUri,
+    opTosUri: draft.opTosUri,
     userinfoEndpoint: draft.userinfoEndpoint,
     introspectionEndpoint: draft.introspectionEndpoint,
     introspectionEndpointAuthMethodsSupported:

@@ -14,6 +14,8 @@ type VerifyResult = {
   protectedResourceMetadataUrl?: string;
   /** The name the server reports for itself, when it was reachable. */
   serverName?: string;
+  /** The URL this result is for. */
+  url?: string;
 };
 
 function unreachableMessage(reason: string | undefined): string {
@@ -86,6 +88,7 @@ export function useVerifyRemoteMcpUrl(url: string): VerifyRemoteMcpUrlState {
             message: "MCP server is available",
             outcome: "mcp_available",
             serverName: response.serverName,
+            url: trimmed,
           });
           break;
         case "authentication_required":
@@ -94,6 +97,7 @@ export function useVerifyRemoteMcpUrl(url: string): VerifyRemoteMcpUrlState {
             message: "MCP server is available and requires authentication",
             outcome: "authentication_required",
             protectedResourceMetadataUrl: response.protectedResourceMetadataUrl,
+            url: trimmed,
           });
           break;
         case "invalid_mcp_response": {

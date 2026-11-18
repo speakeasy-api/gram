@@ -154,6 +154,8 @@ export function readableServiceNameFromUrl(url: string): string | null {
   } catch {
     return null;
   }
+  // A fully qualified name ends in a dot that names no label.
+  host = host.replace(/\.$/, "");
   if (!host) return null;
   const labels = host.split(".");
   if (labels.length < 2 || /^\d+$/.test(labels[labels.length - 1]!)) {

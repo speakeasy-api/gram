@@ -115,6 +115,9 @@ export function usePersonalSignInDraft({
   const [source, setSourceState] = useState<PersonalSignInSource>("scratch");
   const [templateId, setTemplateId] = useState("");
   const [issuerId, setIssuerId] = useState("");
+  // The authorization server this form added from the detected metadata, so
+  // a retry after it was added reads as the same sign-in.
+  const [addedIssuerId, setAddedIssuerId] = useState("");
   const [clientTypePick, setClientTypePick] = useState<ClientType | null>(null);
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
@@ -257,8 +260,11 @@ export function usePersonalSignInDraft({
   const signature = JSON.stringify([
     source,
     starting?.id ?? "",
-    // By issuer URL, so adding a detected one does not read as a change.
-    issuer?.issuer ?? pendingIssuer?.issuer ?? "",
+    // The server this form added still reads as the detected one, so a
+    // retry after adding it does not read as a change.
+    pendingIssuer || (issuer && issuer.id === addedIssuerId)
+      ? `detected:${pendingIssuer?.issuer ?? issuer?.issuer}`
+      : (issuer?.id ?? ""),
     source === "scratch" ? clientType : "",
     clientId.trim(),
     clientSecret,
@@ -306,6 +312,7 @@ export function usePersonalSignInDraft({
         ),
       });
       // A retry after a later step fails uses the server just added.
+      setAddedIssuerId(target.id);
       setIssuerId(target.id);
     }
     if (!target) {

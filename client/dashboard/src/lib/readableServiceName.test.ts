@@ -5,6 +5,7 @@ import { readableServiceNameFromUrl } from "./sources";
 describe("readableServiceNameFromUrl", () => {
   it.each([
     ["https://mcp.canva.com/mcp", "Canva"],
+    ["https://mcp.canva.com./mcp", "Canva"],
     ["https://mcp.linear.app/mcp", "Linear"],
     ["https://app.asana.com", "Asana"],
     ["https://access.stripe.com/mcp", "Stripe"],

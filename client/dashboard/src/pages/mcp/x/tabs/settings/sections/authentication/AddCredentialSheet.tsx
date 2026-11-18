@@ -170,16 +170,10 @@ export function AddCredentialSheet({
       personal.fields.detected.state === "new")
       ? personal.fields.detected.serviceName
       : "";
-  const [suggestedName, setSuggestedName] = useState("");
+  const [nameEdited, setNameEdited] = useState(false);
   useEffect(() => {
-    if (!detectedService) return;
-    setName((current) =>
-      current.trim() !== "" && current !== suggestedName
-        ? current
-        : detectedService,
-    );
-    setSuggestedName(detectedService);
-  }, [detectedService, suggestedName]);
+    if (!nameEdited && detectedService) setName(detectedService);
+  }, [nameEdited, detectedService]);
 
   // A sign-in made for an attempt whose credential then failed to save. A
   // retry of the same form reuses it; anything else discards it, so a failed
@@ -420,7 +414,10 @@ export function AddCredentialSheet({
                       : "e.g. Engineering automation token"
                   }
                   value={name}
-                  onChange={setName}
+                  onChange={(value) => {
+                    setNameEdited(true);
+                    setName(value);
+                  }}
                 />
               </div>
 
