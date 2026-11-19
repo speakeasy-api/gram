@@ -16,6 +16,7 @@ import (
 
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -80,6 +81,7 @@ func TestClientCatalogDecisionsMatchGolden(t *testing.T) {
 	progressive := runtimeFor(feature.VariantPlatformMCPDiscoveryProgressive)
 	codeMode := runtimeFor(feature.VariantPlatformMCPDiscoveryCodeMode)
 
+	catalog := aivendors.CompiledSnapshot()
 	ids := goldenCatalogClientIDs(t)
 	decisions := make([]goldenClientDecision, 0, len(ids))
 	for _, id := range ids {
@@ -87,12 +89,12 @@ func TestClientCatalogDecisionsMatchGolden(t *testing.T) {
 		principal.ClientID = id
 		decisions = append(decisions, goldenClientDecision{
 			ClientID:     id,
-			ChatGPT:      isChatGPTClient(id),
-			Allowlist:    clientToolAllowlist(id),
-			Harness:      harnessForClient(id),
+			ChatGPT:      isChatGPTClient(catalog, id),
+			Allowlist:    clientToolAllowlist(catalog, id),
+			Harness:      harnessForClient(catalog, id),
 			Progressive:  progressive.discoveryModeFor(t.Context(), progressive.registrar.logger, principal),
 			CodeMode:     codeMode.discoveryModeFor(t.Context(), codeMode.registrar.logger, principal),
-			ReadinessApp: mcpconnectionattempts.AppOf(aivendors.CompiledSnapshot(), id, mcpconnectionattempts.ClientIDAdmitted).String(),
+			ReadinessApp: mcpconnectionattempts.AppOf(catalog, id, mcpconnectionattempts.ClientIDAdmitted).String(),
 		})
 	}
 	data, err := json.Marshal(decisions)
@@ -111,7 +113,7 @@ type goldenClientSurface struct {
 func TestClientToolSurfacesMatchGolden(t *testing.T) {
 	t.Parallel()
 
-	runtime := newAllowlistTestRuntime(t, []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)})
+	runtime := newAllowlistTestRuntime(t, []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)}).WithAICatalog(aivendorstest.NewStore())
 	handler := runtime.Handler()
 	initialize := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`
 	call := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_platform_context","arguments":{}}}`
@@ -137,6 +139,20 @@ func TestClientToolSurfacesMatchGolden(t *testing.T) {
 	testenv.RequireJSONGolden(t, "testdata/ai_catalog_client_surfaces_golden.json", data)
 }
 
+// The runtime reads the store it was given: an empty catalog recognizes no
+// ChatGPT client, so ChatGPT keeps the full catalogue.
+func TestRuntimeReadsTheInjectedCatalog(t *testing.T) {
+	t.Parallel()
+
+	runtime := newAllowlistTestRuntime(t, []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)}).WithAICatalog(aivendors.NewStore(aivendors.NewSnapshot(nil)))
+	var list struct {
+		Tools []*mcp.Tool `json:"tools"`
+	}
+	allowlistRPC(t, runtime.Handler(), runtime, testChatGPTConnectorClientID, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, &list)
+	require.ElementsMatch(t, names(runtime.registrar.For(AudienceExternal)), toolNames(list.Tools))
+	require.Panics(t, func() { newAllowlistTestRuntime(t, nil).WithAICatalog(nil) })
+}
+
 // goldenOAuthAdmission is how the Platform MCP authorization server admits one
 // client ID and what it records about it.
 type goldenOAuthAdmission struct {
@@ -149,10 +165,11 @@ func TestOAuthClientAdmissionMatchesGolden(t *testing.T) {
 	t.Parallel()
 
 	service := newTestOAuthHTTP(t)
+	catalog := service.aiCatalog.Snapshot()
 	ids := goldenCatalogClientIDs(t)
 	admissions := make([]goldenOAuthAdmission, 0, len(ids))
 	for _, id := range ids {
-		result := goldenOAuthAdmission{ClientID: id, Denial: "", Shadow: service.shadowCIMDAdmitReason(t.Context(), id)}
+		result := goldenOAuthAdmission{ClientID: id, Denial: "", Shadow: service.shadowCIMDAdmitReason(t.Context(), catalog, id)}
 		if err := service.admitCIMDClient(t.Context(), id); err != nil {
 			var denial *admission.DenialError
 			require.ErrorAs(t, err, &denial)
@@ -168,7 +185,7 @@ func TestOAuthClientAdmissionMatchesGolden(t *testing.T) {
 func TestInboundEMAPresetClientsMatchGolden(t *testing.T) {
 	t.Parallel()
 
-	data, err := json.Marshal(inboundEMAPresetClients())
+	data, err := json.Marshal(inboundEMAPresetClients(aivendors.CompiledSnapshot()))
 	require.NoError(t, err)
 	testenv.RequireJSONGolden(t, "testdata/ai_catalog_inbound_ema_presets_golden.json", data)
 }
@@ -179,7 +196,7 @@ func TestAIScanLibraryWithoutOverlayMatchesGolden(t *testing.T) {
 
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_ai_catalog_golden")
 	require.NoError(t, err)
-	service := NewShadowAIService(&stubDetectionReader{}, NewPostgresShadowAILibrary(agentrepo.New(conn)), stubAuthorizer{}, allowingBudget())
+	service := NewShadowAIService(&stubDetectionReader{}, NewPostgresShadowAILibrary(aivendorstest.NewStore(), agentrepo.New(conn)), stubAuthorizer{}, allowingBudget())
 	output, err := service.ListLibrary(t.Context(), shadowAIPrincipal(), ListAIScanLibraryInput{Category: ""})
 	require.NoError(t, err)
 	data, err := json.Marshal(output)

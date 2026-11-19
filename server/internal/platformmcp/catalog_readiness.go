@@ -125,10 +125,13 @@ type RemoteMCPReadinessProber struct {
 	// authentication through typed auth clients, whose probes use the
 	// registrations those clients offer.
 	authEnforcement *authenforcement.Gate
+
+	// aiCatalog names the admitted client app in connection attribution.
+	aiCatalog *aivendors.Store
 }
 
-func NewRemoteMCPReadinessProber(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, sessions *remotesessions.ChallengeManager) *RemoteMCPReadinessProber {
-	return &RemoteMCPReadinessProber{logger: logger, db: db, enc: enc, policy: policy, sessions: sessions, chaining: nil, authEnforcement: authenforcement.NewGate(db)}
+func NewRemoteMCPReadinessProber(aiCatalog *aivendors.Store, logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, sessions *remotesessions.ChallengeManager) *RemoteMCPReadinessProber {
+	return &RemoteMCPReadinessProber{logger: logger, db: db, enc: enc, policy: policy, sessions: sessions, chaining: nil, authEnforcement: authenforcement.NewGate(db), aiCatalog: aiCatalog}
 }
 
 // WithIdentityChaining judges upstreams without an interactive session by
@@ -208,6 +211,7 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 		return p.result(principal, registrationID, state, evidence, remotesessions.ResolvedAuthorization{}, "anonymous"), nil
 	}
 	subject := urn.NewUserSubject(principal.UserID)
+	app := mcpconnectionattempts.AppOf(p.aiCatalog.Snapshot(), principal.ClientID, mcpconnectionattempts.ClientIDAdmitted)
 	var authorization remotesessions.ResolvedAuthorization
 	chosen := clients[0]
 	if enforced {
@@ -216,7 +220,7 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 		// and the first registration's failure is reported when none does.
 		var firstErr error
 		for i, client := range clients {
-			tokens, resolveErr := p.sessions.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{ProjectID: projectID, OrganizationID: principal.OrganizationID, UserSessionIssuerID: userSessionIssuerID, Subject: subject, RegistrationID: client.ID, SkipUnusable: false, Attribution: remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(principal.OrganizationID, projectID, mcpconnectionattempts.AppOf(aivendors.CompiledSnapshot(), principal.ClientID, mcpconnectionattempts.ClientIDAdmitted)))})
+			tokens, resolveErr := p.sessions.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{ProjectID: projectID, OrganizationID: principal.OrganizationID, UserSessionIssuerID: userSessionIssuerID, Subject: subject, RegistrationID: client.ID, SkipUnusable: false, Attribution: remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(principal.OrganizationID, projectID, app))})
 			token := tokens[client.RemoteSessionIssuerID]
 			if resolveErr == nil && token.Token == "" {
 				resolveErr = remotesessions.ErrNoValidToken
@@ -237,7 +241,7 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 		if len(clients) != 1 {
 			return p.result(principal, registrationID, ReadinessNeedsConfiguration, "multiple_upstream_identity_providers", remotesessions.ResolvedAuthorization{}, "no_client"), nil
 		}
-		authorization, err = p.sessions.ResolveAuthorization(ctx, remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(principal.OrganizationID, projectID, mcpconnectionattempts.AppOf(aivendors.CompiledSnapshot(), principal.ClientID, mcpconnectionattempts.ClientIDAdmitted))), projectID, principal.OrganizationID, userSessionIssuerID, chosen.RemoteSessionIssuerID, subject, remote.Url)
+		authorization, err = p.sessions.ResolveAuthorization(ctx, remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(principal.OrganizationID, projectID, app)), projectID, principal.OrganizationID, userSessionIssuerID, chosen.RemoteSessionIssuerID, subject, remote.Url)
 	}
 	if errors.Is(err, remotesessions.ErrNoRemoteSessionClientBinding) || errors.Is(err, remotesessions.ErrChosenClientUnbound) {
 		return p.result(principal, registrationID, ReadinessNeedsConfiguration, "upstream_identity_provider_not_configured", remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: chosen.RemoteSessionIssuerID}, "no_client"), nil

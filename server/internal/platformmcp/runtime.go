@@ -15,6 +15,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
@@ -211,8 +212,9 @@ func clientToolAllowlistMiddleware(registrar *Registrar) mcp.Middleware {
 				return next(ctx, method, req)
 			}
 			clientID := mustPrincipal(ctx).ClientID
+			catalog := registrar.aiCatalogSnapshot(ctx)
 			if method == "tools/call" {
-				if callReq, ok := req.(*mcp.CallToolRequest); ok && callReq.Params != nil && !toolAllowedForClient(clientID, callReq.Params.Name) {
+				if callReq, ok := req.(*mcp.CallToolRequest); ok && callReq.Params != nil && !toolAllowedForClient(catalog, clientID, callReq.Params.Name) {
 					return nil, &jsonrpc.Error{Code: jsonrpc.CodeInvalidParams, Message: fmt.Sprintf("unknown tool %q", callReq.Params.Name)}
 				}
 			}
@@ -222,9 +224,9 @@ func clientToolAllowlistMiddleware(registrar *Registrar) mcp.Middleware {
 			}
 			switch typed := result.(type) {
 			case *mcp.InitializeResult:
-				typed.Instructions = registrar.instructionsForClient(clientID, typed.Instructions)
+				typed.Instructions = registrar.instructionsForClient(catalog, clientID, typed.Instructions)
 			case *mcp.DiscoverResult:
-				typed.Instructions = registrar.instructionsForClient(clientID, typed.Instructions)
+				typed.Instructions = registrar.instructionsForClient(catalog, clientID, typed.Instructions)
 				// The instructions now depend on the caller, so no shared cache
 				// may hand one client's answer to another.
 				typed.CacheScope = "private"
@@ -312,6 +314,16 @@ func (r *Runtime) WithDashboardLinks(dashboardURL, serverURL *url.URL, db platfo
 	if r != nil && r.registrar != nil {
 		r.registrar.withDashboardLinks(newCardLinks(dashboardURL, serverURL, db))
 	}
+	return r
+}
+
+// WithAICatalog injects the AI client catalog that identifies OAuth clients.
+// Every production runtime needs one.
+func (r *Runtime) WithAICatalog(catalog *aivendors.Store) *Runtime {
+	if catalog == nil {
+		panic("platformmcp: AI client catalog store is required")
+	}
+	r.registrar.withAICatalog(catalog)
 	return r
 }
 

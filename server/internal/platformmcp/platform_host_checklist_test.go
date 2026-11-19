@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -91,6 +92,7 @@ func TestPlatformHostVerificationChecklistPlatformMCP(t *testing.T) {
 			encryptionClient := testEncryption(t)
 			signer := sessiontokens.NewSigner("platform-host-checklist-key")
 			oauth, err := NewOAuthHTTP(OAuthHTTPConfig{
+				AICatalog:     aivendorstest.NewStore(),
 				BaseURL:       serverURL,
 				Cache:         &memoryCache{values: map[string]any{}},
 				Store:         NewPostgresOAuthStore(conn),

@@ -14,6 +14,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 )
@@ -199,6 +200,9 @@ type Registrar struct {
 	// projects resolves the project_slug a tool names for handlers that act
 	// on the project's ID. Without it, those tools are unavailable.
 	projects SkillProjectResolver
+
+	// aiCatalog identifies OAuth clients. The runtime injects it.
+	aiCatalog *aivendors.Store
 }
 
 // withDashboardLinks lets result cards link to dashboard pages.
@@ -207,7 +211,7 @@ func (r *Registrar) withDashboardLinks(links cardLinks) {
 }
 
 func newRegistrar(server *mcp.Server) *Registrar {
-	return &Registrar{server: server, descriptors: nil, resources: nil, riskTelemetry: noopRiskTelemetry{}, externalAuthorizer: nil, logger: nil, instructions: "", cardLinks: cardLinks{dashboardURL: nil, serverURL: nil, projectSlug: nil}, projects: nil}
+	return &Registrar{server: server, descriptors: nil, resources: nil, riskTelemetry: noopRiskTelemetry{}, externalAuthorizer: nil, logger: nil, instructions: "", cardLinks: cardLinks{dashboardURL: nil, serverURL: nil, projectSlug: nil}, projects: nil, aiCatalog: nil}
 }
 
 // withProjects lets tools name their project by slug while their handlers act
@@ -228,6 +232,38 @@ func (r *Registrar) withExternalAuthorizer(authorizer Authorizer) {
 	if r != nil {
 		r.externalAuthorizer = authorizer
 	}
+}
+
+func (r *Registrar) withAICatalog(catalog *aivendors.Store) {
+	if r != nil {
+		r.aiCatalog = catalog
+	}
+}
+
+// packageTestAICatalog stands in for an injected catalog when package tests
+// build a registrar directly. It is always nil outside tests.
+var packageTestAICatalog *aivendors.Store
+
+type aiCatalogSnapshotKey struct{}
+
+// withAICatalogSnapshot pins one catalog snapshot for the rest of a request.
+func (r *Registrar) withAICatalogSnapshot(ctx context.Context) context.Context {
+	return context.WithValue(ctx, aiCatalogSnapshotKey{}, r.aiCatalogSnapshot(ctx))
+}
+
+// aiCatalogSnapshot returns the request's pinned snapshot, or captures one.
+func (r *Registrar) aiCatalogSnapshot(ctx context.Context) *aivendors.Snapshot {
+	if snapshot, ok := ctx.Value(aiCatalogSnapshotKey{}).(*aivendors.Snapshot); ok {
+		return snapshot
+	}
+	catalog := r.aiCatalog
+	if catalog == nil {
+		catalog = packageTestAICatalog
+	}
+	if catalog == nil {
+		panic("platformmcp: AI client catalog store was not injected")
+	}
+	return catalog.Snapshot()
 }
 
 func (r *Registrar) withRiskTelemetry(telemetry RiskTelemetry) {
@@ -274,7 +310,7 @@ func (r *Registrar) FilterExternalTools(ctx context.Context, principal Principal
 		}
 	}
 	grants, grantsLoaded := authz.GrantsFromContext(ctx)
-	allowlist := clientToolAllowlist(principal.ClientID)
+	allowlist := clientToolAllowlist(r.aiCatalogSnapshot(ctx), principal.ClientID)
 	// The small discovery surface reaches every tool by design, so the
 	// allowlist only narrows the full catalogue.
 	if discoveryModeFromContext(ctx) != discoveryFull {
