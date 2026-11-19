@@ -997,7 +997,7 @@ function InactiveSplit({
   rows: (groups: ConnectionGroup[]) => JSX.Element;
 }): JSX.Element {
   const needsReauth = inactive.filter((group) =>
-    group.sessions.every(
+    group.sessions.some(
       (session) => connectionState(session, now) === "needs_reauth",
     ),
   );

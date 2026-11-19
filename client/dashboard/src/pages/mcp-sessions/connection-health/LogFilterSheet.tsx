@@ -19,7 +19,7 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { cn } from "@/lib/utils";
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { DEFAULT_LOG_RANGE, TIME_RANGE_PRESETS } from "./filters";
 import { formatCount, plural } from "./format";
 import type { AttemptFacets } from "./types";
@@ -187,6 +187,10 @@ function TimeRanges({
   onChange: (value: DateRangeValue) => void;
 }): JSX.Element {
   const [custom, setCustom] = useState(!!value.customRange);
+  // A preset chosen anywhere (Reset, the picker) leaves Custom.
+  useEffect(() => {
+    if (!value.customRange) setCustom(false);
+  }, [value.preset, value.customRange]);
   const selected = value.customRange || custom ? "custom" : value.preset;
   const option = (key: string, label: string, onClick: () => void) => (
     <button

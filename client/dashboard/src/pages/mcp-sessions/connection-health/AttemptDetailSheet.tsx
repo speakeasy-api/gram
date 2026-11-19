@@ -214,7 +214,8 @@ function AttemptDetailBody({
   const where = serverLabel(attempt);
   const now = connectionHealthNow();
   const inLastDay =
-    now.getTime() - Date.parse(attempt.startedAt) < 23 * 60 * 60 * 1000;
+    now.getTime() - Date.parse(attempt.startedAt) <
+    24 * 60 * 60 * 1000 - 5 * 60 * 1000;
   return (
     <div className="flex min-h-full flex-col">
       <SheetHeader className="gap-2 border-b px-6 py-5 pr-12">

@@ -51,8 +51,10 @@ describe("stepResultLabel", () => {
 
 describe("formatWeekdayDay", () => {
   it("puts the weekday first", () => {
-    expect(formatWeekdayDay(new Date(2026, 10, 11, 12).getTime())).toMatch(
-      /^\S+ 11$/,
+    const date = new Date(2026, 10, 11, 12);
+    const day = new Intl.DateTimeFormat(undefined, { day: "numeric" }).format(
+      date,
     );
+    expect(formatWeekdayDay(date.getTime()).endsWith(` ${day}`)).toBe(true);
   });
 });

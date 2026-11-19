@@ -1,6 +1,7 @@
 import { useFilterState, type OptionsById } from "@/components/filters";
 import {
   chipLabel,
+  customDateRangeBounds,
   isDimensionAtDefault,
   type FilterValue,
 } from "@/components/filters/filter-schema";
@@ -377,7 +378,8 @@ export function ConnectionLogsView({
   const chipValues = useMemo(() => {
     const { customRange, customLabel } = filters.values.date;
     if (!customRange || customLabel) return filters.values;
-    const end = new Date(customRange.to.getTime() - 1);
+    const bounds = customDateRangeBounds(filters.values.date) ?? customRange;
+    const end = new Date(bounds.to.getTime() - 1);
     const from = formatDayMonth(customRange.from.toISOString());
     const to = formatDayMonth(end.toISOString());
     return {

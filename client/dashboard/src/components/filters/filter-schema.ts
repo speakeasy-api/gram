@@ -137,11 +137,12 @@ interface BaseDimension<K extends FilterKind> {
   required?: boolean;
   /** Once set, the chip names the dimension too: "Service: Linear". */
   chipPrefix?: boolean;
-  /** Once set, a multiselect chip counts its values: "Message: 3". */
-  chipCount?: boolean;
 }
 
-type MultiselectDimension = BaseDimension<"multiselect">;
+interface MultiselectDimension extends BaseDimension<"multiselect"> {
+  /** Once set, the chip counts its values: "Message: 3". */
+  chipCount?: boolean;
+}
 type SelectDimension = BaseDimension<"select">;
 interface TextDimension extends BaseDimension<"text"> {
   /** Zero for builders that submit explicitly; otherwise debounce live filtering. */
@@ -337,7 +338,8 @@ export function chipLabel(
     case "multiselect": {
       const arr = value as string[];
       if (arr.length === 0) return allLabelFor(dim);
-      if (dim.chipCount) return `${dim.label}: ${arr.length}`;
+      if ("chipCount" in dim && dim.chipCount)
+        return `${dim.label}: ${arr.length}`;
       const label = collapseValues(arr, options);
       return dim.chipPrefix ? `${dim.label}: ${label}` : label;
     }
