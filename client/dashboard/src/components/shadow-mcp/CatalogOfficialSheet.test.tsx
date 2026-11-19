@@ -258,7 +258,6 @@ describe("CatalogOfficialSheet", () => {
     expect(mocks.save).toHaveBeenCalledWith({
       serverUrl: "https://tracker.example.com/mcp",
       mcpServerId: "server-1",
-      allowDirectAccess: false,
     });
   });
 
@@ -296,7 +295,6 @@ describe("CatalogOfficialSheet", () => {
     expect(mocks.save).toHaveBeenCalledWith({
       serverUrl: "https://tracker.example.com/mcp",
       mcpServerId: "server-1",
-      allowDirectAccess: false,
     });
   });
 

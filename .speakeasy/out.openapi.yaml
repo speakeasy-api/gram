@@ -4163,7 +4163,7 @@ paths:
         type: mutation
   /rpc/access.setShadowMCPOfficialServer:
     post:
-      description: Link one project-scoped Shadow MCP server to its official version, switch the link off or on, or remove it. A link with allow_direct_access false blocks direct connections wherever a Shadow MCP policy applies and points agents at the linked server; true keeps the link but lets direct connections follow the ordinary rules. Omitting mcp_server_id (with allow_direct_access false) removes the link. Requires an authenticated session authorized for org:admin on the active organization.
+      description: Link one project-scoped Shadow MCP server to its official version, or remove the link. While a link exists, direct connections are blocked wherever a Shadow MCP policy applies and agents are pointed at the linked server. With mcp_server_id the link is added (or restored, when it was removed before) or pointed at that server; omitting mcp_server_id removes the link. Each add, change and removal is recorded in the audit log. Requires an authenticated session authorized for org:admin on the active organization.
       operationId: setShadowMCPOfficialServer
       parameters:
         - allowEmptyValue: true
@@ -98529,6 +98529,11 @@ components:
     ExplainResourceAccessResult:
       type: object
       properties:
+        credentials:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExplainedCredentialAccess'
+          description: For each upstream credential the server offers, whether the member may use it. A caller needs both use access to the server and one usable credential to reach an upstream that requires sign-in.
         levels:
           type: array
           items:
@@ -98544,6 +98549,7 @@ components:
       required:
         - visibility
         - levels
+        - credentials
     ExplainedAccessDirectorySource:
       type: object
       properties:
@@ -98673,6 +98679,82 @@ components:
         - kind
         - display_name
         - level
+        - applies_to
+        - effect
+        - via_directory_mapping
+    ExplainedCredentialAccess:
+      type: object
+      properties:
+        allowed:
+          type: boolean
+          description: Whether the member's rules let them use it, with their own connection for a personal credential.
+        auth_client_id:
+          type: string
+          description: The credential's auth client ID.
+          format: uuid
+        client_type:
+          type: string
+          description: The kind of credential.
+          enum:
+            - remote_session
+            - service_account
+            - static_credential
+            - pass_through
+            - ema
+        enabled:
+          type: boolean
+          description: Whether the credential is turned on. A turned-off credential is unusable whatever the rules say.
+        name:
+          type: string
+          description: The credential's name.
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExplainedCredentialRule'
+          description: Every rule matching this use, deciding rules first.
+      required:
+        - auth_client_id
+        - name
+        - client_type
+        - enabled
+        - allowed
+        - rules
+    ExplainedCredentialRule:
+      type: object
+      properties:
+        applies_to:
+          type: string
+          description: Whether the rule names this credential (credential), every credential of its kind (credential_type), or every credential (all_credentials).
+        display_name:
+          type: string
+          description: Human-readable name for the principal.
+        effect:
+          type: string
+          description: 'How the rule shaped the decision: allows, overrides, overridden, blocks or blocked, with the same meanings as an access rule''s effect.'
+        kind:
+          type: string
+          description: What the principal identifies.
+          enum:
+            - everyone
+            - role
+            - user
+            - unknown
+        principal_urn:
+          type: string
+          description: Canonical principal URN holding the rule.
+        project_bound:
+          type: boolean
+          description: Whether the rule applies only on servers in this server's project.
+        reason:
+          type: string
+          description: 'Why a blocked rule made directly to the member did not override the block: wildcard_direct_grant, narrower_direct_grant or own_exclusion.'
+        via_directory_mapping:
+          type: boolean
+          description: Whether the member holds this role only through a directory role mapping.
+      required:
+        - principal_urn
+        - kind
+        - display_name
         - applies_to
         - effect
         - via_directory_mapping
@@ -116998,9 +117080,6 @@ components:
     SetShadowMCPOfficialServerForm:
       type: object
       properties:
-        allow_direct_access:
-          type: boolean
-          description: 'Switch the link off: keep direct connections to the Shadow MCP server working under the ordinary Shadow MCP rules instead of blocking them. Requires mcp_server_id.'
         mcp_server_id:
           type: string
           description: The MCP server to link as the official version. Omit it to remove the link.
@@ -117015,7 +117094,6 @@ components:
       required:
         - project_id
         - server_url
-        - allow_direct_access
     SetSlackDirectoryDefaultProjectRequestBody:
       type: object
       properties:
@@ -117513,7 +117591,7 @@ components:
       properties:
         direct_access_allowed:
           type: boolean
-          description: 'True while the link is switched off: direct connections to the Shadow MCP server follow the ordinary Shadow MCP rules instead of being blocked.'
+          description: 'Deprecated: links no longer have an on/off switch, so this is always false. Kept one release so older dashboards, which require it, keep rendering, then removed.'
         gateway_name:
           type: string
           description: The gateway that serves the official server, when url is a gateway's address.
@@ -117533,7 +117611,6 @@ components:
       required:
         - mcp_server_id
         - name
-        - direct_access_allowed
     ShadowMCPSuggestedOfficialServer:
       type: object
       properties:

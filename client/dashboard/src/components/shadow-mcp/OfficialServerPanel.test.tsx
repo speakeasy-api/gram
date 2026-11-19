@@ -230,7 +230,6 @@ describe("OfficialServerPanel", () => {
               officialServer: {
                 mcpServerId: "11111111-1111-4111-8111-111111111111",
                 name: "Tracker",
-                directAccessAllowed: false,
               },
             })}
           />
@@ -431,7 +430,6 @@ describe("OfficialServerPanel", () => {
           slug: "tracker",
           url: "https://app.example.com/mcp/team-gateway",
           gatewayName: "Team Gateway",
-          directAccessAllowed: false,
         },
       }),
     );
@@ -450,53 +448,43 @@ describe("OfficialServerPanel", () => {
       "/acme/projects/default/mcp/tracker",
     );
     expect(open.getAttribute("target")).toBe("_blank");
-    expect(
-      screen
-        .getByRole("switch", { name: "Linked" })
-        .getAttribute("aria-checked"),
-    ).toBe("true");
+    expect(screen.queryByRole("switch")).toBeNull();
     expect(mocks.probe).not.toHaveBeenCalled();
   });
 
-  it("switches the link off and on, and removes it", async () => {
+  it("removes the link and adds it back on undo", async () => {
     const official = {
       mcpServerId: "11111111-1111-4111-8111-111111111111",
       name: "Tracker",
       url: "https://app.example.com/mcp/tracker",
-      directAccessAllowed: false,
     };
-    const view = renderPanel(server({ officialServer: official }));
+    renderPanel(server({ officialServer: official }));
 
-    fireEvent.click(screen.getByRole("switch", { name: "Linked" }));
-    await vi.waitFor(() =>
-      expect(mocks.save).toHaveBeenCalledWith({
-        serverUrl: "https://tracker.example.com/mcp",
-        mcpServerId: official.mcpServerId,
-        allowDirectAccess: true,
-      }),
-    );
-
-    view.unmount();
-    renderPanel(
-      server({ officialServer: { ...official, directAccessAllowed: true } }),
-    );
-    expect(screen.getByText("Link off")).toBeTruthy();
-    fireEvent.click(screen.getByRole("switch", { name: "Linked" }));
-    await vi.waitFor(() =>
-      expect(mocks.save).toHaveBeenLastCalledWith({
-        serverUrl: "https://tracker.example.com/mcp",
-        mcpServerId: official.mcpServerId,
-        allowDirectAccess: false,
-      }),
-    );
-
+    expect(screen.queryByText("Link off")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Remove link" }));
     await vi.waitFor(() =>
       expect(mocks.save).toHaveBeenLastCalledWith({
         serverUrl: "https://tracker.example.com/mcp",
         mcpServerId: undefined,
-        allowDirectAccess: false,
       }),
+    );
+
+    await vi.waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalled());
+    const options = mocks.toastSuccess.mock.calls.at(-1)?.[1] as {
+      action: { label: string; onClick: () => void };
+    };
+    expect(options.action.label).toBe("Undo");
+    options.action.onClick();
+    await vi.waitFor(() =>
+      expect(mocks.save).toHaveBeenLastCalledWith({
+        serverUrl: "https://tracker.example.com/mcp",
+        mcpServerId: official.mcpServerId,
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(mocks.toastSuccess).toHaveBeenLastCalledWith(
+        "Link to “Tracker” restored",
+      ),
     );
   });
 
@@ -505,7 +493,6 @@ describe("OfficialServerPanel", () => {
       mcpServerId: "11111111-1111-4111-8111-111111111111",
       name: "Tracker",
       url: "https://app.example.com/mcp/tracker",
-      directAccessAllowed: false,
     };
     renderPanel(server({ officialServer: official }));
 
@@ -526,7 +513,6 @@ describe("OfficialServerPanel", () => {
     expect(mocks.save).toHaveBeenLastCalledWith({
       serverUrl: "https://tracker.example.com/mcp",
       mcpServerId: official.mcpServerId,
-      allowDirectAccess: false,
     });
   });
 
@@ -567,7 +553,6 @@ describe("OfficialServerPanel", () => {
       expect(mocks.save).toHaveBeenCalledWith({
         serverUrl: "https://tracker.example.com/mcp",
         mcpServerId: "22222222-2222-4222-8222-222222222222",
-        allowDirectAccess: false,
       }),
     );
   });
@@ -606,7 +591,6 @@ describe("OfficialServerPanel", () => {
       expect(mocks.save).toHaveBeenCalledWith({
         serverUrl: "https://tracker.example.com/mcp",
         mcpServerId: "server-tools",
-        allowDirectAccess: false,
       });
     });
   });
