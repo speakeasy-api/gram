@@ -17,14 +17,15 @@ mise exec -- aube exec oxfmt -- --write server/internal/aivendors/catalogseed/ca
 
 Production is the source of truth after bootstrap. The seed only inserts, so a
 registry change reaches existing rows only as new products or documents. New
-clients belong in the admin review queue. API, MCP, and private ingress
-processes synchronously ensure reference data and load a database snapshot
-before serving. They refresh that snapshot about once a minute.
+clients belong in the admin review queue. This seed does not change the
+compiled catalog readers; that transition belongs to AIM-449.
 
 The `ai-client-catalog` startup seed hashes the embedded file and its application
 revision. Workers apply each version through the existing startup workflow.
 Normal cost is one workflow start and one activity per version per task queue,
-plus retries during rollouts; there is no periodic schedule.
+plus retries during rollouts; there is no periodic schedule. Revision 2 runs
+the seed once more after revision 1 has rolled out everywhere, so the decision
+backfill also links decisions written by old replicas during that rollout.
 
 Products retain their stable text IDs. Documents get deterministic bootstrap
 IDs, so editing their URL, disabling them, or soft-deleting them survives a
@@ -71,8 +72,8 @@ This checks reference integrity, not product liveness: staff deletions remain
 authoritative and must not make demo provisioning fail.
 Isolated demo tests seed the global catalog before taking their safety baseline.
 
-Platform MCP needs no new tool for process-startup initialization of global
-reference data or the worker-owned decision backfill. The existing Shadow AI
-inventory/library and client admission tools retain their readers, permissions
-and result contracts. Catalog and decision integration tests verify persistence
-and refreshed reader behavior.
+Platform MCP needs no new tool for this worker-owned initialization of global
+reference data. The existing Shadow AI inventory/library and client admission
+tools retain their readers, permissions and result contracts. Catalog and
+decision integration tests verify the new persistence behavior; reader changes
+remain in AIM-449.

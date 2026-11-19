@@ -1,7 +1,6 @@
 package aivendors
 
 import (
-	"cmp"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
@@ -60,6 +59,11 @@ func NewSnapshot(products []Product) *Snapshot {
 	}
 	for _, p := range products {
 		p = p.clone()
+		for _, d := range p.Documents {
+			if d.Enabled && d.Pattern {
+				s.patterns = append(s.patterns, Preset{ProductID: p.ID, VendorKey: p.VendorKey, DisplayName: d.DisplayName, URL: d.URL, Enabled: d.Enabled, Pattern: d.Pattern})
+			}
+		}
 		// Canonical ordering makes fingerprints independent of query ordering.
 		slices.SortFunc(p.Documents, func(a, b Document) int { return strings.Compare(a.URL, b.URL) })
 		s.products = append(s.products, p)
@@ -80,22 +84,11 @@ func NewSnapshot(products []Product) *Snapshot {
 			if !entry.Enabled {
 				continue
 			}
-			if entry.Pattern {
-				s.patterns = append(s.patterns, entry)
-			} else {
+			if !entry.Pattern {
 				s.exact[entry.URL] = entry
 			}
 		}
 	}
-	slices.SortFunc(s.patterns, func(a, b Preset) int {
-		if c := cmp.Compare(patternSpecificity(b.URL), patternSpecificity(a.URL)); c != 0 {
-			return c
-		}
-		if c := strings.Compare(a.URL, b.URL); c != 0 {
-			return c
-		}
-		return strings.Compare(a.ProductID, b.ProductID)
-	})
 	// Product contains only JSON-encodable value fields.
 	data, _ := json.Marshal(s.products)
 	hash := sha256.Sum256(data)
@@ -110,17 +103,8 @@ func NewSnapshot(products []Product) *Snapshot {
 	return s
 }
 
-func patternSpecificity(pattern string) int {
-	_, rest, _ := splitAuthorityAndPath(pattern)
-	path, _ := splitPathAndSuffix(rest)
-	n := 0
-	for segment := range strings.SplitSeq(path, "/") {
-		if segment != "*" {
-			n++
-		}
-	}
-	return n
-}
+// CompiledSnapshot returns a snapshot of the compiled registry.
+func CompiledSnapshot() *Snapshot { return NewSnapshot(Products()) }
 
 // Fingerprint identifies the complete snapshot without truncation.
 func (s *Snapshot) Fingerprint() string { return s.fingerprint }
@@ -140,8 +124,7 @@ func (s *Snapshot) Products() []Product {
 // Catalog returns enabled and disabled live documents.
 func (s *Snapshot) Catalog() []Preset { return slices.Clone(s.presets) }
 
-// CatalogPreset resolves exact URLs before patterns, then most literal segments
-// first. Equal specificity uses URL and product ID for deterministic attribution.
+// CatalogPreset resolves exact URLs before patterns, then patterns in input order.
 func (s *Snapshot) CatalogPreset(clientID string) (Preset, bool) {
 	if p, ok := s.exact[clientID]; ok {
 		return p, true
