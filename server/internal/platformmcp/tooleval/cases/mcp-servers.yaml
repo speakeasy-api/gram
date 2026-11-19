@@ -303,6 +303,12 @@
   allow: [list_my_servers, search_my_tools]
   args:
     server: linear
+- id: mcp-describe-linear-member-instructions
+  prompt: Before I use Linear, show me the server's own instructions for how to use its tools. Don't run anything in Linear yet.
+  expect: [describe_tools]
+  allow: [list_my_servers, search_my_tools]
+  args:
+    server: linear
 - id: mcp-execute-linear-issue
   prompt: Use Linear to file an issue titled "Fix login timeout" in the Platform team. Go ahead, I confirm.
   expect: [execute_tool]
