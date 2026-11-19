@@ -33,9 +33,29 @@ function isPrivateIPv4(hostname: string): boolean {
   return false;
 }
 
+/**
+ * The IPv4 address an IPv4-mapped IPv6 address carries (`::ffff:a.b.c.d`).
+ * The URL parser rewrites the dotted tail as two hex groups
+ * (`::ffff:7f00:1`), so both spellings are decoded.
+ */
+function mappedIPv4(address: string): string | null {
+  const match = /^(?:0{0,4}:){0,5}:?ffff:(.+)$/.exec(address);
+  if (!match?.[1]) return null;
+  const tail = match[1];
+  if (tail.includes(".")) return tail;
+  const groups = tail.split(":");
+  if (groups.length !== 2) return null;
+  const [high, low] = groups.map((group) => Number.parseInt(group, 16));
+  if (high === undefined || low === undefined) return null;
+  if (Number.isNaN(high) || Number.isNaN(low)) return null;
+  return [high >> 8, high & 0xff, low >> 8, low & 0xff].join(".");
+}
+
 function isPrivateIPv6(hostname: string): boolean {
   if (!hostname.startsWith("[")) return false;
   const address = hostname.slice(1, -1).toLowerCase();
+  const mapped = mappedIPv4(address);
+  if (mapped) return isPrivateIPv4(mapped);
   return (
     address.startsWith("fc") ||
     address.startsWith("fd") ||
@@ -127,11 +147,15 @@ export const PREFILL_NAME_PARAM = "name";
 /** The remote MCP create page, with this server's URL and name filled in. */
 export function remoteMcpPrefillHref(
   createHref: string,
-  server: Pick<ShadowMCPInventoryServer, "canonicalServerUrl" | "serverName">,
+  server: Pick<
+    ShadowMCPInventoryServer,
+    "canonicalServerUrl" | "serverName" | "urlHost"
+  >,
 ): string {
   const params = new URLSearchParams({
     [PREFILL_URL_PARAM]: server.canonicalServerUrl,
   });
-  if (server.serverName) params.set(PREFILL_NAME_PARAM, server.serverName);
+  const name = server.serverName || server.urlHost;
+  if (name) params.set(PREFILL_NAME_PARAM, name);
   return `${createHref}?${params.toString()}`;
 }

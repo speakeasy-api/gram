@@ -297,6 +297,7 @@ function CatalogInner() {
           <TeamUsageTable
             servers={teamServers}
             catalog={allServers}
+            catalogLoading={isLoading}
             search={searchQuery}
             isLoading={teamInventory.isPending}
             isError={teamInventory.isError}

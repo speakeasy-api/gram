@@ -50,13 +50,15 @@ const catalogEntry = {
 function renderTable(
   servers: ShadowMCPInventoryServer[],
   onAddFromCatalog = vi.fn(),
+  { search = "", catalogLoading = false } = {},
 ) {
   render(
     <MemoryRouter>
       <TeamUsageTable
         servers={servers}
         catalog={[catalogEntry]}
-        search=""
+        catalogLoading={catalogLoading}
+        search={search}
         isLoading={false}
         isError={false}
         onRetry={() => undefined}
@@ -122,5 +124,41 @@ describe("TeamUsageTable", () => {
         .getByRole("link", { name: "Open Shadow MCP" })
         .getAttribute("href"),
     ).toBe("/shadow-mcp");
+  });
+
+  it("filters by name, host or URL and says when nothing matches", () => {
+    const servers = [
+      server({
+        serverName: "Linear",
+        canonicalServerUrl: "https://mcp.linear.app/mcp",
+        urlHost: "mcp.linear.app",
+      }),
+      server({ serverName: "Internal tools" }),
+    ];
+    renderTable(servers, vi.fn(), { search: "linear" });
+    expect(screen.getByText("Linear")).toBeTruthy();
+    expect(screen.queryByText("Internal tools")).toBeNull();
+    cleanup();
+    renderTable(servers, vi.fn(), { search: "nothing-like-this" });
+    expect(
+      screen.getByText("No servers matching “nothing-like-this”"),
+    ).toBeTruthy();
+  });
+
+  it("holds Add until the catalog has loaded", () => {
+    renderTable(
+      [
+        server({
+          serverName: "Linear",
+          canonicalServerUrl: "https://mcp.linear.app/mcp",
+        }),
+      ],
+      vi.fn(),
+      { catalogLoading: true },
+    );
+    const add = screen.getByRole("button", { name: "Add Linear" });
+    expect((add as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(add);
+    expect(mocks.navigate).not.toHaveBeenCalled();
   });
 });

@@ -38,6 +38,9 @@ describe("isLocalServerUrl", () => {
     "http://192.168.1.10/mcp",
     "http://169.254.169.254/mcp",
     "http://[fd12::1]/mcp",
+    "http://[::ffff:127.0.0.1]/mcp",
+    "http://[::ffff:10.0.0.5]/mcp",
+    "http://[0:0:0:0:0:ffff:c0a8:101]/mcp",
     "http://mcp:8080/mcp",
     "https://tools.localhost/mcp",
     "http://printer.local/mcp",
@@ -51,6 +54,7 @@ describe("isLocalServerUrl", () => {
     "https://8.8.8.8/mcp",
     "https://172.32.0.1/mcp",
     "https://postgres.internal.example.com/mcp",
+    "https://[::ffff:8.8.8.8]/mcp",
   ])("treats %s as public", (url) => {
     expect(isLocalServerUrl(url)).toBe(false);
   });
@@ -132,10 +136,10 @@ describe("remoteMcpPrefillHref", () => {
     expect(params.get("name")).toBe("Linear");
   });
 
-  it("leaves the name out when the server has none", () => {
+  it("falls back to the host when the server has no name", () => {
     const href = remoteMcpPrefillHref("/add", server({}));
-    expect(new URL(href, "https://app.test").searchParams.has("name")).toBe(
-      false,
+    expect(new URL(href, "https://app.test").searchParams.get("name")).toBe(
+      "mcp.example.com",
     );
   });
 });

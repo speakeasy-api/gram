@@ -32,6 +32,7 @@ function displayUrl(raw: string): string {
 export function TeamUsageTable({
   servers,
   catalog,
+  catalogLoading,
   search,
   isLoading,
   isError,
@@ -41,6 +42,11 @@ export function TeamUsageTable({
   /** Already filtered to hostable servers and sorted by usage. */
   servers: ShadowMCPInventoryServer[];
   catalog: CatalogServer[];
+  /**
+   * Whether the catalog is still loading. Add waits for it, since which flow
+   * Add opens depends on whether a catalog entry serves the URL.
+   */
+  catalogLoading: boolean;
   search: string;
   isLoading: boolean;
   isError: boolean;
@@ -145,6 +151,7 @@ export function TeamUsageTable({
               variant="secondary"
               size="sm"
               aria-label={`Add ${teamServerLabel(server)}`}
+              disabled={catalogLoading}
               onClick={() => {
                 if (catalogEntry) {
                   onAddFromCatalog(catalogEntry);
