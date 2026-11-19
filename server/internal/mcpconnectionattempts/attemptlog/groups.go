@@ -26,9 +26,6 @@ const (
 	OutcomeInProgress Outcome = "in_progress"
 )
 
-// Outcomes are every Outcome.
-var Outcomes = []Outcome{OutcomeConnected, OutcomeFailed, OutcomeBlocked, OutcomeDeclined, OutcomeDidntFinish, OutcomeInProgress}
-
 // StepGroup is one of the plain step names the pages show.
 type StepGroup string
 
@@ -42,9 +39,6 @@ const (
 	StepRequest        StepGroup = "request"
 	StepOther          StepGroup = "other"
 )
-
-// StepGroups are every StepGroup.
-var StepGroups = []StepGroup{StepConnect, StepSignIn, StepServiceSignIn, StepSignInRenewal, StepServiceRenewal, StepListingTools, StepRequest, StepOther}
 
 // signInGroups are the steps the sign-in summary counts as first sign-ins.
 var signInGroups = []StepGroup{StepSignIn, StepServiceSignIn}
@@ -62,34 +56,7 @@ var deniedReasons = []string{
 	mcpconnectionattempts.CodeClientNotCIMD.String(),
 }
 
-// GroupOf names the group of a stored step. A token step with a refresh grant renews a sign-in.
-func GroupOf(step, grantType string) StepGroup {
-	switch step {
-	case mcpconnectionattempts.StepInboundAuthorize.String():
-		return StepConnect
-	case mcpconnectionattempts.StepInboundSignIn.String(), mcpconnectionattempts.StepInboundConsent.String():
-		return StepSignIn
-	case mcpconnectionattempts.StepInboundToken.String():
-		if grantType == oauthwire.GrantTypeRefreshToken {
-			return StepSignInRenewal
-		}
-		return StepSignIn
-	case mcpconnectionattempts.StepSignInRenewal.String():
-		return StepSignInRenewal
-	case mcpconnectionattempts.StepProviderSignIn.String(), mcpconnectionattempts.StepProviderToken.String(), mcpconnectionattempts.StepUpstreamEMA.String():
-		return StepServiceSignIn
-	case mcpconnectionattempts.StepProviderRefresh.String():
-		return StepServiceRenewal
-	case mcpconnectionattempts.StepDiscoveryListing.String(), mcpconnectionattempts.StepDiscoveryMember.String():
-		return StepListingTools
-	case mcpconnectionattempts.StepMCPRequest.String():
-		return StepRequest
-	default:
-		return StepOther
-	}
-}
-
-// groupSQL is GroupOf in ClickHouse, over a step and grant type expression.
+// groupSQL names the StepGroup of a step and grant type expression. A token step with a refresh grant renews a sign-in.
 func groupSQL(step, grant string) string {
 	return `multiIf(` +
 		step + ` = '` + mcpconnectionattempts.StepInboundAuthorize.String() + `', '` + string(StepConnect) + `', ` +
@@ -127,6 +94,10 @@ var unattributedReasons = []string{
 	mcpconnectionattempts.CodeProviderRateLimited.String(),
 	mcpconnectionattempts.CodeProviderServerError.String(),
 	mcpconnectionattempts.CodeStaticKeyRejected.String(),
+	mcpconnectionattempts.CodeIneligibleIdentity.String(),
+	mcpconnectionattempts.CodeProviderUnavailable.String(),
+	mcpconnectionattempts.CodeProviderUnreachable.String(),
+	mcpconnectionattempts.CodeProviderRejected.String(),
 }
 
 // serverReasons come back from the MCP server Speakeasy connected to.
@@ -141,7 +112,6 @@ var identityProviderReasons = []string{
 	mcpconnectionattempts.CodeScopePolicyDenied.String(),
 	mcpconnectionattempts.CodeInvalidTarget.String(),
 	mcpconnectionattempts.CodeIDPTransientFailure.String(),
-	mcpconnectionattempts.CodeIneligibleIdentity.String(),
 	mcpconnectionattempts.CodeOfflineUnsupported.String(),
 	mcpconnectionattempts.CodeRenewalRefused.String(),
 	mcpconnectionattempts.CodeRenewalRetryable.String(),
@@ -154,12 +124,9 @@ var serviceReasons = []string{
 	mcpconnectionattempts.CodeProviderOAuthInvalidScope.String(),
 	mcpconnectionattempts.CodeProviderOAuthInvalidGrant.String(),
 	mcpconnectionattempts.CodeUnrenewableToken.String(),
-	mcpconnectionattempts.CodeProviderUnavailable.String(),
-	mcpconnectionattempts.CodeProviderUnreachable.String(),
 	mcpconnectionattempts.CodeEMAProviderRejected.String(),
 	mcpconnectionattempts.CodeProviderTransientFailure.String(),
 	mcpconnectionattempts.CodeRemoteSessionUnavailable.String(),
-	mcpconnectionattempts.CodeProviderRejected.String(),
 	mcpconnectionattempts.CodeUpstreamEMARefused.String(),
 	mcpconnectionattempts.CodeInvalidGrant.String(),
 	mcpconnectionattempts.CodeRefreshInvalidClient.String(),
@@ -243,14 +210,6 @@ var appNames = map[string]string{
 	mcpconnectionattempts.FamilyNotion:          "Notion",
 }
 
-// AppFamily is the family a filter and a row use: empty for an app not on the list.
-func AppFamily(family string) string {
-	if _, ok := appNames[family]; ok {
-		return family
-	}
-	return ""
-}
-
 // AppName is the display name of a family.
 func AppName(family string) string {
 	if name, ok := appNames[family]; ok {
@@ -260,9 +219,7 @@ func AppName(family string) string {
 }
 
 // listedFamilies are the families with a name, for the SQL that maps others to empty.
-func listedFamilies() []string {
-	return slices.Sorted(maps.Keys(appNames))
-}
+var listedFamilies = slices.Sorted(maps.Keys(appNames))
 
 // NetworkLabel is the short form of a network key shown on the pages.
 func NetworkLabel(key string) string {
@@ -273,7 +230,12 @@ func NetworkLabel(key string) string {
 	return key[:labelChars]
 }
 
-// reasonsWithOutcome are the catalog codes that mean outcome when they end an attempt.
+// blockedReasons and declinedReasons are the catalog codes that mean that outcome when they end an attempt.
+var (
+	blockedReasons  = reasonsWithOutcome(mcpconnectionattempts.OutcomeBlocked)
+	declinedReasons = reasonsWithOutcome(mcpconnectionattempts.OutcomeDeclined)
+)
+
 func reasonsWithOutcome(outcome mcpconnectionattempts.Outcome) []string {
 	var codes []string
 	for _, code := range mcpconnectionattempts.Codes() {
@@ -281,6 +243,5 @@ func reasonsWithOutcome(outcome mcpconnectionattempts.Outcome) []string {
 			codes = append(codes, code)
 		}
 	}
-	slices.Sort(codes)
 	return codes
 }

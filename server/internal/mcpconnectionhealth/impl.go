@@ -30,7 +30,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionhealth/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // LogsEnabled reports whether an organization has the logs product feature on.
@@ -208,6 +210,14 @@ func (s *Service) attemptScope(ctx context.Context, c caller, q rangeQuery, now 
 	})
 	if err != nil {
 		return none, oops.E(oops.CodeUnexpected, err, "list provider servers").LogError(ctx, s.logger)
+	}
+	// The organization gateway's project view records no issuer on some rows.
+	gatewayIssuer, _, err := orggateway.Resolve(ctx, usersessionsrepo.New(s.db), c.organizationID)
+	if err != nil {
+		return none, oops.E(oops.CodeUnexpected, err, "resolve organization gateway issuer").LogError(ctx, s.logger)
+	}
+	if gatewayIssuer == issuer.ID {
+		ids = append(ids, orggateway.ProjectGatewayID(c.organizationID, c.projectID))
 	}
 	serverIDs := make([]string, len(ids))
 	for i, id := range ids {

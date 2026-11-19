@@ -93,10 +93,7 @@ func SignIns(ctx context.Context, ch driver.Conn, s Scope, bucket Bucket, now ti
 	first := s.From.UTC().Truncate(width)
 	var buckets []SignInBucket
 	for start := first; start.Before(s.To); start = start.Add(width) {
-		b, ok := found[start.Unix()]
-		if !ok {
-			b = SignInBucket{Start: start, SignInsSucceeded: 0, SignInsDidNot: 0, RenewalsSucceeded: 0, RenewalsDidNot: 0}
-		}
+		b := found[start.Unix()]
 		b.Start = start
 		buckets = append(buckets, b)
 	}

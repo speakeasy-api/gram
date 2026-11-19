@@ -171,7 +171,6 @@ func (n names) person(subjectURN string, withEmail bool) *gen.ConnectionPerson {
 }
 
 func appView(family, version, appKey string) *gen.ConnectionApp {
-	family = attemptlog.AppFamily(family)
 	return &gen.ConnectionApp{
 		Family:  family,
 		Name:    attemptlog.AppName(family),

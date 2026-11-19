@@ -14,7 +14,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 const (
@@ -121,9 +120,6 @@ type Row struct {
 	// Step is a StepGroup.
 	Step string `ch:"r_step"`
 
-	// StoredStep is the step that ended the newest attempt.
-	StoredStep string `ch:"r_stored_step"`
-
 	// Reason is the reason code, empty for success.
 	Reason string `ch:"r_reason"`
 
@@ -160,9 +156,6 @@ type Row struct {
 	// GrantType is the grant on the ending step.
 	GrantType string `ch:"r_grant"`
 
-	// StartedAt is the newest attempt's start.
-	StartedAt time.Time `ch:"r_started"`
-
 	// IssuerIDs are the issuers the newest attempt's rows name.
 	IssuerIDs []string `ch:"r_issuers"`
 }
@@ -177,13 +170,13 @@ type Cursor struct {
 }
 
 type cursorJSON struct {
-	T int64     `json:"t"`
+	T *int64    `json:"t"`
 	I uuid.UUID `json:"i"`
 }
 
 // Encode returns the opaque form.
 func (c Cursor) Encode() string {
-	raw, _ := json.Marshal(cursorJSON{T: c.Time.UnixNano(), I: c.ID}) //nolint:errchkjson // a fixed struct always marshals
+	raw, _ := json.Marshal(cursorJSON{T: new(c.Time.UnixNano()), I: c.ID}) //nolint:errchkjson // a fixed struct always marshals
 	return base64.RawURLEncoding.EncodeToString(raw)
 }
 
@@ -194,10 +187,10 @@ func DecodeCursor(value string) (Cursor, error) {
 		return Cursor{}, ErrBadCursor
 	}
 	var parsed cursorJSON
-	if err := json.Unmarshal(raw, &parsed); err != nil || parsed.I == uuid.Nil {
+	if err := json.Unmarshal(raw, &parsed); err != nil || parsed.T == nil || parsed.I == uuid.Nil {
 		return Cursor{}, ErrBadCursor
 	}
-	return Cursor{Time: time.Unix(0, parsed.T).UTC(), ID: parsed.I}, nil
+	return Cursor{Time: time.Unix(0, *parsed.T).UTC(), ID: parsed.I}, nil
 }
 
 // ValidateRange checks a start range against retention.
@@ -205,7 +198,7 @@ func ValidateRange(from, to, now time.Time) error {
 	switch {
 	case !from.Before(to):
 		return errors.New("from must be before to")
-	case from.Before(now.Add(-Retention - rangeSlack)):
+	case from.Before(now.Add(-Retention-rangeSlack)) || from.After(now.Add(rangeSlack)):
 		return errors.New("from must be within the last 30 days")
 	case to.Sub(from) > Retention:
 		return errors.New("the range must be at most 30 days")
@@ -228,12 +221,12 @@ func attemptsSQL(s Scope, now time.Time) (string, []any, error) {
 		"attempt_started_at < fromUnixTimestamp64Nano(?)",
 	}
 	baseArgs := []any{s.OrganizationID, s.ProjectID, from, to}
+	if s.ServerID != "" {
+		base, baseArgs = append(base, "server_id = ?"), append(baseArgs, s.ServerID)
+	}
 
 	conds := slices.Clone(base)
 	args := slices.Clone(baseArgs)
-	if s.ServerID != "" {
-		conds, args = append(conds, "server_id = ?"), append(args, s.ServerID)
-	}
 	if s.AttemptID != uuid.Nil {
 		conds, args = append(conds, "attempt_id = ?"), append(args, s.AttemptID)
 	}
@@ -261,18 +254,18 @@ func attemptsSQL(s Scope, now time.Time) (string, []any, error) {
 
 	liveCutoff := now.Add(-mcpconnectionattempts.AttemptLiveWindow).UnixNano()
 	args = append([]any{
-		listedFamilies(),
+		listedFamilies,
 		liveCutoff,
-		reasonsWithOutcome(mcpconnectionattempts.OutcomeBlocked),
-		reasonsWithOutcome(mcpconnectionattempts.OutcomeDeclined),
+		blockedReasons,
+		declinedReasons,
 	}, args...)
 
 	query := `
 	SELECT
 		a_id, a_started, a_weight, a_subject, a_device, a_server, a_kind, a_app_key, a_issuers,
 		if(has(?, a_family), a_family, '') AS d_app,
-		a_version AS d_version,
-		if(a_version != '', concat(d_app, '@', a_version), '') AS d_app_version,
+		tupleElement(arrayFirst(v -> tupleElement(v, 2) = a_family, a_versions), 3) AS d_version,
+		if(d_version != '', concat(d_app, '@', d_version), '') AS d_app_version,
 		tupleElement(a_end, 1) AS d_stored_step,
 		tupleElement(a_end, 3) AS d_reason,
 		tupleElement(a_end, 4) AS d_grant,
@@ -299,16 +292,18 @@ func attemptsSQL(s Scope, now time.Time) (string, []any, error) {
 			toString(any(server_kind)) AS a_kind,
 			any(app_key) AS a_app_key,
 			groupUniqArrayIf(user_session_issuer_id, user_session_issuer_id != '') AS a_issuers,
-			toString(if(countIf(client_family NOT IN ('', 'browser')) > 0,
-				argMinIf(client_family, (event_time, client_family), client_family NOT IN ('', 'browser')),
-				if(countIf(client_family = 'browser') > 0, 'browser', ''))) AS a_family,
-			argMinIf(client_version, (event_time, client_version), client_version != '') AS a_version,
-			argMinIf(provider_host, (event_time, provider_host), provider_host != '') AS a_first_service,
+			toString(multiIf(
+				countIf(client_family NOT IN ('', 'browser', 'other')) > 0,
+				argMinIf(client_family, (event_time, client_family), client_family NOT IN ('', 'browser', 'other')),
+				countIf(client_family = 'other') > 0, 'other',
+				countIf(client_family = 'browser') > 0, 'browser', '')) AS a_family,
+			arraySort(groupArrayIf((event_time, toString(client_family), client_version), client_version != '')) AS a_versions,
+			argMinIf(` + mcpconnectionattempts.AttemptHostSQL + `, (event_time, ` + mcpconnectionattempts.AttemptHostSQL + `), ` + mcpconnectionattempts.AttemptHostSQL + ` != '') AS a_first_service,
 			countIf(is_final) > 0 AS a_has_final,
 			if(a_has_final,
-				argMinIf((toString(step), toString(outcome), toString(reason), toString(grant_type), member_id, trace_id, provider_host, event_time),
+				argMinIf((toString(step), toString(outcome), toString(reason), toString(grant_type), member_id, trace_id, ` + mcpconnectionattempts.AttemptHostSQL + `, event_time),
 					(event_time, step, outcome, reason), is_final),
-				argMax((toString(step), toString(outcome), toString(reason), toString(grant_type), member_id, trace_id, provider_host, event_time),
+				argMax((toString(step), toString(outcome), toString(reason), toString(grant_type), member_id, trace_id, ` + mcpconnectionattempts.AttemptHostSQL + `, event_time),
 					(event_time, step, reason))) AS a_end
 		FROM ` + mcpconnectionattempts.EventsTable + `
 		WHERE ` + strings.Join(conds, " AND ") + `
@@ -373,7 +368,6 @@ func List(ctx context.Context, ch driver.Conn, s Scope, f Filters, after *Cursor
 			sum(a_weight) AS r_count,
 			any(d_outcome) AS r_outcome,
 			any(d_step) AS r_step,
-			argMax(d_stored_step, (d_at, a_id)) AS r_stored_step,
 			any(d_reason) AS r_reason,
 			any(a_subject) AS r_subject,
 			argMax(a_device, (d_at, a_id)) AS r_network,
@@ -383,18 +377,14 @@ func List(ctx context.Context, ch driver.Conn, s Scope, f Filters, after *Cursor
 			argMax(a_app_key, (d_at, a_id)) AS r_app_key,
 			any(d_version) AS r_version,
 			any(d_member) AS r_member,
-			any(d_service) AS r_service,
-			argMax(d_trace, (d_at, a_id)) AS r_trace,
-			argMax(d_grant, (d_at, a_id)) AS r_grant,
-			argMax(a_started, (d_at, a_id)) AS r_started,
-			argMax(a_issuers, (d_at, a_id)) AS r_issuers
+			any(d_service) AS r_service
 		FROM (
 			SELECT *, sum(new_run) OVER (PARTITION BY fold_key ORDER BY a_started, a_id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS run
 			FROM (
 				SELECT *, if(a_started > lagInFrame(d_at, 1, toDateTime64(0, 9, 'UTC')) OVER (PARTITION BY fold_key ORDER BY a_started, a_id ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) + toIntervalSecond(?), 1, 0) AS new_run
 				FROM (
 					SELECT *, if(d_outcome IN ` + failing + `,
-						cityHash64(multiIf(a_subject != '', a_subject, a_device != '', concat('network:', a_device), concat('attempt:', toString(a_id))), a_server, a_kind, d_member, d_step, d_stored_step, d_outcome, d_reason, d_app, d_version, d_service),
+						cityHash64(multiIf(a_subject != '', a_subject, a_device != '', concat('network:', a_device), concat('attempt:', toString(a_id))), a_server, a_kind, d_member, d_step, d_outcome, d_reason, d_app, d_version, d_service),
 						cityHash64(toString(a_id))) AS fold_key
 					FROM attempts
 				)
@@ -430,10 +420,10 @@ func Get(ctx context.Context, ch driver.Conn, s Scope, now time.Time) (*Row, []S
 	query := `
 	SELECT
 		a_id AS r_id, d_at AS r_time, a_started AS r_first, a_weight AS r_count, d_outcome AS r_outcome,
-		d_step AS r_step, d_stored_step AS r_stored_step, d_reason AS r_reason, a_subject AS r_subject,
+		d_step AS r_step, d_reason AS r_reason, a_subject AS r_subject,
 		a_device AS r_network, a_server AS r_server, a_kind AS r_kind, d_app AS r_app, a_app_key AS r_app_key,
 		d_version AS r_version, d_member AS r_member, d_service AS r_service, d_trace AS r_trace,
-		d_grant AS r_grant, a_started AS r_started, a_issuers AS r_issuers
+		d_grant AS r_grant, a_issuers AS r_issuers
 	FROM (` + attempts + `)
 	LIMIT 1` + readSettings
 	rows, err := queryAll[Row](ctx, ch, "connection attempts", query, args...)
@@ -451,22 +441,9 @@ func Get(ctx context.Context, ch driver.Conn, s Scope, now time.Time) (*Row, []S
 }
 
 func queryAll[T any](ctx context.Context, ch driver.Conn, what, query string, args ...any) ([]T, error) {
-	result, err := ch.Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("query %s: %w", what, err)
-	}
-	defer o11y.NoLogDefer(func() error { return result.Close() })
-
 	var out []T
-	for result.Next() {
-		var item T
-		if err := result.ScanStruct(&item); err != nil {
-			return nil, fmt.Errorf("scan %s: %w", what, err)
-		}
-		out = append(out, item)
-	}
-	if err := result.Err(); err != nil {
-		return nil, fmt.Errorf("read %s: %w", what, err)
+	if err := ch.Select(ctx, &out, query, args...); err != nil {
+		return nil, fmt.Errorf("query %s: %w", what, err)
 	}
 	return out, nil
 }
@@ -497,24 +474,27 @@ type Step struct {
 	// Service is the service host.
 	Service string `ch:"s_service"`
 
-	// GrantType is the OAuth grant.
-	GrantType string `ch:"s_grant"`
+	// Group is the step's StepGroup.
+	Group string `ch:"s_group"`
 
 	// Retries is the retries spent in the step.
 	Retries uint32 `ch:"s_retries"`
 }
 
+// readSteps keeps the latest steps when there are too many, so the ending step is shown.
 func readSteps(ctx context.Context, ch driver.Conn, s Scope) ([]Step, error) {
-	return queryAll[Step](ctx, ch, "attempt steps", `
+	steps, err := queryAll[Step](ctx, ch, "attempt steps", `
 	SELECT event_time AS s_at, toString(step) AS s_step, toString(step_result) AS s_result, is_final AS s_final,
 		toString(reason) AS s_reason, toString(sub_reason) AS s_sub_reason, member_id AS s_member,
-		provider_host AS s_service, toString(grant_type) AS s_grant, retries AS s_retries
+		provider_host AS s_service, toString(`+groupSQL("toString(step)", "toString(grant_type)")+`) AS s_group, retries AS s_retries
 	FROM `+mcpconnectionattempts.EventsTable+`
 	WHERE organization_id = ? AND project_id = ?
 		AND attempt_started_at >= fromUnixTimestamp64Nano(?) AND attempt_started_at < fromUnixTimestamp64Nano(?)
 		AND attempt_id = ?
-	ORDER BY event_time, step
+	ORDER BY event_time DESC, step DESC
 	LIMIT ?`+readSettings, s.OrganizationID, s.ProjectID, s.From.UnixNano(), s.To.UnixNano(), s.AttemptID, maxAttemptSteps)
+	slices.Reverse(steps)
+	return steps, err
 }
 
 func nonNil(values []string) []string {

@@ -10,7 +10,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_connection_health"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/attemptlog"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionhealth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -109,58 +108,40 @@ func (s *Service) GetSessionActivity(ctx context.Context, payload *gen.GetSessio
 		return nil, err
 	}
 
-	queries := repo.New(s.db)
-	project := uuid.NullUUID{UUID: c.projectID, Valid: true}
-	projectInferenceResource := mcp.InferenceResource + ":" + c.projectID.String()
 	firstDay := time.Date(from.Year(), from.Month(), from.Day(), 0, 0, 0, 0, time.UTC)
 	lastDay := time.Date(to.Year(), to.Month(), to.Day(), 0, 0, 0, 0, time.UTC)
 	if lastDay.Equal(to) {
 		lastDay = lastDay.AddDate(0, 0, -1)
 	}
-	days, err := queries.CountActiveSessionsByDay(ctx, repo.CountActiveSessionsByDayParams{
-		FromDay:                  timestamptz(firstDay),
-		LastDay:                  timestamptz(lastDay),
-		IssuerID:                 issuer.ID,
-		ProjectID:                project,
-		OrganizationID:           c.organizationID,
-		ToDay:                    timestamptz(lastDay.AddDate(0, 0, 1)),
-		LiveSince:                timestamptz(firstDay),
-		DashboardMintPattern:     dashboardMintPattern,
-		InferenceResourcePattern: inferenceResourcePattern,
-		ProjectInferenceResource: projectInferenceResource,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count active sessions").LogError(ctx, s.logger)
-	}
-	activeNow, err := queries.CountActiveSessionsNow(ctx, repo.CountActiveSessionsNowParams{IssuerID: issuer.ID, ProjectID: project, OrganizationID: c.organizationID, DashboardMintPattern: dashboardMintPattern, InferenceResourcePattern: inferenceResourcePattern, ProjectInferenceResource: projectInferenceResource, LiveSince: timestamptz(now)})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count active sessions now").LogError(ctx, s.logger)
-	}
 	averageFrom := now.Add(-averageSessionWindow)
-	average, err := queries.AverageEndedSessionSeconds(ctx, repo.AverageEndedSessionSecondsParams{
-		FromTime:                 timestamptz(averageFrom),
-		ToTime:                   timestamptz(now.Add(clockSkewAllowance)),
-		IssuerID:                 issuer.ID,
-		ProjectID:                project,
-		OrganizationID:           c.organizationID,
-		DashboardMintPattern:     dashboardMintPattern,
-		InferenceResourcePattern: inferenceResourcePattern,
-		ProjectInferenceResource: projectInferenceResource,
-		LiveSince:                timestamptz(averageFrom),
+	liveSince := firstDay
+	if averageFrom.Before(liveSince) {
+		liveSince = averageFrom
+	}
+	days, err := repo.New(s.db).GetSessionActivity(ctx, repo.GetSessionActivityParams{
+		OrganizationID:       c.organizationID,
+		IssuerID:             issuer.ID,
+		ProjectID:            uuid.NullUUID{UUID: c.projectID, Valid: true},
+		DashboardMintPattern: dashboardMintPattern,
+		LiveSince:            conv.ToPGTimestamptz(liveSince),
+		FromDay:              conv.ToPGTimestamptz(firstDay),
+		LastDay:              conv.ToPGTimestamptz(lastDay),
+		AverageFrom:          conv.ToPGTimestamptz(averageFrom),
+		AverageTo:            conv.ToPGTimestamptz(now.Add(clockSkewAllowance)),
 	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "average session length").LogError(ctx, s.logger)
+	if err != nil || len(days) == 0 {
+		return nil, oops.E(oops.CodeUnexpected, err, "read session activity").LogError(ctx, s.logger)
 	}
 
 	result := &gen.ConnectionSessionActivityResult{
 		Days:                     make([]*gen.ConnectionSessionDay, len(days)),
-		ActiveNow:                activeNow,
+		ActiveNow:                days[0].ActiveNow,
 		AverageSessionSeconds:    nil,
 		ConfiguredSessionSeconds: intervalSeconds(issuer.SessionDuration),
 		AverageWindowFrom:        formatTime(averageFrom),
 		AverageWindowTo:          formatTime(now),
 	}
-	if average >= 0 {
+	if average := days[0].AverageSeconds; average >= 0 {
 		result.AverageSessionSeconds = new(int64(average))
 	}
 	for i, day := range days {
@@ -172,9 +153,6 @@ func (s *Service) GetSessionActivity(ctx context.Context, payload *gen.GetSessio
 // dashboardMintPattern matches dashboard-minted sessions, which end with their access token.
 var dashboardMintPattern = sessiontokens.DashboardMintRefreshTokenHashPrefix + ":%"
 
-// inferenceResourcePattern matches inference sessions, whose resource names their project.
-var inferenceResourcePattern = mcp.InferenceResource + ":%"
-
 // averageSessionWindow is how far back the average session length looks. It is
 // fixed so the readout does not swing with the chart's range.
 const averageSessionWindow = 30 * 24 * time.Hour
@@ -182,10 +160,6 @@ const averageSessionWindow = 30 * 24 * time.Hour
 // clockSkewAllowance covers a database clock slightly ahead of this server's. The
 // query also stops at the database's own now, so nothing later is counted.
 const clockSkewAllowance = time.Minute
-
-func timestamptz(t time.Time) pgtype.Timestamptz {
-	return pgtype.Timestamptz{Time: t, InfinityModifier: pgtype.Finite, Valid: true}
-}
 
 // intervalSeconds reads a session duration. Months count as 30 days, as Postgres does for epoch.
 func intervalSeconds(i pgtype.Interval) int64 {
