@@ -32,6 +32,20 @@ const workloadGrantTestIssuer = "https://idp.example.test"
 // failingWorkloadKeys answers every key lookup with err.
 type failingWorkloadKeys struct{ err error }
 
+type failingFeatureProvider struct{ err error }
+
+func (p failingFeatureProvider) IsFlagEnabled(context.Context, feature.Flag, string, map[string]string) (bool, error) {
+	return false, p.err
+}
+
+func (p failingFeatureProvider) IsFlagEnabledLocal(context.Context, feature.Flag, string, map[string]string, map[string]string) (bool, error) {
+	return false, p.err
+}
+
+func (p failingFeatureProvider) FlagPayload(context.Context, feature.Flag, string, map[string]string) ([]byte, error) {
+	return nil, p.err
+}
+
 func (k failingWorkloadKeys) VerificationKeyForAlgorithm(context.Context, jwks.Source, string, jose.SignatureAlgorithm) (*jose.JSONWebKey, error) {
 	return nil, k.err
 }
@@ -133,7 +147,15 @@ func TestRecheckWorkloadGrantStoredGatewayRequiresCurrentRollout(t *testing.T) {
 	}
 	grant := workloadGrantIssuance{endpoint: endpoint}
 
-	require.ErrorIs(t, service.recheckWorkloadGrantAuthorization(t.Context(), grant), errCredentialRejected)
+	require.ErrorIs(t, service.recheckWorkloadGrantAuthorization(t.Context(), grant), errStoredGatewayMachineAccessDisabled)
+	lookupErr := errors.New("flag lookup failed")
+	service.features = failingFeatureProvider{err: lookupErr}
+	err := service.recheckWorkloadGrantAuthorization(t.Context(), grant)
+	require.ErrorIs(t, err, lookupErr)
+	refusal, ok := errors.AsType[*workloadGrantError](err)
+	require.True(t, ok)
+	require.Equal(t, workloadGrantUnavailable, refusal.outcome)
+	service.features = flags
 	flags.SetFlag(feature.FlagStoredGatewayMachineAccess, organizationID, true)
 	require.NoError(t, service.recheckWorkloadGrantAuthorization(t.Context(), grant))
 }

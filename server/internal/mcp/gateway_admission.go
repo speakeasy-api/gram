@@ -122,11 +122,19 @@ func (s *Service) admitGatewayCaller(
 	}, nil
 }
 
-func (s *Service) storedGatewayMachineAccessEnabled(ctx context.Context, logger *slog.Logger, target gatewayTarget) bool {
+func (s *Service) storedGatewayMachineAccess(ctx context.Context, target gatewayTarget) (bool, error) {
 	if target.kind != gatewayKindStored || s.features == nil {
-		return false
+		return false, nil
 	}
 	enabled, err := s.features.IsFlagEnabledLocal(ctx, feature.FlagStoredGatewayMachineAccess, target.organizationID, nil, nil)
+	if err != nil {
+		return false, fmt.Errorf("evaluate stored gateway machine access rollout: %w", err)
+	}
+	return enabled, nil
+}
+
+func (s *Service) storedGatewayMachineAccessEnabled(ctx context.Context, logger *slog.Logger, target gatewayTarget) bool {
+	enabled, err := s.storedGatewayMachineAccess(ctx, target)
 	if err != nil {
 		logger.WarnContext(ctx, "check stored gateway machine access rollout", attr.SlogError(err))
 		return false
