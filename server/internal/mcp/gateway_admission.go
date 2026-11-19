@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -96,7 +95,13 @@ func (s *Service) admitGatewayCaller(
 	if err != nil {
 		return ctx, nil, err
 	}
-	storedMachineAccess := caller.kind != gatewayCallerPerson && s.storedGatewayMachineAccessEnabled(ctx, logger, target)
+	storedMachineAccess := false
+	if caller.kind != gatewayCallerPerson {
+		storedMachineAccess, err = s.storedGatewayMachineAccess(ctx, target)
+		if err != nil {
+			return ctx, nil, fmt.Errorf("check stored gateway machine access rollout: %w", err)
+		}
+	}
 	admitted, err := target.admits(caller, endpoint.ProjectID, storedMachineAccess)
 	if err != nil {
 		return ctx, nil, fmt.Errorf("evaluate gateway target: %w", err)
@@ -131,15 +136,6 @@ func (s *Service) storedGatewayMachineAccess(ctx context.Context, target gateway
 		return false, fmt.Errorf("evaluate stored gateway machine access rollout: %w", err)
 	}
 	return enabled, nil
-}
-
-func (s *Service) storedGatewayMachineAccessEnabled(ctx context.Context, logger *slog.Logger, target gatewayTarget) bool {
-	enabled, err := s.storedGatewayMachineAccess(ctx, target)
-	if err != nil {
-		logger.WarnContext(ctx, "check stored gateway machine access rollout", attr.SlogError(err))
-		return false
-	}
-	return enabled
 }
 
 func gatewayCallerFromContext(ctx context.Context, subject urn.SessionSubject) (gatewayCaller, error) {
