@@ -187,6 +187,12 @@ func isProviderSignInStep(step string) bool {
 	return step == StepProviderSignIn.String() || step == StepProviderToken.String()
 }
 
+// providerFailure is an ending the provider owns; a gateway listing's never is.
+func providerFailure(step, reason string) bool {
+	meaning, ok := MeaningOf(reason)
+	return ok && meaning.WhoFixes == WhoProvider && step != StepDiscoveryMember.String()
+}
+
 func ratio(part, whole uint64) float64 {
 	if whole == 0 {
 		return 0
@@ -548,7 +554,7 @@ func (t *providerTally) add(a providerAttempt, now, statusFrom time.Time) {
 	weight := max(a.Weight, 1)
 	ending := a.End(now)
 	t.counts.Attempts += weight
-	if meaning, ok := MeaningOf(ending.Reason); ok && meaning.WhoFixes == WhoProvider {
+	if providerFailure(ending.Step, ending.Reason) {
 		t.counts.Failures += weight
 		t.organizations[a.OrganizationID] = struct{}{}
 	}
@@ -615,7 +621,7 @@ func (h *ProviderHealth) readBaseline(ctx context.Context, now time.Time, provid
 		}
 		t := tally(label)
 		t.counts.BaselineAttempts += attempts
-		if meaning, ok := MeaningOf(reason); ok && meaning.WhoFixes == WhoProvider {
+		if providerFailure(step, reason) {
 			t.counts.BaselineFailures += attempts
 		}
 		if Outcome(outcome) == OutcomeAbandoned && isProviderSignInStep(step) {

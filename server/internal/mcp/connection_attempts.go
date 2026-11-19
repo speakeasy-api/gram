@@ -302,11 +302,14 @@ func gatewayMemberStatus(gateway *gatewayConsentView, server gatewayServer) (mem
 		}
 	}
 	what, detail := gatewayServerHappened(server.Status, authClient)
-	// The card names an address problem, so the row does too.
+	// The card names what its listing failure was, so the row does too.
+	if server.cause != (mcpconnectionattempts.Code{}) {
+		what = server.cause
+	}
 	if code, ok := mcpconnectionattempts.AddressCode(server.address); ok && server.Status == gatewayServerUnavailable {
 		what = code
 	}
-	opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Member(serverID), mcpconnectionattempts.Detail(detail)}
+	opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Member(serverID), mcpconnectionattempts.Detail(detail), mcpconnectionattempts.Provider(server.upstreamHost)}
 	status := fmt.Sprint(what) + "|" + detail
 	if authClient != nil {
 		opts = append(opts, mcpconnectionattempts.AuthClient(authClient.clientID))
@@ -879,15 +882,19 @@ func (s *Service) recordListingFailures(ctx context.Context, gate *metaGateConte
 		if errors.Is(ctx.Err(), context.Canceled) && errors.Is(failed.err, context.Canceled) {
 			continue
 		}
-		if what, recorded := listingFailureHappened(failed.err); recorded {
-			s.connections.Once(ctx, scope, mcpconnectionattempts.StepDiscoveryMember, what, gate.fromRequest, mcpconnectionattempts.Member(failed.member.serverID), mcpconnectionattempts.Subject(subject))
+		if what, recorded := gate.listingFailureHappened(failed.member, failed.err); recorded {
+			s.connections.Once(ctx, scope, mcpconnectionattempts.StepDiscoveryMember, what, gate.fromRequest, mcpconnectionattempts.Member(failed.member.serverID), mcpconnectionattempts.Subject(subject), mcpconnectionattempts.Provider(memberUpstreamHost(failed.err)))
 		}
 	}
 }
 
-func listingFailureHappened(err error) (mcpconnectionattempts.Code, bool) {
+// listingFailureHappened is what a lost member's listing records, as a call would; credential errors record nothing.
+func (g *metaGateContext) listingFailureHappened(member metaMember, err error) (mcpconnectionattempts.Code, bool) {
 	if _, credential := errors.AsType[memberCredentialError](err); credential {
 		return mcpconnectionattempts.Code{}, false
+	}
+	if _, cut := errors.AsType[listingCutError](err); cut {
+		return mcpconnectionattempts.CodeMemberToolsMissing, true
 	}
 	if failure, ok := errors.AsType[memberConnectionError](err); ok && refusedSignIn(err) {
 		return failure.code, true
@@ -895,10 +902,21 @@ func listingFailureHappened(err error) (mcpconnectionattempts.Code, bool) {
 	if address, _ := memberAddressCause(err); address != guardian.AddressFine {
 		return mcpconnectionattempts.AddressCode(address)
 	}
+	if failure, ok := errors.AsType[memberConnectionError](err); ok && failure.code == mcpconnectionattempts.CodeInvalidRemoteSession {
+		return g.memberNoCredentialHappened(member), true
+	} else if ok && failure.code != (mcpconnectionattempts.Code{}) {
+		return failure.code, true
+	}
 	if denied, ok := errors.AsType[*oops.ShareableError](err); ok && (denied.Code == oops.CodeForbidden || denied.Code == oops.CodeNotFound) {
 		return mcpconnectionattempts.CodeNoServerAccess, true
 	}
 	return mcpconnectionattempts.CodeMemberToolsMissing, true
+}
+
+// adminCredentialRejected is a member whose admin-saved credential the upstream rejected.
+func adminCredentialRejected(err error) (mcpconnectionattempts.Code, bool) {
+	failure, ok := errors.AsType[memberConnectionError](err)
+	return failure.code, ok && (failure.code == mcpconnectionattempts.CodeSharedCredentialRejected || failure.code == mcpconnectionattempts.CodeStaticKeyRejected)
 }
 
 // memberAddressCause is the address Speakeasy did not dial that stopped a member, and whether it is its sign-in provider's.
