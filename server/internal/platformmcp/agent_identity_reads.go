@@ -701,8 +701,6 @@ func agentChecksWindow(rawFrom, rawTo *string, now time.Time) (time.Time, time.T
 	return start, end, nil
 }
 
-// groupAgentChecks groups one outcome's checks by scope and resource. Rows
-// arrive newest first, so each group's first row is its latest.
 // checkServerID is the MCP server a check concerns: the resource of a server
 // check, or the server an auth client check recorded it was used for.
 func checkServerID(check *accessgen.AuthzChallenge) string {
@@ -716,6 +714,9 @@ func checkServerID(check *accessgen.AuthzChallenge) string {
 	}
 }
 
+// groupAgentChecks groups one outcome's checks by scope and resource, and an
+// auth client's checks also by the server it was used for. Rows arrive newest
+// first, so each group's first row is its latest.
 func groupAgentChecks(result *accessgen.ListChallengesResult, names map[string]string) AgentCheckOutcome {
 	groups := []AgentCheckGroup{}
 	index := make(map[string]int)
