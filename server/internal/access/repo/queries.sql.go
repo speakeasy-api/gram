@@ -125,9 +125,10 @@ SET
   decided_via = $3,
   decided_at = clock_timestamp(),
   temporary_grant_id = $4,
+  challenge_ids = $5,
   updated_at = clock_timestamp()
-WHERE organization_id = $5
-  AND id = $6
+WHERE organization_id = $6
+  AND id = $7
   AND status = 'pending'
   AND deleted IS FALSE
 RETURNING id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, expires_at, created_at, updated_at, deleted_at, deleted
@@ -138,6 +139,7 @@ type DecideAccessRequestParams struct {
 	DecidedByUserID  pgtype.Text
 	DecidedVia       pgtype.Text
 	TemporaryGrantID uuid.NullUUID
+	ChallengeIds     []string
 	OrganizationID   string
 	ID               uuid.UUID
 }
@@ -149,6 +151,7 @@ func (q *Queries) DecideAccessRequest(ctx context.Context, arg DecideAccessReque
 		arg.DecidedByUserID,
 		arg.DecidedVia,
 		arg.TemporaryGrantID,
+		arg.ChallengeIds,
 		arg.OrganizationID,
 		arg.ID,
 	)

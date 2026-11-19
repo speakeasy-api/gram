@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	chrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
@@ -35,6 +36,12 @@ const (
 
 	// maxAccessRequests bounds one list of requests.
 	maxAccessRequests = 200
+
+	// openChallengeLookback is how far before a request was made its
+	// approval looks for the requester's denials to resolve.
+	openChallengeLookback = 7 * 24 * time.Hour
+	// maxResolvedChallenges bounds the denials one approval resolves.
+	maxResolvedChallenges = 50
 
 	AccessRequestStatusPending   = "pending"
 	AccessRequestStatusApproved  = "approved"
@@ -373,9 +380,20 @@ func (s *Service) DecideAccessRequestAs(ctx context.Context, input DecideAccessR
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "read access request selector").LogError(ctx, logger)
 		}
-		prepared, err = s.prepareTemporaryGrant(ctx, input.OrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, current.AccessRequest.RequesterUserID).String(), authz.Scope(current.AccessRequest.Scope), selector, input.GrantExpiresAt, current.AccessRequest.ChallengeIds)
+		challengeIDs := current.AccessRequest.ChallengeIds
+		if len(challengeIDs) == 0 {
+			challengeIDs = s.openChallengesForRequest(ctx, current.AccessRequest, selector)
+		}
+		prepared, err = s.prepareTemporaryGrant(ctx, input.OrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, current.AccessRequest.RequesterUserID).String(), authz.Scope(current.AccessRequest.Scope), selector, input.GrantExpiresAt, challengeIDs)
 		if err != nil {
 			return nil, err
+		}
+	}
+	answeredIDs := current.AccessRequest.ChallengeIds
+	if input.Approve {
+		answeredIDs = make([]string, 0, len(prepared.answered))
+		for _, challenge := range prepared.answered {
+			answeredIDs = append(answeredIDs, challenge.ID)
 		}
 	}
 
@@ -423,6 +441,7 @@ func (s *Service) DecideAccessRequestAs(ctx context.Context, input DecideAccessR
 		DecidedByUserID:  pgtype.Text{String: input.DeciderUserID, Valid: true},
 		DecidedVia:       pgtype.Text{String: string(input.Via), Valid: true},
 		TemporaryGrantID: grantID,
+		ChallengeIds:     answeredIDs,
 		OrganizationID:   input.OrganizationID,
 		ID:               input.RequestID,
 	}); err != nil {
@@ -622,3 +641,60 @@ func (s *Service) accessRequestViews(ctx context.Context, db database.DBTX, rows
 // noGrantExpiry renders a request without the deadline of a grant it gave:
 // one that is pending, denied or withdrawn has none.
 var noGrantExpiry = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
+
+// openChallengesForRequest finds the requester's unresolved denials that an
+// approval of request answers: denies of the same scope, raised by the
+// requester, on a resource the request's selector covers, from the week
+// before the request was made onwards. The approval resolves them through the
+// temporary grant, so authz_challenge_resolutions stays the record of which
+// denials are resolved. Finding them is best effort: when ClickHouse cannot be
+// read, the approval goes ahead without resolving any.
+func (s *Service) openChallengesForRequest(ctx context.Context, request repo.AccessRequest, selector authz.Selector) []string {
+	logger := s.logger.With(attr.SlogOrganizationID(request.OrganizationID), attr.SlogUserID(request.RequesterUserID))
+	recipient := urn.NewPrincipal(urn.PrincipalTypeUser, request.RequesterUserID)
+	outcome := string(chrepo.OutcomeDeny)
+	principal := recipient.String()
+	scope := request.Scope
+	from := request.CreatedAt.Time.Add(-openChallengeLookback)
+	challenges, err := chrepo.New(s.chReadConn).ListChallenges(ctx, chrepo.ChallengeListFilters{
+		ChallengeFilters: chrepo.ChallengeFilters{
+			OrganizationID: request.OrganizationID,
+			ProjectID:      nil,
+			Outcome:        &outcome,
+			PrincipalURN:   &principal,
+			Scope:          &scope,
+			ExcludeScopes:  nil,
+			MemberUserIDs:  nil,
+		},
+		From:           &from,
+		To:             nil,
+		Limit:          maxResolvedChallenges,
+		Offset:         0,
+		SkipPagination: false,
+	})
+	if err != nil {
+		logger.WarnContext(ctx, "list denials an access request answers", attr.SlogError(err))
+		return nil
+	}
+	covered := make([]chrepo.ChallengeSummary, 0, len(challenges))
+	for _, challenge := range challenges {
+		if validateChallengesForTemporaryGrant([]chrepo.ChallengeSummary{challenge}, []string{challenge.ID}, recipient, authz.Scope(scope), selector) == nil {
+			covered = append(covered, challenge)
+		}
+	}
+	if len(covered) == 0 {
+		return nil
+	}
+	resolutions, err := s.lookupResolutions(ctx, request.OrganizationID, covered)
+	if err != nil {
+		logger.WarnContext(ctx, "read resolutions of denials an access request answers", attr.SlogError(err))
+		return nil
+	}
+	ids := make([]string, 0, len(covered))
+	for _, challenge := range covered {
+		if _, resolved := resolutions[challenge.ID]; !resolved {
+			ids = append(ids, challenge.ID)
+		}
+	}
+	return ids
+}

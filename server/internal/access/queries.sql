@@ -2232,6 +2232,7 @@ SET
   decided_via = @decided_via,
   decided_at = clock_timestamp(),
   temporary_grant_id = sqlc.narg(temporary_grant_id),
+  challenge_ids = @challenge_ids,
   updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND id = @id

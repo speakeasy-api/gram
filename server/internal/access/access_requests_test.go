@@ -169,6 +169,35 @@ func TestAccessRequest_ApproveGivesTemporaryGrant(t *testing.T) {
 	require.NotEqual(t, request.ID, again.Request.ID, "a decided request does not block a new one")
 }
 
+func TestAccessRequest_ApproveResolvesTheRequestersMatchingDenials(t *testing.T) {
+	t.Parallel()
+	ctx, ti, orgID := newAccessRequestService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	requester := userPrincipalURN(authCtx.UserID)
+	request := requestChatRead(t, ctx, ti).Request
+
+	answered := insertChatReadDenial(t, ti, orgID, requester, uuid.NewString())
+	otherPerson := insertChatReadDenial(t, ti, orgID, userPrincipalURN(accessRequestNonAdminID), uuid.NewString())
+	otherScope := uuid.NewString()
+	insertCHChallengeRow(t, ti, orgID, otherScope, "deny", requester, string(authz.ScopeLogRead), authz.ResourceKindProject, uuid.NewString(), nil, nil)
+
+	_, err := decideAs(ctx, ti, orgID, request.ID, accessRequestAdminID, true)
+	require.NoError(t, err)
+
+	resolutions, err := repo.New(ti.conn).ListChallengeResolutions(ctx, repo.ListChallengeResolutionsParams{
+		OrganizationID: orgID,
+		ChallengeIds:   []string{answered, otherPerson, otherScope},
+	})
+	require.NoError(t, err)
+	require.Len(t, resolutions, 1, "only the requester's denial of the approved access is resolved")
+	require.Equal(t, answered, resolutions[0].ChallengeID)
+	require.Equal(t, "temporary_grant", resolutions[0].ResolutionType)
+
+	stored, err := repo.New(ti.conn).GetAccessRequest(ctx, repo.GetAccessRequestParams{OrganizationID: orgID, ID: uuid.MustParse(request.ID)})
+	require.NoError(t, err)
+	require.Equal(t, []string{answered}, stored.AccessRequest.ChallengeIds)
+}
+
 func TestAccessRequest_DenyGivesNoAccess(t *testing.T) {
 	t.Parallel()
 	ctx, ti, orgID := newAccessRequestService(t)
