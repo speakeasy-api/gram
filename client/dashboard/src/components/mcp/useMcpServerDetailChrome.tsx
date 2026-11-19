@@ -1,4 +1,3 @@
-import { PluginStatusBanner } from "@/pages/mcp/overview/PluginStatusBanner";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
   pluginServerRef,
@@ -238,7 +237,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
   const pluginRef: HostedServerRef | undefined = mcpServer
     ? pluginServerRef(mcpServer, canonicalToolset)
     : undefined;
-  // Same membership rule as the header's plugin card.
+  // Same membership rule as Settings' Plugins section.
   const memberPlugins = pluginRef
     ? (pluginsData?.plugins ?? []).filter((plugin) =>
         plugin.servers?.some((s) => serverMatchesRef(s, pluginRef)),
@@ -561,9 +560,6 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
     ) : (
       overviewSetupGuide
     ),
-    overviewBanner: pluginRef ? (
-      <PluginStatusBanner variant="banner" server={pluginRef} />
-    ) : undefined,
     items,
   };
 }
