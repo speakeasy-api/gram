@@ -17,4 +17,17 @@ describe("approvalChoices", () => {
 
     expect(choices.map((c) => c.key)).toEqual(["1h", "2h", "4h"]);
   });
+
+  it("leaves out the end of the day when it is more than a day away", () => {
+    const zone = process.env.TZ;
+    process.env.TZ = "America/New_York";
+    try {
+      // 1 November 2026 gains an hour in New York: 23:59 is 24h29m after
+      // half past midnight, longer than a temporary grant can last.
+      const choices = approvalChoices(new Date(2026, 10, 1, 0, 30, 0));
+      expect(choices.map((c) => c.key)).toEqual(["1h", "2h", "4h"]);
+    } finally {
+      process.env.TZ = zone;
+    }
+  });
 });

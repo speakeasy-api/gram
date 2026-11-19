@@ -3,6 +3,9 @@ const MIN_END_OF_DAY_LEAD_MS = 10 * 60 * 1000;
 
 const HOUR_MS = 60 * 60 * 1000;
 
+/** The longest a temporary grant can last, as the server enforces. */
+const MAX_GRANT_MS = 24 * HOUR_MS;
+
 type Choice = { key: string; label: string; expiresAt: Date };
 
 /**
@@ -30,7 +33,9 @@ export function approvalChoices(now: Date): Choice[] {
   ];
   const endOfDay = new Date(now);
   endOfDay.setHours(23, 59, 0, 0);
-  if (endOfDay.getTime() - now.getTime() >= MIN_END_OF_DAY_LEAD_MS) {
+  // On a day that gains an hour, 23:59 can be more than a day away.
+  const lead = endOfDay.getTime() - now.getTime();
+  if (lead >= MIN_END_OF_DAY_LEAD_MS && lead <= MAX_GRANT_MS) {
     choices.push({ key: "eod", label: "End of day", expiresAt: endOfDay });
   }
   return choices;

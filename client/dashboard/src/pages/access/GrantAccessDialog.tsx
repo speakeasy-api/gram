@@ -54,6 +54,23 @@ interface GrantAccessDialogProps {
   onClose: () => void;
 }
 
+/** How a request that is no longer pending ended, in a sentence. */
+function requestOutcome(request: AccessRequest): string {
+  const by = request.decidedByName ? ` by ${request.decidedByName}` : "";
+  switch (request.status) {
+    case "approved":
+      return `This request was approved${by}.`;
+    case "denied":
+      return `This request was denied${by}.`;
+    case "withdrawn":
+      return "This request was withdrawn.";
+    case "expired":
+      return "This request has expired.";
+    default:
+      return `This request is ${request.status}.`;
+  }
+}
+
 function memberInitials(member: AccessMember): string {
   return member.name
     .split(" ")
@@ -317,11 +334,7 @@ export function GrantAccessDialog({
 
               {memberRequest && memberRequest.status !== "pending" && (
                 <Text muted small>
-                  This request was {memberRequest.status}
-                  {memberRequest.decidedByName
-                    ? ` by ${memberRequest.decidedByName}`
-                    : ""}
-                  .
+                  {requestOutcome(memberRequest)}
                 </Text>
               )}
 

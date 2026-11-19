@@ -118,7 +118,11 @@ function AccessInner() {
     ? linkedRequests.data?.requests.find((r) => r.id === grantRequestId)
     : undefined;
   const [openedRequest, setOpenedRequest] = useState<AccessRequest>();
-  if (foundRequest && openedRequest?.id !== foundRequest.id) {
+  if (
+    foundRequest &&
+    (openedRequest?.id !== foundRequest.id ||
+      openedRequest.status !== foundRequest.status)
+  ) {
     setOpenedRequest(foundRequest);
   }
   const grantRequest =
