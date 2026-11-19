@@ -56,6 +56,17 @@ jobs:
       - name: Restore Go module cache
         uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
 
+      # ./zero --agent builds the pinned Monty runtime for local Code Mode, and
+      # compiling it from scratch takes about ten minutes. With the installed
+      # binary restored, cargo install sees the pinned revision is already
+      # installed and skips the build. Use an exact key: a different pinned
+      # revision or toolchain must never reuse this binary.
+      - name: Cache pinned Monty installation
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0 # zizmor: ignore[cache-poisoning]
+        with:
+          path: agents/code-runner/target/monty
+          key: monty-blacksmith-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.mise-tasks/build/monty.sh', 'agents/code-runner/rust-toolchain.toml') }}
+
       - name: Answer zero's questions before it asks them
         run: |
           cat > mise.local.toml <<'TOML'
