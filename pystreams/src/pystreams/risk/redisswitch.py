@@ -120,32 +120,37 @@ class RedisSwitch:
             await self._sleep(RETRY_INTERVAL_SECONDS)
 
     async def _write_if_current(self, write: Write) -> bool:
-        """Write to the current instance only if it is still authoritative."""
-        async with self._current.pipeline(transaction=True) as pipe:
-            try:
+        """Write to the current instance only if it is still authoritative.
+
+        Returns False whenever the write is not known to have happened, and the
+        caller tries again. Two cases behind that:
+
+        - Nothing was sent to write: the keys said to wait, a key changed
+          between the read and the write so the instance refused the
+          transaction, or the connection failed first. The operator's job
+          closes connections during a hold, and the client reports a watched
+          connection that dropped as WatchError.
+        - The connection dropped during the write and its outcome is unknown.
+          Trying again can then deliver a reply twice. That is allowed: the
+          reply inbox is built for at-least-once delivery and discards a repeat.
+        """
+        written = False
+        try:
+            async with self._current.pipeline(transaction=True) as pipe:
                 await pipe.watch(self._state_key, HOLD_KEY)
                 values = await pipe.mget(self._state_key, HOLD_KEY)
-            except RedisConnectionError, RedisTimeoutError, WatchError:
-                # Nothing has been sent to write yet, so trying again is safe.
-                # The operator's job closes connections during a hold, and the
-                # client reports a watched connection that dropped as WatchError.
-                return False
-            state, hold = _as_bytes(values[0]), values[1]
-            self._observe(state)
-            if state != _VALUE_CURRENT or hold is not None:
-                return False
-            try:
-                pipe.multi()
-                write(pipe)
-                await pipe.execute()
-            except WatchError:
-                # Either a key changed between the read and the write and the
-                # instance refused the transaction, or the connection dropped
-                # and its outcome is unknown. Trying again can therefore deliver
-                # a reply twice. That is allowed: the reply inbox is built for
-                # at-least-once delivery and discards a repeat.
-                return False
-            return True
+                state, hold = _as_bytes(values[0]), values[1]
+                self._observe(state)
+                if state == _VALUE_CURRENT and hold is None:
+                    pipe.multi()
+                    write(pipe)
+                    await pipe.execute()
+                    written = True
+        except RedisConnectionError, RedisTimeoutError, WatchError:
+            # Also reached when releasing the watch fails as the pipeline
+            # closes. A write that completed before that still counts.
+            pass
+        return written
 
     def _observe(self, state: bytes | None) -> None:
         if self._moved or state is None:

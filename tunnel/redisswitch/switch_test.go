@@ -3,6 +3,7 @@ package redisswitch
 import (
 	"context"
 	"log/slog"
+	"net"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -54,9 +55,6 @@ func newFixture(t *testing.T) *fixture {
 	sw.now = func() time.Time { return time.Now().Add(time.Duration(f.ahead.Load())) }
 	sw.mu.Unlock()
 
-	opts.Dialer = sw.dial
-	opts.CredentialsProvider = sw.credentials
-	opts.OnConnect = sw.onConnect
 	f.sw = sw
 	f.client = sw.client(opts)
 	t.Cleanup(func() { _ = f.client.Close() })
@@ -402,24 +400,85 @@ func TestNewConnectionIsRefusedWhenTheInstanceItselfSaysHold(t *testing.T) {
 	// its cached reading still says current.
 	require.NoError(t, f.current.Set(HoldKey, "run-1"))
 
-	plain := redis.NewClient(&redis.Options{Addr: f.current.Addr(), Password: currentPassword})
-	t.Cleanup(func() { _ = plain.Close() })
-	conn := plain.Conn()
+	conn, err := net.Dial("tcp", f.current.Addr())
+	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
 
-	require.ErrorIs(t, f.sw.onConnect(t.Context(), conn), ErrHolding)
+	require.ErrorIs(t, f.sw.verifyCurrent(t.Context(), conn), ErrHolding)
 }
 
 func TestNewConnectionIsAcceptedWhenTheInstanceSaysCurrent(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	plain := redis.NewClient(&redis.Options{Addr: f.current.Addr(), Password: currentPassword})
-	t.Cleanup(func() { _ = plain.Close() })
-	conn := plain.Conn()
+	conn, err := net.Dial("tcp", f.current.Addr())
+	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
 
-	require.NoError(t, f.sw.onConnect(t.Context(), conn))
+	require.NoError(t, f.sw.verifyCurrent(t.Context(), conn))
+
+	// The socket is still open and usable by its real owner afterwards.
+	owner := redis.NewClient(&redis.Options{
+		Dialer:   func(context.Context, string, string) (net.Conn, error) { return conn, nil },
+		Password: currentPassword,
+	})
+	t.Cleanup(func() { _ = owner.Close() })
+	require.NoError(t, owner.Set(t.Context(), "k", "v", 0).Err())
+	require.True(t, f.current.Exists("k"))
+}
+
+func TestNewConnectionIsRefusedWhenTheInstanceHasMoved(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	// The move is recorded on the instance, but this process has not polled
+	// since: a socket whose handshake was delayed must still be refused.
+	require.NoError(t, f.current.Set(stateKey, movedPrefix+"run-1"))
+
+	conn, err := net.Dial("tcp", f.current.Addr())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+
+	require.ErrorIs(t, f.sw.verifyCurrent(t.Context(), conn), ErrHolding)
+}
+
+func TestWrapBindsTheDialerEvenForOptionsThatOnlyShareTheName(t *testing.T) {
+	t.Parallel()
+
+	current := miniredis.RunT(t)
+	require.NoError(t, current.Set(stateKey, movedPrefix+"run-1"))
+	next := miniredis.RunT(t)
+
+	first, err := NewClient(t.Context(), slog.New(slog.DiscardHandler), &redis.Options{Addr: current.Addr()}, DefaultRole, Target{Addr: next.Addr(), Password: ""})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = first.Close() })
+
+	// Options built by hand, with the right address and name but no dialer.
+	second := Wrap(&redis.Options{Addr: current.Addr(), ClientName: ClientName(DefaultRole)})
+	t.Cleanup(func() { _ = second.Close() })
+
+	require.NoError(t, second.Set(t.Context(), "k", "v", 0).Err())
+	require.True(t, next.Exists("k"), "a gated client must also follow the switch to the next instance")
+	require.False(t, current.Exists("k"))
+}
+
+func TestMoveLeavesNoConnectionToTheInstanceBeingLeft(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t)
+	require.NoError(t, f.client.Set(t.Context(), "before", "v", 0).Err())
+
+	f.sw.mu.Lock()
+	open := len(f.sw.conns)
+	f.sw.mu.Unlock()
+	require.Positive(t, open, "the fixture's command should have opened a tracked connection")
+
+	f.move(t)
+
+	f.sw.mu.Lock()
+	remaining := len(f.sw.conns)
+	f.sw.mu.Unlock()
+	require.Zero(t, remaining)
 }
 
 func TestWaitersAllWakeWhenTheMoveHappens(t *testing.T) {

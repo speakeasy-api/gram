@@ -186,27 +186,26 @@ func NewClient(ctx context.Context, logger *slog.Logger, opts *redis.Options, ro
 		return nil, errors.New("next redis instance is the current one")
 	}
 
+	// Reserved before starting, so two callers cannot both build a switch for
+	// the same role and instance.
 	key := registryKey(opts.Addr, ClientName(role))
-	if _, exists := switches.Load(key); exists {
+	if _, taken := switches.LoadOrStore(key, (*Switch)(nil)); taken {
 		return nil, fmt.Errorf("a redis switch already follows role %q on this instance in this process", role)
 	}
 
 	sw, err := start(context.WithoutCancel(ctx), logger, role, Target{Addr: opts.Addr, Password: opts.Password}, next, opts.DialTimeout)
 	if err != nil {
+		switches.Delete(key)
 		return nil, err
 	}
 	switches.Store(key, sw)
-
-	opts.Dialer = sw.dial
-	opts.CredentialsProvider = sw.credentials
-	opts.OnConnect = sw.onConnect
 
 	return sw.client(opts), nil
 }
 
 // Wrap returns a client for options copied from a client that NewClient built.
-// The copy carries the dialer but not the command gate or the retry setting, so
-// they are applied again here. Options that did not come from such a client
+// A copy does not carry the command gate or the retry setting, so the whole
+// binding is applied again here. Options that did not come from such a client
 // (their address and connection name match no switch) get redis.NewClient.
 func Wrap(opts *redis.Options) *redis.Client {
 	found, ok := switches.Load(registryKey(opts.Addr, opts.ClientName))
@@ -215,13 +214,18 @@ func Wrap(opts *redis.Options) *redis.Client {
 	}
 
 	sw, ok := found.(*Switch)
-	if !ok {
+	if !ok || sw == nil {
 		return redis.NewClient(opts)
 	}
 	return sw.client(opts)
 }
 
+// client builds a client bound to this switch. The gate, the dialer and the
+// credentials are always set together: a client with the gate but an ordinary
+// dialer would wait through a hold and then write to the instance being left.
 func (s *Switch) client(opts *redis.Options) *redis.Client {
+	opts.Dialer = s.dial
+	opts.CredentialsProvider = s.credentials
 	// A command interrupted by the move must fail once. Replayed, it could run
 	// a second time on the other instance.
 	opts.MaxRetries = -1
@@ -405,32 +409,37 @@ func (s *Switch) loadLocked() state {
 
 func (s *Switch) set(ctx context.Context, next state, readAt time.Time) {
 	s.mu.Lock()
-	previous := s.state
-	if previous == stateNext {
+	if s.state == stateNext {
 		s.mu.Unlock()
 		return
 	}
-	s.state = next
-	s.readAt = readAt
-	close(s.changed)
-	s.changed = make(chan struct{})
 
 	var stale []*trackedConn
 	if next == stateNext {
+		// Every connection to the instance being left is closed before any
+		// command learns of the move. Until that is done commands wait and
+		// dials are refused, so nothing can use or add such a connection.
+		s.state = stateUnknown
 		for conn := range s.conns {
 			stale = append(stale, conn)
 		}
 		s.conns = make(map[*trackedConn]struct{})
+		s.mu.Unlock()
+
+		for _, conn := range stale {
+			_ = conn.Conn.Close()
+		}
+
+		s.mu.Lock()
 	}
+
+	s.state = next
+	s.readAt = readAt
+	close(s.changed)
+	s.changed = make(chan struct{})
 	logged := s.lastSeen
 	s.lastSeen = next
 	s.mu.Unlock()
-
-	// Connections to the instance being left would otherwise keep serving
-	// commands from the pool.
-	for _, conn := range stale {
-		_ = conn.Conn.Close()
-	}
 
 	if logged != next {
 		s.logger.InfoContext(ctx, "redis switch state changed",
@@ -468,10 +477,14 @@ func (s *Switch) wait(ctx context.Context) error {
 	}
 }
 
-// dial connects to whichever instance the switch points at. It refuses unless
-// the process holds a fresh reading that allows it, before connecting and
-// again after, so a command that slipped past the gate, or a process that
-// stalled mid-dial, cannot open a connection to the instance being copied.
+// dial connects to whichever instance the switch points at. A connection to
+// the current instance is handed over only if three checks pass: the process
+// holds a fresh reading that allows it before connecting; the instance itself,
+// asked on the new socket, says it is current and not held; and the reading
+// still allows it when the socket is registered. A command that slipped past
+// the gate, a process that stalled mid-dial, or a socket whose handshake was
+// delayed past the operator's connection close therefore cannot write to the
+// instance being copied.
 func (s *Switch) dial(ctx context.Context, network, _ string) (net.Conn, error) {
 	target, _ := s.load()
 
@@ -494,6 +507,11 @@ func (s *Switch) dial(ctx context.Context, network, _ string) (net.Conn, error) 
 		return conn, nil
 	}
 
+	if err := s.verifyCurrent(ctx, conn); err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+
 	// Checked and registered under one lock: a move cannot fall between the
 	// two and leave an unregistered connection to the instance being left.
 	tracked := &trackedConn{Conn: conn, sw: s}
@@ -511,24 +529,47 @@ func (s *Switch) dial(ctx context.Context, network, _ string) (net.Conn, error) 
 	return tracked, nil
 }
 
-// onConnect runs on every new connection after it has authenticated. For a
-// connection to the current instance it reads the switch keys on that same
-// connection and refuses it unless the instance itself says it is current and
-// not held. The cached reading decided where to dial; this confirms it with the
-// instance, so a process whose clock or cache misled it still cannot use the
-// connection.
-func (s *Switch) onConnect(ctx context.Context, conn *redis.Conn) error {
-	if current, _ := s.load(); current == stateNext {
-		return nil
-	}
+// verifyCurrent reads the switch keys on a socket just opened to the current
+// instance and fails unless the instance says it is current and not held. It
+// is asked on this socket, not through the poller, so the answer is about the
+// instance this socket reached and is as fresh as the socket.
+func (s *Switch) verifyCurrent(ctx context.Context, conn net.Conn) error {
+	// A throwaway client speaks the protocol over the socket. Closing it must
+	// leave the socket open for the caller.
+	probe := redis.NewClient(&redis.Options{
+		Dialer:          func(context.Context, string, string) (net.Conn, error) { return keepOpen{Conn: conn}, nil },
+		Password:        s.current.Password,
+		Protocol:        2,
+		ReadTimeout:     pollTimeout,
+		WriteTimeout:    pollTimeout,
+		MaxRetries:      -1,
+		DialerRetries:   1,
+		PoolSize:        1,
+		DisableIdentity: true,
+	})
+	defer func() { _ = probe.Close() }()
 
-	values, err := conn.MGet(ctx, s.stateKey, HoldKey).Result()
+	values, err := probe.MGet(ctx, s.stateKey, HoldKey).Result()
 	if err != nil {
 		return fmt.Errorf("read switch keys on new connection: %w", err)
 	}
 	if value, _ := values[0].(string); value != valueCurrent || values[1] != nil {
 		return ErrHolding
 	}
+
+	// The probe set deadlines for its own command; the caller sets its own.
+	if err := conn.SetDeadline(time.Time{}); err != nil {
+		return fmt.Errorf("clear deadline on new connection: %w", err)
+	}
+	return nil
+}
+
+// keepOpen is a socket whose Close does nothing, lent to a throwaway client.
+type keepOpen struct {
+	net.Conn
+}
+
+func (keepOpen) Close() error {
 	return nil
 }
 
