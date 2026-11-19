@@ -7,12 +7,10 @@ import { useQuery } from "@tanstack/react-query";
  * The resource a minted JWT's audience binds to. The unified mint RPC takes
  * exactly one of these:
  *
- * - `toolset` binds to the toolset's `/mcp/{slug}` surface.
  * - `mcpServer` binds to the server's user_session_issuer — proxied MCP
  *   servers are mcp_servers-backed and carry no toolset.
  */
 export type UserSessionTokenTarget =
-  | { kind: "toolset"; id: string | undefined }
   | { kind: "mcpServer"; id: string | undefined }
   | {
       kind: "metaMcpServer";
@@ -36,8 +34,6 @@ function mintRequestBody(
   target: UserSessionTokenTarget,
 ): MintUserSessionRequestBody {
   switch (target.kind) {
-    case "toolset":
-      return { toolsetId: target.id };
     case "mcpServer":
       return { mcpServerId: target.id };
     case "metaMcpServer":
@@ -49,7 +45,7 @@ function mintRequestBody(
 }
 
 /**
- * Mints a user-session JWT scoped to a toolset or a proxied MCP server. The
+ * Mints a user-session JWT scoped to an MCP server or gateway. The
  * minted token is what the dashboard's MCP clients send as
  * `Authorization: Bearer` on the target's MCP surface, so the runtime gateway
  * resolves the dashboard user's stored upstream credentials through the same
@@ -67,8 +63,8 @@ function mintRequestBody(
  * gateway would reject its audience until the entry expired.
  *
  * Consumers sharing a target share the query key, so React Query dedupes the
- * mint across them — e.g. the playground's auth panel and chat surface issue a
- * single request between them.
+ * mint across them — e.g. two panels on one page that need a token for the same
+ * server issue a single request between them.
  */
 export function useUserSessionToken({
   target,

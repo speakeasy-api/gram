@@ -32,7 +32,7 @@ func TestResolveAuthorization_AgentAttachment(t *testing.T) {
 	cipher, err := enc.Encrypt([]byte("attached-token"))
 	require.NoError(t, err)
 	q := repo.New(ti.conn)
-	source, err := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	source, err := q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn: subject, UserSessionIssuerID: requestingIssuer,
 		RemoteSessionClientID: clientID, AccessTokenEncrypted: cipher,
 		AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
@@ -128,7 +128,7 @@ func TestResolveAuthorization_AgentAttachment(t *testing.T) {
 	require.NoError(t, err)
 	_, err = testrepo.New(ti.conn).SoftDeleteAttachmentSourceFixture(ctx, source.ID)
 	require.NoError(t, err)
-	replacement, err := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	replacement, err := q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn: subject, UserSessionIssuerID: requestingIssuer,
 		RemoteSessionClientID: clientID, AccessTokenEncrypted: cipher,
 		AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{},

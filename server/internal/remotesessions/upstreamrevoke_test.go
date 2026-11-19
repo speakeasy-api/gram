@@ -238,7 +238,7 @@ func seedRevocableSession(
 	}
 
 	subject := urn.NewUserSubject("revoke-subject-" + slug)
-	session, err := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	session, err := q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userIssuer,
 		RemoteSessionClientID: client.ID,
@@ -340,7 +340,7 @@ func seedRevocableClient(
 		require.NoError(t, encErr)
 
 		subject := urn.NewUserSubject("revoke-subject-" + suffix)
-		session, sessErr := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+		session, sessErr := q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 			SubjectUrn:            subject,
 			UserSessionIssuerID:   userIssuer,
 			RemoteSessionClientID: client.ID,

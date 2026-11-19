@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -15,13 +16,13 @@ import (
 // so; it is never reported as a problem with the client's configuration.
 func clientSecretWriteError(ctx context.Context, logger *slog.Logger, err error) error {
 	switch {
-	case clientsecrets.IsKeyProblem(err):
+	case orgencryption.IsKeyProblem(err):
 		return oops.E(oops.CodeUnavailable, err, "the organization's encryption key is unavailable, so the client secret could not be stored; try again shortly").LogError(ctx, logger)
 	case errors.Is(err, clientsecrets.ErrClientNotFound):
 		return oops.E(oops.CodeNotFound, err, "remote session client not found").LogWarn(ctx, logger)
 	case errors.Is(err, clientsecrets.ErrUnattributed):
 		return oops.E(oops.CodeFailedPrecondition, err, "this client was stored without its organization, so its secret cannot be stored while the organization moves to its own encryption key; backfill the client's organization first").LogWarn(ctx, logger)
-	case clientsecrets.IsUnreadable(err):
+	case orgencryption.IsUnreadable(err):
 		// Only a copy opens a stored secret: the source client's no longer
 		// decrypts.
 		return oops.E(oops.CodeConflict, err, "the source client's stored secret could not be read; enter a client_secret instead").LogWarn(ctx, logger)

@@ -95,11 +95,9 @@ func TestTurnStreamSubscribeReplaysThenTails(t *testing.T) {
 	require.Equal(t, chat.TurnFrameDone, got[2].Kind)
 }
 
-// TestTurnStreamSubscribeWithoutCursorStartsFromNow: a chat's retained frames
-// span earlier turns. Replaying them for a fresh subscription handed the
-// client the previous turn's terminal frame, which ended the new turn before
-// it began — the turn appeared to never stream at all.
-func TestTurnStreamSubscribeWithoutCursorStartsFromNow(t *testing.T) {
+// A fresh subscription opens before dispatch resets the previous turn. It
+// must skip that turn's terminal frame and survive the reset.
+func TestTurnStreamResetKeepsPreSubscribedReader(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -107,13 +105,15 @@ func TestTurnStreamSubscribeWithoutCursorStartsFromNow(t *testing.T) {
 	chatID := uuid.New()
 
 	// A previous, completed turn.
-	_, err := stream.Publish(ctx, chatID, textFrame("old turn"))
+	oldCursor, err := stream.Publish(ctx, chatID, textFrame("old turn"))
 	require.NoError(t, err)
 	_, err = stream.Publish(ctx, chatID, doneFrame())
 	require.NoError(t, err)
 
 	frames, err := stream.Subscribe(ctx, chatID, "")
 	require.NoError(t, err)
+
+	require.NoError(t, stream.Reset(ctx, chatID))
 
 	_, err = stream.Publish(ctx, chatID, textFrame("new turn"))
 	require.NoError(t, err)
@@ -123,6 +123,13 @@ func TestTurnStreamSubscribeWithoutCursorStartsFromNow(t *testing.T) {
 	got := collectFrames(t, frames, 2)
 	require.Equal(t, "new turn", got[0].Text, "the prior turn must not be replayed")
 	require.Equal(t, chat.TurnFrameDone, got[1].Kind)
+
+	replayed, err := stream.Replay(ctx, chatID, "0")
+	require.NoError(t, err)
+	require.Equal(t, got, replayed, "only the latest turn is retained")
+
+	_, err = stream.Subscribe(ctx, chatID, oldCursor)
+	require.ErrorIs(t, err, chat.ErrTurnReplayUnavailable)
 }
 
 // TestTurnStreamSubscribeStopsAtTerminalFrame: the subscription closes itself

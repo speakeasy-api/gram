@@ -112,12 +112,13 @@ func (e *idJAGExchange) record(ctx context.Context) {
 // recordSharedIDJAGResourceRejection records an ID-JAG exchange the shared
 // token endpoint refused before the grant handler because of its resource:
 // one rejection log line, counted as an ID-JAG exchange under reason. logger
-// already carries the issuer.
+// already carries the issuer. No client is authenticated yet, so it writes no connection row.
 func (s *Service) recordSharedIDJAGResourceRejection(ctx context.Context, logger *slog.Logger, issuerID uuid.UUID, rejection sharedResourceRejection, resources []string, reason mcpmetrics.IDJAGRejectionReason) {
 	exchange := s.startSharedIDJAGExchange(issuerID, logger)
 	attrs := exchange.reject(reason, nil)
 	s.recordSharedResourceRejectionAs(ctx, logger, "oauth ID-JAG token request rejected", issuerID, mcpmetrics.OAuthFlowStageToken, rejection, resources, attrs...)
 	exchange.record(ctx)
+	s.metrics.RecordConnectionRefusalWithoutRow(ctx, "token_"+string(reason))
 }
 
 // rejectTokenClient logs one refusal of the client a token request presents.
@@ -132,13 +133,14 @@ func (s *Service) rejectTokenClient(ctx context.Context, logger *slog.Logger, r 
 	exchange, logger := s.startIDJAGExchange(endpoint, logger)
 	logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientID, authMethod, grantType, reason, exchange.reject(idJAGReason, nil)...)
 	exchange.record(ctx)
+	s.recordTokenClientRefusal(r, endpoint, grantType, clientID, reason)
 }
 
 // failTokenClient counts an ID-JAG exchange that failed while checking its
 // client as a failed exchange under reason. Other grants are not counted.
 func (s *Service) failTokenClient(ctx context.Context, logger *slog.Logger, r *http.Request, endpoint *ResolvedMcpEndpoint, grantType, clientID string, reason mcpmetrics.IDJAGRejectionReason, err error) {
+	s.recordTokenClientFailure(r, endpoint, grantType, clientID, reason)
 	if grantType != oauthwire.GrantTypeJWTBearer {
-		s.recordTokenClientFailure(r, endpoint, grantType, clientID, reason)
 		return
 	}
 	issuerID := endpoint.UserSessionIssuerID.String()
@@ -148,22 +150,26 @@ func (s *Service) failTokenClient(ctx context.Context, logger *slog.Logger, r *h
 
 // recordSharedIDJAGAssertionRejection records an ID-JAG exchange the shared
 // token endpoint refused before the grant handler because the assertion could
-// not be read. logger already carries the issuer.
+// not be read. logger already carries the issuer. No client is authenticated
+// yet, so it writes no connection row.
 func (s *Service) recordSharedIDJAGAssertionRejection(ctx context.Context, logger *slog.Logger, issuerID uuid.UUID, err error) {
 	exchange := s.startSharedIDJAGExchange(issuerID, logger)
 	logger.LogAttrs(ctx, slog.LevelInfo, "oauth ID-JAG token request rejected", exchange.rejectAssertion(err)...)
 	exchange.record(ctx)
+	s.metrics.RecordConnectionRefusalWithoutRow(ctx, "token_"+string(idjag.ReasonOf(err)))
 }
 
 // recordSharedIDJAGRequestRejection records an ID-JAG exchange the shared
 // token endpoint refused before the grant handler because the request itself
-// was malformed. logger already carries the issuer.
+// was malformed. logger already carries the issuer. No client is authenticated
+// yet, so it writes no connection row.
 func (s *Service) recordSharedIDJAGRequestRejection(ctx context.Context, logger *slog.Logger, r *http.Request, issuerID uuid.UUID, reason string, idJAGReason mcpmetrics.IDJAGRejectionReason) {
 	exchange := s.startSharedIDJAGExchange(issuerID, logger)
 	creds := extractClientCredentials(r)
 	clientID, _ := resolvePresentedClientID(creds)
 	logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientID, creds.method, oauthwire.GrantTypeJWTBearer, reason, exchange.reject(idJAGReason, nil)...)
 	exchange.record(ctx)
+	s.metrics.RecordConnectionRefusalWithoutRow(ctx, "token_"+reason)
 }
 
 // startSharedIDJAGExchange starts an exchange the shared token endpoint

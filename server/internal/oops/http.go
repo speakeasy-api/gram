@@ -77,12 +77,13 @@ func errHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Requ
 		if browser {
 			reason := oauthui.ReasonDefault
 			clientName := ""
-			providerName := ""
+			providerName, adminDetail := "", ""
 			var recovery *oauthui.RecoveryLink
 			if presentation, ok := errors.AsType[*browserError](err); ok {
 				reason = presentation.reason
 				clientName = presentation.clientName
 				providerName = presentation.providerName
+				adminDetail = presentation.adminDetail
 				recovery = presentation.recovery
 			}
 			// A fault's message is written for developers; the error ID finds it.
@@ -107,6 +108,7 @@ func errHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Requ
 				ClientIDOrigin: "",
 				ServerName:     "",
 				ProviderName:   providerName,
+				AdminDetail:    adminDetail,
 			}
 			if err := oauthui.WriteAuthorizationError(r.Context(), w, page); err != nil {
 				logger.ErrorContext(r.Context(), "write browser error response", attr.SlogError(err))
@@ -140,6 +142,9 @@ type browserError struct {
 
 	// providerName names the sign-in provider that is down, from validated flow state.
 	providerName string
+
+	// adminDetail says what is wrong for an administrator, on the page's Technical details only.
+	adminDetail string
 }
 
 func (e *browserError) Error() string { return e.cause.Error() }
@@ -177,6 +182,16 @@ func WithBrowserProvider(err error, name string) error {
 	return presentation
 }
 
+// WithBrowserAdminDetail adds what is wrong for an administrator to the page's Technical details; clients never receive it.
+func WithBrowserAdminDetail(err error, detail string) error {
+	if err == nil {
+		return nil
+	}
+	presentation := browserPresentation(err)
+	presentation.adminDetail = detail
+	return presentation
+}
+
 // WithBrowserRecovery adds an explicit recovery action to browser failures.
 // Callers must use a trusted destination, never a callback or request URL.
 func WithBrowserRecovery(err error, recovery *oauthui.RecoveryLink) error {
@@ -189,7 +204,7 @@ func WithBrowserRecovery(err error, recovery *oauthui.RecoveryLink) error {
 }
 
 func browserPresentation(err error) *browserError {
-	presentation := &browserError{cause: err, reason: oauthui.ReasonDefault, clientName: "", recovery: nil, providerName: ""}
+	presentation := &browserError{cause: err, reason: oauthui.ReasonDefault, clientName: "", recovery: nil, providerName: "", adminDetail: ""}
 	if existing, ok := errors.AsType[*browserError](err); ok {
 		*presentation = *existing
 		presentation.cause = err

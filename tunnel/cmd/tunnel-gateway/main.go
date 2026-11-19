@@ -18,6 +18,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/speakeasy-api/gram/tunnel/gateway"
+	"github.com/speakeasy-api/gram/tunnel/redisswitch"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
@@ -149,10 +150,13 @@ func buildRouteStore(logger *slog.Logger) (route.Store, error) {
 	if addr == "" {
 		return nil, errors.New("TUNNEL_REDIS_ADDR is required")
 	}
-	client := redis.NewClient(&redis.Options{
+	client, err := redisswitch.NewClient(context.Background(), logger, &redis.Options{
 		Addr:     addr,
 		Password: os.Getenv("TUNNEL_REDIS_PASSWORD"),
-	})
+	}, redisswitch.DefaultRole, redisswitch.NextFromEnv())
+	if err != nil {
+		return nil, err
+	}
 	logger.InfoContext(context.Background(), "tunnel-gateway using redis route store", slog.String("addr", addr))
 	return route.NewRedis(client), nil
 }

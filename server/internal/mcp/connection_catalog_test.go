@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
@@ -859,7 +860,7 @@ func seedExpiredCatalogCredential(t *testing.T, ctx context.Context, ti *testIns
 	require.NoError(t, err)
 	refresh, err := ti.enc.Encrypt([]byte("refresh-fixture"))
 	require.NoError(t, err)
-	_, err = remotesessionsrepo.New(ti.conn).UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{SubjectUrn: subject, UserSessionIssuerID: issuerID, RemoteSessionClientID: remoteClient, Scopes: []string{}, AccessTokenEncrypted: access, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Minute), Valid: true}, RefreshTokenEncrypted: pgtype.Text{String: refresh, Valid: true}, RefreshExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}, Resource: pgtype.Text{String: "https://other.example.test/mcp", Valid: true}})
+	_, err = remotesessionsrepo.New(ti.conn).UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{SubjectUrn: subject, UserSessionIssuerID: issuerID, RemoteSessionClientID: remoteClient, Scopes: []string{}, AccessTokenEncrypted: access, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Minute), Valid: true}, RefreshTokenEncrypted: pgtype.Text{String: refresh, Valid: true}, RefreshExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}, Resource: pgtype.Text{String: "https://other.example.test/mcp", Valid: true}})
 	require.NoError(t, err)
 	return &tokenRequests
 }
@@ -1159,14 +1160,19 @@ func TestGatewayConsentLockdownPreventsCaptureAndApproval(t *testing.T) {
 	require.Contains(t, page, `href="https://consent.example.test/mcp/`+slug+`"`)
 	require.NotContains(t, page, `id="consent-tools-root"`)
 	require.Zero(t, upstream.requests.Load(), "lockdown prohibits discovery on this origin")
-	for _, action := range []string{"identity_chaining_check", "validate"} {
+	postAction := func(action string) *oops.ShareableError {
 		form := url.Values{"state": {stateID}, "csrf_token": {csrf}, "action": {action}}
 		req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect/remote-session", strings.NewReader(form.Encode())).WithContext(ctx)
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		err := ti.service.ServeConsentAction(httptest.NewRecorder(), req, endpoint)
-		var denied *oops.ShareableError
-		require.ErrorAs(t, err, &denied)
-		require.Equal(t, oops.CodeForbidden, denied.Code)
+		var refused *oops.ShareableError
+		require.ErrorAs(t, err, &refused)
+		return refused
+	}
+	require.Equal(t, oops.CodeBadRequest, postAction("switch_account").Code, "off, the switch is an unknown action")
+	ti.features.SetFlag(feature.FlagMCPConsentAccountSwitch, auth.ActiveOrganizationID, true)
+	for _, action := range []string{"identity_chaining_check", "validate", "switch_account"} {
+		require.Equal(t, oops.CodeForbidden, postAction(action).Code, action)
 	}
 	require.Zero(t, upstream.requests.Load())
 

@@ -118,7 +118,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 import { Bot, Settings } from "lucide-react";
 import { DateGroupHeader } from "@/components/auditlogs/feed";
 import { groupByLocalDay, pinnedDayAt } from "./toolLogDayGroups";

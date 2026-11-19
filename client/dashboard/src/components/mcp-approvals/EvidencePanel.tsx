@@ -1,7 +1,4 @@
-import {
-  authorityModeLabel,
-  USAGE_QUESTION,
-} from "@/components/mcp-approvals/evidence";
+import { authorityModeLabel } from "@/components/mcp-approvals/evidence";
 import { Badge } from "@/components/ui/Badge";
 import { Heading } from "@/components/ui/Heading";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
@@ -39,17 +36,8 @@ import { gapLabel } from "./evidence";
  */
 export function EvidencePanel({
   document,
-  usage,
 }: {
   document: EvidenceDocument | null;
-  /**
-   * Who is calling the server today, supplied by the page that has the
-   * traffic query. It reads as one more question about the server, and it
-   * belongs beside the tools it declares: what it can do, and who is doing
-   * it. Absent for a decision's frozen snapshot, which is evidence as it
-   * stood rather than traffic as it is now.
-   */
-  usage?: React.ReactNode;
 }): JSX.Element {
   if (!document) {
     return (
@@ -82,53 +70,17 @@ export function EvidencePanel({
           domain={document.domain}
         />
         <AuthoritySection authority={document.authority} />
-        {usage ? (
-          <>
-            <DeclaredCapabilitySection
-              capabilities={document.capabilities}
-              source={document.capabilitiesSource}
-              fill
-            />
-            {/* The traffic table answers "are we already exposed?" on its own —
-                names, counts and recency — so that question no longer has a
-                group of its own. What the table cannot say is what a denial
-                would cost, so that judgment rides here as the note. */}
-            <EvidenceGroup
-              question={USAGE_QUESTION}
-              note={
-                document.exposure?.inUse && (
-                  <span className="border-warning border px-2.5 py-1 text-xs">
-                    Already in use — a denial changes existing workflows.
-                  </span>
-                )
-              }
-            >
-              {usage}
-            </EvidenceGroup>
-          </>
-        ) : (
-          <>
-            <DeclaredCapabilitySection
-              capabilities={document.capabilities}
-              source={document.capabilitiesSource}
-            />
-            {/* Without a traffic table the exposure figures have nowhere else
-                to appear: the review sheet has no summary strip, and a frozen
-                decision snapshot is evidence as it stood, not traffic as it is
-                now. The detail page drops this group because its strip and
-                table already answer it. */}
-            <ExposureSection
-              exposure={document.exposure}
-              identity={document.identity}
-            />
-          </>
-        )}
-        {/* Maturity and advisories share the last row. Maturity used to span
-            the full width so its fact list could run two columns, but with
-            the exposure group gone an odd number of groups left a hole beside
-            whichever one ran last — and three even rows read better than two
-            rows and two banners. Its list falls back to one column here via
-            its own container query. */}
+        <DeclaredCapabilitySection
+          capabilities={document.capabilities}
+          source={document.capabilitiesSource}
+        />
+        <ExposureSection
+          exposure={document.exposure}
+          identity={document.identity}
+        />
+        {/* Maturity and advisories share the last row, so six groups make
+            three even rows. Its list falls back to one column here via its
+            own container query. */}
         <MaturitySection
           pkg={document.package}
           notPublished={document.packageNotPublished}
@@ -167,8 +119,9 @@ const GAPS_SHOWN_BY_THEIR_OWN_GROUP = new Set([
 ]);
 
 /**
- * What this project's own traffic says, for the surfaces that do not render a
- * live traffic table beside it.
+ * What this project's own traffic said when the evidence was gathered. The
+ * server page shows live traffic on its own; this is the snapshot a decision
+ * was made against.
  */
 function ExposureSection({
   exposure,
@@ -635,12 +588,9 @@ function capabilitySourceNote(
 function DeclaredCapabilitySection({
   capabilities,
   source,
-  fill = false,
 }: {
   capabilities: EvidenceCapability[];
   source: "server" | "registry" | undefined;
-  /** Share a row with another group, and size the tool list to it. */
-  fill?: boolean;
 }): JSX.Element {
   if (capabilities.length === 0) {
     // A source that answered with zero tools is a real declaration —
@@ -688,7 +638,7 @@ function DeclaredCapabilitySection({
         )
       }
     >
-      <ToolList capabilities={capabilities} fill={fill} />
+      <ToolList capabilities={capabilities} />
     </EvidenceGroup>
   );
 }
@@ -779,43 +729,20 @@ function ToolRow({ tool }: { tool: EvidenceCapability }): JSX.Element {
   );
 }
 
-/**
- * Every declared tool. Sharing a row with another group, the list takes
- * whatever height that group settled on and scrolls past it — a fixed preview
- * count would be a guess about the neighbour, right for one server's traffic
- * and wrong for the next. The scroller is absolutely positioned because a
- * grid row is sized by its content: left in flow, the list would set the
- * height it is supposed to be reading.
- */
+/** Every declared tool, previewed and expandable. */
 function ToolList({
   capabilities,
-  fill,
 }: {
   capabilities: EvidenceCapability[];
-  fill: boolean;
 }): JSX.Element {
-  if (!fill) {
-    return (
-      <CollapsibleList
-        items={capabilities}
-        itemKey={(tool) => tool.tool}
-        itemClassName={TOOL_ROW_CLASS}
-        noun="tools"
-        renderItem={(tool) => <ToolRow tool={tool} />}
-      />
-    );
-  }
-
   return (
-    <div className="border-border relative min-h-40 flex-1 border">
-      <ul className="divide-border absolute inset-0 divide-y overflow-y-auto">
-        {capabilities.map((tool) => (
-          <li key={tool.tool} className={TOOL_ROW_CLASS}>
-            <ToolRow tool={tool} />
-          </li>
-        ))}
-      </ul>
-    </div>
+    <CollapsibleList
+      items={capabilities}
+      itemKey={(tool) => tool.tool}
+      itemClassName={TOOL_ROW_CLASS}
+      noun="tools"
+      renderItem={(tool) => <ToolRow tool={tool} />}
+    />
   );
 }
 

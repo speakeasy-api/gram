@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens/upstreamtokenstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -46,7 +47,7 @@ func TestPrepareEMA_TypedOwnershipLifecycle(t *testing.T) {
 			copies, err := q.ListAuthClientHeadersFixture(ctx, old)
 			require.NoError(t, err)
 			require.Len(t, copies, 1)
-			governor := identitychaining.NewGovernor(testenv.NewLogger(t), ti.conn, testenv.NewEncryptionClient(t), nil)
+			governor := identitychaining.NewGovernor(testenv.NewLogger(t), ti.conn, upstreamtokenstest.New(t, ti.conn, testenv.NewEncryptionClient(t)), nil)
 			request := identitychaining.Request{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, UserSessionIssuerID: in.UserSessionIssuerID, UpstreamResource: in.Resource, RemoteSessionClientID: conv.ToNullUUID(in.ClientID)}
 			require.True(t, governor.Governs(ctx, request))
 			payload.ExpectedGeneration = first.Generation
@@ -127,7 +128,7 @@ func TestPrepareEMA_ResourceOwnershipTransitionKeepsSibling(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{secondServer}, newLinks)
 	require.NotContains(t, newLinks, firstServer)
-	governor := identitychaining.NewGovernor(testenv.NewLogger(t), ti.conn, testenv.NewEncryptionClient(t), nil)
+	governor := identitychaining.NewGovernor(testenv.NewLogger(t), ti.conn, upstreamtokenstest.New(t, ti.conn, testenv.NewEncryptionClient(t)), nil)
 	request := identitychaining.Request{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, UserSessionIssuerID: in.UserSessionIssuerID, UpstreamResource: firstResource, RemoteSessionClientID: conv.ToNullUUID(in.ClientID)}
 	require.False(t, governor.Governs(ctx, request))
 	request.UpstreamResource = secondResource

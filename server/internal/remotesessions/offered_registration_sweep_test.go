@@ -75,7 +75,7 @@ func (o offeredRegistration) grant(t *testing.T, ctx context.Context, mintedBy u
 	if renewable {
 		refreshToken = conv.ToPGText("refresh-ciphertext")
 	}
-	session, err := repo.New(o.ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	session, err := repo.New(o.ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            o.subject,
 		UserSessionIssuerID:   mintedBy,
 		RemoteSessionClientID: o.registration,

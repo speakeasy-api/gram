@@ -182,11 +182,11 @@ describe("hasFormChanges", () => {
   });
 
   it("upstream credential rules changed → true", () => {
-    expect(hasFormChanges(makeInput({ clientTypesChanged: true }))).toBe(true);
+    expect(hasFormChanges(makeInput({ credentialsChanged: true }))).toBe(true);
   });
 
   it("upstream credential rules unchanged → false", () => {
-    expect(hasFormChanges(makeInput({ clientTypesChanged: false }))).toBe(
+    expect(hasFormChanges(makeInput({ credentialsChanged: false }))).toBe(
       false,
     );
   });
@@ -245,13 +245,13 @@ describe("isSaveDisabled", () => {
     });
 
     it("upstream credential rules changed → enabled", () => {
-      expect(isSaveDisabled(makeInput({ clientTypesChanged: true }))).toBe(
+      expect(isSaveDisabled(makeInput({ credentialsChanged: true }))).toBe(
         false,
       );
     });
 
     it("upstream credential rules unchanged → disabled", () => {
-      expect(isSaveDisabled(makeInput({ clientTypesChanged: false }))).toBe(
+      expect(isSaveDisabled(makeInput({ credentialsChanged: false }))).toBe(
         true,
       );
     });

@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -34,7 +35,8 @@ func TestRefresh_UnreadableSnapshotRereadStoreFailure(t *testing.T) {
 	pool, err := pgxpool.New(t.Context(), "postgres://speakeasy@127.0.0.1:1/unreachable?connect_timeout=1")
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
-	s := &RefreshService{enc: testenv.NewEncryptionClient(t)}
+	enc := testenv.NewEncryptionClient(t)
+	s := &RefreshService{enc: enc, tokens: upstreamtokens.WithoutOrganizationEncryption(testenv.NewLogger(t), pool, enc)}
 	sess := remotesessions_repo.RemoteSession{
 		ID: uuid.New(), SubjectUrn: urn.NewUserSubject("store-down"), RemoteSessionClientID: uuid.New(),
 	}

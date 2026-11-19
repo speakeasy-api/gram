@@ -229,7 +229,6 @@ describe("OfficialServerPanel", () => {
               officialServer: {
                 mcpServerId: "11111111-1111-4111-8111-111111111111",
                 name: "Tracker",
-                directAccessAllowed: false,
               },
             })}
           />
@@ -264,10 +263,21 @@ describe("OfficialServerPanel", () => {
       ),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Make official" })).toBeNull();
-    // The admin can still try the form with a credential of their own.
+    // The admin can still set it up by hand: the usual Add MCP server form,
+    // filled in, which comes back here to link the new server.
+    const setUp = screen.getByRole("link", { name: "Set it up myself" });
+    const href = new URL(setUp.getAttribute("href") ?? "", "http://x");
+    expect(href.pathname).toBe("/acme/projects/default/mcp/add/remote");
+    expect(href.searchParams.get("url")).toBe(
+      "https://tracker.example.com/mcp",
+    );
+    expect(href.searchParams.get("name")).toBe("Tracker");
+    expect(href.searchParams.get("shadow-mcp")).toBe(
+      "tracker-example-com-mcp-12345678",
+    );
     expect(
-      screen.getByRole("button", { name: "Set it up myself" }),
-    ).toBeTruthy();
+      screen.queryByRole("dialog", { name: "Make official sheet" }),
+    ).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Request help" }));
 
@@ -419,7 +429,6 @@ describe("OfficialServerPanel", () => {
           slug: "tracker",
           url: "https://app.example.com/mcp/team-gateway",
           gatewayName: "Team Gateway",
-          directAccessAllowed: false,
         },
       }),
     );
@@ -438,53 +447,43 @@ describe("OfficialServerPanel", () => {
       "/acme/projects/default/mcp/tracker",
     );
     expect(open.getAttribute("target")).toBe("_blank");
-    expect(
-      screen
-        .getByRole("switch", { name: "Linked" })
-        .getAttribute("aria-checked"),
-    ).toBe("true");
+    expect(screen.queryByRole("switch")).toBeNull();
     expect(mocks.probe).not.toHaveBeenCalled();
   });
 
-  it("switches the link off and on, and removes it", async () => {
+  it("removes the link and adds it back on undo", async () => {
     const official = {
       mcpServerId: "11111111-1111-4111-8111-111111111111",
       name: "Tracker",
       url: "https://app.example.com/mcp/tracker",
-      directAccessAllowed: false,
     };
-    const view = renderPanel(server({ officialServer: official }));
+    renderPanel(server({ officialServer: official }));
 
-    fireEvent.click(screen.getByRole("switch", { name: "Linked" }));
-    await vi.waitFor(() =>
-      expect(mocks.save).toHaveBeenCalledWith({
-        serverUrl: "https://tracker.example.com/mcp",
-        mcpServerId: official.mcpServerId,
-        allowDirectAccess: true,
-      }),
-    );
-
-    view.unmount();
-    renderPanel(
-      server({ officialServer: { ...official, directAccessAllowed: true } }),
-    );
-    expect(screen.getByText("Link off")).toBeTruthy();
-    fireEvent.click(screen.getByRole("switch", { name: "Linked" }));
-    await vi.waitFor(() =>
-      expect(mocks.save).toHaveBeenLastCalledWith({
-        serverUrl: "https://tracker.example.com/mcp",
-        mcpServerId: official.mcpServerId,
-        allowDirectAccess: false,
-      }),
-    );
-
+    expect(screen.queryByText("Link off")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Remove link" }));
     await vi.waitFor(() =>
       expect(mocks.save).toHaveBeenLastCalledWith({
         serverUrl: "https://tracker.example.com/mcp",
         mcpServerId: undefined,
-        allowDirectAccess: false,
       }),
+    );
+
+    await vi.waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalled());
+    const options = mocks.toastSuccess.mock.calls.at(-1)?.[1] as {
+      action: { label: string; onClick: () => void };
+    };
+    expect(options.action.label).toBe("Undo");
+    options.action.onClick();
+    await vi.waitFor(() =>
+      expect(mocks.save).toHaveBeenLastCalledWith({
+        serverUrl: "https://tracker.example.com/mcp",
+        mcpServerId: official.mcpServerId,
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(mocks.toastSuccess).toHaveBeenLastCalledWith(
+        "Link to “Tracker” restored",
+      ),
     );
   });
 
@@ -493,7 +492,6 @@ describe("OfficialServerPanel", () => {
       mcpServerId: "11111111-1111-4111-8111-111111111111",
       name: "Tracker",
       url: "https://app.example.com/mcp/tracker",
-      directAccessAllowed: false,
     };
     renderPanel(server({ officialServer: official }));
 
@@ -514,7 +512,6 @@ describe("OfficialServerPanel", () => {
     expect(mocks.save).toHaveBeenLastCalledWith({
       serverUrl: "https://tracker.example.com/mcp",
       mcpServerId: official.mcpServerId,
-      allowDirectAccess: false,
     });
   });
 
@@ -555,7 +552,6 @@ describe("OfficialServerPanel", () => {
       expect(mocks.save).toHaveBeenCalledWith({
         serverUrl: "https://tracker.example.com/mcp",
         mcpServerId: "22222222-2222-4222-8222-222222222222",
-        allowDirectAccess: false,
       }),
     );
   });
@@ -594,7 +590,6 @@ describe("OfficialServerPanel", () => {
       expect(mocks.save).toHaveBeenCalledWith({
         serverUrl: "https://tracker.example.com/mcp",
         mcpServerId: "server-tools",
-        allowDirectAccess: false,
       });
     });
   });
@@ -611,6 +606,21 @@ describe("OfficialServerPanel", () => {
     expect(
       screen.queryByRole("dialog", { name: "Make official sheet" }),
     ).toBeNull();
+  });
+
+  it("keeps Set it up myself off without permission to add servers", async () => {
+    mocks.canWriteMcp = false;
+    mocks.probe.mockResolvedValue({
+      outcome: "unreachable",
+      reason: "guardian_rejected",
+    });
+    renderPanel(server());
+
+    const setUp = await screen.findByRole("button", {
+      name: "Set it up myself",
+    });
+    expect((setUp as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("link", { name: "Set it up myself" })).toBeNull();
   });
 
   it("starts over when the page moves to another server", async () => {

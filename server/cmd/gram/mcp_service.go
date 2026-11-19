@@ -190,7 +190,7 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (service *mcp.Servi
 	if err := service.SetMCPRegistryAuth(c.String("mcp-registry-auth")); err != nil {
 		return nil, fmt.Errorf("configure MCP registry auth: %w", err)
 	}
-	delegation := remotesessions.NewDelegationService(d.DB, d.Encryption, d.Challenges)
+	delegation := remotesessions.NewDelegationService(d.DB, d.Challenges)
 	service.SetFederatedLoginConsumer(mcp.NewFederatedDelegationConsumer(delegation))
 	chainer, err := newIdentityChainer(d.Logger, d.Meter, d.DB, d.Redis, d.Encryption, d.Guardian, d.Challenges, delegation, d.Audit)
 	if err != nil {
@@ -220,7 +220,7 @@ func newIdentityChainer(logger *slog.Logger, meter metric.MeterProvider, db *pgx
 	if err != nil {
 		return nil, fmt.Errorf("initialize identity chaining key resolver: %w", err)
 	}
-	chainer := identitychaining.New(logger, db, enc, challenges, delegation, assertionKeys, cache.NewRedisCacheAdapter(redisClient))
+	chainer := identitychaining.New(logger, db, challenges.UpstreamTokens(), challenges, delegation, assertionKeys, cache.NewRedisCacheAdapter(redisClient))
 	chainer.SetResourceResolver(challenges.ResolveEMAResource)
 	chainer.SetCachedResourceResolver(challenges.CachedEMAResource)
 	chainer.SetMeterProvider(meter)

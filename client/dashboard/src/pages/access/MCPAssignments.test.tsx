@@ -460,6 +460,7 @@ it("includes a newly blocked server even when the overview still shows an allow 
   state.explain.mockImplementation(
     async ({ resourceId }: { resourceId: string }) => ({
       visibility: "private",
+      credentials: [],
       levels: [
         {
           level: "use",
