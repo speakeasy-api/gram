@@ -1,7 +1,7 @@
 // TODO: Move file to better home
 
 import React, { useEffect, useReducer } from "react";
-import { formatDistance } from "date-fns";
+import { formatDistance } from "date-fns/formatDistance";
 
 export const HumanizeDateTime = React.memo(
   ({

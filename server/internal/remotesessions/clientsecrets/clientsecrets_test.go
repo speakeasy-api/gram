@@ -154,7 +154,7 @@ func TestSetFailsClosedWhenTheOrganizationKeyIsSuspended(t *testing.T) {
 
 	_, err := ti.secrets.Set(t.Context(), ti.conn, client.ID, owner, []byte("s3cret"), noExpiry())
 	require.Error(t, err)
-	require.True(t, clientsecrets.IsKeyProblem(err), "a suspended key is a retryable key problem: %v", err)
+	require.True(t, orgencryption.IsKeyProblem(err), "a suspended key is a retryable key problem: %v", err)
 
 	stored := ti.stored(t, client.ID)
 	require.False(t, clientsecrets.Has(clientsecrets.Stored(stored.ClientSecretEncrypted, stored.ClientSecretOrgEncrypted)), "nothing falls back to the platform key")
@@ -219,7 +219,7 @@ func TestProjectClientWithoutOrganizationStaysOnThePlatformKeyAndBlocksFinalize(
 
 	_, err = ti.secrets.Set(t.Context(), ti.conn, client.ID, owner, []byte("replaced"), noExpiry())
 	require.ErrorIs(t, err, clientsecrets.ErrUnattributed, "once enrolled, the secret is not replaced on the platform key")
-	require.False(t, clientsecrets.IsKeyProblem(err))
+	require.False(t, orgencryption.IsKeyProblem(err))
 }
 
 func TestFirstSecretForAProjectClientWithoutOrganizationIsRefusedAfterFinalize(t *testing.T) {
@@ -384,8 +384,8 @@ func TestOpenFailsClosedWhenTheOrganizationKeyIsSuspended(t *testing.T) {
 
 	_, err = ti.secrets.Open(t.Context(), ti.conn, owner, clientsecrets.Stored(row.ClientSecretEncrypted, row.ClientSecretOrgEncrypted))
 	require.Error(t, err, "nothing falls back to the platform-key copy")
-	require.False(t, clientsecrets.IsUnreadable(err), "a suspended key is retryable, not a broken secret: %v", err)
-	require.True(t, clientsecrets.IsKeyProblem(err))
+	require.False(t, orgencryption.IsUnreadable(err), "a suspended key is retryable, not a broken secret: %v", err)
+	require.True(t, orgencryption.IsKeyProblem(err))
 }
 
 func TestCopyOpensTheSourceAndSealsForTheTarget(t *testing.T) {

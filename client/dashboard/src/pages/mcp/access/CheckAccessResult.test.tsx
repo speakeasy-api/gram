@@ -35,6 +35,7 @@ it.each([false, true])(
     query.mockReturnValue({
       data: ExplainResourceAccessResult$inboundSchema.parse({
         visibility: "private",
+        credentials: [],
         levels: [
           {
             level: "use",
@@ -87,6 +88,7 @@ it.each([
     query.mockReturnValue({
       data: ExplainResourceAccessResult$inboundSchema.parse({
         visibility: "private",
+        credentials: [],
         levels: [
           {
             level: "use",
@@ -148,3 +150,64 @@ it.each([
     );
   },
 );
+
+it("flags a person who can connect but has no credential to sign in with", () => {
+  const credential = {
+    auth_client_id: "00000000-0000-4000-8000-000000000001",
+    name: "Reporting bot",
+    client_type: "service_account",
+    enabled: true,
+    allowed: false,
+  };
+  query.mockReturnValue({
+    data: ExplainResourceAccessResult$inboundSchema.parse({
+      visibility: "private",
+      levels: [{ level: "use", allowed: true, tool_access: "all", rules: [] }],
+      credentials: [
+        {
+          ...credential,
+          rules: [
+            {
+              principal_urn: "role:contractors",
+              display_name: "Contractors",
+              kind: "everyone",
+              applies_to: "credential_type",
+              effect: "blocks",
+              via_directory_mapping: false,
+            },
+          ],
+        },
+        {
+          ...credential,
+          auth_client_id: "00000000-0000-4000-8000-000000000002",
+          name: "Shared key",
+          client_type: "static_credential",
+          rules: [],
+        },
+      ],
+    }),
+    isPending: false,
+    isError: false,
+  });
+  render(
+    <CheckAccessResult
+      resourceId="example-server"
+      userId="example-person"
+      memberName="Example person"
+      serverName="Example server"
+    />,
+  );
+  expect(
+    screen.getByText(
+      "Example person can connect but has no credential to sign in upstream with.",
+    ),
+  ).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Show 2 credentials" }));
+  const blocked = screen.getByText("Reporting bot").closest("tr")!;
+  expect(within(blocked).getByText("Blocked")).toBeTruthy();
+  expect(
+    within(blocked).getByText("Blocks every credential of this kind"),
+  ).toBeTruthy();
+  const unnamed = screen.getByText("Shared key").closest("tr")!;
+  expect(within(unnamed).getByText("No rule allows it")).toBeTruthy();
+});

@@ -213,3 +213,47 @@ func TestReadAttemptsBreaksAProviderTieLikeSummarize(t *testing.T) {
 	}))
 	require.Equal(t, 2, seen)
 }
+
+// A listing row's host is its member's, so neither reduction makes it the attempt's provider.
+func TestReadAttemptsLeavesAListingHostOutLikeSummarize(t *testing.T) {
+	t.Parallel()
+	ch, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	org := "org-" + uuid.NewString()
+	day := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -2)
+	scope := GatewayScope(org, uuid.New(), uuid.New(), AppDCR)
+	listing, signIn := AttemptAt(uuid.New(), day.Add(time.Hour), scope), AttemptAt(uuid.New(), day.Add(time.Hour), scope)
+	var rows []Row
+	for _, step := range []struct {
+		attempt Attempt
+		step    Step
+		what    Happened
+		final   bool
+		host    string
+		after   time.Duration
+	}{
+		{listing, StepDiscoveryMember, CodeProviderServerError, true, "https://mcp.linear.app/mcp", time.Minute},
+		{signIn, StepDiscoveryMember, CodeProviderServerError, false, "https://mcp.linear.app/mcp", time.Minute},
+		{signIn, StepProviderSignIn, ResultSignedIn, false, "https://accounts.google.com", 2 * time.Minute},
+		{signIn, StepInboundConsent, ResultComplete, true, "", 3 * time.Minute},
+	} {
+		row, err := RowAt(step.attempt, step.step, step.what, step.final, day.Add(time.Hour+step.after), Provider(step.host))
+		require.NoError(t, err)
+		rows = append(rows, row)
+	}
+	require.NoError(t, AppendRows(t.Context(), ch, rows))
+
+	byAttempt := map[uuid.UUID][]Row{}
+	for _, r := range rows {
+		byAttempt[r.AttemptID] = append(byAttempt[r.AttemptID], r)
+	}
+	want := map[uuid.UUID]string{listing.ID(): "", signIn.ID(): "accounts.google.com"}
+	filter := AttemptFilter{StartedFrom: day, StartedBefore: day.AddDate(0, 0, 1), OrganizationID: org}
+	seen := 0
+	require.NoError(t, ReadAttempts(t.Context(), ch, filter, func(s AttemptSummary) {
+		seen++
+		require.Equal(t, want[s.AttemptID], s.ProviderHost, "attempt %s", s.AttemptID)
+		require.Equal(t, want[s.AttemptID], Summarize(byAttempt[s.AttemptID]).ProviderHost, "attempt %s", s.AttemptID)
+	}))
+	require.Equal(t, 2, seen)
+}

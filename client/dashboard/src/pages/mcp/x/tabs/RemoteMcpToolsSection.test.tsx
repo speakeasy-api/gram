@@ -8,7 +8,11 @@ import { RemoteMcpToolsSection } from "./RemoteMcpToolsSection";
 
 const mocks = vi.hoisted(() => ({
   needsAuth: true,
-  open: vi.fn(),
+  startOAuth: vi.fn(),
+  list: vi.fn(),
+  accessToken: undefined as string | undefined,
+  oauthError: false,
+  oauthConnecting: false,
   tools: undefined as
     | undefined
     | Record<string, { unavailable: boolean; unavailableReason?: string }>,
@@ -19,14 +23,17 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/hooks/useProxiedMcpTools", () => ({
-  useProxiedMcpTools: () => ({
-    tools: mocks.tools,
-    isLoading: false,
-    needsAuth: mocks.needsAuth,
-    isError: false,
-    refetch: vi.fn(),
-    error: null,
-  }),
+  useProxiedMcpTools: (...args: unknown[]) => {
+    mocks.list(...args);
+    return {
+      tools: mocks.tools,
+      isLoading: false,
+      needsAuth: mocks.needsAuth,
+      isError: false,
+      refetch: vi.fn(),
+      error: null,
+    };
+  },
 }));
 
 vi.mock("../../inspect/useToolHealth", async () => {
@@ -48,14 +55,20 @@ vi.mock("../../inspect/useChatSessionHeaders", () => ({
   }),
 }));
 
-vi.mock("@/pages/playground/PlaygroundChat", () => ({
-  PlaygroundChat: ({ mcpUrl }: { mcpUrl: string }) => (
+vi.mock("@/pages/mcp/inspect-chat/InspectChat", () => ({
+  InspectChat: ({ mcpUrl }: { mcpUrl: string }) => (
     <div data-testid="chat" data-url={mcpUrl} />
   ),
 }));
 
-vi.mock("@/hooks/useUserSessionToken", () => ({
-  useUserSessionToken: () => ({ accessToken: undefined, isLoading: false }),
+vi.mock("@/hooks/useInspectOAuth", () => ({
+  useInspectOAuth: ({ serverUrl }: { serverUrl?: string }) => ({
+    accessToken: mocks.accessToken,
+    serverUrl,
+    connect: serverUrl ? () => mocks.startOAuth(serverUrl) : undefined,
+    isConnecting: mocks.oauthConnecting,
+    error: mocks.oauthError,
+  }),
 }));
 
 vi.mock("@/hooks/useToolMetadata", () => ({
@@ -89,8 +102,8 @@ vi.mock("@/lib/utils", async () => {
 
 function renderSection(
   props: Partial<ComponentProps<typeof RemoteMcpToolsSection>> = {},
-): void {
-  render(
+): ReturnType<typeof render> {
+  return render(
     <QueryClientProvider client={new QueryClient()}>
       <MemoryRouter>
         <TooltipProvider>
@@ -115,7 +128,11 @@ const connectButton = { name: "Connect account" };
 afterEach(() => {
   cleanup();
   mocks.needsAuth = true;
-  mocks.open.mockReset();
+  mocks.startOAuth.mockReset();
+  mocks.list.mockReset();
+  mocks.accessToken = undefined;
+  mocks.oauthError = false;
+  mocks.oauthConnecting = false;
   mocks.tools = undefined;
   mocks.stored = {};
   mocks.canWrite = true;
@@ -295,7 +312,6 @@ describe("RemoteMcpToolsSection tool search", () => {
 
 describe("RemoteMcpToolsSection connect prompt", () => {
   it("does not open first-party connect when the server has no issuer", () => {
-    vi.stubGlobal("open", mocks.open);
     renderSection();
 
     expect(screen.queryByRole("button", connectButton)).toBeNull();
@@ -303,23 +319,47 @@ describe("RemoteMcpToolsSection connect prompt", () => {
     expect(
       screen.getByRole("link", { name: "Configure authentication" }),
     ).toBeTruthy();
-    expect(mocks.open).not.toHaveBeenCalled();
+    expect(mocks.startOAuth).not.toHaveBeenCalled();
   });
 
-  it("opens the platform slug connect page for an issuer-gated server", () => {
-    vi.stubGlobal("open", mocks.open);
+  it("starts OAuth on the platform slug without listing tools before consent", () => {
+    mocks.needsAuth = false;
     renderSection({ userSessionIssuerId: "issuer-1" });
-
+    expect(mocks.list).toHaveBeenLastCalledWith(
+      "https://gram.example/mcp/server",
+      expect.objectContaining({ enabled: false }),
+    );
     fireEvent.click(screen.getByRole("button", connectButton));
-
-    expect(mocks.open).toHaveBeenCalledWith(
-      "https://gram.example/mcp/server/connect/first-party",
-      "_blank",
-      "noopener,noreferrer",
+    expect(mocks.startOAuth).toHaveBeenCalledWith(
+      "https://gram.example/mcp/server",
     );
   });
 
-  it("does not offer connect for a public tunnel", () => {
+  it("lists tools using the exchanged token on the same resource", () => {
+    mocks.needsAuth = false;
+    mocks.accessToken = "oauth-token";
+    renderSection({ userSessionIssuerId: "issuer-1" });
+    expect(mocks.list).toHaveBeenLastCalledWith(
+      "https://gram.example/mcp/server",
+      expect.objectContaining({
+        enabled: true,
+        headers: { Authorization: "Bearer oauth-token" },
+      }),
+    );
+  });
+
+  it("lets a viewer retry when OAuth sign-in cannot start", () => {
+    mocks.needsAuth = false;
+    mocks.oauthError = true;
+    renderSection({ userSessionIssuerId: "issuer-1" });
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(mocks.startOAuth).toHaveBeenCalledWith(
+      "https://gram.example/mcp/server",
+    );
+  });
+
+  it("lists on public tunnels anonymously even if an issuer is configured", () => {
+    mocks.needsAuth = false;
     renderSection({
       userSessionIssuerId: "issuer-1",
       tunneledMcpServerId: "tunnel-1",
@@ -327,13 +367,60 @@ describe("RemoteMcpToolsSection connect prompt", () => {
     });
 
     expect(screen.queryByRole("button", connectButton)).toBeNull();
-    expect(screen.getByText(/Connect isn't available/i)).toBeTruthy();
+    expect(mocks.list).toHaveBeenLastCalledWith(
+      "https://mcp.example/mcp/custom-slug",
+      expect.objectContaining({ enabled: true, headers: undefined }),
+    );
   });
 
-  it("does not offer connect when only a custom-domain address exists", () => {
+  it("does not suggest configuring an issuer when an anonymous tunnel refuses listing", () => {
+    renderSection({
+      userSessionIssuerId: "issuer-1",
+      tunneledMcpServerId: "tunnel-1",
+      visibility: "public",
+    });
+
+    expect(screen.queryByRole("button", connectButton)).toBeNull();
+    expect(screen.getByText(/Connect isn't available/)).toBeTruthy();
+  });
+
+  it("keeps tool listing off and hides the prompt while sign-in starts", () => {
+    mocks.needsAuth = false;
+    mocks.oauthConnecting = true;
+    renderSection({ userSessionIssuerId: "issuer-1" });
+
+    expect(screen.queryByRole("button", connectButton)).toBeNull();
+    expect(mocks.list).toHaveBeenLastCalledWith(
+      "https://gram.example/mcp/server",
+      expect.objectContaining({ enabled: false }),
+    );
+  });
+
+  it("uses the custom-domain OAuth and MCP routes when there is no platform address", () => {
+    mocks.needsAuth = false;
+    const props = { userSessionIssuerId: "issuer-1", platformSlug: undefined };
+    const customUrl = "https://mcp.example/mcp/custom-slug";
+    const beforeConsent = renderSection(props);
+    fireEvent.click(screen.getByRole("button", connectButton));
+    expect(mocks.startOAuth).toHaveBeenCalledWith(customUrl);
+    beforeConsent.unmount();
+
+    mocks.accessToken = "custom-oauth-token";
+    renderSection(props);
+    expect(mocks.list).toHaveBeenLastCalledWith(
+      customUrl,
+      expect.objectContaining({
+        enabled: true,
+        headers: { Authorization: "Bearer custom-oauth-token" },
+      }),
+    );
+  });
+
+  it("does not offer connect when there is no resolved MCP address", () => {
     renderSection({
       userSessionIssuerId: "issuer-1",
       platformSlug: undefined,
+      mcpUrl: undefined,
     });
 
     expect(screen.queryByRole("button", connectButton)).toBeNull();

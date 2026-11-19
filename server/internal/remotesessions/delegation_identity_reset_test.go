@@ -100,6 +100,7 @@ func TestDelegationResetKeepsInvalidatedDownstreamTokenClosed(t *testing.T) {
 				// An administrator rotates the client secret, then the person signs in.
 				before := p.DelegationConfigurationHash()
 				p.client.ClientSecretEncrypted = pgtype.Text{String: "rotated-secret", Valid: true}
+				p.client.ClientSecretGeneration++
 				require.NotEqual(t, before, p.DelegationConfigurationHash())
 			} else {
 				// A refresh hits a configuration failure, then a different upstream

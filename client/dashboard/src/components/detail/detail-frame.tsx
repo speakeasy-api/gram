@@ -13,6 +13,13 @@ import { Link } from "react-router";
 export const DETAIL_HEADER_CONTROL_BUTTON =
   "text-foreground hover:bg-muted border-border bg-card flex h-8 w-full items-center gap-2 border px-3 text-sm font-medium whitespace-nowrap transition-colors hover:no-underline disabled:cursor-not-allowed disabled:opacity-50";
 
+/**
+ * The sticky tab strip's height: its `h-12` row plus the `border-b`. The
+ * scroll container publishes it as `--detail-strip`, which sticky content
+ * and in-page scrolls offset by; change it with the strip's classes.
+ */
+const TAB_STRIP_HEIGHT = "calc(3rem + 1px)";
+
 /** One tab in the strip under the header. */
 export type DetailFrameTab = {
   key: string;
@@ -24,8 +31,9 @@ export type DetailFrameTab = {
 /**
  * The frame a resource's detail page shares: the breadcrumb trail, a
  * full-width header over the cards' halftone sea, the page tabs on a card
- * strip, then the active tab's content. The body fills the viewport and only
- * the tab content scrolls, so the header and tabs stay put on every tab.
+ * strip, then the active tab's content. The header scrolls away with the
+ * content and the tab strip sticks at the top, so a short screen gives its
+ * height to the tab. A tab that fills the view keeps both pinned above it.
  */
 export function DetailFrame({
   breadcrumbs,
@@ -62,6 +70,43 @@ export function DetailFrame({
   contentRef?: React.Ref<HTMLDivElement>;
   children: ReactNode;
 }): JSX.Element {
+  const headerBand = (
+    <DetailHeaderBand compact={fill}>{header}</DetailHeaderBand>
+  );
+  const tabStrip = (
+    <nav
+      aria-label={tabsLabel}
+      className={cn(
+        "border-border bg-card shrink-0 border-b",
+        !fill && "sticky top-0 z-20",
+      )}
+    >
+      {strip !== undefined ? (
+        <div className="mx-auto flex h-12 w-full max-w-[1334px] items-center gap-4 px-4 sm:px-8">
+          {strip}
+        </div>
+      ) : (
+        <div className="mx-auto flex w-full max-w-[1334px] gap-7 overflow-x-auto px-4 sm:px-8">
+          {tabs.map((tab) => (
+            <Link
+              key={tab.key}
+              to={tab.href}
+              aria-current={tab.key === activeTab ? "page" : undefined}
+              className={cn(
+                "relative flex h-12 shrink-0 items-center gap-1.5 text-sm transition-colors hover:no-underline",
+                tab.key === activeTab
+                  ? "text-foreground font-medium after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-current"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {tab.titleNode ?? tab.title}
+            </Link>
+          ))}
+        </div>
+      )}
+    </nav>
+  );
+
   return (
     <Page>
       <Page.Header>
@@ -74,51 +119,41 @@ export function DetailFrame({
       {/* No body padding, so the header band and tab strip run edge to edge;
           each region pads itself to the same column as the tab content. */}
       <Page.Body fullWidth noPadding overflowHidden className="gap-0">
-        <DetailHeaderBand>{header}</DetailHeaderBand>
-
-        <nav
-          aria-label={tabsLabel}
-          className="border-border bg-card shrink-0 border-b"
-        >
-          {strip !== undefined ? (
-            <div className="mx-auto flex h-12 w-full max-w-[1334px] items-center gap-4 px-4 sm:px-8">
-              {strip}
-            </div>
-          ) : (
-            <div className="mx-auto flex w-full max-w-[1334px] gap-7 overflow-x-auto px-4 sm:px-8">
-              {tabs.map((tab) => (
-                <Link
-                  key={tab.key}
-                  to={tab.href}
-                  aria-current={tab.key === activeTab ? "page" : undefined}
-                  className={cn(
-                    "relative flex h-12 shrink-0 items-center gap-1.5 text-sm transition-colors hover:no-underline",
-                    tab.key === activeTab
-                      ? "text-foreground font-medium after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-current"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {tab.titleNode ?? tab.title}
-                </Link>
-              ))}
-            </div>
-          )}
-        </nav>
+        {/* A filling tab keeps the header and tabs pinned above it. */}
+        {fill ? headerBand : null}
+        {fill ? tabStrip : null}
 
         {/* data-page-bound marks this as the scroll container, so tab changes
-            reset it to the top (useTabScrollReset). */}
+            reset it (useTabScrollReset). Elsewhere the header scrolls away
+            with the content and the tab strip sticks at the top, so a short
+            screen gives its height to the tab. --detail-strip is the strip's
+            height: sticky content and in-page scrolls offset by it. */}
         <div
           data-page-bound=""
-          className="min-h-0 w-full flex-1 overflow-y-auto px-4 sm:px-8"
+          className={cn(
+            "min-h-0 w-full flex-1 overflow-y-auto",
+            !fill && "[scroll-padding-top:var(--detail-strip)]",
+          )}
+          style={
+            fill
+              ? undefined
+              : ({ "--detail-strip": TAB_STRIP_HEIGHT } as React.CSSProperties)
+          }
         >
-          <div
-            ref={contentRef}
-            className={cn(
-              "mx-auto flex w-full max-w-[1270px] flex-col pt-8",
-              fill ? "h-full pb-12" : "min-h-full pb-32",
-            )}
-          >
-            {children}
+          {fill ? null : headerBand}
+          {fill ? null : tabStrip}
+          <div className={cn("px-4 sm:px-8", fill && "h-full")}>
+            <div
+              ref={contentRef}
+              className={cn(
+                "mx-auto flex w-full max-w-[1270px] flex-col",
+                // A filling tab is a workspace: on a short screen it keeps the
+                // margins thin so the space goes to the tab itself.
+                fill ? "short:py-4 h-full pt-8 pb-12" : "pt-8 pb-32",
+              )}
+            >
+              {children}
+            </div>
           </div>
         </div>
       </Page.Body>
@@ -131,7 +166,14 @@ export function DetailFrame({
  * dissolves to the card color on the left, so the title and controls sit on a
  * clean ground instead of on tiles.
  */
-function DetailHeaderBand({ children }: { children: ReactNode }): JSX.Element {
+function DetailHeaderBand({
+  compact = false,
+  children,
+}: {
+  /** Thinner padding on a short screen, for a tab that fills the view. */
+  compact?: boolean;
+  children: ReactNode;
+}): JSX.Element {
   // A slow swell rather than the cards' hover shimmer.
   const { canvasRef, start } = useIconDither({
     speed: 0.18,
@@ -154,7 +196,13 @@ function DetailHeaderBand({ children }: { children: ReactNode }): JSX.Element {
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 -z-10 size-full [mask-image:linear-gradient(to_right,transparent_28%,rgba(0,0,0,0.55)_58%,black_88%)]"
       />
-      <div className="mx-auto w-full max-w-[1334px] px-4 pt-10 pb-8 sm:px-8">
+      <div
+        className={cn(
+          "mx-auto w-full max-w-[1334px] px-4 sm:px-8",
+          "py-6",
+          compact && "short:py-4",
+        )}
+      >
         {children}
       </div>
     </header>
@@ -189,18 +237,29 @@ export function DetailHeaderTitle({
   name,
   icon,
   below,
+  compact = false,
 }: {
   eyebrow: string;
   name: ReactNode;
   icon?: ReactNode;
   below?: ReactNode;
+  /** On a short screen, drops the eyebrow and tightens the gaps. */
+  compact?: boolean;
 }): JSX.Element {
   return (
-    <div className="flex max-w-[640px] min-w-0 flex-col gap-5">
+    <div
+      className={cn(
+        "flex max-w-[640px] min-w-0 flex-col",
+        "gap-3",
+        compact && "short:gap-2",
+      )}
+    >
       <div className="flex min-w-0 items-center gap-4">
         {icon}
         <div className="flex min-w-0 flex-col gap-1.5">
-          <span className="text-eyebrow">{eyebrow}</span>
+          <span className={cn("text-eyebrow", compact && "short:hidden")}>
+            {eyebrow}
+          </span>
           {typeof name === "string" ? (
             <h1 className={DETAIL_HEADER_NAME}>{name}</h1>
           ) : (
@@ -242,21 +301,32 @@ export type DetailHeaderControlRow = {
 };
 
 /**
- * The header's controls, stacked on the right: a label, then a control in
- * the shared button look. Renders nothing without rows.
+ * The header's controls, side by side on the right: each a label over a
+ * control in the shared button look. One row keeps the header short, so the
+ * tab content gets the height. Renders nothing without rows.
  */
 export function DetailHeaderControls({
   rows,
+  compact = false,
 }: {
   rows: DetailHeaderControlRow[];
+  /** Tighter rows on a short screen. */
+  compact?: boolean;
 }): JSX.Element | null {
   if (rows.length === 0) return null;
   return (
     // A soft wash of the card color behind the rows lifts their labels off
     // the halftone sea.
-    <dl className="before:bg-card/85 relative isolate grid w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-2 before:absolute before:-inset-y-5 before:-right-5 before:-left-12 before:-z-10 before:rounded-3xl before:blur-xl sm:w-[360px]">
+    <dl className="before:bg-card/85 relative isolate flex w-full flex-wrap gap-x-3 gap-y-3 before:absolute before:-inset-y-4 before:-right-5 before:-left-8 before:-z-10 before:rounded-3xl before:blur-xl sm:w-auto">
       {rows.map((row) => (
-        <div key={row.key} className="contents">
+        <div
+          key={row.key}
+          className={cn(
+            "flex w-full min-w-0 flex-col sm:w-[200px]",
+            "gap-1.5",
+            compact && "short:gap-1",
+          )}
+        >
           <dt className="text-eyebrow">{row.label}</dt>
           <dd className="min-w-0">{row.control}</dd>
         </div>

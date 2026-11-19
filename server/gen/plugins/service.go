@@ -142,6 +142,9 @@ type CreatePluginPayload struct {
 	// Defaults to true. When false, the plugin stays out of the marketplace until
 	// someone syncs it by hand.
 	AutoSyncEnabled *bool
+	// Whether the plugin's role audiences add and remove its MCP servers
+	// automatically. Defaults to false.
+	AutoAddServersEnabled *bool
 }
 
 // DeletePluginPayload is the payload type of the plugins service deletePlugin
@@ -318,6 +321,10 @@ type Plugin struct {
 	// Whether changes to this plugin publish to the marketplace automatically.
 	// When false, they wait until someone syncs the marketplace by hand.
 	AutoSyncEnabled bool
+	// Whether the plugin's role audiences add and remove its MCP servers
+	// automatically, based on the MCP servers those roles can use. When false,
+	// only manual changes alter the plugin's server list.
+	AutoAddServersEnabled bool
 	// Number of active servers in this plugin.
 	ServerCount *int64
 	// Number of active skills in this plugin.
@@ -605,6 +612,10 @@ type UpdatePluginPayload struct {
 	// has changes that haven't been synced, and the slug can't change while it is
 	// off.
 	AutoSyncEnabled *bool
+	// Whether the plugin's role audiences add and remove its MCP servers
+	// automatically. Omit to keep the current setting. Turning it on adds the MCP
+	// servers its assigned roles can use now, except ones an admin removed before.
+	AutoAddServersEnabled *bool
 }
 
 // UpdatePluginServerPayload is the payload type of the plugins service

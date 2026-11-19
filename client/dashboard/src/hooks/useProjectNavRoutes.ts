@@ -94,10 +94,6 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
         route: routes.remoteIdentityProviders,
         scope: ["org:read", "org:admin"],
       },
-      {
-        route: routes.playground,
-        scope: ["mcp:read", "mcp:write", "mcp:connect"],
-      },
       { route: routes.deployments, scope: readWrite },
       { route: routes.mcp, scope: ["mcp:read", "mcp:write"] },
       // Channels is deliberately absent: while it is hidden it is reachable

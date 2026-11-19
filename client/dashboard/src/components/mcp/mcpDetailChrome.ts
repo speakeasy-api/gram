@@ -28,6 +28,8 @@ export interface McpDetailChrome {
     warn?: boolean;
     /** The dot beside the label; none while the state is unsettled. */
     tone?: StatusDotTone;
+    /** What following the link opens; authentication settings by default. */
+    opens?: string;
   };
   readinessChecks: McpReadinessCheck[];
   /** The Setup page, when this server offers Setup. */
@@ -37,8 +39,6 @@ export interface McpDetailChrome {
   items: DetailSidebarNavItem[];
   /** Overview's first card while a guided provider setup is unfinished. */
   overviewSetup?: ReactNode;
-  /** Overview's lead card: how the server reaches the team, with Install. */
-  overviewBanner?: ReactNode;
 }
 
 /** A header readiness check, with what the chip and popover need on top. */

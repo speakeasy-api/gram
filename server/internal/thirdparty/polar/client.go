@@ -1081,7 +1081,7 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 				"Custom tool creation",
 				"Hosted server deployments",
 				"14 day log retention",
-				"Built in MCP Playground",
+				"Built in MCP Inspect",
 				"Connect to Claude, Cursor, Gemini and more",
 			},
 			IncludedBullets: []string{

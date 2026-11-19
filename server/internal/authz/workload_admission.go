@@ -91,6 +91,7 @@ func withWorkloadSessionAdmission(ctx context.Context, admission WorkloadSession
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 	ctx = context.WithValue(ctx, admittedWorkloadAgentKey{}, agentID)
+	ctx = context.WithValue(ctx, admittedWorkloadOwnerKey{}, admission.OwnerUserID)
 	// Record the agent whose policy was admitted, so every later use reads this
 	// one value instead of resolving the assignment again.
 	ctx = contextvalues.WithWorkloadAgent(ctx, principal)
@@ -106,3 +107,13 @@ func AdmittedWorkloadAgent(ctx context.Context) (uuid.UUID, bool) {
 }
 
 type admittedWorkloadAgentKey struct{}
+
+// AdmittedWorkloadOwner returns the current owner loaded by live workload
+// admission. It is kept independently of credential provenance because a
+// workload session is no longer carrying its original principal credential.
+func AdmittedWorkloadOwner(ctx context.Context) (string, bool) {
+	owner, ok := ctx.Value(admittedWorkloadOwnerKey{}).(string)
+	return owner, ok && owner != ""
+}
+
+type admittedWorkloadOwnerKey struct{}

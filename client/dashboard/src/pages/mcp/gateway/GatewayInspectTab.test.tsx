@@ -95,8 +95,8 @@ vi.mock("./useGatewayMemberStates", async (importOriginal) => ({
     },
   }),
 }));
-vi.mock("@/pages/playground/PlaygroundChat", () => ({
-  PlaygroundChat: () => <div data-testid="playground-chat" />,
+vi.mock("@/pages/mcp/inspect-chat/InspectChat", () => ({
+  InspectChat: () => <div data-testid="inspect-chat" />,
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-test" }),

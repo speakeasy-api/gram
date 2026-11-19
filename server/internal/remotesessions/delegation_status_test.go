@@ -122,7 +122,7 @@ func TestGetClientDelegationStatusCurrentObservationsOnly(t *testing.T) {
 		case 6:
 			status = "configuration_failure"
 		}
-		_, err = q.UpsertTrustedDelegationCredential(ctx, repo.UpsertTrustedDelegationCredentialParams{
+		_, err = q.UpsertTrustedDelegationCredentialFixture(ctx, repo.UpsertTrustedDelegationCredentialFixtureParams{
 			OrganizationID: org, ClientID: clientID, IssuerID: issuerID, SubjectUrn: "user:" + userID,
 			CredentialConfigHash: conv.ToPGText(config), ObservationStatus: conv.ToPGText(status),
 			ObservedAt: delegationTestTimestamp(observed), CredentialObtainedAt: delegationTestTimestamp(obtained),
