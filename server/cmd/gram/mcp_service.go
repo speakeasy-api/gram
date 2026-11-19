@@ -24,6 +24,7 @@ import (
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/chatredact"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -37,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/otelsink"
+	"github.com/speakeasy-api/gram/server/internal/mcpfeedback"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
@@ -188,6 +190,7 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (service *mcp.Servi
 		return nil, fmt.Errorf("initialize MCP service: %w", err)
 	}
 	service.SetCallbackOrigins(d.CallbackOrigins)
+	service.SetFeedback(mcpfeedback.NewRecorder(d.Logger, d.Meter, d.DB, chatredact.New(), mcpfeedback.NewLimits(ratelimit.NewRedisStore(d.Redis), d.Meter)))
 	service.SetPlatformHosts(d.PlatformHosts)
 	service.SetOpenAIAppsChallengeToken(c.String("openai-apps-challenge-token"))
 	if err := service.SetMCPRegistryAuth(c.String("mcp-registry-auth")); err != nil {
