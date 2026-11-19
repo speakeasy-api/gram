@@ -87,7 +87,7 @@ func (t gatewayTarget) admits(caller gatewayCaller, projectID uuid.UUID, storedM
 		if !ok {
 			return false, nil
 		}
-		admitted, err := authz.GrantsAuthorize(caller.ceiling, authz.MCPCheck(check.Scope, check.MCPResourceID.String(), check.ProjectID.String()))
+		admitted, err := authz.GrantsAuthorize(caller.ceiling, check.connectCheck())
 		if err != nil {
 			return false, fmt.Errorf("authorize workload gateway target: %w", err)
 		}

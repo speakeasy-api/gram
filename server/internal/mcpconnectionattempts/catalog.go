@@ -209,6 +209,7 @@ var (
 
 	// Enterprise-managed sign-in to Speakeasy.
 	CodeEndpointNotAgentAddressable    = define("endpoint_not_agent_addressable", OutcomeBlocked, WhoAdmin, "This gateway doesn't accept this kind of connection.", "Ask for it to be allowed.")
+	CodeGatewayMachineAccessDisabled   = define("gateway_machine_access_disabled", OutcomeBlocked, WhoSpeakeasy, "Machine access to this gateway is disabled.", "Ask Speakeasy to enable machine access to stored gateways for this organization.")
 	CodeSubjectNotAdmitted             = define("subject_not_admitted", OutcomeBlocked, WhoAdmin, "This identity is not allowed to connect here.", "Ask for this identity to be allowed.")
 	CodeClientNotCIMD                  = define("client_not_cimd", OutcomeBlocked, WhoApp, "This app cannot use this kind of sign-in.", "Use an app that publishes its details at a public address.")
 	CodeSubjectNotProvisioned          = define("subject_not_provisioned", OutcomeBlocked, WhoAdmin, "This account is not set up in the organization's directory.", "Ask to be added to the directory and the organization.")

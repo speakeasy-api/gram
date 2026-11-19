@@ -212,6 +212,8 @@ func workloadGrantStageUnavailable(reason string, err error) error {
 	return &workloadGrantError{reason: reason, outcome: workloadGrantUnavailable, retryAfter: workloadGrantUnavailableRetryAfter, err: err}
 }
 
+var errStoredGatewayMachineAccessDisabled = errors.New("stored gateway machine access is disabled")
+
 // presentedWorkload is what an assertion claims before and after verification:
 // the iss and sub it presented, and the issuer row iss resolved to once it
 // has. It is what a rejection log line records.
@@ -475,8 +477,18 @@ func (s *Service) handleWorkloadAssertionGrant(
 	target, ok := agentAuthorizationTarget(endpoint)
 	if gateway, gatewayErr := gatewayTargetFromEndpoint(endpoint); gatewayErr == nil {
 		target, ok = gateway.authorizationTarget(endpoint.ProjectID)
-		if ok && !s.storedGatewayMachineAccessEnabled(ctx, logger, gateway) {
-			ok = false
+		if ok {
+			enabled, rolloutErr := s.storedGatewayMachineAccess(ctx, gateway)
+			if rolloutErr != nil {
+				refusal := workloadGrantStageUnavailable("gateway_machine_access_rollout_unavailable", rolloutErr)
+				refuseWorkloadGrantRow(ctx, t, refusal)
+				return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refusal)
+			}
+			if !enabled {
+				refusal := refuseWorkloadGrant("gateway_machine_access_disabled", errStoredGatewayMachineAccessDisabled)
+				refuseWorkloadGrantRow(ctx, t, refusal)
+				return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refusal)
+			}
 		}
 	}
 	if !ok {
@@ -825,6 +837,9 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 		err = s.recheckWorkloadGrantAuthorization(authorizationCtx, grant)
 	}
 	if err != nil {
+		if _, ok := errors.AsType[*workloadGrantError](err); ok {
+			return nil, err
+		}
 		if errors.Is(err, errCredentialRejected) || isCredentialDenial(err) {
 			return nil, refuseWorkloadGrant("agent_admission_denied", err)
 		}
@@ -897,8 +912,15 @@ func (s *Service) recheckWorkloadGrantAuthorization(ctx context.Context, grant w
 	var checks []authz.Check
 	if grant.endpoint != nil {
 		if gateway, gatewayErr := gatewayTargetFromEndpoint(grant.endpoint); gatewayErr == nil {
-			if _, ok := gateway.authorizationTarget(grant.endpoint.ProjectID); !ok || !s.storedGatewayMachineAccessEnabled(ctx, s.logger, gateway) {
+			if _, ok := gateway.authorizationTarget(grant.endpoint.ProjectID); !ok {
 				return errCredentialRejected
+			}
+			enabled, err := s.storedGatewayMachineAccess(ctx, gateway)
+			if err != nil {
+				return workloadGrantStageUnavailable("gateway_machine_access_rollout_unavailable", err)
+			}
+			if !enabled {
+				return refuseWorkloadGrant("gateway_machine_access_disabled", errStoredGatewayMachineAccessDisabled)
 			}
 		} else {
 			target, ok := agentAuthorizationTarget(grant.endpoint)

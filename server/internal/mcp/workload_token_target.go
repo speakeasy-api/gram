@@ -57,8 +57,14 @@ func (s *Service) WorkloadTokenTargetFor(ctx context.Context, mcpURL string) (Wo
 		return none, false, nil
 	}
 	gateway, gatewayErr := gatewayTargetFromEndpoint(endpoint)
-	if gatewayErr == nil && !s.storedGatewayMachineAccessEnabled(ctx, s.logger, gateway) {
-		return none, false, nil
+	if gatewayErr == nil {
+		enabled, rolloutErr := s.storedGatewayMachineAccess(ctx, gateway)
+		if rolloutErr != nil {
+			return none, false, fmt.Errorf("check stored gateway machine access rollout: %w", rolloutErr)
+		}
+		if !enabled {
+			return none, false, nil
+		}
 	}
 
 	if shared := endpoint.sharedAuthorizationServer; shared != nil {
