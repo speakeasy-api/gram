@@ -2,13 +2,16 @@ package access
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -255,12 +258,26 @@ func TestAccessRequest_List(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, none.Requests)
 
-	// A member who is not an administrator only sees their own requests;
-	// the signed-in member's request is theirs.
+	// A member who is not an administrator only sees their own requests, not
+	// another person's.
+	otherSelector, err := json.Marshal(authz.NewSelector(authz.ScopeChatRead, authz.WildcardResource))
+	require.NoError(t, err)
+	_, err = repo.New(ti.conn).InsertAccessRequest(ctx, repo.InsertAccessRequestParams{
+		OrganizationID:  orgID,
+		RequesterUserID: accessRequestAdminID,
+		Scope:           string(authz.ScopeChatRead),
+		Selector:        otherSelector,
+		ResourceName:    pgtype.Text{String: "", Valid: false},
+		Message:         pgtype.Text{String: "", Valid: false},
+		ChallengeIds:    []string{},
+		ExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+	})
+	require.NoError(t, err)
 	memberCtx := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgRead, orgID))
 	own, err := ti.service.ListAccessRequests(memberCtx, &gen.ListAccessRequestsPayload{SessionToken: nil, Status: nil, Mine: false})
 	require.NoError(t, err)
 	require.Len(t, own.Requests, 1)
+	require.Equal(t, request.ID, own.Requests[0].ID)
 
 	_, err = ti.service.WithdrawAccessRequest(ctx, &gen.WithdrawAccessRequestPayload{SessionToken: nil, ID: request.ID})
 	require.NoError(t, err)

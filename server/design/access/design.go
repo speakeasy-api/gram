@@ -1066,7 +1066,7 @@ var _ = Service("access", func() {
 	})
 
 	Method("requestAccess", func() {
-		Description("Request access to a scope by sending an email notification to organization administrators.")
+		Description("Request access to a scope. Organization administrators are emailed. With the access requests rollout on, a signed-in member's request is also stored, so an administrator can approve it as temporary access or deny it from the dashboard or Slack.")
 		Security(security.ByKey, func() {
 			Scope("consumer")
 		})
@@ -2402,7 +2402,7 @@ var RequestAccessForm = Type("RequestAccessForm", func() {
 var RequestAccessResult = Type("RequestAccessResult", func() {
 	Required("sent_to_count")
 	Attribute("sent_to_count", Int, "Number of administrators who were emailed.")
-	Attribute("request", AccessRequestModel, "The stored request administrators decide, when the access requests rollout is on for the organization. Asking again while a request for the same access is pending returns that request without notifying anyone again.")
+	Attribute("request", AccessRequestModel, "The stored request administrators decide, returned when the access requests rollout is on for the organization and the caller is a signed-in member. API keys and agents get no stored request. Its id is the request id. Asking again while a request for the same access is pending returns that request without notifying anyone again.")
 })
 
 var AccessibleMCPServerModel = Type("AccessibleMCPServer", func() {

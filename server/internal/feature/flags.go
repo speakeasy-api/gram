@@ -39,8 +39,8 @@ const (
 	// temporarily. Evaluated server-side in requestAccess and in the
 	// dashboard; targeted by PostHog organization group (org slug). Fails
 	// closed: requestAccess then only emails the admins, as before, and the
-	// request endpoints answer not found. Requests already stored stay
-	// decidable. Removed once access requests are GA.
+	// request listing answers not found. Requests already stored stay
+	// decidable and withdrawable. Removed once access requests are GA.
 	FlagAccessRequests Flag = "access-requests"
 	// FlagRiskEnforcementPubsub routes applicable realtime scanner lanes over Pub/Sub.
 	FlagRiskEnforcementPubsub Flag = "risk-enforcement-pubsub"

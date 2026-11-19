@@ -210,7 +210,7 @@ type preparedTemporaryGrant struct {
 // prepareTemporaryGrant applies every check a temporary grant needs before
 // its transaction opens: the scope can be given temporarily, the boundary is
 // valid for it, the deadline is inside the allowed window, the recipient can
-// hold a grant, and each challenge it answers is a matching unresolved deny.
+// hold a grant, and each challenge it answers is a matching deny.
 // ClickHouse holds the denial facts, so they are read here, outside the
 // transaction. The caller has already checked the actor is an administrator.
 func (s *Service) prepareTemporaryGrant(ctx context.Context, organizationID, principalURN string, scope authz.Scope, selector authz.Selector, expiresAt string, challengeIDs []string) (preparedTemporaryGrant, error) {

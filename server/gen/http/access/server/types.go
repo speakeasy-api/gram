@@ -739,9 +739,11 @@ type ExplainResourceAccessResponseBody struct {
 type RequestAccessResponseBody struct {
 	// Number of administrators who were emailed.
 	SentToCount int `form:"sent_to_count" json:"sent_to_count" xml:"sent_to_count"`
-	// The stored request administrators decide, when the access requests rollout
-	// is on for the organization. Asking again while a request for the same access
-	// is pending returns that request without notifying anyone again.
+	// The stored request administrators decide, returned when the access requests
+	// rollout is on for the organization and the caller is a signed-in member. API
+	// keys and agents get no stored request. Its id is the request id. Asking
+	// again while a request for the same access is pending returns that request
+	// without notifying anyone again.
 	Request *AccessRequestResponseBody `form:"request,omitempty" json:"request,omitempty" xml:"request,omitempty"`
 }
 

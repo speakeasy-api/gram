@@ -37402,7 +37402,7 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    set-resource-audience: Replace the rules that name one resource. Organization-wide rules are left untouched.`)
 	fmt.Fprintln(os.Stderr, `    list-audience-options: List the principals that can be given access: everyone, roles, people, and agents.`)
 	fmt.Fprintln(os.Stderr, `    explain-resource-access: Explain whether one organization member can connect to, view, and manage one resource, and which rules decide it. The decision comes from the same evaluation as runtime enforcement. A gateway is refused: nothing checks access on its own id, so check each server it fronts instead. Like listIdentityAccess it describes one person's access, so it takes a session only: API keys are not checked against grants and would see any member's rules.`)
-	fmt.Fprintln(os.Stderr, `    request-access: Request access to a scope by sending an email notification to organization administrators.`)
+	fmt.Fprintln(os.Stderr, `    request-access: Request access to a scope. Organization administrators are emailed. With the access requests rollout on, a signed-in member's request is also stored, so an administrator can approve it as temporary access or deny it from the dashboard or Slack.`)
 	fmt.Fprintln(os.Stderr, `    list-challenges: List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.`)
 	fmt.Fprintln(os.Stderr, `    list-challenge-buckets: List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.`)
 	fmt.Fprintln(os.Stderr, `    resolve-challenge: Dismiss one or more denied authz challenges, or atomically add one custom role to the denied user before recording the challenges as resolved.`)
@@ -38224,7 +38224,7 @@ func accessRequestAccessUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Request access to a scope by sending an email notification to organization administrators.`)
+	fmt.Fprintln(os.Stderr, `Request access to a scope. Organization administrators are emailed. With the access requests rollout on, a signed-in member's request is also stored, so an administrator can approve it as temporary access or deny it from the dashboard or Slack.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

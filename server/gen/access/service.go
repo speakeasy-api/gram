@@ -176,8 +176,10 @@ type Service interface {
 	// only: API keys are not checked against grants and would see any member's
 	// rules.
 	ExplainResourceAccess(context.Context, *ExplainResourceAccessPayload) (res *ExplainResourceAccessResult, err error)
-	// Request access to a scope by sending an email notification to organization
-	// administrators.
+	// Request access to a scope. Organization administrators are emailed. With the
+	// access requests rollout on, a signed-in member's request is also stored, so
+	// an administrator can approve it as temporary access or deny it from the
+	// dashboard or Slack.
 	RequestAccess(context.Context, *RequestAccessPayload) (res *RequestAccessResult, err error)
 	// List authz challenge events from ClickHouse, enriched with resolution state
 	// from PostgreSQL.
@@ -1459,9 +1461,11 @@ type RequestAccessPayload struct {
 type RequestAccessResult struct {
 	// Number of administrators who were emailed.
 	SentToCount int
-	// The stored request administrators decide, when the access requests rollout
-	// is on for the organization. Asking again while a request for the same access
-	// is pending returns that request without notifying anyone again.
+	// The stored request administrators decide, returned when the access requests
+	// rollout is on for the organization and the caller is a signed-in member. API
+	// keys and agents get no stored request. Its id is the request id. Asking
+	// again while a request for the same access is pending returns that request
+	// without notifying anyone again.
 	Request *AccessRequest
 }
 
