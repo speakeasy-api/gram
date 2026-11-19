@@ -155,7 +155,6 @@ export function MakeOfficialSheet({
           await link.save({
             serverUrl: server.canonicalServerUrl,
             mcpServerId: mcpServer.id,
-            allowDirectAccess: false,
           });
         } catch {
           linkFailed = true;
@@ -377,7 +376,7 @@ export function CreatedSummary({
       ) : (
         <Text muted small>
           Open it to check its tools and try it in the Playground. Back on this
-          page you can switch the link off while you test, or remove it.
+          page you can remove the link and add it again later.
         </Text>
       )}
       {created.linkFailed && !created.setupRequired ? (
