@@ -354,13 +354,11 @@ export function ShadowAIPolicyEditor({
       return;
     }
     const names = failed.map((change) => change.displayName).join(", ");
-    const kept =
+    const outcome =
       failed.length === 1
-        ? "It keeps the decision it had before."
-        : "They keep the decisions they had before.";
-    toast.error(
-      `${written}, but the decision for ${names} could not be saved. ${kept} Try again in a few minutes.`,
-    );
+        ? `the decision for ${names} could not be saved. It keeps the decision it had before.`
+        : `the decisions for ${names} could not be saved. They keep the decisions they had before.`;
+    toast.error(`${written}, but ${outcome} Try again in a few minutes.`);
   };
 
   const save = async () => {
