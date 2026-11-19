@@ -466,13 +466,12 @@ func TestSharedAuthorizationServer_DashboardRefusalUsesCurrentCallback(t *testin
 
 	old := sharedAuthorize(t, ctx, ti, f, challenge)
 	require.Equal(t, http.StatusBadRequest, old.Code)
-	require.Empty(t, old.Header().Get("Location"))
+	require.Equal(t, "invalid_target", oauthtest.RequireAuthorizationErrorPage(t, old, http.StatusBadRequest).Code)
 
 	f.client.RedirectUris = []string{callback}
 	current := sharedAuthorize(t, ctx, ti, f, challenge)
-	require.Equal(t, http.StatusFound, current.Code)
-	redirect, err := url.Parse(current.Header().Get("Location"))
-	require.NoError(t, err)
+	// The HTTPS callback is linked, not automatically followed before sign-in.
+	redirect := oauthtest.RequireAuthorizationErrorCallback(t, current, http.StatusBadRequest)
 	require.Equal(t, "invalid_target", redirect.Query().Get("error"))
 	require.Equal(t, "client-state", redirect.Query().Get("state"))
 	redirect.RawQuery = ""
