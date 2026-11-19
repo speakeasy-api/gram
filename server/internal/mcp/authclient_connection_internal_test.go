@@ -382,6 +382,10 @@ func TestAdmittedAgentAuthClientUsesTheAttachedConnectionOwner(t *testing.T) {
 				authz.SelectorKeyClientType: authz.AuthClientTypeRemoteSession, authz.SelectorKeyConnectionOwner: "user_lender",
 			})}
 		}, []authz.Grant{personal}, authClientNoAccess, "deny", []authz.Grant{personal}, true},
+		{"the lender's own block on their connection refuses", "user_lender", func(uuid.UUID) []authz.Grant { return []authz.Grant{personal} }, []authz.Grant{personal}, authClientNoAccess, "deny", []authz.Grant{personal, authz.NewGrantWithSelector(authz.ScopeMCPBlockedAuth, authz.Selector{
+			authz.SelectorKeyResourceKind: authz.ResourceKindMCPAuthClient, authz.SelectorKeyResourceID: authz.WildcardResource,
+			authz.SelectorKeyClientType: authz.AuthClientTypeRemoteSession, authz.SelectorKeyConnectionOwner: authz.SelectorValueRepresentedUser,
+		})}, true},
 		{"the represented user's own policy must allow", "user_owner", func(uuid.UUID) []authz.Grant { return []authz.Grant{personal} }, []authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, authz.WildcardResource)}, authClientNoAccess, "deny", nil, false},
 	}
 	for _, tc := range cases {
@@ -430,6 +434,54 @@ func TestAdmittedAgentAuthClientUsesTheAttachedConnectionOwner(t *testing.T) {
 			}
 			require.Equal(t, map[string]int64{tc.shadow: 1}, outcomes, "the shadow decides the same check")
 		})
+	}
+}
+
+// Without enforcement the connect-equivalent rule decides, so a failed read of
+// an attached connection's consent never refuses the request: only enforcement
+// needs it, and the shadow skips it.
+func TestAttachedConsentReadFailureSparesUnenforcedOrganizations(t *testing.T) {
+	t.Parallel()
+
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_auth_client_consent_unenforced")
+	require.NoError(t, err)
+	personal := personalAuthGrant()
+	for _, shadow := range []bool{false, true} {
+		f := newAuthClientFixture(t, pool)
+		client := f.oauthClient(authClientTypeRemoteSession)
+		selector := f.choose(validUUID(client))
+		selector.userSessionIssuerID = uuid.New()
+		flags := new(feature.InMemory)
+		flags.SetFlag(feature.FlagMandatoryAuthzShadow, f.orgID, shadow)
+		f.service.features = flags
+		f.service.logger = testenv.NewLogger(t)
+		f.service.metrics = mcpmetrics.NewMetrics(sdkmetric.NewMeterProvider().Meter("test"), testenv.NewLogger(t))
+		f.service.mandatoryShadowLog = newOnceLog()
+		f.service.authClientPermitter = connectPermitter{}
+		reads := 0
+		f.service.authz = authz.NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient(), authz.EngineOpts{
+			AdmitPrincipalCredential: func(context.Context, *pgxpool.Pool) (authz.PrincipalCredentialAdmission, error) {
+				return authz.PrincipalCredentialAdmission{
+					OwnerUserID: "user_owner", Credential: []authz.Grant{personal}, Agent: []authz.Grant{personal}, Owner: []authz.Grant{personal},
+					Authorizer: authz.RepresentedUserPolicy{UserID: "user_owner", Policy: []authz.Grant{personal}}, LegacyAuthCeiling: false,
+				}, nil
+			},
+			LoadUserPolicy: func(context.Context, string, string) ([]authz.Grant, bool, error) {
+				reads++
+				return nil, false, errors.New("database unavailable")
+			},
+		})
+		f.service.attachedConnections = &fakeAttachedConnections{conn: remotesessions.AttachedConnection{RemoteSessionID: uuid.New(), OwnerUserID: "user_lender"}, attached: true, err: nil, asked: nil}
+		agentID := uuid.New()
+
+		res, err := f.service.resolveAuthClientForServing(admittedAgentContext(t, f.orgID, agentID), selector, f.serverID, f.projectID, urn.NewAgentSubject(agentID))
+		require.NoError(t, err, "shadow=%v", shadow)
+		require.Equal(t, authClientResolved, res.outcome, "shadow=%v", shadow)
+		if shadow {
+			require.Equal(t, 1, reads, "the shadow reads consent")
+			continue
+		}
+		require.Zero(t, reads, "nothing reads consent without a mandatory decision")
 	}
 }
 

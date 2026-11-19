@@ -90,8 +90,9 @@ func TestAttachedConnectionStillBoundedByEveryPolicy(t *testing.T) {
 		"the issuer is blocked on the client": func(p *attachedPolicies) {
 			p.issuer = []Grant{ownConnectionGrant(), NewGrantWithSelector(ScopeMCPBlockedAuth, authSelector(authClientA, nil))}
 		},
-		"the key's own policy does not reach it": func(p *attachedPolicies) { p.credential = connect },
-		"the agent's policy does not reach it":   func(p *attachedPolicies) { p.agent = connect },
+		"the key's own policy does not reach it":     func(p *attachedPolicies) { p.credential = connect },
+		"the agent's policy does not reach it":       func(p *attachedPolicies) { p.agent = connect },
+		"the agent owner's policy does not reach it": func(p *attachedPolicies) { p.agentOwner = connect },
 		"the issuer's grant names only their own connection": func(p *attachedPolicies) {
 			p.issuer = []Grant{NewGrantWithSelector(ScopeMCPAuth, ConnectionAuthClientSelector(authUpstreamU, attachedIssuer))}
 		},

@@ -7,8 +7,10 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -104,11 +106,40 @@ func (s *Service) authClientConnection(ctx context.Context, permit authClientPer
 	if s.authz == nil || !hasAuthorizer || authorizer == conn.OwnerUserID {
 		return attachment, nil
 	}
-	attachment.consent, err = s.authz.AttachedConnectionConsent(ctx, permit.OrganizationID, conn.OwnerUserID)
+	load, required, err := s.attachedConsentUse(ctx, permit.OrganizationID)
 	if err != nil {
-		return none, fmt.Errorf("read attached connection consent: %w", err)
+		return none, fmt.Errorf("resolve attached connection consent use: %w", err)
 	}
+	if !load {
+		return attachment, nil
+	}
+	consent, err := s.authz.AttachedConnectionConsent(ctx, permit.OrganizationID, conn.OwnerUserID)
+	switch {
+	case err != nil && required:
+		return none, fmt.Errorf("read attached connection consent: %w", err)
+	case err != nil:
+		// Only the shadow would read it, so the request it observes goes on.
+		s.logger.WarnContext(ctx, "attached connection consent unavailable to the mandatory shadow", attr.SlogError(err))
+		return attachment, nil
+	}
+	attachment.consent = consent
 	return attachment, nil
+}
+
+// attachedConsentUse reports whether a mandatory decision will read an
+// attached connection's consent for organizationID: enforcement decides with
+// it, so a failed read must refuse (required), and the shadow records the
+// decision enforcement would make. Otherwise the connect-equivalent rule
+// decides, and the owner's policy is not read at all.
+func (s *Service) attachedConsentUse(ctx context.Context, organizationID string) (load, required bool, err error) {
+	permitter, err := s.authClientPermitFor(ctx, organizationID)
+	if err != nil {
+		return false, false, err
+	}
+	if _, enforced := permitter.(mandatoryPermitter); enforced {
+		return true, true, nil
+	}
+	return feature.MandatoryAuthzShadow(ctx, s.features, organizationID), false, nil
 }
 
 // agentKeyAuthorizer is the validated authorizer of an admitted agent
