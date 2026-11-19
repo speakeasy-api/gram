@@ -7212,7 +7212,6 @@ COMMENT ON COLUMN chat_messages.replayed IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.created_at IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.risk_analyzed_at IS '@access: confidential';
 
-CREATE INDEX IF NOT EXISTS chat_messages_chat_id_idx ON chat_messages (chat_id);
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_generation_seq_idx ON chat_messages (chat_id, generation, seq);
 
 -- Transcript readers and keyset pages order by (created_at, seq) within a
@@ -7237,13 +7236,8 @@ ON chat_messages (chat_id, project_id, created_at);
 
 -- Latest non-empty source per chat as a single index-only probe (agent-type
 -- filter options via chats.listSources and the source filter on chats.list).
-CREATE INDEX IF NOT EXISTS chat_messages_chat_id_created_at_source_idx
-ON chat_messages (chat_id, created_at) INCLUDE (source)
-WHERE source IS NOT NULL AND source <> '';
-
--- Source probe with project_id so a sibling-project stamp cannot advertise a
--- source this project cannot load. Kept alongside the (chat_id, created_at)
--- source index until listing queries have moved onto this one.
+-- Keyed on project_id so a sibling-project stamp cannot advertise a source
+-- this project cannot load.
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_project_id_created_at_source_idx
 ON chat_messages (chat_id, project_id, created_at) INCLUDE (source)
 WHERE source IS NOT NULL AND source <> '';
