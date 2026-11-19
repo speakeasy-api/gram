@@ -69,7 +69,7 @@ var adminMeanings = map[Code]adminMeaning{
 	CodeInsufficientScope:                {"The sign-in did not include the permissions this server needs.", ""},
 	CodeMalformedResponse:                {"The sign-in service sent an answer Speakeasy could not read.", ""},
 	CodeEMAProviderRejected:              {"The service refused the company-managed sign-in.", ""},
-	CodeTransientFailure:                 {"The workload identity settings changed while Speakeasy was checking the request.", "The workload issuer's policy changed during verification (a serialization conflict or a policy that no longer matched)."},
+	CodeTransientFailure:                 {"Speakeasy hit a temporary problem while checking the request.", ""},
 	CodeIDPTransientFailure:              {"The sign-in service was temporarily unavailable.", ""},
 	CodeProviderTransientFailure:         {"The service had a temporary problem.", ""},
 	CodeReauthenticationRequired:         {"The person's company sign-in was missing, had expired, or no longer matched the current sign-in setup.", ""},

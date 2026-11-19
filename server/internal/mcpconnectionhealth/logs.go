@@ -240,7 +240,7 @@ func (s *Service) GetAttempt(ctx context.Context, payload *gen.GetAttemptPayload
 		Server:              view.Server,
 		Member:              view.Member,
 		Service:             view.Service,
-		StartedAt:           formatTime(row.StartedAt),
+		StartedAt:           view.FirstStartedAt,
 		UserSessionIssuerID: nil,
 		TraceID:             conv.PtrEmpty(row.TraceID),
 		Steps:               make([]*gen.ConnectionAttemptStep, len(steps)),
@@ -256,7 +256,7 @@ func (s *Service) GetAttempt(ctx context.Context, payload *gen.GetAttemptPayload
 		}
 		detail.Steps[i] = &gen.ConnectionAttemptStep{
 			At:               formatTime(step.At),
-			Step:             gen.ConnectionStepGroup(attemptlog.GroupOf(step.StoredStep, step.GrantType)),
+			Step:             gen.ConnectionStepGroup(step.Group),
 			StoredStep:       step.StoredStep,
 			Result:           step.Result,
 			Final:            step.Final,

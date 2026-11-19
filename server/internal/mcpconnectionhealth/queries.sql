@@ -92,8 +92,9 @@ candidates AS (
 addressed AS (
   SELECT session.*,
          EXISTS (SELECT 1 FROM custom_domains AS domain WHERE domain.organization_id = @organization_id::text AND domain.domain = session.resource_host) AS on_custom_domain,
-         substring(session.resource_path from '^/mcp/([^/]+)/?$') AS endpoint_slug,
-         substring(session.resource_path from '^/mcp/gateway/[^/]+/projects/([^/]+)/?$') AS gateway_project_slug
+         substring(session.resource_path from '/mcp/([^/]+)/?$') AS endpoint_slug,
+         substring(session.resource_path from '/mcp/gateway/[^/]+/projects/([^/]+)/?$') AS gateway_project_slug,
+         substring(session.resource from ':([0-9a-f-]{36})$') AS resource_project_id
   FROM candidates AS session
 ),
 scoped AS (
@@ -104,7 +105,8 @@ scoped AS (
   FROM addressed AS session
   WHERE session.project_id = @project_id
      OR NOT COALESCE(
-          (session.resource LIKE @inference_resource_pattern::text AND session.resource <> @project_inference_resource::text)
+          EXISTS (SELECT 1 FROM projects AS project WHERE project.organization_id = @organization_id::text
+                    AND project.id::text = session.resource_project_id AND project.id <> @project_id)
           OR EXISTS (SELECT 1 FROM user_session_clients AS client
                      WHERE client.id = session.user_session_client_id AND client.organization_id = @organization_id::text
                        AND client.project_id <> @project_id)

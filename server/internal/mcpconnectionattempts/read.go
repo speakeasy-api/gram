@@ -14,8 +14,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
-// attemptHost leaves out a listing row's host, which is its member's, not the attempt's provider.
-const attemptHost = `if(step = 'discovery_member', '', provider_host)`
+// AttemptHostSQL leaves out a listing row's host, which is its member's, not the attempt's provider.
+const AttemptHostSQL = `if(step = 'discovery_member', '', provider_host)`
 
 // attemptEndingColumns are the columns that decide how an attempt ended, plus its
 // provider (the one on the ending row, else the earliest) and weight. They reduce an
@@ -33,9 +33,9 @@ const attemptEndingColumns = `
 	toString(argMax((step, reason), (event_time, step, reason)).2) AS last_reason,
 	max(event_time) AS last_at,
 	ifNull(nullIf(if(countIf(is_final) > 0,
-			argMinIf(` + attemptHost + `, (event_time, step, outcome, reason, ` + attemptHost + `), is_final),
-			argMax(` + attemptHost + `, (event_time, step, reason, ` + attemptHost + `))), ''),
-		argMinIf(` + attemptHost + `, (event_time, ` + attemptHost + `), ` + attemptHost + ` != '')) AS provider,
+			argMinIf(` + AttemptHostSQL + `, (event_time, step, outcome, reason, ` + AttemptHostSQL + `), is_final),
+			argMax(` + AttemptHostSQL + `, (event_time, step, reason, ` + AttemptHostSQL + `))), ''),
+		argMinIf(` + AttemptHostSQL + `, (event_time, ` + AttemptHostSQL + `), ` + AttemptHostSQL + ` != '')) AS provider,
 	toUInt64(max(repeats)) + 1 AS weight`
 
 // attemptColumns reduces an attempt's rows to one AttemptSummary.

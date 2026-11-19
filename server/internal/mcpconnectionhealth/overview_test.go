@@ -152,6 +152,7 @@ func TestGetSessionActivity_AnOrganizationSessionTiedToAnotherProjectIsNotCounte
 		"", "https://example.com/mcp/" + ownSlug + "/", "urn:speakeasy:inference:" + ti.project.String(),
 		"https://example.com/mcp/" + otherSlug, "https://example.com/mcp/" + otherSlug + "?x=1", "urn:speakeasy:inference:" + other.ID.String(),
 		"https://example.com/mcp/gateway/acme/projects/" + other.Slug,
+		"https://example.com/base/mcp/" + otherSlug, "https://example.com/platform/mcp/platform:" + other.ID.String(),
 	}
 	for _, resource := range resources {
 		_, err := sessions.CreateUserSession(ctx, usersessionsrepo.CreateUserSessionParams{

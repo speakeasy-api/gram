@@ -70,8 +70,9 @@ candidates AS (
 addressed AS (
   SELECT session.id, session.project_id, session.organization_id, session.user_session_issuer_id, session.user_session_client_id, session.subject_urn, session.authorizer_user_id, session.delegated_grants, session.delegated_grants_version, session.jti, session.refresh_token_hash, session.refresh_expires_at, session.expires_at, session.tool_selection, session.last_used_at, session.resource, session.sign_in_id, session.credential_id, session.created_at, session.updated_at, session.deleted_at, session.deleted, session.resource_host, session.resource_path,
          EXISTS (SELECT 1 FROM custom_domains AS domain WHERE domain.organization_id = $3::text AND domain.domain = session.resource_host) AS on_custom_domain,
-         substring(session.resource_path from '^/mcp/([^/]+)/?$') AS endpoint_slug,
-         substring(session.resource_path from '^/mcp/gateway/[^/]+/projects/([^/]+)/?$') AS gateway_project_slug
+         substring(session.resource_path from '/mcp/([^/]+)/?$') AS endpoint_slug,
+         substring(session.resource_path from '/mcp/gateway/[^/]+/projects/([^/]+)/?$') AS gateway_project_slug,
+         substring(session.resource from ':([0-9a-f-]{36})$') AS resource_project_id
   FROM candidates AS session
 ),
 scoped AS (
@@ -82,7 +83,8 @@ scoped AS (
   FROM addressed AS session
   WHERE session.project_id = $5
      OR NOT COALESCE(
-          (session.resource LIKE $8::text AND session.resource <> $9::text)
+          EXISTS (SELECT 1 FROM projects AS project WHERE project.organization_id = $3::text
+                    AND project.id::text = session.resource_project_id AND project.id <> $5)
           OR EXISTS (SELECT 1 FROM user_session_clients AS client
                      WHERE client.id = session.user_session_client_id AND client.organization_id = $3::text
                        AND client.project_id <> $5)
@@ -102,7 +104,7 @@ lives AS (
 ),
 days AS (
   SELECT day_start::timestamptz AS day_start
-  FROM generate_series($10::timestamptz, $11::timestamptz, '1 day'::interval) AS day_start
+  FROM generate_series($8::timestamptz, $9::timestamptz, '1 day'::interval) AS day_start
 )
 SELECT days.day_start,
        COUNT(DISTINCT scoped.credential)::bigint AS active_sessions,
@@ -121,17 +123,15 @@ ORDER BY days.day_start
 `
 
 type GetSessionActivityParams struct {
-	AverageFrom              pgtype.Timestamptz
-	AverageTo                pgtype.Timestamptz
-	OrganizationID           string
-	IssuerID                 uuid.UUID
-	ProjectID                uuid.NullUUID
-	DashboardMintPattern     string
-	LiveSince                pgtype.Timestamptz
-	InferenceResourcePattern string
-	ProjectInferenceResource string
-	FromDay                  pgtype.Timestamptz
-	LastDay                  pgtype.Timestamptz
+	AverageFrom          pgtype.Timestamptz
+	AverageTo            pgtype.Timestamptz
+	OrganizationID       string
+	IssuerID             uuid.UUID
+	ProjectID            uuid.NullUUID
+	DashboardMintPattern string
+	LiveSince            pgtype.Timestamptz
+	FromDay              pgtype.Timestamptz
+	LastDay              pgtype.Timestamptz
 }
 
 type GetSessionActivityRow struct {
@@ -155,8 +155,6 @@ func (q *Queries) GetSessionActivity(ctx context.Context, arg GetSessionActivity
 		arg.ProjectID,
 		arg.DashboardMintPattern,
 		arg.LiveSince,
-		arg.InferenceResourcePattern,
-		arg.ProjectInferenceResource,
 		arg.FromDay,
 		arg.LastDay,
 	)

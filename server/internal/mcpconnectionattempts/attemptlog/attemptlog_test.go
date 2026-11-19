@@ -431,6 +431,7 @@ func TestValidateRange_AllowsALast30DaysRangeComputedAMomentAgo(t *testing.T) {
 	now := time.Now()
 	require.NoError(t, attemptlog.ValidateRange(now.Add(-attemptlog.Retention-time.Minute), now.Add(-time.Minute), now))
 	require.Error(t, attemptlog.ValidateRange(now.Add(-attemptlog.Retention-time.Hour), now.Add(-time.Hour), now))
+	require.Error(t, attemptlog.ValidateRange(now.Add(time.Hour), now.Add(2*time.Hour), now))
 }
 
 func TestList_DeclinedAttemptsNeverFold(t *testing.T) {

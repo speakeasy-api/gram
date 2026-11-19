@@ -56,34 +56,7 @@ var deniedReasons = []string{
 	mcpconnectionattempts.CodeClientNotCIMD.String(),
 }
 
-// GroupOf names the group of a stored step. A token step with a refresh grant renews a sign-in.
-func GroupOf(step, grantType string) StepGroup {
-	switch step {
-	case mcpconnectionattempts.StepInboundAuthorize.String():
-		return StepConnect
-	case mcpconnectionattempts.StepInboundSignIn.String(), mcpconnectionattempts.StepInboundConsent.String():
-		return StepSignIn
-	case mcpconnectionattempts.StepInboundToken.String():
-		if grantType == oauthwire.GrantTypeRefreshToken {
-			return StepSignInRenewal
-		}
-		return StepSignIn
-	case mcpconnectionattempts.StepSignInRenewal.String():
-		return StepSignInRenewal
-	case mcpconnectionattempts.StepProviderSignIn.String(), mcpconnectionattempts.StepProviderToken.String(), mcpconnectionattempts.StepUpstreamEMA.String():
-		return StepServiceSignIn
-	case mcpconnectionattempts.StepProviderRefresh.String():
-		return StepServiceRenewal
-	case mcpconnectionattempts.StepDiscoveryListing.String(), mcpconnectionattempts.StepDiscoveryMember.String():
-		return StepListingTools
-	case mcpconnectionattempts.StepMCPRequest.String():
-		return StepRequest
-	default:
-		return StepOther
-	}
-}
-
-// groupSQL is GroupOf in ClickHouse, over a step and grant type expression.
+// groupSQL names the StepGroup of a step and grant type expression. A token step with a refresh grant renews a sign-in.
 func groupSQL(step, grant string) string {
 	return `multiIf(` +
 		step + ` = '` + mcpconnectionattempts.StepInboundAuthorize.String() + `', '` + string(StepConnect) + `', ` +

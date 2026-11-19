@@ -10,7 +10,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_connection_health"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/attemptlog"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionhealth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -124,13 +123,11 @@ func (s *Service) GetSessionActivity(ctx context.Context, payload *gen.GetSessio
 		IssuerID:                 issuer.ID,
 		ProjectID:                uuid.NullUUID{UUID: c.projectID, Valid: true},
 		DashboardMintPattern:     dashboardMintPattern,
-		LiveSince:                timestamptz(liveSince),
-		InferenceResourcePattern: inferenceResourcePattern,
-		ProjectInferenceResource: mcp.InferenceResource + ":" + c.projectID.String(),
-		FromDay:                  timestamptz(firstDay),
-		LastDay:                  timestamptz(lastDay),
-		AverageFrom:              timestamptz(averageFrom),
-		AverageTo:                timestamptz(now.Add(clockSkewAllowance)),
+		LiveSince:                conv.ToPGTimestamptz(liveSince),
+		FromDay:                  conv.ToPGTimestamptz(firstDay),
+		LastDay:                  conv.ToPGTimestamptz(lastDay),
+		AverageFrom:              conv.ToPGTimestamptz(averageFrom),
+		AverageTo:                conv.ToPGTimestamptz(now.Add(clockSkewAllowance)),
 	})
 	if err != nil || len(days) == 0 {
 		return nil, oops.E(oops.CodeUnexpected, err, "read session activity").LogError(ctx, s.logger)
@@ -156,9 +153,6 @@ func (s *Service) GetSessionActivity(ctx context.Context, payload *gen.GetSessio
 // dashboardMintPattern matches dashboard-minted sessions, which end with their access token.
 var dashboardMintPattern = sessiontokens.DashboardMintRefreshTokenHashPrefix + ":%"
 
-// inferenceResourcePattern matches inference sessions, whose resource names their project.
-var inferenceResourcePattern = mcp.InferenceResource + ":%"
-
 // averageSessionWindow is how far back the average session length looks. It is
 // fixed so the readout does not swing with the chart's range.
 const averageSessionWindow = 30 * 24 * time.Hour
@@ -166,10 +160,6 @@ const averageSessionWindow = 30 * 24 * time.Hour
 // clockSkewAllowance covers a database clock slightly ahead of this server's. The
 // query also stops at the database's own now, so nothing later is counted.
 const clockSkewAllowance = time.Minute
-
-func timestamptz(t time.Time) pgtype.Timestamptz {
-	return pgtype.Timestamptz{Time: t, InfinityModifier: pgtype.Finite, Valid: true}
-}
 
 // intervalSeconds reads a session duration. Months count as 30 days, as Postgres does for epoch.
 func intervalSeconds(i pgtype.Interval) int64 {

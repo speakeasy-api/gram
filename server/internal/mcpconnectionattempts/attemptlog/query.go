@@ -157,9 +157,6 @@ type Row struct {
 	// GrantType is the grant on the ending step.
 	GrantType string `ch:"r_grant"`
 
-	// StartedAt is the newest attempt's start.
-	StartedAt time.Time `ch:"r_started"`
-
 	// IssuerIDs are the issuers the newest attempt's rows name.
 	IssuerIDs []string `ch:"r_issuers"`
 }
@@ -202,7 +199,7 @@ func ValidateRange(from, to, now time.Time) error {
 	switch {
 	case !from.Before(to):
 		return errors.New("from must be before to")
-	case from.Before(now.Add(-Retention - rangeSlack)):
+	case from.Before(now.Add(-Retention - rangeSlack)) || from.After(now.Add(rangeSlack)):
 		return errors.New("from must be within the last 30 days")
 	case to.Sub(from) > Retention:
 		return errors.New("the range must be at most 30 days")
@@ -225,12 +222,12 @@ func attemptsSQL(s Scope, now time.Time) (string, []any, error) {
 		"attempt_started_at < fromUnixTimestamp64Nano(?)",
 	}
 	baseArgs := []any{s.OrganizationID, s.ProjectID, from, to}
+	if s.ServerID != "" {
+		base, baseArgs = append(base, "server_id = ?"), append(baseArgs, s.ServerID)
+	}
 
 	conds := slices.Clone(base)
 	args := slices.Clone(baseArgs)
-	if s.ServerID != "" {
-		conds, args = append(conds, "server_id = ?"), append(args, s.ServerID)
-	}
 	if s.AttemptID != uuid.Nil {
 		conds, args = append(conds, "attempt_id = ?"), append(args, s.AttemptID)
 	}
@@ -300,12 +297,12 @@ func attemptsSQL(s Scope, now time.Time) (string, []any, error) {
 				argMinIf(client_family, (event_time, client_family), client_family NOT IN ('', 'browser')),
 				if(countIf(client_family = 'browser') > 0, 'browser', ''))) AS a_family,
 			arraySort(groupArrayIf((event_time, toString(client_family), client_version), client_version != '')) AS a_versions,
-			argMinIf(provider_host, (event_time, provider_host), provider_host != '') AS a_first_service,
+			argMinIf(` + mcpconnectionattempts.AttemptHostSQL + `, (event_time, ` + mcpconnectionattempts.AttemptHostSQL + `), ` + mcpconnectionattempts.AttemptHostSQL + ` != '') AS a_first_service,
 			countIf(is_final) > 0 AS a_has_final,
 			if(a_has_final,
-				argMinIf((toString(step), toString(outcome), toString(reason), toString(grant_type), member_id, trace_id, provider_host, event_time),
+				argMinIf((toString(step), toString(outcome), toString(reason), toString(grant_type), member_id, trace_id, ` + mcpconnectionattempts.AttemptHostSQL + `, event_time),
 					(event_time, step, outcome, reason), is_final),
-				argMax((toString(step), toString(outcome), toString(reason), toString(grant_type), member_id, trace_id, provider_host, event_time),
+				argMax((toString(step), toString(outcome), toString(reason), toString(grant_type), member_id, trace_id, ` + mcpconnectionattempts.AttemptHostSQL + `, event_time),
 					(event_time, step, reason))) AS a_end
 		FROM ` + mcpconnectionattempts.EventsTable + `
 		WHERE ` + strings.Join(conds, " AND ") + `
@@ -425,7 +422,7 @@ func Get(ctx context.Context, ch driver.Conn, s Scope, now time.Time) (*Row, []S
 		d_step AS r_step, d_reason AS r_reason, a_subject AS r_subject,
 		a_device AS r_network, a_server AS r_server, a_kind AS r_kind, d_app AS r_app, a_app_key AS r_app_key,
 		d_version AS r_version, d_member AS r_member, d_service AS r_service, d_trace AS r_trace,
-		d_grant AS r_grant, a_started AS r_started, a_issuers AS r_issuers
+		d_grant AS r_grant, a_issuers AS r_issuers
 	FROM (` + attempts + `)
 	LIMIT 1` + readSettings
 	rows, err := queryAll[Row](ctx, ch, "connection attempts", query, args...)
@@ -489,8 +486,8 @@ type Step struct {
 	// Service is the service host.
 	Service string `ch:"s_service"`
 
-	// GrantType is the OAuth grant.
-	GrantType string `ch:"s_grant"`
+	// Group is the step's StepGroup.
+	Group string `ch:"s_group"`
 
 	// Retries is the retries spent in the step.
 	Retries uint32 `ch:"s_retries"`
@@ -501,7 +498,7 @@ func readSteps(ctx context.Context, ch driver.Conn, s Scope) ([]Step, error) {
 	steps, err := queryAll[Step](ctx, ch, "attempt steps", `
 	SELECT event_time AS s_at, toString(step) AS s_step, toString(step_result) AS s_result, is_final AS s_final,
 		toString(reason) AS s_reason, toString(sub_reason) AS s_sub_reason, member_id AS s_member,
-		provider_host AS s_service, toString(grant_type) AS s_grant, retries AS s_retries
+		provider_host AS s_service, toString(`+groupSQL("toString(step)", "toString(grant_type)")+`) AS s_group, retries AS s_retries
 	FROM `+mcpconnectionattempts.EventsTable+`
 	WHERE organization_id = ? AND project_id = ?
 		AND attempt_started_at >= fromUnixTimestamp64Nano(?) AND attempt_started_at < fromUnixTimestamp64Nano(?)
