@@ -359,6 +359,7 @@ function TopUsersTable({
 
 function DetailActionButtons({
   actionLabel,
+  actionReady,
   disabled,
   onOpenDecide,
   policiesUnavailable,
@@ -367,6 +368,8 @@ function DetailActionButtons({
 }: {
   /** The action the policy makes applicable to this server. */
   actionLabel: string;
+  /** The applicable action depends on the policy, so it waits for it. */
+  actionReady: boolean;
   disabled: boolean;
   onOpenDecide: () => void;
   /**
@@ -390,7 +393,7 @@ function DetailActionButtons({
         />
       )}
       <Button
-        disabled={disabled || policiesUnavailable}
+        disabled={disabled || policiesUnavailable || !actionReady}
         onClick={onOpenDecide}
         variant={pendingReview ? "primary" : "secondary"}
         size="sm"
@@ -752,8 +755,8 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                         )
                       : "Decide access"
                   }
-                  // The action depends on the policy, so it waits for it.
-                  disabled={decideTarget !== null || !policiesQuery.data}
+                  actionReady={!!policiesQuery.data}
+                  disabled={decideTarget !== null}
                   onOpenDecide={openDecide}
                   policiesUnavailable={policiesQuery.isError}
                   server={server}
