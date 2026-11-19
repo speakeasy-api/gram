@@ -33,29 +33,6 @@ func (q *Queries) BackfillDecisions(ctx context.Context, ids []string) (int64, e
 	return result.RowsAffected(), nil
 }
 
-const editAliasFixture = `-- name: EditAliasFixture :exec
-UPDATE ai_product_aliases
-SET name = $1, client = $2, deleted_at = $3
-WHERE id = $4
-`
-
-type EditAliasFixtureParams struct {
-	Name      string
-	Client    pgtype.Text
-	DeletedAt pgtype.Timestamptz
-	ID        uuid.UUID
-}
-
-func (q *Queries) EditAliasFixture(ctx context.Context, arg EditAliasFixtureParams) error {
-	_, err := q.db.Exec(ctx, editAliasFixture,
-		arg.Name,
-		arg.Client,
-		arg.DeletedAt,
-		arg.ID,
-	)
-	return err
-}
-
 const editDocumentFixture = `-- name: EditDocumentFixture :exec
 UPDATE ai_product_cimd_documents
 SET url = $1, display_name = $2, enabled = $3,
@@ -104,39 +81,6 @@ func (q *Queries) EditProductFixture(ctx context.Context, arg EditProductFixture
 		arg.ID,
 	)
 	return err
-}
-
-const insertAlias = `-- name: InsertAlias :execrows
-INSERT INTO ai_product_aliases (id, ai_product_id, name, client)
-SELECT $1::uuid, p.id, $2::text, $3
-FROM ai_products p
-WHERE p.id = $4 AND p.deleted IS FALSE
-  AND NOT EXISTS (
-    SELECT 1 FROM ai_product_aliases a
-    WHERE translate(lower(a.name), E' \t_-', '') = translate(lower($2::text), E' \t_-', '')
-  )
-ON CONFLICT DO NOTHING
-`
-
-type InsertAliasParams struct {
-	ID          uuid.UUID
-	Name        string
-	Client      pgtype.Text
-	AiProductID string
-}
-
-// Like documents, keyed by the unique index's folded name.
-func (q *Queries) InsertAlias(ctx context.Context, arg InsertAliasParams) (int64, error) {
-	result, err := q.db.Exec(ctx, insertAlias,
-		arg.ID,
-		arg.Name,
-		arg.Client,
-		arg.AiProductID,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }
 
 const insertDocument = `-- name: InsertDocument :execrows
@@ -220,41 +164,6 @@ func (q *Queries) InsertProduct(ctx context.Context, arg InsertProductParams) (i
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const listAliases = `-- name: ListAliases :many
-SELECT id, ai_product_id, name, client, created_by, updated_by, created_at, updated_at, deleted_at, deleted FROM ai_product_aliases ORDER BY id
-`
-
-func (q *Queries) ListAliases(ctx context.Context) ([]AiProductAlias, error) {
-	rows, err := q.db.Query(ctx, listAliases)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []AiProductAlias
-	for rows.Next() {
-		var i AiProductAlias
-		if err := rows.Scan(
-			&i.ID,
-			&i.AiProductID,
-			&i.Name,
-			&i.Client,
-			&i.CreatedBy,
-			&i.UpdatedBy,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.Deleted,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const listDocuments = `-- name: ListDocuments :many

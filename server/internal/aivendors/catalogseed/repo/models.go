@@ -59,34 +59,6 @@ type AiProduct struct {
 	Deleted bool
 }
 
-// Other names each catalog product is reported under. Attribution only, never enforcement: the names are self-reported.
-type AiProductAlias struct {
-	// @access: confidential
-	ID uuid.UUID
-	// @access: confidential
-	AiProductID string
-	// The reported name, stored as written. Lookups ignore case, spaces, tabs, underscores and hyphens, so claude_code and Claude Code are the same name.
-	// @access: opaque-confidential
-	Name string
-	// Kind of client the name implies (cli, ide, desktop, web, mobile, cloud, slack); null when the name implies none. Validated in application code.
-	// @access: confidential
-	Client pgtype.Text
-	// Subject URN of the staff member who created the row; null for seeded rows.
-	// @access: confidential-pii
-	CreatedBy pgtype.Text
-	// Subject URN of the staff member who last changed the row; null for seeded rows.
-	// @access: confidential-pii
-	UpdatedBy pgtype.Text
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
-	// @access: confidential
-	UpdatedAt pgtype.Timestamptz
-	// @access: confidential
-	DeletedAt pgtype.Timestamptz
-	// @access: confidential
-	Deleted bool
-}
-
 // CIMD documents each catalog product publishes. Every enabled live row admits its client_id on presets-mode issuers.
 type AiProductCimdDocument struct {
 	// @access: confidential

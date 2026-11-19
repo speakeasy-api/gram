@@ -21,18 +21,6 @@ WHERE p.id = @ai_product_id AND p.deleted IS FALSE
   AND NOT EXISTS (SELECT 1 FROM ai_product_cimd_documents d WHERE d.url = @url::text)
 ON CONFLICT DO NOTHING;
 
--- Like documents, keyed by the unique index's folded name.
--- name: InsertAlias :execrows
-INSERT INTO ai_product_aliases (id, ai_product_id, name, client)
-SELECT @id::uuid, p.id, @name::text, sqlc.narg('client')
-FROM ai_products p
-WHERE p.id = @ai_product_id AND p.deleted IS FALSE
-  AND NOT EXISTS (
-    SELECT 1 FROM ai_product_aliases a
-    WHERE translate(lower(a.name), E' \t_-', '') = translate(lower(@name::text), E' \t_-', '')
-  )
-ON CONFLICT DO NOTHING;
-
 -- Links only unlinked decision-only rows, across every organization.
 -- name: BackfillDecisions :execrows
 UPDATE ai_scan_targets t
@@ -51,18 +39,10 @@ SELECT * FROM ai_products ORDER BY id;
 -- name: ListDocuments :many
 SELECT * FROM ai_product_cimd_documents ORDER BY id;
 
--- name: ListAliases :many
-SELECT * FROM ai_product_aliases ORDER BY id;
-
 -- name: EditProductFixture :exec
 UPDATE ai_products
 SET display_name = @display_name, family = sqlc.narg('family'),
     deleted_at = sqlc.narg('deleted_at')
-WHERE id = @id;
-
--- name: EditAliasFixture :exec
-UPDATE ai_product_aliases
-SET name = @name, client = sqlc.narg('client'), deleted_at = sqlc.narg('deleted_at')
 WHERE id = @id;
 
 -- name: EditDocumentFixture :exec

@@ -17,7 +17,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -60,7 +59,6 @@ func Apply(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool) error {
 	logger.InfoContext(ctx, "ai-client-catalog seed applied",
 		attr.SlogAICatalogSeedVersion(Version()),
 		attr.SlogAICatalogProductsInserted(inserted.products),
-		attr.SlogAICatalogAliasesInserted(inserted.aliases),
 		attr.SlogAICatalogDocumentsInserted(inserted.documents),
 		attr.SlogAICatalogDecisionsLinked(linked),
 	)
@@ -87,14 +85,6 @@ func load() (snapshot, error) {
 	}
 	owners := map[string]string{}
 	for _, p := range data.Products {
-		for _, a := range p.Aliases {
-			switch aivendors.Client(a.Client) {
-			case aivendors.ClientUnknown, aivendors.ClientCLI, aivendors.ClientIDE, aivendors.ClientDesktop,
-				aivendors.ClientWeb, aivendors.ClientMobile, aivendors.ClientCloud, aivendors.ClientSlack:
-			default:
-				return data, fmt.Errorf("AI catalog bootstrap: alias %q has unknown client %q", a.Name, a.Client)
-			}
-		}
 		for _, d := range p.Documents {
 			if owner, ok := owners[d.URL]; ok {
 				return data, fmt.Errorf("AI catalog bootstrap: document %q belongs to %s and %s", d.URL, owner, p.ID)
@@ -106,13 +96,13 @@ func load() (snapshot, error) {
 }
 
 type insertedCounts struct {
-	products, aliases, documents int64
+	products, documents int64
 }
 
 func insertCatalog(ctx context.Context, db *pgxpool.Pool, data snapshot) (insertedCounts, error) {
 	var counts insertedCounts
 	if err := pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
-		counts = insertedCounts{products: 0, aliases: 0, documents: 0}
+		counts = insertedCounts{products: 0, documents: 0}
 		q := repo.New(tx)
 		for _, p := range data.Products {
 			n, err := q.InsertProduct(ctx, repo.InsertProductParams{
@@ -132,18 +122,6 @@ func insertCatalog(ctx context.Context, db *pgxpool.Pool, data snapshot) (insert
 				return fmt.Errorf("seed AI product %s: %w", p.ID, err)
 			}
 			counts.products += n
-			for _, a := range p.Aliases {
-				n, err := q.InsertAlias(ctx, repo.InsertAliasParams{
-					ID:          uuid.NewSHA1(uuid.NameSpaceURL, []byte("speakeasy:ai-catalog-bootstrap:alias:"+a.Name)),
-					AiProductID: p.ID,
-					Name:        a.Name,
-					Client:      conv.ToPGTextEmpty(a.Client),
-				})
-				if err != nil {
-					return fmt.Errorf("seed AI alias for %s: %w", p.ID, err)
-				}
-				counts.aliases += n
-			}
 			for _, d := range p.Documents {
 				n, err := q.InsertDocument(ctx, repo.InsertDocumentParams{
 					ID:          uuid.NewSHA1(uuid.NameSpaceURL, []byte("speakeasy:ai-catalog-bootstrap:"+d.URL)),

@@ -160,7 +160,6 @@ const (
 	RegistrySeedOutcomeKey           = attribute.Key("gram.registry.seed.outcome")
 	AICatalogSeedVersionKey          = attribute.Key("gram.ai_catalog.seed.version")
 	AICatalogProductsInsertedKey     = attribute.Key("gram.ai_catalog.products_inserted")
-	AICatalogAliasesInsertedKey      = attribute.Key("gram.ai_catalog.aliases_inserted")
 	AICatalogDocumentsInsertedKey    = attribute.Key("gram.ai_catalog.documents_inserted")
 	AICatalogDecisionsLinkedKey      = attribute.Key("gram.ai_catalog.decisions_linked")
 	AdminOIDCSubjectKey              = attribute.Key("gram.admin.oidc_subject")
@@ -4606,9 +4605,6 @@ func SlogAICatalogSeedVersion(v string) slog.Attr {
 }
 func SlogAICatalogProductsInserted(v int64) slog.Attr {
 	return slog.Int64(string(AICatalogProductsInsertedKey), v)
-}
-func SlogAICatalogAliasesInserted(v int64) slog.Attr {
-	return slog.Int64(string(AICatalogAliasesInsertedKey), v)
 }
 func SlogAICatalogDocumentsInserted(v int64) slog.Attr {
 	return slog.Int64(string(AICatalogDocumentsInsertedKey), v)

@@ -1,7 +1,7 @@
 package catalogseed
 
 import (
-	"context"
+	"bytes"
 	"encoding/json"
 	"flag"
 	"slices"
@@ -34,11 +34,8 @@ func TestApplyCompleteAndIdempotent(t *testing.T) {
 	require.NoError(t, err)
 	documents, err := q.ListDocuments(ctx)
 	require.NoError(t, err)
-	aliases, err := q.ListAliases(ctx)
-	require.NoError(t, err)
 	require.Len(t, products, 53)
 	require.Len(t, documents, 26)
-	require.Len(t, aliases, 41)
 
 	var data snapshot
 	require.NoError(t, json.Unmarshal(catalog, &data))
@@ -64,20 +61,6 @@ func TestApplyCompleteAndIdempotent(t *testing.T) {
 			require.False(t, row.UpdatedBy.Valid)
 		}
 		require.True(t, found, p.ID)
-		for _, a := range p.Aliases {
-			var found bool
-			for _, row := range aliases {
-				if row.Name != a.Name {
-					continue
-				}
-				found = true
-				require.Equal(t, p.ID, row.AiProductID)
-				require.Equal(t, conv.ToPGTextEmpty(a.Client), row.Client)
-				require.False(t, row.Deleted)
-				require.False(t, row.CreatedBy.Valid)
-			}
-			require.True(t, found, a.Name)
-		}
 		for _, d := range p.Documents {
 			var found bool
 			for _, row := range documents {
@@ -101,11 +84,8 @@ func TestApplyCompleteAndIdempotent(t *testing.T) {
 	require.NoError(t, err)
 	afterDocuments, err := q.ListDocuments(ctx)
 	require.NoError(t, err)
-	afterAliases, err := q.ListAliases(ctx)
-	require.NoError(t, err)
 	require.Equal(t, products, afterProducts, "including timestamps")
 	require.Equal(t, documents, afterDocuments, "including IDs and timestamps")
-	require.Equal(t, aliases, afterAliases, "including IDs and timestamps")
 }
 
 func TestApplyPreservesStaffEditsAndDeletions(t *testing.T) {
@@ -125,21 +105,6 @@ func TestApplyPreservesStaffEditsAndDeletions(t *testing.T) {
 	require.NoError(t, q.EditProductFixture(ctx, repo.EditProductFixtureParams{
 		ID: "cursor", DisplayName: "Cursor", Family: conv.ToPGText("staff-family"),
 	}))
-	aliases, err := q.ListAliases(ctx)
-	require.NoError(t, err)
-	for i, a := range aliases {
-		switch i % 3 {
-		case 0:
-			require.NoError(t, q.EditAliasFixture(ctx, repo.EditAliasFixtureParams{
-				ID: a.ID, Name: a.Name, Client: a.Client,
-				DeletedAt: pgtype.Timestamptz{Time: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), Valid: true},
-			}))
-		case 1:
-			require.NoError(t, q.EditAliasFixture(ctx, repo.EditAliasFixtureParams{
-				ID: a.ID, Name: "staff-" + a.ID.String(), Client: conv.ToPGText("web"),
-			}))
-		}
-	}
 	docs, err := q.ListDocuments(ctx)
 	require.NoError(t, err)
 	for i, d := range docs {
@@ -156,18 +121,13 @@ func TestApplyPreservesStaffEditsAndDeletions(t *testing.T) {
 	require.NoError(t, err)
 	beforeDocs, err := q.ListDocuments(ctx)
 	require.NoError(t, err)
-	beforeAliases, err := q.ListAliases(ctx)
-	require.NoError(t, err)
 	require.NoError(t, Apply(ctx, testenv.NewLogger(t), db))
 	afterProducts, err := q.ListProducts(ctx)
 	require.NoError(t, err)
 	afterDocs, err := q.ListDocuments(ctx)
 	require.NoError(t, err)
-	afterAliases, err := q.ListAliases(ctx)
-	require.NoError(t, err)
 	require.Equal(t, beforeProducts, afterProducts)
 	require.Equal(t, beforeDocs, afterDocs)
-	require.Equal(t, beforeAliases, afterAliases)
 }
 
 func TestApplyConcurrent(t *testing.T) {
@@ -187,9 +147,6 @@ func TestApplyConcurrent(t *testing.T) {
 	docs, err := repo.New(db).ListDocuments(t.Context())
 	require.NoError(t, err)
 	require.Len(t, docs, 26)
-	aliases, err := repo.New(db).ListAliases(t.Context())
-	require.NoError(t, err)
-	require.Len(t, aliases, 41)
 }
 
 func TestBackfillOnlyUnlinkedBuiltinDecisions(t *testing.T) {
@@ -273,15 +230,13 @@ func TestApplyCommitsCatalogWhenBackfillFails(t *testing.T) {
 		OrganizationID: orgID, ID: "claude-code", Status: "blocked",
 	})
 	require.NoError(t, err)
-	// Holding the row lock makes the backfill outlive its deadline.
+	lockTimeout := testenv.NewLockTimeoutPool(t, db, 100*time.Millisecond)
 	require.NoError(t, pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
 		_, err := agentrepo.New(tx).GetAIScanTargetForUpdate(ctx, agentrepo.GetAIScanTargetForUpdateParams{
 			OrganizationID: orgID, ID: "claude-code",
 		})
 		require.NoError(t, err)
-		applyCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		defer cancel()
-		require.ErrorContains(t, Apply(applyCtx, testenv.NewLogger(t), db), "backfill AI product decisions")
+		testenv.RequireLockNotAvailable(t, Apply(ctx, testenv.NewLogger(t), lockTimeout))
 		return nil
 	}))
 	products, err := repo.New(db).ListProducts(ctx)
@@ -354,119 +309,58 @@ func TestApplySkipsDocumentsOfDeletedProduct(t *testing.T) {
 	for _, d := range docs {
 		require.NotEqual(t, "claude-code", d.AiProductID)
 	}
-	aliases, err := q.ListAliases(ctx)
-	require.NoError(t, err)
-	require.Len(t, aliases, 36)
-	for _, a := range aliases {
-		require.NotEqual(t, "claude-code", a.AiProductID)
-	}
 }
 
-func TestApplyPreservesExistingAliasName(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		name    string
-		alias   string
-		deleted bool
-	}{
-		{name: "live", alias: "claude-code-cli"},
-		{name: "deleted", alias: "claude-code-cli", deleted: true},
-		{name: "live respelled", alias: "Claude_Code CLI"},
-		{name: "deleted respelled", alias: "Claude_Code CLI", deleted: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			ctx := t.Context()
-			db, err := infra.CloneTestDatabase(t, "testdb")
-			require.NoError(t, err)
-			q := repo.New(db)
-			_, err = q.InsertProduct(ctx, repo.InsertProductParams{
-				ID: "staff-product", VendorKey: "staff", DisplayName: "Staff product",
-				BundleIds: []string{}, Binaries: []string{}, ConfigDirs: []string{},
-				ProcessNames: []string{}, ClientInfoNames: []string{},
-			})
-			require.NoError(t, err)
-			id := uuid.New()
-			_, err = q.InsertAlias(ctx, repo.InsertAliasParams{
-				ID: id, AiProductID: "staff-product", Name: tc.alias, Client: conv.ToPGText("ide"),
-			})
-			require.NoError(t, err)
-			if tc.deleted {
-				require.NoError(t, q.EditAliasFixture(ctx, repo.EditAliasFixtureParams{
-					ID: id, Name: tc.alias, Client: conv.ToPGText("ide"),
-					DeletedAt: pgtype.Timestamptz{Time: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), Valid: true},
-				}))
-			}
-			before, err := q.ListAliases(ctx)
-			require.NoError(t, err)
-			require.NoError(t, Apply(ctx, testenv.NewLogger(t), db))
-			after, err := q.ListAliases(ctx)
-			require.NoError(t, err)
-			require.Len(t, after, 41)
-			require.Contains(t, after, before[0])
-			for _, a := range after {
-				require.False(t, a.AiProductID == "claude-code" && a.Name == "claude-code-cli")
-			}
-		})
-	}
-}
-
-func TestCatalogReportedNamesBelongToOneProduct(t *testing.T) {
-	t.Parallel()
-	data, err := load()
-	require.NoError(t, err)
-	// Same fold as the alias unique index and Identify's hyphen-free key.
-	fold := func(name string) string {
-		return strings.Map(func(r rune) rune {
-			if strings.ContainsRune(" \t_-", r) {
-				return -1
-			}
-			return r
-		}, strings.ToLower(name))
-	}
-	owners := map[string]string{}
-	for _, p := range data.Products {
-		for _, a := range p.Aliases {
-			_, taken := owners[fold(a.Name)]
-			require.False(t, taken, "alias %q folds to a name another alias holds", a.Name)
-			owners[fold(a.Name)] = p.ID
-		}
-	}
-	for _, p := range data.Products {
-		for _, name := range p.ClientInfoNames {
-			if owner, ok := owners[fold(name)]; ok {
-				require.Equal(t, owner, p.ID, "%q is reported for two products", name)
-			}
-			owners[fold(name)] = p.ID
-		}
-	}
-}
-
+// Aliases stay in the compiled registry; every other field must match the file.
 func TestCatalogMatchesRegistry(t *testing.T) {
 	t.Parallel()
 	var data snapshot
 	require.NoError(t, json.Unmarshal(catalog, &data))
-	registry := snapshot{Notice: data.Notice, Products: nil}
-	for _, p := range aivendors.Products() {
-		var aliases []alias
-		for _, a := range p.Aliases {
-			aliases = append(aliases, alias{Name: a.Name, Client: string(a.Client)})
-		}
-		var documents []document
-		for _, d := range p.Documents {
-			documents = append(documents, document{URL: d.URL, DisplayName: d.DisplayName, Enabled: d.Enabled})
-		}
-		registry.Products = append(registry.Products, product{
-			ID: p.ID, VendorKey: p.VendorKey, Family: p.Family, DisplayName: p.DisplayName,
-			Category: string(p.Category), Signatures: signatures(p.Signatures),
-			VersionPlistKey: p.VersionPlistKey, ClientInfoNames: p.ClientInfoNames,
-			Aliases: aliases, Documents: documents,
-		})
-	}
-	actual, err := json.Marshal(registry)
+	raw, err := json.Marshal(aivendors.Products()) //nolint:musttag // The registry's Go field names are the file format.
 	require.NoError(t, err)
-	if f := flag.Lookup("update"); f == nil || f.Value.String() != "true" {
-		require.JSONEq(t, string(actual), string(catalog), "catalog.json differs from the aivendors registry; regenerate it as the README describes")
+	var products []json.RawMessage
+	require.NoError(t, json.Unmarshal(raw, &products))
+	var actual bytes.Buffer
+	actual.WriteString(`{"Notice":`)
+	notice, err := json.Marshal(data.Notice)
+	require.NoError(t, err)
+	actual.Write(notice)
+	actual.WriteString(`,"Products":[`)
+	for i, p := range products {
+		if i > 0 {
+			actual.WriteByte(',')
+		}
+		actual.Write(withoutKey(t, p, "Aliases"))
 	}
-	testenv.RequireJSONGolden(t, "catalog.json", actual)
+	actual.WriteString("]}")
+	if f := flag.Lookup("update"); f == nil || f.Value.String() != "true" {
+		require.JSONEq(t, actual.String(), string(catalog), "catalog.json differs from the aivendors registry; regenerate it as the README describes")
+	}
+	testenv.RequireJSONGolden(t, "catalog.json", actual.Bytes())
+}
+
+// withoutKey drops one key from a JSON object and keeps the others in order.
+func withoutKey(t *testing.T, object json.RawMessage, key string) []byte {
+	t.Helper()
+	decoder := json.NewDecoder(bytes.NewReader(object))
+	open, err := decoder.Token()
+	require.NoError(t, err)
+	require.Equal(t, json.Delim('{'), open)
+	out := []byte{'{'}
+	for decoder.More() {
+		name, err := decoder.Token()
+		require.NoError(t, err)
+		var value json.RawMessage
+		require.NoError(t, decoder.Decode(&value))
+		if name == key {
+			continue
+		}
+		if len(out) > 1 {
+			out = append(out, ',')
+		}
+		encoded, err := json.Marshal(name)
+		require.NoError(t, err)
+		out = append(append(append(out, encoded...), ':'), value...)
+	}
+	return append(out, '}')
 }
