@@ -49,7 +49,8 @@ func partitionFromCLI(c *cli.Context) (partition.Partition, error) {
 
 // printsHelpOrVersion reports whether the arguments after the global flags
 // only print help or the version: no command, the help or version command, or
-// a help flag anywhere.
+// a help flag. Arguments after a "--" terminator are positional, never flags,
+// so a --help there does not exempt a command from requiring a partition.
 func printsHelpOrVersion(args []string) bool {
 	if len(args) == 0 {
 		return true
@@ -58,6 +59,10 @@ func printsHelpOrVersion(args []string) bool {
 	switch args[0] {
 	case "help", "h", "version":
 		return true
+	}
+
+	if end := slices.Index(args, "--"); end >= 0 {
+		args = args[:end]
 	}
 
 	return slices.ContainsFunc(args, func(arg string) bool {

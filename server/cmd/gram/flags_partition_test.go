@@ -100,6 +100,16 @@ func TestApp_RequiresPartitionBeforeAnyCommand(t *testing.T) {
 	require.ErrorContains(t, err, "--partition (GRAM_PARTITION) is required")
 }
 
+func TestApp_RequiresPartitionWithHelpFlagAfterTerminator(t *testing.T) {
+	// Unset rather than empty: a value from the shell or mise.toml must not
+	// change the outcome. t.Setenv restores the original when the test ends.
+	t.Setenv("GRAM_PARTITION", "")
+	require.NoError(t, os.Unsetenv("GRAM_PARTITION"))
+
+	err := newApp().RunContext(t.Context(), []string{"gram", "start", "--", "--help"})
+	require.ErrorContains(t, err, "--partition (GRAM_PARTITION) is required")
+}
+
 func TestApp_RejectsUnknownPartitionBeforeAnyCommand(t *testing.T) {
 	// Unset rather than empty: a value from the shell or mise.toml must not
 	// change the outcome. t.Setenv restores the original when the test ends.
@@ -145,6 +155,9 @@ func TestPrintsHelpOrVersion(t *testing.T) {
 		{name: "help command", args: []string{"help", "start"}, want: true},
 		{name: "help flag after command", args: []string{"start", "--help"}, want: true},
 		{name: "short help flag", args: []string{"worker", "-h"}, want: true},
+		{name: "help flag before terminator", args: []string{"start", "--help", "--", "x"}, want: true},
+		{name: "help flag after terminator", args: []string{"start", "--", "--help"}, want: false},
+		{name: "short help flag after terminator", args: []string{"demo-seed", "--", "-h"}, want: false},
 		{name: "service command", args: []string{"start"}, want: false},
 		{name: "service command with flags", args: []string{"worker", "--environment", "prod"}, want: false},
 	}
