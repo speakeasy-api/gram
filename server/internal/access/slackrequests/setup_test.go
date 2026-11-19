@@ -164,7 +164,7 @@ func (f *fixture) decide(t *testing.T, target slackrequests.Target, status strin
 	t.Helper()
 	_, err := repo.New(f.db).DecideAccessRequest(t.Context(), repo.DecideAccessRequestParams{
 		Status: status, DecidedByUserID: conv.ToPGText(f.adminID), DecidedVia: conv.ToPGText("slack"),
-		TemporaryGrantID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, OrganizationID: target.OrganizationID, ID: target.RequestID,
+		TemporaryGrantID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ChallengeIds: []string{}, OrganizationID: target.OrganizationID, ID: target.RequestID,
 	})
 	require.NoError(t, err)
 }
