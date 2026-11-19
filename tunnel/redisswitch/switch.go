@@ -48,11 +48,6 @@ const (
 	// processes resume on the current instance.
 	HoldKey = "gram:redis-switch:hold"
 
-	// ClientNamePrefix starts the name of every connection a switch-aware
-	// process opens, so the operator's job can tell them apart from clients that
-	// would ignore a hold. The role follows it.
-	ClientNamePrefix = "gram-redisswitch"
-
 	// EnvNextAddr names the environment variable holding the next instance's
 	// address. The switch is inactive when it is empty.
 	EnvNextAddr = "GRAM_REDIS_NEXT_ADDR"
@@ -110,11 +105,6 @@ func StateKey(role string) string {
 	return stateKeyPrefix + role
 }
 
-// ClientName is the name of every connection a role's clients open.
-func ClientName(role string) string {
-	return ClientNamePrefix + ":" + role
-}
-
 type state string
 
 const (
@@ -153,7 +143,6 @@ func NextFromEnv() Target {
 type Switch struct {
 	logger      *slog.Logger
 	stateKey    string
-	name        string
 	current     Target
 	next        Target
 	poller      *redis.Client
@@ -168,15 +157,12 @@ type Switch struct {
 	lastSeen state
 }
 
-// switches maps a current instance's address and a role's connection name to
-// its Switch, so a second client built from the first one's options gets the
-// same gate. The name travels with copied options, which is what ties a copy to
-// its parent when several roles share one instance.
+// switches maps a current instance's address to its Switch, so a second client
+// built from the first one's options gets the same gate. Connections carry no
+// name to tie a copy to its parent: an instance may reject the CLIENT command,
+// and a named client then cannot connect to it. One process therefore follows
+// one role per instance.
 var switches sync.Map
-
-func registryKey(addr, name string) string {
-	return addr + "|" + name
-}
 
 // NewClient returns a client for opts. When next names an instance, the client
 // follows the role's switch keys on the instance in opts; otherwise it is an
@@ -192,15 +178,15 @@ func NewClient(ctx context.Context, logger *slog.Logger, opts *redis.Options, ro
 	}
 
 	// Reserved before starting, so two callers cannot both build a switch for
-	// the same role and instance.
-	key := registryKey(opts.Addr, ClientName(role))
+	// the same instance.
+	key := opts.Addr
 	reserved := &entry{ready: make(chan struct{}), sw: nil}
 	if found, taken := switches.LoadOrStore(key, reserved); taken {
 		// Only a switch that failed to start may be replaced. Its entry stays in
-		// the registry until then, so Wrap keeps refusing its name.
+		// the registry until then, so Wrap keeps refusing its address.
 		previous, ok := found.(*entry)
 		if !ok || !previous.failed() || !switches.CompareAndSwap(key, found, reserved) {
-			return nil, fmt.Errorf("a redis switch already follows role %q on this instance in this process", role)
+			return nil, fmt.Errorf("a redis switch already follows this instance in this process, so role %q cannot", role)
 		}
 	}
 
@@ -243,13 +229,13 @@ var ErrNotStarted = errors.New("redis switch for this client failed to start")
 // Wrap returns a client for options copied from a client that NewClient built.
 // A copy does not carry the command gate or the retry setting, so the whole
 // binding is applied again here. Options that did not come from such a client
-// (their address and connection name match no switch) get redis.NewClient.
+// (their address matches no switch) get redis.NewClient.
 //
 // If the matching switch is still starting, Wrap waits for it. If it failed to
-// start, the returned client cannot connect: an ordinary client carrying the
-// switch's name would be trusted by the copy job and would not follow a move.
+// start, the returned client cannot connect: an ordinary client would not
+// follow a move.
 func Wrap(opts *redis.Options) *redis.Client {
-	found, ok := switches.Load(registryKey(opts.Addr, opts.ClientName))
+	found, ok := switches.Load(opts.Addr)
 	if !ok {
 		return redis.NewClient(opts)
 	}
@@ -272,8 +258,7 @@ func Wrap(opts *redis.Options) *redis.Client {
 // client builds a client bound to this switch. The gate, the dialer and the
 // credentials are always set together: a client with the gate but an ordinary
 // dialer would wait through a hold and then write to the instance being left.
-// The caller's options are copied, not changed, so the caller is not left
-// holding options that carry the switch's name without its gate.
+// The caller's options are copied, not changed.
 func (s *Switch) client(opts *redis.Options) *redis.Client {
 	bound := *opts
 	bound.Dialer = s.dial
@@ -282,7 +267,6 @@ func (s *Switch) client(opts *redis.Options) *redis.Client {
 	// a second time on the other instance.
 	bound.MaxRetries = -1
 	bound.DialerRetries = 1
-	bound.ClientName = s.name
 
 	client := redis.NewClient(&bound)
 	client.AddHook(hook{sw: s})
@@ -294,7 +278,6 @@ func start(ctx context.Context, logger *slog.Logger, role string, current, next 
 	sw := &Switch{
 		logger:      logger,
 		stateKey:    StateKey(role),
-		name:        ClientName(role),
 		current:     current,
 		next:        next,
 		dialTimeout: dialTimeout,
@@ -302,7 +285,6 @@ func start(ctx context.Context, logger *slog.Logger, role string, current, next 
 		poller: redis.NewClient(&redis.Options{
 			Addr:            current.Addr,
 			Password:        current.Password,
-			ClientName:      ClientName(role),
 			DialTimeout:     pollTimeout,
 			ReadTimeout:     pollTimeout,
 			WriteTimeout:    pollTimeout,
@@ -325,7 +307,7 @@ func start(ctx context.Context, logger *slog.Logger, role string, current, next 
 
 	// A wrong address or password for the next instance must fail this
 	// process at startup, not every process at the moment of the switch.
-	if err := checkReachable(ctx, next, sw.name); err != nil {
+	if err := checkReachable(ctx, next); err != nil {
 		_ = sw.poller.Close()
 		return nil, fmt.Errorf("check next redis instance: %w", err)
 	}
@@ -335,14 +317,13 @@ func start(ctx context.Context, logger *slog.Logger, role string, current, next 
 	return sw, nil
 }
 
-func checkReachable(ctx context.Context, target Target, name string) error {
+func checkReachable(ctx context.Context, target Target) error {
 	ctx, cancel := context.WithTimeout(ctx, startTimeout)
 	defer cancel()
 
 	client := redis.NewClient(&redis.Options{
 		Addr:            target.Addr,
 		Password:        target.Password,
-		ClientName:      name,
 		DialTimeout:     pollTimeout,
 		ReadTimeout:     pollTimeout,
 		WriteTimeout:    pollTimeout,
@@ -594,11 +575,8 @@ func (s *Switch) verifyCurrent(ctx context.Context, conn net.Conn) error {
 	// A throwaway client speaks the protocol over the socket. Closing it must
 	// leave the socket open for the caller.
 	probe := redis.NewClient(&redis.Options{
-		Dialer:   func(context.Context, string, string) (net.Conn, error) { return keepOpen{Conn: conn}, nil },
-		Password: s.current.Password,
-		// Named from its first command, so the copy job never sees this socket
-		// as one that does not follow the switch.
-		ClientName:      s.name,
+		Dialer:          func(context.Context, string, string) (net.Conn, error) { return keepOpen{Conn: conn}, nil },
+		Password:        s.current.Password,
 		Protocol:        2,
 		ReadTimeout:     pollTimeout,
 		WriteTimeout:    pollTimeout,
