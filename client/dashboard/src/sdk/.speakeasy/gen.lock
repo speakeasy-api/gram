@@ -1275,6 +1275,8 @@ trackedFiles:
   src/models/components/explainedaccessdirectorysource.ts: {}
   src/models/components/explainedaccesslevel.ts: {}
   src/models/components/explainedaccessrule.ts: {}
+  src/models/components/explainedcredentialaccess.ts: {}
+  src/models/components/explainedcredentialrule.ts: {}
   src/models/components/explainresourceaccessresult.ts: {}
   src/models/components/exportmcpmetadatarequestbody.ts: {}
   src/models/components/exprcompileresult.ts: {}
@@ -7268,7 +7270,7 @@ examples:
           user_id: "<id>"
       responses:
         "200":
-          application/json: {"levels": [], "visibility": "disabled"}
+          application/json: {"credentials": [], "levels": [], "visibility": "disabled"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
