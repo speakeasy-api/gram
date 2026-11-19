@@ -61,10 +61,7 @@ it("disables the elapsed date when an open calendar crosses UTC midnight", async
       onSubmit={() => {}}
     />,
   );
-  await act(async () => {
-    fireEvent.click(screen.getByLabelText("Ends on"));
-    await vi.dynamicImportSettled();
-  });
+  fireEvent.click(screen.getByLabelText("Ends on"));
   const tomorrow = () =>
     document.querySelector<HTMLButtonElement>(
       "td[data-day='2090-05-02'] button",

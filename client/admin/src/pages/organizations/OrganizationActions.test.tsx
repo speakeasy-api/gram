@@ -253,10 +253,7 @@ function dayButton(iso: string): HTMLButtonElement {
 }
 
 async function openCalendar(): Promise<void> {
-  await act(async () => {
-    fireEvent.click(endDateTrigger());
-    await vi.dynamicImportSettled();
-  });
+  fireEvent.click(endDateTrigger());
   await screen.findByRole("grid");
 }
 

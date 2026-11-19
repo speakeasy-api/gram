@@ -1,4 +1,5 @@
 import react from "@vitejs/plugin-react";
+import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import path from "node:path";
 import { defineConfig } from "vitest/config";
 
@@ -7,7 +8,16 @@ export default defineConfig({
   define: {
     __GRAM_APP_URL__: JSON.stringify("https://app.gram.test"),
   },
-  plugins: [react()],
+  plugins: [
+    // Match the app's page boundaries: importing the route tree must not
+    // eagerly evaluate components for routes the test never visits.
+    tanstackRouter({
+      target: "react",
+      autoCodeSplitting: true,
+      enableRouteGeneration: false,
+    }),
+    react(),
+  ],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "./src"),

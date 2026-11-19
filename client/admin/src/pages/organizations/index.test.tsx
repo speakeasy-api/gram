@@ -2964,10 +2964,7 @@ describe("organizations list write actions", () => {
 
     // The one refusal the calendar's own bounds cannot prevent: pressing the
     // selected day again clears the selection.
-    await act(async () => {
-      fireEvent.click(screen.getByLabelText("Ends on"));
-      await vi.dynamicImportSettled();
-    });
+    fireEvent.click(screen.getByLabelText("Ends on"));
     await screen.findByRole("grid");
     const selected = document.querySelector("td[data-selected='true'] button");
     if (!(selected instanceof HTMLButtonElement)) {

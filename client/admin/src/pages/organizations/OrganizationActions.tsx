@@ -13,7 +13,7 @@ import {
 import { flushSync } from "react-dom";
 
 import { Button } from "@/components/ui/button";
-import { DeferredCalendar } from "@/components/DeferredCalendar";
+import { Calendar } from "@/components/ui/calendar";
 import {
   Dialog,
   DialogContent,
@@ -877,7 +877,7 @@ export function TrialDaysDialog({
                 </PopoverTrigger>
                 <PopoverContent align="start" className="w-auto p-0">
                   {/* Past UTC dates cannot be selected. */}
-                  <DeferredCalendar
+                  <Calendar
                     mode="single"
                     autoFocus
                     selected={endsOn}
