@@ -392,7 +392,7 @@ func TestSourceOf_NamesTheServerForRejectedCredentials(t *testing.T) {
 	t.Parallel()
 	failed := attemptlog.OutcomeFailed
 	require.Equal(t, attemptlog.SourceServer, attemptlog.SourceOf(mcpconnectionattempts.CodeRejectedByMember.String(), failed))
-	require.Equal(t, attemptlog.SourceService, attemptlog.SourceOf(mcpconnectionattempts.CodeProviderUnavailable.String(), failed))
+	require.Equal(t, attemptlog.SourceService, attemptlog.SourceOf(mcpconnectionattempts.CodeProviderOAuthInvalidClient.String(), failed))
 	require.Equal(t, attemptlog.SourceApp, attemptlog.SourceOf(mcpconnectionattempts.CodePKCEMismatch.String(), failed))
 	require.Equal(t, attemptlog.SourceSpeakeasySetting, attemptlog.SourceOf(mcpconnectionattempts.CodeCIMDAdmissionDenied.String(), attemptlog.OutcomeBlocked))
 	require.Equal(t, attemptlog.SourceIdentityProvider, attemptlog.SourceOf(mcpconnectionattempts.CodeIDPUnavailable.String(), failed))
@@ -413,6 +413,9 @@ func TestSourceOf_NoneForSuccessLiveAttemptsOrThePersonsOwnDoing(t *testing.T) {
 		mcpconnectionattempts.CodeProviderRateLimited.String(),
 		mcpconnectionattempts.CodeProviderServerError.String(),
 		mcpconnectionattempts.CodeStaticKeyRejected.String(),
+		mcpconnectionattempts.CodeIneligibleIdentity.String(),
+		mcpconnectionattempts.CodeProviderUnavailable.String(),
+		mcpconnectionattempts.CodeProviderUnreachable.String(),
 	}
 	for _, code := range unattributed {
 		require.Empty(t, attemptlog.SourceOf(code, attemptlog.OutcomeFailed), code)
@@ -558,4 +561,19 @@ func TestDecodeCursor_RejectsACursorWithoutATime(t *testing.T) {
 	decoded, err := attemptlog.DecodeCursor(cursor.Encode())
 	require.NoError(t, err)
 	require.Equal(t, cursor, decoded)
+}
+
+func TestList_AnIdentifiedAppWinsOverAnEarlierUnrecognizedOne(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	a := f.attempt(f.org, f.project, f.server, f.now.Add(-time.Hour))
+	f.row(a, mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultCodeIssued, false, time.Second).ClientFamily = mcpconnectionattempts.FamilyOther
+	late := f.row(a, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, 2*time.Second)
+	late.ClientFamily, late.ClientVersion = mcpconnectionattempts.FamilyCursor, "2.0.1"
+	f.insert()
+
+	rows := list(t, f, f.scope(), attemptlog.Filters{})
+	require.Len(t, rows, 1)
+	require.Equal(t, mcpconnectionattempts.FamilyCursor, rows[0].App)
+	require.Equal(t, "2.0.1", rows[0].AppVersion)
 }

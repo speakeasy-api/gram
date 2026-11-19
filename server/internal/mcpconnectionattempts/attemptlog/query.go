@@ -14,7 +14,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 const (
@@ -293,9 +292,11 @@ func attemptsSQL(s Scope, now time.Time) (string, []any, error) {
 			toString(any(server_kind)) AS a_kind,
 			any(app_key) AS a_app_key,
 			groupUniqArrayIf(user_session_issuer_id, user_session_issuer_id != '') AS a_issuers,
-			toString(if(countIf(client_family NOT IN ('', 'browser')) > 0,
-				argMinIf(client_family, (event_time, client_family), client_family NOT IN ('', 'browser')),
-				if(countIf(client_family = 'browser') > 0, 'browser', ''))) AS a_family,
+			toString(multiIf(
+				countIf(client_family NOT IN ('', 'browser', 'other')) > 0,
+				argMinIf(client_family, (event_time, client_family), client_family NOT IN ('', 'browser', 'other')),
+				countIf(client_family = 'other') > 0, 'other',
+				countIf(client_family = 'browser') > 0, 'browser', '')) AS a_family,
 			arraySort(groupArrayIf((event_time, toString(client_family), client_version), client_version != '')) AS a_versions,
 			argMinIf(` + mcpconnectionattempts.AttemptHostSQL + `, (event_time, ` + mcpconnectionattempts.AttemptHostSQL + `), ` + mcpconnectionattempts.AttemptHostSQL + ` != '') AS a_first_service,
 			countIf(is_final) > 0 AS a_has_final,
@@ -440,22 +441,9 @@ func Get(ctx context.Context, ch driver.Conn, s Scope, now time.Time) (*Row, []S
 }
 
 func queryAll[T any](ctx context.Context, ch driver.Conn, what, query string, args ...any) ([]T, error) {
-	result, err := ch.Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("query %s: %w", what, err)
-	}
-	defer o11y.NoLogDefer(func() error { return result.Close() })
-
 	var out []T
-	for result.Next() {
-		var item T
-		if err := result.ScanStruct(&item); err != nil {
-			return nil, fmt.Errorf("scan %s: %w", what, err)
-		}
-		out = append(out, item)
-	}
-	if err := result.Err(); err != nil {
-		return nil, fmt.Errorf("read %s: %w", what, err)
+	if err := ch.Select(ctx, &out, query, args...); err != nil {
+		return nil, fmt.Errorf("query %s: %w", what, err)
 	}
 	return out, nil
 }

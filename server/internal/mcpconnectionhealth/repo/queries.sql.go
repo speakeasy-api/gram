@@ -104,7 +104,7 @@ lives AS (
 ),
 days AS (
   SELECT day_start::timestamptz AS day_start
-  FROM generate_series($8::timestamptz, $9::timestamptz, '1 day'::interval) AS day_start
+  FROM generate_series($8::timestamptz, $9::timestamptz, '24 hours'::interval) AS day_start
 )
 SELECT days.day_start,
        COUNT(DISTINCT scoped.credential)::bigint AS active_sessions,
@@ -116,7 +116,7 @@ SELECT days.day_start,
           AND ended.ended_at <= clock_timestamp())::float8 AS average_seconds
 FROM days
 LEFT JOIN scoped
-  ON scoped.started_at < days.day_start + '1 day'::interval
+  ON scoped.started_at < days.day_start + '24 hours'::interval
   AND scoped.ended_at > days.day_start
 GROUP BY days.day_start
 ORDER BY days.day_start

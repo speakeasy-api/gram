@@ -94,6 +94,9 @@ var unattributedReasons = []string{
 	mcpconnectionattempts.CodeProviderRateLimited.String(),
 	mcpconnectionattempts.CodeProviderServerError.String(),
 	mcpconnectionattempts.CodeStaticKeyRejected.String(),
+	mcpconnectionattempts.CodeIneligibleIdentity.String(),
+	mcpconnectionattempts.CodeProviderUnavailable.String(),
+	mcpconnectionattempts.CodeProviderUnreachable.String(),
 }
 
 // serverReasons come back from the MCP server Speakeasy connected to.
@@ -108,7 +111,6 @@ var identityProviderReasons = []string{
 	mcpconnectionattempts.CodeScopePolicyDenied.String(),
 	mcpconnectionattempts.CodeInvalidTarget.String(),
 	mcpconnectionattempts.CodeIDPTransientFailure.String(),
-	mcpconnectionattempts.CodeIneligibleIdentity.String(),
 	mcpconnectionattempts.CodeOfflineUnsupported.String(),
 	mcpconnectionattempts.CodeRenewalRefused.String(),
 	mcpconnectionattempts.CodeRenewalRetryable.String(),
@@ -121,8 +123,6 @@ var serviceReasons = []string{
 	mcpconnectionattempts.CodeProviderOAuthInvalidScope.String(),
 	mcpconnectionattempts.CodeProviderOAuthInvalidGrant.String(),
 	mcpconnectionattempts.CodeUnrenewableToken.String(),
-	mcpconnectionattempts.CodeProviderUnavailable.String(),
-	mcpconnectionattempts.CodeProviderUnreachable.String(),
 	mcpconnectionattempts.CodeEMAProviderRejected.String(),
 	mcpconnectionattempts.CodeProviderTransientFailure.String(),
 	mcpconnectionattempts.CodeRemoteSessionUnavailable.String(),
@@ -208,14 +208,6 @@ var appNames = map[string]string{
 	mcpconnectionattempts.FamilyKiro:            "Kiro",
 	mcpconnectionattempts.FamilyReplit:          "Replit",
 	mcpconnectionattempts.FamilyNotion:          "Notion",
-}
-
-// AppFamily is the family a filter and a row use: empty for an app not on the list.
-func AppFamily(family string) string {
-	if _, ok := appNames[family]; ok {
-		return family
-	}
-	return ""
 }
 
 // AppName is the display name of a family.
