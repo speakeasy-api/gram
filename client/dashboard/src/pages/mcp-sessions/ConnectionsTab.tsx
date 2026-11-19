@@ -206,6 +206,7 @@ export function ConnectionsTab({
           onChange={setSearchQuery}
           debounceMs={150}
           placeholder="Search connections"
+          className={health ? "w-52" : undefined}
         />
         <Page.Toolbar.Filters
           schema={health ? HEALTH_SESSION_FILTERS : USER_SESSION_FILTERS}

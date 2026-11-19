@@ -436,7 +436,12 @@ function DeniedClients({
         header: "Reason",
         width: "1.4fr",
         render: (c) => (
-          <div title={c.technicalMessage ?? undefined}>{c.message}</div>
+          <div title={c.technicalMessage ?? undefined}>
+            {c.message}
+            {c.technicalMessage ? (
+              <span className="sr-only"> {c.technicalMessage}</span>
+            ) : null}
+          </div>
         ),
       },
       {

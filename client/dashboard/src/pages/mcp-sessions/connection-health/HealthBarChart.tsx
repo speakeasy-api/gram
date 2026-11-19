@@ -1,7 +1,7 @@
 import { chartColors, SHARED_TOOLTIP } from "@/components/chart/chartTheme";
 import { useIsDarkTheme } from "@/lib/theme";
 import type { Chart, ChartOptions, Plugin } from "chart.js";
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { Bar } from "react-chartjs-2";
 import { nowPosition } from "./format";
 
@@ -44,17 +44,20 @@ function hatch(color: string): CanvasPattern | string {
   return ctx.createPattern(tile, "repeat") ?? color;
 }
 
+type NowRef = { current: { index: number; fraction: number } | null };
+
 function nowMarker(
-  position: { index: number; fraction: number } | null,
+  position: NowRef,
   color: string,
   font: string,
 ): Plugin<"bar"> {
   return {
     id: "healthNowMarker",
     afterDatasetsDraw(chart: Chart<"bar">) {
-      if (!position) return;
+      const now = position.current;
+      if (!now) return;
       const meta = chart.getDatasetMeta(0);
-      const bar = meta.data[position.index] as unknown as
+      const bar = meta.data[now.index] as unknown as
         | { x: number; width: number }
         | undefined;
       if (!bar) return;
@@ -62,7 +65,7 @@ function nowMarker(
       const slot = scale
         ? scale.width / Math.max(1, chart.data.labels!.length)
         : bar.width;
-      const x = bar.x + (position.fraction - 0.5) * slot;
+      const x = bar.x + (now.fraction - 0.5) * slot;
       const { top, bottom } = chart.chartArea;
       const ctx = chart.ctx;
       ctx.save();
@@ -105,6 +108,13 @@ export function HealthBarChart({
   const colors = chartColors(isDark);
   const font = useMemo(monoFont, []);
   const position = nowPosition(timestamps, bucketMs, now.getTime());
+  // The plugin is read once per chart, so it looks the position up on each draw.
+  const positionRef = useRef(position);
+  positionRef.current = position;
+  const plugins = useMemo(
+    () => [nowMarker(positionRef, colors.labelFaded, font)],
+    [colors.labelFaded, font],
+  );
   const seam = isDark ? "#121212" : "#ffffff";
   const data = useMemo(
     () => ({
@@ -178,7 +188,7 @@ export function HealthBarChart({
         key={isDark ? "dark" : "light"}
         data={data}
         options={options}
-        plugins={[nowMarker(position, colors.labelFaded, font)]}
+        plugins={plugins}
       />
     </div>
   );

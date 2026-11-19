@@ -195,13 +195,15 @@ function TimeRanges({
       aria-pressed={selected === key}
       onClick={onClick}
       className={cn(
-        "text-eyebrow h-9 border px-3 transition-colors",
+        "h-9 border px-3 transition-colors",
         selected === key
           ? "bg-primary text-primary-foreground border-primary"
-          : "hover:text-foreground",
+          : "text-muted-foreground hover:text-foreground",
       )}
     >
-      {label}
+      <span className="text-eyebrow" style={{ color: "inherit" }}>
+        {label}
+      </span>
     </button>
   );
   return (
@@ -267,6 +269,8 @@ function CheckList({
       {options.map((option) => {
         const checked = value.includes(option.value);
         const count = counts?.find((c) => c.value === option.value)?.attempts;
+        // Attempts still under way are listed only while there are some.
+        if (option.value === "in_progress" && !count && !checked) return null;
         const id = `log-filter-${label}-${option.value}`;
         return (
           <li key={option.value}>

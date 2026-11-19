@@ -19,6 +19,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   type ReactElement,
   type ReactNode,
 } from "react";
@@ -134,6 +135,7 @@ export function AttemptsTable({
 }): JSX.Element {
   const sentinel = useRef<HTMLDivElement>(null);
   const loading = useRef(false);
+  const [loads, setLoads] = useState(0);
   useEffect(() => {
     const node = sentinel.current;
     if (!node || !hasMore || !onLoadMore) return;
@@ -142,11 +144,13 @@ export function AttemptsTable({
       loading.current = true;
       void onLoadMore().finally(() => {
         loading.current = false;
+        // Re-arms even when the new page folded into rows already shown.
+        setLoads((n) => n + 1);
       });
     });
     observer.observe(node);
     return () => observer.disconnect();
-  }, [hasMore, onLoadMore, rows.length]);
+  }, [hasMore, onLoadMore, rows.length, loads]);
   const headings = useMemo(() => dayHeadings(rows, now), [rows, now]);
   const firstId = rows[0]?.id;
   const columns = useMemo<Column<AttemptRow>[]>(() => {
@@ -156,7 +160,11 @@ export function AttemptsTable({
         header: (
           <span className="inline-flex items-center gap-1">
             Time
-            <ArrowDown className="size-3.5" aria-label="newest first" />
+            <ArrowDown
+              className="size-3.5"
+              role="img"
+              aria-label="newest first"
+            />
           </span>
         ),
         width: "130px",
