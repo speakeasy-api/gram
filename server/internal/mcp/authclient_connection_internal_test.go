@@ -343,8 +343,10 @@ func admittedAgentContext(t *testing.T, orgID string, agentID uuid.UUID) context
 
 // An agent admitted through its own credential path is checked against the
 // owner of the exact connection attached to it, while the user it represents
-// stays its authorizer: that user's attachment serves only under every
-// admitted policy, and an owner block or another lender's connection refuses.
+// stays its authorizer. An attachment serves only under every admitted policy,
+// and an owner block refuses. Another member's attachment is that member's
+// consent: it serves the agent whoever issued the key, for as long as that
+// member is still a member whose own live policy allows the connection.
 func TestAdmittedAgentAuthClientUsesTheAttachedConnectionOwner(t *testing.T) {
 	t.Parallel()
 
@@ -359,18 +361,28 @@ func TestAdmittedAgentAuthClientUsesTheAttachedConnectionOwner(t *testing.T) {
 		authorizer []authz.Grant
 		outcome    authClientOutcome
 		shadow     string
+		// lender is the attaching member's own live policy, and whether
+		// they are still a member, read when they are not the authorizer.
+		lender       []authz.Grant
+		lenderMember bool
 	}{
-		{"the represented user's attachment serves", "user_owner", func(uuid.UUID) []authz.Grant { return []authz.Grant{personal} }, []authz.Grant{personal}, authClientResolved, "allow"},
+		{"the represented user's attachment serves", "user_owner", func(uuid.UUID) []authz.Grant { return []authz.Grant{personal} }, []authz.Grant{personal}, authClientResolved, "allow", nil, false},
 		{"an owner block on that connection refuses", "user_owner", func(client uuid.UUID) []authz.Grant {
 			return []authz.Grant{personal, authz.NewGrantWithSelector(authz.ScopeMCPBlockedAuth, authz.Selector{
 				authz.SelectorKeyResourceKind: authz.ResourceKindMCPAuthClient, authz.SelectorKeyResourceID: client.String(),
 				authz.SelectorKeyClientType: authz.AuthClientTypeRemoteSession, authz.SelectorKeyConnectionOwner: "user_owner",
 			})}
-		}, []authz.Grant{personal}, authClientNoAccess, "deny"},
-		{"another lender's attachment refuses", "user_lender", func(uuid.UUID) []authz.Grant {
-			return []authz.Grant{personal, authz.NewGrant(authz.ScopeMCPAuth, authz.WildcardResource)}
-		}, []authz.Grant{personal, authz.NewGrant(authz.ScopeMCPAuth, authz.WildcardResource)}, authClientNoAccess, "deny"},
-		{"the represented user's own policy must allow", "user_owner", func(uuid.UUID) []authz.Grant { return []authz.Grant{personal} }, []authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, authz.WildcardResource)}, authClientNoAccess, "deny"},
+		}, []authz.Grant{personal}, authClientNoAccess, "deny", nil, false},
+		{"another member's attachment serves a key its owner did not issue", "user_lender", func(uuid.UUID) []authz.Grant { return []authz.Grant{personal} }, []authz.Grant{personal}, authClientResolved, "allow", []authz.Grant{personal}, true},
+		{"another member's attachment refuses once their policy no longer allows it", "user_lender", func(uuid.UUID) []authz.Grant { return []authz.Grant{personal} }, []authz.Grant{personal}, authClientNoAccess, "deny", []authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, authz.WildcardResource)}, true},
+		{"another member's attachment refuses once they leave", "user_lender", func(uuid.UUID) []authz.Grant { return []authz.Grant{personal} }, []authz.Grant{personal}, authClientNoAccess, "deny", []authz.Grant{personal}, false},
+		{"a block on another member's attachment refuses", "user_lender", func(client uuid.UUID) []authz.Grant {
+			return []authz.Grant{personal, authz.NewGrantWithSelector(authz.ScopeMCPBlockedAuth, authz.Selector{
+				authz.SelectorKeyResourceKind: authz.ResourceKindMCPAuthClient, authz.SelectorKeyResourceID: client.String(),
+				authz.SelectorKeyClientType: authz.AuthClientTypeRemoteSession, authz.SelectorKeyConnectionOwner: "user_lender",
+			})}
+		}, []authz.Grant{personal}, authClientNoAccess, "deny", []authz.Grant{personal}, true},
+		{"the represented user's own policy must allow", "user_owner", func(uuid.UUID) []authz.Grant { return []authz.Grant{personal} }, []authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, authz.WildcardResource)}, authClientNoAccess, "deny", nil, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -386,6 +398,12 @@ func TestAdmittedAgentAuthClientUsesTheAttachedConnectionOwner(t *testing.T) {
 						OwnerUserID: "user_owner", Credential: []authz.Grant{personal}, Agent: []authz.Grant{personal}, Owner: tc.ownerGrant(client),
 						Authorizer: authz.RepresentedUserPolicy{UserID: "user_owner", Policy: tc.authorizer}, LegacyAuthCeiling: false,
 					}, nil
+				},
+				LoadUserPolicy: func(_ context.Context, _ string, userID string) ([]authz.Grant, bool, error) {
+					if userID != "user_lender" {
+						return nil, false, errors.New("only the attaching member's policy is read")
+					}
+					return tc.lender, tc.lenderMember, nil
 				},
 			})
 			f.service.authClientPermitter = mandatoryPermitter{engine: f.service.authz}

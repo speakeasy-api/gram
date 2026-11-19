@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -29,6 +30,10 @@ type authClientConnectionOwner struct {
 	// authorizer marks an unattached principal-backed agent key served by its
 	// validated authorizer's own connection.
 	authorizer bool
+	// consent is the owner's consent to the attachment, with their live
+	// policy, read when the owner is not the user the agent acts for. The
+	// mandatory decision then lets the agent use the owner's connection.
+	consent authz.AttachedConnectionConsent
 }
 
 // authClientConnection resolves the stored owner of the personal connection
@@ -41,13 +46,20 @@ type authClientConnectionOwner struct {
 // grants, so an attachment from anyone but the represented user still grants
 // nothing. A caller with no usable attachment has no owner, which no personal
 // grant matches.
+//
+// An attachment is its owner's consent: the lookup serves only a live
+// binding the connection's owner made, to an active agent, while the owner is
+// still a member. So when the owner is not the user an agent key acts for,
+// their consent and live policy are read too, and the mandatory decision lets
+// the agent use that connection whoever issued the key, as long as the
+// owner's policy, the key issuer's and the agent's all allow it.
 func (s *Service) authClientConnection(ctx context.Context, permit authClientPermitRequest) (authClientConnectionOwner, error) {
-	var none authClientConnectionOwner
+	none := authClientConnectionOwner{owner: "", attachedSession: uuid.Nil, authorizer: false, consent: authz.AttachedConnectionConsent{}}
 	if permit.ClientType != authClientTypeRemoteSession {
 		return none, nil
 	}
 	if permit.Subject.Kind == urn.SessionSubjectKindUser {
-		return authClientConnectionOwner{owner: permit.Subject.ID, attachedSession: uuid.Nil, authorizer: false}, nil
+		return authClientConnectionOwner{owner: permit.Subject.ID, attachedSession: uuid.Nil, authorizer: false, consent: authz.AttachedConnectionConsent{}}, nil
 	}
 	// An agent key with no attachment for this registration is served by its
 	// validated authorizer's own connection; the mcp:auth check names that
@@ -56,8 +68,9 @@ func (s *Service) authClientConnection(ctx context.Context, permit authClientPer
 	// key's authorizer, or no owner for any other caller, which no personal
 	// grant matches.
 	fallback := none
-	if authorizer, ok := agentKeyAuthorizer(ctx, permit.Subject); ok {
-		fallback = authClientConnectionOwner{owner: authorizer, attachedSession: uuid.Nil, authorizer: true}
+	authorizer, hasAuthorizer := agentKeyAuthorizer(ctx, permit.Subject)
+	if hasAuthorizer {
+		fallback = authClientConnectionOwner{owner: authorizer, attachedSession: uuid.Nil, authorizer: true, consent: authz.AttachedConnectionConsent{}}
 	}
 	lookup := s.attachedConnectionLookup()
 	if lookup == nil || !permit.RegistrationID.Valid || permit.Subject.IsZero() {
@@ -85,7 +98,17 @@ func (s *Service) authClientConnection(ctx context.Context, permit authClientPer
 		// the checked connection, so it is never an owner.
 		return none, errors.New("resolve attached connection owner: attachment names no connection")
 	}
-	return authClientConnectionOwner{owner: conn.OwnerUserID, attachedSession: conn.RemoteSessionID, authorizer: false}, nil
+	attachment := authClientConnectionOwner{owner: conn.OwnerUserID, attachedSession: conn.RemoteSessionID, authorizer: false, consent: authz.AttachedConnectionConsent{}}
+	// Consent matters only to an agent acting for a user other than the
+	// owner; without an engine the decision is made as before.
+	if s.authz == nil || !hasAuthorizer || authorizer == conn.OwnerUserID {
+		return attachment, nil
+	}
+	attachment.consent, err = s.authz.AttachedConnectionConsent(ctx, permit.OrganizationID, conn.OwnerUserID)
+	if err != nil {
+		return none, fmt.Errorf("read attached connection consent: %w", err)
+	}
+	return attachment, nil
 }
 
 // agentKeyAuthorizer is the validated authorizer of an admitted agent
