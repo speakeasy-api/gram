@@ -134,9 +134,13 @@ type transcriptWarning struct {
 
 // shipTranscript uploads the transcript lines added since the last settled
 // upload and returns the warnings the server raised on the shipped prompts.
-// noTranscript reports that the hook named no transcript the binary can read,
-// so nothing from this Stop will ever ship: the caller sends the reply
-// another way. Every failure is logged and swallowed: a missed upload is
+// noTranscript reports that the binary refuses the transcript path the hook
+// named (empty, missing, a symlink, outside the Claude root), so nothing
+// from it will ever ship: the caller sends the reply another way. Claude
+// writes the reply before Stop runs, so a missing file is not a race. An
+// empty or unreadable transcript at a valid path does not count: its lines
+// can still ship on a later Stop, and sending the reply now as well would
+// store it twice. Every failure is logged and swallowed: a missed upload is
 // retried on the next Stop, and the hook must never disturb the session.
 func (r *Relay) shipTranscript(ctx context.Context, e *agenthooks.StopEvent) (warnings []transcriptWarning, noTranscript bool) {
 	base := &e.Event

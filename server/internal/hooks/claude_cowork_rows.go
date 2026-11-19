@@ -112,7 +112,7 @@ func coworkEventRow(payload *gen.IngestPayload, occurredAt time.Time) (claudeTra
 		}
 		row.externalID = claudeSharedRowKey(row, "")
 	case "assistant.responded":
-		content := conv.StripNUL(canonicalMessageText(payload))
+		content := strings.TrimSpace(conv.StripNUL(canonicalMessageText(payload)))
 		if content == "" {
 			return row, false
 		}

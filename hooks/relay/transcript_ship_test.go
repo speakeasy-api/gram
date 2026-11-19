@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -312,6 +313,10 @@ func TestCoworkStopWithTranscriptSendsNoReply(t *testing.T) {
 	res := invokeClaude(t, cfg, stop)
 	require.Equal(t, 0, res.ExitCode, res.Stderr)
 	require.Empty(t, fs.replyEvents())
+	fs.mu.Lock()
+	paths := slices.Clone(fs.paths)
+	fs.mu.Unlock()
+	require.Contains(t, paths, transcriptUploadPath, "the reply goes up with the transcript")
 }
 
 // TestCoworkReportsEmptyTranscript: a Stop follows a reply, so a transcript

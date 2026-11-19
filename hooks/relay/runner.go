@@ -538,8 +538,10 @@ func (r *Relay) onStop(ctx context.Context, e *agenthooks.StopEvent) (agenthooks
 		// (`claude mcp serve`): the conversation lives on claude.ai, no
 		// transcript is written and transcript_path is empty. The reply then
 		// reaches the server only as an event carrying Stop's
-		// last_assistant_message, as it does outside Cowork. A session with a
-		// transcript never sends one, so the server never stores a reply twice.
+		// last_assistant_message, as it does outside Cowork. Any transcript
+		// path the binary refuses counts, not only an empty one: no line of
+		// that path can ever ship, so the reply cannot also arrive from the
+		// transcript. A session whose transcript ships never sends the event.
 		if noTranscript {
 			r.deliver(ctx, e)
 		}
