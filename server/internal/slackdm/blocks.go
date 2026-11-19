@@ -59,7 +59,8 @@ type Element struct {
 	// Type is button, plain_text or mrkdwn.
 	Type string `json:"type"`
 
-	// Text is a button's label, or a context element's text.
+	// Text is a button's label. Context elements carry their text in
+	// TextValue instead.
 	Text *TextObject `json:"text,omitempty"`
 
 	// TextValue is a context element's text. Context elements are text
@@ -157,9 +158,11 @@ func Code(text string, limit int) string {
 	return "`" + Fit(strings.ReplaceAll(text, "`", "'"), limit) + "`"
 }
 
-// Fit makes text safe inside mrkdwn and cuts it to at most limit characters,
-// plus an ellipsis when cut. Slack reads &, < and > as control characters, so
-// they are escaped and links, mentions and dates cannot be smuggled in. The
+// Fit escapes text for mrkdwn and cuts it to at most limit characters, plus an
+// ellipsis when cut. Slack reads &, < and > as control characters, so they are
+// escaped and links, mentions and dates cannot be smuggled in. Formatting
+// markers and emoji codes still render; callers that must rule those out check
+// the text with ShowsAsWritten first. The
 // bound applies to the escaped text, since escaping can grow a character
 // fivefold and Slack's limits apply to what is sent.
 func Fit(text string, limit int) string {
