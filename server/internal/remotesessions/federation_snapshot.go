@@ -15,12 +15,13 @@ type federatedClientSnapshot struct {
 	AttachmentScope       pgtype.Text   `json:"AttachmentScope"`
 	RemoteSessionIssuerID uuid.UUID     `json:"RemoteSessionIssuerID"`
 	ClientID              string        `json:"ClientID"`
-	ClientSecretEncrypted pgtype.Text   `json:"ClientSecretEncrypted"`
-	// Kept out of the fingerprint for now so adding the columns leaves it
-	// unchanged. Moving secret change detection onto ClientSecretGeneration
-	// happens with organization-key sealing (AIM-1003).
+	// The secret's copies change when the same secret is sealed again and
+	// when finalize clears the platform-key copy, so they stay out of the
+	// fingerprint. ClientSecretGeneration changes whenever the secret is set,
+	// replaced or cleared.
+	ClientSecretEncrypted           pgtype.Text        `json:"-"`
 	ClientSecretOrgEncrypted        pgtype.Text        `json:"-"`
-	ClientSecretGeneration          int64              `json:"-"`
+	ClientSecretGeneration          int64              `json:"ClientSecretGeneration"`
 	ClientIDIssuedAt                pgtype.Timestamptz `json:"ClientIDIssuedAt"`
 	ClientSecretExpiresAt           pgtype.Timestamptz `json:"ClientSecretExpiresAt"`
 	TokenEndpointAuthMethod         pgtype.Text        `json:"TokenEndpointAuthMethod"`

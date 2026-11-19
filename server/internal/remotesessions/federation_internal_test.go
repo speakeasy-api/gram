@@ -139,10 +139,28 @@ func TestFederatedFingerprint(t *testing.T) {
 	same, err := newFederatedProvider(p.organizationID, p.issuer, p.client, p.metadata)
 	require.NoError(t, err)
 	require.Equal(t, p.Fingerprint(), same.Fingerprint())
-	for _, mutate := range []func(*FederatedProvider){
+	for _, reseal := range []func(*FederatedProvider){
+		// The same secret sealed again, as backfill and key rotation do.
 		func(p *FederatedProvider) {
-			p.client.ClientSecretEncrypted = pgtype.Text{String: "encrypted-secret", Valid: true}
+			p.client.ClientSecretEncrypted = pgtype.Text{String: "resealed-secret", Valid: true}
 		},
+		func(p *FederatedProvider) {
+			p.client.ClientSecretOrgEncrypted = pgtype.Text{String: "organization-copy", Valid: true}
+		},
+		// Finalize clears the platform-key copy.
+		func(p *FederatedProvider) {
+			p.client.ClientSecretEncrypted = pgtype.Text{}
+			p.client.ClientSecretOrgEncrypted = pgtype.Text{String: "organization-copy", Valid: true}
+		},
+	} {
+		resealed := *p
+		reseal(&resealed)
+		next, err := newFederatedProvider(resealed.organizationID, resealed.issuer, resealed.client, resealed.metadata)
+		require.NoError(t, err)
+		require.Equal(t, p.Fingerprint(), next.Fingerprint(), "sealing the same secret again keeps logins in progress")
+	}
+	for _, mutate := range []func(*FederatedProvider){
+		func(p *FederatedProvider) { p.client.ClientSecretGeneration++ },
 		func(p *FederatedProvider) { p.metadata.TokenEndpoint += "/new" },
 		func(p *FederatedProvider) { p.client.Scope = append(p.client.Scope, "extra") },
 		func(p *FederatedProvider) { p.organizationID = "other-org" },
