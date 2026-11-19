@@ -66,7 +66,12 @@ describe("ShadowMCP", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("policy summary")).toBeTruthy();
+    const summary = screen.getByText("policy summary");
+    const inventory = screen.getByText("MCP server inventory");
+    expect(
+      summary.compareDocumentPosition(inventory) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(screen.getByTestId("primary-action").textContent).toBe("");
     expect(screen.queryByRole("link", { name: "Set up policy" })).toBeNull();
   });

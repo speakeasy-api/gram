@@ -75,8 +75,12 @@ export function shadowMCPPolicySentence(
   narrowedTo: string | null,
 ): string {
   if (mode === "allowed") return "All Shadow MCPs are allowed by default.";
+  // A block-by-default rule narrowed to an empty audience covers nobody.
+  if (narrowedTo === "") {
+    return "Block by default applies to nobody, so Shadow MCPs are allowed by default.";
+  }
   if (narrowedTo) {
-    return `Shadow MCPs are blocked by default for ${narrowedTo}. Everyone else is allowed.`;
+    return `Shadow MCPs are blocked by default for ${narrowedTo}. Everyone else is allowed by default.`;
   }
   return "All Shadow MCPs are blocked by default.";
 }

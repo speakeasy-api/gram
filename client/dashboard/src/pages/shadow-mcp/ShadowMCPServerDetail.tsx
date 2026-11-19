@@ -742,10 +742,18 @@ export default function ShadowMCPServerDetail(): JSX.Element {
             <Page.Section.CTA>
               {server && (
                 <DetailActionButtons
-                  actionLabel={decisionActionLabel(
-                    applicableDecision(disposition, standingDecisionOf(server)),
-                  )}
-                  disabled={decideTarget !== null}
+                  actionLabel={
+                    policiesQuery.data
+                      ? decisionActionLabel(
+                          applicableDecision(
+                            disposition,
+                            standingDecisionOf(server),
+                          ),
+                        )
+                      : "Decide access"
+                  }
+                  // The action depends on the policy, so it waits for it.
+                  disabled={decideTarget !== null || !policiesQuery.data}
                   onOpenDecide={openDecide}
                   policiesUnavailable={policiesQuery.isError}
                   server={server}

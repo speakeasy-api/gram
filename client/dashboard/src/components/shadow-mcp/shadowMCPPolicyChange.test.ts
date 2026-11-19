@@ -128,11 +128,14 @@ describe("shadowMCPPolicySentence", () => {
     expect(shadowMCPPolicySentence("allowed", null)).toBe(
       "All Shadow MCPs are allowed by default.",
     );
+    expect(shadowMCPPolicySentence("blocked", "")).toBe(
+      "Block by default applies to nobody, so Shadow MCPs are allowed by default.",
+    );
     expect(shadowMCPPolicySentence("blocked", null)).toBe(
       "All Shadow MCPs are blocked by default.",
     );
     expect(shadowMCPPolicySentence("blocked", "2 roles")).toBe(
-      "Shadow MCPs are blocked by default for 2 roles. Everyone else is allowed.",
+      "Shadow MCPs are blocked by default for 2 roles. Everyone else is allowed by default.",
     );
   });
 });

@@ -557,7 +557,9 @@ type GetShadowMCPInventoryServerResponseBody struct {
 	LastCalled       *string `form:"last_called,omitempty" json:"last_called,omitempty" xml:"last_called,omitempty"`
 	ObservedUseCount *int    `form:"observed_use_count,omitempty" json:"observed_use_count,omitempty" xml:"observed_use_count,omitempty"`
 	// Calls to this server that a Speakeasy hook blocked, within the telemetry
-	// retention window. Included in observed_use_count.
+	// retention window. Included in observed_use_count. Optional for one release
+	// so a dashboard deployed ahead of the server still loads the inventory; the
+	// server always sends it.
 	BlockedCallCount *int `form:"blocked_call_count,omitempty" json:"blocked_call_count,omitempty" xml:"blocked_call_count,omitempty"`
 	// Distinct users who reached this server.
 	UserCount *int `form:"user_count,omitempty" json:"user_count,omitempty" xml:"user_count,omitempty"`
@@ -9893,7 +9895,9 @@ type ShadowMCPInventoryServerResponseBody struct {
 	LastCalled       *string `form:"last_called,omitempty" json:"last_called,omitempty" xml:"last_called,omitempty"`
 	ObservedUseCount *int    `form:"observed_use_count,omitempty" json:"observed_use_count,omitempty" xml:"observed_use_count,omitempty"`
 	// Calls to this server that a Speakeasy hook blocked, within the telemetry
-	// retention window. Included in observed_use_count.
+	// retention window. Included in observed_use_count. Optional for one release
+	// so a dashboard deployed ahead of the server still loads the inventory; the
+	// server always sends it.
 	BlockedCallCount *int `form:"blocked_call_count,omitempty" json:"blocked_call_count,omitempty" xml:"blocked_call_count,omitempty"`
 	// Distinct users who reached this server.
 	UserCount *int `form:"user_count,omitempty" json:"user_count,omitempty" xml:"user_count,omitempty"`
@@ -14738,10 +14742,15 @@ func NewGetShadowMCPInventoryServerShadowMCPInventoryServerOK(body *GetShadowMCP
 		LastSeen:           *body.LastSeen,
 		LastCalled:         body.LastCalled,
 		ObservedUseCount:   *body.ObservedUseCount,
-		BlockedCallCount:   *body.BlockedCallCount,
 		UserCount:          *body.UserCount,
 		Access:             *body.Access,
 		RequestCount:       *body.RequestCount,
+	}
+	if body.BlockedCallCount != nil {
+		v.BlockedCallCount = *body.BlockedCallCount
+	}
+	if body.BlockedCallCount == nil {
+		v.BlockedCallCount = 0
 	}
 	v.TopUsers = make([]string, len(body.TopUsers))
 	for i, val := range body.TopUsers {
@@ -19186,9 +19195,6 @@ func ValidateGetShadowMCPInventoryServerResponseBody(body *GetShadowMCPInventory
 	}
 	if body.ObservedUseCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("observed_use_count", "body"))
-	}
-	if body.BlockedCallCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("blocked_call_count", "body"))
 	}
 	if body.UserCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("user_count", "body"))
@@ -31647,9 +31653,6 @@ func ValidateShadowMCPInventoryServerResponseBody(body *ShadowMCPInventoryServer
 	}
 	if body.ObservedUseCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("observed_use_count", "body"))
-	}
-	if body.BlockedCallCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("blocked_call_count", "body"))
 	}
 	if body.UserCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("user_count", "body"))

@@ -1766,7 +1766,9 @@ type ShadowMCPInventoryServer struct {
 	LastCalled       *string
 	ObservedUseCount int
 	// Calls to this server that a Speakeasy hook blocked, within the telemetry
-	// retention window. Included in observed_use_count.
+	// retention window. Included in observed_use_count. Optional for one release
+	// so a dashboard deployed ahead of the server still loads the inventory; the
+	// server always sends it.
 	BlockedCallCount int
 	// Distinct users who reached this server.
 	UserCount int

@@ -41,20 +41,21 @@ export function ShadowMCPPolicySummary(): JSX.Element | null {
   }
 
   const state = shadowMCPModeOf(policiesQuery.data.policies);
-  const urns =
-    state.mode === "blocked" && state.policy?.audienceType === "targeted"
-      ? state.policy.audiencePrincipalUrns
-      : [];
-  const narrowedTo =
-    urns.length > 0
-      ? shadowMCPChosenAudience(
+  const targeted =
+    state.mode === "blocked" && state.policy?.audienceType === "targeted";
+  const urns = targeted ? (state.policy?.audiencePrincipalUrns ?? []) : [];
+  // null: everyone. "": a targeted rule that names nobody.
+  const narrowedTo = !targeted
+    ? null
+    : urns.length === 0
+      ? ""
+      : shadowMCPChosenAudience(
           urns,
           audienceGroups(
             membersQuery.data?.members ?? [],
             rolesQuery.data?.roles ?? [],
           ),
-        )
-      : null;
+        );
   const heldReason = heldByReason(state.heldBy, state.policy?.name);
 
   return (

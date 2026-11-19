@@ -77,7 +77,7 @@ const MODE_COPY: Record<
   blocked: {
     title: "Block by default",
     detail:
-      "Every MCP server is blocked until you approve it. Servers you approved keep working.",
+      "Every MCP server is blocked for everyone until you approve it; narrow who it applies to under Advanced. Servers you approved keep working.",
     confirm: "Block by default",
     done: "MCP servers are now blocked by default.",
   },
@@ -426,7 +426,7 @@ export function EditShadowMCPPolicyDialog({
               disabled={
                 !canContinue ||
                 saving ||
-                (step === "review" && inventory.isLoading)
+                (step === "review" && !inventory.isSuccess)
               }
               onClick={() => void save()}
             >
@@ -450,7 +450,7 @@ function reviewDescription(
   count: number,
 ): string {
   if (count === 0) {
-    return "No server changes: every server the project knows about already has a decision.";
+    return "No servers change under this policy.";
   }
   const servers = count === 1 ? "1 server has" : `${count} servers have`;
   if (target === "blocked") {
@@ -593,8 +593,8 @@ function ReviewStep({
       <Alert variant="warning" title="Servers could not be loaded">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span>
-            The list of servers that change could not be loaded. You can still
-            change the policy.
+            The list of servers that change could not be loaded. Retry to review
+            it before changing the policy.
           </span>
           <Button variant="secondary" size="sm" onClick={onRetry}>
             <Button.Text>Retry</Button.Text>

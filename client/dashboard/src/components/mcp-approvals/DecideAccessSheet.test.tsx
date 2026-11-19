@@ -404,8 +404,10 @@ describe("DecideAccessSheet", () => {
       disposition: null,
     });
 
-    expect(screen.queryAllByText("Who the block covers")).toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    expect(screen.getAllByText("Who the block covers").length).toBeGreaterThan(
+      0,
+    );
     fireEvent.click(screen.getByTestId("audience-select"));
     expect(
       screen.getAllByText(

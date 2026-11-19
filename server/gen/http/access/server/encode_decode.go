@@ -10680,6 +10680,12 @@ func marshalAccessShadowMCPInventoryServerToShadowMCPInventoryServerResponseBody
 		Access:             v.Access,
 		RequestCount:       v.RequestCount,
 	}
+	{
+		var zero int
+		if res.BlockedCallCount == zero {
+			res.BlockedCallCount = 0
+		}
+	}
 	if v.TopUsers != nil {
 		res.TopUsers = make([]string, len(v.TopUsers))
 		for i, val := range v.TopUsers {

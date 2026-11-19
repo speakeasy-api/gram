@@ -117375,7 +117375,8 @@ components:
           $ref: '#/components/schemas/ShadowMCPInventoryApprovalRequest'
         blocked_call_count:
           type: integer
-          description: Calls to this server that a Speakeasy hook blocked, within the telemetry retention window. Included in observed_use_count.
+          description: Calls to this server that a Speakeasy hook blocked, within the telemetry retention window. Included in observed_use_count. Optional for one release so a dashboard deployed ahead of the server still loads the inventory; the server always sends it.
+          default: 0
           format: int64
         blocked_policy_ids:
           type: array
@@ -117433,7 +117434,6 @@ components:
         - first_seen
         - last_seen
         - observed_use_count
-        - blocked_call_count
         - user_count
         - top_users
         - access

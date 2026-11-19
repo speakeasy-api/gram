@@ -732,7 +732,7 @@ describe("ShadowMCPInventoryTable", () => {
     for (const [actions] of calls) {
       expect(actions[0]).toEqual(
         expect.objectContaining({
-          label: "Block server",
+          label: "Decide access",
           disabled: true,
           description:
             "Policy data could not be loaded — deciding now would not be enforced",
@@ -744,9 +744,9 @@ describe("ShadowMCPInventoryTable", () => {
     const labelLists = calls.map(([actions]) =>
       actions.map((action) => action.label),
     );
-    // No blocking policy loaded reads as allowed by default: block is the action.
-    expect(labelLists).toContainEqual(["Block server", "Make official"]);
-    expect(labelLists).toContainEqual(["Block server"]);
+    // The policy is unknown, so the label stays neutral rather than guessing.
+    expect(labelLists).toContainEqual(["Decide access", "Make official"]);
+    expect(labelLists).toContainEqual(["Decide access"]);
 
     // The stdio review still opens, so the evidence can be read, but its
     // Decide Access button waits too.

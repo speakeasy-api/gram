@@ -193,7 +193,8 @@ export function ShadowMCPInventoryTable({
   const [reviewSheetServer, setReviewSheetServer] =
     useState<ShadowMCPInventoryServer | null>(null);
   // The sheet words its form and picks its write path from the policy set's
-  // disposition; row rendering no longer touches it.
+  // disposition, and the row action's label names the action it makes
+  // applicable.
   const disposition = shadowMCPBlockingPolicyDisposition(shadowMCPPolicies);
   const { values, setValue, clearValue, clearAll } =
     useFilterState(INVENTORY_FILTERS);
@@ -577,9 +578,16 @@ export function ShadowMCPInventoryTable({
                 {
                   // The action the policy makes applicable: block under
                   // allow by default, approve under block by default.
-                  label: decisionActionLabel(
-                    applicableDecision(disposition, standingDecisionOf(row)),
-                  ),
+                  // With the policy list unavailable the disposition is
+                  // unknown, so the label stays neutral.
+                  label: policiesUnavailable
+                    ? "Decide access"
+                    : decisionActionLabel(
+                        applicableDecision(
+                          disposition,
+                          standingDecisionOf(row),
+                        ),
+                      ),
                   onClick: () => openDecide(row),
                   disabled: policiesUnavailable,
                   description: decideDisabledReason,
