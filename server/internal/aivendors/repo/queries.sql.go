@@ -52,7 +52,7 @@ func (q *Queries) ListCatalogDocuments(ctx context.Context) ([]AiProductCimdDocu
 }
 
 const listCatalogProducts = `-- name: ListCatalogProducts :many
-SELECT id, vendor_key, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, client_info_names, family, created_by, updated_by, created_at, updated_at, deleted_at, deleted FROM ai_products WHERE deleted IS FALSE ORDER BY id
+SELECT id, vendor_key, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, client_info_names, created_by, updated_by, created_at, updated_at, deleted_at, deleted FROM ai_products WHERE deleted IS FALSE ORDER BY id
 `
 
 // Catalog products and documents are global reference data.
@@ -76,7 +76,6 @@ func (q *Queries) ListCatalogProducts(ctx context.Context) ([]AiProduct, error) 
 			&i.ProcessNames,
 			&i.VersionPlistKey,
 			&i.ClientInfoNames,
-			&i.Family,
 			&i.CreatedBy,
 			&i.UpdatedBy,
 			&i.CreatedAt,

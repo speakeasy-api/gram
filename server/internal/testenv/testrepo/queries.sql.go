@@ -1657,25 +1657,18 @@ func (q *Queries) EditDocumentFixture(ctx context.Context, arg EditDocumentFixtu
 
 const editProductFixture = `-- name: EditProductFixture :exec
 UPDATE ai_products
-SET display_name = $1, family = $2,
-    deleted_at = $3
-WHERE id = $4
+SET display_name = $1, deleted_at = $2
+WHERE id = $3
 `
 
 type EditProductFixtureParams struct {
 	DisplayName string
-	Family      pgtype.Text
 	DeletedAt   pgtype.Timestamptz
 	ID          string
 }
 
 func (q *Queries) EditProductFixture(ctx context.Context, arg EditProductFixtureParams) error {
-	_, err := q.db.Exec(ctx, editProductFixture,
-		arg.DisplayName,
-		arg.Family,
-		arg.DeletedAt,
-		arg.ID,
-	)
+	_, err := q.db.Exec(ctx, editProductFixture, arg.DisplayName, arg.DeletedAt, arg.ID)
 	return err
 }
 
@@ -2353,7 +2346,7 @@ func (q *Queries) GetChatSessionLinkByParentFixture(ctx context.Context, parentC
 }
 
 const getDelegationAssertionOrSubjectPresentFixture = `-- name: GetDelegationAssertionOrSubjectPresentFixture :one
-SELECT (identity_assertion_encrypted IS NOT NULL OR upstream_subject_encrypted IS NOT NULL)::boolean AS present
+SELECT ((identity_assertion_encrypted IS NOT NULL OR identity_assertion_org_encrypted IS NOT NULL) OR (upstream_subject_encrypted IS NOT NULL OR upstream_subject_org_encrypted IS NOT NULL))::boolean AS present
 FROM trusted_issuer_sessions WHERE id = $1
 `
 
@@ -2391,7 +2384,7 @@ func (q *Queries) GetDelegationRefreshClaimFixture(ctx context.Context, arg GetD
 }
 
 const getDelegationSecretsAndGenerationFixture = `-- name: GetDelegationSecretsAndGenerationFixture :one
-SELECT (identity_assertion_encrypted IS NOT NULL OR refresh_token_encrypted IS NOT NULL OR upstream_subject_encrypted IS NOT NULL OR nonce_encrypted IS NOT NULL)::boolean AS present,
+SELECT ((identity_assertion_encrypted IS NOT NULL OR identity_assertion_org_encrypted IS NOT NULL) OR (refresh_token_encrypted IS NOT NULL OR refresh_token_org_encrypted IS NOT NULL) OR (upstream_subject_encrypted IS NOT NULL OR upstream_subject_org_encrypted IS NOT NULL) OR (nonce_encrypted IS NOT NULL OR nonce_org_encrypted IS NOT NULL))::boolean AS present,
        credential_generation
 FROM trusted_issuer_sessions WHERE id = $1
 `
@@ -2409,7 +2402,7 @@ func (q *Queries) GetDelegationSecretsAndGenerationFixture(ctx context.Context, 
 }
 
 const getDelegationSecretsPresentFixture = `-- name: GetDelegationSecretsPresentFixture :one
-SELECT (identity_assertion_encrypted IS NOT NULL OR refresh_token_encrypted IS NOT NULL OR upstream_subject_encrypted IS NOT NULL OR nonce_encrypted IS NOT NULL)::boolean AS present
+SELECT ((identity_assertion_encrypted IS NOT NULL OR identity_assertion_org_encrypted IS NOT NULL) OR (refresh_token_encrypted IS NOT NULL OR refresh_token_org_encrypted IS NOT NULL) OR (upstream_subject_encrypted IS NOT NULL OR upstream_subject_org_encrypted IS NOT NULL) OR (nonce_encrypted IS NOT NULL OR nonce_org_encrypted IS NOT NULL))::boolean AS present
 FROM trusted_issuer_sessions WHERE id = $1
 `
 
@@ -4049,14 +4042,19 @@ BEGIN
     $fn$;
     CREATE TRIGGER mark_remote_session_identity_write
         BEFORE UPDATE ON remote_sessions FOR EACH ROW
-        WHEN (OLD.updated_at = NEW.updated_at AND OLD.last_used_at IS NOT DISTINCT FROM NEW.last_used_at)
+        WHEN (OLD.updated_at = NEW.updated_at AND OLD.last_used_at IS NOT DISTINCT FROM NEW.last_used_at
+            AND OLD.access_token_encrypted IS NOT DISTINCT FROM NEW.access_token_encrypted
+            AND OLD.access_token_org_encrypted IS NOT DISTINCT FROM NEW.access_token_org_encrypted)
         EXECUTE FUNCTION mark_remote_session_identity_write();
 END
 $install$
 `
 
-// Marks every remote_sessions update that leaves updated_at and last_used_at alone, the
-// identity restatement's signature, by appending to validation_reason.
+// Marks every remote_sessions update that leaves updated_at, last_used_at and the
+// access token alone, the identity restatement's signature, by appending to
+// validation_reason. The token write that follows a refresh's compare-and-swap
+// in the same transaction also leaves updated_at alone, but always replaces the
+// access token.
 func (q *Queries) InstallRemoteSessionIdentityWriteMarkerFixture(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, installRemoteSessionIdentityWriteMarkerFixture)
 	return err

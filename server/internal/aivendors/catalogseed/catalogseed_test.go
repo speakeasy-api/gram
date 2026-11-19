@@ -58,7 +58,6 @@ func TestApplyCompleteAndIdempotent(t *testing.T) {
 			require.Equal(t, conv.DefaultSlice(p.Signatures.ProcessNames, []string{}), row.ProcessNames)
 			require.Equal(t, conv.ToPGTextEmpty(p.VersionPlistKey), row.VersionPlistKey)
 			require.Equal(t, conv.DefaultSlice(p.ClientInfoNames, []string{}), row.ClientInfoNames)
-			require.Equal(t, conv.ToPGTextEmpty(p.Family), row.Family)
 			require.False(t, row.Deleted)
 			require.False(t, row.CreatedBy.Valid)
 			require.False(t, row.UpdatedBy.Valid)
@@ -101,12 +100,6 @@ func TestApplyPreservesStaffEditsAndDeletions(t *testing.T) {
 	require.NoError(t, testrepo.New(db).EditProductFixture(ctx, testrepo.EditProductFixtureParams{
 		ID: "claude-code", DisplayName: "Staff title",
 		DeletedAt: pgtype.Timestamptz{Time: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), Valid: true},
-	}))
-	require.NoError(t, testrepo.New(db).EditProductFixture(ctx, testrepo.EditProductFixtureParams{
-		ID: "claude", DisplayName: "Claude", Family: pgtype.Text{},
-	}))
-	require.NoError(t, testrepo.New(db).EditProductFixture(ctx, testrepo.EditProductFixtureParams{
-		ID: "cursor", DisplayName: "Cursor", Family: conv.ToPGText("staff-family"),
 	}))
 	docs, err := q.ListDocuments(ctx)
 	require.NoError(t, err)
@@ -266,7 +259,7 @@ func TestBackfillSkipsDeletedProduct(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, EnsureCatalog(ctx, db))
 	require.NoError(t, testrepo.New(db).EditProductFixture(ctx, testrepo.EditProductFixtureParams{
-		ID: "claude-code", DisplayName: "Claude Code", Family: conv.ToPGText("claude"),
+		ID: "claude-code", DisplayName: "Claude Code",
 		DeletedAt: pgtype.Timestamptz{Time: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), Valid: true},
 	}))
 	require.NoError(t, Apply(ctx, testenv.NewLogger(t), db))
@@ -343,7 +336,7 @@ func TestApplySkipsDocumentsOfDeletedProduct(t *testing.T) {
 	}
 }
 
-// Aliases stay in the compiled registry; every other field must match the file.
+// Every registry field except registryFieldsNotInFile must match the file.
 func TestCatalogMatchesRegistry(t *testing.T) {
 	t.Parallel()
 	var data snapshot
@@ -369,8 +362,8 @@ func TestCatalogMatchesRegistry(t *testing.T) {
 
 // registryFieldsNotInFile are the registry fields catalog.json leaves out.
 var registryFieldsNotInFile = map[reflect.Type][]string{
-	// Reported-name aliases live in code, not the database.
-	reflect.TypeFor[aivendors.Product](): {"Aliases"},
+	// Reported-name aliases and product families live in code, not the database.
+	reflect.TypeFor[aivendors.Product](): {"Aliases", "Family"},
 	// The seed derives is_pattern from a "*" in the URL.
 	reflect.TypeFor[aivendors.Document](): {"Pattern"},
 }

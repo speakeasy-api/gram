@@ -6,6 +6,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 )
 
 // BuildRemoteSessionView converts a remote_sessions row into its API view.
@@ -39,7 +40,7 @@ func BuildRemoteSessionView(row repo.RemoteSession, subjectDisplayName, subjectE
 		RemoteSessionClientID:  row.RemoteSessionClientID.String(),
 		AccessExpiresAt:        row.AccessExpiresAt.Time.Format(time.RFC3339),
 		RefreshExpiresAt:       refreshExpiresAt,
-		HasRefreshToken:        row.RefreshTokenEncrypted.Valid && row.RefreshTokenEncrypted.String != "",
+		HasRefreshToken:        upstreamtokens.Has(upstreamtokens.Stored(row.RefreshTokenEncrypted, row.RefreshTokenOrgEncrypted)),
 		Scopes:                 row.Scopes,
 		CreatedAt:              row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:              row.UpdatedAt.Time.Format(time.RFC3339),

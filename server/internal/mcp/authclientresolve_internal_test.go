@@ -1095,7 +1095,7 @@ func TestResolveAccessTokensServesAnAuthClientWithoutTheSignInLink(t *testing.T)
 	subject := urn.NewUserSubject("user_tokens")
 	accessEnc, err := f.service.enc.Encrypt([]byte("upstream-token"))
 	require.NoError(t, err)
-	_, err = remotesessionsrepo.New(pool).UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+	_, err = remotesessionsrepo.New(pool).UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   consentedUnder,
 		RemoteSessionClientID: f.registration,
@@ -1159,7 +1159,7 @@ func TestRefreshNeedsAuthClientReconnectUnderEnforcement(t *testing.T) {
 
 	accessEnc, err := f.service.enc.Encrypt([]byte("upstream-token"))
 	require.NoError(t, err)
-	_, err = remotesessionsrepo.New(pool).UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+	_, err = remotesessionsrepo.New(pool).UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   consentedUnder,
 		RemoteSessionClientID: f.registration,

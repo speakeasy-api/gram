@@ -3,9 +3,10 @@
 `catalog.json` holds 53 products and 26 CIMD documents. It tracks the compiled
 `aivendors` registry until that registry is removed (AIM-450), then becomes
 frozen. `TestCatalogMatchesRegistry` fails when any field differs, including a
-field newly added to the registry. Reported-name aliases are not in the file
-or the database: they change with plugin and telemetry code, so they stay in
-the registry (`Product.Aliases`, `aivendors.Identify`).
+field newly added to the registry. Reported-name aliases and product families
+are not in the file or the database: they change with plugin and telemetry
+code, so they stay in the registry (`Product.Aliases`, `Product.Family`,
+`aivendors.Identify`).
 
 Regenerate the file from the registry, then format it:
 
@@ -32,9 +33,6 @@ are not inserted under deleted products. Arbitrary URL history of preexisting
 non-bootstrap rows is not recoverable after their URL has been edited.
 
 Loading rejects unknown fields and a document URL under two products.
-
-A product's family is written only when the product is inserted, so a family
-staff later set or cleared survives a rerun.
 
 Catalog rows must only ever be soft-deleted: the next run reinserts a
 hard-deleted seed row.

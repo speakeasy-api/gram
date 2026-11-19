@@ -318,7 +318,7 @@ func TestService_SetAIToolDecision_WaitsForDeletedProduct(t *testing.T) {
 	ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
 	require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
 	require.NoError(t, testrepo.New(ti.conn).EditProductFixture(ctx, testrepo.EditProductFixtureParams{
-		ID: "claude-code", DisplayName: "Claude Code", Family: conv.ToPGText("claude"),
+		ID: "claude-code", DisplayName: "Claude Code",
 		DeletedAt: pgtype.Timestamptz{Time: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), Valid: true},
 	}))
 	_, err := ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{

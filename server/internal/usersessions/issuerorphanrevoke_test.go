@@ -209,7 +209,7 @@ func seedRemoteSession(t *testing.T, ctx context.Context, ti *testInstance, sess
 	refreshEnc, err := enc.Encrypt([]byte(refreshToken))
 	require.NoError(t, err)
 
-	_, err = remotesessionsrepo.New(ti.conn).UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+	_, err = remotesessionsrepo.New(ti.conn).UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:             urn.NewUserSubject(subject),
 		UserSessionIssuerID:    sessionIssuerID,
 		RemoteSessionClientID:  clientID,
