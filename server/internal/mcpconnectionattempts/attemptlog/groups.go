@@ -97,6 +97,7 @@ var unattributedReasons = []string{
 	mcpconnectionattempts.CodeIneligibleIdentity.String(),
 	mcpconnectionattempts.CodeProviderUnavailable.String(),
 	mcpconnectionattempts.CodeProviderUnreachable.String(),
+	mcpconnectionattempts.CodeProviderRejected.String(),
 }
 
 // serverReasons come back from the MCP server Speakeasy connected to.
@@ -126,7 +127,6 @@ var serviceReasons = []string{
 	mcpconnectionattempts.CodeEMAProviderRejected.String(),
 	mcpconnectionattempts.CodeProviderTransientFailure.String(),
 	mcpconnectionattempts.CodeRemoteSessionUnavailable.String(),
-	mcpconnectionattempts.CodeProviderRejected.String(),
 	mcpconnectionattempts.CodeUpstreamEMARefused.String(),
 	mcpconnectionattempts.CodeInvalidGrant.String(),
 	mcpconnectionattempts.CodeRefreshInvalidClient.String(),
@@ -219,9 +219,7 @@ func AppName(family string) string {
 }
 
 // listedFamilies are the families with a name, for the SQL that maps others to empty.
-func listedFamilies() []string {
-	return slices.Sorted(maps.Keys(appNames))
-}
+var listedFamilies = slices.Sorted(maps.Keys(appNames))
 
 // NetworkLabel is the short form of a network key shown on the pages.
 func NetworkLabel(key string) string {
@@ -232,7 +230,12 @@ func NetworkLabel(key string) string {
 	return key[:labelChars]
 }
 
-// reasonsWithOutcome are the catalog codes that mean outcome when they end an attempt.
+// blockedReasons and declinedReasons are the catalog codes that mean that outcome when they end an attempt.
+var (
+	blockedReasons  = reasonsWithOutcome(mcpconnectionattempts.OutcomeBlocked)
+	declinedReasons = reasonsWithOutcome(mcpconnectionattempts.OutcomeDeclined)
+)
+
 func reasonsWithOutcome(outcome mcpconnectionattempts.Outcome) []string {
 	var codes []string
 	for _, code := range mcpconnectionattempts.Codes() {

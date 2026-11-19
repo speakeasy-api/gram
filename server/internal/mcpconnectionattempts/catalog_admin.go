@@ -85,7 +85,7 @@ var adminMeanings = map[Code]adminMeaning{
 	CodeInvalidRemoteSession:             {"The person has no usable connection to the service for this server.", ""},
 	CodeCredentialMisconfigured:          {"The setup that connects this server to the service is incomplete or not valid.", ""},
 	CodeRemoteSessionUnavailable:         {"The service's sign-in system did not answer properly, so Speakeasy could not get or renew access.", ""},
-	CodeProviderRejected:                 {"The service rejected the person's saved access.", ""},
+	CodeProviderRejected:                 {"The server or the service rejected the person's saved access.", ""},
 	CodeTunnelAtCapacity:                 {"The private connection's tunnel was too busy to take the request.", "The tunnel gateway answered with its tunnel-busy error."},
 	CodeTunnelUnavailable:                {"The private connection's tunnel was not available.", ""},
 	CodeKillswitchCheckUnavailable:       {"Speakeasy could not check whether tool calls are paused for this server.", ""},

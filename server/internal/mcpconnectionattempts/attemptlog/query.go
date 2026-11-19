@@ -254,10 +254,10 @@ func attemptsSQL(s Scope, now time.Time) (string, []any, error) {
 
 	liveCutoff := now.Add(-mcpconnectionattempts.AttemptLiveWindow).UnixNano()
 	args = append([]any{
-		listedFamilies(),
+		listedFamilies,
 		liveCutoff,
-		reasonsWithOutcome(mcpconnectionattempts.OutcomeBlocked),
-		reasonsWithOutcome(mcpconnectionattempts.OutcomeDeclined),
+		blockedReasons,
+		declinedReasons,
 	}, args...)
 
 	query := `

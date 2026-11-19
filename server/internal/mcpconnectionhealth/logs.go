@@ -157,7 +157,7 @@ func (n names) facetLabel(facet attemptlog.Facet, value string) *string {
 	case attemptlog.FacetApps:
 		return new(attemptlog.AppName(value))
 	case attemptlog.FacetAppVersions:
-		family, version := splitAppVersion(value)
+		family, version, _ := strings.Cut(value, "@")
 		return new(attemptlog.AppName(family) + " " + version)
 	case attemptlog.FacetReasons:
 		return conv.PtrEmpty(attemptlog.MessageOf(value))
@@ -166,14 +166,6 @@ func (n names) facetLabel(facet attemptlog.Facet, value string) *string {
 	default:
 		return nil
 	}
-}
-
-func splitAppVersion(value string) (string, string) {
-	i := strings.LastIndexByte(value, '@')
-	if i < 0 {
-		return "", value
-	}
-	return value[:i], value[i+1:]
 }
 
 func (s *Service) GetAttempt(ctx context.Context, payload *gen.GetAttemptPayload) (*gen.GetConnectionAttemptResult, error) {
