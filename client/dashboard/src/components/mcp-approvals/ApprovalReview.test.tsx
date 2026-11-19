@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApprovalReview } from "./ApprovalReview";
@@ -26,7 +26,7 @@ vi.mock("@/lib/dates", () => ({
 // The evidence panel has its own tests; this file is about who asked.
 vi.mock("@/components/mcp-approvals/EvidencePanel", () => ({
   EvidenceGroup: ({ children }: { children: ReactNode }) => <>{children}</>,
-  EvidencePanel: () => null,
+  EvidencePanel: () => <div>Evidence groups</div>,
   StatusBadge: ({ status }: { status: string }) => <span>{status}</span>,
 }));
 
@@ -142,5 +142,60 @@ describe("ApprovalReview requesters", () => {
     expect(screen.getByText('"Needed for the release."')).toBeTruthy();
     expect(screen.getByText(/raised/)).toBeTruthy();
     expect(screen.queryByText(/No one has asked for it/)).toBeNull();
+  });
+});
+
+describe("ApprovalReview collapsed evidence", () => {
+  beforeEach(() => {
+    mocks.detail = undefined;
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("keeps the evidence inline by default, as the review sheet shows it", () => {
+    mocks.detail = detail({ status: "denied", decisions: [denial] });
+
+    render(<ApprovalReview requestId="request-id" />);
+
+    expect(screen.getByText("Evidence groups")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Evidence/ })).toBeNull();
+  });
+
+  it("folds decided evidence behind a disclosure with its action on the row", () => {
+    mocks.detail = detail({ status: "denied", decisions: [denial] });
+
+    render(
+      <ApprovalReview
+        requestId="request-id"
+        title="Access review"
+        collapseEvidence
+        evidenceAction={<button type="button">Refresh evidence</button>}
+      />,
+    );
+
+    expect(screen.queryByText("Evidence groups")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Refresh evidence" }),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /Evidence/ }));
+
+    expect(screen.getByText("Evidence groups")).toBeTruthy();
+  });
+
+  it("opens the evidence while a decision is awaited", () => {
+    mocks.detail = detail({ status: "requested" });
+
+    render(
+      <ApprovalReview
+        requestId="request-id"
+        title="Access review"
+        collapseEvidence
+      />,
+    );
+
+    expect(screen.getByText("Evidence groups")).toBeTruthy();
   });
 });

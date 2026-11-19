@@ -1,4 +1,5 @@
 import { IdentityLink } from "@/components/identity-link";
+import { useHideInsightsDock } from "@/components/insights-context";
 import {
   encodeIdentityUrn,
   identityRefForUserKey,
@@ -10,6 +11,7 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Heading } from "@/components/ui/Heading";
 import { MetricCard, type MetricCardProps } from "@/components/ui/MetricCard";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { type Column, Table } from "@/components/ui/Table";
@@ -127,9 +129,7 @@ function UserSources({
 }
 
 // MetricCard defaults to the roomier p-6/gap-4 the deployment page uses. This
-// strip shares a row with the review header and sits above dense hairline
-// tables, so it matches their rhythm, and px-3 puts its labels on the same left
-// rail as the fact lists below.
+// strip sits above dense hairline tables, so it matches their rhythm.
 const SUMMARY_TILE_CLASS = "gap-2 px-3 py-3";
 
 /** Day without the time, for a figure that has to read at a glance. */
@@ -168,13 +168,8 @@ function statusTone(status: ShadowMCPInventoryStatus): MetricCardProps["tone"] {
 }
 
 /**
- * The server at a glance: status, traffic, and recency as one bordered strip.
- *
- * Handed to the review as its `summary` so the two share a row. It replaced a
- * badge and two lines of prose in a full-width block, where the status sat
- * alone on the left and the figures had nowhere to go that did not read as an
- * island — giving every figure the same shape and its own column fills the
- * width by construction instead.
+ * The server at a glance: status, traffic, and recency as one bordered strip,
+ * first on the page so the answer comes before the detail.
  */
 function ServerSummary({ server }: { server: ShadowMCPInventoryServer }) {
   const status = shadowMCPInventoryStatus(server);
@@ -352,12 +347,11 @@ function TopUsersTable({
   );
 }
 
-function DetailActionButtons({
+function DecideAccessButton({
   disabled,
   onOpenDecide,
   policiesUnavailable,
   server,
-  projectSlug,
 }: {
   disabled: boolean;
   onOpenDecide: () => void;
@@ -368,31 +362,21 @@ function DetailActionButtons({
    */
   policiesUnavailable: boolean;
   server: ShadowMCPInventoryServer;
-  projectSlug: string;
 }) {
   const pendingReview = server.approvalRequest?.status === "requested";
 
   return (
-    <div className="flex items-center gap-2">
-      {server.approvalRequest && (
-        <RefreshEvidenceButton
-          requestId={server.approvalRequest.id}
-          projectSlug={projectSlug}
-          ready={!disabled}
-        />
-      )}
-      <Button
-        disabled={disabled || policiesUnavailable}
-        onClick={onOpenDecide}
-        variant={pendingReview ? "primary" : "secondary"}
-        size="sm"
-        title={policiesUnavailable ? POLICIES_UNAVAILABLE_REASON : undefined}
-      >
-        <Button.Text>
-          {pendingReview ? "Review Request" : "Decide Access"}
-        </Button.Text>
-      </Button>
-    </div>
+    <Button
+      disabled={disabled || policiesUnavailable}
+      onClick={onOpenDecide}
+      variant={pendingReview ? "primary" : "secondary"}
+      size="sm"
+      title={policiesUnavailable ? POLICIES_UNAVAILABLE_REASON : undefined}
+    >
+      <Button.Text>
+        {pendingReview ? "Review request" : "Decide access"}
+      </Button.Text>
+    </Button>
   );
 }
 
@@ -488,7 +472,19 @@ function EnsureServerReview({
   );
 }
 
+/** A section title on this page, in the same serif as the access review's. */
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <Heading variant="h3" className="text-lg font-thin">
+      {children}
+    </Heading>
+  );
+}
+
 export default function ShadowMCPServerDetail(): JSX.Element {
+  // The Project Assistant cannot read this server's inventory or review,
+  // so its dock stays off the Shadow MCP pages.
+  useHideInsightsDock();
   const { serverSlug = "" } = useParams<{ serverSlug: string }>();
   const project = useProject();
   const routes = useRoutes();
@@ -621,9 +617,6 @@ export default function ShadowMCPServerDetail(): JSX.Element {
     setUsersCursor(nextUsersCursor);
   };
 
-  // Built once and rendered wherever the review puts it: inside the evidence
-  // for a server that has one, standalone under its own heading for a server
-  // that does not.
   const usersPanel =
     usersQuery.isLoading && !hasLoadedUserPages ? (
       <SkeletonTable />
@@ -732,12 +725,11 @@ export default function ShadowMCPServerDetail(): JSX.Element {
             </Page.Section.Description>
             <Page.Section.CTA>
               {server && (
-                <DetailActionButtons
+                <DecideAccessButton
                   disabled={decideTarget !== null}
                   onOpenDecide={openDecide}
                   policiesUnavailable={policiesQuery.isError}
                   server={server}
-                  projectSlug={project.slug}
                 />
               )}
             </Page.Section.CTA>
@@ -770,41 +762,36 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                     members={membersQuery.data?.members ?? []}
                     roles={rolesQuery.data?.roles ?? []}
                   />
-                  {/* First on the page: turning the server into an official
-                      one is the outcome the inventory leads to, and the
-                      review below is the evidence for it. */}
+                  {/* State first, then the two outcomes: serve it as an
+                      official server, or decide who may connect. Who uses
+                      it is what either outcome changes, so it comes next;
+                      the review and its evidence are detail below. */}
+                  <ServerSummary server={server} />
                   <OfficialServerPanel server={server} />
+                  <section className="space-y-3">
+                    <SectionHeading>Who uses it</SectionHeading>
+                    {usersPanel}
+                  </section>
                   <section className="min-h-0 space-y-3">
-                    {/* The review owns its own heading: the request's status
-                        shares that row, and only the review has it. Observed
-                        traffic goes in with the evidence rather than trailing
-                        it as a section of its own — who calls the server is
-                        one of the questions a reviewer is asking. */}
                     {server.approvalRequest ? (
                       <ApprovalReview
                         requestId={server.approvalRequest.id}
                         title="Access review"
-                        usage={usersPanel}
-                        summary={<ServerSummary server={server} />}
+                        collapseEvidence
+                        evidenceAction={
+                          <RefreshEvidenceButton
+                            requestId={server.approvalRequest.id}
+                            projectSlug={project.slug}
+                            ready={decideTarget === null}
+                          />
+                        }
                       />
                     ) : (
                       <>
-                        {/* No dossier yet, so the review has no header to
-                            share a row with — the strip stands alone until
-                            the gather lands and the two-column row appears. */}
-                        <ServerSummary server={server} />
+                        <SectionHeading>Access review</SectionHeading>
                         <EnsureServerReview
                           canonicalServerUrl={server.canonicalServerUrl}
                         />
-                        <div>
-                          <Text variant="subheading">
-                            Who is currently using it?
-                          </Text>
-                          <Text muted small>
-                            Users with observed calls to this Shadow MCP server.
-                          </Text>
-                        </div>
-                        {usersPanel}
                       </>
                     )}
                   </section>

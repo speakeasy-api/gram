@@ -5,21 +5,30 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   scope: undefined as unknown,
+  description: undefined as unknown,
+  hideDock: vi.fn(),
+}));
+
+vi.mock("@/components/insights-context", () => ({
+  useHideInsightsDock: state.hideDock,
 }));
 
 vi.mock("@/components/page-templates", () => ({
   ResourceListPage: ({
     title,
+    description,
     scope,
     primaryAction,
     children,
   }: {
     title: string;
+    description?: string;
     scope: unknown;
     primaryAction?: ReactNode;
     children: ReactNode;
   }) => {
     state.scope = scope;
+    state.description = description;
     return (
       <div>
         <h1>{title}</h1>
@@ -44,6 +53,8 @@ afterEach(cleanup);
 
 beforeEach(() => {
   state.scope = undefined;
+  state.description = undefined;
+  state.hideDock.mockClear();
 });
 
 describe("ShadowMCP", () => {
@@ -71,5 +82,18 @@ describe("ShadowMCP", () => {
     );
     expect(screen.queryByRole("link", { name: "Set up policy" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Edit policy" })).toBeNull();
+  });
+
+  it("keeps the header to one short line and hides the Project Assistant", () => {
+    render(
+      <MemoryRouter>
+        <ShadowMCP />
+      </MemoryRouter>,
+    );
+
+    expect(state.description).toBe(
+      "Decide which MCP servers your team's agents may connect to.",
+    );
+    expect(state.hideDock).toHaveBeenCalled();
   });
 });

@@ -1,3 +1,4 @@
+import { useHideInsightsDock } from "@/components/insights-context";
 import { ResourceListPage } from "@/components/page-templates";
 import { ShadowMCPModeControl } from "@/components/shadow-mcp/ShadowMCPModeControl";
 import { MCPApprovalsTab } from "@/pages/security/MCPApprovalsTab";
@@ -14,13 +15,17 @@ import { MCPApprovalsTab } from "@/pages/security/MCPApprovalsTab";
  *
  * The inventory reads and every decision require org:admin, so the page is
  * gated there, the same as Guardrails.
+ *
+ * The Project Assistant dock stays off here: it cannot read the inventory or
+ * its requests, so it could only answer around the page's one job.
  */
 export default function ShadowMCP(): JSX.Element {
+  useHideInsightsDock();
   return (
     <ResourceListPage
       scope="org:admin"
       title="Shadow MCP"
-      description="See the MCP servers your team's agents use, and decide which may connect."
+      description="Decide which MCP servers your team's agents may connect to."
       primaryAction={<ShadowMCPModeControl />}
       hideToolbar
       fullHeight

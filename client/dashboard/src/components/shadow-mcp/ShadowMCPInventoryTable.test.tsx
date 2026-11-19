@@ -904,19 +904,17 @@ describe("ShadowMCPInventoryTable", () => {
       expect(screen.getByText("Beta MCP")).toBeTruthy();
     });
 
-    for (const header of [
-      "Server",
-      "Status",
-      "Last called",
-      "Last seen",
-      "Usage",
-    ]) {
+    for (const header of ["Server", "Status", "Last called", "Usage"]) {
       expect(screen.getByRole("button", { name: header })).toBeTruthy();
     }
+
+    // Last seen rides under the call date rather than taking a column.
+    expect(screen.queryByRole("button", { name: "Last seen" })).toBeNull();
 
     let rows = screen.getAllByRole("row").slice(1);
     expect(within(rows[0]!).getByText("Alpha MCP")).toBeTruthy();
     expect(within(rows[1]!).getByText("Beta MCP")).toBeTruthy();
+    expect(within(rows[1]!).getByText(/^Seen /)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Usage" }));
 

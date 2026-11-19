@@ -78,6 +78,25 @@ type InventoryPage = {
 
 const EMPTY_INVENTORY_PAGES: InventoryPage[] = [];
 
+function LastActivityCell({ server }: { server: ShadowMCPInventoryServer }) {
+  const seen = observedDate(server.lastSeen);
+  return (
+    <div className="space-y-1">
+      <Text variant="small">{formatShortDate(server.lastCalled)}</Text>
+      {seen && (
+        <Text
+          muted
+          small
+          className="text-xs"
+          title="Last seen in an agent's list of MCP servers"
+        >
+          Seen {formatShortDate(seen)}
+        </Text>
+      )}
+    </div>
+  );
+}
+
 function InventoryStatusCell({ server }: { server: ShadowMCPInventoryServer }) {
   const status = shadowMCPInventoryStatus(server);
 
@@ -375,26 +394,15 @@ export function ShadowMCPInventoryTable({
       render: (server) => <ShadowMCPInventoryReviewCell server={server} />,
     },
     {
+      // When it was last seen in an agent's server list rides under the call
+      // date: it answers "is it still around?" for a server nobody calls,
+      // and a column of its own cost the table a second date to scan.
       key: "lastCalled",
       header: "Last called",
       sortable: true,
       sortValue: (server) => server.lastCalled?.getTime() ?? 0,
-      width: "0.7fr",
-      render: (server) => (
-        <Text variant="small">{formatShortDate(server.lastCalled)}</Text>
-      ),
-    },
-    {
-      key: "lastSeen",
-      header: "Last seen",
-      sortable: true,
-      sortValue: (server) => observedDate(server.lastSeen)?.getTime() ?? 0,
-      width: "0.7fr",
-      render: (server) => (
-        <Text variant="small">
-          {formatShortDate(observedDate(server.lastSeen))}
-        </Text>
-      ),
+      width: "0.9fr",
+      render: (server) => <LastActivityCell server={server} />,
     },
     {
       key: "usage",
