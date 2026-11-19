@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"errors"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -17,10 +18,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/orgencryption/orgencryptiontest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"sync"
 )
 
 func TestOrganizationKeySealsSignInAndRefresh(t *testing.T) {
@@ -135,4 +138,69 @@ func TestSignInWithASuspendedOrganizationKeyNeverRedeemsTheCode(t *testing.T) {
 
 	_, err = env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 	require.ErrorIs(t, err, pgx.ErrNoRows, "nothing was stored")
+}
+
+// A refresh the provider rejected while a concurrent winner stored a live
+// token stays retryable when the organization's key cannot open that token:
+// the rejection no longer describes the session.
+func TestInvalidGrantWithAConcurrentWinnerTheKeyCannotOpenIsRetryable(t *testing.T) {
+	t.Parallel()
+
+	refreshArrived := make(chan struct{})
+	releaseRefresh := make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releaseRefresh) }) }
+	t.Cleanup(release)
+
+	ctx, env := newSyntheticExpiryEnv(t, "org-key-winner", func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if r.Form.Get("grant_type") != "refresh_token" {
+			_, _ = w.Write([]byte(`{"access_token":"access-initial","refresh_token":"refresh-initial"}`))
+			return
+		}
+		close(refreshArrived)
+		<-releaseRefresh
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
+	}, withOrganizationEncryption())
+	require.NoError(t, testrepo.New(env.db).ExpireRemoteSessionAccessTokenFixture(ctx, env.session.ID))
+
+	resolved := make(chan error, 1)
+	go func() {
+		_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
+		resolved <- err
+	}()
+	<-refreshArrived
+
+	// A concurrent sign-in moves the row and stores a live pair, then the key
+	// is suspended.
+	winner, err := env.q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
+		SubjectUrn:            env.subject,
+		UserSessionIssuerID:   env.session.UserSessionIssuerID,
+		RemoteSessionClientID: env.clientID,
+		AccessTokenEncrypted:  "placeholder",
+		AccessExpiresAt:       conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
+		RefreshTokenEncrypted: pgtype.Text{String: "", Valid: false},
+		RefreshExpiresAt:      pgtype.Timestamptz{},
+		Scopes:                env.session.Scopes,
+		Resource:              pgtype.Text{},
+	})
+	require.NoError(t, err)
+	require.Equal(t, env.session.ID, winner.ID)
+	_, err = env.orgEncryption.tokens.SetRemoteSession(ctx, env.db, env.session.ID, conv.ToPGText(env.organizationID), upstreamtokens.RemoteSessionTokens{AccessToken: "access-winner", RefreshToken: "refresh-winner", KeepRefreshToken: false})
+	require.NoError(t, err)
+	require.NoError(t, env.orgEncryption.fixture.Provisioner.Suspend(ctx, env.organizationID, "customer disabled the key", orgencryption.SystemActor()))
+	// Sealing the winner's pair cached the key; drop it, as the cache would on expiry.
+	env.orgEncryption.fixture.Service.Forget(env.organizationID)
+	release()
+
+	err = <-resolved
+	require.True(t, orgencryption.IsKeyProblem(err), "the key outage is reported, not the provider's rejection: %v", err)
+	refreshErr, ok := errors.AsType[*remotesessions.TokenRefreshError](err)
+	require.True(t, ok)
+	require.NotEqual(t, "invalid_grant", refreshErr.UpstreamCode(), "nothing acts on a rejection that no longer describes the session")
 }

@@ -21,6 +21,8 @@ func TestIsUnreadableAndIsKeyProblem(t *testing.T) {
 	}{
 		{name: "unreadable", err: orgencryption.ErrUnreadable, unreadable: true, keyProblem: false},
 		{name: "missing", err: orgencryption.ErrMissing, unreadable: true, keyProblem: false},
+		{name: "wrapped unreadable", err: fmt.Errorf("open token: %w", orgencryption.ErrUnreadable), unreadable: true, keyProblem: false},
+		{name: "wrapped missing", err: fmt.Errorf("open token: %w", orgencryption.ErrMissing), unreadable: true, keyProblem: false},
 		{name: "suspended", err: orgencryption.ErrSuspended, unreadable: false, keyProblem: true},
 		{name: "key unavailable", err: orgencryption.ErrKeyUnavailable, unreadable: false, keyProblem: true},
 		{name: "fenced", err: orgencryption.ErrFenced, unreadable: false, keyProblem: true},

@@ -1206,7 +1206,13 @@ func (s *RefreshService) refresh(
 		return zero, &client, nil, refreshErr
 	}
 	plain, err := openAccessToken(ctx, s.tokens, latest)
-	if err != nil {
+	switch {
+	case err != nil && orgencryption.IsKeyProblem(err):
+		// A concurrent winner holds a live token the key cannot open right
+		// now. Our own failure no longer describes the session, so the caller
+		// retries instead of acting on it.
+		return zero, &client, nil, newTokenRefreshError("the session's refreshed access token could not be opened right now; try again shortly", err, refreshRemedyRetry)
+	case err != nil:
 		return zero, &client, nil, refreshErr
 	}
 
