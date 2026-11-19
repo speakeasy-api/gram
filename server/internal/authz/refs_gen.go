@@ -161,6 +161,22 @@ func (r MCPServerRef) Connect() Check {
 	return newRefCheck(ScopeMCPConnect, r.id, r.dimensions(), MatchLoose)
 }
 
+// ToolCall requests ScopeMCPConnect with tool and disposition. An empty value is left out of the
+// check.
+func (r MCPServerRef) ToolCall(tool, disposition string) Check {
+	dimensions := r.dimensions()
+	if dimensions == nil {
+		dimensions = map[string]string{}
+	}
+	if tool != "" {
+		dimensions["tool"] = tool
+	}
+	if disposition != "" {
+		dimensions["disposition"] = disposition
+	}
+	return newRefCheck(ScopeMCPConnect, r.id, dimensions, MatchLoose)
+}
+
 // EnvironmentRef names one environment resource for a request.
 type EnvironmentRef struct {
 	id      string
