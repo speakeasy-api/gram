@@ -47,7 +47,8 @@ type GetAttemptCountsRequestBody struct {
 // GetAttemptRequestBody is the type of the "mcpConnectionHealth" service
 // "getAttempt" endpoint HTTP request body.
 type GetAttemptRequestBody struct {
-	// The attempt reference a person was shown, or a row id from listAttempts.
+	// The attempt reference a person was shown, or a row id from listAttempts. Any
+	// string; one that matches nothing is not found.
 	Reference string `form:"reference" json:"reference" xml:"reference"`
 }
 

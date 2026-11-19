@@ -8,8 +8,6 @@
 package server
 
 import (
-	"unicode/utf8"
-
 	mcpconnectionhealth "github.com/speakeasy-api/gram/server/gen/mcp_connection_health"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -49,7 +47,8 @@ type GetAttemptCountsRequestBody struct {
 // GetAttemptRequestBody is the type of the "mcpConnectionHealth" service
 // "getAttempt" endpoint HTTP request body.
 type GetAttemptRequestBody struct {
-	// The attempt reference a person was shown, or a row id from listAttempts.
+	// The attempt reference a person was shown, or a row id from listAttempts. Any
+	// string; one that matches nothing is not found.
 	Reference *string `form:"reference,omitempty" json:"reference,omitempty" xml:"reference,omitempty"`
 }
 
@@ -2677,11 +2676,6 @@ func ValidateGetAttemptCountsRequestBody(body *GetAttemptCountsRequestBody) (err
 func ValidateGetAttemptRequestBody(body *GetAttemptRequestBody) (err error) {
 	if body.Reference == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("reference", "body"))
-	}
-	if body.Reference != nil {
-		if utf8.RuneCountInString(*body.Reference) > 200 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.reference", *body.Reference, utf8.RuneCountInString(*body.Reference), 200, false))
-		}
 	}
 	return
 }

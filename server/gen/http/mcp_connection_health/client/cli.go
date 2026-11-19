@@ -10,7 +10,6 @@ package client
 import (
 	"encoding/json"
 	"fmt"
-	"unicode/utf8"
 
 	mcpconnectionhealth "github.com/speakeasy-api/gram/server/gen/mcp_connection_health"
 	goa "goa.design/goa/v3/pkg"
@@ -154,13 +153,7 @@ func BuildGetAttemptPayload(mcpConnectionHealthGetAttemptBody string, mcpConnect
 	{
 		err = json.Unmarshal([]byte(mcpConnectionHealthGetAttemptBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"reference\": \"aaa\"\n   }'")
-		}
-		if utf8.RuneCountInString(body.Reference) > 200 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.reference", body.Reference, utf8.RuneCountInString(body.Reference), 200, false))
-		}
-		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"reference\": \"abc123\"\n   }'")
 		}
 	}
 	var sessionToken *string
