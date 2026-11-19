@@ -50,7 +50,7 @@ SELECT count(*) FROM remote_session_ema_bindings WHERE organization_id = sqlc.ar
 SELECT count(*) FROM mcp_server_auth_clients WHERE organization_id = sqlc.arg(organization_id) AND auth_client_id = sqlc.arg(client_id) AND NOT deleted AND mcp_server_id IN (sqlc.arg(first_server_id), sqlc.arg(second_server_id));
 
 -- name: SetPreparationInheritedClientSecretFixture :exec
-UPDATE remote_session_clients SET token_endpoint_auth_method = 'client_secret_basic', client_secret_encrypted = sqlc.arg(encrypted_secret), grant_types = sqlc.arg(grant_types) WHERE id = sqlc.arg(client_id) AND organization_id = sqlc.arg(organization_id) AND project_id IS NULL;
+UPDATE remote_session_clients SET token_endpoint_auth_method = 'client_secret_basic', client_secret_encrypted = sqlc.arg(encrypted_secret), client_secret_org_encrypted = NULL, client_secret_generation = client_secret_generation + 1, grant_types = sqlc.arg(grant_types) WHERE id = sqlc.arg(client_id) AND organization_id = sqlc.arg(organization_id) AND project_id IS NULL;
 
 -- name: GetPreparationBindingStateFixture :one
 SELECT state FROM remote_session_ema_bindings WHERE id = sqlc.arg(binding_id) AND project_id = sqlc.arg(project_id);

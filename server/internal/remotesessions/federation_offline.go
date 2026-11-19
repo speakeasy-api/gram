@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -29,7 +30,7 @@ func (p *FederatedProvider) OfflinePolicy() (FederatedOfflinePolicy, error) {
 	}
 	advertised := p.metadata.ScopesSupported
 	enabled := slices.Contains(scopes, "offline_access") && (advertised == nil || slices.Contains(advertised, "offline_access"))
-	// The encrypted credential digest identifies rotation without retaining secrets.
+	// The client secret's revision identifies rotation without retaining secrets.
 	// Do not use the provider fingerprint: discovery order and unrelated metadata
 	// must not reset a human's refusal suppression.
 	encoded, err := json.Marshal(federatedOfflinePolicyRevision{
@@ -120,12 +121,11 @@ func FederatedDelegationConfigurationHash(organizationID string, issuer repo.Rem
 	if !slices.Contains(scopes, "openid") || !slices.Contains(scopes, "email") {
 		return ""
 	}
-	secretRevision := sha256.Sum256([]byte(client.ClientSecretEncrypted.String))
 	encoded, err := json.Marshal(federatedDelegationRegistrationRevision{
 		Organization: organizationID, IssuerID: issuer.ID.String(), Issuer: issuer.Issuer,
 		ClientID: client.ID.String(), Client: client.ClientID,
 		Method: client.TokenEndpointAuthMethod.String, Audience: client.TokenEndpointAuthAudienceFormat.String,
-		Key: client.JsonWebKeySetID.UUID.String(), CredentialRevision: hex.EncodeToString(secretRevision[:]),
+		Key: client.JsonWebKeySetID.UUID.String(), CredentialRevision: strconv.FormatInt(client.ClientSecretGeneration, 10),
 		Authorization: issuer.AuthorizationEndpoint.String, Token: issuer.TokenEndpoint.String, JWKS: issuer.JwksUri.String,
 		Tunnel: issuer.TunneledMcpServerID.UUID.String(), SecretExpiry: client.ClientSecretExpiresAt.Time.UTC().String(),
 		Scopes: scopes, SigningRevision: revision,
