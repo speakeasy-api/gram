@@ -80,17 +80,23 @@ func TestSnapshotOwnsAllMutableData(t *testing.T) {
 	products := Products()
 	snapshot := NewSnapshot(products)
 	fingerprint := snapshot.Fingerprint()
+	expectedProducts := Products()
 	expectedCatalog := slices.Clone(snapshot.Catalog())
-	products[0].Documents[0].URL = "https://changed.example.com/client.json"
+	products[0].Documents[0].URL = "https://changed.example.com/input.json"
 	copied := snapshot.Products()
-	copied[0].Documents = nil
+	copied[0].Documents[0].URL = "https://changed.example.com/copy.json"
 	for i := range copied {
 		if len(copied[i].Signatures.BundleIDs) > 0 {
 			copied[i].Signatures.BundleIDs[0] = "changed"
 		}
+		if len(copied[i].ClientInfoNames) > 0 {
+			copied[i].ClientInfoNames[0] = "changed"
+		}
 	}
 	presets := snapshot.Catalog()
+	presets[0].URL = "https://changed.example.com/preset.json"
 	presets[0].Enabled = !presets[0].Enabled
+	require.Equal(t, expectedProducts, snapshot.Products())
 	require.Equal(t, expectedCatalog, snapshot.Catalog())
 	require.Equal(t, fingerprint, NewSnapshot(snapshot.Products()).Fingerprint())
 	require.Equal(t, fingerprint, snapshot.Fingerprint())

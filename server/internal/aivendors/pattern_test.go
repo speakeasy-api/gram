@@ -192,6 +192,7 @@ func TestValidatePattern_RejectsMalformed(t *testing.T) {
 	require.ErrorIs(t, validatePattern("https://chatgpt.com/a//b"), errPatternEmptySegment)
 	require.ErrorIs(t, validatePattern("ftp://chatgpt.com/x"), errPatternUnparseable)
 	require.ErrorIs(t, validatePattern("https:///x"), errPatternUnparseable)
+	require.ErrorIs(t, validatePattern("https://:443/*"), errPatternUnparseable)
 }
 
 func TestPatternRejectsPathInsideQueryOrFragment(t *testing.T) {
@@ -238,19 +239,18 @@ func TestCatalogAdmits_ChatGPTConnectorNamespace(t *testing.T) {
 
 // TestCatalogAdmits_CodexPerServerNamespace exercises the Codex CLI pattern
 // against the client_id shape Codex ≥0.148.0 presents: {id} is a 12-char
-// base64url-no-pad digest of the MCP server URL, so real ids draw only on
+// base64url-no-pad digest of the MCP server URL, so ids draw only on
 // A-Z, a-z, 0-9, "-", and "_" — an alphabet containing no "/", which is
 // what makes single-segment matching sound for this namespace.
 func TestCatalogAdmits_CodexPerServerNamespace(t *testing.T) {
 	t.Parallel()
 
-	// The first two are real ids observed in production denials (AIS-582);
-	// between them they cover the "-" alphabet character, and the third
-	// covers "_".
+	// Synthetic ids with the shape observed in production denials (AIS-582);
+	// the second covers the "-" alphabet character and the third covers "_".
 	admitted := []string{
-		"https://chatgpt.com/oauth/codex/WoV6218LroET/client.json",
-		"https://chatgpt.com/oauth/codex/Lv2-Pvw8pHkH/client.json",
-		"https://chatgpt.com/oauth/codex/p9jr1GJD7_bK/client.json",
+		"https://chatgpt.com/oauth/codex/Qx7mT2bLk9Pa/client.json",
+		"https://chatgpt.com/oauth/codex/Hn4-Rz8wYc3D/client.json",
+		"https://chatgpt.com/oauth/codex/f6Kd2Vs_9JtM/client.json",
 	}
 	for _, clientID := range admitted {
 		require.Truef(t, matchesPattern(codexPattern, clientID), "%q should match", clientID)
@@ -301,16 +301,16 @@ func TestCatalogAdmits_ExactEntriesUnaffectedByPatterns(t *testing.T) {
 }
 
 // TestCatalogAdmits_VercelConnectNamespace exercises the Vercel Connect
-// connector wildcard against the real client_id shape observed in production
+// connector wildcard against the client_id shape observed in production
 // (scl_...) and the boundary cases that must be rejected.
 func TestCatalogAdmits_VercelConnectNamespace(t *testing.T) {
 	t.Parallel()
 
 	const vercelPattern = "https://connect.vercel.com/connectors/*"
 
-	// Real connector ID from production (AIM-383)
+	// Synthetic id with the connector id shape observed in production (AIM-383)
 	admitted := []string{
-		"https://connect.vercel.com/connectors/scl_lcd9uojo79WQ4Qh3UZKvLQ",
+		"https://connect.vercel.com/connectors/scl_Xr7Kp2Qm9TzL4wBn8VcY3d",
 		"https://connect.vercel.com/connectors/scl_abc123xyz",
 	}
 	for _, clientID := range admitted {

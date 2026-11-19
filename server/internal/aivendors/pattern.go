@@ -71,7 +71,8 @@ func validatePattern(pattern string) error {
 	}
 	// url.Parse still earns its keep as a structural sanity check on the
 	// whole pattern, with wildcards stubbed out so it sees a normal URL.
-	if _, err := url.Parse(strings.ReplaceAll(pattern, "*", "x")); err != nil {
+	parsed, err := url.Parse(strings.ReplaceAll(pattern, "*", "x"))
+	if err != nil || parsed.Hostname() == "" {
 		return errPatternUnparseable
 	}
 	if rest == "" {
