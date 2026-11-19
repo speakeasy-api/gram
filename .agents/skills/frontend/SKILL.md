@@ -346,6 +346,22 @@ Checklist for the content below the title:
 
 A page that renders its own `<h1>` instead of this pattern is a defect; if a custom header is unavoidable, it must still render `<PageEyebrow />` + `text-display-sm font-thin`.
 
+## Keep imports lightweight
+
+Vitest evaluates transitive imports for each isolated test file. Production tree-shaking does not remove that test startup work. Keep shared primitives and helpers cheap to import:
+
+```typescript
+import { format } from "date-fns/format";
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
+```
+
+- Use named imports from supported `date-fns/<function>` entry points instead of the package root.
+- Keep `SkeletonTable` in its own module; import it there in components, stories, and test mocks. Keep basic `Skeleton` and `Text` free of the table and animation dependency graph. Re-exporting `SkeletonTable` from `Skeleton` brings that graph back.
+- When rebasing, preserve main's behavior and migrate any new callers to these entry points. Check stories and mocks as well as production imports.
+- Preserve the import-boundary regression tests in `client/dashboard/src/components/ui/Skeleton/imports.test.tsx` and `client/dashboard/src/lib/dates.imports.test.ts`. They load the real lightweight modules and fail if the heavy dependencies are evaluated; mocking the module under test defeats the guard.
+
 ## Design-system inventory (consolidated — don't import the removed ones)
 
 The primitive shelf was consolidated; these imports are gone or moved. Reaching for a removed one is a defect:

@@ -19,7 +19,7 @@ import { useOrgRoutes } from "@/routes";
 import type { FleetDevice } from "@gram/client/models/components/fleetdevice.js";
 import type { ManagedDeviceAgentState } from "@gram/client/models/components/manageddeviceagentstate.js";
 import type { ManagedDeviceTool } from "@gram/client/models/components/manageddevicetool.js";
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 import { ChevronDown } from "lucide-react";
 import { Link } from "react-router";
 import {

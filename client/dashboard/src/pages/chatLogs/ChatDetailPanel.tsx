@@ -2,7 +2,8 @@ import { SlackChannelLink } from "@/components/slack-channel-link";
 import { claudeTagMetadata, projectClaudeTagRows } from "./claudeTag";
 import { IdentityLink } from "@/components/identity-link";
 import { AssistantActorLink } from "@/components/assistant-actor-link";
-import { format, formatDistanceToNow } from "date-fns";
+import { format } from "date-fns/format";
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
 import {
   ArrowLeft,
   ChevronDown,

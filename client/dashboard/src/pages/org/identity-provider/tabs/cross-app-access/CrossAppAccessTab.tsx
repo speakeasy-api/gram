@@ -8,7 +8,7 @@ import { StatRow } from "@/components/stat-row";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Text } from "@/components/ui/Text";
 import { VendorEmaTrustNotice } from "@/components/vendor-ema-trust-notice";
 import { useRowSelection } from "@/hooks/useRowSelection";

@@ -1,7 +1,7 @@
 import { RiskContentNotice } from "./RiskContentNotice";
 import { useRiskContentRestricted } from "./use-risk-content-restricted";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
-import { addDays } from "date-fns";
+import { addDays } from "date-fns/addDays";
 import { useCallback, useMemo } from "react";
 import {
   DRAWER_FOOTNOTE,
