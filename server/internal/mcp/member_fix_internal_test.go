@@ -342,7 +342,7 @@ func TestWithAgentMemberFix_ExplainsAnotherMembersConnection(t *testing.T) {
 	require.ErrorContains(t, explained, `server "linear" refused this call: the agent's connection to it belongs to a different member than the one who issued the agent's key, and an agent key can only use connections owned by the member who issued it`)
 	require.ErrorContains(t, explained, "attach a connection owned by the key's issuer on the agent's MCP sign-in tab at "+testAgentSignIn)
 	require.ErrorContains(t, explained, "have the connection's owner issue the agent's key")
-	require.ErrorContains(t, explained, "ask an organization administrator to set up a shared credential for this server")
+	require.ErrorContains(t, explained, "ask an admin of the server's project to set up a shared credential for this server")
 	require.NotContains(t, explained.Error(), testAgentAccess, "the agent's permissions cannot fix it")
 	require.NotContains(t, explained.Error(), "review its permissions")
 

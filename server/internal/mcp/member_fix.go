@@ -213,7 +213,7 @@ func agentOwnerOnlyError(slug, signInURL string) error {
 		where = "on the agent's MCP sign-in tab at " + signInURL
 	}
 	return agentOwnerOnlyRefusalError{&metaMemberError{message: fmt.Sprintf("server %q refused this call: the agent's connection to it belongs to a different member than the one who issued the agent's key, and an agent key can only use connections owned by the member who issued it. "+
-		"The agent's permissions do not change that. To fix this, attach a connection owned by the key's issuer %s, have the connection's owner issue the agent's key, or ask an organization administrator to set up a shared credential for this server, then retry", slug, where)}}
+		"The agent's permissions do not change that. To fix this, attach a connection owned by the key's issuer %s, have the connection's owner issue the agent's key, or ask an admin of the server's project to set up a shared credential for this server, then retry", slug, where)}}
 }
 
 // agentOwnerOnlyRefusalError is an agent gateway member refused a connection its
