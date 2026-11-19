@@ -24,7 +24,8 @@ const host = nonEmptyString
   .regex(/^[a-z0-9.-]+(:\d+)?$/i)
   .transform((value) => value.toLowerCase());
 
-// A bare hostname without a port, compared against URL.hostname.
+// A bare hostname without a port: compared against URL.hostname, or shown to
+// customers as a DNS target.
 const hostname = nonEmptyString
   .regex(/^[a-z0-9.-]+$/i)
   .transform((value) => value.toLowerCase());
@@ -37,23 +38,38 @@ const httpsURL = nonEmptyString.refine((value) => {
   }
 });
 
-// Each field catches its own failure, so one invalid value drops only that
-// setting. Unknown keys are stripped rather than rejected, so infra can add a
-// setting before the image that reads it ships.
+// An optional setting that drops itself, with an error naming it, when its
+// value is invalid, so one bad value disables only that setting.
+function setting<T extends z.ZodType>(name: string, schema: T) {
+  return schema.optional().catch(() => {
+    console.error(
+      `Ignoring invalid dashboard runtime configuration setting "${name}".`,
+    );
+    return undefined;
+  });
+}
+
+// Unknown keys are stripped rather than rejected, so infra can add a setting
+// before the image that reads it ships.
 const runtimeConfigSchema = z
   .object({
-    posthogKey: nonEmptyString.optional().catch(undefined),
-    posthogHost: httpsURL.optional().catch(undefined),
-    datadogRumApplicationId: nonEmptyString.optional().catch(undefined),
-    datadogRumClientToken: nonEmptyString.optional().catch(undefined),
-    datadogRumSite: host.optional().catch(undefined),
-    datadogRumEnv: nonEmptyString.optional().catch(undefined),
-    tunnelHost: host.optional().catch(undefined),
-    customDomainCname: host.optional().catch(undefined),
-    pylonAppId: nonEmptyString.optional().catch(undefined),
-    firstPartyHosts: z.array(hostname).nonempty().optional().catch(undefined),
+    posthogKey: setting("posthogKey", nonEmptyString),
+    posthogHost: setting("posthogHost", httpsURL),
+    datadogRumApplicationId: setting("datadogRumApplicationId", nonEmptyString),
+    datadogRumClientToken: setting("datadogRumClientToken", nonEmptyString),
+    datadogRumSite: setting("datadogRumSite", hostname),
+    datadogRumEnv: setting("datadogRumEnv", nonEmptyString),
+    tunnelHost: setting("tunnelHost", host),
+    customDomainCname: setting("customDomainCname", hostname),
+    pylonAppId: setting("pylonAppId", nonEmptyString),
+    firstPartyHosts: setting("firstPartyHosts", z.array(hostname).nonempty()),
   })
-  .catch({});
+  .catch(() => {
+    console.error(
+      "Ignoring dashboard runtime configuration that is not a JSON object.",
+    );
+    return {};
+  });
 
 export type RuntimeConfig = z.infer<typeof runtimeConfigSchema>;
 
@@ -102,6 +118,18 @@ export function posthogConfig(
 ): PostHogConfig | null {
   if (!config.posthogKey || !config.posthogHost) return null;
   return { key: config.posthogKey, apiHost: config.posthogHost };
+}
+
+/** Whether any Datadog RUM setting is present, complete or not. */
+export function hasAnyDatadogRumSetting(
+  config: RuntimeConfig = getRuntimeConfig(),
+): boolean {
+  return [
+    config.datadogRumApplicationId,
+    config.datadogRumClientToken,
+    config.datadogRumSite,
+    config.datadogRumEnv,
+  ].some((value) => value !== undefined);
 }
 
 export type DatadogRumConfig = {

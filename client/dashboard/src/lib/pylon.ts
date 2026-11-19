@@ -15,11 +15,12 @@
 
 import { getRuntimeConfig, type RuntimeConfig } from "@/lib/runtime-config";
 
-// Used when the deployment does not configure its own Pylon app.
-const DEFAULT_PYLON_APP_ID = "f9cade16-8d3c-4826-9a2a-034fad495102";
-
-export function pylonAppId(config: RuntimeConfig = getRuntimeConfig()): string {
-  return config.pylonAppId ?? DEFAULT_PYLON_APP_ID;
+// The deployment's Pylon app, or null when it does not configure one: support
+// chat then stays off rather than reaching another deployment's workspace.
+export function pylonAppId(
+  config: RuntimeConfig = getRuntimeConfig(),
+): string | null {
+  return config.pylonAppId ?? null;
 }
 
 export type PylonChatSettings = {

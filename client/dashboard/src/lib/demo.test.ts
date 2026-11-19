@@ -31,7 +31,7 @@ describe("demoProjectPageHref", () => {
     },
   );
 
-  it.each([
+  it.each<[string, string, [string, ...string[]]]>([
     [
       "dev",
       "https://dev.getgram.ai",
@@ -40,7 +40,7 @@ describe("demoProjectPageHref", () => {
     ["another partition", "https://ai.eu.example.com", ["ai.eu.example.com"]],
   ])("links %s to the demo's deployment", (_name, origin, hosts) => {
     const href = demoProjectPageHref("/example/logs", undefined, origin, {
-      firstPartyHosts: hosts as [string, ...string[]],
+      firstPartyHosts: hosts,
     });
     expect(href).toBe(
       `https://app.getgram.ai/explore-demo?redirect=${encodeURIComponent(DEMO_LANDING_PATH)}`,

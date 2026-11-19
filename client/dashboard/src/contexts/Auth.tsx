@@ -199,14 +199,15 @@ export function usePylonInAppChat(user: User | undefined): void {
   useEffect(() => {
     clearLegacyUserStorage();
 
-    if (!user || !import.meta.env.PROD) {
+    const appId = pylonAppId();
+    if (!user || !import.meta.env.PROD || !appId) {
       return;
     }
     const email = user.email;
     const displayName = user.displayName || email;
 
     const chatSettings = {
-      app_id: pylonAppId(),
+      app_id: appId,
       email,
       name: displayName,
       avatar_url: user.photoUrl,

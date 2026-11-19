@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DASHBOARD_CONFIG_META_NAME,
@@ -8,6 +9,7 @@ import {
 import {
   datadogRumConfig,
   getRuntimeConfig,
+  hasAnyDatadogRumSetting,
   parseRuntimeConfig,
   posthogConfig,
 } from "./runtime-config";
@@ -41,21 +43,24 @@ describe("parseRuntimeConfig", () => {
     ["the empty image default", ""],
     ["a missing tag", null],
     ["the unsubstituted placeholder", DASHBOARD_CONFIG_PLACEHOLDER],
-    ["a JSON array", "[]"],
-    ["JSON null", "null"],
   ])("treats %s as an empty configuration", (_name, raw) => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     expect(parseRuntimeConfig(raw)).toEqual({});
     expect(error).not.toHaveBeenCalled();
   });
 
-  it("reports malformed JSON and treats it as empty", () => {
+  it.each([
+    ["malformed JSON", "{not json"],
+    ["a JSON array", "[]"],
+    ["JSON null", "null"],
+  ])("reports %s and treats it as empty", (_name, raw) => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(parseRuntimeConfig("{not json")).toEqual({});
+    expect(parseRuntimeConfig(raw)).toEqual({});
     expect(error).toHaveBeenCalledOnce();
   });
 
-  it("drops only the invalid fields", () => {
+  it("drops only the invalid fields, naming each one", () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
     expect(
       parseRuntimeConfig(
         JSON.stringify({
@@ -73,6 +78,13 @@ describe("parseRuntimeConfig", () => {
       datadogRumSite: undefined,
       firstPartyHosts: undefined,
     });
+    const named = error.mock.calls.map(([message]) => String(message)).sort();
+    expect(named).toEqual(
+      ["datadogRumSite", "firstPartyHosts", "posthogHost", "tunnelHost"].map(
+        (name) =>
+          `Ignoring invalid dashboard runtime configuration setting "${name}".`,
+      ),
+    );
   });
 
   it("lowercases hosts so they compare with URL.hostname", () => {
@@ -89,12 +101,15 @@ describe("parseRuntimeConfig", () => {
     });
   });
 
-  it("allows a port on the tunnel host but not on first-party hosts", () => {
+  it("allows a port only on the tunnel host", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
     expect(
       parseRuntimeConfig(
         JSON.stringify({
           tunnelHost: "localhost:8443",
           firstPartyHosts: ["app.example.com:8443"],
+          customDomainCname: "cname.example.com:443",
+          datadogRumSite: "datadoghq.com:443",
         }),
       ),
     ).toEqual({ tunnelHost: "localhost:8443" });
@@ -147,12 +162,32 @@ describe("datadogRumConfig", () => {
       site: "datadoghq.com",
       env: "prod",
     });
-    expect(datadogRumConfig({ ...full, datadogRumEnv: undefined })).toBeNull();
+  });
+
+  it.each([
+    "datadogRumApplicationId",
+    "datadogRumClientToken",
+    "datadogRumSite",
+    "datadogRumEnv",
+  ] as const)("stays off without %s", (key) => {
+    expect(datadogRumConfig({ ...full, [key]: undefined })).toBeNull();
+  });
+});
+
+describe("hasAnyDatadogRumSetting", () => {
+  it("reports partial RUM settings", () => {
+    expect(hasAnyDatadogRumSetting({})).toBe(false);
+    expect(hasAnyDatadogRumSetting({ datadogRumSite: "datadoghq.com" })).toBe(
+      true,
+    );
   });
 });
 
 describe("index.html placeholder", () => {
-  const indexHtml = fs.readFileSync("index.html", "utf8");
+  const indexHtml = fs.readFileSync(
+    path.resolve(import.meta.dirname, "../../index.html"),
+    "utf8",
+  );
 
   it("is left in index.html for the entrypoint", () => {
     expect(indexHtml).toContain(
