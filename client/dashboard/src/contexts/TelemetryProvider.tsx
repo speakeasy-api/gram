@@ -2,7 +2,8 @@ import {
   rememberLandingUtm,
   setAnalyticsSessionIdSource,
 } from "@/lib/signup-attribution";
-import { getServerURL, isProdHost } from "@/lib/utils";
+import { datadogRumConfig, posthogConfig } from "@/lib/runtime-config";
+import { getServerURL } from "@/lib/utils";
 import posthog from "posthog-js";
 import { type ReactNode, useEffect } from "react";
 import { datadogRum } from "@datadog/browser-rum";
@@ -68,26 +69,41 @@ export function isGramHost(serverURL: string): boolean {
 // Before the router can redirect away from the landing URL.
 rememberLandingUtm();
 
+let warnedMissingPostHog = false;
+
 export const TelemetryProvider = (props: {
   children: ReactNode;
 }): JSX.Element => {
   const serverURL = getServerURL();
-  const isProd = isProdHost(serverURL);
-  const ph = isPublicSharePath()
-    ? null
-    : posthog.init(
-        isProd
-          ? "phc_hiYSF5Axu49I1xs4Z5BG8KCI3PGNLM8ERRs7eocmfX9"
-          : "phc_5S3YhOs1lONwM2yKa0ytVSAyWOR2GhVhwAebkyi022l",
-        {
-          api_host: "https://metrics.speakeasy.com",
-          // PostHog otherwise collects the hardware model by default on
-          // Chromium-based Android browsers.
-          disableDeviceModel: true,
-          feature_flag_request_timeout_ms: 1000,
-        },
-        "speakeasy",
-      );
+  // PostHog and Datadog RUM settings come from the deployment (see
+  // lib/runtime-config.ts). A deployment that sets none runs without either.
+  const posthogSettings = posthogConfig();
+  if (
+    !posthogSettings &&
+    !warnedMissingPostHog &&
+    !shouldUseDevTelemetry(serverURL)
+  ) {
+    // Without PostHog every feature flag reads false. Every deployment except
+    // local development is expected to configure it (GRAM_DASHBOARD_CONFIG).
+    warnedMissingPostHog = true;
+    console.warn(
+      "Dashboard runtime configuration has no PostHog settings; feature flags are off.",
+    );
+  }
+  const ph =
+    isPublicSharePath() || !posthogSettings
+      ? null
+      : posthog.init(
+          posthogSettings.key,
+          {
+            api_host: posthogSettings.apiHost,
+            // PostHog otherwise collects the hardware model by default on
+            // Chromium-based Android browsers.
+            disableDeviceModel: true,
+            feature_flag_request_timeout_ms: 1000,
+          },
+          "speakeasy",
+        );
   setAnalyticsSessionIdSource(ph ? () => ph.get_session_id() : null);
 
   useEffect(() => {
@@ -102,14 +118,14 @@ export const TelemetryProvider = (props: {
       return;
     }
 
-    const serverURL = getServerURL();
-    if (isProdHost(serverURL)) {
+    const rum = datadogRumConfig();
+    if (rum) {
       datadogRum.init({
-        applicationId: "93afb64a-dd15-490c-a749-51b4c5c5a171",
-        clientToken: "pub8358667232c624e2f91e1eaa0bd380fd",
-        site: "datadoghq.com",
+        applicationId: rum.applicationId,
+        clientToken: rum.clientToken,
+        site: rum.site,
         service: "gram",
-        env: "prod",
+        env: rum.env,
         sessionSampleRate: 100,
         sessionReplaySampleRate: 100,
         trackUserInteractions: true,

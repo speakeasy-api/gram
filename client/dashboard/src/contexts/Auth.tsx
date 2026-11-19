@@ -5,7 +5,7 @@ import type { SessionInfoResponse } from "@gram/client/models/operations/session
 import { useSessionInfo } from "@gram/client/react-query/sessionInfo.js";
 import { createContext, useContext, useEffect, useState } from "react";
 import { useLocation } from "react-router";
-import { initializePylon, PYLON_APP_ID } from "@/lib/pylon";
+import { initializePylon, pylonAppId } from "@/lib/pylon";
 import { clearLegacyUserStorage } from "@/lib/logout-storage";
 import {
   initializeFermat,
@@ -212,7 +212,7 @@ export function usePylonInAppChat(user: User | undefined): void {
     const displayName = user.displayName || email;
 
     const chatSettings = {
-      app_id: PYLON_APP_ID,
+      app_id: pylonAppId(),
       email,
       name: displayName,
       avatar_url: user.photoUrl,
