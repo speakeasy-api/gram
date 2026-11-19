@@ -66,6 +66,16 @@ describe("ViewOrgSessionsButton", () => {
     );
   });
 
+  it("asks for the sessions list while the flag is still loading", () => {
+    health.mockReturnValue("pending");
+
+    render(<ViewOrgSessionsButton />, { wrapper: MemoryRouter });
+
+    expect(link()?.getAttribute("href")).toBe(
+      "/org-slug/projects/project-slug/mcp-sessions?view=sessions",
+    );
+  });
+
   it("renders nothing without read access to the active project", () => {
     hasScope.mockReturnValue(false);
 

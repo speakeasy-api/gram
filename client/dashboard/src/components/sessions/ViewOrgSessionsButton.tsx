@@ -22,7 +22,9 @@ export function ViewOrgSessionsButton(): JSX.Element | null {
     <routes.mcpSessions.Link
       className="hover:no-underline"
       queryParams={
-        health === "on"
+        // The index drops it when the flag turns out off; a click while the flag
+        // loads must not land on Overview.
+        health !== "off"
           ? { [LANDING_VIEW_PARAM]: SESSIONS_LANDING_VIEW }
           : undefined
       }

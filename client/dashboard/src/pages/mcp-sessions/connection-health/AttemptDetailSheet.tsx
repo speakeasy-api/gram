@@ -133,7 +133,8 @@ export function AttemptDetailSheet({
 function questionFor(attempt: AttemptDetail, who: string, where: string) {
   const to = where ? ` to ${where}` : "";
   // An attempt with no known person is "this connection", not "No known person's".
-  const connection = `${attempt.person ? `${who}'s` : "this"} connection${to}`;
+  const known = attempt.person && attempt.person.kind !== "anonymous";
+  const connection = `${known ? `${who}'s` : "this"} connection${to}`;
   switch (attempt.outcome) {
     case "connected":
       return `What happened in ${connection}, and does anything look wrong?`;
