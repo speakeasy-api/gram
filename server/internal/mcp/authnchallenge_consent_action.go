@@ -125,7 +125,9 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return oauthAuthorityError(err).LogError(ctx, logger)
 	}
 	action := r.PostForm.Get("action")
-	if endpoint.MetaMcpServerID.Valid && (action == "identity_chaining_check" || action == "validate" || action == consentActionSwitchAccount) {
+	// Off, the switch action is an unknown action, as before the flag.
+	switchAccount := action == consentActionSwitchAccount && s.accountSwitchEnabled(ctx, endpoint.OrganizationID)
+	if endpoint.MetaMcpServerID.Valid && (action == "identity_chaining_check" || action == "validate" || switchAccount) {
 		lockedDown, err := s.endpointCustomDomainLockdown(ctx, logger, endpoint)
 		if err != nil {
 			return err
@@ -135,14 +137,15 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		}
 	}
 	subject := *challengeState.Subject
+	if switchAccount {
+		return s.switchSignInAccount(w, r, endpoint, challengeState)
+	}
 
 	switch r.PostForm.Get("action") {
 	case "agent_connections", "agent_attach", "agent_detach":
 		return s.serveConsentAgentConnections(w, r, endpoint, challengeState)
 	case "retry_delegation":
 		return s.retryFederatedDelegation(w, r, endpoint, challengeState)
-	case consentActionSwitchAccount:
-		return s.switchSignInAccount(w, r, endpoint, challengeState)
 	case "identity_chaining_check":
 		return s.serveIdentityChainingCheck(w, r, endpoint, challengeState)
 	case "hide_server", "show_server":
@@ -355,7 +358,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return nil
 
 	default:
-		return oops.E(oops.CodeBadRequest, nil, `action must be "connect", "refresh", "validate", "disconnect", "set_auto_refresh", "retry_delegation", "switch_account", or "identity_chaining_check"`).LogError(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, `action must be "connect", "refresh", "validate", "disconnect", "set_auto_refresh", "retry_delegation", or "identity_chaining_check"`).LogError(ctx, logger)
 	}
 }
 

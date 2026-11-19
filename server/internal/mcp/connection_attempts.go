@@ -416,6 +416,9 @@ func (s *Service) changedMemberStatuses(ctx context.Context, logger *slog.Logger
 }
 
 func refusedConsentKey(attempt mcpconnectionattempts.Attempt, clientID, signInID uuid.UUID, code mcpconnectionattempts.Code) string {
+	if signInID == uuid.Nil {
+		return "connectionAttemptIneligible:" + attempt.ID().String() + ":" + clientID.String() + ":" + code.String()
+	}
 	return "connectionAttemptIneligible:" + attempt.ID().String() + ":" + clientID.String() + ":" + signInID.String() + ":" + code.String()
 }
 

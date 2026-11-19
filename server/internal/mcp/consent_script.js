@@ -642,11 +642,13 @@
 
   // Back from the sign-in can restore this page with its buttons pending;
   // reload it so they work again.
-  window.addEventListener("pageshow", function (event) {
-    if (event.persisted) {
-      window.location.reload();
-    }
-  });
+  if (document.querySelector("button[data-switch-account]")) {
+    window.addEventListener("pageshow", function (event) {
+      if (event.persisted) {
+        window.location.reload();
+      }
+    });
+  }
 
   // Identity-chained cards render neutral, so they read right without script.
   // Check each exchange in the background and settle the card in place; any

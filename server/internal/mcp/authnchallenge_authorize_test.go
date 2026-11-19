@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -27,12 +28,23 @@ import (
 
 func TestAuthorize_CustomDomainPrivateChallengeUsesGramIDPCallback(t *testing.T) {
 	t.Parallel()
+	for _, switchOn := range []bool{false, true} {
+		t.Run(map[bool]string{false: "account switch off", true: "account switch on"}[switchOn], func(t *testing.T) {
+			t.Parallel()
+			authorizeCustomDomainPrivateChallenge(t, switchOn)
+		})
+	}
+}
+
+func authorizeCustomDomainPrivateChallenge(t *testing.T, switchOn bool) {
+	t.Helper()
 
 	ctx, ti, _ := newTestMCPServiceWithDevIDP(t)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
+	ti.features.SetFlag(feature.FlagMCPConsentAccountSwitch, authCtx.ActiveOrganizationID, switchOn)
 
 	slug := "auth-callback-cd-" + uuid.New().String()[:8]
 	toolset, issuer := createPrivateIssuerGatedToolset(t, ctx, ti, authCtx, slug)
@@ -95,6 +107,11 @@ func TestAuthorize_CustomDomainPrivateChallengeUsesGramIDPCallback(t *testing.T)
 		MCPResourceID:       toolset.ID,
 	}, stored.AgentAuthorizationTarget)
 
+	if !switchOn {
+		require.Empty(t, w.Result().Cookies(), "as before the switch: no browser binding on this path")
+		require.Empty(t, stored.ConsentBrowserHash)
+		return
+	}
 	cookies := w.Result().Cookies()
 	require.Len(t, cookies, 1, "the starting browser is bound on the consent page's host")
 	require.Equal(t, "__Host-speakeasy_consent_"+stored.FlowID, cookies[0].Name)
@@ -166,6 +183,7 @@ func TestAuthorize_PublicToolset_IgnoresAmbientSessionCredentials(t *testing.T) 
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
+	ti.features.SetFlag(feature.FlagMCPConsentAccountSwitch, authCtx.ActiveOrganizationID, true)
 	slug := "auth-public-anon-" + uuid.New().String()[:8]
 	toolset, issuer := createPrivateIssuerGatedToolset(t, ctx, ti, authCtx, slug)
 	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "public"})

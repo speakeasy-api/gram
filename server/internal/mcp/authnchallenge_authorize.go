@@ -336,7 +336,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			http.Redirect(w, r, federatedURL.String(), http.StatusFound)
 			return nil
 		}
-		if endpoint.servingSharedAuthorizationServer() == nil {
+		if endpoint.servingSharedAuthorizationServer() == nil && s.accountSwitchEnabled(ctx, endpoint.OrganizationID) {
 			if err := bindConsentBrowser(w, &challengeState); err != nil {
 				_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
 				s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)

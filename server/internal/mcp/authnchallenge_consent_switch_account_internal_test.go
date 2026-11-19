@@ -2,10 +2,12 @@ package mcp
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -39,4 +41,15 @@ func TestAccountSwitchAllowed(t *testing.T) {
 		edit(&state)
 		require.False(t, accountSwitchAllowed(state), name)
 	}
+}
+
+func TestRefusedConsentKeyWithoutSignInKeepsTheEarlierKey(t *testing.T) {
+	t.Parallel()
+
+	var scope mcpconnectionattempts.Scope
+	attempt := mcpconnectionattempts.AttemptAt(uuid.New(), time.Now(), scope)
+	clientID, signInID := uuid.New(), uuid.New()
+	code := mcpconnectionattempts.CodeUnmanagedAccount
+	require.Equal(t, "connectionAttemptIneligible:"+attempt.ID().String()+":"+clientID.String()+":"+code.String(), refusedConsentKey(attempt, clientID, uuid.Nil, code))
+	require.Equal(t, "connectionAttemptIneligible:"+attempt.ID().String()+":"+clientID.String()+":"+signInID.String()+":"+code.String(), refusedConsentKey(attempt, clientID, signInID, code))
 }

@@ -186,6 +186,8 @@ type consentApprovalError struct {
 // consentTemplateData is the field set the consent template renders against.
 type consentTemplateData struct {
 	CatalogChanges *catalogChanges
+	// AccountSwitch renders the company sign-in action chained cards reveal when their check offers it.
+	AccountSwitch bool
 	// GatewayDefaultMode labels the gateway default when choosing discovery.
 	GatewayDefaultMode string
 	// CodeModeUnavailable explains a stored code choice that is currently served as Progressive.
@@ -1103,7 +1105,10 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			gatewayDefaultMode = "Progressive"
 		}
 	}
+	accountSwitch := slices.ContainsFunc(cards, func(card remoteSessionCard) bool { return card.Chained }) &&
+		s.accountSwitchEnabled(ctx, endpoint.OrganizationID)
 	data := consentTemplateData{
+		AccountSwitch:           accountSwitch,
 		GatewayDefaultMode:      gatewayDefaultMode,
 		CodeModeUnavailable:     codeModeUnavailable,
 		ClientName:              clientName,

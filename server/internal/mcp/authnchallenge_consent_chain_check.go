@@ -145,7 +145,13 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 		signInID = *challengeState.SignInID
 	}
 	result, outcome := s.checkIdentityChaining(ctx, requests, display, signInID)
-	if result.Status == chainCheckRejected && outcome.Reason == identitychaining.ReasonUnmanagedAccount {
+	switchEnabled := result.Status == chainCheckRejected && s.accountSwitchEnabled(ctx, endpoint.OrganizationID)
+	// Off, refusals keep the key they had before the flag.
+	refusedSignIn := uuid.Nil
+	if switchEnabled {
+		refusedSignIn = signInID
+	}
+	if switchEnabled && outcome.Reason == identitychaining.ReasonUnmanagedAccount {
 		if challengeState.AccountSwitches > 0 {
 			result.Message = fmt.Sprintf(unmanagedAgainMessage, display)
 		}
@@ -164,7 +170,7 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 	)
 
 	if code, refused := chainingRefusalCode(outcome.Reason); refused && result.Status == chainCheckRejected {
-		s.recordRefusedConsent(ctx, logger, challengeState.connectionAttempt(endpoint), client.ID, signInID, code,
+		s.recordRefusedConsent(ctx, logger, challengeState.connectionAttempt(endpoint), client.ID, refusedSignIn, code,
 			mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Subject(challengeState.Subject),
 			mcpconnectionattempts.Provider(client.IssuerURL), mcpconnectionattempts.RemoteSessionClient(client.ID))
 	}

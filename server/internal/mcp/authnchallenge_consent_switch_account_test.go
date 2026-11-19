@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -180,6 +181,7 @@ func armSwitch(t *testing.T, fx *switchFixture, remoteIssuer uuid.UUID, upstream
 	ti.service.SetIdentityResolver(fx.mock)
 	ti.service.SetIDPSessionRevoker(fx.revoker)
 	signins.EnableForTests(ti.features, fx.orgID)
+	ti.features.SetFlag(feature.FlagMCPConsentAccountSwitch, fx.orgID, true)
 	setSwitchVerifiedDomains(t, fx, switchWorkDomain)
 	fx.workosOrganization = workOSOrganizationID(t, fx.ctx, ti, fx.orgID)
 
@@ -850,4 +852,95 @@ func TestSessionForSignIn_ScopedToPersonAndOrganization(t *testing.T) {
 	elsewhere, err := signins.SessionForSignIn(fx.ctx, fx.ti.conn, otherOrg, fx.subject.ID, signInID)
 	require.NoError(t, err)
 	require.Equal(t, none, elsewhere, "another organization")
+}
+
+// unknownConsentAction is the refusal main gives an action it doesn't know, switch_account included.
+const unknownConsentAction = `action must be "connect", "refresh", "validate", "disconnect", "set_auto_refresh", "retry_delegation", or "identity_chaining_check"`
+
+func setAccountSwitch(fx *switchFixture, enabled bool) {
+	fx.ti.features.SetFlag(feature.FlagMCPConsentAccountSwitch, fx.orgID, enabled)
+}
+
+// requireNothingSwitched asserts a refused switch left the page's challenge, session and sign-in as they were.
+func requireNothingSwitched(t *testing.T, fx *switchFixture, before mcp.AuthnChallengeState) {
+	t.Helper()
+	require.Empty(t, fx.revoker.sessions(), "the person's session is not ended")
+	require.Equal(t, before, fx.state(t), "the page's challenge is not consumed or rotated")
+	require.False(t, fx.ti.service.ConsentSwitched(fx.ctx, before.ID), "the page is not marked as switched")
+	require.Empty(t, fx.mock.buildAuthURLParams.State, "no new sign-in starts")
+}
+
+// Off, the connect page, its check and the switch action behave as they did before the switch existed.
+func TestConsentSwitchAccount_FlagOffBehavesAsBefore(t *testing.T) {
+	t.Parallel()
+
+	fx := seedSwitchConsent(t, "aim852-off", nil)
+	setAccountSwitch(fx, false)
+
+	code, page, _ := render(t, fx.consentActionFixture)
+	require.Equal(t, http.StatusOK, code)
+	require.NotContains(t, page, "switch_account")
+	require.NotContains(t, page, "data-switch-account")
+	require.NotContains(t, page, "Sign in with your company account")
+	require.Contains(t, page, "data-connect-fallback > Use your own account </button>")
+
+	body := checkCard(t, fx)
+	require.Len(t, body, 2, "only status and message, as before")
+	require.Equal(t, "rejected", body["status"])
+	require.True(t, strings.HasPrefix(body["message"], "You're signed in to Speakeasy with a personal account"), body["message"])
+
+	fx.store(t, func(s *mcp.AuthnChallengeState) { s.AccountSwitches = 1 })
+	before := fx.state(t)
+	require.NotContains(t, checkCard(t, fx)["message"], switchAgainCopy, "the after-a-switch wording needs the switch")
+
+	_, err := postSwitchAccount(t, fx, nil)
+	requireSwitchRefused(t, err, oops.CodeBadRequest, unknownConsentAction)
+	requireNothingSwitched(t, fx, before)
+
+	page = refusedSwitchPage(t, fx)
+	require.Contains(t, page, "Couldn't connect", "the page an unknown action showed before")
+	require.NotContains(t, page, "Couldn't start a new sign-in")
+	requireNothingSwitched(t, fx, before)
+}
+
+// A page rendered while the switch was on refuses the click once it is turned off, and changes nothing.
+func TestConsentSwitchAccount_TurnedOffBeforeTheClick(t *testing.T) {
+	t.Parallel()
+
+	fx := seedSwitchConsent(t, "aim852-off-mid", nil)
+	_, page, _ := render(t, fx.consentActionFixture)
+	require.Contains(t, page, "data-switch-account hidden")
+	require.Equal(t, "switch_account", checkCard(t, fx)["action"])
+	before := fx.state(t)
+
+	setAccountSwitch(fx, false)
+	_, err := postSwitchAccount(t, fx, nil)
+	requireSwitchRefused(t, err, oops.CodeBadRequest, unknownConsentAction)
+	requireNothingSwitched(t, fx, before)
+	require.Contains(t, refusedSwitchPage(t, fx), "Couldn't connect")
+	requireNothingSwitched(t, fx, before)
+
+	setAccountSwitch(fx, true)
+	switchAccount(t, fx)
+	require.Equal(t, []string{fx.session}, fx.revoker.sessions(), "back on, the same page switches")
+}
+
+// Off, a page an earlier switch spent reads as plainly expired: the switch marker is not read.
+func TestConsentSwitchAccount_FlagOffIgnoresSwitchMarkers(t *testing.T) {
+	t.Parallel()
+
+	fx := seedSwitchConsent(t, "aim852-off-spent", nil)
+	old := fx.consentActionFixture
+	switchAccount(t, fx)
+	require.True(t, fx.ti.service.ConsentSwitched(fx.ctx, old.stateID))
+
+	setAccountSwitch(fx, false)
+	w := renderSpent(t, old)
+	page := w.Body.String()
+	require.NotContains(t, page, "New sign-in started")
+	require.Contains(t, page, "expired or was already used")
+
+	_, err := (&switchFixture{consentActionFixture: old, ctx: fx.ctx, mock: fx.mock, revoker: fx.revoker, governor: fx.governor, managed: fx.managed, session: fx.session, workosOrganization: fx.workosOrganization, browser: fx.browser}).serveAction(url.Values{"state": {old.stateID}, "csrf_token": {"csrf-token"}, "action": {"connect"}, "client_id": {fx.clientA.String()}})
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "started a new sign-in")
 }

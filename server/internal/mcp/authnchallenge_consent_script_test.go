@@ -41,7 +41,6 @@ for (const skew of [-60000, 0, 60000]) {
       },
       window: {
         setTimeout: (callback, delay) => timers.push({ callback, delay }),
-        addEventListener() {},
         location: { reload: () => reloads++ },
       },
     });
@@ -132,7 +131,7 @@ vm.runInNewContext(source, {
     },
     querySelectorAll: (selector) => (selector === '[data-chain-check="pending"]' ? statuses : selector === 'button[data-connect-fallback]' ? fallbacks : []),
   },
-  window: { setTimeout: () => {}, addEventListener() {}, location: { reload: () => {} } },
+  window: { setTimeout: () => {}, location: { reload: () => {} } },
 });
 
 for (const id of ['connected', 'rejected', 'ready', 'error', 'offline']) {
@@ -259,6 +258,7 @@ vm.runInNewContext(source, {
     createTextNode: (text) => ({ text }),
     querySelector(selector) {
       if (selector === '[data-service-connections]') return element({ 'data-action-url': '/mcp/x/connect/remote-session' });
+      if (selector === 'button[data-switch-account]') return switches[0];
       return null;
     },
     querySelectorAll: (selector) => {
@@ -329,7 +329,7 @@ function render(state) {
       if (selector === 'select[name="discovery_mode"]') return select;
       return null;
     } },
-    window: { addEventListener() {} },
+    window: {},
   });
   return select;
 }

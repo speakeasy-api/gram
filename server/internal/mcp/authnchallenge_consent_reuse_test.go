@@ -14,6 +14,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
@@ -529,6 +530,10 @@ func TestSharedConsentSwitchedPageExplainsTheSwitch(t *testing.T) {
 	require.NoError(t, ti.service.MarkConsentSwitched(ctx, spent.state.ID, spent.state.UserSessionIssuerID, "Shared Client"))
 	_, err := ti.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+spent.state.ID)
 	require.NoError(t, err)
+	err = get(spent)
+	require.ErrorContains(t, err, "not found or expired", "off, the marker is not read")
+	require.NotContains(t, err.Error(), "started a new sign-in")
+	ti.features.SetFlag(feature.FlagMCPConsentAccountSwitch, issuer.issuer.OrganizationID.String, true)
 	require.ErrorContains(t, get(spent), "this consent page started a new sign-in")
 
 	foreign := sharedIdentifiedConsent(t, ctx, ti, issuer, issuer.slugA)

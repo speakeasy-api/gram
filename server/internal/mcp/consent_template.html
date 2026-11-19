@@ -607,6 +607,7 @@
                 </button>
                 {{end}} {{if or (not .Connected) (and .Unavailable (not .UnavailableTunnel)) .IdentityReconnect .AttachmentReconnect .Rejected .Inactive}}
                 {{if .Chained}}
+                {{if $.AccountSwitch}}
                 {{/* Shown by the page script only when the check offers it. */}}
                 <button
                   type="submit"
@@ -618,6 +619,7 @@
                 >
                   Sign in with your company account
                 </button>
+                {{end}}
                 {{/* Every company sign-in card offers the same outlined action in every
                 state. The short label never overflows a narrow card; the page script
                 names the service when it fits. */}}

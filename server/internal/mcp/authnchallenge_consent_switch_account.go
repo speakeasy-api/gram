@@ -14,6 +14,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -50,6 +51,15 @@ const (
 	accountSwitchNotOffered
 	accountSwitchExpired
 )
+
+// accountSwitchEnabled evaluates FlagMCPConsentAccountSwitch locally for the owning organization; it fails closed.
+func (s *Service) accountSwitchEnabled(ctx context.Context, organizationID string) bool {
+	if s.features == nil || organizationID == "" {
+		return false
+	}
+	enabled, err := s.features.IsFlagEnabledLocal(ctx, feature.FlagMCPConsentAccountSwitch, organizationID, nil, nil)
+	return err == nil && enabled
+}
 
 // accountSwitchAllowed reports whether a consent can send its person back to
 // sign in to Speakeasy with another account: a WorkOS sign-in of their own,
@@ -170,7 +180,7 @@ func (s *Service) switchSignInAccount(w http.ResponseWriter, r *http.Request, en
 	switch {
 	case errors.Is(err, redisCache.ErrCacheMiss):
 		// A second submit of a switch already under way explains the switch.
-		if switched := s.switchedConsentError(ctx, logger, endpoint, state.ID); switched != nil {
+		if switched := s.switchedChallengeError(ctx, logger, endpoint.UserSessionIssuerID, endpoint.Slug, state.ID); switched != nil {
 			return switched
 		}
 		return switchRefused(oops.E(oops.CodeBadRequest, err, switchAccountExpired).LogWarn(ctx, logger))
@@ -249,8 +259,11 @@ func (m accountSwitchMarker) TTL() time.Duration {
 }
 
 // switchedConsentError explains a consent page an account switch spent, or
-// returns nil when no switch did.
+// returns nil when no switch did or the switch is off for the organization.
 func (s *Service) switchedConsentError(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, stateID string) error {
+	if stateID == "" || !s.accountSwitchEnabled(ctx, endpoint.OrganizationID) {
+		return nil
+	}
 	return s.switchedChallengeError(ctx, logger, endpoint.UserSessionIssuerID, endpoint.Slug, stateID)
 }
 
