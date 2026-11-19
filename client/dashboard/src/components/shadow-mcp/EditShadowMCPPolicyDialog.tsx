@@ -60,7 +60,7 @@ const POLICY_CHANGE_MAX_PAGES = 10;
 
 const KEEP_RATIONALE: Record<ShadowMCPMode, string> = {
   blocked: "Approved so it keeps working when servers are blocked by default.",
-  allowed: "Denied so it stays blocked when servers are allowed by default.",
+  allowed: "Blocked so it stays blocked when servers are allowed by default.",
 };
 
 const MODE_COPY: Record<
@@ -330,7 +330,7 @@ export function EditShadowMCPPolicyDialog({
 
   const canContinue = flips || audienceChanged;
   const confirmLabel = keptServers.length
-    ? `${MODE_COPY[target].confirm} and ${keepDecision === "approved" ? "approve" : "deny"} ${keptServers.length}`
+    ? `${MODE_COPY[target].confirm} and ${keepDecision === "approved" ? "approve" : "block"} ${keptServers.length}`
     : MODE_COPY[target].confirm;
 
   return (
