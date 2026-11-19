@@ -17,8 +17,9 @@ mise exec -- aube exec oxfmt -- --write server/internal/aivendors/catalogseed/ca
 
 Production is the source of truth after bootstrap. The seed only inserts, so a
 registry change reaches existing rows only as new products or documents. New
-clients belong in the admin review queue. This seed does not change the
-compiled catalog readers; that transition belongs to AIM-449.
+clients belong in the admin review queue. API, MCP, and private ingress
+processes synchronously ensure reference data and load a database snapshot
+before serving. They refresh that snapshot about once a minute.
 
 The `ai-client-catalog` startup seed hashes the embedded file and its application
 revision. Workers apply each version through the existing startup workflow.
@@ -43,9 +44,11 @@ surfaces through the startup seed activity's error.
 
 The seed fills only missing references on decision-only rows for the frozen
 scan library, and only to live products. It preserves definitions, existing
-references, decisions, rationales and timestamps. Future built-in decision
-writes set the reference directly; while the product is missing or
-soft-deleted they return a retryable unavailable error.
+references, decisions, rationales and timestamps. A reference to a product that
+is soft-deleted later stays as decision history; live catalog readers exclude
+soft-deleted products. Future built-in decision writes set the reference
+directly; while the product is missing or soft-deleted they return a retryable
+unavailable error.
 
 After all previous-version API replicas have stopped during the initial rolling
 deployment, run the deployed binary with its configured database URL and site
@@ -64,10 +67,12 @@ to database-backed classification in AIM-449.
 Demo provisioning calls `EnsureCatalog` before its tenant transaction. This
 inserts reference data without running the cross-organization backfill. Demo
 decisions reference the seeded products and postflight requires all five links.
+This checks reference integrity, not product liveness: staff deletions remain
+authoritative and must not make demo provisioning fail.
 Isolated demo tests seed the global catalog before taking their safety baseline.
 
-Platform MCP needs no new tool for this worker-owned initialization of global
-reference data. The existing Shadow AI inventory/library and client admission
-tools retain their readers, permissions and result contracts. Catalog and
-decision integration tests verify the new persistence behavior; reader changes
-remain in AIM-449.
+Platform MCP needs no new tool for process-startup initialization of global
+reference data or the worker-owned decision backfill. The existing Shadow AI
+inventory/library and client admission tools retain their readers, permissions
+and result contracts. Catalog and decision integration tests verify persistence
+and refreshed reader behavior.
