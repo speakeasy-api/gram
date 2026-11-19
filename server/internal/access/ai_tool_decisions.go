@@ -93,7 +93,7 @@ func (s *Service) SetAIToolDecision(ctx context.Context, payload *gen.SetAIToolD
 		}
 		if !state.HasDefinition {
 			if !state.ProductExists {
-				return nil, oops.E(oops.CodeUnavailable, nil, "AI client catalog is initializing; retry this decision shortly").LogWarn(ctx, s.logger)
+				return nil, oops.E(oops.CodeUnavailable, nil, "Speakeasy cannot save a decision about this tool yet because it is not in the AI tool catalog. Try again later, or contact Speakeasy support if this continues.").LogWarn(ctx, s.logger)
 			}
 			productID = conv.ToPGText(targetID)
 		}

@@ -29,7 +29,7 @@ func startupSeeds(logger *slog.Logger, db *pgxpool.Pool, assetBaseURL *url.URL) 
 			Name:    "ai-client-catalog",
 			Version: catalogseed.Version(),
 			Apply: func(ctx context.Context) error {
-				return catalogseed.Apply(ctx, db)
+				return catalogseed.Apply(ctx, logger, db)
 			},
 		},
 		{

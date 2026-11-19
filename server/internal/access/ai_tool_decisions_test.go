@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestService_SetAIToolDecision_RecordsDecisionAndSurfacesItOnTheInventory(t *testing.T) {
@@ -123,7 +124,6 @@ func TestService_ListAIDetections_UnenforceableToolReadsUnreviewed(t *testing.T)
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
 	ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
 	seedAIDetection(t, ctx, ti, orgID, "cursor", "serial-1", "alex@example.com", "installed", "harness", "", time.Now().UTC())
 
@@ -148,7 +148,6 @@ func TestService_SetAIToolDecision_RejectsUnknownTarget(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
 	ctx, _, _ = withUniqueDetectionOrg(t, ctx, ti)
 
 	_, err := ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{
@@ -166,7 +165,6 @@ func TestService_SetAIToolDecision_RequiresOrgAdmin(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -194,7 +192,6 @@ func TestService_ListAIDetections_ProjectReaderIsRefused(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -267,7 +264,6 @@ func TestService_ListAIDetections_ProjectReaderCannotFilterByTeam(t *testing.T) 
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -359,7 +355,7 @@ func TestService_SetAIToolDecision_LeavesCustomTargetUnlinked(t *testing.T) {
 			})
 			require.NoError(t, err)
 			if tc.seeded {
-				require.NoError(t, catalogseed.Apply(ctx, ti.conn))
+				require.NoError(t, catalogseed.Apply(ctx, testenv.NewLogger(t), ti.conn))
 			}
 			_, err = ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{
 				TargetID: tc.id, Decision: "blocked",

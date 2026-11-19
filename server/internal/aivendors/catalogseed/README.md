@@ -1,10 +1,19 @@
 # AI client catalog bootstrap
 
-`catalog.json` is a frozen bootstrap of 53 products, 41 aliases and 26 CIMD
-documents, generated once from the compiled `aivendors` registry.
-Production is the source of truth after bootstrap. New clients belong in the
-admin review queue, not this file. This seed does not change the compiled
-catalog readers; that transition belongs to AIM-449.
+`catalog.json` holds 53 products, 41 aliases and 26 CIMD documents. It tracks
+the compiled `aivendors` registry until that registry is removed (AIM-450), then
+becomes frozen. `TestCatalogMatchesRegistry` fails when the two differ.
+Regenerate the file from the registry, then format it:
+
+```sh
+mise run test:server ./internal/aivendors/catalogseed/ -run TestCatalogMatchesRegistry -args -update
+mise exec -- aube exec oxfmt -- --write server/internal/aivendors/catalogseed/catalog.json
+```
+
+Production is the source of truth after bootstrap. The seed only inserts, so a
+registry change reaches existing rows only as new products, aliases or
+documents. New clients belong in the admin review queue. This seed does not
+change the compiled catalog readers; that transition belongs to AIM-449.
 
 The `ai-client-catalog` startup seed hashes the embedded file and its application
 revision. Workers apply each version through the existing startup workflow.
@@ -18,10 +27,22 @@ are not inserted under deleted products. Arbitrary URL history of preexisting
 non-bootstrap rows is not recoverable after their URL has been edited.
 
 Aliases follow the same rules keyed by name: deterministic IDs, and an
-existing name (live or soft-deleted, under any product, in any spelling that
-folds to the same name) is left alone. None are inserted under deleted products.
-A test rejects a file where one folded name belongs to two products. A product's family is written only when the product is
-inserted, so a family staff later set or cleared survives a rerun.
+existing alias with the same folded name (live or soft-deleted, under any
+product) is left alone. The fold drops case, spaces, tabs, underscores and
+hyphens, which matches the hyphen-free key `Identify` looks up; Go and Postgres
+fold ASCII names identically. None are inserted under deleted products. A test
+rejects a file where one folded name belongs to two products, and loading
+rejects unknown fields, unknown alias clients and a URL under two products.
+
+A product's family is written only when the product is inserted, so a family
+staff later set or cleared survives a rerun.
+
+Catalog rows must only ever be soft-deleted: the next run reinserts a
+hard-deleted seed row.
+
+Catalog inserts commit in one transaction and the decision backfill runs in a
+second, so a failed backfill never leaves the catalog empty. Each run logs the
+seed version and the counts inserted and linked.
 
 The seed fills only missing references on decision-only rows for the frozen
 scan library. It preserves definitions, existing references, decisions,

@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const backfillDecisions = `-- name: BackfillDecisions :exec
+const backfillDecisions = `-- name: BackfillDecisions :execrows
 UPDATE ai_scan_targets t
 SET ai_product_id = p.id
 FROM ai_products p
@@ -24,12 +24,13 @@ WHERE t.id = p.id AND t.id = ANY($1::text[]) AND t.ai_product_id IS NULL
   AND cardinality(t.client_info_names) = 0
 `
 
-// Only decision-only rows for the frozen scan library are backfilled. Never
-// overwrite a reference or turn an organization's own definition into a built-in.
-// This deployment-wide repair intentionally spans organizations.
-func (q *Queries) BackfillDecisions(ctx context.Context, ids []string) error {
-	_, err := q.db.Exec(ctx, backfillDecisions, ids)
-	return err
+// Links only unlinked decision-only rows, across every organization.
+func (q *Queries) BackfillDecisions(ctx context.Context, ids []string) (int64, error) {
+	result, err := q.db.Exec(ctx, backfillDecisions, ids)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const editAliasFixture = `-- name: EditAliasFixture :exec
@@ -105,7 +106,7 @@ func (q *Queries) EditProductFixture(ctx context.Context, arg EditProductFixture
 	return err
 }
 
-const insertAlias = `-- name: InsertAlias :exec
+const insertAlias = `-- name: InsertAlias :execrows
 INSERT INTO ai_product_aliases (id, ai_product_id, name, client)
 SELECT $1::uuid, p.id, $2::text, $3
 FROM ai_products p
@@ -124,20 +125,21 @@ type InsertAliasParams struct {
 	AiProductID string
 }
 
-// Same guarantees as documents, compared in the unique index's folded form: any
-// row with the folded name, live or deleted, wins. The untargeted conflict clause
-// absorbs a renamed seed row and a concurrent insert of the same folded name.
-func (q *Queries) InsertAlias(ctx context.Context, arg InsertAliasParams) error {
-	_, err := q.db.Exec(ctx, insertAlias,
+// Like documents, keyed by the unique index's folded name.
+func (q *Queries) InsertAlias(ctx context.Context, arg InsertAliasParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertAlias,
 		arg.ID,
 		arg.Name,
 		arg.Client,
 		arg.AiProductID,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
-const insertDocument = `-- name: InsertDocument :exec
+const insertDocument = `-- name: InsertDocument :execrows
 INSERT INTO ai_product_cimd_documents (
   id, ai_product_id, url, display_name, enabled, is_pattern
 )
@@ -157,10 +159,9 @@ type InsertDocumentParams struct {
 	AiProductID string
 }
 
-// Stable IDs preserve seed-owned rows even after their URL changes. Historical
-// URL rows also prevent restoring a document that staff deliberately deleted.
-func (q *Queries) InsertDocument(ctx context.Context, arg InsertDocumentParams) error {
-	_, err := q.db.Exec(ctx, insertDocument,
+// Any row holding the URL, even soft-deleted, blocks the insert.
+func (q *Queries) InsertDocument(ctx context.Context, arg InsertDocumentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertDocument,
 		arg.ID,
 		arg.Url,
 		arg.DisplayName,
@@ -168,10 +169,13 @@ func (q *Queries) InsertDocument(ctx context.Context, arg InsertDocumentParams) 
 		arg.IsPattern,
 		arg.AiProductID,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
-const insertProduct = `-- name: InsertProduct :exec
+const insertProduct = `-- name: InsertProduct :execrows
 INSERT INTO ai_products (
   id, vendor_key, display_name, category, bundle_ids, binaries, config_dirs,
   process_names, version_plist_key, client_info_names, family
@@ -198,8 +202,8 @@ type InsertProductParams struct {
 }
 
 // Catalog rows are global reference data, not tenant-owned records.
-func (q *Queries) InsertProduct(ctx context.Context, arg InsertProductParams) error {
-	_, err := q.db.Exec(ctx, insertProduct,
+func (q *Queries) InsertProduct(ctx context.Context, arg InsertProductParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertProduct,
 		arg.ID,
 		arg.VendorKey,
 		arg.DisplayName,
@@ -212,7 +216,10 @@ func (q *Queries) InsertProduct(ctx context.Context, arg InsertProductParams) er
 		arg.ClientInfoNames,
 		arg.Family,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const listAliases = `-- name: ListAliases :many

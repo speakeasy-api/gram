@@ -547,10 +547,7 @@ VALUES (
   @client_info_names::text[]
 )
 ON CONFLICT (organization_id, id) DO UPDATE
--- Writing a definition makes the row the organization's own target. A
--- decision-only row left by a built-in since removed from the registry may
--- still reference its product, and keeping that would mark the definition
--- as a built-in's.
+-- A definition makes the row the organization's own, so drop any product link.
 SET ai_product_id = NULL
   , display_name = EXCLUDED.display_name
   , category = EXCLUDED.category
@@ -618,9 +615,7 @@ ORDER BY id;
 -- name: AcquireAIScanTargetsLock :exec
 SELECT pg_advisory_xact_lock(hashtextextended('ai_scan_targets:' || @organization_id::text, 0));
 
--- ID matching alone cannot establish a stored row's kind: an organization's
--- definition may predate a built-in with the same ID. Only decision-only rows
--- can acquire a catalog reference, even while readers still overlay by ID.
+-- Only decision-only rows may take a catalog link; an ID match is not enough.
 -- name: GetAIScanTargetCatalogState :one
 SELECT
   EXISTS (SELECT 1 FROM ai_products p WHERE p.id = @id) AS product_exists,
