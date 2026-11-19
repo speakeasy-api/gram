@@ -92196,6 +92196,7 @@ components:
             - invalid_check
             - rbac_skipped_apikey
             - dev_override
+            - connection_owner_mismatch
         resolution_role_slug:
           type: string
           description: Role slug assigned (when resolution_type=role_assigned).
@@ -92750,6 +92751,7 @@ components:
             - invalid_check
             - rbac_skipped_apikey
             - dev_override
+            - connection_owner_mismatch
         resolution_role_slug:
           type: string
           description: Role slug assigned (when resolution_type=role_assigned).
