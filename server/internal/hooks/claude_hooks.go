@@ -1412,16 +1412,17 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 
 	auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
 	userReason := s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
-		OrganizationID:  metadata.GramOrgID,
-		ProjectID:       metadata.ProjectID,
-		RequesterUserID: metadata.UserID,
-		UserMessage:     policy.UserMessage,
-		AuditReason:     auditReason,
-		Evidence:        evidence,
-		ToolName:        mcpToolName,
-		ToolInput:       payload.ToolInput,
-		RiskPolicyID:    policy.ID,
-		PolicyName:      policy.Name,
+		OrganizationID:    metadata.GramOrgID,
+		ProjectID:         metadata.ProjectID,
+		RequesterUserID:   metadata.UserID,
+		UserMessage:       policy.UserMessage,
+		AuditReason:       auditReason,
+		Evidence:          evidence,
+		ToolName:          mcpToolName,
+		ToolInput:         payload.ToolInput,
+		RiskPolicyID:      policy.ID,
+		SessionMCPServers: entries,
+		PolicyName:        policy.Name,
 	})
 	matchedURL := ""
 	if matched != nil {

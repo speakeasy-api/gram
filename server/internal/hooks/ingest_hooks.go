@@ -977,16 +977,17 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 	if detail, denied := s.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), actor.UserID, policy, toolName, evidence); denied {
 		auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
 		userReason := s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
-			OrganizationID:  authCtx.ActiveOrganizationID,
-			ProjectID:       authCtx.ProjectID.String(),
-			RequesterUserID: actor.UserID,
-			UserMessage:     policy.UserMessage,
-			AuditReason:     auditReason,
-			Evidence:        evidence,
-			ToolName:        toolName,
-			ToolInput:       toolInput,
-			RiskPolicyID:    policy.ID,
-			PolicyName:      policy.Name,
+			OrganizationID:    authCtx.ActiveOrganizationID,
+			ProjectID:         authCtx.ProjectID.String(),
+			RequesterUserID:   actor.UserID,
+			UserMessage:       policy.UserMessage,
+			AuditReason:       auditReason,
+			Evidence:          evidence,
+			ToolName:          toolName,
+			ToolInput:         toolInput,
+			RiskPolicyID:      policy.ID,
+			SessionMCPServers: s.sessionMCPServers(ctx, canonicalSessionID(payload)),
+			PolicyName:        policy.Name,
 		})
 		// Retried deliveries still get the deny decision, but must not mint
 		// another block row (and a second block URL) for the same call.
