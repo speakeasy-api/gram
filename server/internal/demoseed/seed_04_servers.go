@@ -442,7 +442,9 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	// Server's). An organization sign-in reaches
 	// every server in the organization, including one with a sign-in of its own.
 	for i := 1; i <= 3; i++ {
-		for _, server := range []string{"linear", "slack", "ema-wiki", "linear-app", "notion-app"} {
+		// Support Tools ("shadow-official") has no upstream client, so the
+		// choice there is no-auth, as on Example Shared Credential.
+		for _, server := range []string{"linear", "slack", "ema-wiki", "linear-app", "notion-app", "shadow-official"} {
 			client := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 			switch server {
 			case "linear":

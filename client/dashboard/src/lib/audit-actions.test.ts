@@ -67,7 +67,7 @@ describe("AUDIT_ACTIONS", () => {
     ],
     [
       "shadow_mcp_official_server:delete",
-      "restored the automatic official server of Shadow MCP server",
+      "removed the official server choice of Shadow MCP server",
     ],
     [
       "shadow_mcp_official_server:set",
