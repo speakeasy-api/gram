@@ -584,3 +584,20 @@ func TestList_AnIdentifiedAppWinsOverAnEarlierUnrecognizedOne(t *testing.T) {
 		require.Equal(t, "2.0.1", row.AppVersion)
 	}
 }
+
+func TestList_AScriptWinsOverAnUnrecognizedAppInEitherOrder(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	for i, families := range [][2]string{{mcpconnectionattempts.FamilyOther, mcpconnectionattempts.FamilyScript}, {mcpconnectionattempts.FamilyScript, mcpconnectionattempts.FamilyOther}} {
+		a := f.attempt(f.org, f.project, f.server, f.now.Add(-time.Hour+time.Duration(i)*time.Minute))
+		f.row(a, mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultCodeIssued, false, time.Second).ClientFamily = families[0]
+		f.row(a, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, 2*time.Second).ClientFamily = families[1]
+	}
+	f.insert()
+
+	rows := list(t, f, f.scope(), attemptlog.Filters{})
+	require.Len(t, rows, 2)
+	for _, row := range rows {
+		require.Equal(t, mcpconnectionattempts.FamilyScript, row.App)
+	}
+}

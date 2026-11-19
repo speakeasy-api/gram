@@ -22,7 +22,7 @@ var adminMeanings = map[Code]adminMeaning{
 	CodeRegistrationInvalid:              {"Speakeasy refused the app's request to register with this server.", "The dynamic client registration request was refused; the refusal code is in the detail."},
 	CodeUnknownClientID:                  {"Speakeasy found no registration for this app on this server.", "The app's client ID was not found among the server's registered clients."},
 	CodeRedirectURIMismatch:              {"The app asked to return to an address it had not registered, or changed that address between sign-in steps.", "The redirect URI was not registered for the client, or did not match the one in the authorization request."},
-	CodeResourceMismatch:                 {"The request did not name the server or project it was made to, or named a different one.", ""},
+	CodeResourceMismatch:                 {"The request named no server or project where one is required, named a different one than it was made to, or used a sign-in issued for a different one.", ""},
 	CodePKCEMismatch:                     {"The app failed the safety check that links its sign-in steps together.", "The PKCE code verifier did not match the code challenge."},
 	CodeCodeNotFoundOrExpired:            {"The app took too long to finish signing in, or tried to finish the same sign-in twice.", ""},
 	CodeServerNotFound:                   {"No server exists at the address the app used.", ""},
