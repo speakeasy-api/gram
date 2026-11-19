@@ -37,8 +37,16 @@ type gatewayCaller struct {
 }
 
 func emptyGatewayCaller() gatewayCaller {
+	return newGatewayCaller(0)
+}
+
+func personGatewayCaller() gatewayCaller {
+	return newGatewayCaller(gatewayCallerPerson)
+}
+
+func newGatewayCaller(kind gatewayCallerKind) gatewayCaller {
 	return gatewayCaller{
-		kind:         0,
+		kind:         kind,
 		principal:    urn.Principal{Type: "", ID: ""},
 		owner:        "",
 		ceiling:      nil,
