@@ -323,6 +323,14 @@ export function EditShadowMCPPolicyDialog({
 
   const save = async () => {
     setError(null);
+    // Another admin may have changed the policy since this dialog opened;
+    // saving from the old snapshot would revert their change.
+    if (policyChangedSince(baseline, state)) {
+      setError(
+        "The policy changed while this was open. Close and reopen Edit policy to review the current policy.",
+      );
+      return;
+    }
     setSaving(true);
     const note = rationale.trim() || KEEP_RATIONALE[target];
     // Decisions go first: an approval recorded before the block lands means
@@ -526,6 +534,24 @@ function policyErrorMessage(err: unknown, kept: number): string {
     return `The policy was not changed. ${err.message}${decided}`;
   }
   return `The policy could not be changed. Try again.${decided}`;
+}
+
+function policyChangedSince(
+  before: ShadowMCPModeState,
+  now: ShadowMCPModeState,
+): boolean {
+  if (before.mode !== now.mode) return true;
+  if (before.policy?.id !== now.policy?.id) return true;
+  if (!before.policy || !now.policy) return false;
+  if (before.policy.audienceType !== now.policy.audienceType) return true;
+  if (before.policy.name !== now.policy.name) return true;
+  if (before.policy.updatedAt?.getTime() !== now.policy.updatedAt?.getTime()) {
+    return true;
+  }
+  return !sameSet(
+    before.policy.audiencePrincipalUrns,
+    now.policy.audiencePrincipalUrns,
+  );
 }
 
 function sameSet(a: readonly string[], b: readonly string[]): boolean {

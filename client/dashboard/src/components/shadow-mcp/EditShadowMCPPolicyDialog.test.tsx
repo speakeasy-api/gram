@@ -342,6 +342,49 @@ describe("EditShadowMCPPolicyDialog", () => {
     await screen.findByText("busy");
   });
 
+  it("refuses to save over a policy another admin changed", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const onOpenChange = vi.fn<(open: boolean) => void>();
+    const view = render(
+      <QueryClientProvider client={client}>
+        <EditShadowMCPPolicyDialog
+          open
+          onOpenChange={onOpenChange}
+          state={allowed}
+        />
+      </QueryClientProvider>,
+    );
+    chooseBlockAndReview();
+    await screen.findByText("busy");
+    view.rerender(
+      <QueryClientProvider client={client}>
+        <EditShadowMCPPolicyDialog
+          open
+          onOpenChange={onOpenChange}
+          state={{
+            mode: "blocked",
+            policy: {
+              id: "policy-2",
+              name: "Shadow MCP",
+              sources: ["shadow_mcp"],
+              audienceType: "everyone",
+              audiencePrincipalUrns: [],
+            } as unknown as ShadowMCPModeState["policy"],
+            heldBy: null,
+          }}
+        />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Block by default" }));
+
+    await screen.findByText(/The policy changed while this was open/);
+    expect(mocks.calls).toEqual([]);
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
   it("removes the policy to allow by default", async () => {
     const onOpenChange = renderDialog({
       mode: "blocked",
