@@ -904,6 +904,8 @@ func workloadGrantHappened(err error) (mcpconnectionattempts.Code, mcpconnection
 			return mcpconnectionattempts.CodeEndpointNotAgentAddressable, detail
 		case "gateway_machine_access_disabled":
 			return mcpconnectionattempts.CodeGatewayMachineAccessDisabled, detail
+		case "gateway_no_reachable_members":
+			return mcpconnectionattempts.CodeNoServerAccess, detail
 		case "agent_admission_denied":
 			return mcpconnectionattempts.CodeNoServerAccess, detail
 		case "issuer_policy_changed":

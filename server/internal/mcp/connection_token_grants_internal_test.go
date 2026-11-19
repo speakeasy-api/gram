@@ -40,6 +40,7 @@ func TestWorkloadGrantHappened(t *testing.T) {
 		{name: "subject not admitted", err: refuseWorkloadGrant("subject_not_admitted", cause), want: mcpconnectionattempts.CodeSubjectNotAdmitted, detail: "subject_not_admitted"},
 		{name: "endpoint not agent addressable", err: refuseWorkloadGrant("endpoint_not_agent_addressable", cause), want: mcpconnectionattempts.CodeEndpointNotAgentAddressable, detail: "endpoint_not_agent_addressable"},
 		{name: "gateway machine access disabled", err: refuseWorkloadGrant("gateway_machine_access_disabled", cause), want: mcpconnectionattempts.CodeGatewayMachineAccessDisabled, detail: "gateway_machine_access_disabled"},
+		{name: "gateway has no reachable members", err: refuseWorkloadGrant("gateway_no_reachable_members", cause), want: mcpconnectionattempts.CodeNoServerAccess, detail: "gateway_no_reachable_members"},
 		{name: "agent admission denied", err: refuseWorkloadGrant("agent_admission_denied", cause), want: mcpconnectionattempts.CodeNoServerAccess, detail: "agent_admission_denied"},
 		{name: "issuer policy changed", err: refuseWorkloadGrant("issuer_policy_changed", cause), want: mcpconnectionattempts.CodeTransientFailure, detail: "issuer_policy_changed"},
 		{name: "unnamed refusal", err: refuseWorkloadGrant("policy", cause), want: mcpconnectionattempts.CodeAssertionOther, detail: "policy"},

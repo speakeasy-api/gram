@@ -787,8 +787,14 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 	if err == nil && grant.endpoint != nil {
 		authorizationCtx, err = s.requireWorkloadSessionAuthorization(authorizationCtx, grant.endpoint, workloadSessionReachResource)
 	}
+	if err == nil && grant.endpoint != nil {
+		authorizationCtx, err = s.requireStoredGatewayWorkloadMember(authorizationCtx, logger, grant.endpoint)
+	}
 	if err == nil && grant.session.Audience == InferenceResource {
 		err = s.authz.Require(authorizationCtx, authz.InferenceExecuteCheck(grant.session.ProjectID.String()))
+	}
+	if _, ok := errors.AsType[*workloadGrantError](err); ok {
+		return nil, err
 	}
 	switch {
 	case errors.Is(err, errCredentialRejected), err != nil && isCredentialDenial(err):
@@ -897,6 +903,36 @@ func (s *Service) writeWorkloadGrantRefusal(ctx context.Context, w http.Response
 	default:
 		return oops.E(oops.CodeUnexpected, err, "unknown workload grant outcome").LogError(ctx, logger)
 	}
+}
+
+// A gateway-bound workload session must reach at least one member. Gateway
+// entry and member authorization remain separate decisions: the endpoint grant
+// admits the gateway, while the normal member snapshot applies visibility and
+// each member's own mcp:connect authorization.
+func (s *Service) requireStoredGatewayWorkloadMember(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint) (context.Context, error) {
+	gateway, err := gatewayTargetFromEndpoint(endpoint)
+	if err != nil {
+		return ctx, nil
+	}
+	if _, ok := gateway.authorizationTarget(endpoint.ProjectID); !ok {
+		return ctx, nil
+	}
+
+	ctx, members, _, err := s.resolveMetaMemberSnapshot(
+		ctx,
+		logger,
+		mandatorySurfaceGatewayMember,
+		endpoint.OrganizationID,
+		gateway.id,
+		endpoint.ProjectID,
+	)
+	if err != nil {
+		return ctx, workloadGrantStageUnavailable("gateway_member_admission_unavailable", err)
+	}
+	if len(members) == 0 {
+		return ctx, refuseWorkloadGrant("gateway_no_reachable_members", errors.New("workload reaches no stored gateway member"))
+	}
+	return ctx, nil
 }
 
 // retryAfterSeconds renders a Retry-After delay in whole seconds, never less
