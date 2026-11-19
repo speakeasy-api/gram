@@ -27,7 +27,8 @@ describe("approvalChoices", () => {
       const choices = approvalChoices(new Date(2026, 10, 1, 0, 30, 0));
       expect(choices.map((c) => c.key)).toEqual(["1h", "2h", "4h"]);
     } finally {
-      process.env.TZ = zone;
+      if (zone === undefined) delete process.env.TZ;
+      else process.env.TZ = zone;
     }
   });
 });
