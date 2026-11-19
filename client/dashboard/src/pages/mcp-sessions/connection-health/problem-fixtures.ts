@@ -346,10 +346,7 @@ function problems(): SuspectedProblemDetail[] {
       app: app("cursor", "2.0.1"),
       server: SERVERS.github,
       attempts: [38, 22, 27][i]!,
-      firstFailedAt: (i === 0
-        ? at(0, "09:02:10")
-        : at(-2, `10:2${i - 1}:15`)
-      ).toISOString(),
+      firstFailedAt: at(-2, `10:2${i}:15`).toISOString(),
     })),
     servers: [{ server: SERVERS.github, attempts: 87 }],
   };
