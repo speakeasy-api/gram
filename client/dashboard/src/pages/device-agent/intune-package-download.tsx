@@ -5,7 +5,7 @@ import { useOrganization } from "@/contexts/Auth";
 import { useAgentToken } from "@/hooks/useAgentToken";
 import { useOrgRoutes } from "@/routes";
 import { Download } from "lucide-react";
-import { useState } from "react";
+import React, { useState } from "react";
 import { Link } from "react-router";
 import { buildIntuneBundle, configRevision } from "./intune-package";
 
@@ -29,7 +29,7 @@ export function IntunePackageDownload({
   version: string | null;
   msiUrl: string | null;
   autoUpdate: "automatic" | "notify";
-}) {
+}): React.JSX.Element {
   const { name: orgName, slug: orgSlug } = useOrganization();
   const apiKeysHref = useOrgRoutes().apiKeys.href();
   const { canGenerate, generateAsync } = useAgentToken({});
@@ -82,7 +82,7 @@ export function IntunePackageDownload({
         </div>
         <Button
           variant="secondary"
-          onClick={download}
+          onClick={() => void download()}
           disabled={!ready || !canGenerate || status.kind === "working"}
           title={
             !canGenerate
