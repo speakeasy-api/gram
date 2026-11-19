@@ -166,57 +166,50 @@ export function SetupBody({
               )}
             </Alert>
           )}
-          {s.step === "test" && live.completionError && (
-            <Alert variant="error" className="mt-5">
-              <p>{live.completionError}</p>
-            </Alert>
-          )}
-          <>
-            <div className="mt-[30px] flex justify-end gap-2 border-t pt-[22px]">
-              {s.step !== "begin" && (
-                <Button
-                  variant="tertiary"
-                  disabled={live.completing}
-                  onClick={() => dispatch({ type: "back" })}
-                >
-                  <Button.Text>Back</Button.Text>
-                </Button>
-              )}
-              {s.step === "test" ? (
-                <Button
-                  variant="primary"
-                  disabled={!canComplete}
-                  onClick={
-                    live.complete ?? (() => dispatch({ type: "complete" }))
-                  }
-                >
-                  <Button.Text>
-                    {live.completing ? "Completing…" : "Complete setup"}
-                  </Button.Text>
-                </Button>
-              ) : (
-                <Button
-                  variant="primary"
-                  disabled={
-                    !!live.pending ||
-                    live.loading ||
-                    (s.provider === "salesforce" &&
-                      s.values.path === "support" &&
-                      s.step === "support")
-                  }
-                  onClick={live.next}
-                >
-                  <Button.Text>
-                    {live.pending === "save"
-                      ? "Saving…"
-                      : s.step === "begin"
-                        ? "Get started"
-                        : "Continue"}
-                  </Button.Text>
-                </Button>
-              )}
-            </div>
-          </>
+          <div className="mt-[30px] flex justify-end gap-2 border-t pt-[22px]">
+            {s.step !== "begin" && (
+              <Button
+                variant="tertiary"
+                disabled={live.completing}
+                onClick={() => dispatch({ type: "back" })}
+              >
+                <Button.Text>Back</Button.Text>
+              </Button>
+            )}
+            {s.step === "test" ? (
+              <Button
+                variant="primary"
+                disabled={!canComplete}
+                onClick={
+                  live.complete ?? (() => dispatch({ type: "complete" }))
+                }
+              >
+                <Button.Text>
+                  {live.completing ? "Completing…" : "Complete setup"}
+                </Button.Text>
+              </Button>
+            ) : (
+              <Button
+                variant="primary"
+                disabled={
+                  !!live.pending ||
+                  live.loading ||
+                  (s.provider === "salesforce" &&
+                    s.values.path === "support" &&
+                    s.step === "support")
+                }
+                onClick={live.next}
+              >
+                <Button.Text>
+                  {live.pending === "save"
+                    ? "Saving…"
+                    : s.step === "begin"
+                      ? "Get started"
+                      : "Continue"}
+                </Button.Text>
+              </Button>
+            )}
+          </div>
         </section>
         <StepRail />
       </div>
