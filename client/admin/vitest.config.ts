@@ -9,8 +9,7 @@ export default defineConfig({
     __GRAM_APP_URL__: JSON.stringify("https://app.gram.test"),
   },
   plugins: [
-    // Match the app's page boundaries: importing the route tree must not
-    // eagerly evaluate components for routes the test never visits.
+    // Match production route splitting so tests load only the pages they visit.
     tanstackRouter({
       target: "react",
       autoCodeSplitting: true,
