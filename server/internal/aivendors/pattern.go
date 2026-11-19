@@ -47,6 +47,7 @@ var (
 	errPatternUnparseable     = errors.New("pattern is not a parseable https URL")
 	errPatternEmptySegment    = errors.New("pattern has an empty path segment")
 	errPatternNoPathComponent = errors.New("pattern has no path component")
+	errPatternNoWildcard      = errors.New("pattern has no wildcard segment")
 )
 
 // validatePattern enforces the structural rules above. Returns nil for a
@@ -95,6 +96,9 @@ func validatePattern(pattern string) error {
 		if strings.Contains(segment, "*") && segment != "*" {
 			return errPatternPartialSegment
 		}
+	}
+	if !strings.Contains(path, "*") {
+		return errPatternNoWildcard
 	}
 	return nil
 }

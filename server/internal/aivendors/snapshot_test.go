@@ -1,9 +1,11 @@
 package aivendors
 
 import (
-	"github.com/stretchr/testify/require"
 	"slices"
+	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestSnapshotExactBeforePatternsAndExplicitPatternFlag(t *testing.T) {
@@ -66,6 +68,7 @@ func TestCompiledSnapshotMatchesRegistry(t *testing.T) {
 	require.Equal(t, want, snapshot.Products())
 	var documents []Preset
 	for _, entry := range CIMDDocuments() {
+		require.Equal(t, strings.Contains(entry.Document.URL, "*"), entry.Document.Pattern, entry.Document.URL)
 		documents = append(documents, Preset{ProductID: entry.Product.ID, VendorKey: entry.Product.VendorKey, DisplayName: entry.Document.DisplayName, URL: entry.Document.URL, Enabled: entry.Document.Enabled, Pattern: entry.Document.Pattern})
 	}
 	require.Equal(t, documents, snapshot.Catalog())
@@ -86,11 +89,22 @@ func TestSnapshotOwnsAllMutableData(t *testing.T) {
 	copied := snapshot.Products()
 	copied[0].Documents[0].URL = "https://changed.example.com/copy.json"
 	for i := range copied {
-		if len(copied[i].Signatures.BundleIDs) > 0 {
-			copied[i].Signatures.BundleIDs[0] = "changed"
+		for _, values := range [][]string{
+			copied[i].Signatures.BundleIDs,
+			copied[i].Signatures.Binaries,
+			copied[i].Signatures.ConfigDirs,
+			copied[i].Signatures.ProcessNames,
+			copied[i].ClientInfoNames,
+		} {
+			if len(values) > 0 {
+				values[0] = "changed"
+			}
 		}
-		if len(copied[i].ClientInfoNames) > 0 {
-			copied[i].ClientInfoNames[0] = "changed"
+		if len(copied[i].Aliases) > 0 {
+			copied[i].Aliases[0].Name = "changed"
+		}
+		if len(copied[i].Documents) > 0 {
+			copied[i].Documents[0].DisplayName = "changed"
 		}
 	}
 	presets := snapshot.Catalog()
