@@ -308,5 +308,15 @@ export function useActiveKillswitches(): {
         k.schedule.end === "bounded" ? k.schedule.endsAt.toISOString() : null,
     }),
   );
-  return { killswitches, isPending: query.isPending, isError: query.isError };
+  // A member who may not read killswitches sees none rather than an error.
+  const forbidden =
+    typeof query.error === "object" &&
+    query.error !== null &&
+    "statusCode" in query.error &&
+    (query.error.statusCode === 401 || query.error.statusCode === 403);
+  return {
+    killswitches,
+    isPending: query.isPending,
+    isError: query.isError && !forbidden,
+  };
 }
