@@ -75,6 +75,7 @@ import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import {
   AlertTriangle,
   Database,
+  MessageSquareQuote,
   MessageSquareText,
   ShieldCheck,
   WandSparkles,
@@ -102,6 +103,12 @@ const GUARDRAILS_TAB: McpDetailTabDef<TabValue> = {
   key: "guardrails",
   title: "Guardrails",
   Icon: ShieldCheck,
+};
+// Named as on a skill's page, where agents' reports about it live too.
+const FEEDBACK_TAB: McpDetailTabDef<TabValue> = {
+  key: "feedback",
+  title: "Agent Feedback",
+  Icon: MessageSquareQuote,
 };
 
 /**
@@ -495,6 +502,9 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
       // vendor with the vendor's own credentials, so Speakeasy never mints a session
       // or registers a client for them and the tab would always be empty.
       !isUnproxied && "sessions",
+      // Hidden for unproxied servers: agents reach them directly, so Speakeasy
+      // cannot add the feedback tool or receive what it would collect.
+      !isUnproxied && FEEDBACK_TAB,
       "settings",
     ],
     activeTab,

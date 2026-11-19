@@ -132,6 +132,16 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 
 	checks := []postflightCountCheck{
 		{
+			what:  "mcp server feedback settings",
+			count: byProject(s.q.ServerFeedbackCountConfigs),
+			fail:  postflightMustEqual(2, "expected 2 servers with feedback settings, found %d"),
+		},
+		{
+			what:  "mcp server feedback reports",
+			count: byProject(s.q.ServerFeedbackCountReports),
+			fail:  postflightMustEqual(int64(len(serverFeedbackReports)), fmt.Sprintf("expected %d mcp server feedback reports, found %%d", len(serverFeedbackReports))),
+		},
+		{
 			what:  "remote server tool metadata",
 			count: byProject(s.q.PostflightCountToolMetadata),
 			fail:  postflightMustEqual(inspectMetadataCount(), fmt.Sprintf("expected %d remote server tool metadata rows, found %%d", inspectMetadataCount())),
