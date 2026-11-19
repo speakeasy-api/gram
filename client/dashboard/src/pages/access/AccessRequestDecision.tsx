@@ -26,7 +26,9 @@ export function AccessRequestDecision({
   const queryClient = useQueryClient();
   const [choice, setChoice] = useState<string | null>(null);
   const decide = useDecideAccessRequestMutation({
-    onSuccess: async () => {
+    // Refresh on a refusal too: a 409 means the request was decided
+    // elsewhere, and the list should show that.
+    onSettled: async () => {
       await Promise.all([
         invalidateAllAccessRequests(queryClient),
         invalidateAllTemporaryGrants(queryClient),
@@ -51,7 +53,14 @@ export function AccessRequestDecision({
     );
   }
 
-  const submit = (key: string, approve: boolean, expiresAt?: Date) => {
+  const submit = (key: string, approve: boolean) => {
+    // The window starts when the administrator clicks, not when the dialog
+    // opened.
+    const expiresAt = approve
+      ? approvalChoices(new Date()).find((option) => option.key === key)
+          ?.expiresAt
+      : undefined;
+    if (approve && !expiresAt) return;
     setChoice(key);
     decide.mutate({
       request: {
@@ -74,7 +83,7 @@ export function AccessRequestDecision({
             size="sm"
             variant={option.key === "1h" ? "primary" : "secondary"}
             disabled={decide.isPending}
-            onClick={() => submit(option.key, true, option.expiresAt)}
+            onClick={() => submit(option.key, true)}
           >
             {decide.isPending && choice === option.key
               ? "Approving…"
@@ -96,7 +105,7 @@ export function AccessRequestDecision({
       {decide.isError && (
         <Text variant="body" className="text-destructive text-sm">
           {decide.error instanceof GramError && decide.error.statusCode === 409
-            ? `${requesterName} already has this access, or the request was decided elsewhere. Check their temporary access, or deny the request.`
+            ? `${requesterName} already has this access, or the request was decided elsewhere. Check their temporary access.`
             : "The request could not be decided. Try again."}
         </Text>
       )}

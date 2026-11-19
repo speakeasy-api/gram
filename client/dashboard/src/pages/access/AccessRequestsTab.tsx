@@ -8,6 +8,9 @@ import type { AccessRequest } from "@gram/client/models/components/accessrequest
 import { useAccessRequests } from "@gram/client/react-query/accessRequests.js";
 import { formatDistanceToNow } from "date-fns";
 import { useMemo } from "react";
+
+/** The most requests the server lists in one response. */
+export const MAX_LISTED_ACCESS_REQUESTS = 200;
 import { scopeLabel } from "./scopeCatalogue";
 
 /**
@@ -90,7 +93,7 @@ export function AccessRequestsTab({
   );
 
   if (query.isPending) {
-    return <SkeletonTable />;
+    return <SkeletonTable columns={columns.map((column) => column.width)} />;
   }
   if (query.isError) {
     return (
@@ -118,5 +121,15 @@ export function AccessRequestsTab({
       />
     );
   }
-  return <Table columns={columns} data={rows} rowKey={(row) => row.id} />;
+  return (
+    <div className="space-y-3">
+      {rows.length >= MAX_LISTED_ACCESS_REQUESTS && (
+        <Text muted small>
+          Showing the {MAX_LISTED_ACCESS_REQUESTS} newest pending requests.
+          Decide these to see older ones.
+        </Text>
+      )}
+      <Table columns={columns} data={rows} rowKey={(row) => row.id} />
+    </div>
+  );
 }

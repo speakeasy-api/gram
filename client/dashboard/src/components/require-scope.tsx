@@ -424,24 +424,29 @@ function RequestScopeAccessButton({
   });
   // Only request scopes the user is actually missing — an all-scopes gate can
   // trip on a partial grant, and admins shouldn't be asked for held scopes.
-  const missingScopes = getRequestableScopes(scopes).filter(
+  const missingScopes = scopes.filter(
     (s) => !hasScope(s, resourceId, projectId),
   );
   // Members who can't read the organization can't load the catalogue either;
   // a scope it does not describe is offered, and the server refuses it if it
   // can't be given temporarily.
+  const askableScopes = getRequestableScopes(missingScopes);
   const requestableScopes = accessRequestsOn
-    ? missingScopes.filter(
+    ? askableScopes.filter(
         (s) => catalogue.get(s)?.temporaryGrantable !== false,
       )
-    : missingScopes;
+    : askableScopes;
   if (missingScopes.length === 0) return null;
+  // An all-scopes gate stays shut unless every missing scope can be asked for.
+  const cannotUnblock =
+    requestableScopes.length === 0 ||
+    (all && requestableScopes.length < missingScopes.length);
   const stack = cn(
     "flex flex-col gap-1",
     align === "start" ? "items-start text-left" : "items-center text-center",
     className,
   );
-  if (requestableScopes.length === 0 || requestState === "not-requestable") {
+  if (cannotUnblock || requestState === "not-requestable") {
     return (
       <p className={cn("text-muted-foreground max-w-sm text-sm", stack)}>
         This access can't be requested here. Ask an organization administrator
@@ -600,6 +605,13 @@ function AccessRequestWatcher({
 }): null {
   const queryClient = useQueryClient();
   const seenPending = React.useRef(new Set<string>());
+  // The parent passes new references on every render; the effect only needs
+  // to run when the polled list changes.
+  const onDecidedRef = React.useRef(onDecided);
+  React.useLayoutEffect(() => {
+    onDecidedRef.current = onDecided;
+  });
+  const scopesKey = scopes.join(",");
   const mine = useAccessRequests({ mine: true }, undefined, {
     refetchInterval: ACCESS_REQUEST_POLL_MS,
     throwOnError: false,
@@ -607,18 +619,22 @@ function AccessRequestWatcher({
 
   React.useEffect(() => {
     if (!mine.data) return;
+    const watched = scopesKey.split(",");
     const matching = mine.data.requests.filter(
       (request) =>
-        scopes.includes(request.scope) &&
+        watched.includes(request.scope) &&
         request.selector.resourceId === resourceId,
     );
+    // The list holds only the newest requests, so a request missing from it
+    // tells nothing: only a listed, decided request ends the wait.
+    if (matching.length === 0) return;
     if (
       seenPending.current.size === 0 &&
       !matching.some((request) => request.status === "pending")
     ) {
       // Decided before this page last looked: show the current state, no toast.
       invalidateTemporaryAccess(queryClient);
-      onDecided();
+      onDecidedRef.current();
       return;
     }
     for (const request of matching) {
@@ -640,9 +656,9 @@ function AccessRequestWatcher({
       } else {
         toast.info("Your access request expired before anyone decided it.");
       }
-      onDecided();
+      onDecidedRef.current();
     }
-  }, [mine.data, scopes, resourceId, queryClient, onDecided]);
+  }, [mine.data, scopesKey, resourceId, queryClient]);
 
   return null;
 }

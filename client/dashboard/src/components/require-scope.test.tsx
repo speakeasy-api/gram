@@ -99,6 +99,9 @@ afterEach(() => {
   accessRequests.grantable = new Set();
   accessRequests.pending = [];
   mutateAsync.mockClear();
+  toast.success.mockClear();
+  toast.error.mockClear();
+  toast.info.mockClear();
 });
 
 describe("RequireScope page level", () => {

@@ -21,7 +21,10 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
-import { AccessRequestsTab } from "./AccessRequestsTab";
+import {
+  AccessRequestsTab,
+  MAX_LISTED_ACCESS_REQUESTS,
+} from "./AccessRequestsTab";
 import { useState } from "react";
 import { ChallengesTab } from "./ChallengesTab";
 import { GrantAccessDialog } from "./GrantAccessDialog";
@@ -99,11 +102,20 @@ function AccessInner() {
     enabled: accessRequestsOn,
     throwOnError: false,
   });
-  const pendingCount = pendingRequests.data?.requests.length;
-  // Keep the request the dialog opened on: once it is decided it leaves the
-  // pending list, and the dialog still has to show the outcome.
+  const pendingRows = pendingRequests.data?.requests.length ?? 0;
+  const pendingCount =
+    pendingRows >= MAX_LISTED_ACCESS_REQUESTS
+      ? `${pendingRows}+`
+      : pendingRows || undefined;
+  // A linked request is looked up in every status, so a link to a request
+  // decided or lapsed since opens it and says so. The dialog keeps the request
+  // it opened on, so a decision made in it still shows its outcome.
+  const linkedRequests = useAccessRequests({}, undefined, {
+    enabled: accessRequestsOn && !!grantRequestId,
+    throwOnError: false,
+  });
   const foundRequest = grantRequestId
-    ? pendingRequests.data?.requests.find((r) => r.id === grantRequestId)
+    ? linkedRequests.data?.requests.find((r) => r.id === grantRequestId)
     : undefined;
   const [openedRequest, setOpenedRequest] = useState<AccessRequest>();
   if (foundRequest && openedRequest?.id !== foundRequest.id) {
@@ -140,7 +152,15 @@ function AccessInner() {
 
   const pathSegments = location.pathname.split("/");
   const lastSegment = pathSegments[pathSegments.length - 1] ?? "";
-  const currentTab = tabFromPath[lastSegment] || "roles";
+  const pathTab = tabFromPath[lastSegment] || "roles";
+  // With the rollout off there is no Access Requests tab to show, so a direct
+  // link lands on Roles.
+  const currentTab =
+    pathTab === "requests" &&
+    !accessRequestsOn &&
+    accessRequestsFlag.status !== "loading"
+      ? "roles"
+      : pathTab;
 
   const basePath = pathSegments
     .slice(0, lastSegment === "access" ? pathSegments.length : -1)

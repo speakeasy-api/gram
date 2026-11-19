@@ -112,6 +112,12 @@ export function GrantAccessDialog({
     () => membersData?.members?.find((m) => m.id === userId) ?? null,
     [membersData?.members, userId],
   );
+  // The request is only shown for the member it belongs to, so its decision
+  // cannot be applied to someone other than the person named here.
+  const memberRequest =
+    request && member && request.requesterUserId === member.id
+      ? request
+      : undefined;
 
   const suggestions = useMemo(
     () =>
@@ -296,17 +302,27 @@ export function GrantAccessDialog({
                 </div>
               </div>
 
-              {request?.message && (
+              {memberRequest?.message && (
                 <Text muted small>
-                  “{request.message}”
+                  “{memberRequest.message}”
                 </Text>
               )}
 
-              {request?.status === "pending" && !granted && (
+              {memberRequest?.status === "pending" && !granted && (
                 <AccessRequestDecision
-                  request={request}
+                  request={memberRequest}
                   requesterName={member.name}
                 />
+              )}
+
+              {memberRequest && memberRequest.status !== "pending" && (
+                <Text muted small>
+                  This request was {memberRequest.status}
+                  {memberRequest.decidedByName
+                    ? ` by ${memberRequest.decidedByName}`
+                    : ""}
+                  .
+                </Text>
               )}
 
               {granted ? (
