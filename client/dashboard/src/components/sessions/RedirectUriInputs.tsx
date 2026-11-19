@@ -25,16 +25,21 @@ export function RedirectUriInputs({
         // Positional keys are fine: fields are only ever appended or removed,
         // and each one is fully controlled by `value`.
         <div key={index} className="flex items-center gap-2">
-          <Input
-            value={uri}
-            onChange={(next) => update(index, next)}
-            placeholder="https://agent.example.com/oauth/callback"
-            aria-label={`Redirect URI ${index + 1}`}
-            className="font-mono text-xs"
-            disabled={disabled}
-          />
+          {/* Input's own wrapper has no width, so in a row it would shrink
+              to its content; this one takes the row's free space. */}
+          <div className="min-w-0 flex-1">
+            <Input
+              value={uri}
+              onChange={(next) => update(index, next)}
+              placeholder="https://agent.example.com/oauth/callback"
+              aria-label={`Redirect URI ${index + 1}`}
+              className="font-mono text-xs"
+              disabled={disabled}
+            />
+          </div>
           {value.length > 1 && (
             <Button
+              type="button"
               variant="tertiary"
               size="sm"
               icon="x"
@@ -46,6 +51,7 @@ export function RedirectUriInputs({
         </div>
       ))}
       <Button
+        type="button"
         variant="secondary"
         size="sm"
         icon="plus"

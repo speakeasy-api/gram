@@ -76,6 +76,24 @@ describe("RegisterClientSheet", () => {
     expect(submit).toHaveProperty("disabled", false);
   });
 
+  it("adds a redirect URI field without submitting the form", () => {
+    renderSheet();
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Support triage agent" },
+    });
+    fireEvent.change(screen.getByLabelText("Redirect URI 1"), {
+      target: { value: "https://agent.example.com/cb" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add redirect URI" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove redirect URI 2" }),
+    );
+
+    expect(createMutate).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Redirect URI 1")).toBeDefined();
+  });
+
   it("registers with the chosen auth method and shows the secret once", async () => {
     renderSheet();
 
