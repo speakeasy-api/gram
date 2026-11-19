@@ -428,6 +428,37 @@ type AiProduct struct {
 	// Names the product reports at MCP initialize. Attribution only, never enforcement: they are self-reported, so any client can claim any name.
 	// @access: opaque-confidential
 	ClientInfoNames []string
+	// Groups a vendor's related products, e.g. claude for Claude Code, Claude and Cowork. Null means the product is a family of its own.
+	// @access: confidential
+	Family pgtype.Text
+	// Subject URN of the staff member who created the row; null for seeded rows.
+	// @access: confidential-pii
+	CreatedBy pgtype.Text
+	// Subject URN of the staff member who last changed the row; null for seeded rows.
+	// @access: confidential-pii
+	UpdatedBy pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+// Other names each catalog product is reported under. Attribution only, never enforcement: the names are self-reported.
+type AiProductAlias struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	AiProductID string
+	// The reported name. Stored as written; lookups fold case and treat spaces, underscores and hyphens alike in application code.
+	// @access: opaque-confidential
+	Name string
+	// Kind of client the name implies (cli, ide, desktop, web, mobile, cloud, slack); null when the name implies none. Validated in application code.
+	// @access: confidential
+	Client pgtype.Text
 	// Subject URN of the staff member who created the row; null for seeded rows.
 	// @access: confidential-pii
 	CreatedBy pgtype.Text
