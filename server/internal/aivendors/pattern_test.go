@@ -29,7 +29,10 @@ func TestMatchesPattern_AdmitsOneSegment(t *testing.T) {
 		"https://chatgpt.com/oauth/A-Z_0-9.~/client.json",
 	}
 	for _, clientID := range admitted {
-		require.Truef(t, matchesPattern(chatGPTPattern, clientID), "%q should match", clientID)
+		t.Run(clientID, func(t *testing.T) {
+			t.Parallel()
+			require.Truef(t, matchesPattern(chatGPTPattern, clientID), "%q should match", clientID)
+		})
 	}
 }
 
@@ -51,7 +54,10 @@ func TestMatchesPattern_HostEscapesRejected(t *testing.T) {
 		"https://chatgpt.com./oauth/x/client.json",                 // trailing-dot host
 	}
 	for _, clientID := range rejected {
-		require.Falsef(t, matchesPattern(chatGPTPattern, clientID), "%q must NOT match", clientID)
+		t.Run(clientID, func(t *testing.T) {
+			t.Parallel()
+			require.Falsef(t, matchesPattern(chatGPTPattern, clientID), "%q must NOT match", clientID)
+		})
 	}
 }
 
@@ -71,7 +77,10 @@ func TestMatchesPattern_DoesNotSpanPathSeparator(t *testing.T) {
 		"https://chatgpt.com/oauth/x/client.json?probe=1", // query is part of the compare
 	}
 	for _, clientID := range rejected {
-		require.Falsef(t, matchesPattern(chatGPTPattern, clientID), "%q must NOT match", clientID)
+		t.Run(clientID, func(t *testing.T) {
+			t.Parallel()
+			require.Falsef(t, matchesPattern(chatGPTPattern, clientID), "%q must NOT match", clientID)
+		})
 	}
 }
 
@@ -97,8 +106,11 @@ func TestMatchesPattern_QueryCannotSmuggleSegments(t *testing.T) {
 		"https://chatgpt.com/oauth?a=/x/client.json",         // one segment shallower still
 	}
 	for _, clientID := range smuggled {
-		require.Falsef(t, matchesPattern(chatGPTPattern, clientID), "%q must NOT match", clientID)
-		require.Falsef(t, catalogAdmits(clientID), "%q must NOT be admitted by the catalog", clientID)
+		t.Run(clientID, func(t *testing.T) {
+			t.Parallel()
+			require.Falsef(t, matchesPattern(chatGPTPattern, clientID), "%q must NOT match", clientID)
+			require.Falsef(t, catalogAdmits(clientID), "%q must NOT be admitted by the catalog", clientID)
+		})
 	}
 }
 
@@ -143,7 +155,10 @@ func TestValidatePattern_AcceptsSegmentWildcard(t *testing.T) {
 		"https://example.com/a/*/b/*/c",
 	}
 	for _, pattern := range valid {
-		require.NoErrorf(t, validatePattern(pattern), "%q should be a valid pattern", pattern)
+		t.Run(pattern, func(t *testing.T) {
+			t.Parallel()
+			require.NoErrorf(t, validatePattern(pattern), "%q should be a valid pattern", pattern)
+		})
 	}
 }
 
@@ -164,7 +179,10 @@ func TestValidatePattern_RejectsHostWildcard(t *testing.T) {
 		"https://chatgpt.com/x#*",       // fragment wildcard
 	}
 	for _, pattern := range invalid {
-		require.Errorf(t, validatePattern(pattern), "%q must be rejected", pattern)
+		t.Run(pattern, func(t *testing.T) {
+			t.Parallel()
+			require.Errorf(t, validatePattern(pattern), "%q must be rejected", pattern)
+		})
 	}
 }
 
@@ -177,7 +195,10 @@ func TestValidatePattern_RejectsPartialSegment(t *testing.T) {
 		"https://chatgpt.com/oauth/prefix*/client.json",
 	}
 	for _, pattern := range invalid {
-		require.ErrorIsf(t, validatePattern(pattern), errPatternPartialSegment, "%q must be rejected", pattern)
+		t.Run(pattern, func(t *testing.T) {
+			t.Parallel()
+			require.ErrorIsf(t, validatePattern(pattern), errPatternPartialSegment, "%q must be rejected", pattern)
+		})
 	}
 }
 
@@ -195,14 +216,32 @@ func TestValidatePattern_RejectsMalformed(t *testing.T) {
 	require.ErrorIs(t, validatePattern("https://:443/*"), errPatternUnparseable)
 }
 
+func TestValidatePattern_RequiresWildcard(t *testing.T) {
+	t.Parallel()
+
+	for _, pattern := range []string{
+		"https://chatgpt.com/oauth/client.json",
+		"https://example.com/x",
+		"https://example.com/oauth/client.json?v=2",
+	} {
+		t.Run(pattern, func(t *testing.T) {
+			t.Parallel()
+			require.ErrorIs(t, validatePattern(pattern), errPatternNoWildcard)
+		})
+	}
+}
+
 func TestPatternRejectsPathInsideQueryOrFragment(t *testing.T) {
 	t.Parallel()
 	for _, pattern := range []string{
 		"https://example.com?redirect=/oauth/*/client.json",
 		"https://example.com#/oauth/*/client.json",
 	} {
-		require.ErrorIs(t, validatePattern(pattern), errPatternUnparseable)
-		require.False(t, matchesPattern(pattern, strings.ReplaceAll(pattern, "*", "connector")))
+		t.Run(pattern, func(t *testing.T) {
+			t.Parallel()
+			require.ErrorIs(t, validatePattern(pattern), errPatternUnparseable)
+			require.False(t, matchesPattern(pattern, strings.ReplaceAll(pattern, "*", "connector")))
+		})
 	}
 }
 
@@ -253,8 +292,11 @@ func TestCatalogAdmits_CodexPerServerNamespace(t *testing.T) {
 		"https://chatgpt.com/oauth/codex/f6Kd2Vs_9JtM/client.json",
 	}
 	for _, clientID := range admitted {
-		require.Truef(t, matchesPattern(codexPattern, clientID), "%q should match", clientID)
-		require.Truef(t, catalogAdmits(clientID), "%q should be admitted by the catalog", clientID)
+		t.Run(clientID, func(t *testing.T) {
+			t.Parallel()
+			require.Truef(t, matchesPattern(codexPattern, clientID), "%q should match", clientID)
+			require.Truef(t, catalogAdmits(clientID), "%q should be admitted by the catalog", clientID)
+		})
 	}
 
 	rejected := []string{
@@ -266,7 +308,10 @@ func TestCatalogAdmits_CodexPerServerNamespace(t *testing.T) {
 		"https://chatgpt.com.evil.example.com/oauth/codex/x/client.json", // suffix-extended host
 	}
 	for _, clientID := range rejected {
-		require.Falsef(t, matchesPattern(codexPattern, clientID), "%q must NOT match", clientID)
+		t.Run(clientID, func(t *testing.T) {
+			t.Parallel()
+			require.Falsef(t, matchesPattern(codexPattern, clientID), "%q must NOT match", clientID)
+		})
 	}
 	// The deeper shape must miss the whole catalog, not just this pattern.
 	require.False(t, catalogAdmits("https://chatgpt.com/oauth/codex/a/b/client.json"))
@@ -314,8 +359,11 @@ func TestCatalogAdmits_VercelConnectNamespace(t *testing.T) {
 		"https://connect.vercel.com/connectors/scl_abc123xyz",
 	}
 	for _, clientID := range admitted {
-		require.Truef(t, matchesPattern(vercelPattern, clientID), "%q should match", clientID)
-		require.Truef(t, catalogAdmits(clientID), "%q should be admitted by the catalog", clientID)
+		t.Run(clientID, func(t *testing.T) {
+			t.Parallel()
+			require.Truef(t, matchesPattern(vercelPattern, clientID), "%q should match", clientID)
+			require.Truef(t, catalogAdmits(clientID), "%q should be admitted by the catalog", clientID)
+		})
 	}
 
 	rejected := []string{
@@ -326,8 +374,11 @@ func TestCatalogAdmits_VercelConnectNamespace(t *testing.T) {
 		"https://connect.vercel.com/connectors/scl_abc?x", // query differs
 	}
 	for _, clientID := range rejected {
-		require.Falsef(t, matchesPattern(vercelPattern, clientID), "%q must NOT match", clientID)
-		require.Falsef(t, catalogAdmits(clientID), "%q must NOT be admitted by the catalog", clientID)
+		t.Run(clientID, func(t *testing.T) {
+			t.Parallel()
+			require.Falsef(t, matchesPattern(vercelPattern, clientID), "%q must NOT match", clientID)
+			require.Falsef(t, catalogAdmits(clientID), "%q must NOT be admitted by the catalog", clientID)
+		})
 	}
 }
 

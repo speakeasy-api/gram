@@ -123,6 +123,7 @@ func TestLoadOmitsPatternsWithoutRealPath(t *testing.T) {
 		"https://example.com?redirect=/oauth/*/client.json",
 		"https://example.com#/oauth/*/client.json",
 		"https://:443/*/client.json",
+		"https://zed.dev/oauth/no-wildcard/client.json",
 	}
 	for _, pattern := range patterns {
 		_, err = seedrepo.New(db).InsertDocument(t.Context(), seedrepo.InsertDocumentParams{
