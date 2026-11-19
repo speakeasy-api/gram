@@ -50,9 +50,9 @@ kind its checks and grant selectors name.`, "map[Scope]string", r.DeriveResource
 of that kind must carry: the Required dimensions in the registry. Selector
 matching skips grant keys a check omits, so a check without a dimension that
 grants of its kind can be bounded by would pass such a grant whatever value
-the grant names. MCP grants can be bounded to a project
-({"resource_id":"*","project_id":P}), so every MCP check must name the
-project of the resource it targets.`, "map[string][]string", r.DeriveRequiredCheckDimensions()},
+the grant names. Grants on a type inside a project can be bounded to one
+({"resource_id":"*","project_id":P}), so every check on such a type must
+name the project of the resource it targets.`, "map[string][]string", r.DeriveRequiredCheckDimensions()},
 		{"allowedSelectorKeys", `allowedSelectorKeys defines which extra keys (beyond resource_kind and
 resource_id) are valid for each resource kind: the Dimensions each type
 declares. Kinds not listed here allow no extra keys, except where
