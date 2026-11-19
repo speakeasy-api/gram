@@ -1,4 +1,4 @@
-package authz
+package registry
 
 import (
 	"errors"
@@ -6,12 +6,6 @@ import (
 	"slices"
 	"strings"
 )
-
-func init() {
-	if err := Model.Validate(); err != nil {
-		panic(fmt.Sprintf("authz model is invalid: %v", err))
-	}
-}
 
 // ScopeFor returns the stored scope of permission p on resource type t.
 func (t ResourceType) ScopeFor(p Permission) Scope {
@@ -24,8 +18,8 @@ func (t ResourceType) ScopeFor(p Permission) Scope {
 // BlockScopeFor returns the generated block scope paired with permission p on
 // resource type t: the stored scope's prefix, then blocked_ and its action.
 func (t ResourceType) BlockScopeFor(p Permission) Scope {
-	parts := t.ScopeFor(p).Parts()
-	return Scope(parts.Resource + ":blocked_" + parts.Action)
+	prefix, action := t.ScopeFor(p).split()
+	return Scope(prefix + ":blocked_" + action)
 }
 
 // Permission returns the permission for action, if declared.
@@ -97,11 +91,14 @@ func (r Registry) Validate() error {
 			dimKeys[d.Key] = true
 		}
 
-		actions := map[Action]Permission{}
+		actions := make(map[Action]Permission)
 		for _, p := range t.Permissions {
 			if p.Action == "" {
 				fail("%s: a permission has no action", t.Kind)
 				continue
+			}
+			if !slices.Contains(Actions, p.Action) && !slices.Contains(LegacyActions[t.Kind], p.Action) {
+				fail("%s: action %q is not in registry.Actions; add it to scopes.go", t.Kind, p.Action)
 			}
 			if _, dup := actions[p.Action]; dup {
 				fail("%s: action %q is declared twice", t.Kind, p.Action)
@@ -115,10 +112,11 @@ func (r Registry) Validate() error {
 		for _, p := range t.Permissions {
 			owner := fmt.Sprintf("%s.%s", t.Kind, p.Action)
 			scope := t.ScopeFor(p)
-			if parts := scope.Parts(); parts.Resource == "" || parts.Action == "" || strings.Count(string(scope), ":") != 1 {
+			prefix, action := scope.split()
+			if prefix == "" || action == "" || strings.Count(string(scope), ":") != 1 {
 				fail("%s: scope %q is not resource:action", owner, scope)
 			}
-			if strings.HasPrefix(scope.Parts().Action, "blocked_") {
+			if strings.HasPrefix(action, "blocked_") {
 				fail("%s: blocked_ actions are generated, not declared", owner)
 			}
 			claim(scope, owner)
@@ -243,8 +241,8 @@ func impliesCycle(t ResourceType) string {
 		visiting
 		done
 	)
-	state := map[Action]int{}
-	edges := map[Action][]Action{}
+	state := make(map[Action]int)
+	edges := make(map[Action][]Action)
 	for _, p := range t.Permissions {
 		edges[p.Action] = p.Implies
 	}

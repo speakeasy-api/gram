@@ -11657,7 +11657,7 @@ func unmarshalShadowMCPOfficialServerResponseBodyToAccessShadowMCPOfficialServer
 		Slug:                v.Slug,
 		URL:                 v.URL,
 		GatewayName:         v.GatewayName,
-		DirectAccessAllowed: *v.DirectAccessAllowed,
+		DirectAccessAllowed: v.DirectAccessAllowed,
 	}
 
 	return res

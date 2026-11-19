@@ -134,7 +134,6 @@ describe("MakeOfficialSheet", () => {
     expect(mocks.save).toHaveBeenCalledWith({
       serverUrl: "https://tracker.example.com/mcp",
       mcpServerId: "server-1",
-      allowDirectAccess: false,
     });
     const open = screen.getByRole("link", { name: "Open" });
     expect(open.getAttribute("href")).toBe(
