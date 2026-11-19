@@ -119,15 +119,15 @@ func (s *Service) GetSessionActivity(ctx context.Context, payload *gen.GetSessio
 		liveSince = averageFrom
 	}
 	days, err := repo.New(s.db).GetSessionActivity(ctx, repo.GetSessionActivityParams{
-		OrganizationID:           c.organizationID,
-		IssuerID:                 issuer.ID,
-		ProjectID:                uuid.NullUUID{UUID: c.projectID, Valid: true},
-		DashboardMintPattern:     dashboardMintPattern,
-		LiveSince:                conv.ToPGTimestamptz(liveSince),
-		FromDay:                  conv.ToPGTimestamptz(firstDay),
-		LastDay:                  conv.ToPGTimestamptz(lastDay),
-		AverageFrom:              conv.ToPGTimestamptz(averageFrom),
-		AverageTo:                conv.ToPGTimestamptz(now.Add(clockSkewAllowance)),
+		OrganizationID:       c.organizationID,
+		IssuerID:             issuer.ID,
+		ProjectID:            uuid.NullUUID{UUID: c.projectID, Valid: true},
+		DashboardMintPattern: dashboardMintPattern,
+		LiveSince:            conv.ToPGTimestamptz(liveSince),
+		FromDay:              conv.ToPGTimestamptz(firstDay),
+		LastDay:              conv.ToPGTimestamptz(lastDay),
+		AverageFrom:          conv.ToPGTimestamptz(averageFrom),
+		AverageTo:            conv.ToPGTimestamptz(now.Add(clockSkewAllowance)),
 	})
 	if err != nil || len(days) == 0 {
 		return nil, oops.E(oops.CodeUnexpected, err, "read session activity").LogError(ctx, s.logger)

@@ -199,7 +199,7 @@ func ValidateRange(from, to, now time.Time) error {
 	switch {
 	case !from.Before(to):
 		return errors.New("from must be before to")
-	case from.Before(now.Add(-Retention - rangeSlack)) || from.After(now.Add(rangeSlack)):
+	case from.Before(now.Add(-Retention-rangeSlack)) || from.After(now.Add(rangeSlack)):
 		return errors.New("from must be within the last 30 days")
 	case to.Sub(from) > Retention:
 		return errors.New("the range must be at most 30 days")
