@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"maps"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -1443,5 +1444,73 @@ func insertTelemetryLogWithParams(t *testing.T, ctx context.Context, params test
 		params.traceID, nil, string(attrsJSON), "{}",
 		params.projectID, params.deploymentID, params.functionID, params.gramURN,
 		params.serviceName, nil)
+	require.NoError(t, err)
+}
+
+func TestSearchLogs_GramChatIDWithoutWindow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	chatID := uuid.NewString()
+	otherChatID := uuid.NewString()
+
+	base := time.Now().UTC().Add(-3 * time.Hour)
+	for i := range 3 {
+		insertChatTelemetryLog(t, ctx, projectID, chatID, base.Add(time.Duration(i)*time.Hour))
+	}
+	insertChatTelemetryLog(t, ctx, projectID, otherChatID, base.Add(30*time.Minute))
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	var first, last int64
+	err = conn.QueryRow(ctx, `
+		SELECT min(first_time_unix_nano), max(last_time_unix_nano)
+		FROM chat_log_time_bounds
+		WHERE gram_project_id = ? AND gram_chat_id = ?
+	`, projectID, chatID).Scan(&first, &last)
+	require.NoError(t, err)
+	require.Equal(t, base.UnixNano(), first)
+	require.Equal(t, base.Add(2*time.Hour).UnixNano(), last)
+
+	// The chat panel sends no window, so the read relies on the chat's bounds.
+	res, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
+		Filter: &gen.SearchLogsFilter{GramChatID: &chatID},
+		Limit:  10,
+		Sort:   "asc",
+	})
+	require.NoError(t, err)
+	require.Len(t, res.Logs, 3)
+	for i, log := range res.Logs {
+		require.Equal(t, strconv.FormatInt(base.Add(time.Duration(i)*time.Hour).UnixNano(), 10), log.TimeUnixNano)
+	}
+
+	unknownChatID := uuid.NewString()
+	res, err = ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
+		Filter: &gen.SearchLogsFilter{GramChatID: &unknownChatID},
+		Limit:  10,
+	})
+	require.NoError(t, err)
+	require.Empty(t, res.Logs)
+}
+
+func insertChatTelemetryLog(t *testing.T, ctx context.Context, projectID, chatID string, timestamp time.Time) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "chat log body",
+		"{}", "{}", projectID, "urn:gram:chat", "test-service", chatID)
 	require.NoError(t, err)
 }
