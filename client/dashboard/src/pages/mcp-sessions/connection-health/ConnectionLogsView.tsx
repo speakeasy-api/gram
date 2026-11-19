@@ -44,6 +44,7 @@ import {
   presetValue,
   resolveWindow,
   TIME_RANGE_PRESETS,
+  type TimeRangePreset,
   UNLISTED_APP,
   RETENTION_MS,
   SEARCH_PARAM,
@@ -69,6 +70,15 @@ import {
 } from "./types";
 
 const EMPTY_FILTERS: AttemptFilters = {};
+
+/** The next range to try when one is empty. */
+const WIDER_RANGE: Partial<Record<string, TimeRangePreset>> = {
+  "1h": "1d",
+  "4h": "1d",
+  "1d": "7d",
+  "7d": "30d",
+  custom: "1d",
+};
 const SHEET_PARAMS = [ATTEMPT_PARAM];
 
 const REFERENCE_PATTERN =
@@ -136,40 +146,33 @@ type SearchResult = AttemptFilters | "no-match" | "too-broad" | null;
 /** The API takes at most this many values per filter. */
 const MAX_FILTER_VALUES = 50;
 
+/** Search narrows a filter it shares a field with, never widens it. */
 function searchFilters(
   text: string,
   facets: AttemptFacets | undefined,
+  base: AttemptFilters,
 ): SearchResult {
   const q = text.trim().toLowerCase();
   if (!q) return null;
-  const hits = (values: FacetValue[] | undefined) =>
-    (values ?? [])
-      .filter((v) => (v.label ?? v.value).toLowerCase().includes(q))
-      .map((v) => v.value);
-  const cap = (key: "people" | "serverIds" | "memberIds", values: string[]) =>
-    values.length > MAX_FILTER_VALUES ? "too-broad" : { [key]: values };
-  const people = hits(facets?.people).filter(Boolean);
-  if (people.length > 0) return cap("people", people);
-  const serverIds = hits(facets?.servers);
-  if (serverIds.length > 0) return cap("serverIds", serverIds);
-  const memberIds = hits(facets?.members);
-  if (memberIds.length > 0) return cap("memberIds", memberIds);
-  return "no-match";
-}
-
-/** Search narrows a filter it shares a field with, never widens it. */
-function narrow(base: AttemptFilters, text: SearchResult): SearchResult {
-  if (!text || typeof text === "string") return text;
-  const next: AttemptFilters = {};
-  for (const key of ["people", "serverIds", "memberIds"] as const) {
-    const hits = text[key];
-    if (!hits) continue;
+  const fields = [
+    ["people", facets?.people],
+    ["serverIds", facets?.servers],
+    ["memberIds", facets?.members],
+  ] as const;
+  for (const [key, values] of fields) {
     const set = base[key];
-    const kept = set ? hits.filter((v) => set.includes(v)) : hits;
-    if (kept.length === 0) return "no-match";
-    next[key] = kept;
+    const hits = (values ?? [])
+      .filter(
+        (v) =>
+          v.value !== "" &&
+          (v.label ?? v.value).toLowerCase().includes(q) &&
+          (!set || set.includes(v.value)),
+      )
+      .map((v) => v.value);
+    if (hits.length === 0) continue;
+    return hits.length > MAX_FILTER_VALUES ? "too-broad" : { [key]: hits };
   }
-  return next;
+  return "no-match";
 }
 
 /** The current filters, with the server set, for the provider's own view. */
@@ -249,7 +252,7 @@ export function ConnectionLogsView({
     isReference || !search.trim()
       ? null
       : searchFacets
-        ? narrow(baseFilters, searchFilters(search, searchFacets))
+        ? searchFilters(search, searchFacets, baseFilters)
         : "pending";
   const searchBlocked =
     textFilters === "no-match" ||
@@ -377,7 +380,7 @@ export function ConnectionLogsView({
   const countText = !loggingEnabled
     ? null
     : isReference
-      ? referencePending
+      ? referencePending || referenceFailed
         ? null
         : rows[0]
           ? rows[0].count > 1
@@ -506,6 +509,7 @@ export function ConnectionLogsView({
       />
     );
   } else if (rows.length === 0) {
+    const widerRange = WIDER_RANGE[filters.values.date.preset ?? "custom"];
     body = isReference ? (
       <InlineEmptyState
         icon="search"
@@ -536,21 +540,12 @@ export function ConnectionLogsView({
         heading={`No attempts in ${rangePhrase(filters.values, optionsById)}`}
         description={`Nothing connected or failed in ${rangePhrase(filters.values, optionsById)}.`}
         action={
-          filters.values.date.preset !== "30d" ? (
+          widerRange ? (
             <Button
               variant="secondary"
-              onClick={() =>
-                filters.setValue(
-                  "date",
-                  presetValue(
-                    filters.values.date.preset === "1d" ? "7d" : "1d",
-                  ),
-                )
-              }
+              onClick={() => filters.setValue("date", presetValue(widerRange))}
             >
-              {filters.values.date.preset === "1d"
-                ? "Last 7 days"
-                : "Last 24 hours"}
+              {chipLabel(LOG_FILTERS[0], presetValue(widerRange))}
             </Button>
           ) : undefined
         }
@@ -644,7 +639,11 @@ export function ConnectionLogsView({
                   values={filters.values}
                   optionsById={optionsById}
                   facets={
-                    searching ? searchedCounts.data?.facets : filteredFacets
+                    searching
+                      ? searchedCounts.data?.facets
+                      : textFilters
+                        ? undefined
+                        : filteredFacets
                   }
                   total={beforeRetention || isReference ? undefined : total}
                   onChange={setFilter}

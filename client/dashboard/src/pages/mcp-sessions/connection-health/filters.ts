@@ -131,7 +131,12 @@ export function useSetSearchParam(
 export function resolveWindow(value: DateRangeValue, now: Date): Window {
   const bounds = customDateRangeBounds(value);
   if (bounds) {
-    return { from: bounds.from.toISOString(), to: bounds.to.toISOString() };
+    // Ends no later than now, so a range inside the log stays within 30 days.
+    const to =
+      bounds.from < now
+        ? Math.min(bounds.to.getTime(), now.getTime())
+        : bounds.to.getTime();
+    return { from: bounds.from.toISOString(), to: new Date(to).toISOString() };
   }
   return presetWindow(
     isPreset(value.preset) ? value.preset : DEFAULT_LOG_RANGE,

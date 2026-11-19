@@ -52,8 +52,11 @@ export function AskAiButton({
   const { hasScope } = useRBAC();
   const assistantsAvailable = useAssistantsAvailable();
   const investigate = useInvestigate();
+  // Without a project assistant to answer, the chat would only ask for an admin.
+  const { assistantNeedsAdmin } = useInsightsState();
   if (
     !assistantsAvailable ||
+    assistantNeedsAdmin ||
     !hasScope("assistant:read", undefined, project.id)
   )
     return null;

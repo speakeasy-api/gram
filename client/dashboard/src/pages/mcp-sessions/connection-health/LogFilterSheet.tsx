@@ -2,6 +2,7 @@ import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { FilterControl } from "@/components/filters/FilterControl";
 import {
   calendarDateRangeValue,
+  chipLabel,
   defaultValueForDimension,
   type DateRangeValue,
   type FilterDimension,
@@ -20,17 +21,14 @@ import {
 } from "@/components/ui/Sheet";
 import { cn } from "@/lib/utils";
 import { useEffect, useState, type ReactNode } from "react";
-import { DEFAULT_LOG_RANGE, presetValue, TIME_RANGE_PRESETS } from "./filters";
+import {
+  DEFAULT_LOG_RANGE,
+  LOG_FILTERS,
+  presetValue,
+  TIME_RANGE_PRESETS,
+} from "./filters";
 import { formatCount, plural } from "./format";
 import type { AttemptFacets } from "./types";
-
-const PRESET_LABELS: Record<(typeof TIME_RANGE_PRESETS)[number], string> = {
-  "1h": "Last hour",
-  "4h": "Last 4 hours",
-  "1d": "Last 24 hours",
-  "7d": "Last 7 days",
-  "30d": "Last 30 days",
-};
 
 /** Multiselects listed with their counts rather than in a dropdown. */
 const LISTED: Partial<Record<string, keyof AttemptFacets>> = {
@@ -212,7 +210,7 @@ function TimeRanges({
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap gap-2">
         {TIME_RANGE_PRESETS.map((preset) =>
-          option(preset, PRESET_LABELS[preset], () => {
+          option(preset, chipLabel(LOG_FILTERS[0], presetValue(preset)), () => {
             setCustom(false);
             onChange(presetValue(preset));
           }),

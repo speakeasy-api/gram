@@ -1004,6 +1004,13 @@ function InactiveSplit({
       : rest
     ).push(group);
   }
+  // The count above includes sessions still signed in whose service sign-in lapsed.
+  const anyCounted = needsReauth.some((group) =>
+    group.sessions.some(
+      (session) =>
+        !session.revokedAt && session.refreshExpiresAt.getTime() > now,
+    ),
+  );
   const anyRevoked = rest.some((group) =>
     group.sessions.some(
       (session) => connectionState(session, now) === "revoked",
@@ -1014,7 +1021,9 @@ function InactiveSplit({
       {needsReauth.length > 0 ? (
         <div className="space-y-2">
           <p className="text-eyebrow px-2">
-            Needs re-auth · not counted as active
+            {anyCounted
+              ? "Needs re-auth"
+              : "Needs re-auth · not counted as active"}
           </p>
           <div className={cn(bordered && "border-border border")}>
             {rows(needsReauth)}

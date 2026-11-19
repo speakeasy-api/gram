@@ -7,6 +7,7 @@ import {
   keepPreviousData,
   useInfiniteQuery,
   useQuery,
+  useQueryClient,
   type InfiniteData,
   type UseInfiniteQueryResult,
   type UseQueryResult,
@@ -202,6 +203,19 @@ export function useSessionAverage(
   });
 }
 
+/** Refetches the provider's session count and average, e.g. after a revoke. */
+export function useRefreshSessionActivity(providerId: string): () => void {
+  const queryClient = useQueryClient();
+  const { projectId } = useClient();
+  return () => {
+    for (const read of ["getSessionActivity", "sessionAverage"]) {
+      void queryClient.invalidateQueries({
+        queryKey: [ROOT, projectId, read, providerId],
+      });
+    }
+  };
+}
+
 export function useDeniedClients(
   scope: Scope,
   window: Window,
@@ -232,11 +246,12 @@ function useAttemptBelongs(
 ): { belongs: "yes" | "no" | "pending" | "error"; retry: () => void } {
   const serverId =
     attempt && !attempt.userSessionIssuerId ? attempt.server?.id : undefined;
-  const [window] = useState(() => presetWindow("30d", connectionHealthNow()));
+  // Read per lookup, so the window holds the attempt just found.
+  const [now] = useRangeClock(attempt?.id ?? "");
   // The server is this provider's when the provider has attempts on it.
   const counts = useAttemptCounts(
     { providerId },
-    window,
+    presetWindow("30d", now),
     { serverIds: serverId ? [serverId] : undefined },
     { enabled: !!serverId },
   );

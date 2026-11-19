@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   logsSearch,
   presetWindow,
+  resolveWindow,
   RETENTION_MS,
   startsBeforeRetention,
   toAttemptFilters,
@@ -107,5 +108,20 @@ describe("retention", () => {
       to: NOW.toISOString(),
     };
     expect(startsBeforeRetention(older, NOW)).toBe(true);
+  });
+});
+
+describe("resolveWindow", () => {
+  it("ends a picked range that runs past now at now", () => {
+    const from = new Date(NOW.getTime() - 2 * 24 * 60 * 60 * 1000);
+    const to = new Date(NOW.getTime() + 12 * 60 * 60 * 1000);
+    const window = resolveWindow(
+      { preset: null, customRange: { from, to }, customLabel: "Picked" },
+      NOW,
+    );
+    expect(window).toEqual({
+      from: from.toISOString(),
+      to: NOW.toISOString(),
+    });
   });
 });
