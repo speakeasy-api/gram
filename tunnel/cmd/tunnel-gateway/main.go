@@ -33,15 +33,10 @@ const partitionAttrKey = "gram.partition"
 // is repeated here and the tests pin it.
 var knownPartitions = []string{"us", "eu"}
 
-// defaultPartition is the partition the gateway runs in when GRAM_PARTITION is
-// unset, matching partition.Default in the server.
-const defaultPartition = "us"
-
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
-	rawPartition, partitionSet := os.LookupEnv("GRAM_PARTITION")
-	partition, err := parsePartition(rawPartition, partitionSet)
+	partition, err := parsePartition(os.Getenv("GRAM_PARTITION"))
 	if err != nil {
 		logger.ErrorContext(context.Background(), "invalid GRAM_PARTITION", slog.Any("error", err))
 		os.Exit(2)
@@ -222,11 +217,12 @@ func parseMaxSessions(raw string) (int, error) {
 	return parsed, nil
 }
 
-// parsePartition returns the partition named by GRAM_PARTITION. Unset selects
-// the default (us); set but empty or unknown is an error, as in the server.
-func parsePartition(raw string, set bool) (string, error) {
-	if !set {
-		return defaultPartition, nil
+// parsePartition returns the partition named by GRAM_PARTITION. It has no
+// default: unset, empty or unknown is an error, as in the server, so a
+// deployment that forgets it fails at startup.
+func parsePartition(raw string) (string, error) {
+	if raw == "" {
+		return "", fmt.Errorf("GRAM_PARTITION is required: set it to one of %s", strings.Join(knownPartitions, ", "))
 	}
 	if !slices.Contains(knownPartitions, raw) {
 		return "", fmt.Errorf("unknown partition %q: must be one of %s", raw, strings.Join(knownPartitions, ", "))

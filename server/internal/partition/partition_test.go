@@ -43,9 +43,3 @@ func TestParse_RejectsUnknownNames(t *testing.T) {
 		})
 	}
 }
-
-func TestDefault_IsUS(t *testing.T) {
-	t.Parallel()
-
-	require.Equal(t, partition.US, partition.Default)
-}

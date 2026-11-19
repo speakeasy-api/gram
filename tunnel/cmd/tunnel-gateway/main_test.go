@@ -30,32 +30,26 @@ func TestParseMaxSessionsRejectsInvalidValue(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestParsePartitionDefaultsToUSWhenUnset(t *testing.T) {
-	got, err := parsePartition("", false)
-	require.NoError(t, err)
-	require.Equal(t, "us", got)
-}
-
 func TestParsePartitionAcceptsKnownPartitions(t *testing.T) {
 	for _, want := range []string{"us", "eu"} {
-		got, err := parsePartition(want, true)
+		got, err := parsePartition(want)
 		require.NoError(t, err)
 		require.Equal(t, want, got)
 	}
 }
 
-func TestParsePartitionRejectsEmptyOrUnknown(t *testing.T) {
+func TestParsePartitionRejectsMissingOrUnknown(t *testing.T) {
 	tests := []struct {
 		name    string
 		raw     string
 		wantErr string
 	}{
-		{name: "empty", raw: "", wantErr: `unknown partition ""`},
+		{name: "missing", raw: "", wantErr: "GRAM_PARTITION is required: set it to one of us, eu"},
 		{name: "unknown", raw: "apac", wantErr: `unknown partition "apac"`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := parsePartition(tc.raw, true)
+			_, err := parsePartition(tc.raw)
 			require.ErrorContains(t, err, tc.wantErr)
 		})
 	}

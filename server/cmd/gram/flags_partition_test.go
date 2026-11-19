@@ -2,6 +2,7 @@ package gram
 
 import (
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -43,13 +44,22 @@ func runPartitionApp(t *testing.T, args ...string) (partition.Partition, error) 
 	return got, nil
 }
 
-func TestPartitionFlag_DefaultsToUS(t *testing.T) { //nolint:paralleltest // app.Run mutates urfave's shared help command
-	got, err := runPartitionApp(t, "probe")
-	require.NoError(t, err)
-	require.Equal(t, partition.US, got)
+func TestPartitionFlag_RequiredWhenUnset(t *testing.T) {
+	// Unset rather than empty: a value from the shell or mise.toml must not
+	// change the outcome. t.Setenv restores the original when the test ends.
+	t.Setenv("GRAM_PARTITION", "")
+	require.NoError(t, os.Unsetenv("GRAM_PARTITION"))
+
+	_, err := runPartitionApp(t, "probe")
+	require.ErrorContains(t, err, "--partition (GRAM_PARTITION) is required: set it to one of us, eu")
 }
 
-func TestPartitionFlag_ReachesSubcommand(t *testing.T) { //nolint:paralleltest // app.Run mutates urfave's shared help command
+func TestPartitionFlag_ReachesSubcommand(t *testing.T) {
+	// Unset rather than empty: a value from the shell or mise.toml must not
+	// change the outcome. t.Setenv restores the original when the test ends.
+	t.Setenv("GRAM_PARTITION", "")
+	require.NoError(t, os.Unsetenv("GRAM_PARTITION"))
+
 	got, err := runPartitionApp(t, "--partition", "eu", "probe")
 	require.NoError(t, err)
 	require.Equal(t, partition.EU, got)
@@ -70,14 +80,81 @@ func TestPartitionFlag_RejectsEmptyEnvironmentVariable(t *testing.T) {
 	require.ErrorContains(t, err, `invalid --partition: unknown partition ""`)
 }
 
-func TestPartitionFlag_RejectsUnknownPartition(t *testing.T) { //nolint:paralleltest // app.Run mutates urfave's shared help command
+func TestPartitionFlag_RejectsUnknownPartition(t *testing.T) {
+	// Unset rather than empty: a value from the shell or mise.toml must not
+	// change the outcome. t.Setenv restores the original when the test ends.
+	t.Setenv("GRAM_PARTITION", "")
+	require.NoError(t, os.Unsetenv("GRAM_PARTITION"))
+
 	_, err := runPartitionApp(t, "--partition", "apac", "probe")
 	require.ErrorContains(t, err, `invalid --partition: unknown partition "apac"`)
 }
 
-func TestApp_RejectsUnknownPartitionBeforeAnyCommand(t *testing.T) { //nolint:paralleltest // app.Run mutates urfave's shared help command
+func TestApp_RequiresPartitionBeforeAnyCommand(t *testing.T) {
+	// Unset rather than empty: a value from the shell or mise.toml must not
+	// change the outcome. t.Setenv restores the original when the test ends.
+	t.Setenv("GRAM_PARTITION", "")
+	require.NoError(t, os.Unsetenv("GRAM_PARTITION"))
+
+	err := newApp().RunContext(t.Context(), []string{"gram", "start"})
+	require.ErrorContains(t, err, "--partition (GRAM_PARTITION) is required")
+}
+
+func TestApp_RejectsUnknownPartitionBeforeAnyCommand(t *testing.T) {
+	// Unset rather than empty: a value from the shell or mise.toml must not
+	// change the outcome. t.Setenv restores the original when the test ends.
+	t.Setenv("GRAM_PARTITION", "")
+	require.NoError(t, os.Unsetenv("GRAM_PARTITION"))
+
 	err := newApp().RunContext(t.Context(), []string{"gram", "--partition", "apac", "version"})
 	require.ErrorContains(t, err, `invalid --partition: unknown partition "apac"`)
+}
+
+func TestApp_HelpAndVersionRunWithoutPartition(t *testing.T) {
+	// Unset rather than empty: a value from the shell or mise.toml must not
+	// change the outcome. t.Setenv restores the original when the test ends.
+	t.Setenv("GRAM_PARTITION", "")
+	require.NoError(t, os.Unsetenv("GRAM_PARTITION"))
+
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "version", args: []string{"gram", "version"}},
+		{name: "help command", args: []string{"gram", "help"}},
+		{name: "root help flag", args: []string{"gram", "--help"}},
+		{name: "command help flag", args: []string{"gram", "start", "--help"}},
+	}
+	for _, tc := range tests { //nolint:paralleltest // subtests share the parent's environment and urfave's help command
+		t.Run(tc.name, func(t *testing.T) {
+			require.NoError(t, newApp().RunContext(t.Context(), tc.args))
+		})
+	}
+}
+
+func TestPrintsHelpOrVersion(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "no command", args: nil, want: true},
+		{name: "version", args: []string{"version"}, want: true},
+		{name: "help command", args: []string{"help", "start"}, want: true},
+		{name: "help flag after command", args: []string{"start", "--help"}, want: true},
+		{name: "short help flag", args: []string{"worker", "-h"}, want: true},
+		{name: "service command", args: []string{"start"}, want: false},
+		{name: "service command with flags", args: []string{"worker", "--environment", "prod"}, want: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, tc.want, printsHelpOrVersion(tc.args))
+		})
+	}
 }
 
 func TestPullPartition_PanicsWithoutRootCommand(t *testing.T) {

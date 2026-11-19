@@ -13,7 +13,3 @@ EU: Final = "eu"
 
 # Every known partition, in the same order as ``partition.All`` in Go.
 PARTITIONS: Final = (US, EU)
-
-# The partition a process runs in when none is configured. Every deployment
-# that predates partitions is the US one.
-DEFAULT: Final = US

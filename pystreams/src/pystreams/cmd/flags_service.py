@@ -1,33 +1,8 @@
-import os
 from collections.abc import Sequence
 
 import click
 
 from pystreams import partition
-
-
-def _reject_empty_partition_env(
-    ctx: click.Context, param: click.Parameter, value: str
-) -> str:
-    """Fail on a GRAM_PARTITION that is set but empty.
-
-    Click treats an empty environment variable as unset and falls back to the
-    default, while the Go server rejects it. Rejecting it here too keeps a
-    misrendered deployment from running pystreams as ``us`` while the Go
-    processes refuse to start. An explicit ``--partition`` wins over the
-    environment, as it does in Go, so the check only applies when the value
-    came from the default.
-    """
-    source = ctx.get_parameter_source(param.name) if param.name else None
-    if (
-        source is click.core.ParameterSource.DEFAULT
-        and os.environ.get("GRAM_PARTITION") == ""
-    ):
-        raise click.BadParameter(
-            "GRAM_PARTITION is set but empty; set it to one of: "
-            + ", ".join(partition.PARTITIONS)
-        )
-    return value
 
 
 def service_options() -> Sequence[click.Option]:
@@ -47,10 +22,13 @@ def service_options() -> Sequence[click.Option]:
         click.Option(
             ["--partition"],
             type=click.Choice(partition.PARTITIONS, case_sensitive=True),
-            default=partition.DEFAULT,
-            show_default=True,
+            # No default: a deployment that forgets the partition fails at
+            # startup instead of running as the wrong one. Click treats a set
+            # but empty GRAM_PARTITION as unset, so it fails the same way,
+            # matching the Go server.
+            required=True,
             envvar="GRAM_PARTITION",
-            callback=_reject_empty_partition_env,
+            show_envvar=True,
             help="Partition this deployment runs in. A partition is an "
             "independent production deployment with its own data stores and "
             "hosts.",

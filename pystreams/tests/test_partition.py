@@ -40,13 +40,13 @@ def parse(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_partitions_match_go_server():
-    # Golden values from server/internal/partition (partition.All, Default).
+    # Golden values from server/internal/partition (partition.All).
     assert partition.PARTITIONS == ("us", "eu")
-    assert partition.DEFAULT == "us"
 
 
-def test_partition_defaults_to_us(parse):
-    assert parse([])["partition"] == "us"
+def test_partition_is_required(parse):
+    with pytest.raises(click.MissingParameter, match="partition"):
+        parse([])
 
 
 def test_partition_reads_environment_variable(parse):
@@ -55,7 +55,7 @@ def test_partition_reads_environment_variable(parse):
 
 def test_empty_partition_environment_variable_is_rejected(parse):
     # Matches the Go server, which rejects a set-but-empty GRAM_PARTITION.
-    with pytest.raises(click.BadParameter, match="set but empty"):
+    with pytest.raises(click.MissingParameter, match="partition"):
         parse([], env={"GRAM_PARTITION": ""})
 
 

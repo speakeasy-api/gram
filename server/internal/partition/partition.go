@@ -24,10 +24,6 @@ const (
 	EU Partition = "eu"
 )
 
-// Default is the partition a process runs in when none is configured. It is
-// US because every deployment that predates partitions is the US one.
-const Default = US
-
 // All lists every known partition in a stable order.
 func All() []Partition {
 	return []Partition{US, EU}

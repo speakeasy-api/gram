@@ -66,7 +66,6 @@ func newApp() *cli.App {
 			if err != nil {
 				return err
 			}
-			c.Context = PushPartition(c.Context, p)
 
 			c.Context = o11y.PushAppInfo(c.Context, &o11y.AppInfo{
 				Name:    "gram",
@@ -81,8 +80,13 @@ func newApp() *cli.App {
 			})).With(
 				attr.SlogDataDogGitCommitSHA(GitSHA),
 				attr.SlogDataDogGitRepoURL("github.com/speakeasy-api/gram"),
-				attr.SlogPartition(p),
 			)
+			// Help and version run without a partition; every other command
+			// has one and carries it on every log line.
+			if p != "" {
+				c.Context = PushPartition(c.Context, p)
+				logger = logger.With(attr.SlogPartition(p))
+			}
 
 			// Sets `GOMEMLIMIT` to 90% of cgroup's memory limit.
 			// Cgroups are Linux-only. Keep all real Linux errors visible.
