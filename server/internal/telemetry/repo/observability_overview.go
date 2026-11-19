@@ -86,8 +86,8 @@ func (q *Queries) GetObservabilityOverview(ctx context.Context, arg GetObservabi
 
 	summariesFromView := !scope.hasFilters()
 	result := &ObservabilityOverview{
-		Summary:               &OverviewSummary{},
-		Comparison:            &OverviewSummary{},
+		Summary:               new(OverviewSummary),
+		Comparison:            new(OverviewSummary),
 		TimeSeries:            nil,
 		TopToolsByCount:       nil,
 		TopToolsByFailureRate: nil,
@@ -318,7 +318,7 @@ func fillTimeSeries(buckets map[int64]TimeSeriesBucket, timeStart, timeEnd, inte
 	for t := alignedStart; t < alignedEnd; t += step {
 		bucket, ok := buckets[t]
 		if !ok {
-			bucket = TimeSeriesBucket{BucketTimeUnixNano: t}
+			bucket.BucketTimeUnixNano = t
 		}
 		series = append(series, bucket)
 	}
