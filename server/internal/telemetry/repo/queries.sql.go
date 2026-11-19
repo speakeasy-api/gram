@@ -2088,6 +2088,14 @@ type ListTelemetryLogsParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsParams) ([]TelemetryLog, error) {
+	if arg.GramChatID != "" {
+		bounds, err := q.getChatLogTimeBounds(ctx, arg.GramProjectID, arg.GramChatID)
+		if err != nil {
+			return nil, err
+		}
+		arg.TimeStart, arg.TimeEnd = bounds.narrow(arg.TimeStart, arg.TimeEnd)
+	}
+
 	sb := sq.Select(
 		"id",
 		"time_unix_nano",
