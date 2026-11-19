@@ -50,11 +50,16 @@ func Render(r registry.Registry) ([]File, error) {
 	if err != nil {
 		return nil, err
 	}
+	ids, err := renderIDs(r)
+	if err != nil {
+		return nil, err
+	}
 	vocabulary, err := renderVocabulary(registry.VocabularyFiles())
 	if err != nil {
 		return nil, err
 	}
 	return append(vocabulary, []File{
+		{Path: "internal/authz/ids_gen.go", Content: ids},
 		{Path: "internal/authz/scopes_gen.go", Content: scopes},
 		{Path: "internal/authz/refs_gen.go", Content: refs},
 		{Path: "internal/authz/tables_gen.go", Content: tables},
