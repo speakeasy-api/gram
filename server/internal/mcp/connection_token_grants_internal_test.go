@@ -94,7 +94,7 @@ func (c assistantGrantCase) post(t *testing.T, form url.Values) *httptest.Respon
 
 	r := newTokenDispatchRequest(t, form)
 	w := httptest.NewRecorder()
-	require.NoError(t, c.service.handleAssistantClientCredentialsGrant(r.Context(), w, r, c.endpoint, c.client, "https://gram.example", "client_secret_post", c.service.logger))
+	require.NoError(t, c.service.handleAssistantClientCredentialsGrant(r.Context(), w, r, c.endpoint, c.service.aiCatalog.Snapshot(), c.client, "https://gram.example", "client_secret_post", c.service.logger))
 	return w
 }
 

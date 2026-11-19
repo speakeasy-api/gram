@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
@@ -74,8 +75,8 @@ type AssistantWorkloadTokenIssuer interface {
 	IssueAssistantWorkloadToken(context.Context, AssistantWorkloadTokenRequest) (AssistantWorkloadToken, error)
 }
 
-func (s *Service) handleAssistantClientCredentialsGrant(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, client *usersessions_repo.UserSessionClient, baseURL, presentedAuthMethod string, logger *slog.Logger) error {
-	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(s.aiCatalog.Snapshot(), client.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundToken,
+func (s *Service) handleAssistantClientCredentialsGrant(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, clientCatalog *aivendors.Snapshot, client *usersessions_repo.UserSessionClient, baseURL, presentedAuthMethod string, logger *slog.Logger) error {
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientCatalog, client.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundToken,
 		mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(oauthwire.GrantTypeClientCredentials),
 		mcpconnectionattempts.UserSessionClient(client.ID), mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID))
 	defer t.Finish(ctx)

@@ -580,7 +580,7 @@ func (s *Service) forwardedClientName(ctx context.Context, logger *slog.Logger, 
 		challengeState.Subject == nil || challengeState.Subject.Kind != urn.SessionSubjectKindAnonymous {
 		return ""
 	}
-	row, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
+	row, err := s.resolveUserSessionClient(ctx, logger, endpoint, s.aiCatalog.Snapshot(), challengeState.ClientID, lookupClientOnly)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		logger.DebugContext(ctx, "mcp client to forward the name of not found", attr.SlogError(err))

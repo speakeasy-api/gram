@@ -658,7 +658,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	loopbackRedirectWarning := false
 	var clientRowID uuid.UUID
 	if !challengeState.FirstParty || catalogReview {
-		client, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
+		client, err := s.resolveUserSessionClient(ctx, logger, endpoint, s.aiCatalog.Snapshot(), challengeState.ClientID, lookupClientOnly)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				t.Refuse(ctx, mcpconnectionattempts.CodeUnknownClientID)
@@ -1490,7 +1490,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	}
 
 	// Resolve the user_session_clients row id for the consent FK.
-	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
+	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, s.aiCatalog.Snapshot(), challengeState.ClientID, lookupClientOnly)
 	if err != nil {
 		// Client revoked mid-flow (config change) or DB error — either way the
 		// approved flow can't complete.

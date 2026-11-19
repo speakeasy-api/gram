@@ -151,7 +151,7 @@ func TestServeTokenGrantFailsClosedWithoutDeclaredClientAuthentication(t *testin
 
 	service, endpoint, _ := newTokenDispatchTestService(t)
 	var called []string
-	authenticated := func(context.Context, http.ResponseWriter, *http.Request, *ResolvedMcpEndpoint, *usersessions_repo.UserSessionClient, string, string, *slog.Logger) error {
+	authenticated := func(context.Context, http.ResponseWriter, *http.Request, *ResolvedMcpEndpoint, *aivendors.Snapshot, *usersessions_repo.UserSessionClient, string, string, *slog.Logger) error {
 		called = append(called, "authenticated")
 		return nil
 	}

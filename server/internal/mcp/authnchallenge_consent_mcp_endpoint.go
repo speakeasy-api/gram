@@ -160,7 +160,7 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 	if challengeState.FirstParty {
 		return oops.E(oops.CodeBadRequest, nil, "first-party connect challenges have no tool picker").LogWarn(ctx, logger)
 	}
-	if _, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly); err != nil {
+	if _, err := s.resolveUserSessionClient(ctx, logger, endpoint, s.aiCatalog.Snapshot(), challengeState.ClientID, lookupClientOnly); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeBadRequest, err, "user session client revoked").LogWarn(ctx, logger)
 		}
@@ -604,7 +604,7 @@ func (s *Service) consentTransportDeferred(ctx context.Context, logger *slog.Log
 		logger.WarnContext(ctx, "build consent cards for inventory deferral", attr.SlogError(err))
 		return false
 	}
-	client, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
+	client, err := s.resolveUserSessionClient(ctx, logger, endpoint, s.aiCatalog.Snapshot(), challengeState.ClientID, lookupClientOnly)
 	if err != nil {
 		return false
 	}
