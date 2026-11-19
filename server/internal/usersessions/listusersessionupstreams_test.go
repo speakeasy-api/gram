@@ -239,7 +239,7 @@ func seedUpstream(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientP
 		UserSessionIssuerID:   userSessionIssuerID,
 	}))
 
-	_, err = q.UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	_, err = q.UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:             subject,
 		UserSessionIssuerID:    userSessionIssuerID,
 		RemoteSessionClientID:  client.ID,

@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -194,7 +195,7 @@ func newDevIDPFixture(t *testing.T, opts devIDPOptions) devIDPFixture {
 	require.NoError(t, err)
 	encryptedSubject, err := enc.Encrypt([]byte(upstreamSubject))
 	require.NoError(t, err)
-	_, err = q.UpsertTrustedDelegationCredential(ctx, repo.UpsertTrustedDelegationCredentialParams{
+	_, err = q.UpsertTrustedDelegationCredentialFixture(ctx, repo.UpsertTrustedDelegationCredentialFixtureParams{
 		OrganizationID: org, ClientID: idpClient.ID, IssuerID: idpIssuer.ID, SubjectUrn: urn.NewUserSubject(human).String(), ExpectedGeneration: 0,
 		IdentityAssertionEncrypted: pgtype.Text{String: encryptedToken, Valid: true},
 		IdentityAssertionExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true, InfinityModifier: pgtype.Finite},
@@ -215,7 +216,7 @@ func newDevIDPFixture(t *testing.T, opts devIDPOptions) devIDPFixture {
 	serverURL, err := url.Parse("https://gram.example.test")
 	require.NoError(t, err)
 	challenges := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, db, enc, policy, nil, locks, serverURL, remotesessions.WithIDTokenVerifier(remotesessions.NewIDTokenVerifier(keys)))
-	chainer := New(logger, db, enc, challenges, remotesessions.NewDelegationService(db, enc, challenges), keys, locks)
+	chainer := New(logger, db, upstreamtokens.WithoutOrganizationEncryption(logger, db, enc), challenges, remotesessions.NewDelegationService(db, challenges), keys, locks)
 	observed := &recordingObserver{}
 	chainer.SetObserver(observed)
 	return devIDPFixture{
@@ -355,7 +356,7 @@ func TestDevIDP_HeldDelegationClaim(t *testing.T) {
 			_, outcome := f.chainer.Acquire(t.Context(), f.req)
 			require.Equal(t, Outcome{Stage: StageDelegation, Reason: tc.reason, Confidence: ConfidenceVerified, Retryable: tc.retryable, Cached: false, Provider: remotesessions.EMAProviderExternal}, outcome)
 			require.Equal(t, requests, f.idp.Requests(), "a held claim contacts nobody")
-			require.Equal(t, tc.decision, NewGovernor(testenv.NewLogger(t), f.db, f.enc, f.chainer.delegation).RefreshDecision(t.Context(), f.req).Decision)
+			require.Equal(t, tc.decision, NewGovernor(testenv.NewLogger(t), f.db, upstreamtokens.WithoutOrganizationEncryption(testenv.NewLogger(t), f.db, f.enc), f.chainer.delegation).RefreshDecision(t.Context(), f.req).Decision)
 		})
 	}
 }

@@ -124,7 +124,7 @@ func TestDeleteMcpServer_RevokesOrphanedClientSessions(t *testing.T) {
 	refreshEnc, err := enc.Encrypt([]byte("orphan-revoke-refresh"))
 	require.NoError(t, err)
 
-	_, err = q.UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+	_, err = q.UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:             urn.NewUserSubject("orphan-revoke-subject"),
 		UserSessionIssuerID:    issuerID,
 		RemoteSessionClientID:  client.ID,
