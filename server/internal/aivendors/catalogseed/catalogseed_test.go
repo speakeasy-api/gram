@@ -265,7 +265,7 @@ func TestBackfillSkipsDeletedProduct(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NoError(t, EnsureCatalog(ctx, db))
-	require.NoError(t, repo.New(db).EditProductFixture(ctx, repo.EditProductFixtureParams{
+	require.NoError(t, testrepo.New(db).EditProductFixture(ctx, testrepo.EditProductFixtureParams{
 		ID: "claude-code", DisplayName: "Claude Code", Family: conv.ToPGText("claude"),
 		DeletedAt: pgtype.Timestamptz{Time: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), Valid: true},
 	}))
