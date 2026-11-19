@@ -18,7 +18,7 @@ function StepRail(): JSX.Element {
   return (
     <nav
       aria-label={`${names[s.provider]} setup steps`}
-      className="row-start-1 min-w-0 lg:sticky lg:top-6 lg:col-start-2 lg:row-start-1"
+      className="row-start-1 min-w-0 lg:sticky lg:top-[calc(var(--detail-strip,0px)+1.5rem)] lg:col-start-2 lg:row-start-1"
     >
       <ol className="flex flex-wrap gap-x-[18px] gap-y-3 lg:block">
         {steps(s).map((step, index) => {
