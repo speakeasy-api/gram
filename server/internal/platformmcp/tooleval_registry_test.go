@@ -177,6 +177,7 @@ func composeToolEvalRegistry(t *testing.T, logger *slog.Logger, pool *pgxpool.Po
 		distributions, skills, diagnostics, NewWorkflowRunService(logger, &captureWorkflowRunEmitter{}), pluginInventory, sessionRecall, riskMutations,
 		CatalogDescriptor{}, accessReads, accessRoleMutations, nil, signalAuthoring)
 	registrar.withLogger(logger)
+	registrar.withAICatalog(aivendorstest.NewStore())
 	return registrar
 }
 

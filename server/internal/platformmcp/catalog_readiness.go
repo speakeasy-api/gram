@@ -131,6 +131,9 @@ type RemoteMCPReadinessProber struct {
 }
 
 func NewRemoteMCPReadinessProber(aiCatalog *aivendors.Store, logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, sessions *remotesessions.ChallengeManager) *RemoteMCPReadinessProber {
+	if aiCatalog == nil {
+		panic("platformmcp: readiness prober requires an AI client catalog store")
+	}
 	return &RemoteMCPReadinessProber{logger: logger, db: db, enc: enc, policy: policy, sessions: sessions, chaining: nil, authEnforcement: authenforcement.NewGate(db), aiCatalog: aiCatalog}
 }
 

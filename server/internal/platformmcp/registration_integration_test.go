@@ -19,7 +19,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
-	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	audittestrepo "github.com/speakeasy-api/gram/server/internal/audit/audittest/repo"
@@ -53,8 +52,6 @@ func TestMain(m *testing.M) {
 		log.Fatalf("launch test infrastructure: %v", err)
 	}
 	platformMCPInfra = infra
-	// Registrars built without a runtime read the compiled registry.
-	packageTestAICatalog = aivendorstest.NewStore()
 
 	code := m.Run()
 

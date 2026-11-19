@@ -106,7 +106,7 @@ func TestPlatformHostVerificationChecklistPlatformMCP(t *testing.T) {
 			require.NoError(t, err)
 			authenticator, err := NewJWTAuthenticator(signer, conn, encryptionClient, serverURL)
 			require.NoError(t, err)
-			runtime := NewRuntime(testenv.NewLogger(t), authenticator, allowGate{}, allowAuthorizer{}, oauth.ProtectedResourceURL(), "platform-host-checklist-cursor", nil, nil, nil, nil, nil)
+			runtime := NewRuntime(testenv.NewLogger(t), authenticator, allowGate{}, allowAuthorizer{}, oauth.ProtectedResourceURL(), "platform-host-checklist-cursor", nil, nil, nil, nil, nil).WithAICatalog(aivendorstest.NewStore())
 
 			logger := testenv.NewLogger(t)
 			mcpSecurity, err := middleware.MCPSecurity(logger, append([]string{serverURL.String()}, slices.Sorted(maps.Values(platformHosts))...), nil)

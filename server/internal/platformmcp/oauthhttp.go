@@ -253,6 +253,7 @@ var _ cache.CacheableObject[oauthChallenge] = (*oauthChallenge)(nil)
 // platform host is its own RFC 8707 resource with its own authorization
 // server metadata. Requests from any other surface use baseURL.
 type OAuthHTTP struct {
+	// aiCatalog identifies CIMD clients for admission.
 	aiCatalog *aivendors.Store
 
 	// baseURL is the configured server URL. It is the origin for requests not
@@ -284,7 +285,7 @@ type OAuthHTTP struct {
 }
 
 type OAuthHTTPConfig struct {
-	// AICatalog supplies the live client catalog.
+	// AICatalog identifies CIMD clients for admission. Required.
 	AICatalog *aivendors.Store
 
 	BaseURL       *url.URL

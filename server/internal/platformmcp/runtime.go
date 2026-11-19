@@ -323,7 +323,9 @@ func (r *Runtime) WithAICatalog(catalog *aivendors.Store) *Runtime {
 	if catalog == nil {
 		panic("platformmcp: AI client catalog store is required")
 	}
-	r.registrar.withAICatalog(catalog)
+	if r != nil && r.registrar != nil {
+		r.registrar.withAICatalog(catalog)
+	}
 	return r
 }
 
@@ -341,6 +343,7 @@ func (r *Runtime) recordAuthOutcome(ctx context.Context, outcome, reason string)
 }
 
 func (r *Runtime) Handler() http.Handler {
+	r.registrar.requireAICatalog()
 	handler := mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
 		return r.server
 	}, &mcp.StreamableHTTPOptions{
@@ -478,5 +481,6 @@ func (r *Runtime) AssistantTools() []Descriptor {
 	if r == nil {
 		return nil
 	}
+	r.registrar.requireAICatalog()
 	return r.registrar.For(AudienceAssistant)
 }

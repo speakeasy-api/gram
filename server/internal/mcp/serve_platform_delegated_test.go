@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/assistant_platform_mcp_adapter"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -193,7 +194,7 @@ func TestAssistantPlatformTool_WorkloadTurnIsToldItNeedsAPerson(t *testing.T) {
 		ti.logger, nil, nil, authorizer, "", "test-cursor-key",
 		platformmcp.NewPostgresReader(ti.logger, ti.conn).WithAuthorization(ti.authzEngine), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		platformmcp.CatalogDescriptor{},
-	).AssistantTools()
+	).WithAICatalog(aivendorstest.NewStore()).AssistantTools()
 	var listProjects *assistant_platform_mcp_adapter.Tool
 	for _, tool := range assistant_platform_mcp_adapter.Tools(descriptors, authorizer) {
 		if tool.Descriptor().Name == "list_projects" {

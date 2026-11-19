@@ -7,8 +7,8 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"os"
-	"slices"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -25,26 +25,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
 
-// goldenCatalogClientIDs reuses the client IDs of the admission golden: every
-// catalog document URL, variants of each, wildcard probes and refused inputs.
+// goldenCatalogClientIDs are every catalog document URL, variants of each,
+// wildcard probes, refused inputs and four test clients.
 func goldenCatalogClientIDs(t *testing.T) []string {
 	t.Helper()
 
-	data, err := os.ReadFile("../usersessions/cimd/admission/testdata/admission_golden.json")
+	// Frozen from cimd/admission/testdata/admission_golden.json plus the test clients.
+	data, err := os.ReadFile("testdata/ai_catalog_client_ids.json")
 	require.NoError(t, err)
-	var cases []struct {
-		ClientID string `json:"client_id"`
-	}
-	require.NoError(t, json.Unmarshal(data, &cases))
-	ids := make([]string, 0, len(cases)+4)
-	for _, tc := range cases {
-		ids = append(ids, tc.ClientID)
-	}
-	for _, id := range []string{testChatGPTConnectorClientID, testCodexClientID, testOtherClientID, "00000000-0000-0000-0000-000000000000"} {
-		if !slices.Contains(ids, id) {
-			ids = append(ids, id)
-		}
-	}
+	var ids []string
+	require.NoError(t, json.Unmarshal(data, &ids))
 	return ids
 }
 
@@ -113,7 +103,7 @@ type goldenClientSurface struct {
 func TestClientToolSurfacesMatchGolden(t *testing.T) {
 	t.Parallel()
 
-	runtime := newAllowlistTestRuntime(t, []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)}).WithAICatalog(aivendorstest.NewStore())
+	runtime := newAllowlistTestRuntime(t, []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)})
 	handler := runtime.Handler()
 	initialize := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`
 	call := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_platform_context","arguments":{}}}`
@@ -202,4 +192,66 @@ func TestAIScanLibraryWithoutOverlayMatchesGolden(t *testing.T) {
 	data, err := json.Marshal(output)
 	require.NoError(t, err)
 	testenv.RequireJSONGolden(t, "testdata/ai_catalog_scan_library_golden.json", data)
+}
+
+// server/discover filters the instructions the way initialize does.
+func TestDiscoverInstructionsMatchGolden(t *testing.T) {
+	t.Parallel()
+
+	data, err := os.ReadFile("testdata/ai_catalog_client_surfaces_golden.json")
+	require.NoError(t, err)
+	var surfaces []goldenClientSurface
+	require.NoError(t, json.Unmarshal(data, &surfaces))
+	require.Len(t, surfaces, 3)
+
+	runtime := newAllowlistTestRuntime(t, []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)})
+	handler := runtime.Handler()
+	discover := `{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/clientInfo":{"name":"test","version":"1"}}}}`
+	header := http.Header{"Mcp-Protocol-Version": {"2026-07-28"}, "Mcp-Method": {"server/discover"}}
+	for _, surface := range surfaces {
+		var discovered struct {
+			Instructions string `json:"instructions"`
+		}
+		allowlistRPC(t, handler, runtime, surface.ClientID, discover, &discovered, header)
+		require.Equal(t, surface.Instructions, discovered.Instructions, surface.ClientID)
+	}
+}
+
+// get_inbound_ema_trust lists the catalog's enabled presets in order.
+func TestInboundEMATrustToolPresetClientsMatchGolden(t *testing.T) {
+	t.Parallel()
+
+	f := newInboundEMAFixture(t, 1)
+	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "inbound-ema", Version: "1"}, nil))
+	reg.withAICatalog(aivendorstest.NewStore())
+	registerInboundEMATrustTools(reg, f.service)
+	result, err := descriptorByName(t, reg, getInboundEMATrustToolName).Invoke(contextWithPrincipal(t.Context(), f.principal), json.RawMessage(`{}`))
+	require.NoError(t, err)
+	encoded, err := json.Marshal(result)
+	require.NoError(t, err)
+	var output struct {
+		StructuredContent struct {
+			PresetClients json.RawMessage `json:"preset_clients"`
+		} `json:"structuredContent"`
+		PresetClients json.RawMessage `json:"preset_clients"`
+	}
+	require.NoError(t, json.Unmarshal(encoded, &output))
+	presets := output.PresetClients
+	if presets == nil {
+		presets = output.StructuredContent.PresetClients
+	}
+	require.NotNil(t, presets, string(encoded))
+	testenv.RequireJSONGolden(t, "testdata/ai_catalog_inbound_ema_presets_golden.json", presets)
+}
+
+// A runtime composed without a catalog fails when it is attached, not on its
+// first request.
+func TestRuntimeWithoutCatalogFailsAtComposition(t *testing.T) {
+	t.Parallel()
+
+	runtime := NewRuntime(testenv.NewLogger(t), &testAuthenticator{principal: testPrincipal()}, testGate{enabled: true}, &testAuthorizer{grants: nil}, "", "test-cursor-key", nil, nil, nil, nil, nil)
+	require.PanicsWithValue(t, "platformmcp: runtime composed without an AI client catalog store; call WithAICatalog", func() { runtime.Handler() })
+	require.Panics(t, func() { runtime.AssistantTools() })
+	require.Panics(t, func() { NewRemoteMCPReadinessProber(nil, testenv.NewLogger(t), nil, nil, nil, nil) })
+	require.Panics(t, func() { NewPostgresShadowAILibrary(nil, nil) })
 }

@@ -234,15 +234,19 @@ func (r *Registrar) withExternalAuthorizer(authorizer Authorizer) {
 	}
 }
 
+// requireAICatalog fails composition when no catalog was injected, so a
+// runtime missing one never starts serving.
+func (r *Registrar) requireAICatalog() {
+	if r == nil || r.aiCatalog == nil {
+		panic("platformmcp: runtime composed without an AI client catalog store; call WithAICatalog")
+	}
+}
+
 func (r *Registrar) withAICatalog(catalog *aivendors.Store) {
 	if r != nil {
 		r.aiCatalog = catalog
 	}
 }
-
-// packageTestAICatalog stands in for an injected catalog when package tests
-// build a registrar directly. It is always nil outside tests.
-var packageTestAICatalog *aivendors.Store
 
 type aiCatalogSnapshotKey struct{}
 
@@ -256,14 +260,10 @@ func (r *Registrar) aiCatalogSnapshot(ctx context.Context) *aivendors.Snapshot {
 	if snapshot, ok := ctx.Value(aiCatalogSnapshotKey{}).(*aivendors.Snapshot); ok {
 		return snapshot
 	}
-	catalog := r.aiCatalog
-	if catalog == nil {
-		catalog = packageTestAICatalog
-	}
-	if catalog == nil {
+	if r.aiCatalog == nil {
 		panic("platformmcp: AI client catalog store was not injected")
 	}
-	return catalog.Snapshot()
+	return r.aiCatalog.Snapshot()
 }
 
 func (r *Registrar) withRiskTelemetry(telemetry RiskTelemetry) {

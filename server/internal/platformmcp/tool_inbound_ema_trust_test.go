@@ -20,6 +20,7 @@ import (
 	orgusergen "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -193,6 +194,7 @@ func newInboundEMAFixture(t *testing.T, directoryUsers int) inboundEMAFixture {
 func TestInboundEMATrustToolContracts(t *testing.T) {
 	t.Parallel()
 	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "inbound-ema", Version: "1"}, nil))
+	reg.withAICatalog(aivendorstest.NewStore())
 	registerInboundEMATrustTools(reg, nil)
 	require.Empty(t, reg.For(AudienceAssistant), "trust is organization administration by a person")
 	for _, name := range []string{getInboundEMATrustToolName, trustInboundEMAProviderToolName, untrustInboundEMAProviderToolName} {

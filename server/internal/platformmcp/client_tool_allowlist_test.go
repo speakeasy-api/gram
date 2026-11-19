@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -61,6 +62,7 @@ func TestExternalCatalogueIntersectsChatGPTAllowlistWithGrants(t *testing.T) {
 
 	chatGPT := testPrincipal()
 	chatGPT.ClientID = testChatGPTConnectorClientID
+	registrar.withAICatalog(aivendorstest.NewStore())
 	require.Equal(t, []string{"search_mcp_catalog", "list_projects"}, toolNames(registrar.FilterExternalTools(ctx, chatGPT, tools)))
 
 	other := testPrincipal()
@@ -166,7 +168,7 @@ func newAllowlistTestRuntime(t *testing.T, grants []authz.Grant) *Runtime {
 		nil,
 		nil,
 		nil,
-	)
+	).WithAICatalog(aivendorstest.NewStore())
 }
 
 type allowlistRPCResponse struct {

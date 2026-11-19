@@ -41,12 +41,16 @@ type shadowAILibraryReader interface {
 // PostgresShadowAILibrary reads the library from the agent tables, where
 // Overlay composes it per read — no snapshot to go stale against the defaults.
 type PostgresShadowAILibrary struct {
+	// aiCatalog supplies the default scan targets.
 	aiCatalog *aivendors.Store
 
 	queries *agentrepo.Queries
 }
 
 func NewPostgresShadowAILibrary(aiCatalog *aivendors.Store, queries *agentrepo.Queries) *PostgresShadowAILibrary {
+	if aiCatalog == nil {
+		panic("platformmcp: AI scan library requires an AI client catalog store")
+	}
 	return &PostgresShadowAILibrary{aiCatalog: aiCatalog, queries: queries}
 }
 
