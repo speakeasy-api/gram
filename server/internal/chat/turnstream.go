@@ -23,9 +23,8 @@ import (
 // capped — frames are ephemeral, the persisted rows stay the durable record,
 // and a client with no usable cursor resyncs with a single chat.load.
 const (
-	// turnStreamMaxLen bounds one chat's frame history. Generous next to a
-	// turn's frame count (a few hundred at most, dominated by text deltas) and
-	// still small enough that an abandoned chat costs little.
+	// turnStreamMaxLen bounds the frame count, not the bytes, of a chat's
+	// replay buffer.
 	turnStreamMaxLen = 2000
 	// turnStreamTTL expires a chat's frames once nobody can still be watching.
 	// Turn timeout is 10 minutes; this leaves room for a reconnect after one.
@@ -94,6 +93,15 @@ func NewTurnStream(client *redis.Client) *TurnStream {
 	return &TurnStream{client: client}
 }
 
+// Reset removes the previous turn's frames while preserving the stream's ID
+// sequence for subscribers already waiting for the next turn.
+func (t *TurnStream) Reset(ctx context.Context, chatID uuid.UUID) error {
+	if t == nil || chatID == uuid.Nil {
+		return nil
+	}
+	return t.client.XTrimMaxLen(ctx, turnStreamKey(chatID), 0).Err()
+}
+
 // Publish appends a frame and returns its cursor. Callers treat failures as
 // non-fatal: a lost frame costs the watcher some responsiveness, and must
 // never fail the turn that produced it.
@@ -152,6 +160,9 @@ func (t *TurnStream) lastID(ctx context.Context, chatID uuid.UUID) (string, erro
 	return entries[0].ID, nil
 }
 
+// ErrTurnReplayUnavailable means the client must reload the persisted chat.
+var ErrTurnReplayUnavailable = errors.New("turn replay cursor no longer retained")
+
 // Replay returns frames already published after the given cursor. An empty
 // cursor replays the chat's whole retained history, which is what a client
 // joining a turn late (or reconnecting without a cursor) wants.
@@ -160,14 +171,21 @@ func (t *TurnStream) Replay(ctx context.Context, chatID uuid.UUID, after string)
 		return nil, errors.New("turn stream is not configured")
 	}
 	start := "-"
-	if after != "" {
-		// "(" makes the range exclusive, so a client never re-applies the
-		// frame it last saw.
-		start = "(" + after
+	resume := after != "" && after != "0" && after != "0-0"
+	if resume {
+		// Include the cursor in the read to detect a reset or trim without
+		// racing a separate cursor lookup against the replay.
+		start = after
 	}
 	entries, err := t.client.XRange(ctx, turnStreamKey(chatID), start, "+").Result()
 	if err != nil {
 		return nil, fmt.Errorf("replay turn frames: %w", err)
+	}
+	if resume {
+		if len(entries) == 0 || entries[0].ID != after {
+			return nil, ErrTurnReplayUnavailable
+		}
+		entries = entries[1:]
 	}
 	return decodeTurnEntries(entries), nil
 }
@@ -180,11 +198,9 @@ func (t *TurnStream) Subscribe(ctx context.Context, chatID uuid.UUID, after stri
 	if t == nil {
 		return nil, errors.New("turn stream is not configured")
 	}
-	// No cursor means "start from now", not "replay everything". A chat's
-	// retained frames span earlier turns, so replaying from the beginning would
-	// hand a client the previous turn's terminal frame and end the new turn
-	// before it began. Replay exists for reconnects, and a reconnecting client
-	// always carries the cursor it got to.
+	// No cursor means "start from now", not "replay everything". A client
+	// can subscribe before dispatch resets the previous turn's frames, so
+	// replaying that turn's terminal frame would end the new turn early.
 	var backlog []TurnFrame
 	start := after
 	if after == "" {

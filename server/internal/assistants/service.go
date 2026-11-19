@@ -503,6 +503,7 @@ type ServiceCore struct {
 	contextWindow     *openrouter.ContextWindowResolver
 	wakeCanceller     WakeCanceller
 	chatWriter        *chat.ChatMessageWriter
+	turnStream        *chat.TurnStream
 	assetStorage      assets.BlobStore
 	assetSigningKey   string
 	envLoader         toolconfig.EnvironmentLoader
@@ -564,6 +565,7 @@ func NewServiceCore(
 		contextWindow:               contextWindow,
 		wakeCanceller:               nil,
 		chatWriter:                  nil,
+		turnStream:                  nil,
 		assetStorage:                nil,
 		assetSigningKey:             "",
 		envLoader:                   nil,
@@ -595,6 +597,11 @@ func (s *ServiceCore) SetDashboardIngestor(i DashboardIngestor) {
 // site. Self-heal is skipped if the writer was never set.
 func (s *ServiceCore) SetChatMessageWriter(w *chat.ChatMessageWriter) {
 	s.chatWriter = w
+}
+
+// SetTurnStream wires the worker's dashboard replay buffer.
+func (s *ServiceCore) SetTurnStream(stream *chat.TurnStream) {
+	s.turnStream = stream
 }
 
 // SetAssetStorage wires the blob store history replay uses to fetch
@@ -3343,6 +3350,13 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "turn_start", "assistant turn started", "INFO", nil)
 
 		stopLeaseHeartbeat := s.startProcessingLeaseHeartbeat(turnCtx, thread.ProjectID, runtimeRecord.ID, event.ID)
+		// Reset on the first claim, not on enqueue (the previous turn may
+		// still be running) or retry (the frames belong to this same turn).
+		if thread.SourceKind == sourceKindDashboard && event.Attempts == 1 {
+			if err := s.turnStream.Reset(turnCtx, thread.ChatID); err != nil {
+				s.logger.WarnContext(turnCtx, "reset assistant turn replay", attr.SlogError(err))
+			}
+		}
 		currentSkillSnapshot, runErr := s.processEventTurnWithProtocol(turnCtx, thread, assistant, runtimeRecord, event, protocol)
 		stopLeaseHeartbeat()
 		if runErr != nil {
