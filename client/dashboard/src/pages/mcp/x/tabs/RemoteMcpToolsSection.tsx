@@ -168,6 +168,7 @@ function RemoteMcpToolsSectionInner({
     tunneledMcpServerId,
     visibility,
     chatSession: true,
+    inspectOAuth: true,
   });
   const {
     tools: listed,
@@ -297,11 +298,6 @@ function RemoteMcpToolsSectionInner({
   );
 }
 
-/**
- * The needs-connect state. Connecting opens the first-party connect page;
- * returning focus lists again, which saves any tools new to the project, so
- * the copy says so.
- */
 function ConnectPrompt({ onConnect }: { onConnect: () => void }): JSX.Element {
   return (
     <InspectState

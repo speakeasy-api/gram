@@ -16,6 +16,7 @@ import (
 	"log/slog"
 	"net/http"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -924,7 +925,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return rejectGrant(mcpconnectionattempts.CodeClientAuthFailed, "code was issued to a different client", mcpconnectionattempts.Detail("code_client_mismatch"))
 	}
-	if grant.RedirectURI != req.RedirectURI {
+	if grant.RedirectURI != req.RedirectURI || (clientRow.ClientID == dashboardInspectClientID && !slices.Contains(s.dashboardInspectRedirectURIs(), req.RedirectURI)) {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "redirect_uri_mismatch")
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return rejectGrant(mcpconnectionattempts.CodeRedirectURIMismatch, "redirect_uri does not match the original request")

@@ -8,7 +8,9 @@ import { RemoteMcpToolsSection } from "./RemoteMcpToolsSection";
 
 const mocks = vi.hoisted(() => ({
   needsAuth: true,
-  open: vi.fn(),
+  startOAuth: vi.fn(),
+  list: vi.fn(),
+  accessToken: undefined as string | undefined,
   tools: undefined as
     | undefined
     | Record<string, { unavailable: boolean; unavailableReason?: string }>,
@@ -19,14 +21,17 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/hooks/useProxiedMcpTools", () => ({
-  useProxiedMcpTools: () => ({
-    tools: mocks.tools,
-    isLoading: false,
-    needsAuth: mocks.needsAuth,
-    isError: false,
-    refetch: vi.fn(),
-    error: null,
-  }),
+  useProxiedMcpTools: (...args: unknown[]) => {
+    mocks.list(...args);
+    return {
+      tools: mocks.tools,
+      isLoading: false,
+      needsAuth: mocks.needsAuth,
+      isError: false,
+      refetch: vi.fn(),
+      error: null,
+    };
+  },
 }));
 
 vi.mock("../../inspect/useToolHealth", async () => {
@@ -54,8 +59,16 @@ vi.mock("@/pages/mcp/inspect-chat/InspectChat", () => ({
   ),
 }));
 
-vi.mock("@/hooks/useUserSessionToken", () => ({
-  useUserSessionToken: () => ({ accessToken: undefined, isLoading: false }),
+vi.mock("@/hooks/useInspectOAuth", () => ({
+  useInspectOAuth: ({ platformSlug }: { platformSlug?: string }) => ({
+    accessToken: mocks.accessToken,
+    serverUrl: platformSlug
+      ? `https://gram.example/mcp/${platformSlug}`
+      : undefined,
+    connect: platformSlug ? () => mocks.startOAuth(platformSlug) : undefined,
+    isConnecting: false,
+    error: false,
+  }),
 }));
 
 vi.mock("@/hooks/useToolMetadata", () => ({
@@ -115,7 +128,9 @@ const connectButton = { name: "Connect account" };
 afterEach(() => {
   cleanup();
   mocks.needsAuth = true;
-  mocks.open.mockReset();
+  mocks.startOAuth.mockReset();
+  mocks.list.mockReset();
+  mocks.accessToken = undefined;
   mocks.tools = undefined;
   mocks.stored = {};
   mocks.canWrite = true;
@@ -295,7 +310,6 @@ describe("RemoteMcpToolsSection tool search", () => {
 
 describe("RemoteMcpToolsSection connect prompt", () => {
   it("does not open first-party connect when the server has no issuer", () => {
-    vi.stubGlobal("open", mocks.open);
     renderSection();
 
     expect(screen.queryByRole("button", connectButton)).toBeNull();
@@ -303,19 +317,30 @@ describe("RemoteMcpToolsSection connect prompt", () => {
     expect(
       screen.getByRole("link", { name: "Configure authentication" }),
     ).toBeTruthy();
-    expect(mocks.open).not.toHaveBeenCalled();
+    expect(mocks.startOAuth).not.toHaveBeenCalled();
   });
 
-  it("opens the platform slug connect page for an issuer-gated server", () => {
-    vi.stubGlobal("open", mocks.open);
+  it("starts OAuth on the platform slug without listing tools before consent", () => {
+    mocks.needsAuth = false;
     renderSection({ userSessionIssuerId: "issuer-1" });
-
+    expect(mocks.list).toHaveBeenLastCalledWith(
+      "https://gram.example/mcp/server",
+      expect.objectContaining({ enabled: false }),
+    );
     fireEvent.click(screen.getByRole("button", connectButton));
+    expect(mocks.startOAuth).toHaveBeenCalledWith("server");
+  });
 
-    expect(mocks.open).toHaveBeenCalledWith(
-      "https://gram.example/mcp/server/connect/first-party",
-      "_blank",
-      "noopener,noreferrer",
+  it("lists tools using the exchanged token on the same resource", () => {
+    mocks.needsAuth = false;
+    mocks.accessToken = "oauth-token";
+    renderSection({ userSessionIssuerId: "issuer-1" });
+    expect(mocks.list).toHaveBeenLastCalledWith(
+      "https://gram.example/mcp/server",
+      expect.objectContaining({
+        enabled: true,
+        headers: { Authorization: "Bearer oauth-token" },
+      }),
     );
   });
 

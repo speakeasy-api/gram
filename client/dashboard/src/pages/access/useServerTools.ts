@@ -1,6 +1,7 @@
 import { useOrganization } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useToolMetadata } from "@/hooks/useToolMetadata";
+import { useUserSessionToken } from "@/hooks/useUserSessionToken";
 import { platformEndpointSlug } from "@/hooks/useToolsetUrl";
 import { getServerURL } from "@/lib/utils";
 import { useGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
@@ -91,6 +92,13 @@ export function useServerTools(
   );
   // Connect on the Speakeasy origin: a custom domain would need its own session.
   const platformSlug = platformEndpointSlug(endpoints.data?.mcpEndpoints ?? []);
+  const previewEnabled = needsLive && !!mcpServer.data && !!platformSlug;
+  // Keep the non-navigating preview while the editor has unsaved role changes.
+  const dashboardToken = useUserSessionToken({
+    target: { kind: "mcpServer", id: previewEnabled ? server?.id : undefined },
+    userSessionIssuerId: mcpServer.data?.userSessionIssuerId,
+    project: projectRef,
+  });
   const live = useRemoteMcpToolConnection({
     mcpUrl: platformSlug ? `${getServerURL()}/mcp/${platformSlug}` : undefined,
     mcpServerId: server?.id,
@@ -100,7 +108,8 @@ export function useServerTools(
     tunneledMcpServerId: mcpServer.data?.tunneledMcpServerId,
     visibility: mcpServer.data?.visibility,
     project: projectRef,
-    enabled: needsLive && !!mcpServer.data && !!platformSlug,
+    enabled: previewEnabled,
+    dashboardToken,
   });
   const liveTools = useMemo(
     () =>
