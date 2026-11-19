@@ -54,8 +54,11 @@ const server = {
 
 it("places tunnel status above the usage dashboard", () => {
   const { container } = render(
-    <OverviewTab mcpServer={server} agentSetupHref="/settings"
-        pluginSettingsHref="/settings#publishing" />,
+    <OverviewTab
+      mcpServer={server}
+      agentSetupHref="/settings"
+      pluginSettingsHref="/settings#publishing"
+    />,
     { wrapper: MemoryRouter },
   );
   expect(container.textContent).toBe("Tunnel statusShared usage dashboard");
@@ -71,10 +74,16 @@ it("places tunnel status above the usage dashboard", () => {
 
 it("offers no Tool Logs link when the organization does not record logs", () => {
   logs.enabled = false;
-  render(<OverviewTab mcpServer={server} agentSetupHref="/settings"
-        pluginSettingsHref="/settings#publishing" />, {
-    wrapper: MemoryRouter,
-  });
+  render(
+    <OverviewTab
+      mcpServer={server}
+      agentSetupHref="/settings"
+      pluginSettingsHref="/settings#publishing"
+    />,
+    {
+      wrapper: MemoryRouter,
+    },
+  );
   expect(screen.getByText("Tunnel status")).toBeTruthy();
   expect(screen.queryByRole("link")).toBeNull();
 });
@@ -84,7 +93,7 @@ it("shows the tunnel status without a usage dashboard when the server has no slu
     <OverviewTab
       mcpServer={{ ...server, slug: undefined }}
       agentSetupHref="/settings"
-        pluginSettingsHref="/settings#publishing"
+      pluginSettingsHref="/settings#publishing"
     />,
     { wrapper: MemoryRouter },
   );
@@ -96,7 +105,7 @@ it("retains the shared overview for servers without tunnels", () => {
     <OverviewTab
       mcpServer={{ ...server, tunneledMcpServerId: undefined }}
       agentSetupHref="/settings"
-        pluginSettingsHref="/settings#publishing"
+      pluginSettingsHref="/settings#publishing"
     />,
     { wrapper: MemoryRouter },
   );
