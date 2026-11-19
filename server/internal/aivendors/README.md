@@ -60,8 +60,7 @@ The compiled registry remains only as a test baseline pending AIM-450. Productio
 readers receive the database store explicitly and do not fall back to it, with
 one exception still to migrate: telemetry identity (`Identify`, used by the OTel
 dialects and enrichment) and the analytics product family and vendor lookups
-read the compiled registry. Snapshots load each product's family and
-`vendor_key` from the database, but analytics is not wired to the snapshot yet,
-so it ignores staff edits to either. Reported-name aliases stay in the compiled
-registry by design: they change with plugin and telemetry code, so the database
-does not store them.
+read the compiled registry. Product families and reported-name aliases stay in
+the compiled registry by design: they change with plugin and telemetry code, so
+the database does not store them. Snapshots do load `vendor_key`, but analytics
+is not wired to the snapshot yet, so it ignores staff vendor edits.

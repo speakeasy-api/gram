@@ -52,9 +52,10 @@ func Load(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, validate f
 	for _, p := range rows {
 		byID[p.ID] = len(products)
 		products = append(products, Product{
-			ID:          p.ID,
-			VendorKey:   p.VendorKey,
-			Family:      p.Family.String,
+			ID:        p.ID,
+			VendorKey: p.VendorKey,
+			// Families and aliases live in the compiled registry by design.
+			Family:      "",
 			DisplayName: p.DisplayName,
 			Category:    Category(p.Category.String),
 			Signatures: Signatures{
@@ -65,9 +66,8 @@ func Load(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, validate f
 			},
 			VersionPlistKey: p.VersionPlistKey.String,
 			ClientInfoNames: p.ClientInfoNames,
-			// Reported-name aliases live in the compiled registry by design.
-			Aliases:   nil,
-			Documents: nil,
+			Aliases:         nil,
+			Documents:       nil,
 		})
 	}
 	for _, d := range docs {

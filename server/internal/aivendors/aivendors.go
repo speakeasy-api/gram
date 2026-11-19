@@ -64,8 +64,9 @@ type Product struct {
 	// VendorKey groups products by vendor. Not unique; stable.
 	VendorKey string `json:"vendor_key"`
 	// Family groups a vendor's related products, such as Claude Code, Claude and
-	// Cowork. Empty means the product is a family of its own, stored as NULL.
-	// Omitted when empty so such a product's fingerprint encoding is unchanged.
+	// Cowork. Empty means the product is a family of its own. Families live in
+	// the compiled registry by design, so database snapshots leave them empty
+	// and omit them from the fingerprint.
 	Family      string `json:"family,omitempty"`
 	DisplayName string `json:"display_name"`
 	// Category is required when Signatures are set.
