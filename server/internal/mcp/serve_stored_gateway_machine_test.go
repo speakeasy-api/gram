@@ -107,7 +107,7 @@ func TestServePublic_StoredGatewayAgentPrincipalCredentialInitializes(t *testing
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 }
 
-func TestServePublic_StoredGatewayBoundWorkloadOnlyEntersNamedGateway(t *testing.T) {
+func TestServePublic_StoredGatewayBoundWorkloadRequiresReachableMember(t *testing.T) {
 	t.Parallel()
 	f := newWorkloadGrantFixture(t)
 	ctx := f.fixtureContext(t)
@@ -115,7 +115,8 @@ func TestServePublic_StoredGatewayBoundWorkloadOnlyEntersNamedGateway(t *testing
 
 	allowedSlug := "bound-workload-stored-" + uuid.NewString()
 	otherSlug := "other-workload-stored-" + uuid.NewString()
-	createMetaMcpEndpoint(t, ctx, f.ti.conn, f.fx.target.ProjectID, f.fx.orgID, allowedSlug, f.fx.target.UserSessionIssuerID)
+	gateway := createMetaMcpEndpoint(t, ctx, f.ti.conn, f.fx.target.ProjectID, f.fx.orgID, allowedSlug, f.fx.target.UserSessionIssuerID)
+	seedMetaMember(t, ctx, f.ti.conn, f.fx.target.ProjectID, gateway.ID, "private workload member", "private-"+uuid.NewString()[:8], 0, mcpservers.VisibilityPrivate)
 	createMetaMcpEndpoint(t, ctx, f.ti.conn, f.fx.target.ProjectID, f.fx.orgID, otherSlug, f.fx.target.UserSessionIssuerID)
 	allowedResource := strings.TrimSuffix(f.ti.serverURL.String(), "/") + "/mcp/" + allowedSlug
 	f.ti.features.SetFlag(feature.FlagStoredGatewayMachineAccess, f.fx.orgID, true)
@@ -129,6 +130,13 @@ func TestServePublic_StoredGatewayBoundWorkloadOnlyEntersNamedGateway(t *testing
 	form := issuerWorkloadForm(f.assertion(t, issuerURL))
 	form.Set(oauthwire.ParamResource, allowedResource)
 	tokenResponse := sharedToken(t, t.Context(), f.ti, f.fx.target.UserSessionIssuerID.String(), form)
+	require.Equal(t, http.StatusBadRequest, tokenResponse.Code, tokenResponse.Body.String())
+	require.Equal(t, "invalid_grant", decodeSharedTokenResponse(t, tokenResponse).Error)
+	require.Empty(t, f.workloadSessions(t), "a refused gateway-bound grant must not mint a session")
+
+	seedMetaMember(t, ctx, f.ti.conn, f.fx.target.ProjectID, gateway.ID, "public workload member", "public-"+uuid.NewString()[:8], 1, mcpservers.VisibilityPublic)
+	form.Set(oauthwire.ParamAssertion, f.assertion(t, issuerURL))
+	tokenResponse = sharedToken(t, t.Context(), f.ti, f.fx.target.UserSessionIssuerID.String(), form)
 	require.Equal(t, http.StatusOK, tokenResponse.Code, tokenResponse.Body.String())
 	bearer := decodeSharedTokenResponse(t, tokenResponse).AccessToken
 	require.NotEmpty(t, bearer)
