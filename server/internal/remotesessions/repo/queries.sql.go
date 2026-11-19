@@ -3646,6 +3646,7 @@ SELECT
     c.client_id                            AS external_client_id,
     c.client_secret_encrypted              AS client_secret_encrypted,
     c.client_secret_org_encrypted          AS client_secret_org_encrypted,
+    c.client_secret_generation             AS client_secret_generation,
     c.client_secret_expires_at             AS client_secret_expires_at,
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.token_endpoint_auth_audience_format  AS token_endpoint_auth_audience_format,
@@ -3695,6 +3696,7 @@ type GetClientCredentialsGrantClientRow struct {
 	ExternalClientID                string
 	ClientSecretEncrypted           pgtype.Text
 	ClientSecretOrgEncrypted        pgtype.Text
+	ClientSecretGeneration          int64
 	ClientSecretExpiresAt           pgtype.Timestamptz
 	TokenEndpointAuthMethod         pgtype.Text
 	TokenEndpointAuthAudienceFormat pgtype.Text
@@ -3726,6 +3728,7 @@ func (q *Queries) GetClientCredentialsGrantClient(ctx context.Context, arg GetCl
 		&i.ExternalClientID,
 		&i.ClientSecretEncrypted,
 		&i.ClientSecretOrgEncrypted,
+		&i.ClientSecretGeneration,
 		&i.ClientSecretExpiresAt,
 		&i.TokenEndpointAuthMethod,
 		&i.TokenEndpointAuthAudienceFormat,
@@ -15414,7 +15417,9 @@ func (q *Queries) SetOrganizationRemoteSessionClientCallbackBaseURLFixture(ctx c
 const setOrganizationRemoteSessionClientCredentialsFixture = `-- name: SetOrganizationRemoteSessionClientCredentialsFixture :exec
 UPDATE remote_session_clients
 SET client_id = coalesce($1::text, client_id),
-    client_secret_encrypted = coalesce($2::text, client_secret_encrypted)
+    client_secret_encrypted = coalesce($2::text, client_secret_encrypted),
+    client_secret_org_encrypted = CASE WHEN $2::text IS NULL THEN client_secret_org_encrypted ELSE NULL END,
+    client_secret_generation = client_secret_generation + CASE WHEN $2::text IS NULL THEN 0 ELSE 1 END
 WHERE id = $3 AND organization_id = $4 AND project_id IS NULL
 `
 
@@ -15425,7 +15430,8 @@ type SetOrganizationRemoteSessionClientCredentialsFixtureParams struct {
 	OrganizationID        pgtype.Text
 }
 
-// Test fixture: change an organization-level login client during a browser flow.
+// Test fixture: change an organization-level login client during a browser
+// flow. A planted secret counts a new revision, as every secret writer does.
 func (q *Queries) SetOrganizationRemoteSessionClientCredentialsFixture(ctx context.Context, arg SetOrganizationRemoteSessionClientCredentialsFixtureParams) error {
 	_, err := q.db.Exec(ctx, setOrganizationRemoteSessionClientCredentialsFixture,
 		arg.ClientID,
