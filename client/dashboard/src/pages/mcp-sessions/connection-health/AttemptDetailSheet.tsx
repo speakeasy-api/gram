@@ -132,17 +132,19 @@ export function AttemptDetailSheet({
 
 function questionFor(attempt: AttemptDetail, who: string, where: string) {
   const to = where ? ` to ${where}` : "";
+  // An attempt with no known person is "this connection", not "No known person's".
+  const connection = `${attempt.person ? `${who}'s` : "this"} connection${to}`;
   switch (attempt.outcome) {
     case "connected":
-      return `What happened in ${who}'s connection${to}, and does anything look wrong?`;
+      return `What happened in ${connection}, and does anything look wrong?`;
     case "in_progress":
-      return `${who}'s connection${to} is still in progress. What has happened so far?`;
+      return `${connection.charAt(0).toUpperCase()}${connection.slice(1)} is still in progress. What has happened so far?`;
     case "failed":
     case "blocked":
     case "declined":
     case "didnt_finish":
     default:
-      return `Why did ${who}'s connection${to} end as "${outcomeLabel(attempt.outcome)}", and is there anything I should change?`;
+      return `Why did ${connection} end as "${outcomeLabel(attempt.outcome)}", and is there anything I should change?`;
   }
 }
 
