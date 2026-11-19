@@ -356,6 +356,11 @@ func TestCatalogMatchesRegistry(t *testing.T) {
 	actual.WriteString(`,"Products":`)
 	writeGoFields(t, &actual, reflect.ValueOf(aivendors.Products()))
 	actual.WriteString("}")
+	for _, product := range aivendors.Products() {
+		for _, document := range product.Documents {
+			require.Equal(t, strings.Contains(document.URL, "*"), document.Pattern, document.URL)
+		}
+	}
 	if f := flag.Lookup("update"); f == nil || f.Value.String() != "true" {
 		require.JSONEq(t, actual.String(), string(catalog), "catalog.json differs from the aivendors registry; regenerate it as the README describes")
 	}
