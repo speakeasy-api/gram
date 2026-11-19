@@ -1509,7 +1509,8 @@ func insertChatTelemetryLog(t *testing.T, ctx context.Context, projectID, chatID
 		INSERT INTO telemetry_logs (
 			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
 			attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) SETTINGS async_insert = 0
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "chat log body",
 		"{}", "{}", projectID, "urn:gram:chat", "test-service", chatID)
 	require.NoError(t, err)
