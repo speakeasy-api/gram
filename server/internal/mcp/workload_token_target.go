@@ -36,13 +36,22 @@ func (s *Service) WorkloadTokenTargetFor(ctx context.Context, mcpURL string) (Wo
 	slug, isSlugPath := strings.CutPrefix(u.EscapedPath(), "/mcp/")
 	switch {
 	case isOrganizationGateway:
-		if organizationGatewaySlug, err = url.PathUnescape(organizationGatewaySlug); err != nil {
-			return none, false, fmt.Errorf("unescape gateway slug: %w", err)
-		}
-		organization, project, scoped := strings.Cut(organizationGatewaySlug, "/projects/")
-		if !scoped || organization == "" || project == "" || strings.Contains(organization, "/") || strings.Contains(project, "/") {
+		escapedOrganization, escapedProject, scoped := strings.Cut(organizationGatewaySlug, "/projects/")
+		if !scoped || escapedOrganization == "" || escapedProject == "" || strings.Contains(escapedOrganization, "/") || strings.Contains(escapedProject, "/") {
 			return none, false, nil
 		}
+		organization, unescapeErr := url.PathUnescape(escapedOrganization)
+		if unescapeErr != nil {
+			return none, false, fmt.Errorf("unescape gateway organization slug: %w", unescapeErr)
+		}
+		project, unescapeErr := url.PathUnescape(escapedProject)
+		if unescapeErr != nil {
+			return none, false, fmt.Errorf("unescape gateway project slug: %w", unescapeErr)
+		}
+		if strings.Contains(organization, "/") || strings.Contains(project, "/") {
+			return none, false, nil
+		}
+		organizationGatewaySlug = organization + "/projects/" + project
 	case !isSlugPath || slug == "" || strings.Contains(slug, "/"):
 		return none, false, nil
 	default:

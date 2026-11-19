@@ -1153,8 +1153,8 @@ func (s *Service) authenticateIssuerGate(
 		refreshable   bool
 		valErr        error
 	)
-	// The organization-wide gateway serves the organization's users. Machine
-	// credentials are project-scoped and may sign in only to project gateways.
+	// The organization-wide gateway serves the organization's users and refuses
+	// machine credentials. Other endpoints continue through their own admission.
 	organizationWideGateway := endpoint.IsOrganizationWideGateway()
 	anyOrganizationGateway := endpoint.IsOrganizationGateway()
 	switch {

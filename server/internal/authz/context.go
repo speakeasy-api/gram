@@ -11,6 +11,7 @@ import (
 type contextKey string
 
 type admissionBoundaryKey struct{}
+type withoutCredentialCeilingKey struct{}
 
 const (
 	grantsContextKey contextKey = "authz_grants"
@@ -132,9 +133,11 @@ func WithoutCredentialCeiling(ctx context.Context) context.Context {
 	if !ok || len(policies.policies) == 0 {
 		return ctx
 	}
+	policies.legacyAuthCeiling = false
 	policies.policies = append([][]Grant{}, policies.policies[1:]...)
 	ctx = context.WithValue(ctx, admittedPoliciesContextKey, policies)
-	return context.WithValue(ctx, admittedCeilingContextKey, []Grant{})
+	ctx = context.WithValue(ctx, admittedCeilingContextKey, []Grant{})
+	return context.WithValue(ctx, withoutCredentialCeilingKey{}, true)
 }
 
 // CredentialCeilingFromContext returns the immutable credential policy loaded

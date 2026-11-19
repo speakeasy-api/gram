@@ -14,6 +14,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -127,11 +129,15 @@ func TestServePublic_StoredGatewayBoundWorkloadRequiresReachableMember(t *testin
 	require.Equal(t, target.TokenEndpoint, target.Audience)
 	require.Equal(t, allowedResource, target.Resource)
 
+	recorder := mcpconnectionattemptstest.New(t)
+	f.ti.service.SetConnectionRecorder(recorder.Recorder)
 	form := issuerWorkloadForm(f.assertion(t, issuerURL))
 	form.Set(oauthwire.ParamResource, allowedResource)
 	tokenResponse := sharedToken(t, t.Context(), f.ti, f.fx.target.UserSessionIssuerID.String(), form)
 	require.Equal(t, http.StatusBadRequest, tokenResponse.Code, tokenResponse.Body.String())
 	require.Equal(t, "invalid_grant", decodeSharedTokenResponse(t, tokenResponse).Error)
+	row := recorder.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeNoServerAccess)
+	require.Equal(t, "gateway_no_reachable_members", row.SubReason)
 	require.Empty(t, f.workloadSessions(t), "a refused gateway-bound grant must not mint a session")
 
 	seedMetaMember(t, ctx, f.ti.conn, f.fx.target.ProjectID, gateway.ID, "public workload member", "public-"+uuid.NewString()[:8], 1, mcpservers.VisibilityPublic)

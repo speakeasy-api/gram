@@ -28,7 +28,9 @@ func TestServeProjectGateway_WorkloadMachineAccess(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 	require.NotNil(t, authCtx.ProjectSlug)
 	fixture := seedOrganizationGateway(t, f.ctx, f.ti)
-	seedUserMCPConnectGrant(t, f.ctx, f.ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, f.fx.target.MCPResourceID.String())
+	grantedID := mcpServerBySlug(t, f.ctx, f.ti, *authCtx.ProjectID, fixture.granted)
+	seedUserMCPConnectGrant(t, f.ctx, f.ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, grantedID.String())
+	seedPrincipalMCPConnectGrant(t, f.ctx, f.ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, f.agentID.String()), grantedID)
 	root := strings.TrimSuffix(f.ti.serverURL.String(), "/") + "/mcp/gateway/" + fixture.organizationSlug + "/projects/" + fixture.projectSlug
 
 	_, ok, err := f.ti.service.WorkloadTokenTargetFor(t.Context(), root)
@@ -60,6 +62,7 @@ func TestServeProjectGateway_WorkloadMachineAccess(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, listed.Code, listed.Body.String())
 	require.Contains(t, listed.Body.String(), fixture.open)
+	require.Contains(t, listed.Body.String(), fixture.granted)
 
 	_, err = serveOrganizationGatewayHTTP(t, f.ctx, f.ti, fixture.organizationSlug, bearer, makeInitializeBody())
 	requireOopsCode(t, err, oops.CodeUnauthorized)

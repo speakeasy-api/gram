@@ -134,7 +134,11 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 	// looks at the caller — which would hand a machine every grant written for
 	// every member.
 	if actor, hasActor := contextvalues.AuthenticatedActor(ctx); hasActor && actor.Type == urn.PrincipalTypeWorkload {
-		return e.AdmitWorkloadSession(ctx)
+		prepared, err := e.AdmitWorkloadSession(ctx)
+		if err == nil && ctx.Value(withoutCredentialCeilingKey{}) == true {
+			prepared = WithoutCredentialCeiling(prepared)
+		}
+		return prepared, err
 	}
 
 	// Future principal-backed transports, including agent MCP sessions, attach
