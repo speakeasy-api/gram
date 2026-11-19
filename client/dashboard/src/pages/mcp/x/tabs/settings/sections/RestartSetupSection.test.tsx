@@ -108,6 +108,17 @@ it("forgets this server's saved Setup step so Setup starts from the beginning", 
   expect(sessionStorage.getItem(savedElsewhere)).not.toBeNull();
 });
 
+it("still opens Setup when the cache can't refresh after the restart is saved", async () => {
+  mocks.invalidate.mockRejectedValue(new Error("offline"));
+  renderSection();
+  await userEvent.click(screen.getByRole("button", { name: "Restart setup" }));
+  await waitFor(() =>
+    expect(screen.getByLabelText("Location").textContent).toBe(
+      "/mcp/slack/setup",
+    ),
+  );
+});
+
 it("stays in Settings with an error when the restart can't be saved", async () => {
   mocks.markCompleted.mockRejectedValue(new Error("unavailable"));
   sessionStorage.setItem(savedHere, JSON.stringify({ step: "test" }));

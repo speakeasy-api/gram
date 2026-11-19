@@ -49,7 +49,8 @@ export function RestartSetupSection({
     // Setup restores the last step it saved; start again from the first.
     clearProviderProgress(mcpServer.id);
     // Setup reads the done mark when it opens, so refresh it before going.
-    await invalidateMcpServerQueries(queryClient);
+    // The restart is saved; a failed refresh only leaves the cache stale.
+    await invalidateMcpServerQueries(queryClient).catch(() => {});
     await navigate(
       routes.mcp.details.setup.href(mcpServerRouteParam(mcpServer)),
     );

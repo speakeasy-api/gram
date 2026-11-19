@@ -14,7 +14,7 @@ import { taskTitle } from "./provider-data";
 import { ConnectionTask } from "./ConnectionTask";
 
 function StepRail(): JSX.Element {
-  const { s, dispatch } = useSetup();
+  const { s, dispatch, live } = useSetup();
   return (
     <nav
       aria-label={`${names[s.provider]} setup steps`}
@@ -34,6 +34,8 @@ function StepRail(): JSX.Element {
                 type="button"
                 className="flex items-center gap-3 text-left"
                 aria-current={s.step === step.id ? "step" : undefined}
+                // Completing leaves Setup; moving now would be overridden.
+                disabled={live.completing}
                 onClick={() => dispatch({ type: "goto", step: step.id })}
               >
                 <span
@@ -174,6 +176,7 @@ export function SetupBody({
               {s.step !== "begin" && (
                 <Button
                   variant="tertiary"
+                  disabled={live.completing}
                   onClick={() => dispatch({ type: "back" })}
                 >
                   <Button.Text>Back</Button.Text>

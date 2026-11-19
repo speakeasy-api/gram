@@ -364,7 +364,10 @@ it("lists no setup step for a provider without a guide", () => {
 function IdentityRow() {
   const chrome = useMcpServerDetailChrome();
   return (
-    <span data-warn={String(!!chrome?.identity?.warn)}>
+    <span
+      data-warn={String(!!chrome?.identity?.warn)}
+      data-href={chrome?.identity?.href}
+    >
       {chrome?.identity?.label}
     </span>
   );
@@ -439,8 +442,10 @@ it.each([
       isError: false,
     };
     renderIdentity();
-    expect(screen.getByText("Setup pending").getAttribute("data-warn")).toBe(
-      "true",
+    const pending = screen.getByText("Setup pending");
+    expect(pending.getAttribute("data-warn")).toBe("true");
+    expect(pending.getAttribute("data-href")).toBe(
+      "/example/projects/default/mcp/slack/setup",
     );
   },
 );

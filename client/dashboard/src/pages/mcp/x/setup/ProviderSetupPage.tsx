@@ -274,14 +274,18 @@ function RetainedProviderSetup({
           })
         : undefined,
     );
-    // A completed setup reopens on its connection check, not the plan.
-    if (guidedSetupStatus(mcpServer, serverUrl) !== "done") return progress;
+    // A completed setup reopens on its connection check, not the plan. A
+    // saved path without one (Salesforce support) keeps its own step.
+    const ids = steps(progress).map((step) => step.id);
+    if (
+      guidedSetupStatus(mcpServer, serverUrl) !== "done" ||
+      !ids.includes("test")
+    )
+      return progress;
     return {
       ...progress,
       step: "test",
-      done: steps(progress)
-        .map((step) => step.id)
-        .filter((id) => id !== "test"),
+      done: ids.filter((id) => id !== "test"),
     };
   });
   useEffect(() => {
@@ -375,7 +379,9 @@ function LiveSetupConnection({
       setCompleting(false);
       return;
     }
-    void invalidateMcpServerQueries(cache);
+    // Overview reads the done mark, so refresh it before going there. The
+    // mark is saved; a failed refresh only leaves the cache stale.
+    await invalidateMcpServerQueries(cache).catch(() => {});
     dispatch({ type: "complete" });
   };
   return (

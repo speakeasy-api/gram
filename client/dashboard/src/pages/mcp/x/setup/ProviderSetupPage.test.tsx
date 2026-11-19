@@ -24,7 +24,7 @@ vi.mock("@/contexts/Sdk", () => ({
   }),
 }));
 vi.mock("@/lib/mcp-server-visibility", () => ({
-  invalidateMcpServerQueries: vi.fn().mockResolvedValue(undefined),
+  invalidateMcpServerQueries: () => mocks.invalidate(),
 }));
 vi.mock("@gram/client/react-query/metaMcpMembers", () => ({
   invalidateAllMetaMcpMembers: vi.fn().mockResolvedValue(undefined),
@@ -53,6 +53,7 @@ const mocks = vi.hoisted(() => ({
   configured: undefined as (() => Promise<void>) | undefined,
   headers: [] as RemoteMcpServerHeader[],
   markCompleted: vi.fn(),
+  invalidate: vi.fn(),
 }));
 vi.mock("canvas-confetti", () => ({ default: { create: mocks.create } }));
 vi.mock("@/contexts/Auth", () => ({
@@ -253,6 +254,7 @@ beforeEach(() => {
   mocks.members.mockResolvedValue({ members: [] });
   mocks.addMember.mockResolvedValue({});
   mocks.markCompleted.mockResolvedValue(server);
+  mocks.invalidate.mockResolvedValue(undefined);
   mocks.provider = "github";
   mocks.oktaUrl = "https://example.okta.com/mcp";
   mocks.snowflakeUrl =
@@ -588,6 +590,57 @@ describe("recorded setup completion", () => {
       expect(plan.textContent).toBe("Setup plan");
     },
   );
+
+  it("opens Overview when the cache can't refresh after completion is saved", async () => {
+    mocks.invalidate.mockRejectedValue(new Error("offline"));
+    render(<Setup />);
+    validate();
+    await userEvent.click(completeButton());
+    await waitFor(() =>
+      expect(screen.getByLabelText("Current location").textContent).toBe(
+        "/overview",
+      ),
+    );
+  });
+
+  it("holds Back and the step rail while completion saves", async () => {
+    let finish = (_value: unknown) => {};
+    mocks.markCompleted.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    render(<Setup />);
+    validate();
+    await userEvent.click(completeButton());
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Back" }).disabled,
+    ).toBe(true);
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: /Setup plan$/ })
+        .disabled,
+    ).toBe(true);
+    await act(async () => finish(server));
+    await waitFor(() =>
+      expect(screen.getByLabelText("Current location").textContent).toBe(
+        "/overview",
+      ),
+    );
+  });
+
+  it("keeps a completed Salesforce setup on its support handoff", () => {
+    mocks.provider = "salesforce";
+    mocks.initialStep = "support";
+    mocks.salesforcePath = "support";
+    render(
+      <Setup mcpServer={{ ...server, setupGuideCompletedAt: new Date() }} />,
+    );
+    expect(
+      screen
+        .getByRole("button", { name: /Finish with support/ })
+        .getAttribute("aria-current"),
+    ).toBe("step");
+  });
 
   it("opens an unfinished setup where its progress left off", () => {
     mocks.initialStep = "begin";
