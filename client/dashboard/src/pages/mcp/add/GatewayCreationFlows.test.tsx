@@ -513,6 +513,17 @@ describe("remote creation from a Shadow MCP server", () => {
     );
   });
 
+  it("keeps the official server behind the Speakeasy proxy", () => {
+    render(<CreateRemoteMcp />, { wrapper: ShadowRouter });
+    const direct = screen
+      .getAllByRole("radio")
+      .find((radio) => radio.getAttribute("value") === "unproxied");
+    expect(direct?.hasAttribute("disabled")).toBe(true);
+    expect(
+      screen.getByText(/An official server must proxy through Speakeasy/),
+    ).toBeTruthy();
+  });
+
   it("goes back to the Shadow MCP server on cancel", async () => {
     render(<CreateRemoteMcp />, { wrapper: ShadowRouter });
     await act(async () => {

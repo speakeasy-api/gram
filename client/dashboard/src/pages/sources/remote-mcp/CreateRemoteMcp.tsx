@@ -119,8 +119,11 @@ function CreateRemoteMcpForm() {
   // Unproxied servers are often only reachable from the customer's network,
   // so our infrastructure failing to reach one says nothing about whether it
   // works. Verification only gates saving when we sit in the request path.
-  // Gateway members are always proxied, whatever the Connection choice says.
-  const requiresVerification = mode === "proxied" || !!flow.gatewayId;
+  // Gateway members and official versions of Shadow MCP servers are always
+  // proxied, whatever the Connection choice says: Speakeasy must sit in the
+  // request path for either to work.
+  const proxyRequired = !!flow.gatewayId || !!shadowServerSlug;
+  const requiresVerification = mode === "proxied" || proxyRequired;
   const readyToSave = isVerified || !requiresVerification;
   const defaultIssuerSelection = defaultCreationUserSessionIssuerValue(
     issuerQuery.organizationIssuers,
@@ -175,7 +178,7 @@ function CreateRemoteMcpForm() {
     const trimmedName = name.trim();
     setSubmitting(true);
     try {
-      if (mode === "unproxied" && !flow.gatewayId) {
+      if (mode === "unproxied" && !proxyRequired) {
         const { mcpServer } = await createUnproxied.mutateAsync({
           name: trimmedName === "" ? undefined : trimmedName,
           url: url.trim(),
@@ -338,7 +341,7 @@ function CreateRemoteMcpForm() {
                     <RadioGroupItem
                       value="unproxied"
                       className="mt-0.5"
-                      disabled={!!flow.gatewayId}
+                      disabled={proxyRequired}
                     />
                     <span className="flex flex-col gap-0.5">
                       <span className="text-sm">
@@ -358,6 +361,12 @@ function CreateRemoteMcpForm() {
                 {flow.gatewayId && (
                   <Text muted small>
                     Gateway members must proxy through Speakeasy; direct
+                    connections are not supported.
+                  </Text>
+                )}
+                {!flow.gatewayId && shadowServerSlug && (
+                  <Text muted small>
+                    An official server must proxy through Speakeasy; direct
                     connections are not supported.
                   </Text>
                 )}
