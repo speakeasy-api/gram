@@ -96,6 +96,20 @@ func TestEndOfDayIsHiddenWhenTheDayIsNearlyOver(t *testing.T) {
 	require.True(t, endOfDay(late, loc).IsZero())
 }
 
+func TestEndOfDayIsHiddenWhenItIsMoreThanADayAway(t *testing.T) {
+	t.Parallel()
+	loc, err := time.LoadLocation("America/New_York")
+	require.NoError(t, err)
+
+	// 1 November 2026 gains an hour in New York, so 23:59 is 24h29m after
+	// half past midnight: longer than a temporary grant can last.
+	justAfterMidnight := time.Date(2026, 11, 1, 0, 30, 0, 0, loc)
+	require.True(t, endOfDay(justAfterMidnight, loc).IsZero())
+
+	afternoon := time.Date(2026, 11, 1, 14, 0, 0, 0, loc)
+	require.Equal(t, time.Date(2026, 11, 1, 23, 59, 0, 0, loc), endOfDay(afternoon, loc))
+}
+
 func TestWindowValues(t *testing.T) {
 	t.Parallel()
 	deadline := time.Unix(1_800_000_000, 0)

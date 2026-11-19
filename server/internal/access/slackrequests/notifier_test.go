@@ -48,6 +48,28 @@ func TestNotifyDMsAdministratorsButNotTheRequester(t *testing.T) {
 	require.Len(t, f.slack.callsTo("chat.postMessage"), 1, "a retried send does not DM twice")
 }
 
+func TestEndOfDayUsesTheRequestersSlackTimeZone(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	const zone = "Pacific/Kiritimati"
+	f.slack.setZone("UREQUESTER", zone)
+	loc, err := time.LoadLocation(zone)
+	require.NoError(t, err)
+	local := time.Now().In(loc)
+	end := time.Date(local.Year(), local.Month(), local.Day(), 23, 59, 0, 0, loc)
+	if time.Until(end) < time.Hour {
+		t.Skip("too close to midnight in the requester's time zone for End of day to be offered")
+	}
+	target := f.pendingRequest(t)
+
+	_, err = f.notifier.Notify(t.Context(), target)
+	require.NoError(t, err)
+
+	posts := f.slack.callsTo("chat.postMessage")
+	require.Len(t, posts, 1)
+	require.Contains(t, posts[0].Form.Get("blocks"), "eod|"+strconv.FormatInt(end.Unix(), 10), "End of day is 23:59 where the requester is")
+}
+
 func TestFinishUpdatesCardsAndTellsTheRequester(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)

@@ -25,17 +25,23 @@ const (
 	// accessRequestSlackDecidedSignal wakes a run once its request is decided.
 	accessRequestSlackDecidedSignal = "decided"
 
-	// accessRequestSlackRunTimeout outlives the longest request: a request
-	// lapses 24 hours after it is made.
-	accessRequestSlackRunTimeout = 25 * time.Hour
+	// accessRequestSlackRunTimeout outlives the longest request plus the
+	// time finishing its cards is retried: a request lapses 24 hours after it
+	// is made.
+	accessRequestSlackRunTimeout = 24*time.Hour + accessRequestSlackFinishWindow + time.Hour
 
 	// accessRequestSlackExpiryGrace lets a request lapse in the database
 	// before its cards are marked expired, so a slow clock cannot show
 	// Expired on a request that can still be decided.
 	accessRequestSlackExpiryGrace = 30 * time.Second
 
-	// accessRequestSlackActivityAttempts bounds the tries of each activity.
+	// accessRequestSlackActivityAttempts bounds the tries of the send
+	// activity.
 	accessRequestSlackActivityAttempts = 6
+
+	// accessRequestSlackFinishWindow is how long updating the cards is
+	// retried, so a Slack outage of a few hours does not leave them live.
+	accessRequestSlackFinishWindow = 6 * time.Hour
 )
 
 // AccessRequestSlackWorkflow sends an access request to the organization's
@@ -74,7 +80,15 @@ func AccessRequestSlackWorkflow(ctx workflow.Context, target slackrequests.Targe
 	selector.Select(ctx)
 	cancelTimer()
 
-	if err := workflow.ExecuteActivity(activityCtx, a.FinishAccessRequestCards, target).Get(activityCtx, nil); err != nil {
+	// Finishing retries for longer than sending: until it succeeds the cards
+	// keep their buttons. A click on a stale card still refreshes it, since a
+	// decided request is refused and the card redrawn.
+	finishCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout:    2 * time.Minute,
+		ScheduleToCloseTimeout: accessRequestSlackFinishWindow,
+		RetryPolicy:            &temporal.RetryPolicy{InitialInterval: 5 * time.Second, BackoffCoefficient: 2, MaximumInterval: 10 * time.Minute, MaximumAttempts: 0},
+	})
+	if err := workflow.ExecuteActivity(finishCtx, a.FinishAccessRequestCards, target).Get(finishCtx, nil); err != nil {
 		return fmt.Errorf("update access request DMs: %w", err)
 	}
 	return nil

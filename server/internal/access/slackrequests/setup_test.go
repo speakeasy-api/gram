@@ -252,6 +252,13 @@ func (s *fakeSlack) mapUser(email, slackUserID string) {
 	s.users[email] = slackUserID
 }
 
+// setZone gives a Slack user a profile time zone.
+func (s *fakeSlack) setZone(slackUserID, zone string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.zones[slackUserID] = zone
+}
+
 func (s *fakeSlack) callsTo(method string) []slackCall {
 	s.mu.Lock()
 	defer s.mu.Unlock()

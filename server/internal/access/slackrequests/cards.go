@@ -224,11 +224,12 @@ func label(text string) string {
 }
 
 // endOfDay is 23:59 today in loc, or zero when that is less than
-// minEndOfDayLead away.
+// minEndOfDayLead away or, on a day that gains an hour, further away than a
+// temporary grant can last.
 func endOfDay(now time.Time, loc *time.Location) time.Time {
 	local := now.In(loc)
 	end := time.Date(local.Year(), local.Month(), local.Day(), 23, 59, 0, 0, loc)
-	if end.Sub(now) < minEndOfDayLead {
+	if lead := end.Sub(now); lead < minEndOfDayLead || lead > access.TemporaryGrantMaxDuration {
 		return time.Time{}
 	}
 	return end
