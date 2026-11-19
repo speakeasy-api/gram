@@ -12,13 +12,6 @@
 
 const SUPPORTED_EVIDENCE_VERSIONS = [1, 2];
 
-/**
- * The question observed traffic answers. Lives here so the evidence panel and
- * the review that falls back to rendering traffic on its own ask it in the
- * same words.
- */
-export const USAGE_QUESTION = "Who is currently using it?";
-
 export type EvidenceIdentity = {
   kind: "remote" | "package" | "unresolved";
   artifactRef?: string;

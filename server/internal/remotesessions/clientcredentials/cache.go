@@ -73,8 +73,10 @@ type cacheKeys struct {
 
 // newCacheKeys hashes everything the minted credential depends on, so
 // arbitrary resources make bounded, delimiter-safe keys. The client's
-// credential version covers the stored secret ciphertext (new on every write),
-// the signing key set and its active key, and how and where the client
+// credential version covers the client secret's revision
+// (client_secret_generation, which changes whenever the secret is set,
+// replaced or cleared but not when it is sealed again), the signing key set
+// and its active key, and how and where the client
 // authenticates, so rotating any of them misses the cache, including a cached
 // failure.
 func newCacheKeys(client repo.GetClientCredentialsGrantClientRow, resource string) cacheKeys {
@@ -100,7 +102,7 @@ func newCacheKeys(client repo.GetClientCredentialsGrantClientRow, resource strin
 
 	digest := sha256.Sum256([]byte(strings.Join([]string{
 		client.OrganizationID.String, client.ClientID.String(),
-		client.ExternalClientID, client.TokenEndpointAuthMethod.String, client.ClientSecretEncrypted.String, secretExpiresAt,
+		client.ExternalClientID, client.TokenEndpointAuthMethod.String, strconv.FormatInt(client.ClientSecretGeneration, 10), secretExpiresAt,
 		keySetID, client.ActiveKeyID, client.TokenEndpointAuthAudienceFormat.String,
 		client.IssuerID.String(), client.IssuerUrl, client.TokenEndpoint.String, resourceIndicatorSupported, tunnelID,
 		client.ClientAudience.String, strings.Join(slices.Sorted(slices.Values(client.ClientScope)), " "), resource,

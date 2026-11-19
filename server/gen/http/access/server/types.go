@@ -147,10 +147,6 @@ type SetShadowMCPOfficialServerRequestBody struct {
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
 	// The MCP server to link as the official version. Omit it to remove the link.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	// Switch the link off: keep direct connections to the Shadow MCP server
-	// working under the ordinary Shadow MCP rules instead of blocking them.
-	// Requires mcp_server_id.
-	AllowDirectAccess *bool `form:"allow_direct_access,omitempty" json:"allow_direct_access,omitempty" xml:"allow_direct_access,omitempty"`
 }
 
 // ResolveShadowMCPInventoryRequestRequestBody is the type of the "access"
@@ -582,9 +578,9 @@ type GetShadowMCPInventoryServerResponseBody struct {
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string `form:"blocked_policy_ids" json:"blocked_policy_ids" xml:"blocked_policy_ids"`
-	// The MCP server linked as this Shadow MCP server's official version. While
-	// the link is on, direct use is blocked wherever a Shadow MCP policy applies,
-	// and the block points agents here.
+	// The MCP server linked as this Shadow MCP server's official version. While it
+	// is linked, direct use is blocked wherever a Shadow MCP policy applies, and
+	// the block points agents here.
 	OfficialServer *ShadowMCPOfficialServerResponseBody `form:"official_server,omitempty" json:"official_server,omitempty" xml:"official_server,omitempty"`
 	// A project MCP server that proxies to the same upstream URL, offered as the
 	// server to link. Present only while no official server is linked.
@@ -705,6 +701,10 @@ type ExplainResourceAccessResponseBody struct {
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 	// The decision for use, view and manage, in that order.
 	Levels []*ExplainedAccessLevelResponseBody `form:"levels" json:"levels" xml:"levels"`
+	// For each upstream credential the server offers, whether the member may use
+	// it. A caller needs both use access to the server and one usable credential
+	// to reach an upstream that requires sign-in.
+	Credentials []*ExplainedCredentialAccessResponseBody `form:"credentials" json:"credentials" xml:"credentials"`
 }
 
 // RequestAccessResponseBody is the type of the "access" service
@@ -9843,9 +9843,9 @@ type ShadowMCPInventoryServerResponseBody struct {
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string `form:"blocked_policy_ids" json:"blocked_policy_ids" xml:"blocked_policy_ids"`
-	// The MCP server linked as this Shadow MCP server's official version. While
-	// the link is on, direct use is blocked wherever a Shadow MCP policy applies,
-	// and the block points agents here.
+	// The MCP server linked as this Shadow MCP server's official version. While it
+	// is linked, direct use is blocked wherever a Shadow MCP policy applies, and
+	// the block points agents here.
 	OfficialServer *ShadowMCPOfficialServerResponseBody `form:"official_server,omitempty" json:"official_server,omitempty" xml:"official_server,omitempty"`
 	// A project MCP server that proxies to the same upstream URL, offered as the
 	// server to link. Present only while no official server is linked.
@@ -9930,9 +9930,10 @@ type ShadowMCPOfficialServerResponseBody struct {
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The gateway that serves the official server, when url is a gateway's address.
 	GatewayName *string `form:"gateway_name,omitempty" json:"gateway_name,omitempty" xml:"gateway_name,omitempty"`
-	// True while the link is switched off: direct connections to the Shadow MCP
-	// server follow the ordinary Shadow MCP rules instead of being blocked.
-	DirectAccessAllowed bool `form:"direct_access_allowed" json:"direct_access_allowed" xml:"direct_access_allowed"`
+	// Deprecated: links no longer have an on/off switch, so this is always false.
+	// Kept one release so older dashboards, which require it, keep rendering, then
+	// removed.
+	DirectAccessAllowed *bool `form:"direct_access_allowed,omitempty" json:"direct_access_allowed,omitempty" xml:"direct_access_allowed,omitempty"`
 }
 
 // ShadowMCPSuggestedOfficialServerResponseBody is used to define fields on
@@ -10155,6 +10156,49 @@ type ExplainedAccessDirectorySourceResponseBody struct {
 	AttributeKey *string `form:"attribute_key,omitempty" json:"attribute_key,omitempty" xml:"attribute_key,omitempty"`
 	// The attribute value the member's profile matched, for an attribute mapping.
 	AttributeValue *string `form:"attribute_value,omitempty" json:"attribute_value,omitempty" xml:"attribute_value,omitempty"`
+}
+
+// ExplainedCredentialAccessResponseBody is used to define fields on response
+// body types.
+type ExplainedCredentialAccessResponseBody struct {
+	// The credential's auth client ID.
+	AuthClientID string `form:"auth_client_id" json:"auth_client_id" xml:"auth_client_id"`
+	// The credential's name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The kind of credential.
+	ClientType string `form:"client_type" json:"client_type" xml:"client_type"`
+	// Whether the credential is turned on. A turned-off credential is unusable
+	// whatever the rules say.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Whether the member's rules let them use it, with their own connection for a
+	// personal credential.
+	Allowed bool `form:"allowed" json:"allowed" xml:"allowed"`
+	// Every rule matching this use, deciding rules first.
+	Rules []*ExplainedCredentialRuleResponseBody `form:"rules" json:"rules" xml:"rules"`
+}
+
+// ExplainedCredentialRuleResponseBody is used to define fields on response
+// body types.
+type ExplainedCredentialRuleResponseBody struct {
+	// Canonical principal URN holding the rule.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
+	// What the principal identifies.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// Human-readable name for the principal.
+	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
+	// Whether the rule names this credential (credential), every credential of its
+	// kind (credential_type), or every credential (all_credentials).
+	AppliesTo string `form:"applies_to" json:"applies_to" xml:"applies_to"`
+	// Whether the rule applies only on servers in this server's project.
+	ProjectBound *bool `form:"project_bound,omitempty" json:"project_bound,omitempty" xml:"project_bound,omitempty"`
+	// How the rule shaped the decision: allows, overrides, overridden, blocks or
+	// blocked, with the same meanings as an access rule's effect.
+	Effect string `form:"effect" json:"effect" xml:"effect"`
+	// Why a blocked rule made directly to the member did not override the block:
+	// wildcard_direct_grant, narrower_direct_grant or own_exclusion.
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// Whether the member holds this role only through a directory role mapping.
+	ViaDirectoryMapping bool `form:"via_directory_mapping" json:"via_directory_mapping" xml:"via_directory_mapping"`
 }
 
 // AuthzChallengeResponseBody is used to define fields on response body types.
@@ -11317,6 +11361,18 @@ func NewExplainResourceAccessResponseBody(res *access.ExplainResourceAccessResul
 		}
 	} else {
 		body.Levels = []*ExplainedAccessLevelResponseBody{}
+	}
+	if res.Credentials != nil {
+		body.Credentials = make([]*ExplainedCredentialAccessResponseBody, len(res.Credentials))
+		for i, val := range res.Credentials {
+			if val == nil {
+				body.Credentials[i] = nil
+				continue
+			}
+			body.Credentials[i] = marshalAccessExplainedCredentialAccessToExplainedCredentialAccessResponseBody(val)
+		}
+	} else {
+		body.Credentials = []*ExplainedCredentialAccessResponseBody{}
 	}
 	return body
 }
@@ -18662,10 +18718,9 @@ func NewUpdateShadowMCPInventoryServerNamePayload(body *UpdateShadowMCPInventory
 // setShadowMCPOfficialServer endpoint payload.
 func NewSetShadowMCPOfficialServerPayload(body *SetShadowMCPOfficialServerRequestBody, sessionToken *string) *access.SetShadowMCPOfficialServerPayload {
 	v := &access.SetShadowMCPOfficialServerPayload{
-		ProjectID:         *body.ProjectID,
-		ServerURL:         *body.ServerURL,
-		McpServerID:       body.McpServerID,
-		AllowDirectAccess: *body.AllowDirectAccess,
+		ProjectID:   *body.ProjectID,
+		ServerURL:   *body.ServerURL,
+		McpServerID: body.McpServerID,
 	}
 	v.SessionToken = sessionToken
 
@@ -19187,9 +19242,6 @@ func ValidateSetShadowMCPOfficialServerRequestBody(body *SetShadowMCPOfficialSer
 	}
 	if body.ServerURL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("server_url", "body"))
-	}
-	if body.AllowDirectAccess == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("allow_direct_access", "body"))
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))

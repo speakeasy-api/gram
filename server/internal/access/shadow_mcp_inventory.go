@@ -310,12 +310,13 @@ func (s *Service) attachShadowMCPOfficialServers(ctx context.Context, organizati
 			continue
 		}
 		server.OfficialServer = &gen.ShadowMCPOfficialServer{
-			McpServerID:         match.MCPServerID.String(),
-			Name:                match.Name,
-			Slug:                conv.PtrEmpty(match.Slug),
-			URL:                 conv.PtrEmpty(match.URL),
-			GatewayName:         conv.PtrEmpty(match.GatewayName),
-			DirectAccessAllowed: match.DirectAccessAllowed,
+			McpServerID: match.MCPServerID.String(),
+			Name:        match.Name,
+			Slug:        conv.PtrEmpty(match.Slug),
+			URL:         conv.PtrEmpty(match.URL),
+			GatewayName: conv.PtrEmpty(match.GatewayName),
+			// Deprecated field, sent for older dashboards that require it.
+			DirectAccessAllowed: new(false),
 		}
 	}
 }
