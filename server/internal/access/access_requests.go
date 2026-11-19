@@ -42,6 +42,10 @@ const (
 	openChallengeLookback = 7 * 24 * time.Hour
 	// maxResolvedChallenges bounds the denials one approval resolves.
 	maxResolvedChallenges = 50
+	// openChallengePageSize and openChallengePages bound how many of the
+	// requester's denials an approval reads while looking for open ones.
+	openChallengePageSize = 100
+	openChallengePages    = 5
 
 	AccessRequestStatusPending   = "pending"
 	AccessRequestStatusApproved  = "approved"
@@ -656,44 +660,57 @@ func (s *Service) openChallengesForRequest(ctx context.Context, request repo.Acc
 	principal := recipient.String()
 	scope := request.Scope
 	from := request.CreatedAt.Time.Add(-openChallengeLookback)
-	challenges, err := chrepo.New(s.chReadConn).ListChallenges(ctx, chrepo.ChallengeListFilters{
-		ChallengeFilters: chrepo.ChallengeFilters{
-			OrganizationID: request.OrganizationID,
-			ProjectID:      nil,
-			Outcome:        &outcome,
-			PrincipalURN:   &principal,
-			Scope:          &scope,
-			ExcludeScopes:  nil,
-			MemberUserIDs:  nil,
-		},
-		From:           &from,
-		To:             nil,
-		Limit:          maxResolvedChallenges,
-		Offset:         0,
-		SkipPagination: false,
-	})
-	if err != nil {
-		logger.WarnContext(ctx, "list denials an access request answers", attr.SlogError(err))
-		return nil
-	}
-	covered := make([]chrepo.ChallengeSummary, 0, len(challenges))
-	for _, challenge := range challenges {
-		if validateChallengesForTemporaryGrant([]chrepo.ChallengeSummary{challenge}, []string{challenge.ID}, recipient, authz.Scope(scope), selector) == nil {
-			covered = append(covered, challenge)
+	queries := chrepo.New(s.chReadConn)
+
+	// Denials of other resources and ones already resolved are filtered out
+	// after the read, so page until enough open ones are found or the window
+	// runs out.
+	ids := make([]string, 0, maxResolvedChallenges)
+	for page := range openChallengePages {
+		challenges, err := queries.ListChallenges(ctx, chrepo.ChallengeListFilters{
+			ChallengeFilters: chrepo.ChallengeFilters{
+				OrganizationID: request.OrganizationID,
+				ProjectID:      nil,
+				Outcome:        &outcome,
+				PrincipalURN:   &principal,
+				Scope:          &scope,
+				ExcludeScopes:  nil,
+				MemberUserIDs:  nil,
+			},
+			From:           &from,
+			To:             nil,
+			Limit:          openChallengePageSize,
+			Offset:         uint64(page) * openChallengePageSize,
+			SkipPagination: false,
+		})
+		if err != nil {
+			logger.WarnContext(ctx, "list denials an access request answers", attr.SlogError(err))
+			return ids
 		}
-	}
-	if len(covered) == 0 {
-		return nil
-	}
-	resolutions, err := s.lookupResolutions(ctx, request.OrganizationID, covered)
-	if err != nil {
-		logger.WarnContext(ctx, "read resolutions of denials an access request answers", attr.SlogError(err))
-		return nil
-	}
-	ids := make([]string, 0, len(covered))
-	for _, challenge := range covered {
-		if _, resolved := resolutions[challenge.ID]; !resolved {
-			ids = append(ids, challenge.ID)
+		covered := make([]chrepo.ChallengeSummary, 0, len(challenges))
+		for _, challenge := range challenges {
+			if validateChallengesForTemporaryGrant([]chrepo.ChallengeSummary{challenge}, []string{challenge.ID}, recipient, authz.Scope(scope), selector) == nil {
+				covered = append(covered, challenge)
+			}
+		}
+		if len(covered) > 0 {
+			resolutions, err := s.lookupResolutions(ctx, request.OrganizationID, covered)
+			if err != nil {
+				logger.WarnContext(ctx, "read resolutions of denials an access request answers", attr.SlogError(err))
+				return ids
+			}
+			for _, challenge := range covered {
+				if _, resolved := resolutions[challenge.ID]; resolved {
+					continue
+				}
+				ids = append(ids, challenge.ID)
+				if len(ids) == maxResolvedChallenges {
+					return ids
+				}
+			}
+		}
+		if uint64(len(challenges)) < openChallengePageSize {
+			break
 		}
 	}
 	return ids
