@@ -122,7 +122,7 @@ export function ConnectionsTab({
     userSessionIssuerId: providerId,
     limit: PAGE_FETCH_LIMIT,
   });
-  useDrainedPages({
+  const { isTruncated: clientsTruncated } = useDrainedPages({
     enabled: true,
     pageCount: clientsQuery.data?.pages.length ?? 0,
     hasNextPage: clientsQuery.hasNextPage,
@@ -152,9 +152,26 @@ export function ConnectionsTab({
         ),
     );
   }, [sessions, deferredSearch]);
+  // Search narrows registrations by name too, so an agent with no sessions
+  // yet can still be found under the agent grouping.
+  const filteredClients = useMemo(() => {
+    const q = deferredSearch.trim().toLowerCase();
+    if (!q) return clients;
+    return clients.filter((c) => c.clientName.toLowerCase().includes(q));
+  }, [clients, deferredSearch]);
+  // Only the agent grouping seeds a row per registration; the others are cut
+  // from sessions alone, so registrations add nothing to them.
+  const listsRegistrations = grouping === "client";
+  const hasRows =
+    filteredSessions.length > 0 ||
+    (listsRegistrations && filteredClients.length > 0);
+  const retryAll = () => {
+    void refetch();
+    void clientsQuery.refetch();
+  };
 
   let listBody: JSX.Element;
-  if (isPending) {
+  if (isPending || clientsQuery.isPending) {
     listBody = (
       <div className="space-y-2">
         {Array.from({ length: 8 }).map((_, i) => (
@@ -162,13 +179,16 @@ export function ConnectionsTab({
         ))}
       </div>
     );
-  } else if (isError && sessions.length === 0) {
+  } else if (
+    (isError && sessions.length === 0) ||
+    (clientsQuery.isError && clients.length === 0)
+  ) {
     listBody = (
       <div className="flex items-center justify-between gap-3">
         <p className="text-destructive text-sm">
           Couldn&apos;t load connections.
         </p>
-        <Button variant="tertiary" size="sm" onClick={() => void refetch()}>
+        <Button variant="tertiary" size="sm" onClick={retryAll}>
           Retry
         </Button>
       </div>
@@ -184,10 +204,12 @@ export function ConnectionsTab({
     );
   } else if (sessions.length === 0 && clients.length === 0) {
     listBody = <MCPSessionsEmptyState />;
-  } else if (filteredSessions.length === 0) {
+  } else if (!hasRows) {
     listBody = (
       <p className="text-muted-foreground text-sm">
-        No connections match your search
+        {deferredSearch.trim()
+          ? "No connections match your search"
+          : "No one has signed in through this provider yet. Group by Agent to see its registered agents."}
       </p>
     );
   } else {
@@ -196,11 +218,8 @@ export function ConnectionsTab({
         sessions={filteredSessions}
         grouping={grouping}
         canRevoke={canRevoke}
-        onRevoked={() => {
-          void refetch();
-          void clientsQuery.refetch();
-        }}
-        clients={clients}
+        onRevoked={retryAll}
+        clients={filteredClients}
         killswitchContext={{ capabilityKey: "mcp_tool_calls" }}
         project={project}
       />
@@ -248,6 +267,13 @@ export function ConnectionsTab({
           options={GROUPING_OPTIONS}
         />
       </div>
+
+      {clientsTruncated && (
+        <p className="text-muted-foreground text-sm">
+          Showing the first {clients.length} agents. Later pages were not
+          loaded, so search and the agent grouping cover only these.
+        </p>
+      )}
 
       {listBody}
 

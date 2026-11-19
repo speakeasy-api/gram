@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
@@ -7,6 +7,9 @@ import { ConnectionsTab } from "./ConnectionsTab";
 const state = vi.hoisted(() => ({
   project: { id: "project_a", slug: "first" },
   listParams: [] as unknown[],
+  filterValues: { subjectUrn: "user:u1" } as Record<string, unknown>,
+  clients: [] as { id: string; clientName: string }[],
+  listedClients: undefined as unknown[] | undefined,
 }));
 vi.mock("@/contexts/Auth", () => ({ useProject: () => state.project }));
 vi.mock("@/contexts/Sdk", () => ({
@@ -20,7 +23,7 @@ vi.mock("@/hooks/useReadableAgents", () => ({
 }));
 vi.mock("@/components/filters", () => ({
   defineFilters: (filters: unknown) => filters,
-  useFilterState: () => ({ values: { subjectUrn: "user:u1" } }),
+  useFilterState: () => ({ values: state.filterValues }),
 }));
 vi.mock("@gram/client/react-query/userSessionFacets.js", () => ({
   useUserSessionFacets: () => ({ data: {} }),
@@ -32,7 +35,9 @@ vi.mock("@gram/client/react-query/userSessions.js", () => ({
   },
 }));
 vi.mock("@gram/client/react-query/userSessionClients.js", () => ({
-  useUserSessionClientsInfinite: () => ({ data: { pages: [] } }),
+  useUserSessionClientsInfinite: () => ({
+    data: { pages: [{ result: { items: state.clients } }] },
+  }),
 }));
 vi.mock("@/components/sessions/RegisterClientAction", () => ({
   RegisterClientAction: ({ issuerId }: { issuerId: string }) => (
@@ -40,7 +45,10 @@ vi.mock("@/components/sessions/RegisterClientAction", () => ({
   ),
 }));
 vi.mock("@/components/connections/ConnectionsList", () => ({
-  ConnectionsList: () => null,
+  ConnectionsList: ({ clients }: { clients: unknown[] }) => {
+    state.listedClients = clients;
+    return <div>Connections list</div>;
+  },
 }));
 vi.mock("@/components/page-layout", () => ({
   Page: {
@@ -58,6 +66,9 @@ vi.mock("@/components/page-layout", () => ({
 afterEach(() => {
   cleanup();
   state.listParams = [];
+  state.filterValues = { subjectUrn: "user:u1" };
+  state.clients = [];
+  state.listedClients = undefined;
 });
 
 it("lists only the chosen provider's connections, keeping the query's filters", () => {
@@ -85,4 +96,24 @@ it("offers registering an agent against the chosen provider", () => {
   expect(
     screen.getByRole("button", { name: "Register agent for issuer_1" }),
   ).toBeTruthy();
+});
+
+it("lists a registered agent that has not signed in yet under the agent grouping", () => {
+  state.filterValues = {};
+  state.clients = [{ id: "client_1", clientName: "Support triage agent" }];
+  render(
+    <MemoryRouter>
+      <ConnectionsTab providerId="issuer_1" />
+    </MemoryRouter>,
+  );
+
+  // Grouped by person, there is no session to list, and nothing was searched.
+  expect(
+    screen.getByText(/No one has signed in through this provider yet/),
+  ).toBeTruthy();
+  expect(screen.queryByText("No connections match your search")).toBeNull();
+
+  fireEvent.click(screen.getByText("Agent"));
+  expect(screen.getByText("Connections list")).toBeTruthy();
+  expect(state.listedClients).toEqual(state.clients);
 });

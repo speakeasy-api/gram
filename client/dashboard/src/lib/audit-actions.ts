@@ -365,7 +365,9 @@ export const AUDIT_ACTIONS = [
   "unproxied-mcp:create",
   "unproxied-mcp:delete",
   "user-session-client:cimd-refresh",
+  "user-session-client:create",
   "user-session-client:revoke",
+  "user-session-client:update-redirect-uris",
   "user-session-consent:revoke",
   "user-session-issuer-cimd-client:add",
   "user-session-issuer-cimd-client:remove",
@@ -1166,8 +1168,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "revoked user session";
     case "user-session-client:cimd-refresh":
       return "refreshed the client metadata document for";
+    case "user-session-client:create":
+      return "registered user session client";
     case "user-session-client:revoke":
       return "revoked user session client";
+    case "user-session-client:update-redirect-uris":
+      return "updated the redirect URIs of";
     case "user-session-consent:revoke":
       return "revoked consent for";
     case "user-session-issuer:create":
