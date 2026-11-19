@@ -18,10 +18,6 @@ import {
   teamServerLabel,
 } from "./team-usage";
 
-function countLabel(count: number, singular: string, plural: string): string {
-  return `${count.toLocaleString()} ${count === 1 ? singular : plural}`;
-}
-
 /** The URL without its scheme, which is what people recognize a server by. */
 function displayUrl(raw: string): string {
   return raw.replace(/^https?:\/\//, "").replace(/\/+$/, "");
@@ -90,9 +86,7 @@ export function TeamUsageTable({
       header: "People",
       width: "0.6fr",
       render: (server) => (
-        <Text variant="small">
-          {countLabel(server.userCount, "person", "people")}
-        </Text>
+        <Text variant="small">{server.userCount.toLocaleString()}</Text>
       ),
     },
     {
@@ -100,9 +94,7 @@ export function TeamUsageTable({
       header: "Calls",
       width: "0.6fr",
       render: (server) => (
-        <Text variant="small">
-          {countLabel(server.observedUseCount, "call", "calls")}
-        </Text>
+        <Text variant="small">{server.observedUseCount.toLocaleString()}</Text>
       ),
     },
     {
@@ -119,12 +111,15 @@ export function TeamUsageTable({
       key: "canonicalServerUrl",
       id: "action",
       header: "",
-      width: "120px",
+      width: "150px",
       render: (server) => {
         const existing = teamServerExistingServer(server);
         if (existing) {
           return (
-            <div className="flex justify-end">
+            <div className="flex items-center justify-end gap-3">
+              <Text muted small>
+                Added
+              </Text>
               <Button variant="tertiary" size="sm" asChild>
                 <Link
                   to={routes.mcp.details.overview.href(
@@ -208,11 +203,17 @@ export function TeamUsageTable({
   }
 
   return (
-    <Table
-      columns={columns}
-      data={visible}
-      rowKey={(server) => server.canonicalServerUrl}
-      noResultsMessage={`No servers matching “${search.trim()}”`}
-    />
+    <div className="space-y-3">
+      <Text muted small className="block">
+        Remote servers your team&apos;s agents connect to directly, most used
+        first. People and calls count everything Speakeasy has seen.
+      </Text>
+      <Table
+        columns={columns}
+        data={visible}
+        rowKey={(server) => server.canonicalServerUrl}
+        noResultsMessage={`No servers matching “${search.trim()}”`}
+      />
+    </div>
   );
 }
