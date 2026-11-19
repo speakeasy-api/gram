@@ -178,6 +178,40 @@ var _ = Service("agent", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "getClaudeObservabilityPlugin")
 	})
 
+	Method("getClaudeObservabilityPluginStatus", func() {
+		Description("Report whether the enrolled user should be offered the Claude observability plugin download, and whether the plugin they uploaded is sending events. available is false when the organization has no observability plugin, or has turned observability off. key_created_at is when the user's live plugin key was minted by their latest download, and key_last_used_at when hooks last authenticated with it (recorded at most once a minute); both are absent when the user has no live key. Mints and revokes nothing. Authenticates like getClaudeObservabilityPlugin: a per-user key only.")
+
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+		})
+
+		Result(func() {
+			Meta("openapi:typename", "ClaudeObservabilityPluginStatus")
+			Attribute("available", Boolean, "Whether the organization offers the Claude observability plugin.")
+			Attribute("key_created_at", String, "When the user's live plugin key was minted.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("key_last_used_at", String, "When hooks last authenticated with the user's live plugin key.", func() {
+				Format(FormatDateTime)
+			})
+			Required("available")
+		})
+
+		HTTP(func() {
+			GET("/rpc/agent.getClaudeObservabilityPluginStatus")
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getAgentClaudeObservabilityPluginStatus")
+		Meta("openapi:extension:x-speakeasy-name-override", "getClaudeObservabilityPluginStatus")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AgentClaudeObservabilityPluginStatus"}`)
+	})
+
 	Method("hideMcpServer", func() {
 		Description("Hide an MCP server for the enrolled user, the same preference the gateway consent page's Hide sets. Gateways leave a hidden server out of the user's tools, and getMyConnections reports it as hidden. Only servers getMyConnections reports to the user can be hidden; anything else is not found. Hiding a hidden server changes nothing. Accepts a per-user key, or an org install key with the user's email vouched in the Gram-User-Email header, the same way getMyConnections resolves the user.")
 

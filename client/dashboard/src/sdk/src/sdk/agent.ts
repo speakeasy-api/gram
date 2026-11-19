@@ -5,6 +5,7 @@
 import { agentCreateSessionHandoff } from "../funcs/agentCreateSessionHandoff.js";
 import { agentDeleteAiScanTarget } from "../funcs/agentDeleteAiScanTarget.js";
 import { agentGetClaudeObservabilityPlugin } from "../funcs/agentGetClaudeObservabilityPlugin.js";
+import { agentGetClaudeObservabilityPluginStatus } from "../funcs/agentGetClaudeObservabilityPluginStatus.js";
 import { agentGetConfiguration } from "../funcs/agentGetConfiguration.js";
 import { agentGetMyConnections } from "../funcs/agentGetMyConnections.js";
 import { agentGetPlugins } from "../funcs/agentGetPlugins.js";
@@ -21,6 +22,7 @@ import { agentUpdateConfiguration } from "../funcs/agentUpdateConfiguration.js";
 import { agentUpsertAiScanTarget } from "../funcs/agentUpsertAiScanTarget.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AiScanTargetMutationResult } from "../models/components/aiscantargetmutationresult.js";
+import { ClaudeObservabilityPluginStatus } from "../models/components/claudeobservabilitypluginstatus.js";
 import { CreateSessionHandoffResult } from "../models/components/createsessionhandoffresult.js";
 import { DeleteAiScanTargetResult } from "../models/components/deleteaiscantargetresult.js";
 import { DeviceAgentConfiguration } from "../models/components/deviceagentconfiguration.js";
@@ -44,6 +46,10 @@ import {
   GetAgentClaudeObservabilityPluginResponse,
   GetAgentClaudeObservabilityPluginSecurity,
 } from "../models/operations/getagentclaudeobservabilityplugin.js";
+import {
+  GetAgentClaudeObservabilityPluginStatusRequest,
+  GetAgentClaudeObservabilityPluginStatusSecurity,
+} from "../models/operations/getagentclaudeobservabilitypluginstatus.js";
 import {
   GetAgentMyConnectionsRequest,
   GetAgentMyConnectionsSecurity,
@@ -153,6 +159,25 @@ export class Agent extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GetAgentClaudeObservabilityPluginResponse> {
     return unwrapAsync(agentGetClaudeObservabilityPlugin(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getClaudeObservabilityPluginStatus agent
+   *
+   * @remarks
+   * Report whether the enrolled user should be offered the Claude observability plugin download, and whether the plugin they uploaded is sending events. available is false when the organization has no observability plugin, or has turned observability off. key_created_at is when the user's live plugin key was minted by their latest download, and key_last_used_at when hooks last authenticated with it (recorded at most once a minute); both are absent when the user has no live key. Mints and revokes nothing. Authenticates like getClaudeObservabilityPlugin: a per-user key only.
+   */
+  async getClaudeObservabilityPluginStatus(
+    request?: GetAgentClaudeObservabilityPluginStatusRequest | undefined,
+    security?: GetAgentClaudeObservabilityPluginStatusSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ClaudeObservabilityPluginStatus> {
+    return unwrapAsync(agentGetClaudeObservabilityPluginStatus(
       this,
       request,
       security,

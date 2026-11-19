@@ -611,3 +611,20 @@ ORDER BY id;
 
 -- name: AcquireAIScanTargetsLock :exec
 SELECT pg_advisory_xact_lock(hashtextextended('ai_scan_targets:' || @organization_id::text, 0));
+
+-- name: GetMemberClaudeWebHooksAPIKey :one
+-- The member's live key from the Claude web plugin download, the one
+-- getClaudeObservabilityPlugin mints and RevokeMemberClaudeWebHooksAPIKeys
+-- keeps to one. last_accessed_at moves when the uploaded plugin's hooks
+-- authenticate, so it says whether the plugin is sending events. The name and
+-- key_prefix checks mirror the revoke query, so a user-chosen key never counts.
+SELECT created_at, last_accessed_at
+FROM api_keys
+WHERE organization_id = @organization_id
+  AND created_by_user_id = @created_by_user_id
+  AND deleted IS FALSE
+  AND scopes @> ARRAY['hooks']::text[]
+  AND name ~ '^plugins-claude-web-hooks-[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$'
+  AND right(key_prefix, 5) = left(substring(name from '[0-9a-f]{6}$'), 5)
+ORDER BY created_at DESC
+LIMIT 1;
