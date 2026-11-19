@@ -15,6 +15,8 @@ import { standsInForToolset } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { TunneledMcpConnectionsPanel } from "./TunneledMcpConnectionsPanel";
 import { UnproxiedMcpOverviewTab } from "./UnproxiedMcpOverviewTab";
+import { PluginDistributionLine } from "@/pages/mcp/overview/PluginDistributionLine";
+import { pluginServerRef } from "@/pages/mcp/overview/serverMatchesRef";
 
 // Picks the overview for the server's backend. Unproxied servers have no
 // Speakeasy-proxied traffic and get their own scoped-down tab; tunneled servers
@@ -22,10 +24,13 @@ import { UnproxiedMcpOverviewTab } from "./UnproxiedMcpOverviewTab";
 export function OverviewTab({
   mcpServer,
   agentSetupHref,
+  pluginSettingsHref,
   hostedToolset: loadedToolset,
 }: {
   mcpServer: McpServer;
   agentSetupHref: string;
+  /** The Plugins section of this server's settings. */
+  pluginSettingsHref: string;
   /** The hosted toolset when loaded, for when the read's summary is missing. */
   hostedToolset?: { id: string; slug: string; name: string };
 }): JSX.Element | null {
@@ -87,11 +92,18 @@ export function OverviewTab({
   const tunneled = !!mcpServer.tunneledMcpServerId;
   // The usage dashboard is keyed by slug; a tunneled server without one still
   // gets its tunnel status.
+  const pluginLine = (
+    <PluginDistributionLine
+      server={pluginServerRef(mcpServer, hostedToolset)}
+      settingsHref={pluginSettingsHref}
+    />
+  );
   const usage = hostedToolset ? (
-    <MCPOverviewTab server={server} />
+    <MCPOverviewTab server={server} toolbarStart={pluginLine} />
   ) : mcpServer.slug ? (
     <MCPOverviewTab
       server={server}
+      toolbarStart={pluginLine}
       // Tool Logs lists no tunneled servers as filter options yet.
       logsTarget={tunneled ? null : { type: "mcp_server", id: mcpServer.id }}
     />

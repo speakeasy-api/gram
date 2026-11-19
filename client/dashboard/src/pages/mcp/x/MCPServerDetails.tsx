@@ -1,3 +1,4 @@
+import { SETTINGS_GROUPS } from "@/components/detail/settings-groups";
 import { DetailBody } from "@/components/detail-body";
 import { useMcpServerDetailChrome } from "@/components/mcp/useMcpServerDetailChrome";
 import { McpDetailFrame } from "@/components/mcp/McpDetailFrame";
@@ -239,6 +240,7 @@ export default function MCPServerDetails(): JSX.Element | null {
               mcpServer={mcpServer}
               hostedToolset={hostedToolset}
               agentSetupHref={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AGENT_SETUP_SECTION_ID}`}
+              pluginSettingsHref={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${SETTINGS_GROUPS.publishing.id}`}
             />
             <SetupModal
               onClose={() =>
@@ -290,6 +292,7 @@ export default function MCPServerDetails(): JSX.Element | null {
               mcpServer={mcpServer}
               hostedToolset={hostedToolset}
               agentSetupHref={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AGENT_SETUP_SECTION_ID}`}
+              pluginSettingsHref={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${SETTINGS_GROUPS.publishing.id}`}
             />
           )
         );

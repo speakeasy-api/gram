@@ -31,6 +31,9 @@ vi.mock("@/pages/mcp/overview/MCPOverviewTab", () => ({
     </div>
   ),
 }));
+vi.mock("@/pages/mcp/overview/PluginDistributionLine", () => ({
+  PluginDistributionLine: () => null,
+}));
 vi.mock("./UnproxiedMcpOverviewTab", () => ({
   UnproxiedMcpOverviewTab: () => <div>Unproxied overview</div>,
 }));
@@ -51,7 +54,8 @@ const server = {
 
 it("places tunnel status above the usage dashboard", () => {
   const { container } = render(
-    <OverviewTab mcpServer={server} agentSetupHref="/settings" />,
+    <OverviewTab mcpServer={server} agentSetupHref="/settings"
+        pluginSettingsHref="/settings#publishing" />,
     { wrapper: MemoryRouter },
   );
   expect(container.textContent).toBe("Tunnel statusShared usage dashboard");
@@ -67,7 +71,8 @@ it("places tunnel status above the usage dashboard", () => {
 
 it("offers no Tool Logs link when the organization does not record logs", () => {
   logs.enabled = false;
-  render(<OverviewTab mcpServer={server} agentSetupHref="/settings" />, {
+  render(<OverviewTab mcpServer={server} agentSetupHref="/settings"
+        pluginSettingsHref="/settings#publishing" />, {
     wrapper: MemoryRouter,
   });
   expect(screen.getByText("Tunnel status")).toBeTruthy();
@@ -79,6 +84,7 @@ it("shows the tunnel status without a usage dashboard when the server has no slu
     <OverviewTab
       mcpServer={{ ...server, slug: undefined }}
       agentSetupHref="/settings"
+        pluginSettingsHref="/settings#publishing"
     />,
     { wrapper: MemoryRouter },
   );
@@ -90,6 +96,7 @@ it("retains the shared overview for servers without tunnels", () => {
     <OverviewTab
       mcpServer={{ ...server, tunneledMcpServerId: undefined }}
       agentSetupHref="/settings"
+        pluginSettingsHref="/settings#publishing"
     />,
     { wrapper: MemoryRouter },
   );
@@ -120,6 +127,7 @@ it.each([
           } as McpServer
         }
         agentSetupHref="/settings"
+        pluginSettingsHref="/settings#publishing"
       />,
       { wrapper: MemoryRouter },
     );
