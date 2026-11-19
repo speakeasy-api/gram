@@ -1949,26 +1949,39 @@ func TestDelegationServiceEchoedRefreshTokenKeepsStoredCopies(t *testing.T) {
 			t.Parallel()
 			s, store, p, b, allow := newDelegationUnitFixture(t)
 			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
+			// Both copies, as dual_write stores them. The fixture's key opens
+			// the platform copy; the organization copy only has to survive.
 			planted := plantedSecret(t, s, "old-refresh")
+			planted.stored.Org = pgtype.Text{String: "organization-key-copy", Valid: true}
 			store.mu.Lock()
 			row := store.rows[b]
 			row.refresh = planted
 			store.rows[b] = row
 			store.mu.Unlock()
 
-			s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+			posts := 0
+			s.refreshIdentity = func(_ context.Context, _ Provider, refresh, _, _ string) (*RefreshResult, error) {
+				posts++
+				require.Equal(t, "old-refresh", refresh)
 				r := delegationRenewal(p, s.now(), "new-id", "old-refresh")
 				if tc.ambiguous {
 					return r, errors.New("connection reset after the provider answered")
 				}
 				return r, nil
 			}
-			_, _ = s.Resolve(t.Context(), b, allow)
+			a, err := s.Resolve(t.Context(), b, allow)
+			require.Equal(t, 1, posts, "the refresh reached the provider")
+			if tc.ambiguous {
+				require.ErrorIs(t, err, ErrTemporary)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, "new-id", a.Value())
+			}
 
 			c, err := store.load(t.Context(), b)
 			require.NoError(t, err)
 			require.NotNil(t, c.refresh.stored, "an echoed refresh token is not a rotation, so nothing is sealed again")
-			require.Equal(t, *planted.stored, *c.refresh.stored, "the stored copies are kept as they were")
+			require.Equal(t, *planted.stored, *c.refresh.stored, "both stored copies are kept as they were")
 		})
 	}
 }

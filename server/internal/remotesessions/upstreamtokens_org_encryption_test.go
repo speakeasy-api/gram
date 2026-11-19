@@ -174,7 +174,11 @@ func TestInvalidGrantWithAConcurrentWinnerTheKeyCannotOpenIsRetryable(t *testing
 		_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
 		resolved <- err
 	}()
-	<-refreshArrived
+	select {
+	case <-refreshArrived:
+	case <-time.After(10 * time.Second):
+		require.FailNow(t, "the refresh never reached the provider")
+	}
 
 	// A concurrent sign-in moves the row and stores a live pair, then the key
 	// is suspended.
@@ -198,7 +202,11 @@ func TestInvalidGrantWithAConcurrentWinnerTheKeyCannotOpenIsRetryable(t *testing
 	env.orgEncryption.fixture.Service.Forget(env.organizationID)
 	release()
 
-	err = <-resolved
+	select {
+	case err = <-resolved:
+	case <-time.After(10 * time.Second):
+		require.FailNow(t, "the refresh never returned")
+	}
 	require.True(t, orgencryption.IsKeyProblem(err), "the key outage is reported, not the provider's rejection: %v", err)
 	refreshErr, ok := errors.AsType[*remotesessions.TokenRefreshError](err)
 	require.True(t, ok)
