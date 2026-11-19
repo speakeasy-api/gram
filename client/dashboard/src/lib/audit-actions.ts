@@ -1173,7 +1173,7 @@ export function staticActionPhrase(action: AuditAction): string {
     case "user-session-client:revoke":
       return "revoked user session client";
     case "user-session-client:update-redirect-uris":
-      return "updated the redirect URIs of";
+      return "updated user session client redirect URIs";
     case "user-session-consent:revoke":
       return "revoked consent for";
     case "user-session-issuer:create":

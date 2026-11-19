@@ -250,8 +250,8 @@ export function ConnectionsTab({
           onClearAll={filters.clearAll}
         />
         <Page.Toolbar.Refresh
-          onRefresh={() => void refetch()}
-          isRefreshing={isFetching}
+          onRefresh={retryAll}
+          isRefreshing={isFetching || clientsQuery.isFetching}
         />
       </Page.Toolbar>
 
