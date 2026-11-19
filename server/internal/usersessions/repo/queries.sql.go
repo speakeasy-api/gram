@@ -8443,6 +8443,65 @@ func (q *Queries) UpdateUserSessionClientFromCIMD(ctx context.Context, arg Updat
 	return i, err
 }
 
+const updateUserSessionClientRedirectURIs = `-- name: UpdateUserSessionClientRedirectURIs :one
+UPDATE user_session_clients AS cli
+SET redirect_uris = $1,
+    updated_at = clock_timestamp()
+FROM user_session_issuers AS iss
+WHERE cli.id = $2
+  AND iss.id = cli.user_session_issuer_id
+  AND (iss.project_id = $3::uuid OR (iss.project_id IS NULL AND iss.organization_id = $4::text))
+  AND cli.client_id_metadata_uri IS NULL
+  AND cli.deleted IS FALSE
+RETURNING cli.id, cli.assistant_trigger_workload_binding_id, cli.assistant_runtime_id, cli.project_id, cli.organization_id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.client_id_metadata_uri, cli.client_id_metadata_fetched_at, cli.client_id_metadata_cache_expires_at, cli.client_id_metadata_etag, cli.token_endpoint_auth_method, cli.client_jwks, cli.client_jwks_uri, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted
+`
+
+type UpdateUserSessionClientRedirectURIsParams struct {
+	RedirectUris   []string
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+// Replaces an operator-managed client's redirect URIs. CIMD rows are
+// excluded: their redirect URIs come from the metadata document and would be
+// overwritten on the next re-read.
+func (q *Queries) UpdateUserSessionClientRedirectURIs(ctx context.Context, arg UpdateUserSessionClientRedirectURIsParams) (UserSessionClient, error) {
+	row := q.db.QueryRow(ctx, updateUserSessionClientRedirectURIs,
+		arg.RedirectUris,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	var i UserSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.AssistantTriggerWorkloadBindingID,
+		&i.AssistantRuntimeID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.UserSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretHash,
+		&i.ClientName,
+		&i.RedirectUris,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.ClientIDMetadataUri,
+		&i.ClientIDMetadataFetchedAt,
+		&i.ClientIDMetadataCacheExpiresAt,
+		&i.ClientIDMetadataEtag,
+		&i.TokenEndpointAuthMethod,
+		&i.ClientJwks,
+		&i.ClientJwksUri,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const updateUserSessionClientsToIssuer = `-- name: UpdateUserSessionClientsToIssuer :execrows
 UPDATE user_session_clients AS client
 SET user_session_issuer_id = $1,

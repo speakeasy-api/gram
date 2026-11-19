@@ -7,6 +7,16 @@
 
 package client
 
+// CreateUserSessionClientUserSessionClientsPath returns the URL path to the userSessionClients service createUserSessionClient HTTP endpoint.
+func CreateUserSessionClientUserSessionClientsPath() string {
+	return "/rpc/userSessionClients.create"
+}
+
+// UpdateUserSessionClientRedirectURIsUserSessionClientsPath returns the URL path to the userSessionClients service updateUserSessionClientRedirectURIs HTTP endpoint.
+func UpdateUserSessionClientRedirectURIsUserSessionClientsPath() string {
+	return "/rpc/userSessionClients.updateRedirectURIs"
+}
+
 // ListUserSessionClientsUserSessionClientsPath returns the URL path to the userSessionClients service listUserSessionClients HTTP endpoint.
 func ListUserSessionClientsUserSessionClientsPath() string {
 	return "/rpc/userSessionClients.list"
