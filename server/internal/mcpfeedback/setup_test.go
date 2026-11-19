@@ -30,6 +30,9 @@ import (
 	unproxiedmcprepo "github.com/speakeasy-api/gram/server/internal/unproxiedmcp/repo"
 )
 
+// testServiceName is the service.name the test recorder stamps on exported records.
+const testServiceName = "gram-server"
+
 var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
@@ -78,7 +81,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 func newTestRecorder(t *testing.T, ti *testInstance, limits mcpfeedback.Limits) *mcpfeedback.Recorder {
 	t.Helper()
 
-	return mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, chatredact.New(), limits)
+	return mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, chatredact.New(), limits, testServiceName)
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {
