@@ -81,7 +81,7 @@ type AccessRequestMessage struct {
 	RecipientUserID string
 	// @access: confidential
 	SlackTeamID pgtype.Text
-	// @access: confidential
+	// @access: confidential-pii
 	SlackUserID pgtype.Text
 	// @access: confidential
 	SlackChannelID pgtype.Text

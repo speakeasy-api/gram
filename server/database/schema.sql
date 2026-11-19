@@ -12587,7 +12587,7 @@ CREATE TABLE IF NOT EXISTS access_requests (
 
   CONSTRAINT access_requests_pkey PRIMARY KEY (id),
   CONSTRAINT access_requests_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT access_requests_selector_check CHECK (jsonb_typeof(selector) = 'object')
+  CONSTRAINT access_requests_selector_check CHECK (jsonb_typeof(selector) = 'object' AND selector != '{}')
 );
 
 COMMENT ON TABLE access_requests IS 'Requests from members for access they were denied, decided by an organization admin. An approval creates a temporary grant.';
@@ -12644,11 +12644,6 @@ CREATE INDEX IF NOT EXISTS access_requests_org_requester_created_at_idx
 ON access_requests (organization_id, requester_user_id, created_at DESC)
 WHERE deleted IS FALSE;
 
--- Finding pending requests that have lapsed.
-CREATE INDEX IF NOT EXISTS access_requests_status_expires_at_idx
-ON access_requests (status, expires_at)
-WHERE deleted IS FALSE;
-
 -- One notification sent for an access request, such as the Slack DM to one
 -- admin. Kept so a decision can update every message and so a click can be
 -- matched to the DM it came from.
@@ -12689,7 +12684,7 @@ COMMENT ON COLUMN access_request_messages.provider IS '@access: confidential';
 COMMENT ON COLUMN access_request_messages.kind IS '@access: confidential';
 COMMENT ON COLUMN access_request_messages.recipient_user_id IS '@access: confidential';
 COMMENT ON COLUMN access_request_messages.slack_team_id IS '@access: confidential';
-COMMENT ON COLUMN access_request_messages.slack_user_id IS '@access: confidential';
+COMMENT ON COLUMN access_request_messages.slack_user_id IS '@access: confidential-pii';
 COMMENT ON COLUMN access_request_messages.slack_channel_id IS '@access: confidential';
 COMMENT ON COLUMN access_request_messages.slack_message_ts IS '@access: confidential';
 COMMENT ON COLUMN access_request_messages.created_at IS '@access: confidential';

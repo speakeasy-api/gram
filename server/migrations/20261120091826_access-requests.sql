@@ -20,7 +20,7 @@ CREATE TABLE "access_requests" (
   "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
   PRIMARY KEY ("id"),
   CONSTRAINT "access_requests_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
-  CONSTRAINT "access_requests_selector_check" CHECK (jsonb_typeof(selector) = 'object'::text)
+  CONSTRAINT "access_requests_selector_check" CHECK ((jsonb_typeof(selector) = 'object'::text) AND (selector <> '{}'::jsonb))
 );
 -- Create index "access_requests_open_request_key" to table: "access_requests"
 CREATE UNIQUE INDEX "access_requests_open_request_key" ON "access_requests" ("organization_id", "requester_user_id", "scope", "selector") WHERE ((deleted IS FALSE) AND (status = 'pending'::text));
@@ -30,8 +30,6 @@ CREATE INDEX "access_requests_org_requester_created_at_idx" ON "access_requests"
 CREATE INDEX "access_requests_org_status_created_at_idx" ON "access_requests" ("organization_id", "status", "created_at" DESC) WHERE (deleted IS FALSE);
 -- Create index "access_requests_organization_id_id_key" to table: "access_requests"
 CREATE UNIQUE INDEX "access_requests_organization_id_id_key" ON "access_requests" ("organization_id", "id");
--- Create index "access_requests_status_expires_at_idx" to table: "access_requests"
-CREATE INDEX "access_requests_status_expires_at_idx" ON "access_requests" ("status", "expires_at") WHERE (deleted IS FALSE);
 -- Set comment to table: "access_requests"
 COMMENT ON TABLE "access_requests" IS 'Requests from members for access they were denied, decided by an organization admin. An approval creates a temporary grant.';
 -- Set comment to column: "id" on table: "access_requests"
@@ -124,7 +122,7 @@ COMMENT ON COLUMN "access_request_messages"."recipient_user_id" IS '@access: con
 -- Set comment to column: "slack_team_id" on table: "access_request_messages"
 COMMENT ON COLUMN "access_request_messages"."slack_team_id" IS '@access: confidential';
 -- Set comment to column: "slack_user_id" on table: "access_request_messages"
-COMMENT ON COLUMN "access_request_messages"."slack_user_id" IS '@access: confidential';
+COMMENT ON COLUMN "access_request_messages"."slack_user_id" IS '@access: confidential-pii';
 -- Set comment to column: "slack_channel_id" on table: "access_request_messages"
 COMMENT ON COLUMN "access_request_messages"."slack_channel_id" IS '@access: confidential';
 -- Set comment to column: "slack_message_ts" on table: "access_request_messages"
