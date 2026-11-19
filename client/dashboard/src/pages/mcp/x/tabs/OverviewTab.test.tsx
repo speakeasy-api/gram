@@ -1,5 +1,4 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -22,31 +21,18 @@ vi.mock("@tanstack/react-query", async (original) => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "example", projectSlug: "test" }),
 }));
+// Plugin distribution lives in the page header, so the overview only frames
+// the usage dashboard and tunnel status.
 vi.mock("@/pages/mcp/overview/MCPOverviewTab", () => ({
-  MCPOverviewTab: ({
-    server,
-    toolbarStart,
-  }: {
-    server: { kind: string; slug: string };
-    toolbarStart?: ReactNode;
-  }) => (
+  MCPOverviewTab: ({ server }: { server: { kind: string; slug: string } }) => (
     <div>
-      {toolbarStart}
       <div>Shared usage dashboard</div>
       <div data-testid="scope" data-scope={`${server.kind}:${server.slug}`} />
     </div>
   ),
 }));
-vi.mock("@/pages/mcp/overview/PluginDistributionLine", () => ({
-  PluginDistributionLine: () => <span>Plugins</span>,
-}));
 vi.mock("./UnproxiedMcpOverviewTab", () => ({
-  UnproxiedMcpOverviewTab: ({ header }: { header?: ReactNode }) => (
-    <div>
-      {header}
-      Unproxied overview
-    </div>
-  ),
+  UnproxiedMcpOverviewTab: () => <div>Unproxied overview</div>,
 }));
 vi.mock("./TunneledMcpConnectionsPanel", () => ({
   TunneledMcpConnectionsPanel: ({ logsHref }: { logsHref?: string }) =>
@@ -65,16 +51,10 @@ const server = {
 
 it("places tunnel status above the usage dashboard", () => {
   const { container } = render(
-    <OverviewTab
-      mcpServer={server}
-      agentSetupHref="/settings"
-      pluginSettingsHref="/settings#publishing"
-    />,
+    <OverviewTab mcpServer={server} agentSetupHref="/settings" />,
     { wrapper: MemoryRouter },
   );
-  expect(container.textContent).toBe(
-    "Tunnel statusPluginsShared usage dashboard",
-  );
+  expect(container.textContent).toBe("Tunnel statusShared usage dashboard");
   const url = new URL(
     screen.getByRole("link").getAttribute("href")!,
     "https://example.test",
@@ -87,16 +67,9 @@ it("places tunnel status above the usage dashboard", () => {
 
 it("offers no Tool Logs link when the organization does not record logs", () => {
   logs.enabled = false;
-  render(
-    <OverviewTab
-      mcpServer={server}
-      agentSetupHref="/settings"
-      pluginSettingsHref="/settings#publishing"
-    />,
-    {
-      wrapper: MemoryRouter,
-    },
-  );
+  render(<OverviewTab mcpServer={server} agentSetupHref="/settings" />, {
+    wrapper: MemoryRouter,
+  });
   expect(screen.getByText("Tunnel status")).toBeTruthy();
   expect(screen.queryByRole("link")).toBeNull();
 });
@@ -106,23 +79,10 @@ it("shows the tunnel status without a usage dashboard when the server has no slu
     <OverviewTab
       mcpServer={{ ...server, slug: undefined }}
       agentSetupHref="/settings"
-      pluginSettingsHref="/settings#publishing"
     />,
     { wrapper: MemoryRouter },
   );
-  expect(container.textContent).toBe("PluginsTunnel status");
-});
-
-it("shows plugin status above an unproxied server's activity", () => {
-  const { container } = render(
-    <OverviewTab
-      mcpServer={{ ...server, unproxiedMcpServerId: "unproxied" }}
-      agentSetupHref="/settings"
-      pluginSettingsHref="/settings#publishing"
-    />,
-    { wrapper: MemoryRouter },
-  );
-  expect(container.textContent).toBe("PluginsUnproxied overview");
+  expect(container.textContent).toBe("Tunnel status");
 });
 
 it("retains the shared overview for servers without tunnels", () => {
@@ -130,7 +90,6 @@ it("retains the shared overview for servers without tunnels", () => {
     <OverviewTab
       mcpServer={{ ...server, tunneledMcpServerId: undefined }}
       agentSetupHref="/settings"
-      pluginSettingsHref="/settings#publishing"
     />,
     { wrapper: MemoryRouter },
   );
@@ -161,7 +120,6 @@ it.each([
           } as McpServer
         }
         agentSetupHref="/settings"
-        pluginSettingsHref="/settings#publishing"
       />,
       { wrapper: MemoryRouter },
     );

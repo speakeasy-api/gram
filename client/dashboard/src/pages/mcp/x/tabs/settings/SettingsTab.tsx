@@ -182,12 +182,15 @@ export function SettingsTab({
   }
 
   const G = SETTINGS_GROUPS;
-  // The plugin picker, as a settings section; only people who can edit
-  // plugins get it.
+  // The same plugin picker as the header's plugin card, as a settings
+  // section; only people who can edit plugins get it.
   const publishing = canWritePlugins && {
     ...G.publishing,
     content: (
-      <PluginStatusBanner server={pluginServerRef(mcpServer, hostedToolset)} />
+      <PluginStatusBanner
+        variant="settings"
+        server={pluginServerRef(mcpServer, hostedToolset)}
+      />
     ),
   };
   const danger = (

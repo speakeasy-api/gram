@@ -15,6 +15,7 @@ import {
 import { Spinner } from "@/components/ui/Spinner";
 import { Text } from "@/components/ui/Text";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
+import { ClientIconFan } from "@/pages/mcp/overview/PluginStatusBanner";
 import type { DistributionPlugin } from "@gram/client/models/components/distributionplugin.js";
 import type { Skill } from "@gram/client/models/components/skill.js";
 import { useDistributeSkillMutation } from "@gram/client/react-query/distributeSkill.js";
@@ -344,21 +345,5 @@ export function SkillPluginBanner({
         <ClientIconFan />
       </div>
     </StatusBanner>
-  );
-}
-
-// A little fanned stack of client badges — purely decorative, gestures at
-// "this is what publishing unlocks" without claiming these are the only
-// supported clients.
-function ClientIconFan(): React.JSX.Element {
-  return (
-    <div className="relative hidden h-36 shrink-0 sm:block" aria-hidden="true">
-      <div className="absolute inset-6 rounded-full bg-black/15 blur-2xl" />
-      <img
-        src="/icons/decorative/plugin-clients.webp"
-        alt=""
-        className="relative h-full w-full mr-10 object-contain drop-shadow-xl"
-      />
-    </div>
   );
 }

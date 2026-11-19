@@ -1,7 +1,13 @@
 import { McpServerReadinessBar } from "./mcp-server-readiness-bar";
 import { ConfigProvider } from "@/components/ui/context/ConfigContext";
 import { TooltipProvider } from "@/components/ui/Tooltip";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
@@ -29,6 +35,8 @@ const state = vi.hoisted(() => ({
         "https://example.test/marketplace?token=synthetic-admin-token",
     },
   })),
+  settings: vi.fn(() => ({ data: { effectiveName: "example-marketplace" } })),
+  resourceAudience: vi.fn(() => ({ data: undefined })),
   mutation: vi.fn(() => ({ isPending: false, mutateAsync: vi.fn() })),
   mcpServer: { id: "server-a", name: "Server" } as {
     id: string;
@@ -77,6 +85,12 @@ vi.mock("@gram/client/react-query/removePluginServer", () => ({
 }));
 vi.mock("@gram/client/react-query/publishPlugins", () => ({
   usePublishPluginsMutation: state.mutation,
+}));
+vi.mock("@gram/client/react-query/resourceAudience.js", () => ({
+  useResourceAudience: state.resourceAudience,
+}));
+vi.mock("@gram/client/react-query/marketplaceSettings", () => ({
+  useMarketplaceSettings: state.settings,
 }));
 vi.mock("@/contexts/Fetcher", () => ({
   useFetcher: () => ({ fetch: vi.fn() }),
@@ -282,13 +296,14 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 const scope = { gramProject: "project-slug", gramSession: "session-a" };
-function banner() {
+function banner(variant?: "banner" | "settings") {
   const client = new QueryClient();
   const content = () => (
     <QueryClientProvider client={client}>
       <TooltipProvider>
         <ConfigProvider theme="light" setTheme={() => {}}>
           <PluginStatusBanner
+            variant={variant}
             server={{
               kind: "mcp-server",
               id: "server-a",
@@ -304,9 +319,43 @@ function banner() {
   return { ...view, refresh: () => view.rerender(content()) };
 }
 describe("MCP plugin permission boundaries", () => {
-  it("offers the plugin picker as a Plugins settings section", () => {
+  it("unmounts the real token-bearing install dialog on admin-to-writer downgrade", async () => {
+    state.grants = [{ scope: "org:admin" }, { scope: "plugin:write" }];
+    const view = banner();
+    fireEvent.click(screen.getByRole("button", { name: "Install" }));
+    fireEvent.click(screen.getByRole("button", { name: "Claude Code" }));
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("synthetic-admin-token"),
+    );
+    expect(state.settings).toHaveBeenCalled();
+    vi.clearAllMocks();
     state.grants = [{ scope: "plugin:write" }];
+    view.refresh();
+    expect(document.body.textContent).not.toContain("synthetic-admin-token");
+    expect(screen.queryByRole("button", { name: "Install" })).toBeNull();
+    expect(state.settings).not.toHaveBeenCalled();
+    expect(state.plugins).toHaveBeenCalledWith(
+      scope,
+      undefined,
+      expect.objectContaining({ throwOnError: false }),
+    );
+    expect(screen.getByRole("button", { name: "Cached plugin" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Update" })).toBeTruthy();
+  });
+
+  it("does not mount install queries for a writer who administers another organization", () => {
+    state.grants = [
+      { scope: "plugin:write" },
+      { scope: "org:admin", selectors: [{ resourceId: "org-b" }] },
+    ];
     banner();
+    expect(state.settings).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Install" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Update" })).toBeTruthy();
+  });
+  it("offers the header's plugin picker as a Plugins settings section", () => {
+    state.grants = [{ scope: "plugin:write" }];
+    banner("settings");
     expect(screen.getByRole("heading", { name: "Plugins" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Plugins" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Update" })).toBeTruthy();
@@ -330,7 +379,7 @@ describe("MCP plugin permission boundaries", () => {
         ],
       },
     } as unknown as ReturnType<typeof state.plugins>);
-    banner();
+    banner("settings");
     fireEvent.click(screen.getByRole("button", { name: "Plugins" }));
     const names = screen
       .getAllByRole("checkbox")
@@ -402,7 +451,7 @@ describe("MCP plugin permission boundaries", () => {
       ],
     },
   ])(
-    "does not mount plugin section queries or mutation controls without write access: %j",
+    "does not mount banner queries or mutation controls without write access: %j",
     ({ grants }) => {
       state.grants = grants;
       const view = banner();
@@ -413,7 +462,7 @@ describe("MCP plugin permission boundaries", () => {
     },
   );
   it.each(["plugin:write", "org:admin"])(
-    "scopes writer plugin section queries for %s",
+    "scopes writer banner queries for %s",
     (grant) => {
       state.grants = [{ scope: grant }];
       banner();
@@ -428,6 +477,17 @@ describe("MCP plugin permission boundaries", () => {
         expect.objectContaining({ refetchInterval: 5000 }),
       );
       expect(state.mutation).toHaveBeenCalled();
+      expect(state.resourceAudience).toHaveBeenCalledWith(
+        { resourceKind: "mcp", resourceId: "server-a" },
+        undefined,
+        expect.objectContaining({ enabled: grant === "org:admin" }),
+      );
+      if (grant === "org:admin") {
+        expect(screen.getByRole("button", { name: "Install" })).toBeTruthy();
+      } else {
+        expect(screen.queryByRole("button", { name: "Install" })).toBeNull();
+        expect(state.settings).not.toHaveBeenCalled();
+      }
     },
   );
 });
