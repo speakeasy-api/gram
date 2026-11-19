@@ -34,7 +34,7 @@ import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useProbeRemoteMcpURLMutation } from "@gram/client/react-query/probeRemoteMcpURL.js";
 import { ExternalLink } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { CatalogOfficialSheet } from "./CatalogOfficialSheet";
 import { MakeOfficialSheet } from "./MakeOfficialSheet";
@@ -46,6 +46,7 @@ import {
   recommendedOnboardOption,
   shadowMCPCatalogMatch,
   shadowMCPOfficialServerDescription,
+  shadowMCPSetUpHref,
 } from "./shadowMCPOfficialServer";
 import { useSaveShadowMCPOfficialServer } from "./useSaveShadowMCPOfficialServer";
 
@@ -169,6 +170,37 @@ function PanelHeading({
         {description}
       </Text>
     </div>
+  );
+}
+
+/**
+ * Opens the usual way to add a remote MCP server, filled in with this
+ * server's URL and name. Saving there brings the admin back to this page,
+ * where the new server is offered as the one to link.
+ */
+function SetUpMyselfButton({
+  server,
+  allowed,
+}: {
+  server: ShadowMCPInventoryServer;
+  allowed: boolean;
+}) {
+  const routes = useRoutes();
+  if (!allowed) {
+    return (
+      <CreateServerGate allowed={false}>
+        <Button variant="tertiary" size="sm" disabled>
+          <Button.Text>Set it up myself</Button.Text>
+        </Button>
+      </CreateServerGate>
+    );
+  }
+  return (
+    <Button variant="tertiary" size="sm" asChild>
+      <Link to={shadowMCPSetUpHref(routes.mcp.add.remote.href(), server)}>
+        <Button.Text>Set it up myself</Button.Text>
+      </Link>
+    </Button>
   );
 }
 
@@ -668,16 +700,7 @@ function UnlinkedPanel({
         actions={
           recommended === "manual" && isRecommended ? (
             <>
-              <CreateServerGate allowed={canCreateServer}>
-                <Button
-                  variant="tertiary"
-                  size="sm"
-                  disabled={!canCreateServer || checking}
-                  onClick={() => onMakeOfficial(result)}
-                >
-                  <Button.Text>Set it up myself</Button.Text>
-                </Button>
-              </CreateServerGate>
+              <SetUpMyselfButton server={server} allowed={canCreateServer} />
               <Button
                 variant="secondary"
                 size="sm"
