@@ -466,6 +466,8 @@ func issuerGateFailureReason(err error) string {
 		return "tool_selection_resource_mismatch"
 	case errors.Is(err, errToolSelectionLoad):
 		return "tool_selection_load_failed"
+	case errors.Is(err, errSessionLivenessLoad):
+		return "session_liveness_load_failed"
 	case errors.Is(err, errAgentSessionCredentialLoad):
 		return "agent_session_load_failed"
 	case errors.Is(err, errWorkloadSessionCredentialLoad):
@@ -640,6 +642,14 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 	policy, err := s.loadSessionPolicy(ctx, endpoint, session.JTI())
 	if err != nil {
 		return ctx, nil, nil, false, fmt.Errorf("%w: %w", errToolSelectionLoad, err)
+	}
+	if !policy.rowConfirmed {
+		if err := s.requireLiveSession(ctx, endpoint, session.JTI()); err != nil {
+			if errors.Is(err, errSessionPolicyGone) {
+				return ctx, nil, nil, false, fmt.Errorf("%w: %w", errCredentialRejected, err)
+			}
+			return ctx, nil, nil, false, fmt.Errorf("%w: %w", errSessionLivenessLoad, err)
+		}
 	}
 	toolSelection, sessionRefreshable := policy.selection, policy.refreshable
 	if toolSelection != nil && !endpointAcceptsToolSelectionResource(endpoint, toolSelection.Resource) {
