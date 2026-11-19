@@ -93,7 +93,10 @@ export function useRemoteMcpToolConnection({
   inspectOAuth = false,
   dashboardToken,
 }: RemoteMcpToolConnectionOptions): RemoteMcpToolConnection {
-  const isIssuerGated = !!userSessionIssuerId;
+  // Public tunnels serve anonymously and intentionally have no OAuth routes.
+  const publicTunnel =
+    inspectOAuth && !!tunneledMcpServerId && visibility === "public";
+  const isIssuerGated = !!userSessionIssuerId && !publicTunnel;
   const canFirstPartyConnect = supportsFirstPartyConnect({
     userSessionIssuerId,
     platformSlug,
@@ -122,7 +125,7 @@ export function useRemoteMcpToolConnection({
 
   // Issuer-gated servers must wait for the JWT before connecting, otherwise the
   // unauthenticated request 401s and caches a spurious `needsAuth`.
-  const usesChatSession = chatSession && !isIssuerGated;
+  const usesChatSession = chatSession && !isIssuerGated && !publicTunnel;
   const chat = useChatSessionHeaders(enabled && usesChatSession);
   const headers = useMemo(
     () =>

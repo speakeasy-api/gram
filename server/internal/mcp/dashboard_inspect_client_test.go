@@ -28,7 +28,8 @@ func TestDashboardInspectOAuthClient(t *testing.T) {
 	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "public"})
 
 	const clientID = "speakeasy-dashboard-inspect"
-	redirectURI := ti.serverURL.ResolveReference(&url.URL{Path: "/inspect/oauth/callback"}).String()
+	const redirectURI = "https://dashboard.example.test/inspect/oauth/callback"
+	ti.service.SetPlatformHosts(map[string]string{"dashboard.example.test": "https://dashboard.example.test"})
 	verifier := pkceVerifier(t)
 	params := usersessions_repo.GetUserSessionClientByClientIDParams{UserSessionIssuerID: issuer.ID, ClientID: clientID}
 	queries := usersessions_repo.New(ti.conn)

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -78,6 +79,10 @@ func (s *Service) registerDashboardInspectClient(ctx context.Context, logger *sl
 		ClientName:              "Speakeasy Dashboard Inspect",
 		RedirectUris:            redirectURIs,
 		TokenEndpointAuthMethod: oauthwire.AuthMethodNone,
+		ClientSecretHash:        pgtype.Text{},
+		ClientSecretExpiresAt:   pgtype.Timestamptz{},
+		ClientJwks:              nil,
+		ClientJwksUri:           pgtype.Text{},
 	})
 	if isUniqueViolation(err) {
 		// Another request already registered the client for this issuer.

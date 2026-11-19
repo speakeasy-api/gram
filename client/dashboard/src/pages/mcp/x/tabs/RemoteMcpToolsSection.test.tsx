@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   startOAuth: vi.fn(),
   list: vi.fn(),
   accessToken: undefined as string | undefined,
+  oauthError: false,
   tools: undefined as
     | undefined
     | Record<string, { unavailable: boolean; unavailableReason?: string }>,
@@ -67,7 +68,7 @@ vi.mock("@/hooks/useInspectOAuth", () => ({
       : undefined,
     connect: platformSlug ? () => mocks.startOAuth(platformSlug) : undefined,
     isConnecting: false,
-    error: false,
+    error: mocks.oauthError,
   }),
 }));
 
@@ -131,6 +132,7 @@ afterEach(() => {
   mocks.startOAuth.mockReset();
   mocks.list.mockReset();
   mocks.accessToken = undefined;
+  mocks.oauthError = false;
   mocks.tools = undefined;
   mocks.stored = {};
   mocks.canWrite = true;
@@ -344,7 +346,16 @@ describe("RemoteMcpToolsSection connect prompt", () => {
     );
   });
 
-  it("does not offer connect for a public tunnel", () => {
+  it("lets a viewer retry when OAuth sign-in cannot start", () => {
+    mocks.needsAuth = false;
+    mocks.oauthError = true;
+    renderSection({ userSessionIssuerId: "issuer-1" });
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(mocks.startOAuth).toHaveBeenCalledWith("server");
+  });
+
+  it("lists on public tunnels anonymously even if an issuer is configured", () => {
+    mocks.needsAuth = false;
     renderSection({
       userSessionIssuerId: "issuer-1",
       tunneledMcpServerId: "tunnel-1",
@@ -352,7 +363,10 @@ describe("RemoteMcpToolsSection connect prompt", () => {
     });
 
     expect(screen.queryByRole("button", connectButton)).toBeNull();
-    expect(screen.getByText(/Connect isn't available/i)).toBeTruthy();
+    expect(mocks.list).toHaveBeenLastCalledWith(
+      "https://mcp.example/mcp/custom-slug",
+      expect.objectContaining({ enabled: true, headers: undefined }),
+    );
   });
 
   it("does not offer connect when only a custom-domain address exists", () => {
