@@ -12,7 +12,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 
 import { TooltipProvider } from "@/components/ui/Tooltip";
-import type { MouseEvent, ReactElement, ReactNode } from "react";
+import {
+  useState,
+  type MouseEvent,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
@@ -33,7 +38,7 @@ vi.mock("@/components/require-scope", () => ({
 }));
 
 const mocks = vi.hoisted(() => ({
-  useShadowMCPInventory: vi.fn(),
+  useShadowMCPInventoryInfinite: vi.fn(),
   decideAccessSheet: vi.fn(),
   rowContextMenu: vi.fn(),
 }));
@@ -49,7 +54,7 @@ type DecideAccessSheetProps = {
 };
 
 vi.mock("@gram/client/react-query/shadowMCPInventory.js", () => ({
-  useShadowMCPInventory: mocks.useShadowMCPInventory,
+  useShadowMCPInventoryInfinite: mocks.useShadowMCPInventoryInfinite,
 }));
 
 // The sheet's own behavior is covered by its dedicated tests; the table test
@@ -422,26 +427,74 @@ function renderInventoryTable(
   );
 }
 
+type InventoryPage = {
+  servers: ShadowMCPInventoryServer[];
+  nextCursor?: string;
+};
+
+/** The shape useShadowMCPInventoryInfinite returns for the given pages. */
+function infiniteInventoryResult({
+  pages,
+  isLoading = false,
+  isError = false,
+  isFetchingNextPage = false,
+  isFetchNextPageError = false,
+  fetchNextPage = vi.fn(),
+}: {
+  pages?: InventoryPage[];
+  isLoading?: boolean;
+  isError?: boolean;
+  isFetchingNextPage?: boolean;
+  isFetchNextPageError?: boolean;
+  fetchNextPage?: () => unknown;
+}) {
+  return {
+    data: pages
+      ? { pages: pages.map((page) => ({ result: page })), pageParams: [] }
+      : undefined,
+    hasNextPage: Boolean(pages?.[pages.length - 1]?.nextCursor),
+    fetchNextPage,
+    isFetchingNextPage,
+    isFetchNextPageError,
+    isLoading,
+    isError,
+    refetch: vi.fn(),
+  };
+}
+
 function mockShadowMCPInventory({
   servers = [],
-  isLoading = false,
-  isFetching = false,
-  error = null,
   nextCursor,
+  ...state
 }: {
   servers?: ShadowMCPInventoryServer[];
-  isLoading?: boolean;
-  isFetching?: boolean;
-  error?: Error | null;
   nextCursor?: string;
+  isFetchingNextPage?: boolean;
+  isFetchNextPageError?: boolean;
+  fetchNextPage?: () => unknown;
 } = {}) {
-  mocks.useShadowMCPInventory.mockReturnValue({
-    data: { servers, nextCursor },
-    isFetching,
-    isLoading,
-    refetch: vi.fn(),
-    error,
+  mocks.useShadowMCPInventoryInfinite.mockReturnValue(
+    infiniteInventoryResult({ pages: [{ servers, nextCursor }], ...state }),
+  );
+}
+
+/**
+ * Serves `pages` one at a time the way React Query does: the first page on
+ * mount, the next one each time fetchNextPage runs. Returns the spy.
+ */
+function mockPagedInventory(pages: InventoryPage[]) {
+  const fetchNextPage = vi.fn();
+  mocks.useShadowMCPInventoryInfinite.mockImplementation(() => {
+    const [loaded, setLoaded] = useState(1);
+    return infiniteInventoryResult({
+      pages: pages.slice(0, loaded),
+      fetchNextPage: () => {
+        fetchNextPage();
+        setLoaded((count) => Math.min(count + 1, pages.length));
+      },
+    });
   });
+  return fetchNextPage;
 }
 
 function lastDecideAccessSheetProps(): DecideAccessSheetProps {
@@ -500,9 +553,9 @@ describe("ShadowMCPInventoryTable", () => {
     expect(screen.getByText("Blocked")).toBeTruthy();
     expect(screen.getByText("42 calls")).toBeTruthy();
     expect(screen.getByText("3 users")).toBeTruthy();
-    expect(screen.getByText("Never")).toBeTruthy();
+    expect(screen.getByText("Never called")).toBeTruthy();
     expect(screen.getByText("https://unused.example.com/mcp")).toBeTruthy();
-    expect(mocks.useShadowMCPInventory).toHaveBeenCalledWith(
+    expect(mocks.useShadowMCPInventoryInfinite).toHaveBeenCalledWith(
       { projectId: "project-id-1", limit: 50 },
       undefined,
       expect.objectContaining({ enabled: true }),
@@ -528,7 +581,7 @@ describe("ShadowMCPInventoryTable", () => {
 
     renderInventoryTable();
 
-    const search = screen.getByPlaceholderText("Search servers...");
+    const search = screen.getByPlaceholderText("Search loaded servers...");
 
     fireEvent.change(search, { target: { value: "  gItHuB  " } });
     expect(screen.getByText("GitHub MCP")).toBeTruthy();
@@ -570,7 +623,7 @@ describe("ShadowMCPInventoryTable", () => {
     });
 
     renderInventoryTable();
-    fireEvent.change(screen.getByPlaceholderText("Search servers..."), {
+    fireEvent.change(screen.getByPlaceholderText("Search loaded servers..."), {
       target: { value: "team" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Server" }));
@@ -904,17 +957,24 @@ describe("ShadowMCPInventoryTable", () => {
       expect(screen.getByText("Beta MCP")).toBeTruthy();
     });
 
-    for (const header of [
-      "Server",
-      "Status",
-      "Last called",
-      "Last seen",
-      "Usage",
-    ]) {
+    for (const header of ["Server", "Status", "Last active", "Usage"]) {
       expect(screen.getByRole("button", { name: header })).toBeTruthy();
     }
 
+    // Both dates share one column, which sorts by the later of the two.
+    expect(screen.queryByRole("button", { name: "Last seen" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Last called" })).toBeNull();
+
     let rows = screen.getAllByRole("row").slice(1);
+    expect(within(rows[0]!).getByText("Alpha MCP")).toBeTruthy();
+    expect(within(rows[1]!).getByText("Beta MCP")).toBeTruthy();
+    expect(within(rows[1]!).getByText(/^Seen /)).toBeTruthy();
+
+    // Beta was called earlier but listed later, so its activity is newer:
+    // oldest activity first puts Alpha on top, where sorting by the call
+    // date alone would put Beta there.
+    fireEvent.click(screen.getByRole("button", { name: "Last active" }));
+    rows = screen.getAllByRole("row").slice(1);
     expect(within(rows[0]!).getByText("Alpha MCP")).toBeTruthy();
     expect(within(rows[1]!).getByText("Beta MCP")).toBeTruthy();
 
@@ -929,59 +989,9 @@ describe("ShadowMCPInventoryTable", () => {
     expect(within(rows[1]!).getByText("1 user")).toBeTruthy();
   });
 
-  it("loads more inventory rows through the Moonshine table", async () => {
-    const firstPageServer = inventoryServer({
-      canonicalServerUrl: "https://first.example.com/mcp",
-      serverName: "First MCP",
-    });
-    const secondPageServer = inventoryServer({
-      canonicalServerUrl: "https://second.example.com/mcp",
-      serverName: "Second MCP",
-    });
-    const firstPageResponse = {
-      data: { servers: [firstPageServer], nextCursor: "next-page" },
-      error: null,
-      isFetching: false,
-      isLoading: false,
-    };
-    const secondPageResponse = {
-      data: { servers: [secondPageServer], nextCursor: undefined },
-      error: null,
-      isFetching: false,
-      isLoading: false,
-    };
-    mocks.useShadowMCPInventory.mockImplementation(
-      (request: { cursor?: string }) => {
-        if (request.cursor === "next-page") {
-          return secondPageResponse;
-        }
-
-        return firstPageResponse;
-      },
-    );
-
-    renderInventoryTable();
-
-    await waitFor(() => {
-      expect(screen.getByText("First MCP")).toBeTruthy();
-    });
-    expect(screen.queryByText("Second MCP")).toBeFalsy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
-
-    await waitFor(() => {
-      expect(screen.getByText("Second MCP")).toBeTruthy();
-    });
-    expect(mocks.useShadowMCPInventory).toHaveBeenCalledWith(
-      { projectId: "project-id-1", limit: 50, cursor: "next-page" },
-      undefined,
-      expect.objectContaining({ enabled: true }),
-    );
-  });
-
-  it("applies an active search to newly loaded inventory pages", async () => {
-    const firstPageResponse = {
-      data: {
+  it("appends the next page below the loaded rows on Load more", async () => {
+    const fetchNextPage = mockPagedInventory([
+      {
         servers: [
           inventoryServer({
             canonicalServerUrl: "https://first.example.com/mcp",
@@ -990,33 +1000,110 @@ describe("ShadowMCPInventoryTable", () => {
         ],
         nextCursor: "next-page",
       },
-      error: null,
-      isFetching: false,
-      isLoading: false,
-      refetch: vi.fn(),
-    };
-    const secondPageResponse = {
-      data: {
+      {
+        servers: [
+          inventoryServer({
+            canonicalServerUrl: "https://second.example.com/mcp",
+            serverName: "Second MCP",
+          }),
+        ],
+      },
+    ]);
+
+    renderInventoryTable();
+
+    expect(screen.getByText("First MCP")).toBeTruthy();
+    expect(screen.queryByText("Second MCP")).toBeFalsy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Second MCP")).toBeTruthy();
+    });
+    expect(fetchNextPage).toHaveBeenCalledTimes(1);
+    const rows = screen.getAllByRole("row").slice(1);
+    expect(within(rows[0]!).getByText("First MCP")).toBeTruthy();
+    expect(within(rows[1]!).getByText("Second MCP")).toBeTruthy();
+    // The last page has no cursor, so the control goes away.
+    expect(screen.queryByRole("button", { name: "Load more" })).toBeNull();
+  });
+
+  it("keeps the server order across pages instead of re-sorting by usage", async () => {
+    mockPagedInventory([
+      {
+        servers: [
+          inventoryServer({
+            canonicalServerUrl: "https://recent.example.com/mcp",
+            observedUseCount: 1,
+            serverName: "Recent MCP",
+          }),
+        ],
+        nextCursor: "next-page",
+      },
+      {
+        servers: [
+          inventoryServer({
+            canonicalServerUrl: "https://busy.example.com/mcp",
+            observedUseCount: 500,
+            serverName: "Busy MCP",
+          }),
+        ],
+      },
+    ]);
+
+    renderInventoryTable();
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Busy MCP")).toBeTruthy();
+    });
+    const rows = screen.getAllByRole("row").slice(1);
+    expect(within(rows[0]!).getByText("Recent MCP")).toBeTruthy();
+    expect(within(rows[1]!).getByText("Busy MCP")).toBeTruthy();
+  });
+
+  it("renders a row once when it moves to a later page between fetches", async () => {
+    const moved = inventoryServer({
+      canonicalServerUrl: "https://moved.example.com/mcp",
+      serverName: "Moved MCP",
+    });
+    mockPagedInventory([
+      { servers: [moved], nextCursor: "next-page" },
+      { servers: [moved] },
+    ]);
+
+    renderInventoryTable();
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Load more" })).toBeNull();
+    });
+    expect(screen.getAllByText("Moved MCP")).toHaveLength(1);
+  });
+
+  it("applies an active search to newly loaded inventory pages", async () => {
+    mockPagedInventory([
+      {
+        servers: [
+          inventoryServer({
+            canonicalServerUrl: "https://first.example.com/mcp",
+            serverName: "First MCP",
+          }),
+        ],
+        nextCursor: "next-page",
+      },
+      {
         servers: [
           inventoryServer({
             canonicalServerUrl: "https://matching.example.com/mcp",
             serverName: "Matching MCP",
           }),
         ],
-        nextCursor: undefined,
       },
-      error: null,
-      isFetching: false,
-      isLoading: false,
-      refetch: vi.fn(),
-    };
-    mocks.useShadowMCPInventory.mockImplementation(
-      (request: { cursor?: string }) =>
-        request.cursor === "next-page" ? secondPageResponse : firstPageResponse,
-    );
+    ]);
 
     renderInventoryTable();
-    fireEvent.change(screen.getByPlaceholderText("Search servers..."), {
+    fireEvent.change(screen.getByPlaceholderText("Search loaded servers..."), {
       target: { value: "matching" },
     });
 
@@ -1030,42 +1117,19 @@ describe("ShadowMCPInventoryTable", () => {
     expect(screen.queryByText("No servers matching “matching”")).toBeNull();
   });
 
-  it("keeps loaded inventory rows visible while loading the next page", async () => {
-    const firstPageServer = inventoryServer({
-      canonicalServerUrl: "https://first.example.com/mcp",
-      serverName: "First MCP",
+  it("keeps loaded inventory rows visible while loading the next page", () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "https://first.example.com/mcp",
+          serverName: "First MCP",
+        }),
+      ],
+      nextCursor: "next-page",
+      isFetchingNextPage: true,
     });
-    const firstPageResponse = {
-      data: { servers: [firstPageServer], nextCursor: "next-page" },
-      error: null,
-      isFetching: false,
-      isLoading: false,
-      refetch: vi.fn(),
-    };
-    const loadingNextPageResponse = {
-      data: undefined,
-      error: null,
-      isFetching: true,
-      isLoading: true,
-      refetch: vi.fn(),
-    };
-    mocks.useShadowMCPInventory.mockImplementation(
-      (request: { cursor?: string }) => {
-        if (request.cursor === "next-page") {
-          return loadingNextPageResponse;
-        }
-
-        return firstPageResponse;
-      },
-    );
 
     renderInventoryTable();
-
-    await waitFor(() => {
-      expect(screen.getByText("First MCP")).toBeTruthy();
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
 
     expect(screen.getByText("First MCP")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Loading" })).toBeTruthy();
@@ -1074,52 +1138,31 @@ describe("ShadowMCPInventoryTable", () => {
     ).toBeFalsy();
   });
 
-  it("keeps loaded inventory rows visible and retries after a next page error", async () => {
-    const refetchNextPage = vi.fn();
-    const firstPageServer = inventoryServer({
-      canonicalServerUrl: "https://first.example.com/mcp",
-      serverName: "First MCP",
+  it("keeps loaded inventory rows visible and retries after a next page error", () => {
+    const fetchNextPage = vi.fn();
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "https://first.example.com/mcp",
+          serverName: "First MCP",
+        }),
+      ],
+      nextCursor: "next-page",
+      isFetchNextPageError: true,
+      fetchNextPage,
     });
-    const firstPageResponse = {
-      data: { servers: [firstPageServer], nextCursor: "next-page" },
-      error: null,
-      isFetching: false,
-      isLoading: false,
-      refetch: vi.fn(),
-    };
-    const errorNextPageResponse = {
-      data: undefined,
-      error: new Error("next page failed"),
-      isFetching: false,
-      isLoading: false,
-      refetch: refetchNextPage,
-    };
-    mocks.useShadowMCPInventory.mockImplementation(
-      (request: { cursor?: string }) => {
-        if (request.cursor === "next-page") {
-          return errorNextPageResponse;
-        }
-
-        return firstPageResponse;
-      },
-    );
 
     renderInventoryTable();
-
-    await waitFor(() => {
-      expect(screen.getByText("First MCP")).toBeTruthy();
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
 
     expect(screen.getByText("First MCP")).toBeTruthy();
     expect(
       screen.queryByText("Shadow MCP inventory could not be loaded"),
     ).toBeFalsy();
+    expect(screen.getByText("More servers could not be loaded.")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
 
-    expect(refetchNextPage).toHaveBeenCalled();
+    expect(fetchNextPage).toHaveBeenCalled();
   });
 
   it("does not render stale inventory rows when the project changes", async () => {
@@ -1127,21 +1170,13 @@ describe("ShadowMCPInventoryTable", () => {
       canonicalServerUrl: "https://first-project.example.com/mcp",
       serverName: "First Project MCP",
     });
-    const firstProjectResponse = {
-      data: { servers: [firstProjectServer], nextCursor: undefined },
-      error: null,
-      isFetching: false,
-      isLoading: false,
-      refetch: vi.fn(),
-    };
-    const secondProjectLoadingResponse = {
-      data: undefined,
-      error: null,
-      isFetching: true,
+    const firstProjectResponse = infiniteInventoryResult({
+      pages: [{ servers: [firstProjectServer] }],
+    });
+    const secondProjectLoadingResponse = infiniteInventoryResult({
       isLoading: true,
-      refetch: vi.fn(),
-    };
-    mocks.useShadowMCPInventory.mockImplementation(
+    });
+    mocks.useShadowMCPInventoryInfinite.mockImplementation(
       (request: { projectId: string }) => {
         if (request.projectId === "project-id-2") {
           return secondProjectLoadingResponse;
@@ -1193,14 +1228,11 @@ describe("ShadowMCPInventoryTable", () => {
       canonicalServerUrl: "https://enabled.example.com/mcp",
       serverName: "Enabled MCP",
     });
-    const enabledResponse = {
-      data: { servers: [inventoryServerRow], nextCursor: undefined },
-      error: null,
-      isFetching: false,
-      isLoading: false,
-      refetch: vi.fn(),
-    };
-    mocks.useShadowMCPInventory.mockReturnValue(enabledResponse);
+    // React Query keeps the cached pages when a query is disabled; the table
+    // must not keep showing them.
+    mocks.useShadowMCPInventoryInfinite.mockReturnValue(
+      infiniteInventoryResult({ pages: [{ servers: [inventoryServerRow] }] }),
+    );
     const queryClient = new QueryClient();
     const { rerender } = render(
       <MemoryRouter>

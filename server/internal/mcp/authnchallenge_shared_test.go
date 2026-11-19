@@ -441,6 +441,43 @@ func TestSharedAuthorizationServer_AuthorizeRefusesMissingOrForeignResource(t *t
 	}
 }
 
+func TestSharedAuthorizationServer_DashboardRefusalUsesCurrentCallback(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	f := seedSharedIssuer(t, ctx, ti)
+	const clientID = "speakeasy-dashboard-inspect"
+	const callback = "https://dashboard.example.test/inspect/oauth/callback"
+	const previousCallback = "https://previous.example.test/inspect/oauth/callback"
+	ti.service.SetPlatformHosts(map[string]string{"dashboard.example.test": "https://dashboard.example.test"})
+	var noText pgtype.Text
+	var noExpiry pgtype.Timestamptz
+	client, err := usersessions_repo.New(ti.conn).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
+		UserSessionIssuerID:     f.issuer.ID,
+		ClientID:                clientID,
+		ClientName:              "Dashboard Inspect test client",
+		RedirectUris:            []string{previousCallback},
+		TokenEndpointAuthMethod: "none",
+		ClientSecretHash:        noText, ClientSecretExpiresAt: noExpiry, ClientJwks: nil, ClientJwksUri: noText,
+	})
+	require.NoError(t, err)
+	f.client = client
+	challenge := pkceChallenge(pkceVerifier(t))
+
+	old := sharedAuthorize(t, ctx, ti, f, challenge)
+	require.Equal(t, http.StatusBadRequest, old.Code)
+	require.Equal(t, "invalid_target", oauthtest.RequireAuthorizationErrorPage(t, old, http.StatusBadRequest).Code)
+
+	f.client.RedirectUris = []string{callback}
+	current := sharedAuthorize(t, ctx, ti, f, challenge)
+	// The HTTPS callback is linked, not automatically followed before sign-in.
+	redirect := oauthtest.RequireAuthorizationErrorCallback(t, current, http.StatusBadRequest)
+	require.Equal(t, "invalid_target", redirect.Query().Get("error"))
+	require.Equal(t, "client-state", redirect.Query().Get("state"))
+	redirect.RawQuery = ""
+	require.Equal(t, callback, redirect.String())
+}
+
 func TestSharedAuthorizationServer_AuthorizeRendersRefusalForUnknownClient(t *testing.T) {
 	t.Parallel()
 

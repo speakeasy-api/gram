@@ -339,7 +339,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 			registerNetworkIngressTool(reg, postgresReader.networkIngress)
 		}
 		registerToolExposureTools(reg, postgresReader.toolExposure, reader)
-		registerCreateMCPFromFunctionsTool(reg, postgresReader.toolExposure)
+		registerCreateMCPFromFunctionsTool(reg, postgresReader.toolExposure, !postgresReader.functionsDisabled)
 		registerGatewayTools(reg, postgresReader.gateways)
 		registerProjectLifecycleTools(reg, postgresReader.projectLifecycle)
 		if postgresReader.reviewRequests == nil {
@@ -396,7 +396,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerMCPConnectionMutationTools(reg, nil)
 		registerUnavailableNetworkIngressTool(reg)
 		registerToolExposureTools(reg, nil, reader)
-		registerCreateMCPFromFunctionsTool(reg, nil)
+		registerCreateMCPFromFunctionsTool(reg, nil, false)
 		registerGatewayTools(reg, nil)
 		registerProjectLifecycleTools(reg, nil)
 		registerUnavailableReviewRequestTools(reg)

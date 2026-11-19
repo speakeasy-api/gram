@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -221,6 +222,9 @@ func (b *metaCodeBackend) VerifyConnections(ctx context.Context, servers []strin
 // connectionRouteFailure names the state of a member that could not be routed.
 func connectionRouteFailure(err error, canConnect bool) (authentication, instructions string) {
 	if outage, unavailable := errors.AsType[memberUnavailableError](err); unavailable {
+		if outage.address != guardian.AddressFine {
+			return "unreachable", outage.address.EndUserMessage("This server", guardian.SignInAddress)
+		}
 		if outage.session == nil {
 			return "unreachable", "This server can't get its connection details right now. Retry shortly. If it keeps happening, ask your administrator to check its sign-in provider, then contact Speakeasy support."
 		}
@@ -288,7 +292,7 @@ func (b *metaCodeBackend) verifyConnection(ctx context.Context, gate *metaGateCo
 		state.Authentication, state.Instructions = connectionRouteFailure(err, codeConnectAvailable(gate))
 		return state
 	}
-	verdict, _, _ := b.service.probeUpstream(ctx, b.service.logger, probeProxyBuilder(dial.build), member.name)
+	verdict, _, failure := b.service.probeUpstream(ctx, b.service.logger, probeProxyBuilder(dial.build), member.name)
 	now = time.Now().UTC()
 	state.CheckedAt = &now
 	switch verdict {
@@ -300,6 +304,9 @@ func (b *metaCodeBackend) verifyConnection(ctx context.Context, gate *metaGateCo
 	default:
 		state.Authentication = "unreachable"
 		state.Instructions = "The upstream could not be verified; try again later."
+		if address := guardian.AddressFailureOf(failure.err, dial.tunneled); address != guardian.AddressFine {
+			state.Instructions = address.EndUserMessage("This server", guardian.OwnAddress)
+		}
 	}
 	return state
 }

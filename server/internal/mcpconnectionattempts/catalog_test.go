@@ -130,6 +130,9 @@ var frozenCodes = []string{
 	"upstream_credential_not_chosen",
 	"sign_in_method_not_accepted",
 	"credential_choice_invalid",
+	"address_not_allowed",
+	"address_not_found",
+	"unmanaged_account",
 }
 
 // frozenResults pins each result's stored name, append-only like the codes.

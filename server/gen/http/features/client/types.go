@@ -36,9 +36,6 @@ type SetRemoteSessionAutoRefreshPolicyRequestBody struct {
 // GetProductFeaturesResponseBody is the type of the "features" service
 // "getProductFeatures" endpoint HTTP response body.
 type GetProductFeaturesResponseBody struct {
-	// Whether the staff-managed provider setup rollout is enabled. Defaults to
-	// false when absent.
-	ProviderSetupEnabled *bool `form:"provider_setup_enabled,omitempty" json:"provider_setup_enabled,omitempty" xml:"provider_setup_enabled,omitempty"`
 	// Whether logging is enabled
 	LogsEnabled *bool `form:"logs_enabled,omitempty" json:"logs_enabled,omitempty" xml:"logs_enabled,omitempty"`
 	// Whether tool I/O logging is enabled
@@ -100,6 +97,10 @@ type GetProductFeaturesResponseBody struct {
 	// an organization entitlement: false when the deployment runs with the
 	// disabled assistant runtime provider. Absent from staff admin responses.
 	AssistantsAvailable *bool `form:"assistants_available,omitempty" json:"assistants_available,omitempty" xml:"assistants_available,omitempty"`
+	// Whether this deployment can run Speakeasy Functions. A deployment-wide
+	// setting, not an organization entitlement: false when the deployment runs
+	// with the disabled Functions provider. Absent from staff admin responses.
+	FunctionsAvailable *bool `form:"functions_available,omitempty" json:"functions_available,omitempty" xml:"functions_available,omitempty"`
 	// Whether upstream auth enforcement is on for the organization. Absent when
 	// the state could not be read. Staff change it through the admin enforcement
 	// endpoint.
@@ -695,7 +696,6 @@ func NewSetRemoteSessionAutoRefreshPolicyRequestBody(p *features.SetRemoteSessio
 // "getProductFeatures" endpoint result from a HTTP "OK" response.
 func NewGetProductFeaturesProductFeaturesOK(body *GetProductFeaturesResponseBody) *featuresviews.ProductFeaturesView {
 	v := &featuresviews.ProductFeaturesView{
-		ProviderSetupEnabled:                    body.ProviderSetupEnabled,
 		LogsEnabled:                             body.LogsEnabled,
 		ToolIoLogsEnabled:                       body.ToolIoLogsEnabled,
 		SessionCaptureEnabled:                   body.SessionCaptureEnabled,
@@ -719,6 +719,7 @@ func NewGetProductFeaturesProductFeaturesOK(body *GetProductFeaturesResponseBody
 		CodeModeEnabled:                         body.CodeModeEnabled,
 		DeviceAgent:                             body.DeviceAgent,
 		AssistantsAvailable:                     body.AssistantsAvailable,
+		FunctionsAvailable:                      body.FunctionsAvailable,
 		UpstreamAuthEnforced:                    body.UpstreamAuthEnforced,
 	}
 

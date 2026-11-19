@@ -4,7 +4,6 @@
 -- whose server was removed falls back to the server found by URL.
 SELECT
     c.server_url,
-    c.allow_direct_access,
     m.id AS chosen_mcp_server_id,
     m.name AS chosen_mcp_server_name,
     m.slug AS chosen_mcp_server_slug
@@ -21,7 +20,6 @@ WHERE c.project_id = @project_id
 -- One choice, read the same way as ListShadowMCPOfficialServerChoices.
 SELECT
     c.server_url,
-    c.allow_direct_access,
     m.id AS chosen_mcp_server_id,
     m.name AS chosen_mcp_server_name,
     m.slug AS chosen_mcp_server_slug
@@ -42,7 +40,8 @@ SELECT pg_advisory_xact_lock(hashtextextended('shadow_mcp_official_servers:' || 
 
 -- name: LockShadowMCPOfficialServerChoice :one
 -- The live choice row for one URL, locked for the update that replaces it.
-SELECT *
+-- Columns are named so that dropping unused ones never breaks this query.
+SELECT id, server_url, mcp_server_id
 FROM shadow_mcp_official_servers
 WHERE project_id = @project_id
     AND server_url = @server_url
@@ -50,27 +49,46 @@ WHERE project_id = @project_id
 FOR UPDATE;
 
 -- name: UpsertShadowMCPOfficialServerChoice :one
+-- Links a URL to a server: inserts the link, or points the live link at
+-- another server.
 INSERT INTO shadow_mcp_official_servers (
     project_id,
     server_url,
     mcp_server_id,
-    allow_direct_access,
     created_by_user_id,
     updated_by_user_id
 ) VALUES (
     @project_id,
     @server_url,
     sqlc.narg(mcp_server_id),
-    @allow_direct_access,
     sqlc.narg(user_id),
     sqlc.narg(user_id)
 )
 ON CONFLICT (project_id, server_url) WHERE deleted IS FALSE DO UPDATE SET
     mcp_server_id = EXCLUDED.mcp_server_id,
-    allow_direct_access = EXCLUDED.allow_direct_access,
     updated_by_user_id = EXCLUDED.updated_by_user_id,
     updated_at = clock_timestamp()
-RETURNING *;
+RETURNING id, server_url, mcp_server_id;
+
+-- name: RestoreShadowMCPOfficialServerChoice :one
+-- Adding a removed link again restores the most recently removed row for the
+-- URL, so the link keeps one id across its history. Callers hold
+-- LockShadowMCPOfficialServerURL and have checked that no live row exists.
+UPDATE shadow_mcp_official_servers
+SET deleted_at = NULL,
+    mcp_server_id = sqlc.narg(mcp_server_id),
+    updated_by_user_id = sqlc.narg(user_id),
+    updated_at = clock_timestamp()
+WHERE id = (
+    SELECT prev.id
+    FROM shadow_mcp_official_servers AS prev
+    WHERE prev.project_id = @project_id
+        AND prev.server_url = @server_url
+        AND prev.deleted IS TRUE
+    ORDER BY prev.deleted_at DESC
+    LIMIT 1
+)
+RETURNING id, server_url, mcp_server_id;
 
 -- name: DeleteShadowMCPOfficialServerChoice :execrows
 UPDATE shadow_mcp_official_servers

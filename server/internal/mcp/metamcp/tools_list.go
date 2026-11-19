@@ -77,7 +77,7 @@ func Tools(executeToolSchema json.RawMessage) []Tool {
 		{
 			Name:        ToolConnectionStatus,
 			Title:       "Check Connection Status",
-			Description: "Show member connection status. Live connections check current sign-in; cached connections report verification at consent without a new probe. Tool calls check current authorization. Follow the result’s directions to sign in or reconnect this gateway. A status of `unavailable` means a temporary problem: retry shortly.",
+			Description: "Show member connection status. Live connections check current sign-in; cached connections report verification at consent without a new probe. Tool calls check current authorization. Follow the result’s directions to sign in or reconnect this gateway. A status of `unavailable` means a temporary problem: retry shortly. When its outage has `needsAdmin`, retrying won’t help: tell the user what the message says is wrong and to ask an administrator, without adding technical detail of your own.",
 			InputSchema: connectionStatusSchema,
 		},
 	}

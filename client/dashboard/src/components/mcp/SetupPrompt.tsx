@@ -1,6 +1,6 @@
 import { StatusBanner } from "@/components/status-banner";
 import { Button } from "@/components/ui/Button";
-import { BookOpen, TriangleAlert } from "lucide-react";
+import { BookOpen, type LucideIcon, TriangleAlert } from "lucide-react";
 import { Link } from "react-router";
 
 /**
@@ -13,12 +13,15 @@ export function SetupPrompt({
   href,
   description,
   action = "Continue setup",
+  icon: Icon = BookOpen,
 }: {
   name: string;
   href: string;
   /** What the setup involves; defaults to the guided flow's words. */
   description?: string;
   action?: string;
+  /** The button's icon: a book for a written guide, a wand for guided setup. */
+  icon?: LucideIcon;
 }): JSX.Element {
   return (
     <StatusBanner tone="warning">
@@ -36,7 +39,7 @@ export function SetupPrompt({
         <Button variant="primary" size="sm" asChild>
           <Link to={href}>
             <Button.LeftIcon>
-              <BookOpen />
+              <Icon />
             </Button.LeftIcon>
             <Button.Text>{action}</Button.Text>
           </Link>

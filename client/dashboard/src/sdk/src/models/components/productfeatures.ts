@@ -38,6 +38,10 @@ export type ProductFeatures = {
    */
   deviceAgent: boolean;
   /**
+   * Whether this deployment can run Speakeasy Functions. A deployment-wide setting, not an organization entitlement: false when the deployment runs with the disabled Functions provider. Absent from staff admin responses.
+   */
+  functionsAvailable?: boolean | undefined;
+  /**
    * Whether generated hook plugins may mint per-user keys via the interactive browser login
    */
   hooksBrowserLoginEnabled: boolean;
@@ -61,10 +65,6 @@ export type ProductFeatures = {
    * Whether the organization can use the Speakeasy Platform MCP capability
    */
   platformMcpEnabled: boolean;
-  /**
-   * Whether the staff-managed provider setup rollout is enabled. Defaults to false when absent.
-   */
-  providerSetupEnabled?: boolean | undefined;
   /**
    * Whether consent screens expose automatic remote-session refresh for the organization
    */
@@ -124,13 +124,13 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
     custom_model_keys_enabled: z.boolean(),
     customer_managed_encryption_keys_enabled: z.boolean(),
     device_agent: z.boolean(),
+    functions_available: z.optional(z.boolean()),
     hooks_browser_login_enabled: z.boolean(),
     hooks_fail_open_enabled: z.boolean(),
     logs_enabled: z.boolean(),
     network_ingress_enabled: z.boolean(),
     organization_gateway_disabled: z.boolean(),
     platform_mcp_enabled: z.boolean(),
-    provider_setup_enabled: z.optional(z.boolean()),
     remote_session_auto_refresh_enabled: z.boolean(),
     remote_session_auto_refresh_enforced_enabled: z.boolean(),
     scim_enabled: z.boolean(),
@@ -154,13 +154,13 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
       "customer_managed_encryption_keys_enabled":
         "customerManagedEncryptionKeysEnabled",
       "device_agent": "deviceAgent",
+      "functions_available": "functionsAvailable",
       "hooks_browser_login_enabled": "hooksBrowserLoginEnabled",
       "hooks_fail_open_enabled": "hooksFailOpenEnabled",
       "logs_enabled": "logsEnabled",
       "network_ingress_enabled": "networkIngressEnabled",
       "organization_gateway_disabled": "organizationGatewayDisabled",
       "platform_mcp_enabled": "platformMcpEnabled",
-      "provider_setup_enabled": "providerSetupEnabled",
       "remote_session_auto_refresh_enabled": "remoteSessionAutoRefreshEnabled",
       "remote_session_auto_refresh_enforced_enabled":
         "remoteSessionAutoRefreshEnforcedEnabled",

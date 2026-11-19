@@ -145,11 +145,9 @@ import PlatformAdminOverview from "./pages/platform-admin/Overview";
 import PlatformAdminRbacOverride from "./pages/platform-admin/RbacOverride";
 import PlatformAdminOnboarding from "./pages/platform-admin/Onboarding";
 import PlatformAdminOpenRouterKeys from "./pages/platform-admin/OpenRouterKeys";
-import Playground from "./pages/playground/Playground";
 import NewPromptPage from "./pages/prompts/NewPrompt";
 import PromptPage from "./pages/prompts/Prompt";
 import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
-import SDK from "./pages/sdk/SDK";
 import Access from "./pages/access/Access";
 import { RoleEditorPage } from "./pages/access/RoleEditorPage";
 import RequestAccess from "./pages/access/RequestAccess";
@@ -231,9 +229,6 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
         component: ChatConversation,
       },
     },
-  },
-  playground: {
-    component: Playground,
   },
   integrations: {
     component: Integrations,
@@ -665,9 +660,6 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
         component: ShadowMCPServerLegacyRedirect,
       },
     },
-  },
-  sdks: {
-    component: SDK,
   },
   deployments: {
     component: DeploymentsRoot,

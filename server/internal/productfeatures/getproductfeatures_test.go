@@ -132,7 +132,7 @@ func TestProductFeaturesService_GetProductFeatures_AssistantsAvailable(t *testin
 
 	logger := testenv.NewLogger(t)
 	authzEngine := authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	disabled := productfeatures.NewService(logger, testenv.NewTracerProvider(t), ti.conn, ti.sessionManager, ti.redisClient, authzEngine, audit.NewLogger(), false)
+	disabled := productfeatures.NewService(logger, testenv.NewTracerProvider(t), ti.conn, ti.sessionManager, ti.redisClient, authzEngine, audit.NewLogger(), productfeatures.DeploymentCapabilities{AssistantsAvailable: false, FunctionsAvailable: true})
 	res, err = disabled.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{
 		OrganizationID: requestedOrganizationID(ctx)})
 	require.NoError(t, err)

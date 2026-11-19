@@ -4,7 +4,6 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useMcpServerDetailChrome } from "./useMcpServerDetailChrome";
 
 const state = vi.hoisted(() => ({
-  rollout: "enabled" as "enabled" | "disabled" | "loading",
   canWrite: true,
   url: "https://mcp.slack.com/mcp",
   server: undefined as Record<string, unknown> | undefined,
@@ -28,9 +27,6 @@ const REMOTE_SERVER = {
   slug: "slack",
   remoteMcpServerId: "remote",
 };
-vi.mock("@/hooks/useProviderSetupRollout", () => ({
-  useProviderSetupRollout: () => state.rollout,
-}));
 vi.mock("@/components/setup-guide/useSetupGuide", () => ({
   useSetupGuide: () => state.guide,
 }));
@@ -130,9 +126,6 @@ vi.mock("@gram/client/react-query/listEnvironments.js", () => ({
 vi.mock("@gram/client/react-query/getMcpMetadata.js", () => ({
   useGetMcpMetadata: () => ({ data: undefined, isPending: false }),
 }));
-vi.mock("@/pages/mcp/overview/PluginStatusBanner", () => ({
-  PluginStatusBanner: () => null,
-}));
 vi.mock("@gram/client/react-query/serverClientAssociations.js", () => ({
   useServerClientAssociations: () => ({
     data: { requiredClientIds: [] },
@@ -176,7 +169,6 @@ function Sidebar() {
 }
 afterEach(cleanup);
 beforeEach(() => {
-  state.rollout = "enabled";
   state.canWrite = true;
   state.url = "https://mcp.slack.com/mcp";
   state.server = undefined;
@@ -190,29 +182,13 @@ beforeEach(() => {
   state.upstreamAuthQuery = {};
   state.guide = null;
 });
-it.each(["disabled", "loading"] as const)(
-  "hides Setup while the rollout is %s",
-  (status) => {
-    state.rollout = status;
-    render(<Sidebar />);
-    expect(screen.queryByRole("link", { name: "Setup" })).toBeNull();
-    expect(screen.getByRole("link", { name: "Overview" })).toBeDefined();
-  },
-);
-it("lets an unconfigured server start Setup only after enablement, and hides it when disabled", () => {
-  state.rollout = "loading";
-  const view = render(<Sidebar />);
-  expect(screen.queryByRole("link", { name: "Setup" })).toBeNull();
-  state.rollout = "enabled";
-  view.rerender(<Sidebar />);
+it("offers Setup for a supported provider", () => {
+  render(<Sidebar />);
   expect(screen.getByRole("link", { name: "Setup" }).getAttribute("href")).toBe(
     "/example/projects/default/mcp/slack/setup",
   );
-  state.rollout = "disabled";
-  view.rerender(<Sidebar />);
-  expect(screen.queryByRole("link", { name: "Setup" })).toBeNull();
 });
-it("retains the write permission requirement when the rollout is enabled", () => {
+it("requires write permission to offer Setup", () => {
   state.canWrite = false;
   render(<Sidebar />);
   expect(screen.queryByRole("link", { name: "Setup" })).toBeNull();
@@ -355,16 +331,12 @@ it("sends a guide-only provider to the Setup tab, as the step after Authenticati
   expect(screen.getByText(/Marked done/)).toBeTruthy();
 });
 
-it("offers Setup for a guide-only provider only with the rollout and write access", () => {
+it("offers Setup for a guide-only provider only with write access", () => {
   state.url = "https://mcp.linear.app/mcp";
   state.guide = { only: { title: "Linear" }, openGuide: null };
-  const view = render(<Sidebar />);
+  render(<Sidebar />);
   expect(screen.getByRole("link", { name: "Setup" })).toBeDefined();
-  state.rollout = "disabled";
-  view.rerender(<Sidebar />);
-  expect(screen.queryByRole("link", { name: "Setup" })).toBeNull();
   cleanup();
-  state.rollout = "enabled";
   renderReadiness();
   cleanup();
   state.canWrite = false;
@@ -389,7 +361,10 @@ it("lists no setup step for a provider without a guide", () => {
 function IdentityRow() {
   const chrome = useMcpServerDetailChrome();
   return (
-    <span data-warn={String(!!chrome?.identity?.warn)}>
+    <span
+      data-warn={String(!!chrome?.identity?.warn)}
+      data-href={chrome?.identity?.href}
+    >
       {chrome?.identity?.label}
     </span>
   );
@@ -431,6 +406,7 @@ it.each([
 );
 
 it("names an enforced server with no credentials by its sign-in status", () => {
+  state.url = "https://other.example/mcp";
   state.upstreamAuth = "enforced";
   state.upstreamAuthQuery = {
     data: { status: "no_auth_required", clients: [] },
@@ -448,4 +424,82 @@ it("warns when an enforced server's credentials can't be read", () => {
   expect(screen.getByText("Couldn't check").getAttribute("data-warn")).toBe(
     "true",
   );
+});
+
+it.each([
+  ["setup_incomplete", "enforced"],
+  ["no_auth_required", "enforced"],
+] as const)(
+  "sends a guided server whose credentials are %s to Setup",
+  (status, upstreamAuth) => {
+    state.upstreamAuth = upstreamAuth;
+    state.upstreamAuthQuery = {
+      data: { status, clients: [] },
+      isPending: false,
+      isError: false,
+    };
+    renderIdentity();
+    const pending = screen.getByText("Setup pending");
+    expect(pending.getAttribute("data-warn")).toBe("true");
+    expect(pending.getAttribute("data-href")).toBe(
+      "/example/projects/default/mcp/slack/setup",
+    );
+  },
+);
+
+it("keeps a guided server's configured credentials", () => {
+  state.upstreamAuth = "enforced";
+  state.upstreamAuthQuery = {
+    data: { status: "configured", clients: [credential(true)] },
+    isPending: false,
+    isError: false,
+  };
+  renderIdentity();
+  expect(screen.getByText("1 credential configured")).toBeDefined();
+  expect(screen.queryByText("Setup pending")).toBeNull();
+});
+
+function OverviewPrompt() {
+  const chrome = useMcpServerDetailChrome();
+  return <div>{chrome?.overviewSetup}</div>;
+}
+function renderOverviewPrompt() {
+  render(
+    <MemoryRouter
+      initialEntries={["/example/projects/default/mcp/slack/overview"]}
+    >
+      <Routes>
+        <Route
+          path="/example/projects/default/mcp/:mcpServerSlug/:tab"
+          element={<OverviewPrompt />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+it("prompts to finish guided setup that isn't marked done, even with working credentials", () => {
+  state.upstreamAuth = "enforced";
+  state.upstreamAuthQuery = {
+    data: { status: "configured", clients: [credential(true)] },
+    isPending: false,
+    isError: false,
+  };
+  renderOverviewPrompt();
+  expect(screen.getByText("Finish setting up Slack")).toBeDefined();
+});
+
+it("stops prompting once guided setup is marked done, even without credentials", () => {
+  state.server = { ...REMOTE_SERVER, setupGuideCompletedAt: new Date() };
+  state.upstreamAuth = "enforced";
+  state.upstreamAuthQuery = {
+    data: { status: "setup_incomplete", clients: [] },
+    isPending: false,
+    isError: false,
+  };
+  renderOverviewPrompt();
+  expect(screen.queryByText("Finish setting up Slack")).toBeNull();
+  cleanup();
+  renderIdentity();
+  expect(screen.queryByText("Setup pending")).toBeNull();
 });

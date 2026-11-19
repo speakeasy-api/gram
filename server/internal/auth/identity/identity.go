@@ -63,6 +63,10 @@ type AuthorizationURLParams struct {
 	// Prompt "login" forces the user to authenticate again rather than
 	// reuse an existing session. Omitted when empty.
 	Prompt string
+
+	// OrganizationID is a WorkOS organization AuthKit selects for the user,
+	// skipping its organization picker. Omitted when empty.
+	OrganizationID string
 }
 
 // AuthenticateResult holds the fields Speakeasy uses from the IDP code exchange.
@@ -876,6 +880,9 @@ func (r *Resolver) BuildAuthorizationURL(ctx context.Context, params Authorizati
 	}
 	if params.Prompt != "" {
 		q.Set("prompt", params.Prompt)
+	}
+	if params.OrganizationID != "" {
+		q.Set("organization_id", params.OrganizationID)
 	}
 
 	authorizeBase := workosAuthorizeEndpoint

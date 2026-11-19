@@ -59,7 +59,10 @@ JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 JOIN user_session_issuers AS source ON source.id = s.user_session_issuer_id
 JOIN projects AS p ON p.id = $3 AND p.organization_id = $4 AND p.deleted IS FALSE
 WHERE link.user_session_issuer_id = $5
-  AND s.user_session_issuer_id = link.user_session_issuer_id
+  -- The issuer a connection was made through, such as a team gateway's, is
+  -- provenance only, as at runtime: it must still exist in this tenant, but
+  -- whether it binds the client now does not matter. The binding's own issuer
+  -- must bind the client.
   AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
   AND (usi.project_id = p.id OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
   AND (source.project_id = p.id OR (source.project_id IS NULL AND source.organization_id = p.organization_id))
@@ -3640,6 +3643,7 @@ SELECT
     c.client_id                            AS external_client_id,
     c.client_secret_encrypted              AS client_secret_encrypted,
     c.client_secret_org_encrypted          AS client_secret_org_encrypted,
+    c.client_secret_generation             AS client_secret_generation,
     c.client_secret_expires_at             AS client_secret_expires_at,
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.token_endpoint_auth_audience_format  AS token_endpoint_auth_audience_format,
@@ -3689,6 +3693,7 @@ type GetClientCredentialsGrantClientRow struct {
 	ExternalClientID                string
 	ClientSecretEncrypted           pgtype.Text
 	ClientSecretOrgEncrypted        pgtype.Text
+	ClientSecretGeneration          int64
 	ClientSecretExpiresAt           pgtype.Timestamptz
 	TokenEndpointAuthMethod         pgtype.Text
 	TokenEndpointAuthAudienceFormat pgtype.Text
@@ -3720,6 +3725,7 @@ func (q *Queries) GetClientCredentialsGrantClient(ctx context.Context, arg GetCl
 		&i.ExternalClientID,
 		&i.ClientSecretEncrypted,
 		&i.ClientSecretOrgEncrypted,
+		&i.ClientSecretGeneration,
 		&i.ClientSecretExpiresAt,
 		&i.TokenEndpointAuthMethod,
 		&i.TokenEndpointAuthAudienceFormat,
@@ -10457,7 +10463,10 @@ JOIN user_session_issuers AS source ON source.id = s.user_session_issuer_id
 JOIN projects AS p ON p.id = $1 AND p.organization_id = $2 AND p.deleted IS FALSE
 LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
 WHERE link.user_session_issuer_id = $3
-  AND s.user_session_issuer_id = link.user_session_issuer_id
+  -- The issuer a connection was made through, such as a team gateway's, is
+  -- provenance only, as at runtime: it must still exist in this tenant, but
+  -- whether it binds the client now does not matter. The binding's own issuer
+  -- must bind the client.
   AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
   AND (usi.project_id = p.id OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
   AND (source.project_id = p.id OR (source.project_id IS NULL AND source.organization_id = p.organization_id))
@@ -15460,7 +15469,9 @@ func (q *Queries) SetOrganizationRemoteSessionClientCallbackBaseURLFixture(ctx c
 const setOrganizationRemoteSessionClientCredentialsFixture = `-- name: SetOrganizationRemoteSessionClientCredentialsFixture :exec
 UPDATE remote_session_clients
 SET client_id = coalesce($1::text, client_id),
-    client_secret_encrypted = coalesce($2::text, client_secret_encrypted)
+    client_secret_encrypted = coalesce($2::text, client_secret_encrypted),
+    client_secret_org_encrypted = CASE WHEN $2::text IS NULL THEN client_secret_org_encrypted ELSE NULL END,
+    client_secret_generation = client_secret_generation + CASE WHEN $2::text IS NULL THEN 0 ELSE 1 END
 WHERE id = $3 AND organization_id = $4 AND project_id IS NULL
 `
 
@@ -15471,7 +15482,8 @@ type SetOrganizationRemoteSessionClientCredentialsFixtureParams struct {
 	OrganizationID        pgtype.Text
 }
 
-// Test fixture: change an organization-level login client during a browser flow.
+// Test fixture: change an organization-level login client during a browser
+// flow. A planted secret counts a new revision, as every secret writer does.
 func (q *Queries) SetOrganizationRemoteSessionClientCredentialsFixture(ctx context.Context, arg SetOrganizationRemoteSessionClientCredentialsFixtureParams) error {
 	_, err := q.db.Exec(ctx, setOrganizationRemoteSessionClientCredentialsFixture,
 		arg.ClientID,
