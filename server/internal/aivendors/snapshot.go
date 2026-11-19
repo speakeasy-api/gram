@@ -1,11 +1,13 @@
 package aivendors
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"slices"
+	"strings"
 	"sync"
 )
 
@@ -45,7 +47,8 @@ type Snapshot struct {
 }
 
 // NewSnapshot builds indexes over validated catalog data and takes ownership of
-// a deep copy. Input order is kept: it is listing order and pattern priority.
+// a deep copy. Input order is kept as listing order; pattern priority depends
+// only on content.
 func NewSnapshot(products []Product) *Snapshot {
 	s := &Snapshot{
 		products:    make([]Product, 0, len(products)),
@@ -80,6 +83,15 @@ func NewSnapshot(products []Product) *Snapshot {
 			}
 		}
 	}
+	slices.SortStableFunc(s.patterns, func(a, b Preset) int {
+		if c := cmp.Compare(patternSpecificity(b.URL), patternSpecificity(a.URL)); c != 0 {
+			return c
+		}
+		if c := strings.Compare(a.URL, b.URL); c != 0 {
+			return c
+		}
+		return strings.Compare(a.ProductID, b.ProductID)
+	})
 	canonical := make([]Product, 0, len(s.products))
 	for _, p := range s.products {
 		canonical = append(canonical, p.withEmptyAsNil())
@@ -96,6 +108,19 @@ func NewSnapshot(products []Product) *Snapshot {
 		s.version = 1
 	}
 	return s
+}
+
+// patternSpecificity counts a pattern's literal path segments.
+func patternSpecificity(pattern string) int {
+	_, rest, _ := splitAuthorityAndPath(pattern)
+	path, _ := splitPathAndSuffix(rest)
+	n := 0
+	for segment := range strings.SplitSeq(path, "/") {
+		if segment != "*" {
+			n++
+		}
+	}
+	return n
 }
 
 // withEmptyAsNil makes nil and empty slices encode the same in the fingerprint.
@@ -134,7 +159,8 @@ var compiledSnapshot = sync.OnceValue(func() *Snapshot {
 	return NewSnapshot(products)
 })
 
-// Fingerprint hashes the complete snapshot, including product and document order.
+// Fingerprint hashes the complete snapshot, including product and document
+// order, which is listing order.
 func (s *Snapshot) Fingerprint() string { return s.fingerprint }
 
 // Version is the positive, opaque wire identifier echoed by device agents.
@@ -163,7 +189,9 @@ func (s *Snapshot) Products() []Product {
 // Catalog returns enabled and disabled live documents.
 func (s *Snapshot) Catalog() []Preset { return slices.Clone(s.presets) }
 
-// CatalogPreset resolves exact URLs before patterns, then patterns in input order.
+// CatalogPreset resolves exact URLs before patterns, then the pattern with the
+// most literal path segments. Ties go to the lower URL, then product ID, so
+// input order never decides attribution.
 func (s *Snapshot) CatalogPreset(clientID string) (Preset, bool) {
 	if p, ok := s.exact[clientID]; ok {
 		return p, true
