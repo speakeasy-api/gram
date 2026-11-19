@@ -969,6 +969,16 @@ INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url)
   (@id::uuid, @project_id::uuid, 'Support Tools', 'support-tools-official',
    'streamable-http', 'https://support-tools.example.com/mcp');
 
+-- It has its own sign-in with no clients bound, so it owes no upstream
+-- client associations; on the shared workforce sign-in it would owe one for
+-- every client bound there.
+-- name: ServersInsertShadowOfficialUserSessionIssuer :exec
+INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                  authn_challenge_mode, session_duration,
+                                  authorization_server_mode) VALUES
+  (@id::uuid, @project_id::uuid, @org_id::text, 'support-tools-official',
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint');
+
 -- name: ServersInsertShadowOfficialMCPServer :exec
 INSERT INTO mcp_servers (id, project_id, name, slug,
                          remote_mcp_server_id, user_session_issuer_id,

@@ -565,6 +565,15 @@ function UnlinkedPanel({
     }
   };
 
+  const resetToAutomatic = async () => {
+    try {
+      await save({ serverUrl: url });
+      toast.success("Direct connection no longer kept");
+    } catch {
+      toast.error("Could not change the link. Try again.");
+    }
+  };
+
   const requestHelp = () => {
     // The URL is the canonical form the inventory already shows: no query
     // string and no credentials. Staff need it to set the server up.
@@ -754,6 +763,24 @@ function UnlinkedPanel({
           ) : undefined
         }
       />
+      {declined && !suggested ? (
+        // No server proxies the URL today. Removing the choice lets one that
+        // appears later be linked automatically.
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Text muted small className="max-w-xl">
+            Go back to the default to link a server that proxies this URL as
+            soon as one exists.
+          </Text>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={linking}
+            onClick={() => void resetToAutomatic()}
+          >
+            <Button.Text>Use automatic link</Button.Text>
+          </Button>
+        </div>
+      ) : null}
       {primaryKey ? options[primaryKey](true) : <ChecksSkeleton />}
       <Advanced>
         {others.map((key) => options[key](false))}

@@ -140,15 +140,17 @@ func chooseOfficialLinks(rows []shadowmcprepo.ListShadowMCPOfficialServerChoices
 	return links, declined
 }
 
-// LoadOfficialServerLinks reads every official-server link in a project.
-// Look a URL up in Linked with [OfficialServerFor].
+// LoadOfficialServerLinks reads the official-server links of a project.
+// Look a URL up in Linked with [OfficialServerFor]. With keys, only those
+// URLs (in [OfficialServerKey] form) are resolved, so a page of the
+// inventory pays only for the servers it shows; nil resolves every URL.
 //
 // A project server that proxies to an upstream URL is its official version
 // by default, the oldest when several do. An administrator's choice, stored
 // in shadow_mcp_official_servers, overrides that: it names another server,
 // or keeps the upstream in direct use. Deleting or disabling a chosen server
 // falls back to the automatic link.
-func LoadOfficialServerLinks(ctx context.Context, db OfficialServerDBTX, organizationID string, projectID uuid.UUID, serverURL *url.URL) (OfficialServerLinks, error) {
+func LoadOfficialServerLinks(ctx context.Context, db OfficialServerDBTX, organizationID string, projectID uuid.UUID, serverURL *url.URL, keys map[string]bool) (OfficialServerLinks, error) {
 	empty := OfficialServerLinks{Linked: nil, Declined: nil, Suggested: nil}
 	rows, err := shadowmcprepo.New(db).ListShadowMCPOfficialServerChoices(ctx, projectID)
 	if err != nil {
@@ -159,6 +161,15 @@ func LoadOfficialServerLinks(ctx context.Context, db OfficialServerDBTX, organiz
 		return empty, err
 	}
 	links, declined := chooseOfficialLinks(rows, suggested)
+	if keys != nil {
+		wanted := make([]officialLink, 0, len(links))
+		for _, link := range links {
+			if keys[link.key] {
+				wanted = append(wanted, link)
+			}
+		}
+		links = wanted
+	}
 	linked, err := resolveOfficialServers(ctx, db, organizationID, projectID, serverURL, links)
 	if err != nil {
 		return empty, err

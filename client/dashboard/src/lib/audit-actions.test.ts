@@ -59,7 +59,7 @@ describe("AUDIT_ACTIONS", () => {
   it.each([
     [
       "shadow_mcp_official_server:create",
-      "chose the official server of Shadow MCP server",
+      "set the official server choice of Shadow MCP server",
     ],
     [
       "shadow_mcp_official_server:update",

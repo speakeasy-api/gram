@@ -1020,7 +1020,7 @@ export function staticActionPhrase(action: AuditAction): string {
       return "deleted an evaluation review for";
 
     case "shadow_mcp_official_server:create":
-      return "chose the official server of Shadow MCP server";
+      return "set the official server choice of Shadow MCP server";
     case "shadow_mcp_official_server:update":
       return "changed the official server choice of Shadow MCP server";
     case "shadow_mcp_official_server:delete":

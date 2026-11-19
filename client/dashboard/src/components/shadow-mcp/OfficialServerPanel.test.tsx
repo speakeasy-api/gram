@@ -516,6 +516,18 @@ describe("OfficialServerPanel", () => {
     );
   });
 
+  it("goes back to the automatic link when no server proxies the URL", async () => {
+    mocks.probe.mockResolvedValue({ outcome: "mcp_available" });
+    renderPanel(server({ officialServerDeclined: true }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Use automatic link" }));
+    await vi.waitFor(() =>
+      expect(mocks.save).toHaveBeenCalledWith({
+        serverUrl: "https://tracker.example.com/mcp",
+      }),
+    );
+  });
+
   it("links the proxying server again after the direct connection was kept", async () => {
     mocks.probe.mockResolvedValue({ outcome: "mcp_available" });
     renderPanel(

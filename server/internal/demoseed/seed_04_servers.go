@@ -859,11 +859,18 @@ func (s *seeder) seedServersShadowOfficial(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("insert demo shadow official remote mcp server: %w", err)
 	}
+	if err := s.q.ServersInsertShadowOfficialUserSessionIssuer(ctx, repo.ServersInsertShadowOfficialUserSessionIssuerParams{
+		ID:        s.det("issuer-shadow-official"),
+		ProjectID: proj,
+		OrgID:     s.orgID(),
+	}); err != nil {
+		return fmt.Errorf("insert demo shadow official user session issuer: %w", err)
+	}
 	if err := s.q.ServersInsertShadowOfficialMCPServer(ctx, repo.ServersInsertShadowOfficialMCPServerParams{
 		ID:        s.det("mcpserver-shadow-official"),
 		ProjectID: proj,
 		RemoteID:  s.det("remotemcp-shadow-official"),
-		IssuerID:  s.det("issuer-workforce"),
+		IssuerID:  s.det("issuer-shadow-official"),
 	}); err != nil {
 		return fmt.Errorf("insert demo shadow official mcp server: %w", err)
 	}

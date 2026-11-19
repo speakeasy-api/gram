@@ -109,13 +109,15 @@ type Service interface {
 	UpdateShadowMCPInventoryServerName(context.Context, *UpdateShadowMCPInventoryServerNamePayload) (err error)
 	// Choose the official version of one project-scoped Shadow MCP server. By
 	// default a project MCP server that proxies to the Shadow MCP server's URL is
-	// linked automatically (the oldest, when several do). While a link exists,
-	// direct connections are blocked wherever a Shadow MCP policy applies and
-	// agents are pointed at the linked server. With mcp_server_id that server is
-	// linked instead; with keep_shadow no server is linked, so direct use follows
-	// the ordinary Shadow MCP rules; with neither, the automatic link applies
-	// again. Each change is recorded in the audit log. Requires an authenticated
-	// session authorized for org:admin on the active organization.
+	// linked automatically (the oldest, when several do). While a link exists and
+	// the linked server has an address, direct connections are blocked wherever a
+	// Shadow MCP policy applies and agents are pointed at the linked server; a
+	// linked server with no address yet leaves direct connections on the ordinary
+	// rules. With mcp_server_id that server is linked instead; with keep_shadow no
+	// server is linked, so direct use follows the ordinary Shadow MCP rules; with
+	// neither, the automatic link applies again. Each change is recorded in the
+	// audit log. Requires an authenticated session authorized for org:admin on the
+	// active organization.
 	SetShadowMCPOfficialServer(context.Context, *SetShadowMCPOfficialServerPayload) (err error)
 	// List users with observed telemetry usage for one project-scoped Shadow MCP
 	// server URL.

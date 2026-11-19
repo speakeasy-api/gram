@@ -1787,6 +1787,28 @@ func (q *Queries) ServersInsertShadowOfficialRemoteMCPServer(ctx context.Context
 	return err
 }
 
+const serversInsertShadowOfficialUserSessionIssuer = `-- name: ServersInsertShadowOfficialUserSessionIssuer :exec
+INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                  authn_challenge_mode, session_duration,
+                                  authorization_server_mode) VALUES
+  ($1::uuid, $2::uuid, $3::text, 'support-tools-official',
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint')
+`
+
+type ServersInsertShadowOfficialUserSessionIssuerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	OrgID     string
+}
+
+// It has its own sign-in with no clients bound, so it owes no upstream
+// client associations; on the shared workforce sign-in it would owe one for
+// every client bound there.
+func (q *Queries) ServersInsertShadowOfficialUserSessionIssuer(ctx context.Context, arg ServersInsertShadowOfficialUserSessionIssuerParams) error {
+	_, err := q.db.Exec(ctx, serversInsertShadowOfficialUserSessionIssuer, arg.ID, arg.ProjectID, arg.OrgID)
+	return err
+}
+
 const serversInsertSlackIdentityHeader = `-- name: ServersInsertSlackIdentityHeader :exec
 INSERT INTO remote_mcp_server_headers
   (id, remote_mcp_server_id, name, description, is_required, is_secret, value)

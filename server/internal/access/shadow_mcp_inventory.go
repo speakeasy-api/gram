@@ -265,18 +265,21 @@ func (s *Service) ReadShadowMCPInventory(ctx context.Context, input ShadowMCPInv
 // leaves the rows unmarked rather than failing the inventory: the page still
 // lists what was observed, and only the onboarded state is missing.
 func (s *Service) attachShadowMCPOfficialServers(ctx context.Context, organizationID string, projectID uuid.UUID, servers []*gen.ShadowMCPInventoryServer) {
-	hasURLRow := false
+	// Only the URLs on this page are resolved.
+	keys := map[string]bool{}
 	for _, server := range servers {
-		if server != nil && conv.PtrValOr(server.TargetKind, shadowMCPTargetKindServerURL) == shadowMCPTargetKindServerURL {
-			hasURLRow = true
-			break
+		if server == nil || conv.PtrValOr(server.TargetKind, shadowMCPTargetKindServerURL) != shadowMCPTargetKindServerURL {
+			continue
+		}
+		if key, ok := shadowmcp.OfficialServerKey(server.CanonicalServerURL); ok {
+			keys[key] = true
 		}
 	}
-	if !hasURLRow {
+	if len(keys) == 0 {
 		return
 	}
 
-	links, err := shadowmcp.LoadOfficialServerLinks(ctx, s.db, organizationID, projectID, s.serverURL)
+	links, err := shadowmcp.LoadOfficialServerLinks(ctx, s.db, organizationID, projectID, s.serverURL, keys)
 	if err != nil {
 		s.logger.WarnContext(ctx, "resolve official servers for shadow mcp inventory",
 			attr.SlogError(err),
