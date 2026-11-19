@@ -7,7 +7,6 @@ const mocks = vi.hoisted(() => ({
   server: undefined as unknown,
   error: null as unknown,
   canWrite: true,
-  providerSetup: "enabled" as "enabled" | "disabled" | "loading",
   toolSource: {
     status: "ready",
     tools: [
@@ -29,9 +28,6 @@ const mocks = vi.hoisted(() => ({
 // The detail frame's chrome loads its own data; these tests cover routing.
 vi.mock("@/components/mcp/useMcpServerDetailChrome", () => ({
   useMcpServerDetailChrome: () => null,
-}));
-vi.mock("@/hooks/useProviderSetupRollout", () => ({
-  useProviderSetupRollout: () => mocks.providerSetup,
 }));
 vi.mock("./setup/ProviderSetupPage", () => ({
   ProviderSetupPage: ({ mcpServer }: { mcpServer: { id: string } }) => (
@@ -207,7 +203,6 @@ const REMOTE_SERVER = {
 
 beforeEach(() => {
   mocks.canWrite = true;
-  mocks.providerSetup = "enabled";
   mocks.server = REMOTE_SERVER;
   mocks.error = null;
   mocks.readTools.mockClear();
@@ -415,30 +410,4 @@ describe("MCPServerDetails setup authorization", () => {
       screen.getByRole("heading", { name: "Access restricted" }),
     ).toBeDefined();
   });
-});
-
-it("redirects a disabled Setup route to Overview", () => {
-  mocks.providerSetup = "disabled";
-  visit("/acme/projects/default/mcp/my-server/setup");
-  expect(screen.queryByTestId("setup-page")).toBeNull();
-  expect(screen.getByTestId("landed").textContent).toBe(
-    "/acme/projects/default/mcp/my-server/overview",
-  );
-});
-it("does not render or redirect Setup before the rollout resolves", () => {
-  mocks.providerSetup = "loading";
-  const view = visit("/acme/projects/default/mcp/my-server/setup");
-  expect(screen.queryByTestId("setup-page")).toBeNull();
-  expect(screen.queryByTestId("landed")).toBeNull();
-  mocks.providerSetup = "enabled";
-  view.rerender(<Fixture url="/acme/projects/default/mcp/my-server/setup" />);
-  expect(screen.getByTestId("setup-page").textContent).toBe("server-1");
-});
-it("removes Setup when the rollout is disabled during an active setup", () => {
-  const view = visit("/acme/projects/default/mcp/my-server/setup");
-  expect(screen.getByTestId("setup-page")).toBeDefined();
-  mocks.providerSetup = "disabled";
-  view.rerender(<Fixture url="/acme/projects/default/mcp/my-server/setup" />);
-  expect(screen.queryByTestId("setup-page")).toBeNull();
-  expect(screen.getByTestId("landed").textContent).toContain("/overview");
 });
