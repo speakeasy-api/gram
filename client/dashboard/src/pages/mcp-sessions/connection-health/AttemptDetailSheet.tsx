@@ -194,6 +194,8 @@ function AttemptDetailBody({
   const routes = useRoutes();
   const who = personLabel(attempt);
   const where = serverLabel(attempt);
+  // The link filters by server, not gateway member.
+  const gateway = attempt.server ? serverLabel({ server: attempt.server }) : "";
   const now = connectionHealthNow();
   const inLastDay =
     now.getTime() - Date.parse(attempt.startedAt) <
@@ -314,7 +316,7 @@ function AttemptDetailBody({
                     },
                     now,
                   )}`}
-                  title={`All outcomes for ${who}${where ? ` on ${where}` : ""}`}
+                  title={`All outcomes for ${who}${gateway ? ` on ${gateway}` : ""}`}
                   detail={`${inLastDay ? "Last 24 hours" : `Since ${formatDayMonth(attempt.startedAt)}`} · Connection Logs`}
                 />
                 <RelatedLink

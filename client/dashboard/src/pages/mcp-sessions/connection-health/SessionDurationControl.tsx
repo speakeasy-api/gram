@@ -1,7 +1,7 @@
 import { DETAIL_HEADER_CONTROL_BUTTON } from "@/components/detail/detail-frame";
 import { ChevronRight } from "lucide-react";
 import { Link } from "react-router";
-import { useSessionAverage } from "./api";
+import { useSessionSummary } from "./api";
 import { formatSessionLength } from "./format";
 
 /** The header's one Session length readout: the 30-day average and the setting. */
@@ -14,7 +14,8 @@ export function SessionDurationControl({
   configuredHours: number;
   href: string;
 }): JSX.Element {
-  const average = useSessionAverage(providerId).data;
+  const average = useSessionSummary(providerId, { staleTime: 5 * 60 * 1000 })
+    .data?.averageSessionSeconds;
   const setTo = formatSessionLength(configuredHours * 3_600);
   const label =
     average === undefined

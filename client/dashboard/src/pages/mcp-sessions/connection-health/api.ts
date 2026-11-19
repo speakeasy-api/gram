@@ -7,7 +7,6 @@ import {
   keepPreviousData,
   useInfiniteQuery,
   useQuery,
-  useQueryClient,
   type InfiniteData,
   type UseInfiniteQueryResult,
   type UseQueryResult,
@@ -182,38 +181,24 @@ export function useSessionActivity(
   });
 }
 
-/** The 30-day average session length; the API ignores the range for it. */
-export function useSessionAverage(
+/** The provider's live session count and 30-day average; the API ignores the range for both. */
+export function useSessionSummary(
   providerId: string,
-): UseQueryResult<number | undefined> {
+  options: { enabled?: boolean; staleTime?: number } = {},
+): UseQueryResult<SessionActivityResponse> {
   const { client, gramProject, projectId } = useClient();
   return useQuery({
-    queryKey: [ROOT, projectId, "sessionAverage", providerId],
-    queryFn: async () => {
-      const result = await sdk.getSessionActivity(client, gramProject, {
+    queryKey: [ROOT, projectId, "sessionSummary", providerId],
+    queryFn: () =>
+      sdk.getSessionActivity(client, gramProject, {
         userSessionIssuerId: providerId,
         ...presetWindow("1d", connectionHealthNow()),
-      });
-      return result.averageSessionSeconds ?? null;
-    },
-    select: (value) => value ?? undefined,
-    staleTime: 5 * 60 * 1000,
+      }),
+    enabled: options.enabled ?? true,
+    staleTime: options.staleTime,
     retry,
     throwOnError: false,
   });
-}
-
-/** Refetches the provider's session count and average, e.g. after a revoke. */
-export function useRefreshSessionActivity(providerId: string): () => void {
-  const queryClient = useQueryClient();
-  const { projectId } = useClient();
-  return () => {
-    for (const read of ["getSessionActivity", "sessionAverage"]) {
-      void queryClient.invalidateQueries({
-        queryKey: [ROOT, projectId, read, providerId],
-      });
-    }
-  };
 }
 
 export function useDeniedClients(

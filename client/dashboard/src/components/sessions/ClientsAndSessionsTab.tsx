@@ -147,6 +147,7 @@ function IssuerClientsAndSessions(
   // The sessions list mounts only when its view is shown, so its queries wait.
   return issuerId && health === "on" && originatingMcpServerId ? (
     <ServerConnectionHealth
+      key={`${issuerId}:${originatingMcpServerId}`}
       providerId={issuerId}
       server={{ id: originatingMcpServerId, name: serverName ?? "This server" }}
       sessions={<IssuerSessionsList {...props} />}

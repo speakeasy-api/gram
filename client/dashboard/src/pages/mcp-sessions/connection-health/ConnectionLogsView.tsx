@@ -211,7 +211,10 @@ export function ConnectionLogsView({
   const openReference = searchParams.get(ATTEMPT_PARAM);
   const { preset, customRange } = filters.values.date;
   // Presets resolve against a clock that moves on a new range or Refresh.
-  const [now, tick] = useRangeClock(preset ?? "custom");
+  const picked = customDateRangeBounds(filters.values.date);
+  const [now, tick] = useRangeClock(
+    preset ?? `${picked?.from.getTime()}-${picked?.to.getTime()}`,
+  );
   const window = useMemo(
     () => resolveWindow(filters.values.date, now),
     [filters.values.date, now],
@@ -247,7 +250,9 @@ export function ConnectionLogsView({
   const optionFacets = optionCounts.data?.facets;
   const filteredFacets = counts.data?.facets;
   // Search matches against the filtered counts, so a narrow filter finds rarer names.
-  const searchFacets = counts.data?.facets;
+  const searchFacets = counts.isPlaceholderData
+    ? undefined
+    : counts.data?.facets;
   const textFilters: SearchResult | "pending" =
     isReference || !search.trim()
       ? null
@@ -374,7 +379,9 @@ export function ConnectionLogsView({
       : searchBlocked
         ? undefined
         : searching
-          ? searchedCounts.data?.totalAttempts
+          ? searchedCounts.isPlaceholderData
+            ? undefined
+            : searchedCounts.data?.totalAttempts
           : counts.data?.totalAttempts;
 
   const countText = !loggingEnabled
@@ -640,7 +647,9 @@ export function ConnectionLogsView({
                   optionsById={optionsById}
                   facets={
                     searching
-                      ? searchedCounts.data?.facets
+                      ? searchedCounts.isPlaceholderData
+                        ? undefined
+                        : searchedCounts.data?.facets
                       : textFilters
                         ? undefined
                         : filteredFacets

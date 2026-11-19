@@ -1,13 +1,7 @@
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { useRoutes } from "@/routes";
-import { useState } from "react";
 import { useNavigate } from "react-router";
-import {
-  connectionHealthNow,
-  useRefreshSessionActivity,
-  useSessionActivity,
-} from "./api";
-import { presetWindow } from "./filters";
+import { useSessionSummary } from "./api";
 import { ConnectionsTab } from "../ConnectionsTab";
 import { ConnectionLogsView } from "./ConnectionLogsView";
 
@@ -28,12 +22,10 @@ export function ConnectionsViews({
 }): JSX.Element {
   const routes = useRoutes();
   const navigate = useNavigate();
-  const [window] = useState(() => presetWindow("1d", connectionHealthNow()));
-  // Signed in, not expired, not revoked: the count the Overview charts.
-  const activeNow = useSessionActivity(providerId, window, {
+  // Signed in, not expired, not revoked; shared with the header's average.
+  const summary = useSessionSummary(providerId, {
     enabled: view === "sessions",
-  }).data?.activeNow;
-  const refreshActivity = useRefreshSessionActivity(providerId);
+  });
   return (
     <div className="space-y-4">
       <SegmentedControl
@@ -55,7 +47,10 @@ export function ConnectionsViews({
       ) : (
         <ConnectionsTab
           providerId={providerId}
-          health={{ activeNow, refetch: refreshActivity }}
+          health={{
+            activeNow: summary.data?.activeNow,
+            refetch: () => void summary.refetch(),
+          }}
         />
       )}
     </div>

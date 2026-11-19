@@ -232,6 +232,7 @@ export function OverviewTab({
             rows={activityRows}
             now={now}
             onOpen={(row) => setParam(ATTEMPT_PARAM, row.id)}
+            selectedId={searchParams.get(ATTEMPT_PARAM)}
           />
         )}
       </OverviewSection>

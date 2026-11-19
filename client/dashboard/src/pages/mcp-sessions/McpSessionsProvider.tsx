@@ -141,7 +141,7 @@ function ProviderPage(): JSX.Element {
   if (!segment)
     return (
       <Navigate
-        to={`${tabHref(healthOn ? "overview" : "connections")}${search}`}
+        to={`${tabHref(healthOn && !search ? "overview" : "connections")}${search}`}
         replace
       />
     );
