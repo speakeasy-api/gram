@@ -65,20 +65,23 @@ function CreateRemoteMcpForm() {
   const createUnproxied = useCreateUnproxiedMcpSource();
   const issuerQuery = useEffectiveUserSessionIssuers();
   const newGuardrail = useNewServerGuardrail();
-  // Opened from a Shadow MCP server's "Set it up myself": its URL and name
-  // fill the form, and saving goes back to its page to link the new server.
-  const [searchParams] = useSearchParams();
-  const shadowServerSlug =
-    searchParams.get(SHADOW_MCP_SETUP_PARAMS.shadowServer) || null;
-  const shadowServerName =
-    searchParams.get(SHADOW_MCP_SETUP_PARAMS.name) || "this Shadow MCP server";
 
+  // A link can open the form with the server's URL and name already filled
+  // in; the admin still verifies and saves.
+  const [searchParams] = useSearchParams();
   const [name, setName] = useState(
-    () => searchParams.get(SHADOW_MCP_SETUP_PARAMS.name) ?? "",
+    () => searchParams.get(SHADOW_MCP_SETUP_PARAMS.name)?.trim() ?? "",
   );
   const [url, setUrl] = useState(
-    () => searchParams.get(SHADOW_MCP_SETUP_PARAMS.url) ?? "",
+    () => searchParams.get(SHADOW_MCP_SETUP_PARAMS.url)?.trim() ?? "",
   );
+  // Opened from a Shadow MCP server's "Set it up myself": saving goes back to
+  // its page to link the new server.
+  const shadowServerSlug =
+    searchParams.get(SHADOW_MCP_SETUP_PARAMS.shadowServer)?.trim() || null;
+  const shadowServerName =
+    searchParams.get(SHADOW_MCP_SETUP_PARAMS.name)?.trim() ||
+    "this Shadow MCP server";
   const [mode, setMode] = useState<ProxyMode>("proxied");
   const [issuerSelection, setIssuerSelection] = useState<string | null>(null);
   const [identityMode, setIdentityMode] =
