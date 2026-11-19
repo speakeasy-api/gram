@@ -138,6 +138,7 @@ function questionFor(attempt: AttemptDetail, who: string, where: string) {
   switch (attempt.outcome) {
     case "in_progress":
       return `${connection.charAt(0).toUpperCase()}${connection.slice(1)} is still in progress. What has happened so far?`;
+    case "connected":
     case "failed":
     case "blocked":
     case "declined":
