@@ -15,6 +15,7 @@ export const ClientFamily = {
   Codex: "codex",
   Cursor: "cursor",
   Opencode: "opencode",
+  Vibe: "vibe",
   Other: "other",
 } as const;
 /**

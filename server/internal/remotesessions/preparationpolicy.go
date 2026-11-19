@@ -130,7 +130,7 @@ func preparationClientConfigurationValid(ctx context.Context, q *repo.Queries, c
 		return false
 	}
 	authMethodSupported := slices.Contains(issuer.TokenEndpointAuthMethodsSupported, method)
-	if method == "" || !authMethodSupported || ((method == oauthwire.AuthMethodClientSecretBasic || method == oauthwire.AuthMethodClientSecretPost) && !client.ClientSecretEncrypted.Valid) || (method == oauthwire.AuthMethodPrivateKeyJWT && !client.JsonWebKeySetID.Valid) {
+	if method == "" || !authMethodSupported || ((method == oauthwire.AuthMethodClientSecretBasic || method == oauthwire.AuthMethodClientSecretPost) && !hasClientSecret(client)) || (method == oauthwire.AuthMethodPrivateKeyJWT && !client.JsonWebKeySetID.Valid) {
 		return false
 	}
 	if method == oauthwire.AuthMethodPrivateKeyJWT && client.JsonWebKeySetID.Valid {

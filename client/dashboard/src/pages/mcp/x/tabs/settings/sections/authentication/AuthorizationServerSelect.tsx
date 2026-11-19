@@ -8,7 +8,7 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { remoteSessionScopeTier } from "@/lib/sources";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { useRemoteSessionIssuersInfinite } from "@gram/client/react-query/remoteSessionIssuers.js";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 
 const ISSUER_TIER_LABEL = {
   project: "This project",
@@ -29,12 +29,18 @@ export function AuthorizationServerSelect({
   selectedIssuer,
   pickFailed,
   onChange,
+  pendingLabel,
+  hint,
 }: {
   excludedIssuerIds: ReadonlySet<string>;
   selectedIssuerId: string;
   selectedIssuer: RemoteSessionIssuer | undefined;
   pickFailed: boolean;
   onChange: (id: string) => void;
+  /** A detected server that is added on save, shown as the selection. */
+  pendingLabel?: string;
+  /** Replaces the default hint under the picker. */
+  hint?: ReactNode;
 }): JSX.Element {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search.trim(), 250);
@@ -97,18 +103,20 @@ export function AuthorizationServerSelect({
       >
         {selectedIssuer
           ? issuerOptionLabel(selectedIssuer)
-          : "Choose an authorization server…"}
+          : (pendingLabel ?? "Choose an authorization server…")}
       </Combobox>
-      {pickFailed ? (
+      {pickFailed && !pendingLabel ? (
         <FieldError>
           Failed to load this authorization server. Pick it again, or refresh
           the page.
         </FieldError>
       ) : (
-        <Text muted small>
-          Pick an authorization server this project already has: its own, its
-          organization&apos;s, or one from the platform catalog.
-        </Text>
+        (hint ?? (
+          <Text muted small>
+            Pick an authorization server this project already has: its own, its
+            organization&apos;s, or one from the platform catalog.
+          </Text>
+        ))
       )}
     </Stack>
   );

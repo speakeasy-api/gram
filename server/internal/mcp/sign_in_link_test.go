@@ -172,7 +172,7 @@ func runSignInLinkIDPCallback(t *testing.T, ctx context.Context, ti *testInstanc
 	require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		Endpoint:            mcp.EndpointRef{McpSlug: toolset.McpSlug.String, CustomDomainID: toolset.CustomDomainID},
+		Endpoint:            mcp.EndpointRef{McpSlug: toolset.McpSlug.String, McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, CustomDomainID: toolset.CustomDomainID},
 		ClientID:            "test-client",
 		RedirectURI:         "http://localhost:3000/callback",
 		State:               "client-state",
@@ -234,7 +234,7 @@ func exchangeLinkedCode(t *testing.T, ctx context.Context, ti *testInstance, too
 func sessionForAccessToken(t *testing.T, ctx context.Context, ti *testInstance, toolset hostedToolset, accessToken string) usersessions_repo.UserSession {
 	t.Helper()
 
-	claims, err := sessiontokens.NewSigner("test-jwt-secret").Validate(accessToken, urn.NewToolset(toolset.ID).String())
+	claims, err := sessiontokens.NewSigner("test-jwt-secret").Validate(accessToken, urn.NewUserSessionIssuer(toolset.UserSessionIssuerID.UUID).String())
 	require.NoError(t, err)
 	session, err := usersessions_repo.New(ti.conn).GetUserSessionByJTI(ctx, usersessions_repo.GetUserSessionByJTIParams{
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
@@ -390,7 +390,7 @@ func TestHandleConsent_LinksOnlyTheAuthorizersOwnSession(t *testing.T) {
 			require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 				ID:                  stateID,
 				UserSessionIssuerID: issuer.ID,
-				Endpoint:            mcp.EndpointRef{McpSlug: toolset.McpSlug.String, CustomDomainID: toolset.CustomDomainID},
+				Endpoint:            mcp.EndpointRef{McpSlug: toolset.McpSlug.String, McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, CustomDomainID: toolset.CustomDomainID},
 				ClientID:            client.ClientID,
 				RedirectURI:         client.RedirectUris[0],
 				State:               "client-state",
@@ -570,7 +570,7 @@ func TestHandleIDPCallback_RevokedSignInForcesAFreshLogin(t *testing.T) {
 	require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		Endpoint:            mcp.EndpointRef{McpSlug: toolset.McpSlug.String, CustomDomainID: toolset.CustomDomainID},
+		Endpoint:            mcp.EndpointRef{McpSlug: toolset.McpSlug.String, McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, CustomDomainID: toolset.CustomDomainID},
 		ClientID:            "test-client",
 		RedirectURI:         "http://localhost:3000/callback",
 		State:               "client-state",
@@ -623,7 +623,7 @@ func TestHandleIDPCallback_ARevokedSignInAfterTheFreshLoginEndsTheFlow(t *testin
 	require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		Endpoint:            mcp.EndpointRef{McpSlug: toolset.McpSlug.String, CustomDomainID: toolset.CustomDomainID},
+		Endpoint:            mcp.EndpointRef{McpSlug: toolset.McpSlug.String, McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, CustomDomainID: toolset.CustomDomainID},
 		ClientID:            "test-client",
 		RedirectURI:         "http://localhost:3000/callback",
 		State:               "client-state",

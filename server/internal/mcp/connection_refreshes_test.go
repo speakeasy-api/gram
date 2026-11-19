@@ -297,7 +297,7 @@ func TestInboundRefresh_ReplayOfAnExpiredSuccessorIsExpiry(t *testing.T) {
 	require.Equal(t, http.StatusOK, winner.code, winner.body)
 	var response tokenResponseFixture
 	require.NoError(t, json.Unmarshal([]byte(winner.body), &response))
-	claims, err := sessiontokens.NewSigner("test-jwt-secret").Validate(response.AccessToken, urn.NewToolset(fx.toolset.ID).String())
+	claims, err := sessiontokens.NewSigner("test-jwt-secret").Validate(response.AccessToken, urn.NewUserSessionIssuer(fx.toolset.UserSessionIssuerID.UUID).String())
 	require.NoError(t, err)
 	successor, err := usersessions_repo.New(ti.conn).GetUserSessionByJTI(ctx, usersessions_repo.GetUserSessionByJTIParams{
 		UserSessionIssuerID: fx.target.UserSessionIssuerID,

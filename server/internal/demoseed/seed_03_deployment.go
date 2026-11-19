@@ -36,7 +36,7 @@ func (s *seeder) seedDeployment(ctx context.Context) error {
 
 // seedDeploymentStack writes one completed deployment with 8 HTTP tools whose
 // URNs (tools:http:acme:*) match the ClickHouse telemetry, feeding the
-// Deployments, Sources, MCP, Playground, and Catalog surfaces.
+// Deployments, Sources, MCP, and Catalog surfaces.
 func (s *seeder) seedDeploymentStack(ctx context.Context) error {
 	proj := s.projectID()
 
@@ -510,7 +510,7 @@ func (s *seeder) seedDeploymentAssistants(ctx context.Context) error {
 		OrganizationID: org,
 		ProjectID:      proj,
 		OwnerUserID:    owner,
-		Name:           "Identity-bound assistant agent",
+		Name:           "Identity-bound assistant",
 	}); err != nil {
 		return fmt.Errorf("insert demo assistant agent: %w", err)
 	}

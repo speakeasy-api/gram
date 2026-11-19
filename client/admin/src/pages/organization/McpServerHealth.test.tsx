@@ -191,6 +191,9 @@ beforeEach(() => {
     if (url.pathname === "/admin/project.mcpServerHealth") {
       return Promise.resolve(json(config));
     }
+    if (url.pathname === "/admin/mcpServerSources") {
+      return Promise.resolve(json({ sources: [] }));
+    }
     if (url.pathname === TOOL_CALLS_PATH) {
       return toolCallsResponse ?? Promise.resolve(json(toolCalls));
     }
@@ -754,3 +757,34 @@ describe("McpServerHealth", () => {
     });
   });
 });
+
+it.each(["toolset", "toolset_only"])(
+  "shows Sources below Logs for %s servers",
+  async (source) => {
+    respond = (days) => ({
+      ...withIssuer(days),
+      server: { ...SERVER, source },
+    });
+    await open();
+    const heading = await screen.findByRole("heading", { name: "Sources" });
+    const logs = screen.getByRole("heading", { name: "Logs" });
+    expect(
+      logs.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(await screen.findByText("No OpenAPI sources.")).toBeTruthy();
+  },
+);
+
+it.each(["remote", "tunneled", "unproxied"])(
+  "does not fetch sources for %s servers",
+  async (source) => {
+    respond = (days) => ({
+      ...withIssuer(days),
+      server: { ...SERVER, source },
+    });
+    await open();
+    await screen.findByRole("heading", { name: "Logs" });
+    expect(screen.queryByRole("heading", { name: "Sources" })).toBeNull();
+    expect(requestsTo("/admin/mcpServerSources")).toHaveLength(0);
+  },
+);

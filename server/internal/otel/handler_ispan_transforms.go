@@ -54,24 +54,9 @@ func NewSpanTransformHandler(
 }
 
 func (h *SpanTransformHandler) Handle(ctx context.Context, m *otelv1.InboundSpan, _ gcp.MessageMetadata) error {
-	out, err := spanFromInboundSpan(m)
+	out, err := transformInboundSpan(ctx, h.instruments, m, h.enrichers)
 	if err != nil {
-		return fmt.Errorf("convert inbound span: %w", o11y.LogError(ctx, h.logger, err, "failed to convert inbound span"))
-	}
-	// The producer's copy of anything in the pipeline's namespace goes
-	// before the pipeline writes its own, so the scope rewrite below and
-	// the enrichers after it leave exactly one copy of each key.
-	dropReservedSpanAttributes(out)
-	if err := rewriteInstrumentationScope(out); err != nil {
-		return fmt.Errorf("rewrite instrumentation scope: %w", err)
-	}
-
-	enrichments, err := enrich.Span(ctx, h.instruments, m, h.enrichers)
-	if err != nil {
-		return fmt.Errorf("enrich span: %w", o11y.LogError(ctx, h.logger, err, "failed to enrich span"))
-	}
-	if err := applySpanEnrichments(out, enrichments); err != nil {
-		return fmt.Errorf("apply span enrichments: %w", o11y.LogError(ctx, h.logger, err, "failed to apply span enrichments"))
+		return o11y.LogError(ctx, h.logger, err, "failed to transform inbound span")
 	}
 
 	res := h.spanPublisher.Publish(ctx, out)
@@ -81,6 +66,31 @@ func (h *SpanTransformHandler) Handle(ctx context.Context, m *otelv1.InboundSpan
 	}
 
 	return nil
+}
+
+// transformInboundSpan turns an inbound span into what every consumer and relay receives.
+func transformInboundSpan(ctx context.Context, instruments *enrich.Instruments, m *otelv1.InboundSpan, enrichers []enrich.SpanEnricher) (*otelv1.Span, error) {
+	out, err := spanFromInboundSpan(m)
+	if err != nil {
+		return nil, fmt.Errorf("convert inbound span: %w", err)
+	}
+	// The producer's copy of anything in the pipeline's namespace goes
+	// before the pipeline writes its own, so the scope rewrite below and
+	// the enrichers after it leave exactly one copy of each key.
+	dropReservedSpanAttributes(out)
+	stripSpanTestEventMarks(out)
+	if err := rewriteInstrumentationScope(out); err != nil {
+		return nil, fmt.Errorf("rewrite instrumentation scope: %w", err)
+	}
+
+	enrichments, err := enrich.Span(ctx, instruments, m, enrichers)
+	if err != nil {
+		return nil, fmt.Errorf("enrich span: %w", err)
+	}
+	if err := applySpanEnrichments(out, enrichments); err != nil {
+		return nil, fmt.Errorf("apply span enrichments: %w", err)
+	}
+	return out, nil
 }
 
 func rewriteInstrumentationScope(span *otelv1.Span) error {

@@ -45,24 +45,24 @@ func provisionSecretClient(t *testing.T, ctx context.Context, ti *testInstance) 
 	return &secretFixture{provisioner: provisioner, kms: kms, connectionID: connectionID, issuerID: issuerID, client: client}
 }
 
-func setClientIDParams(orgID string, connectionID uuid.UUID, secretEncrypted string) identityproviderconnections.SetClientIDParams {
+func setClientIDParams(orgID string, connectionID uuid.UUID, secret string) identityproviderconnections.SetClientIDParams {
 	return identityproviderconnections.SetClientIDParams{
-		OrganizationID:        orgID,
-		ConnectionID:          connectionID,
-		Provider:              identityproviderconnections.ProviderOkta,
-		ClientID:              testClientID,
-		ClientSecretEncrypted: secretEncrypted,
-		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, "user_test"),
-		ActorDisplayName:      nil,
+		OrganizationID:   orgID,
+		ConnectionID:     connectionID,
+		Provider:         identityproviderconnections.ProviderOkta,
+		ClientID:         testClientID,
+		ClientSecret:     secret,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, "user_test"),
+		ActorDisplayName: nil,
 	}
 }
 
 // setClientID runs SetClientID in its own committed transaction.
-func setClientID(t *testing.T, ctx context.Context, ti *testInstance, fx *secretFixture, secretEncrypted string) (*identityproviderconnections.ManagedClient, error) {
+func setClientID(t *testing.T, ctx context.Context, ti *testInstance, fx *secretFixture, secret string) (*identityproviderconnections.ManagedClient, error) {
 	t.Helper()
 
 	dbtx := testenv.BeginTx(t, ctx, ti.conn)
-	managed, err := fx.provisioner.SetClientID(ctx, dbtx, setClientIDParams(ti.orgID, fx.connectionID, secretEncrypted))
+	managed, err := fx.provisioner.SetClientID(ctx, dbtx, setClientIDParams(ti.orgID, fx.connectionID, secret))
 	if err != nil {
 		return nil, fmt.Errorf("set client id: %w", err)
 	}
@@ -78,7 +78,19 @@ func storedSecret(t *testing.T, ctx context.Context, ti *testInstance, connectio
 		IdentityProviderConnectionID: conv.ToNullUUID(connectionID),
 	})
 	require.NoError(t, err)
-	return row.RemoteSessionClient.ClientSecretEncrypted.String, row.RemoteSessionClient.ClientSecretEncrypted.Valid
+	if !row.RemoteSessionClient.ClientSecretEncrypted.Valid {
+		return "", false
+	}
+	return decryptSecret(t, row.RemoteSessionClient.ClientSecretEncrypted.String), true
+}
+
+// decryptSecret opens a platform-key secret copy.
+func decryptSecret(t *testing.T, ciphertext string) string {
+	t.Helper()
+
+	plaintext, err := testenv.NewEncryptionClient(t).Decrypt(ciphertext)
+	require.NoError(t, err)
+	return plaintext
 }
 
 func TestProvisionClient_SecretClientHasNoKeyMaterial(t *testing.T) {
@@ -93,7 +105,6 @@ func TestProvisionClient_SecretClientHasNoKeyMaterial(t *testing.T) {
 	require.False(t, fx.client.ExternalKeyID.Valid)
 	require.False(t, fx.client.ActiveKeyID.Valid)
 	require.Empty(t, fx.client.JSONWebKeySetURL)
-	require.Empty(t, fx.client.ClientSecretEncrypted)
 	require.Zero(t, fx.kms.Opened(), "a secret client never touches KMS")
 	require.Empty(t, fx.kms.Created())
 
@@ -169,15 +180,14 @@ func TestSetClientID_SecretClientRequiresSecret(t *testing.T) {
 	_, err := setClientID(t, ctx, ti, fx, "")
 	require.ErrorIs(t, err, identityproviderconnections.ErrClientSecretRequired)
 
-	managed, err := setClientID(t, ctx, ti, fx, "ciphertext-1")
+	managed, err := setClientID(t, ctx, ti, fx, "secret-1")
 	require.NoError(t, err)
 	require.Equal(t, testClientID, managed.ClientID)
-	require.Equal(t, "ciphertext-1", managed.ClientSecretEncrypted)
 	require.Equal(t, remotesessions.TokenEndpointAuthMethodBasic, managed.AuthMethod)
 
 	stored, ok := storedSecret(t, ctx, ti, fx.connectionID)
 	require.True(t, ok)
-	require.Equal(t, "ciphertext-1", stored)
+	require.Equal(t, "secret-1", stored)
 }
 
 func TestSetClientID_KeyClientRefusesSecret(t *testing.T) {
@@ -188,37 +198,36 @@ func TestSetClientID_KeyClientRefusesSecret(t *testing.T) {
 	keyed := provisiontest.Provision(t, ctx, ti.conn, ti.orgID, issuerID, testServerURL)
 	fx := &secretFixture{provisioner: keyed.Provisioner, kms: nil, connectionID: keyed.ConnectionID, issuerID: issuerID, client: keyed.Client}
 
-	_, err := setClientID(t, ctx, ti, fx, "ciphertext-1")
+	_, err := setClientID(t, ctx, ti, fx, "secret-1")
 	require.ErrorIs(t, err, identityproviderconnections.ErrClientSecretNotAccepted)
 
 	_, ok := storedSecret(t, ctx, ti, fx.connectionID)
 	require.False(t, ok)
 }
 
-func TestReplaceClientSecret_SwapsCiphertext(t *testing.T) {
+func TestReplaceClientSecret_SwapsSecret(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestDB(t)
 	fx := provisionSecretClient(t, ctx, ti)
-	_, err := setClientID(t, ctx, ti, fx, "ciphertext-1")
+	_, err := setClientID(t, ctx, ti, fx, "secret-1")
 	require.NoError(t, err)
 
 	dbtx := testenv.BeginTx(t, ctx, ti.conn)
 	managed, err := fx.provisioner.ReplaceClientSecret(ctx, dbtx, identityproviderconnections.ReplaceClientSecretParams{
-		OrganizationID:        ti.orgID,
-		ConnectionID:          fx.connectionID,
-		Provider:              identityproviderconnections.ProviderOkta,
-		ClientSecretEncrypted: "ciphertext-2",
-		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, "user_test"),
-		ActorDisplayName:      nil,
+		OrganizationID:   ti.orgID,
+		ConnectionID:     fx.connectionID,
+		Provider:         identityproviderconnections.ProviderOkta,
+		ClientSecret:     "secret-2",
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, "user_test"),
+		ActorDisplayName: nil,
 	})
 	require.NoError(t, err)
 	require.NoError(t, dbtx.Commit(ctx))
-	require.Equal(t, "ciphertext-2", managed.ClientSecretEncrypted)
 	require.Equal(t, testClientID, managed.ClientID)
 
 	stored, ok := storedSecret(t, ctx, ti, fx.connectionID)
 	require.True(t, ok)
-	require.Equal(t, "ciphertext-2", stored)
+	require.Equal(t, "secret-2", stored)
 
 	actions := auditActions(t, ctx, ti.conn, ti.orgID)
 	require.Equal(t, [2]string{"user:user_test", "remote-session-client:update"}, actions[len(actions)-1])
@@ -233,12 +242,12 @@ func TestReplaceClientSecret_RefusesKeyClient(t *testing.T) {
 
 	dbtx := testenv.BeginTx(t, ctx, ti.conn)
 	_, err := keyed.Provisioner.ReplaceClientSecret(ctx, dbtx, identityproviderconnections.ReplaceClientSecretParams{
-		OrganizationID:        ti.orgID,
-		ConnectionID:          keyed.ConnectionID,
-		Provider:              identityproviderconnections.ProviderOkta,
-		ClientSecretEncrypted: "ciphertext-2",
-		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, "user_test"),
-		ActorDisplayName:      nil,
+		OrganizationID:   ti.orgID,
+		ConnectionID:     keyed.ConnectionID,
+		Provider:         identityproviderconnections.ProviderOkta,
+		ClientSecret:     "secret-2",
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, "user_test"),
+		ActorDisplayName: nil,
 	})
 	require.ErrorIs(t, err, identityproviderconnections.ErrClientSecretNotAccepted)
 }
@@ -247,7 +256,7 @@ func TestRevokeClient_ClearsSecretIdempotently(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestDB(t)
 	fx := provisionSecretClient(t, ctx, ti)
-	_, err := setClientID(t, ctx, ti, fx, "ciphertext-1")
+	_, err := setClientID(t, ctx, ti, fx, "secret-1")
 	require.NoError(t, err)
 
 	revoked, err := fx.provisioner.RevokeClient(ctx, ti.orgID, fx.connectionID)
@@ -286,7 +295,7 @@ func TestClearClientSecret_ClearsInsideCallerTransaction(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestDB(t)
 	fx := provisionSecretClient(t, ctx, ti)
-	_, err := setClientID(t, ctx, ti, fx, "ciphertext-1")
+	_, err := setClientID(t, ctx, ti, fx, "secret-1")
 	require.NoError(t, err)
 	audited := len(auditActions(t, ctx, ti.conn, ti.orgID))
 

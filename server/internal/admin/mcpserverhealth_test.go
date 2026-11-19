@@ -195,7 +195,7 @@ func (f healthFixture) seedRemoteSessionClient(t *testing.T, remoteIssuerID, use
 	if dcr {
 		issuedAt = conv.ToPGTimestamptz(time.Now())
 	}
-	client, err := queries.CreateRemoteSessionClient(t.Context(), remotesessionsrepo.CreateRemoteSessionClientParams{
+	client, err := queries.CreateRemoteSessionClientFixture(t.Context(), remotesessionsrepo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:                       uuid.NullUUID{UUID: f.projectID, Valid: true},
 		OrganizationID:                  pgtype.Text{String: "", Valid: false},
 		RemoteSessionIssuerID:           remoteIssuerID,

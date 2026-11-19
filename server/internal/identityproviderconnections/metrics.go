@@ -18,6 +18,7 @@ const (
 const (
 	verifyOutcomeCredentialRejected = "credential_rejected" //nolint:gosec // G101 false positive: a metric attribute value.
 	verifyOutcomeUnreachable        = "unreachable"
+	verifyOutcomeKeyUnavailable     = "key_unavailable"
 )
 
 // Create outcomes.

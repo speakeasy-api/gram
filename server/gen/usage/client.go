@@ -26,7 +26,6 @@ type Client struct {
 	GetInferenceSpendCapsEndpoint     goa.Endpoint
 	GetUsageTiersEndpoint             goa.Endpoint
 	CreateCustomerSessionEndpoint     goa.Endpoint
-	CreateCheckoutEndpoint            goa.Endpoint
 	GetStripeCheckoutStatusEndpoint   goa.Endpoint
 	CreateStripeCheckoutEndpoint      goa.Endpoint
 	GetStripeSubscriptionEndpoint     goa.Endpoint
@@ -38,7 +37,7 @@ type Client struct {
 }
 
 // NewClient initializes a "usage" service client given the endpoints.
-func NewClient(getPeriodUsage, getMeterUsage, getSpendBreakdown, getTokensUnderManagement, setBillingMetadata, getBillingEmail, setBillingEmail, setSpendCap, getInferenceSpendCaps, getUsageTiers, createCustomerSession, createCheckout, getStripeCheckoutStatus, createStripeCheckout, getStripeSubscription, getPaygBillingSummary, createStripePortalSession, cancelStripeSubscription, resumeStripeSubscription, createTopUpCheckout goa.Endpoint) *Client {
+func NewClient(getPeriodUsage, getMeterUsage, getSpendBreakdown, getTokensUnderManagement, setBillingMetadata, getBillingEmail, setBillingEmail, setSpendCap, getInferenceSpendCaps, getUsageTiers, createCustomerSession, getStripeCheckoutStatus, createStripeCheckout, getStripeSubscription, getPaygBillingSummary, createStripePortalSession, cancelStripeSubscription, resumeStripeSubscription, createTopUpCheckout goa.Endpoint) *Client {
 	return &Client{
 		GetPeriodUsageEndpoint:            getPeriodUsage,
 		GetMeterUsageEndpoint:             getMeterUsage,
@@ -51,7 +50,6 @@ func NewClient(getPeriodUsage, getMeterUsage, getSpendBreakdown, getTokensUnderM
 		GetInferenceSpendCapsEndpoint:     getInferenceSpendCaps,
 		GetUsageTiersEndpoint:             getUsageTiers,
 		CreateCustomerSessionEndpoint:     createCustomerSession,
-		CreateCheckoutEndpoint:            createCheckout,
 		GetStripeCheckoutStatusEndpoint:   getStripeCheckoutStatus,
 		CreateStripeCheckoutEndpoint:      createStripeCheckout,
 		GetStripeSubscriptionEndpoint:     getStripeSubscription,
@@ -304,28 +302,6 @@ func (c *Client) GetUsageTiers(ctx context.Context) (res *UsageTiers, err error)
 func (c *Client) CreateCustomerSession(ctx context.Context, p *CreateCustomerSessionPayload) (res string, err error) {
 	var ires any
 	ires, err = c.CreateCustomerSessionEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(string), nil
-}
-
-// CreateCheckout calls the "createCheckout" endpoint of the "usage" service.
-// CreateCheckout may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) CreateCheckout(ctx context.Context, p *CreateCheckoutPayload) (res string, err error) {
-	var ires any
-	ires, err = c.CreateCheckoutEndpoint(ctx, p)
 	if err != nil {
 		return
 	}

@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP SDK manifests and JSON schemas intentionally rely on documented zero-value optional fields.
+//nolint:exhaustruct_v5 // MCP SDK manifests and JSON schemas intentionally rely on documented zero-value optional fields.
 package platformmcp
 
 import (

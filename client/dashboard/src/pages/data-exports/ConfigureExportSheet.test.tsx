@@ -18,6 +18,15 @@ vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: React.ReactNode }) => children,
 }));
 vi.mock("@/components/project-menu", () => ({ ProjectAvatar: () => null }));
+vi.mock("@gram/client/react-query/testDataExportRoute.js", () => ({
+  useTestDataExportRouteMutation: () => ({
+    mutate: vi.fn(),
+    data: undefined,
+    error: undefined,
+    isPending: false,
+    isError: false,
+  }),
+}));
 
 vi.mock("@/components/ui/Sheet", () => ({
   Sheet: ({ children }: { children: React.ReactNode }) => children,

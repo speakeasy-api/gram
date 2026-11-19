@@ -130,32 +130,6 @@ func BuildGetOrganizationFeaturesPayload(adminGetOrganizationFeaturesOrganizatio
 	return v, nil
 }
 
-// BuildSetOrganizationProviderSetupPayload builds the payload for the admin
-// setOrganizationProviderSetup endpoint from CLI flags.
-func BuildSetOrganizationProviderSetupPayload(adminSetOrganizationProviderSetupBody string, adminSetOrganizationProviderSetupAdminSessionToken string) (*admin.SetOrganizationProviderSetupPayload, error) {
-	var err error
-	var body SetOrganizationProviderSetupRequestBody
-	{
-		err = json.Unmarshal([]byte(adminSetOrganizationProviderSetupBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"enabled\": false,\n      \"organization_id\": \"abc123\"\n   }'")
-		}
-	}
-	var adminSessionToken *string
-	{
-		if adminSetOrganizationProviderSetupAdminSessionToken != "" {
-			adminSessionToken = &adminSetOrganizationProviderSetupAdminSessionToken
-		}
-	}
-	v := &admin.SetOrganizationProviderSetupPayload{
-		OrganizationID: body.OrganizationID,
-		Enabled:        body.Enabled,
-	}
-	v.AdminSessionToken = adminSessionToken
-
-	return v, nil
-}
-
 // BuildSetOrganizationFeaturePayload builds the payload for the admin
 // setOrganizationFeature endpoint from CLI flags.
 func BuildSetOrganizationFeaturePayload(adminSetOrganizationFeatureBody string, adminSetOrganizationFeatureAdminSessionToken string) (*admin.SetOrganizationFeaturePayload, error) {
@@ -4028,6 +4002,46 @@ func BuildStartMemoryEvalRunPayload(adminStartMemoryEvalRunBody string, adminSta
 	v := &admin.StartMemoryEvalRunPayload{}
 	if body.Config != nil {
 		v.Config = marshalAdminMemoryEvalRunConfigRequestBodyToAdminAdminMemoryEvalRunConfig(body.Config)
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildListAssistantOrganizationsPayload builds the payload for the admin
+// listAssistantOrganizations endpoint from CLI flags.
+func BuildListAssistantOrganizationsPayload(adminListAssistantOrganizationsAdminSessionToken string) (*admin.ListAssistantOrganizationsPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminListAssistantOrganizationsAdminSessionToken != "" {
+			adminSessionToken = &adminListAssistantOrganizationsAdminSessionToken
+		}
+	}
+	v := &admin.ListAssistantOrganizationsPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildRepairOrganizationAssistantAgentNamesPayload builds the payload for the
+// admin repairOrganizationAssistantAgentNames endpoint from CLI flags.
+func BuildRepairOrganizationAssistantAgentNamesPayload(adminRepairOrganizationAssistantAgentNamesBody string, adminRepairOrganizationAssistantAgentNamesAdminSessionToken string) (*admin.RepairOrganizationAssistantAgentNamesPayload, error) {
+	var err error
+	var body RepairOrganizationAssistantAgentNamesRequestBody
+	{
+		err = json.Unmarshal([]byte(adminRepairOrganizationAssistantAgentNamesBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminRepairOrganizationAssistantAgentNamesAdminSessionToken != "" {
+			adminSessionToken = &adminRepairOrganizationAssistantAgentNamesAdminSessionToken
+		}
+	}
+	v := &admin.RepairOrganizationAssistantAgentNamesPayload{
+		OrganizationID: body.OrganizationID,
 	}
 	v.AdminSessionToken = adminSessionToken
 

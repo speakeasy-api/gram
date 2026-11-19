@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/remotesessionprovider"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
@@ -288,7 +289,6 @@ func (c *ClientConfigurator) createOrReuseClient(ctx context.Context, request pl
 			OrganizationID:                  conv.ToPGText(request.OrganizationID),
 			RemoteSessionIssuerID:           issuerID,
 			ClientID:                        clientID,
-			ClientSecretEncrypted:           pgtype.Text{String: "", Valid: false},
 			ClientIDIssuedAt:                conv.ToPGTimestamptz(time.Now().UTC()),
 			ClientSecretExpiresAt:           pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
 			TokenEndpointAuthMethod:         conv.ToPGText("none"),
@@ -366,7 +366,7 @@ func requireNoCompetingFixtureBinding(ctx context.Context, queries *remotesessio
 }
 
 func validFixtureClient(client remotesessionsrepo.RemoteSessionClient) bool {
-	return !client.ProjectID.Valid && client.OrganizationID.Valid && client.ClientID != "" && !client.ClientSecretEncrypted.Valid && pgTextEquals(client.TokenEndpointAuthMethod, "none") && slices.Equal(client.Scope, []string{"tools:read"}) && !client.Audience.Valid && !client.ClientIDMetadataUri.Valid && !client.LegacyCallbackUrl
+	return !client.ProjectID.Valid && client.OrganizationID.Valid && client.ClientID != "" && !clientsecrets.Has(clientsecrets.Stored(client.ClientSecretEncrypted, client.ClientSecretOrgEncrypted)) && pgTextEquals(client.TokenEndpointAuthMethod, "none") && slices.Equal(client.Scope, []string{"tools:read"}) && !client.Audience.Valid && !client.ClientIDMetadataUri.Valid && !client.LegacyCallbackUrl
 }
 
 func pgTextEquals(value pgtype.Text, expected string) bool {

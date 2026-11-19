@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Refusals, results and repository literals only set fields applicable to the outcome.
+//nolint:exhaustruct_v5 // Refusals, results and repository literals only set fields applicable to the outcome.
 package platformmcp
 
 import (

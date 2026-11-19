@@ -30,6 +30,7 @@ func seedIDPCallbackChallenge(t *testing.T, ctx context.Context, ti *testInstanc
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
 		Endpoint: mcp.EndpointRef{
 			McpSlug:        toolset.McpSlug.String,
+			McpServerID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
 			CustomDomainID: toolset.CustomDomainID,
 		},
 		ClientID:            "test-client",
@@ -148,6 +149,7 @@ func TestHandleIDPCallback_RetiredRouteBaseRejected(t *testing.T) {
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
 		Endpoint: mcp.EndpointRef{
 			McpSlug:        toolset.McpSlug.String,
+			McpServerID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
 			CustomDomainID: toolset.CustomDomainID,
 			RouteBase:      "x/mcp",
 		},

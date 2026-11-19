@@ -6,7 +6,7 @@ import {
   useToolMetadata,
   type ToolMetadataByName,
 } from "@/hooks/useToolMetadata";
-import { useUserSessionToken } from "@/hooks/useUserSessionToken";
+import { useInspectOAuth } from "@/hooks/useInspectOAuth";
 import {
   firstPartyConnectUrl,
   getServerURL,
@@ -15,12 +15,13 @@ import {
 } from "@/lib/utils";
 import { useEffect, useMemo } from "react";
 
+import { useChatSessionHeaders } from "../../inspect/useChatSessionHeaders";
 import { useSyncToolMetadata } from "./useSyncToolMetadata";
 
 export interface RemoteMcpToolConnectionOptions {
   /** The Speakeasy-proxied MCP URL to connect to; undefined while it resolves. */
   mcpUrl: string | undefined;
-  /** The mcp_server id, used to mint the user-session JWT. */
+  /** The mcp_server id, used to scope the OAuth grant and metadata. */
   mcpServerId: string | undefined;
   /** The server's user_session_issuer id; also the issuer-gated flag. */
   userSessionIssuerId: string | undefined;
@@ -37,6 +38,15 @@ export interface RemoteMcpToolConnectionOptions {
   project?: { id: string; slug: string };
   /** False while the inputs above are still loading. */
   enabled?: boolean;
+  /**
+   * Authenticate with a dashboard chat session when there's no issuer, the
+   * way hosted servers accept the chat. Off for callers that only list.
+   */
+  chatSession?: boolean;
+  /** Use interactive OAuth in Inspect; the role editor keeps its draft in place. */
+  inspectOAuth?: boolean;
+  /** Legacy role editor preview, supplied by the role editor itself. */
+  dashboardToken?: { accessToken: string | undefined; isLoading: boolean };
 }
 
 export interface RemoteMcpToolConnection {
@@ -50,26 +60,24 @@ export interface RemoteMcpToolConnection {
   isError: boolean;
   isIssuerGated: boolean;
   refetch: () => void;
-  /**
-   * Opens the first-party connect page in a new tab; returning to this one
-   * lists the tools again. Undefined when the server has no connect page.
-   */
+  /** Starts sign-in when this server supports it. */
   connect: (() => void) | undefined;
   /** Make the stored tool metadata mirror the session. */
   sync: () => void;
   isSyncing: boolean;
   /** This viewer can change the stored tool metadata. */
   canWrite: boolean;
+  /** Where and how to send further MCP requests on this connection. */
+  connectUrl: string | undefined;
+  headers: Record<string, string> | undefined;
 }
 
 /**
  * Connects to a remote MCP server through Speakeasy to list its tools, and records
  * the tools it sees for the first time so they can be permissioned by name.
  *
- * Issuer-gated servers connect with a minted user-session JWT. With no
- * upstream session yet the listing comes back `needsAuth`, and `connect` opens
- * the first-party connect page; coming back to the tab tries again. Shared by
- * the Inspect tab and the role editor's tool access sheet.
+ * Inspect uses a user-bound OAuth grant; the role editor still uses the
+ * dashboard session so that a live preview cannot navigate away from a draft.
  */
 export function useRemoteMcpToolConnection({
   mcpUrl,
@@ -81,8 +89,15 @@ export function useRemoteMcpToolConnection({
   visibility,
   project,
   enabled = true,
+  chatSession = false,
+  inspectOAuth = false,
+  dashboardToken,
 }: RemoteMcpToolConnectionOptions): RemoteMcpToolConnection {
+  // Public tunnels serve anonymously and intentionally have no OAuth routes.
+  const publicTunnel =
+    inspectOAuth && !!tunneledMcpServerId && visibility === "public";
   const isIssuerGated = !!userSessionIssuerId;
+  const requiresToken = isIssuerGated && !publicTunnel;
   const canFirstPartyConnect = supportsFirstPartyConnect({
     userSessionIssuerId,
     platformSlug,
@@ -90,11 +105,22 @@ export function useRemoteMcpToolConnection({
     tunneledMcpServerId,
   });
 
-  const { accessToken, isLoading: isTokenLoading } = useUserSessionToken({
-    target: { kind: "mcpServer", id: enabled ? mcpServerId : undefined },
-    userSessionIssuerId,
-    project,
+  // Prefer the platform endpoint when it exists. A custom-domain-only server
+  // uses its own OAuth and MCP routes; the grant must stay on that same address.
+  const oauth = useInspectOAuth({
+    serverUrl:
+      enabled && inspectOAuth && requiresToken
+        ? platformSlug
+          ? `${getServerURL()}/mcp/${encodeURIComponent(platformSlug)}`
+          : mcpUrl
+        : undefined,
+    issuerId: userSessionIssuerId,
+    serverId: mcpServerId,
   });
+  const accessToken = inspectOAuth
+    ? oauth.accessToken
+    : dashboardToken?.accessToken;
+  const endpointUrl = oauth.serverUrl ?? mcpUrl;
 
   // Toolset-backed servers carry no stored metadata, so skip the request.
   const { metadataByTool, isLoading: isMetadataLoading } = useToolMetadata(
@@ -104,19 +130,36 @@ export function useRemoteMcpToolConnection({
 
   // Issuer-gated servers must wait for the JWT before connecting, otherwise the
   // unauthenticated request 401s and caches a spurious `needsAuth`.
+  const usesChatSession = chatSession && !isIssuerGated && !publicTunnel;
+  const chat = useChatSessionHeaders(enabled && usesChatSession);
   const headers = useMemo(
     () =>
-      accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
-    [accessToken],
+      accessToken
+        ? { Authorization: `Bearer ${accessToken}` }
+        : usesChatSession
+          ? chat.headers
+          : undefined,
+    [accessToken, usesChatSession, chat.headers],
   );
-  const connectionEnabled = enabled && (!isIssuerGated || !!accessToken);
+  const connectionEnabled =
+    enabled &&
+    (requiresToken ? !!accessToken : !usesChatSession || !!chat.headers);
 
   // Connect through the dev proxy origin (same-origin) so the AI SDK transport
   // carries the gram_session cookie and the gateway's proxied SSE response
   // isn't dropped on a cross-origin hop. No-op in prod / for custom domains.
-  const connectUrl = useMemo(() => mcpConnectionUrl(mcpUrl), [mcpUrl]);
+  const connectUrl = useMemo(
+    () => mcpConnectionUrl(endpointUrl),
+    [endpointUrl],
+  );
 
-  const { tools, isLoading, needsAuth, isError, refetch } = useProxiedMcpTools(
+  const {
+    tools,
+    isLoading,
+    needsAuth: listingNeedsAuth,
+    isError: isListError,
+    refetch: refetchTools,
+  } = useProxiedMcpTools(
     connectUrl,
     // Every failure stays inline as `isError`, so each consumer can offer its
     // own retry instead of an error boundary.
@@ -127,20 +170,42 @@ export function useRemoteMcpToolConnection({
   // the gram_session cookie on the backend origin (not the dev proxy). Built
   // from the platform slug only — the display URL may be a custom domain.
   const authUrl = useMemo(() => {
-    if (!canFirstPartyConnect || !platformSlug) return undefined;
+    if (inspectOAuth || !canFirstPartyConnect || !platformSlug)
+      return undefined;
     return firstPartyConnectUrl(`${getServerURL()}/mcp/${platformSlug}`);
-  }, [canFirstPartyConnect, platformSlug]);
+  }, [inspectOAuth, canFirstPartyConnect, platformSlug]);
+
+  // A chat session that couldn't be created leaves nothing to connect with;
+  // report it as a failed listing so the retry mints a new one. A failed
+  // background refresh keeps the previous token, so it is not fatal.
+  const chatFailed = usesChatSession && !!chat.error && !chat.headers;
+  const needsAuth =
+    listingNeedsAuth ||
+    (enabled && inspectOAuth && requiresToken && !accessToken && !oauth.error);
+  const isError = isListError || chatFailed || oauth.error;
+  const refetch =
+    oauth.error && oauth.connect
+      ? oauth.connect
+      : chatFailed
+        ? chat.refetch
+        : refetchTools;
 
   // When the user comes back from the connect tab, re-attempt the listing so a
   // freshly linked session surfaces without a manual refresh.
   useEffect(() => {
-    if (!needsAuth) return;
+    if (!authUrl || !listingNeedsAuth) return;
     const onFocus = () => refetch();
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
-  }, [needsAuth, refetch]);
+  }, [authUrl, listingNeedsAuth, refetch]);
 
-  const loading = !enabled || isTokenLoading || isLoading || isMetadataLoading;
+  const loading =
+    !enabled ||
+    !!dashboardToken?.isLoading ||
+    oauth.isConnecting ||
+    chat.isLoading ||
+    isLoading ||
+    isMetadataLoading;
 
   // Only remote-backed servers carry tool metadata, and there is nothing to
   // reconcile until both the session and the stored set have loaded.
@@ -160,11 +225,15 @@ export function useRemoteMcpToolConnection({
     isError,
     isIssuerGated,
     refetch,
-    connect: authUrl
-      ? () => window.open(authUrl, "_blank", "noopener,noreferrer")
-      : undefined,
+    connect: inspectOAuth
+      ? oauth.connect
+      : authUrl
+        ? () => window.open(authUrl, "_blank", "noopener,noreferrer")
+        : undefined,
     sync,
     isSyncing,
     canWrite,
+    connectUrl,
+    headers,
   };
 }

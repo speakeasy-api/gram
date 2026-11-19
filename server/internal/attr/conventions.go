@@ -499,12 +499,26 @@ const (
 	NetworkIngressResultKey             = attribute.Key("gram.network_ingress.result")
 	NetworkIngressReasonKey             = attribute.Key("gram.network_ingress.reason")
 	NetworkIngressErrorCodeKey          = attribute.Key("gram.network_ingress.error_code")
-	TailnetGatewaySlotKey               = attribute.Key("gram.tailnet_gateway.slot")
-	TailnetGatewayNodeStatusKey         = attribute.Key("gram.tailnet_gateway.node_status")
-	TailnetGatewayOperationKey          = attribute.Key("gram.tailnet_gateway.operation")
-	TailnetGatewayResultKey             = attribute.Key("gram.tailnet_gateway.result")
-	TailnetGatewayIdentityKindKey       = attribute.Key("gram.tailnet_gateway.identity_kind")
-	NetworkIngressDurationKey           = attribute.Key("gram.network_ingress.operation.duration")
+	// NetworkIngressKubernetesReasonKey is the machine-readable reason of a
+	// failed Kubernetes API call (for example Conflict or Forbidden).
+	NetworkIngressKubernetesReasonKey = attribute.Key("gram.network_ingress.kubernetes.reason")
+
+	// NetworkIngressKubernetesStatusCodeKey is the HTTP status of a failed
+	// Kubernetes API call.
+	NetworkIngressKubernetesStatusCodeKey = attribute.Key("gram.network_ingress.kubernetes.status_code")
+
+	// NetworkIngressKubernetesResourceKey is the type a failed Kubernetes API
+	// call addressed, qualified by its API group. The API server reports the
+	// plural resource for most failures (tailnets.tailscale.com) but the Kind
+	// for validation failures (Tailnet.tailscale.com), so filter on both.
+	NetworkIngressKubernetesResourceKey = attribute.Key("gram.network_ingress.kubernetes.resource")
+
+	TailnetGatewaySlotKey         = attribute.Key("gram.tailnet_gateway.slot")
+	TailnetGatewayNodeStatusKey   = attribute.Key("gram.tailnet_gateway.node_status")
+	TailnetGatewayOperationKey    = attribute.Key("gram.tailnet_gateway.operation")
+	TailnetGatewayResultKey       = attribute.Key("gram.tailnet_gateway.result")
+	TailnetGatewayIdentityKindKey = attribute.Key("gram.tailnet_gateway.identity_kind")
+	NetworkIngressDurationKey     = attribute.Key("gram.network_ingress.operation.duration")
 
 	CustomDomainHealthStatusKey         = attribute.Key("gram.custom_domain.health.status")
 	CustomDomainHealthIssueKey          = attribute.Key("gram.custom_domain.health.issue")
@@ -576,21 +590,17 @@ const (
 	// McpKillswitchResourceClassKey is the bounded kill-switch resource
 	// coverage class of a covered MCP tools/call. Never a server identifier.
 	McpKillswitchResourceClassKey = attribute.Key("gram.mcp.killswitch.resource_class")
-	// McpEntryPointKey is the bounded entry-point dimension on the
-	// mcp.toolset_slug_fallback counter: which public surface resolved a
-	// request through the legacy toolsets.mcp_slug lookup.
-	McpEntryPointKey       = attribute.Key("gram.mcp.entry_point")
-	McpRequestedTagsKey    = attribute.Key("gram.mcp.requested_tags")
-	McpToolsReturnedKey    = attribute.Key("gram.mcp.tools_returned")
-	McpToolsFilteredKey    = attribute.Key("gram.mcp.tools_filtered")
-	McpServerIDKey         = attribute.Key("gram.mcp_server.id")
-	McpServerIDsKey        = attribute.Key("gram.mcp_server.ids")
-	McpEndpointIDKey       = attribute.Key("gram.mcp_endpoint.id")
-	MetaMcpServerIDKey     = attribute.Key("gram.meta_mcp_server.id")
-	MetaMemberBackendKey   = attribute.Key("gram.meta.member.backend")
-	MetaDispatchOutcomeKey = attribute.Key("gram.meta.dispatch.outcome")
-	McpURLKey              = attribute.Key("gram.mcp.url")
-	McpSessionSubjectKey   = attribute.Key("gram.mcp.session_subject")
+	McpRequestedTagsKey           = attribute.Key("gram.mcp.requested_tags")
+	McpToolsReturnedKey           = attribute.Key("gram.mcp.tools_returned")
+	McpToolsFilteredKey           = attribute.Key("gram.mcp.tools_filtered")
+	McpServerIDKey                = attribute.Key("gram.mcp_server.id")
+	McpServerIDsKey               = attribute.Key("gram.mcp_server.ids")
+	McpEndpointIDKey              = attribute.Key("gram.mcp_endpoint.id")
+	MetaMcpServerIDKey            = attribute.Key("gram.meta_mcp_server.id")
+	MetaMemberBackendKey          = attribute.Key("gram.meta.member.backend")
+	MetaDispatchOutcomeKey        = attribute.Key("gram.meta.dispatch.outcome")
+	McpURLKey                     = attribute.Key("gram.mcp.url")
+	McpSessionSubjectKey          = attribute.Key("gram.mcp.session_subject")
 
 	// Gateway consent diagnostics contain IDs and comparison results only,
 	// never credentials, configuration hashes, or captured tool definitions.
@@ -601,11 +611,6 @@ const (
 	McpConsentExecuteKey         = attribute.Key("gram.mcp.consent.execute")
 	McpConsentComparisonsKey     = attribute.Key("gram.mcp.consent.comparisons")
 	McpConsentExpiresAtKey       = attribute.Key("gram.mcp.consent.expires_at")
-
-	// Legacy toolsets.mcp_slug fallback attribution; logs only, never metric dimensions.
-	McpFallbackRequestHostKey         = attribute.Key("gram.mcp.fallback.request_host")
-	McpFallbackCanonicalWrapperKey    = attribute.Key("gram.mcp.fallback.canonical_wrapper")
-	McpFallbackToolsetCustomDomainKey = attribute.Key("gram.mcp.fallback.toolset_custom_domain")
 
 	// McpClientNameKey / McpClientVersionKey carry the MCP caller's
 	// self-reported identity from the initialize handshake (or the
@@ -696,6 +701,26 @@ const (
 	// the encryption key a process holds, so pods with different keys can be
 	// told apart without revealing the key.
 	EncryptionKeyFingerprintKey = attribute.Key("gram.encryption.key_fingerprint")
+
+	// OrgEncryptionUseCaseKey is the organization encryption use case a value
+	// or key belongs to, such as oauth-session-tokens.
+	OrgEncryptionUseCaseKey = attribute.Key("gram.orgencryption.use_case")
+
+	// OrgEncryptionTransitionStateKey is an organization's transition state
+	// for one use case: platform_key, dual_write or org_kms.
+	OrgEncryptionTransitionStateKey = attribute.Key("gram.orgencryption.transition_state")
+
+	// OrgEncryptionErrorCodeKey is the ENC-* code of a platform-key
+	// decryption failure. It never carries the value or ciphertext.
+	OrgEncryptionErrorCodeKey = attribute.Key("gram.orgencryption.error_code")
+
+	// OrgEncryptionMismatchedCountKey counts values whose two copies did not
+	// match during verification.
+	OrgEncryptionMismatchedCountKey = attribute.Key("gram.orgencryption.mismatched_count")
+
+	// OrgEncryptionUnopenableCountKey counts organization-key copies that did
+	// not open during verification.
+	OrgEncryptionUnopenableCountKey = attribute.Key("gram.orgencryption.unopenable_count")
 
 	// OAuthValidationTriggerKey names which caller presented a stored remote
 	// session credential to its upstream: the consent page's Verify, the
@@ -859,6 +884,11 @@ const (
 	ExtMcpConnectionSubjectKindKey      = attribute.Key("speakeasy.mcp_connection.subject_kind")
 	ExtMcpConnectionClientNameKey       = attribute.Key("speakeasy.mcp_connection.client_name")
 	ExtMcpConnectionClientVersionKey    = attribute.Key("speakeasy.mcp_connection.client_version")
+
+	// TestEventKey marks every record a data export test sends, so a destination can filter it out.
+	TestEventKey = attribute.Key("speakeasy.test_event")
+	// TestEventIDKey is shared by every record one data export test sends, so a destination can find them.
+	TestEventIDKey = attribute.Key("speakeasy.test_event_id")
 
 	ConnectionDropCountsKey           = attribute.Key("gram.connection.drop_counts")
 	ConnectionDropReasonKey           = attribute.Key("gram.connection.drop_reason")
@@ -1046,6 +1076,9 @@ const (
 	// and sender produced a row (see the HookEndpointGeneration* values), so
 	// traffic on retired endpoints can be found and moved to a supported one.
 	HookEndpointGenerationKey = attribute.Key("gram.hook.endpoint_generation")
+	// HookVersionStatusKey is a hooks install's support status: current,
+	// behind, unsupported or unknown.
+	HookVersionStatusKey = attribute.Key("gram.hook.version_status")
 	// Device-side delivery failure reports (client.delivery_failed): what the
 	// speakeasy-hooks binary observed when an event could not reach the
 	// control plane. Rows carrying these are diagnostic
@@ -1064,6 +1097,13 @@ const (
 	HookDeliveryFailedIdempotencyKeyKey = attribute.Key("gram.hook.delivery.failed_idempotency_key")
 	HookDeliverySessionIDKey            = attribute.Key("gram.hook.delivery.session_id")
 	HookDeliverySpoolDepthKey           = attribute.Key("gram.hook.delivery.spool_depth")
+	// Bootstrap install failure reports (client.install_failed): a plugin's
+	// bootstrap script could not install the hooks binary. Rows carrying
+	// these are diagnostic. The version the script tried to install is kept
+	// apart from gram.hook.device.binary_version, which names a binary that
+	// actually ran.
+	HookInstallCauseKey   = attribute.Key("gram.hook.install.cause")
+	HookInstallVersionKey = attribute.Key("gram.hook.install.version")
 	// Hardware identity the Speakeasy device agent (speakeasyd) reports via
 	// the Gram-Device-* headers, recorded on the request log for its
 	// endpoints so a fleet's requests can be counted and told apart per
@@ -1869,6 +1909,12 @@ func SlogHookDeliveryPhase(v string) slog.Attr      { return slog.String(string(
 func HookDeliveryCause(v string) attribute.KeyValue { return HookDeliveryCauseKey.String(v) }
 func SlogHookDeliveryCause(v string) slog.Attr      { return slog.String(string(HookDeliveryCauseKey), v) }
 
+func HookInstallCause(v string) attribute.KeyValue { return HookInstallCauseKey.String(v) }
+func SlogHookInstallCause(v string) slog.Attr      { return slog.String(string(HookInstallCauseKey), v) }
+
+func HookInstallVersion(v string) attribute.KeyValue { return HookInstallVersionKey.String(v) }
+func SlogHookInstallVersion(v string) slog.Attr      { return slog.String(string(HookInstallVersionKey), v) }
+
 func SlogHookDeliveryStatusCode(v int) slog.Attr {
 	return slog.Int(string(HookDeliveryStatusCodeKey), v)
 }
@@ -2551,6 +2597,18 @@ func SlogNetworkIngressErrorCode[V ~string](v V) slog.Attr {
 	return slog.String(string(NetworkIngressErrorCodeKey), string(v))
 }
 
+func SlogNetworkIngressKubernetesReason[V ~string](v V) slog.Attr {
+	return slog.String(string(NetworkIngressKubernetesReasonKey), string(v))
+}
+
+func SlogNetworkIngressKubernetesStatusCode(v int32) slog.Attr {
+	return slog.Int(string(NetworkIngressKubernetesStatusCodeKey), int(v))
+}
+
+func SlogNetworkIngressKubernetesResource(v string) slog.Attr {
+	return slog.String(string(NetworkIngressKubernetesResourceKey), v)
+}
+
 func TailnetGatewaySlot(v int32) attribute.KeyValue { return TailnetGatewaySlotKey.Int(int(v)) }
 func SlogTailnetGatewaySlot(v int32) slog.Attr {
 	return slog.Int(string(TailnetGatewaySlotKey), int(v))
@@ -2699,6 +2757,34 @@ func OAuthStoredToken[V ~string](v V) attribute.KeyValue {
 
 func SlogEncryptionKeyFingerprint(v string) slog.Attr {
 	return slog.String(string(EncryptionKeyFingerprintKey), v)
+}
+
+func OrgEncryptionUseCase[V ~string](v V) attribute.KeyValue {
+	return OrgEncryptionUseCaseKey.String(string(v))
+}
+
+func SlogOrgEncryptionUseCase[V ~string](v V) slog.Attr {
+	return slog.String(string(OrgEncryptionUseCaseKey), string(v))
+}
+
+func OrgEncryptionTransitionState[V ~string](v V) attribute.KeyValue {
+	return OrgEncryptionTransitionStateKey.String(string(v))
+}
+
+func SlogOrgEncryptionTransitionState[V ~string](v V) slog.Attr {
+	return slog.String(string(OrgEncryptionTransitionStateKey), string(v))
+}
+
+func SlogOrgEncryptionErrorCode(v string) slog.Attr {
+	return slog.String(string(OrgEncryptionErrorCodeKey), v)
+}
+
+func SlogOrgEncryptionMismatchedCount(v int64) slog.Attr {
+	return slog.Int64(string(OrgEncryptionMismatchedCountKey), v)
+}
+
+func SlogOrgEncryptionUnopenableCount(v int64) slog.Attr {
+	return slog.Int64(string(OrgEncryptionUnopenableCountKey), v)
 }
 
 func OAuthValidationTrigger[V ~string](v V) attribute.KeyValue {
@@ -3114,6 +3200,8 @@ func SlogOrganizationID(v string) slog.Attr      { return slog.String(string(Org
 func OrganizationSlug(v string) attribute.KeyValue { return OrganizationSlugKey.String(v) }
 func SlogOrganizationSlug(v string) slog.Attr      { return slog.String(string(OrganizationSlugKey), v) }
 
+func HookVersionStatus(v string) attribute.KeyValue { return HookVersionStatusKey.String(v) }
+
 func WorkOSOrganizationID(v string) attribute.KeyValue { return WorkOSOrganizationIDKey.String(v) }
 func SlogWorkOSOrganizationID(v string) slog.Attr {
 	return slog.String(string(WorkOSOrganizationIDKey), v)
@@ -3319,6 +3407,16 @@ func SlogExtMcpConnectionStepResult(v string) slog.Attr {
 func ExtMcpConnectionFinal(v bool) attribute.KeyValue { return ExtMcpConnectionFinalKey.Bool(v) }
 func SlogExtMcpConnectionFinal(v bool) slog.Attr {
 	return slog.Bool(string(ExtMcpConnectionFinalKey), v)
+}
+
+func TestEvent(v bool) attribute.KeyValue { return TestEventKey.Bool(v) }
+func SlogTestEvent(v bool) slog.Attr {
+	return slog.Bool(string(TestEventKey), v)
+}
+
+func TestEventID(v string) attribute.KeyValue { return TestEventIDKey.String(v) }
+func SlogTestEventID(v string) slog.Attr {
+	return slog.String(string(TestEventIDKey), v)
 }
 
 func ExtMcpConnectionUserMessage(v string) attribute.KeyValue {
@@ -3941,23 +4039,6 @@ func SlogMcpSkillTargetKind[V ~string](v V) slog.Attr {
 func McpSkillTargetID(v string) attribute.KeyValue { return McpSkillTargetIDKey.String(v) }
 func SlogMcpSkillTargetID(v string) slog.Attr {
 	return slog.String(string(McpSkillTargetIDKey), v)
-}
-
-func McpEntryPoint[V ~string](v V) attribute.KeyValue { return McpEntryPointKey.String(string(v)) }
-func SlogMcpEntryPoint[V ~string](v V) slog.Attr {
-	return slog.String(string(McpEntryPointKey), string(v))
-}
-
-func SlogMcpFallbackRequestHost[V ~string](v V) slog.Attr {
-	return slog.String(string(McpFallbackRequestHostKey), string(v))
-}
-
-func SlogMcpFallbackCanonicalWrapper(v bool) slog.Attr {
-	return slog.Bool(string(McpFallbackCanonicalWrapperKey), v)
-}
-
-func SlogMcpFallbackToolsetCustomDomain[V ~string](v V) slog.Attr {
-	return slog.String(string(McpFallbackToolsetCustomDomainKey), string(v))
 }
 
 func McpKillswitchSurface[V ~string](v V) attribute.KeyValue {

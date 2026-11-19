@@ -626,6 +626,7 @@ var _ = Service("access", func() {
 		Meta("openapi:operationId", "listShadowMCPInventory")
 		Meta("openapi:extension:x-speakeasy-name-override", "listShadowMCPInventory")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventory"}`)
+		shared.CursorPagination()
 	})
 
 	Method("getShadowMCPInventoryServer", func() {
@@ -656,6 +657,37 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventoryServer"}`)
 	})
 
+	Method("findShadowMCPInventoryServers", func() {
+		Description("Find the Shadow MCP servers in use whose upstream URL matches one of the given URLs, for example the endpoints of a server about to be added from the catalog. URLs match when they name the same upstream (case, default ports and a trailing slash are ignored). Requires an authenticated session authorized for org:admin on the active organization.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("project_id", String, func() {
+				Format(FormatUUID)
+			})
+			Attribute("server_urls", ArrayOf(String), "The upstream URLs to look for.", func() {
+				MinLength(1)
+				MaxLength(50)
+			})
+			Required("project_id", "server_urls")
+			security.SessionPayload()
+		})
+
+		Result(FindShadowMCPInventoryServersResult)
+
+		HTTP(func() {
+			GET("/rpc/access.findShadowMCPInventoryServers")
+			Param("project_id")
+			Param("server_urls")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "findShadowMCPInventoryServers")
+		Meta("openapi:extension:x-speakeasy-name-override", "findShadowMCPInventoryServers")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "FindShadowMCPInventoryServers"}`)
+	})
+
 	Method("updateShadowMCPInventoryServerName", func() {
 		Description("Update or clear the administrator-defined display name for one project-scoped Shadow MCP inventory server URL.")
 		Security(security.Session)
@@ -674,6 +706,26 @@ var _ = Service("access", func() {
 		Meta("openapi:operationId", "updateShadowMCPInventoryServerName")
 		Meta("openapi:extension:x-speakeasy-name-override", "updateShadowMCPInventoryServerName")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateShadowMCPInventoryServerName", "type": "mutation"}`)
+	})
+
+	Method("setShadowMCPOfficialServer", func() {
+		Description("Link one project-scoped Shadow MCP server to its official version, or remove the link. While a link exists, direct connections are blocked wherever a Shadow MCP policy applies and agents are pointed at the linked server. With mcp_server_id the link is added (or restored, when it was removed before) or pointed at that server; omitting mcp_server_id removes the link. Each add, change and removal is recorded in the audit log. Requires an authenticated session authorized for org:admin on the active organization.")
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(SetShadowMCPOfficialServerForm)
+			security.SessionPayload()
+		})
+
+		HTTP(func() {
+			POST("/rpc/access.setShadowMCPOfficialServer")
+			security.SessionHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "setShadowMCPOfficialServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "setShadowMCPOfficialServer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetShadowMCPOfficialServer", "type": "mutation"}`)
 	})
 
 	Method("listShadowMCPInventoryUsers", func() {
@@ -1646,13 +1698,46 @@ var ExplainedAccessLevelModel = Type("ExplainedAccessLevel", func() {
 	Attribute("rules", ArrayOf(ExplainedAccessRuleModel), "Every rule matching this access, deciding rules first.")
 })
 
+// One loaded grant that matched a member's use of one upstream credential.
+var ExplainedCredentialRuleModel = Type("ExplainedCredentialRule", func() {
+	Required("principal_urn", "kind", "display_name", "applies_to", "effect", "via_directory_mapping")
+
+	Attribute("principal_urn", String, "Canonical principal URN holding the rule.")
+	Attribute("kind", String, "What the principal identifies.", func() {
+		Enum("everyone", "role", "user", "unknown")
+	})
+	Attribute("display_name", String, "Human-readable name for the principal.")
+	Attribute("applies_to", String, "Whether the rule names this credential (credential), every credential of its kind (credential_type), or every credential (all_credentials).")
+	Attribute("project_bound", Boolean, "Whether the rule applies only on servers in this server's project.")
+	Attribute("effect", String, "How the rule shaped the decision: allows, overrides, overridden, blocks or blocked, with the same meanings as an access rule's effect.")
+	Attribute("reason", String, "Why a blocked rule made directly to the member did not override the block: wildcard_direct_grant, narrower_direct_grant or own_exclusion.")
+	Attribute("via_directory_mapping", Boolean, "Whether the member holds this role only through a directory role mapping.")
+})
+
+// Whether a member may use one upstream credential the server offers.
+var ExplainedCredentialAccessModel = Type("ExplainedCredentialAccess", func() {
+	Required("auth_client_id", "name", "client_type", "enabled", "allowed", "rules")
+
+	Attribute("auth_client_id", String, "The credential's auth client ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The credential's name.")
+	Attribute("client_type", String, "The kind of credential.", func() {
+		Enum("remote_session", "service_account", "static_credential", "pass_through", "ema")
+	})
+	Attribute("enabled", Boolean, "Whether the credential is turned on. A turned-off credential is unusable whatever the rules say.")
+	Attribute("allowed", Boolean, "Whether the member's rules let them use it, with their own connection for a personal credential.")
+	Attribute("rules", ArrayOf(ExplainedCredentialRuleModel), "Every rule matching this use, deciding rules first.")
+})
+
 var ExplainResourceAccessResult = Type("ExplainResourceAccessResult", func() {
-	Required("visibility", "levels")
+	Required("visibility", "levels", "credentials")
 
 	Attribute("visibility", String, "Who may connect without a rule. public: connecting is not checked against rules. private: rules decide. disabled: nobody can connect.", func() {
 		Enum("public", "private", "disabled")
 	})
 	Attribute("levels", ArrayOf(ExplainedAccessLevelModel), "The decision for use, view and manage, in that order.")
+	Attribute("credentials", ArrayOf(ExplainedCredentialAccessModel), "For each upstream credential the server offers, whether the member may use it. A caller needs both use access to the server and one usable credential to reach an upstream that requires sign-in.")
 })
 
 var MemberModel = Type("AccessMember", func() {
@@ -1801,12 +1886,66 @@ var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
 	Attribute("approval_request", ShadowMCPInventoryApprovalRequestModel)
 	Attribute("allowed_policy_ids", ArrayOf(String))
 	Attribute("blocked_policy_ids", ArrayOf(String), "Enabled blocking policies that block this server via a risk_policy:block grant (allow_all policies only).")
+	Attribute("official_server", ShadowMCPOfficialServerModel, func() {
+		Description("The MCP server linked as this Shadow MCP server's official version. While it is linked, direct use is blocked wherever a Shadow MCP policy applies, and the block points agents here.")
+	})
+	Attribute("suggested_official_server", ShadowMCPSuggestedOfficialServerModel, func() {
+		Description("A project MCP server that proxies to the same upstream URL, offered as the server to link. Present only while no official server is linked.")
+	})
+})
+
+var ShadowMCPSuggestedOfficialServerModel = Type("ShadowMCPSuggestedOfficialServer", func() {
+	Description("A project MCP server that already serves a Shadow MCP server's upstream URL and can be linked as its official version.")
+	Required("mcp_server_id", "name")
+
+	Attribute("mcp_server_id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The server's display name.")
+	Attribute("slug", String, "The server's slug, when it has one.")
+})
+
+var ShadowMCPOfficialServerModel = Type("ShadowMCPOfficialServer", func() {
+	Description("The official, Speakeasy-served version of a Shadow MCP server, linked by an administrator.")
+	Required("mcp_server_id", "name")
+
+	Attribute("mcp_server_id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The official server's display name.")
+	Attribute("slug", String, "The official server's slug, when it has one.")
+	Attribute("url", String, "Where agents connect. A gateway's address when the server is a gateway member. Absent while the server has no endpoint.")
+	Attribute("gateway_name", String, "The gateway that serves the official server, when url is a gateway's address.")
+	Attribute("direct_access_allowed", Boolean, func() {
+		Description("Deprecated: links no longer have an on/off switch, so this is always false. Kept one release so older dashboards, which require it, keep rendering, then removed.")
+	})
+})
+
+var SetShadowMCPOfficialServerForm = Type("SetShadowMCPOfficialServerForm", func() {
+	Required("project_id", "server_url")
+
+	Attribute("project_id", String, func() { Format(FormatUUID) })
+	Attribute("server_url", String, "The Shadow MCP server's URL.", func() { Format(FormatURI) })
+	Attribute("mcp_server_id", String, "The MCP server to link as the official version. Omit it to remove the link.", func() { Format(FormatUUID) })
 })
 
 var ListShadowMCPInventoryResult = Type("ListShadowMCPInventoryResult", func() {
 	Required("servers")
 	Attribute("servers", ArrayOf(ShadowMCPInventoryServerModel))
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
+})
+
+var ShadowMCPInventoryServerMatchModel = Type("ShadowMCPInventoryServerMatch", func() {
+	Description("A Shadow MCP server in use whose upstream URL matches one of the URLs looked up.")
+	Required("server_url", "server")
+
+	Attribute("server_url", String, "The URL that was looked up, exactly as given.")
+	Attribute("server", ShadowMCPInventoryServerModel)
+})
+
+var FindShadowMCPInventoryServersResult = Type("FindShadowMCPInventoryServersResult", func() {
+	Required("matches")
+	Attribute("matches", ArrayOf(ShadowMCPInventoryServerMatchModel), "One entry per looked-up URL that matches a Shadow MCP server in use. URLs without a match are left out.")
 })
 
 var ShadowMCPInventoryUserSourceModel = Type("ShadowMCPInventoryUserSource", func() {

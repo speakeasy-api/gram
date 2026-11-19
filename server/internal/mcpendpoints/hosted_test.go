@@ -21,7 +21,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -29,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -60,7 +60,7 @@ func newHostedAddressFixture(t *testing.T, accountType string) (context.Context,
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	authzEngine := authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), ti.conn, testenv.NewEncryptionClient(t), guardianPolicy, nil)
+	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), ti.conn, testenv.NewEncryptionClient(t), clientsecretstest.New(t, ti.conn, testenv.NewEncryptionClient(t)), guardianPolicy, nil)
 	toolsetsSvc := toolsets.NewService(logger, tracerProvider, guardianPolicy, ti.conn, ti.sessionManager, nil, authzEngine, audit.NewLogger(), nil, false, revoker)
 
 	created, err := toolsetsSvc.CreateToolset(ctx, &toolsetsgen.CreateToolsetPayload{Name: "Hosted address", ToolUrns: []string{}})
@@ -81,7 +81,7 @@ func (f *hostedAddressFixture) payload(slug string, mutate func(*gen.UpdateMcpEn
 	return payload
 }
 
-// requireProjected returns the hosted server's single endpoint and asserts the toolset has no legacy alias.
+// requireProjected returns the hosted server's single endpoint.
 func (f *hostedAddressFixture) requireProjected(t *testing.T, ctx context.Context) mcpendpointsrepo.McpEndpoint {
 	t.Helper()
 
@@ -93,9 +93,6 @@ func (f *hostedAddressFixture) requireProjected(t *testing.T, ctx context.Contex
 func (f *hostedAddressFixture) endpoints(t *testing.T, ctx context.Context) []mcpendpointsrepo.McpEndpoint {
 	t.Helper()
 
-	alias, err := legacyalias.Get(ctx, f.ti.conn, f.projectID, f.toolset.ID)
-	require.NoError(t, err)
-	require.Equal(t, legacyalias.None(), alias, "endpoint writes never give the toolset a legacy alias")
 	endpoints, err := mcpendpointsrepo.New(f.ti.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: f.projectID, McpServerID: f.toolset.ID})
 	require.NoError(t, err)
 	return endpoints
@@ -145,7 +142,7 @@ func TestUpdateMcpEndpointHostedRenameMovesEndpointInPlace(t *testing.T) {
 	require.Equal(t, f.endpoint.ID, endpoint.ID)
 	require.Equal(t, newSlug, endpoint.Slug)
 	require.True(t, f.resolves(t, ctx, newSlug))
-	require.False(t, f.resolves(t, ctx, oldSlug), "a server created without a toolset alias stops serving its old address")
+	require.False(t, f.resolves(t, ctx, oldSlug), "the server stops serving its old address")
 
 	record, err := audittest.LatestAuditLogByActionAndSubject(ctx, f.ti.conn, audit.ActionMcpEndpointUpdate, f.endpoint.ID.String())
 	require.NoError(t, err)

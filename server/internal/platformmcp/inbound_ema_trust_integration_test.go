@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -98,10 +99,10 @@ func newInboundEMAServicesFixture(t *testing.T, maxConns int32) (context.Context
 	serverURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
 	hosts := authserver.Hosts{ServerURL: serverURL.String(), AuthenticationHostBaseURL: "", PlatformHosts: nil}
-	users := usersessions.NewService(logger, tracer, meter, conn, &sessions.Manager{}, nil, engine, audit.NewLogger(), policy, nil, enc, usersessions.NewSigner("test-jwt-secret"), serverURL.String(), hosts, ratelimit.NewRedisStore(redisClient), func(_ context.Context, _ string) bool { return false })
-	remote := remotesessions.NewService(logger, tracer, meter, conn, &sessions.Manager{}, engine, enc,
+	users := usersessions.NewService(logger, tracer, meter, conn, &sessions.Manager{}, nil, engine, audit.NewLogger(), policy, nil, enc, clientsecretstest.New(t, conn, enc), usersessions.NewSigner("test-jwt-secret"), serverURL.String(), hosts, ratelimit.NewRedisStore(redisClient), func(_ context.Context, _ string) bool { return false })
+	remote := remotesessions.NewService(logger, tracer, meter, conn, &sessions.Manager{}, engine, enc, clientsecretstest.New(t, conn, enc),
 		environments.NewEnvironmentEntries(logger, conn, enc, mcpmetadatarepo.New(conn)), policy, nil, audit.NewLogger(), serverURL,
-		remotesessions.NewIdentityCommitter(logger, conn, enc, audit.NewLogger(), serverURL, policy, nil, nil),
+		remotesessions.NewIdentityCommitter(logger, conn, enc, clientsecretstest.New(t, conn, enc), audit.NewLogger(), serverURL, policy, nil, nil),
 		remotesessions.NewRefreshService(logger, meter, conn, enc, policy, nil, cache.NewRedisCacheAdapter(redisClient)),
 		productfeatures.NewClient(logger, tracer, conn, redisClient), nil)
 

@@ -39,6 +39,24 @@ type Service struct {
 	authz         *authz.Engine
 	featureClient *Client
 	mutator       *Mutator
+
+	// capabilities are the deployment-wide features this process can serve.
+	// They come from its configuration, so they are the same for every
+	// organization.
+	capabilities DeploymentCapabilities
+}
+
+// DeploymentCapabilities reports which deployment-wide features this process
+// can serve. Unlike organization features, they come from the deployment's
+// configuration and cannot be toggled per organization.
+type DeploymentCapabilities struct {
+	// AssistantsAvailable is false when the deployment runs with the disabled
+	// assistant runtime provider.
+	AssistantsAvailable bool
+
+	// FunctionsAvailable is false when the deployment runs with the disabled
+	// Functions provider.
+	FunctionsAvailable bool
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -51,6 +69,7 @@ func NewService(
 	redisClient *redis.Client,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	capabilities DeploymentCapabilities,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("product_features"))
 
@@ -64,6 +83,8 @@ func NewService(
 		authz:         authzEngine,
 		featureClient: featureClient,
 		mutator:       NewMutator(featureClient, auditLogger),
+
+		capabilities: capabilities,
 	}
 }
 
@@ -130,10 +151,7 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 	// organization admins; org-settable operational toggles need org:admin only.
 	// Retired rollout flags and upstream auth enforcement, which has readiness
 	// checks of its own, cannot be changed here, including by staff.
-	if feature == FeatureProviderSetup {
-		return oops.E(oops.CodeForbidden, nil, "Provider setup rollout is managed through the staff admin API.")
-	}
-	if feature == Feature("automatic-role-distribution") {
+	if feature == Feature("automatic-role-distribution") || feature == Feature("provider_setup") {
 		return oops.E(oops.CodeInvalid, nil, "unknown product feature")
 	}
 	if feature == FeatureUpstreamAuthEnforced {
@@ -249,7 +267,6 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		upstreamAuthEnforced = &enforced
 	}
 	return &gen.ProductFeatures{
-		ProviderSetupEnabled:                    new(snapshot.ProviderSetupEnabled),
 		LogsEnabled:                             snapshot.LogsEnabled,
 		ToolIoLogsEnabled:                       snapshot.ToolIoLogsEnabled,
 		SessionCaptureEnabled:                   snapshot.SessionCaptureEnabled,
@@ -272,6 +289,8 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		OrganizationGatewayDisabled:             snapshot.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         snapshot.CodeModeEnabled,
 		DeviceAgent:                             snapshot.DeviceAgent,
+		AssistantsAvailable:                     new(s.capabilities.AssistantsAvailable),
+		FunctionsAvailable:                      new(s.capabilities.FunctionsAvailable),
 		UpstreamAuthEnforced:                    upstreamAuthEnforced,
 	}, nil
 }

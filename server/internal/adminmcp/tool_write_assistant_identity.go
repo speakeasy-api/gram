@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP manifests and failure results use documented zero values.
+//nolint:exhaustruct_v5 // MCP manifests and failure results use documented zero values.
 package adminmcp
 
 import (

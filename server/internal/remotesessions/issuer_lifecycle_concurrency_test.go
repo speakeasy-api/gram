@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -35,7 +36,7 @@ func TestIssuerLifecycle_RotationAdoptsEMABoundReplacement(t *testing.T) {
 	require.Equal(t, "ready", prepared.State)
 
 	// Adoption and refusals occur before any upstream or credential work.
-	rotator := remotesessions.NewClientRotator(testenv.NewLogger(t), ti.conn, nil, nil, nil, ti.redisCache, nil, nil, nil, nil)
+	rotator := remotesessions.NewClientRotator(testenv.NewLogger(t), ti.conn, nil, clientsecretstest.New(t, ti.conn, nil), nil, nil, ti.redisCache, nil, nil, nil, nil)
 	var params remotesessions.RotateClientRegistrationParams
 	params.ClientID = in.ClientID
 	params.ExpectedClientID = "superseded-registration"
@@ -98,7 +99,7 @@ func TestIssuerLifecycle_ProjectUserIssuerMutationHidesSiblingBindings(t *testin
 	require.NoError(t, err)
 	service := usersessions.NewService(logger, tracer, testenv.NewMeterProvider(t), ti.conn, ti.sessionManager, nil,
 		authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
-		audit.NewLogger(), policy, nil, testenv.NewEncryptionClient(t), nil, "", authserver.Hosts{}, nil, nil)
+		audit.NewLogger(), policy, nil, testenv.NewEncryptionClient(t), clientsecretstest.New(t, ti.conn, testenv.NewEncryptionClient(t)), nil, "", authserver.Hosts{}, nil, nil)
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	sibling := createProject(t, ctx, ti.conn, "issuer-review-sibling")

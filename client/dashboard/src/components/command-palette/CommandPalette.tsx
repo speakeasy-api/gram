@@ -32,6 +32,7 @@ import {
 } from "./performance";
 import { prefilter, rank } from "./ranker";
 import { useRecentsUserId } from "./recentlyVisited";
+import { useAssistantsAvailable } from "@/hooks/useAssistantsAvailability";
 
 // Speakeasy brand spectrum — the same brand-language gradient the Project
 // Assistant uses. Rendered as a thin hairline at the top of the palette so the
@@ -43,6 +44,11 @@ const KBD_CLASS =
   "border-neutral-softest bg-muted text-muted-foreground pointer-events-none inline-flex h-5 min-w-5 items-center justify-center gap-1 border px-1.5 font-mono text-[10px] font-medium select-none";
 
 const ASK_AI_VALUE = "__ask_ai__";
+// Keep broad terms (for example a popular integration name) from mounting an
+// unbounded number of cmdk rows. The server contract is already bounded to 40
+// results globally; applying the same ceiling after local ranking also covers
+// page actions, catalog entries, recents, and specialized MCP actions.
+const MAX_VISIBLE_SEARCH_RESULTS = 40;
 
 /** A candidate displayed by the palette. */
 interface DisplayRow {
@@ -287,8 +293,11 @@ export function CommandPalette(): JSX.Element {
   // Project Assistant and resource search are project-scoped. At the org level
   // (no project in the URL) the palette still works for navigating org pages.
   const inProject = Boolean(projectSlug);
+  const assistantsAvailable = useAssistantsAvailable();
   const canAskAssistant =
-    inProject && hasScope("assistant:read", undefined, project.id);
+    inProject &&
+    assistantsAvailable &&
+    hasScope("assistant:read", undefined, project.id);
 
   // Recents are scoped per user so a shared browser profile doesn't leak
   // history. Gate the session lookup on `isOpen` so we don't poll auth.info on
@@ -328,8 +337,12 @@ export function CommandPalette(): JSX.Element {
     if (!isOpen || !hasQuery) return null;
 
     const startedAt = performance.now();
-    const rows = rank(prefilter(trimmedQuery, candidates));
-    return { rows, duration: performance.now() - startedAt };
+    const rankedRows = rank(prefilter(trimmedQuery, candidates));
+    return {
+      rows: rankedRows.slice(0, MAX_VISIBLE_SEARCH_RESULTS),
+      total: rankedRows.length,
+      duration: performance.now() - startedAt,
+    };
   }, [candidates, hasQuery, isOpen, trimmedQuery]);
   const rows = ranked?.rows ?? EMPTY_ROWS;
   const idle = useMemo(() => idleRows(candidates), [candidates]);
@@ -499,9 +512,11 @@ export function CommandPalette(): JSX.Element {
       )}
       <CommandInput
         placeholder={
-          inProject
-            ? "Ask AI or search resources and pages…"
-            : "Search projects and pages…"
+          !inProject
+            ? "Search projects and pages…"
+            : assistantsAvailable
+              ? "Ask AI or search resources and pages…"
+              : "Search resources and pages…"
         }
         value={query}
         onValueChange={(value) => {
@@ -545,6 +560,12 @@ export function CommandPalette(): JSX.Element {
               <div className="py-6 text-center text-sm">No results found.</div>
             )}
             <RankedRows rows={rows} {...rowGroupProps} />
+            {ranked !== null && ranked.total > rows.length && (
+              <div className="text-muted-foreground px-3 py-2 text-center text-xs">
+                Showing top {rows.length} of {ranked.total} results. Refine your
+                search to see more.
+              </div>
+            )}
             {askAiGroup}
           </>
         )}

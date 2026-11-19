@@ -3,15 +3,8 @@ import { useFollowRenamedServer } from "@/pages/mcp/x/useFollowRenamedServer";
 import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { useMcpMetadataMetadataForm } from "@/components/mcp_install_page/useMcpMetadataForm";
 import { RequireScope } from "@/components/require-scope";
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldLabel,
-} from "@/components/ui/Field";
-import { Input } from "@/components/ui/Input";
-import { Text } from "@/components/ui/Text";
-import { cn } from "@/lib/utils";
+import { useRBAC } from "@/hooks/useRBAC";
+import { FieldDescription } from "@/components/ui/Field";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
@@ -24,6 +17,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { VerifyRemoteMcpUrlButton } from "@/pages/sources/remote-mcp/VerifyRemoteMcpUrlButton";
 import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
+import { DisplayNameField } from "./DisplayNameField";
 import { UpstreamUrlField } from "./UpstreamUrlField";
 import {
   type UpstreamUrlDraft,
@@ -33,6 +27,7 @@ import {
   FooterSaveButton,
   SettingsSection,
 } from "@/components/detail/settings-section";
+import { useReportUnsavedChanges } from "@/components/detail/settings-layout";
 
 // Matches MCP_SERVER_NAME_MAX_LENGTH on the legacy page. The limit is enforced
 // here, not by the mcp_servers.name column.
@@ -135,6 +130,10 @@ function GeneralSectionContent({
   const nameDirty = trimmedDraft !== (mcpServer.name ?? "").trim();
   const upstreamDirty = !!upstream?.dirty;
   const dirty = nameDirty || metadataForm.brandingDirty || upstreamDirty;
+  // Same check as the Save gate: an edit nobody can save is no change worth
+  // guarding.
+  const { hasScope } = useRBAC();
+  useReportUnsavedChanges(hasScope("mcp:write") && dirty);
   const saving =
     update.isPending || metadataForm.isLoading || !!upstream?.pending;
   const supportsEditing = isKnownEnumValue(
@@ -208,7 +207,9 @@ function GeneralSectionContent({
   return (
     <SettingsSection>
       <SettingsSection.Header>
-        <SettingsSection.Title>General</SettingsSection.Title>
+        <SettingsSection.Title>
+          {upstream ? "Name, icon, and URL" : "Name and icon"}
+        </SettingsSection.Title>
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
@@ -253,30 +254,18 @@ function GeneralSectionContent({
             {/* Both fields share one column so their left edges line up
                 beside the icon rather than one of them wrapping under it. */}
             <div className="flex max-w-xl min-w-0 flex-1 flex-col gap-4">
-              <Field
-                data-invalid={update.isError ? true : undefined}
-                className="max-w-md"
-              >
-                <FieldLabel htmlFor="mcp-server-display-name">
-                  Display Name
-                </FieldLabel>
-                <Input
-                  id="mcp-server-display-name"
-                  value={nameDraft}
-                  onChange={(value) => setNameDraft(value)}
-                  placeholder="My MCP server"
-                  aria-invalid={update.isError || nameTooLong}
-                  className={cn(nameTooLong && "border-warning-default")}
-                />
-                {nameTooLong ? (
-                  <Text small warning className="block">
-                    Display names can be up to {NAME_MAX_LENGTH} characters.
-                  </Text>
-                ) : null}
-                {update.isError && (
-                  <FieldError>{update.error.message}</FieldError>
-                )}
-              </Field>
+              <DisplayNameField
+                id="mcp-server-display-name"
+                value={nameDraft}
+                onChange={setNameDraft}
+                placeholder="My MCP server"
+                error={update.isError ? update.error.message : undefined}
+                overLimitMessage={
+                  nameTooLong
+                    ? `Display names can be up to ${NAME_MAX_LENGTH} characters.`
+                    : undefined
+                }
+              />
               {upstream ? <UpstreamUrlField upstream={upstream} /> : null}
             </div>
           </div>

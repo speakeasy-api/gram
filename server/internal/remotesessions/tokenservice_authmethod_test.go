@@ -102,7 +102,7 @@ func setupRefreshFixture(t *testing.T, authMethod string, clientSecret string, s
 		require.NoError(t, encErr)
 		secretPG = conv.ToPGText(secretCiphertext)
 	}
-	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+	client, err := q.CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   issuer.ID,

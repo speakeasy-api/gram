@@ -10,6 +10,11 @@ import {
   HookDeliveryFailureData$outboundSchema,
 } from "./hookdeliveryfailuredata.js";
 import {
+  HookInstallFailureData,
+  HookInstallFailureData$Outbound,
+  HookInstallFailureData$outboundSchema,
+} from "./hookinstallfailuredata.js";
+import {
   HookMCPAttributionEntry,
   HookMCPAttributionEntry$Outbound,
   HookMCPAttributionEntry$outboundSchema,
@@ -64,6 +69,10 @@ export type HookIngestData = {
    */
   deliveryFailure?: HookDeliveryFailureData | undefined;
   /**
+   * Bootstrap install failure report, sent with event type client.install_failed. A plugin's bootstrap script sends one, best effort, when it cannot download the hooks binary or the download fails its checksum. It is diagnostic only and never counts as agent activity.
+   */
+  installFailure?: HookInstallFailureData | undefined;
+  /**
    * MCP feature payload.
    */
   mcp?: HookMCPData | undefined;
@@ -112,6 +121,7 @@ export type HookIngestData = {
 /** @internal */
 export type HookIngestData$Outbound = {
   delivery_failure?: HookDeliveryFailureData$Outbound | undefined;
+  install_failure?: HookInstallFailureData$Outbound | undefined;
   mcp?: HookMCPData$Outbound | undefined;
   mcp_attribution?: Array<HookMCPAttributionEntry$Outbound> | undefined;
   mcp_inventory?: Array<HookMCPData$Outbound> | undefined;
@@ -132,6 +142,7 @@ export const HookIngestData$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     deliveryFailure: z.optional(HookDeliveryFailureData$outboundSchema),
+    installFailure: z.optional(HookInstallFailureData$outboundSchema),
     mcp: z.optional(HookMCPData$outboundSchema),
     mcpAttribution: z.optional(z.array(HookMCPAttributionEntry$outboundSchema)),
     mcpInventory: z.optional(z.array(HookMCPData$outboundSchema)),
@@ -149,6 +160,7 @@ export const HookIngestData$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       deliveryFailure: "delivery_failure",
+      installFailure: "install_failure",
       mcpAttribution: "mcp_attribution",
       mcpInventory: "mcp_inventory",
       mcpInventoryCollected: "mcp_inventory_collected",

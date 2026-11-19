@@ -29,6 +29,7 @@ var defaultableSetupTools = map[string]ToolMeta{
 	"attach_platform_mcp_identity_provider": {Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable},
 	"get_mcp_readiness":                     {Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable},
 	"get_my_install_instructions":           {Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeDefaultable, DiscoveryScopes: discoveryOrgReadOrMCPConnect},
+	"get_my_vibe_observability_install":     {Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeDefaultable, DiscoveryScopes: discoveryOrgRead},
 }
 
 func TestDefaultableSetupToolsKeepAuthorizationAndMakeTheProjectOptional(t *testing.T) {

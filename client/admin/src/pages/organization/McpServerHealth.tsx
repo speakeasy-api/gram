@@ -50,6 +50,7 @@ import {
 import { LEAVES_THE_APP } from "@/lib/impersonation";
 import { cn } from "@/lib/utils";
 
+import { McpServerSources } from "./McpServerSources";
 import { SOURCE_LABELS, VISIBILITY_LABELS } from "./mcpServerLabels";
 import {
   adminMcpPrompt,
@@ -312,6 +313,15 @@ function HealthReport({
           className={cn(!issuer && "lg:col-span-2")}
         />
       </div>
+
+      {(server.source === "toolset" || server.source === "toolset_only") && (
+        <McpServerSources
+          key={`${organizationId}:${project}:${server.id}`}
+          organizationId={organizationId}
+          projectId={project}
+          mcpServerId={server.id}
+        />
+      )}
 
       {health.resourceScopes && (
         <ResourceScopesCard

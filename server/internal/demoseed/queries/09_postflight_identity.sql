@@ -178,7 +178,7 @@ SELECT count(*) FROM remote_session_ema_providers
 WHERE organization_id = @org_id::text AND deleted IS FALSE;
 
 -- The Example OAuth server's remote identity provider, the identity chaining example, Jamf
--- Pro, the Enterprise Sign-In (ID-JAG) Server's authorization server, and Linear.
+-- Pro, Acme Wiki's authorization server, Linear and Notion.
 -- name: PostflightIDProjectRemoteSessionIssuers :one
 SELECT count(*) FROM remote_session_issuers
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;
@@ -224,7 +224,7 @@ SELECT count(*) FROM mcp_server_remote_session_clients
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;
 
 -- Check both the total and the expected credential/server/client tuples so
--- twenty-six misassigned choices cannot satisfy postflight.
+-- twenty-three misassigned choices cannot satisfy postflight.
 -- name: PostflightIDUpstreamClientChoices :one
 WITH live AS (
   SELECT * FROM upstream_client_selections
@@ -232,7 +232,7 @@ WITH live AS (
     AND credential_kind = 'user_session'
 )
 SELECT count(*) FROM live
-WHERE (SELECT count(*) FROM live) = 26
+WHERE (SELECT count(*) FROM live) = 23
   AND credential_kind = 'user_session'
   AND (
     (credential_id = ANY(@linear_session_ids::uuid[])

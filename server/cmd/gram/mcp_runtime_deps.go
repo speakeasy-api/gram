@@ -87,6 +87,7 @@ func newMCPRemoteSessionDependencies(logger *slog.Logger, tracerProvider trace.T
 		remotesessions.WithCallbackOrigins(callbackOrigins),
 		remotesessions.WithConnectionRecorder(connections),
 		remotesessions.WithProtectedResourceProber(protectedResources),
-		remotesessions.WithFeatureFlags(features))
+		remotesessions.WithFeatureFlags(features),
+		remotesessions.WithClientSecrets(orgEncryption.ClientSecrets(logger, enc)))
 	return &mcpRemoteSessionDependencies{Verifier: verifier, Refresher: refresher, Enricher: enricher, Challenges: challenges, OrgEncryption: orgEncryption}, nil
 }

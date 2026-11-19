@@ -1,6 +1,10 @@
 package remotesessions
 
-import "github.com/google/uuid"
+import (
+	"github.com/google/uuid"
+
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+)
 
 // TokenEndpointRegistration is a stored remote session client registration and
 // the issuer token endpoint it authenticates at.
@@ -8,14 +12,17 @@ type TokenEndpointRegistration struct {
 	// ClientID is the remote_session_clients row.
 	ClientID uuid.UUID
 
-	// OrganizationID owns the client; private_key_jwt signs with its keys.
+	// OrganizationID owns the client; private_key_jwt signs with its keys,
+	// and its transition state decides which secret copy is read. Empty for a
+	// client row without an organization.
 	OrganizationID string
 
 	// ExternalClientID is the client_id the authorization server issued.
 	ExternalClientID string
 
-	// ClientSecretEncrypted is the encrypted client secret, or empty.
-	ClientSecretEncrypted string
+	// ClientSecret is the client secret's stored copies, both NULL when the
+	// client has none.
+	ClientSecret orgencryption.Copies
 
 	// TokenEndpointAuthMethod is the stored token_endpoint_auth_method.
 	TokenEndpointAuthMethod string

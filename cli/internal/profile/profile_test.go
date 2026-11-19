@@ -44,8 +44,8 @@ func legacyConfig() *Config {
 	return &Config{
 		Current: "default",
 		Profiles: map[string]*Profile{
-			"default": {Secret: "legacy-secret", DefaultProjectSlug: "proj", APIUrl: "https://app.getgram.ai", Org: nil, Projects: []*keys.ValidateKeyProject{{ID: "1", Name: "Proj", Slug: "proj"}, {ID: "2", Name: "Other", Slug: "other"}}},
-			"staging": {Secret: "staging-secret", DefaultProjectSlug: "", APIUrl: "https://staging.example.com", Org: nil, Projects: nil},
+			"default": {Name: "", Secret: "legacy-secret", DefaultProjectSlug: "proj", APIUrl: "https://app.getgram.ai", Org: nil, Projects: []*keys.ValidateKeyProject{{ID: "1", Name: "Proj", Slug: "proj"}, {ID: "2", Name: "Other", Slug: "other"}}},
+			"staging": {Name: "", Secret: "staging-secret", DefaultProjectSlug: "", APIUrl: "https://staging.example.com", Org: nil, Projects: nil},
 		},
 	}
 }
@@ -102,7 +102,7 @@ func TestLoad_NewFileWinsOverLegacy(t *testing.T) { //nolint:paralleltest // set
 	writeConfig(t, filepath.Join(home, ".gram", "profile.json"), legacyConfig())
 	path, err := DefaultProfilePath()
 	require.NoError(t, err)
-	writeConfig(t, path, &Config{Current: "default", Profiles: map[string]*Profile{"default": {Secret: "new-secret", DefaultProjectSlug: "", APIUrl: "", Org: nil, Projects: nil}}})
+	writeConfig(t, path, &Config{Current: "default", Profiles: map[string]*Profile{"default": {Name: "", Secret: "new-secret", DefaultProjectSlug: "", APIUrl: "", Org: nil, Projects: nil}}})
 
 	prof, err := LoadByName(path, "")
 	require.NoError(t, err)

@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -116,7 +117,7 @@ func TestHandleFirstPartyConnect_BindsAgentRefreshAttemptToOAuthState(t *testing
 	require.NoError(t, err)
 	meter := testenv.NewMeterProvider(t)
 	refresher := remotesessions.NewRefreshService(ti.logger, meter, ti.conn, ti.enc, policy, nil, ti.cacheAdapter)
-	bindings := remotesessions.NewService(ti.logger, ti.tracerProvider, meter, ti.conn, ti.sessionManager, ti.authzEngine, ti.enc, nil, policy, nil, ti.audit, ti.serverURL, remotesessions.NewIdentityCommitter(ti.logger, ti.conn, ti.enc, ti.audit, ti.serverURL, policy, nil, nil), refresher, nil, nil)
+	bindings := remotesessions.NewService(ti.logger, ti.tracerProvider, meter, ti.conn, ti.sessionManager, ti.authzEngine, ti.enc, clientsecretstest.New(t, ti.conn, ti.enc), nil, policy, nil, ti.audit, ti.serverURL, remotesessions.NewIdentityCommitter(ti.logger, ti.conn, ti.enc, clientsecretstest.New(t, ti.conn, ti.enc), ti.audit, ti.serverURL, policy, nil, nil), refresher, nil, nil)
 	bindings.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID, _ bool) error {
 		_, _, err := agentmanagement.NewAuthorizer(ti.authzEngine).RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentSetup)
 		if err != nil {

@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -372,17 +373,6 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgclientsgen.Creat
 		return nil, err
 	}
 
-	// Encrypt a supplied client secret before it touches the database; an absent
-	// secret leaves the stored ciphertext NULL.
-	var secretCiphertext pgtype.Text
-	if hasSecret {
-		ciphertext, encErr := s.enc.Encrypt([]byte(*payload.ClientSecret))
-		if encErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, encErr, "encrypt client secret").LogError(ctx, logger)
-		}
-		secretCiphertext = conv.ToPGText(ciphertext)
-	}
-
 	callbackBaseURL, err := s.newClientCallbackBaseURL(ctx, authCtx.ActiveOrganizationID, owner)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve organization callback origin").LogError(ctx, logger)
@@ -453,7 +443,6 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgclientsgen.Creat
 		OrganizationID:                  conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:           issuerID,
 		ClientID:                        clientID,
-		ClientSecretEncrypted:           secretCiphertext,
 		ClientIDIssuedAt:                provenance.clientIDIssuedAt,
 		ClientSecretExpiresAt:           provenance.clientSecretExpiresAt,
 		TokenEndpointAuthMethod:         conv.PtrToPGText(authMethod),
@@ -469,6 +458,14 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgclientsgen.Creat
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create organization admin remote session client").LogError(ctx, logger)
+	}
+
+	// An absent secret leaves the client without one.
+	if hasSecret {
+		created, err = s.secrets.Set(ctx, dbtx, created.ID, clientOwner(created), []byte(*payload.ClientSecret), provenance.clientSecretExpiresAt)
+		if err != nil {
+			return nil, clientSecretWriteError(ctx, logger, err)
+		}
 	}
 
 	// Standalone client: no user_session_issuer attachments.
@@ -688,18 +685,11 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 		return nil, oops.E(oops.CodeForbidden, nil, "changing a client's legacy callback mode requires a platform admin").LogError(ctx, logger)
 	}
 
-	// Encrypt a rotated client secret before it touches the database; an absent
-	// secret leaves the stored ciphertext untouched (narg NULL → COALESCE keeps).
-	var clientSecretEncrypted pgtype.Text
-	if payload.ClientSecret != nil {
-		if strings.TrimSpace(*payload.ClientSecret) == "" {
-			return nil, oops.E(oops.CodeBadRequest, nil, "client_secret cannot be empty").LogError(ctx, logger)
-		}
-		ciphertext, encErr := s.enc.Encrypt([]byte(*payload.ClientSecret))
-		if encErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, encErr, "encrypt client secret").LogError(ctx, logger)
-		}
-		clientSecretEncrypted = conv.ToPGText(ciphertext)
+	// A rotated client secret replaces the stored one; an absent secret leaves
+	// it untouched.
+	newSecret := payload.ClientSecret != nil
+	if newSecret && strings.TrimSpace(*payload.ClientSecret) == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "client_secret cannot be empty").LogError(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -760,7 +750,7 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 		return nil, err
 	}
 
-	if err := requireSelfClientCredential(updatedClientCredentialState(existing.RemoteSessionClient, payload.TokenEndpointAuthMethod, clientSecretEncrypted.Valid, payload.LegacyCallbackURL)); err != nil {
+	if err := requireSelfClientCredential(updatedClientCredentialState(existing.RemoteSessionClient, payload.TokenEndpointAuthMethod, newSecret, payload.LegacyCallbackURL)); err != nil {
 		return nil, err
 	}
 
@@ -780,7 +770,6 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 	updated, err := txRepo.UpdateOrganizationRemoteSessionClient(ctx, repo.UpdateOrganizationRemoteSessionClientParams{
 		ClientID:                        newClientID,
 		DisplayName:                     updatedDisplayName(payload.DisplayName),
-		ClientSecretEncrypted:           clientSecretEncrypted,
 		TokenEndpointAuthMethod:         conv.PtrToPGText(payload.TokenEndpointAuthMethod),
 		TokenEndpointAuthAudienceFormat: conv.PtrToPGText(payload.TokenEndpointAuthAudienceFormat),
 		Scope:                           payload.Scope,
@@ -795,6 +784,15 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 			return nil, oops.E(oops.CodeNotFound, err, "remote session client not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update organization admin remote session client").LogError(ctx, logger)
+	}
+
+	// A pasted-in replacement secret carries no issuer-reported expiry, and
+	// keeping the old secret's deadline would flag the new one as expired.
+	if newSecret {
+		updated, err = s.secrets.Set(ctx, dbtx, updated.ID, clientOwner(updated), []byte(*payload.ClientSecret), pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false})
+		if err != nil {
+			return nil, clientSecretWriteError(ctx, logger, err)
+		}
 	}
 
 	// Sessions obtained through the old client_id hold tokens the issuer bound
@@ -932,6 +930,10 @@ func (s *Service) RotateClient(ctx context.Context, payload *orgclientsgen.Rotat
 			return nil, oops.E(oops.CodeBadRequest, err, "identity provider rejected the client registration: %s", registrationErr.ProviderMessage).LogWarn(ctx, logger)
 		case errors.As(err, &registrationErr):
 			return nil, oops.E(oops.CodeGatewayError, err, "failed to re-register the client with the identity provider").LogError(ctx, logger)
+		case errors.Is(err, clientsecrets.ErrUnattributed):
+			return nil, oops.E(oops.CodeFailedPrecondition, err, "this client was stored without its organization, so its secret cannot be stored while the organization moves to its own encryption key; backfill the client's organization first").LogWarn(ctx, logger)
+		case clientsecrets.IsKeyProblem(err):
+			return nil, oops.E(oops.CodeUnavailable, err, "the organization's encryption key is unavailable, so the client could not be rotated; try again shortly").LogError(ctx, logger)
 		default:
 			return nil, oops.E(oops.CodeUnexpected, err, "rotate remote session client registration").LogError(ctx, logger)
 		}

@@ -3,9 +3,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useOrgRoutes } from "@/routes";
 import type { OrganizationGateway } from "@gram/client/models/components/organizationgateway.js";
 import { useState } from "react";
@@ -103,15 +101,13 @@ export function GatewayNotServed({
   const canManage = hasScope("org:admin", organization.id);
   // The MCP Authentication page can make a project's server
   // organization-wide and consolidate one server into another (removing the
-  // source). It is rolled out behind a flag and its actions need org:admin;
-  // without both, point to an admin or support instead.
-  const issuersPage =
-    useFeatureFlag(FEATURE_FLAGS.userSessionIssuerDashboard).status ===
-      "enabled" && canManage ? (
-      <Link to={orgRoutes.userSessionIssuers.href()} className="underline">
-        MCP Authentication
-      </Link>
-    ) : null;
+  // source). Its actions need org:admin; without it, point to an admin or
+  // support instead.
+  const issuersPage = canManage ? (
+    <Link to={orgRoutes.userSessionIssuers.href()} className="underline">
+      MCP Authentication
+    </Link>
+  ) : null;
   const askFor = canManage
     ? "Contact support"
     : "Ask an organization admin or contact support";

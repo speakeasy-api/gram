@@ -82,6 +82,7 @@ require (
 	github.com/speakeasy-api/agenthooks v0.7.3
 	github.com/speakeasy-api/mcp-setup-docs/go v0.3.9
 	github.com/speakeasy-api/openapi v1.24.0
+	github.com/speakeasy-api/sc v0.1.1
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.0-20250711233419-a173a6c0125c
 	github.com/stretchr/testify v1.12.1
 	github.com/stripe/stripe-go/v85 v85.0.1

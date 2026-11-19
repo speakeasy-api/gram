@@ -1,9 +1,13 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Icon } from ".";
-import { iconNames } from "./names";
+import dynamicIconImports from "lucide-react/dynamicIconImports";
+import type { IconName } from "./names";
 import { sizes } from "@/components/ui/lib/types";
 
 type Story = StoryObj<typeof Icon>;
+
+// Storybook only: the app itself must not import this map at runtime.
+const iconNames = Object.keys(dynamicIconImports) as IconName[];
 
 const meta: Meta<typeof Icon> = {
   title: "Design System/Icon",

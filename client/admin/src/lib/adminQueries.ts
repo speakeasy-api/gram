@@ -21,6 +21,7 @@ import {
   listOrganizationMembers,
   listOrganizationProjects,
   listOrganizationAssistants,
+  listAssistantMigrationOrganizations,
   listOrganizations,
   listUsers,
   listUserOrganizations,
@@ -438,4 +439,14 @@ export function adminListCustomDomainsQuery(
   request: AdminListCustomDomainsRequest = {},
 ): ReturnType<typeof createAdminListCustomDomainsQuery> {
   return createAdminListCustomDomainsQuery(request);
+}
+
+export function assistantMigrationOrganizationsQuery(): AdminQuery<
+  Awaited<ReturnType<typeof listAssistantMigrationOrganizations>>,
+  readonly ["admin", "assistant-migration-organizations"]
+> {
+  return queryOptions({
+    queryKey: ["admin", "assistant-migration-organizations"] as const,
+    queryFn: listAssistantMigrationOrganizations,
+  });
 }

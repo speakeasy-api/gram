@@ -161,6 +161,25 @@ func TestRecordDecision_AllowAllPolicyInverts(t *testing.T) {
 	require.Empty(t, grantPrincipals(t, ctx, ti, authz.ScopeRiskPolicyBlock, policyID, serverURL))
 }
 
+// Under an allow_all policy a denial narrowed to a person writes the block
+// rule for that person only.
+func TestRecordDecision_AllowAllNarrowDenialBlocksOnlyThem(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	policyID := seedShadowMCPPolicy(t, ctx, ti, "allow_all")
+	serverURL := "https://mcp.example.com/narrow-deny"
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: serverURL, status: "requested", evidence: "", version: 0})
+
+	principal := seedMemberPrincipal(t, ctx, ti, "user-contractor-deny")
+	payload := decisionPayload(requestID.String(), "denied")
+	payload.GrantedPrincipalUrns = []string{principal}
+	_, err := ti.service.RecordDecision(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, []string{principal}, grantPrincipals(t, ctx, ti, authz.ScopeRiskPolicyBlock, policyID, serverURL))
+}
+
 // An stdio target has no URL to key a grant on: the decision records without
 // touching enforcement state.
 func TestRecordDecision_StdioTargetRecordsWithoutGrants(t *testing.T) {
@@ -204,6 +223,31 @@ func TestRecordDecision_NarrowApprovalRejectedUnderAllowAllOnly(t *testing.T) {
 	// Nothing was written: the decision and the grant change fail together.
 	require.Empty(t, decisionsFor(t, ctx, ti, ti.projectID, requestID))
 	require.Equal(t, "requested", requestStatus(t, ctx, ti, ti.projectID, requestID))
+}
+
+// A denial narrower than everyone is rejected under a block_all policy that
+// covers everyone: the denial revokes every exception, so it blocks everyone,
+// and a record naming one person would understate who is blocked.
+func TestRecordDecision_NarrowDenialRejectedUnderEveryoneBlockAll(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	seedShadowMCPPolicy(t, ctx, ti, "block_all")
+	serverURL := "https://mcp.example.com/narrow-deny-block-all"
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: serverURL, status: "requested", evidence: "", version: 0})
+
+	payload := decisionPayload(requestID.String(), "denied")
+	payload.GrantedPrincipalUrns = []string{seedMemberPrincipal(t, ctx, ti, "someone-denied")}
+
+	_, err := ti.service.RecordDecision(ctx, payload)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.Empty(t, decisionsFor(t, ctx, ti, ti.projectID, requestID))
+	require.Equal(t, "requested", requestStatus(t, ctx, ti, ti.projectID, requestID))
+
+	// A denial for everyone is still recorded.
+	_, err = ti.service.RecordDecision(ctx, decisionPayload(requestID.String(), "denied"))
+	require.NoError(t, err)
 }
 
 // Deciding a promoted request resolves the legacy bypass request it grew out

@@ -1,0 +1,519 @@
+golangci-lint patch carried by Speakeasy until upstream ships an equivalent fix.
+
+Upstream: https://github.com/golangci/golangci-lint/issues/6822
+Applies to: golangci-lint v2.15.0 (server/gcl/version), on top of
+0001-guard-facts-debug-calls.patch.
+
+Stops copying every dependency's facts into each package's fact maps. A fact
+lookup goes to the action of the package that produced the fact instead, so
+facts are stored once rather than once per dependent package.
+
+This is a prototype: it is larger than the other patches and has had less
+review. If lint findings ever differ from a build without it, remove it
+first.
+
+Remove when: golangci-lint stops copying inherited facts, or this patch stops
+applying after an upgrade. It can be removed on its own.
+
+diff --git a/pkg/goanalysis/runner.go b/pkg/goanalysis/runner.go
+index 849866d..c606971 100644
+--- a/pkg/goanalysis/runner.go
++++ b/pkg/goanalysis/runner.go
+@@ -31,14 +31,12 @@ var (
+ 	isMemoryDebug     = logutils.HaveDebugTag(logutils.DebugKeyGoAnalysisMemory)
+ 	issuesCacheDebugf = logutils.Debug(logutils.DebugKeyGoAnalysisIssuesCache)
+ 
+-	factsDebugf         = logutils.Debug(logutils.DebugKeyGoAnalysisFacts)
+-	isFactsDebug        = logutils.HaveDebugTag(logutils.DebugKeyGoAnalysisFacts)
+-	factsCacheDebugf    = logutils.Debug(logutils.DebugKeyGoAnalysisFactsCache)
+-	isFactsCacheDebug   = logutils.HaveDebugTag(logutils.DebugKeyGoAnalysisFactsCache)
+-	factsInheritDebugf  = logutils.Debug(logutils.DebugKeyGoAnalysisFactsInherit)
+-	isFactsInheritDebug = logutils.HaveDebugTag(logutils.DebugKeyGoAnalysisFactsInherit)
+-	factsExportDebugf   = logutils.Debug(logutils.DebugKeyGoAnalysisFacts)
+-	isFactsExportDebug  = logutils.HaveDebugTag(logutils.DebugKeyGoAnalysisFactsExport)
++	factsDebugf        = logutils.Debug(logutils.DebugKeyGoAnalysisFacts)
++	isFactsDebug       = logutils.HaveDebugTag(logutils.DebugKeyGoAnalysisFacts)
++	factsCacheDebugf   = logutils.Debug(logutils.DebugKeyGoAnalysisFactsCache)
++	isFactsCacheDebug  = logutils.HaveDebugTag(logutils.DebugKeyGoAnalysisFactsCache)
++	factsExportDebugf  = logutils.Debug(logutils.DebugKeyGoAnalysisFacts)
++	isFactsExportDebug = logutils.HaveDebugTag(logutils.DebugKeyGoAnalysisFactsExport)
+ )
+ 
+ type Diagnostic struct {
+@@ -58,6 +56,9 @@ type runner struct {
+ 	passToPkg      map[*analysis.Pass]*packages.Package
+ 	passToPkgGuard sync.Mutex
+ 	sw             *timeutils.Stopwatch
++
++	// factProducers maps a package's *types.Package to the actions producing facts for it (see runner_facts.go).
++	factProducers sync.Map
+ }
+ 
+ func newRunner(prefix string, logger logutils.Log, pkgCache *cache.Cache, loadGuard *load.Guard,
+@@ -252,6 +253,8 @@ func (r *runner) analyze(pkgs []*packages.Package, analyzers []*analysis.Analyze
+ 			actions:    actionPerPkg[pkg],
+ 			loadGuard:  r.loadGuard,
+ 			dependents: 1, // self dependent
++
++			factProducers: &r.factProducers,
+ 		}
+ 	}
+ 	for _, act := range actions {
+diff --git a/pkg/goanalysis/runner_action_cache.go b/pkg/goanalysis/runner_action_cache.go
+index ddac520..ac4709e 100644
+--- a/pkg/goanalysis/runner_action_cache.go
++++ b/pkg/goanalysis/runner_action_cache.go
+@@ -45,33 +45,9 @@ func (act *action) loadCacheFacts(reset bool) bool {
+ 		act.packageFacts = make(map[packageFactKey]analysis.Fact)
+ 	}
+ 
+-	if !act.loadPersistedFacts() {
+-		return false
+-	}
+-
+ 	// The cache only stores the facts a package produces about its own objects.
+-	// The facts a package re-exports from its dependencies (see exportedFrom) are not persisted,
+-	// to avoid duplicating them in every cache entry (which grows quadratically with the import graph).
+-	// Instead, we rebuild them in memory here by inheriting from the dependencies,
+-	// exactly like analyze() does for packages analyzed from source.
+-	// This is safe because every dependency is fully analyzed (from cache or source) before this package is loaded,
+-	// so their facts are already available.
+-	act.inheritFactsFromDeps()
+-
+-	return true
+-}
+-
+-// inheritFactsFromDeps rebuilds, in memory,
+-// the facts re-exported from this action's dependencies (vertical edges: same analyzer, different package),
+-// mirroring the inheritance performed by analyze() for packages analyzed from source.
+-func (act *action) inheritFactsFromDeps() {
+-	for _, dep := range act.Deps {
+-		if dep.Package == act.Package || dep.Analyzer != act.Analyzer {
+-			continue
+-		}
+-
+-		inheritFacts(act, dep)
+-	}
++	// Facts about objects of dependencies are looked up in the actions of those dependencies (see runner_facts.go).
++	return act.loadPersistedFacts()
+ }
+ 
+ func (act *action) persistFactsToCache() error {
+@@ -83,10 +59,8 @@ func (act *action) persistFactsToCache() error {
+ 
+ 	// Persist only the facts this package produces about its own objects.
+ 	//
+-	// Facts about objects from other packages (inherited through this package's export data) are intentionally NOT persisted:
+-	// doing so duplicates them in every cache entry along the import graph and makes the cache grow quadratically.
+-	// When a package is restored from the cache,
+-	// those re-exported facts are rebuilt in memory by inheriting from its dependencies (see inheritFactsFromDeps).
++	// Facts about objects from other packages are never stored in this action (see runner_facts.go),
++	// so the checks below are only a safeguard.
+ 
+ 	var facts []Fact
+ 
+diff --git a/pkg/goanalysis/runner_checker.go b/pkg/goanalysis/runner_checker.go
+index 1bad6b3..c954bc8 100644
+--- a/pkg/goanalysis/runner_checker.go
++++ b/pkg/goanalysis/runner_checker.go
+@@ -7,8 +7,6 @@
+ package goanalysis
+ 
+ import (
+-	"bytes"
+-	"encoding/gob"
+ 	"errors"
+ 	"fmt"
+ 	"go/types"
+@@ -49,6 +47,7 @@ type action struct {
+ 	loadCachedFactsOk   bool
+ 	isInitialPkg        bool
+ 	needAnalyzeSource   bool
++	directDeps          map[*types.Package]struct{} // types of the packages imported directly (see runner_facts.go)
+ }
+ 
+ // NOTE(ldez) no alteration.
+@@ -100,7 +99,9 @@ func (act *action) analyze() {
+ 	}
+ 
+ 	// Plumb the output values of the dependencies
+-	// into the inputs of this action.  Also facts.
++	// into the inputs of this action.
++	// Facts of dependencies (vertical edges) are not copied:
++	// they are looked up in the action that produced them (see runner_facts.go).
+ 	inputs := make(map[*analysis.Analyzer]any)
+ 	act.objectFacts = make(map[objectFactKey]analysis.Fact)
+ 	act.packageFacts = make(map[packageFactKey]analysis.Fact)
+@@ -110,12 +111,6 @@ func (act *action) analyze() {
+ 			// in-memory outputs of prerequisite analyzers
+ 			// become inputs to this analysis pass.
+ 			inputs[dep.Analyzer] = dep.Result
+-
+-		} else if dep.Analyzer == act.Analyzer { // (always true)
+-			// Same analysis, different package (vertical edge):
+-			// serialized facts produced by prerequisite analysis
+-			// become available to this analysis pass.
+-			inheritFacts(act, dep)
+ 		}
+ 	}
+ 
+@@ -129,10 +124,6 @@ func (act *action) analyze() {
+ 	// 	}
+ 	// }
+ 
+-	if isFactsDebug {
+-		factsDebugf("%s: Inherited facts in %s", act, time.Since(t0))
+-	}
+-
+ 	module := &analysis.Module{} // possibly empty (non nil) in go/analysis drivers.
+ 	if mod := act.Package.Module; mod != nil {
+ 		module = analysisModuleFromPackagesModule(mod)
+@@ -217,107 +208,6 @@ func (act *action) analyze() {
+ 	}
+ }
+ 
+-// NOTE(ldez) altered: logger; sanityCheck.
+-// inheritFacts populates act.facts with
+-// those it obtains from its dependency, dep.
+-func inheritFacts(act, dep *action) {
+-	const sanityCheck = false
+-
+-	for key, fact := range dep.objectFacts {
+-		// Filter out facts related to objects
+-		// that are irrelevant downstream
+-		// (equivalently: not in the compiler export data).
+-		if !exportedFrom(key.obj, dep.Package.Types) {
+-			if isFactsInheritDebug {
+-				factsInheritDebugf("%v: discarding %T fact from %s for %s: %s", act, fact, dep, key.obj, fact)
+-			}
+-			continue
+-		}
+-
+-		// Optionally serialize/deserialize fact
+-		// to verify that it works across address spaces.
+-		if sanityCheck {
+-			encodedFact, err := codeFact(fact)
+-			if err != nil {
+-				act.runner.log.Panicf("internal error: encoding of %T fact failed in %v: %v", fact, act, err)
+-			}
+-			fact = encodedFact
+-		}
+-
+-		// The debug calls are guarded because their variadic arguments
+-		// are heap-allocated for every fact even when debugging is off.
+-		if isFactsInheritDebug {
+-			factsInheritDebugf("%v: inherited %T fact for %s: %s", act, fact, key.obj, fact)
+-		}
+-
+-		act.objectFacts[key] = fact
+-	}
+-
+-	for key, fact := range dep.packageFacts {
+-		// TODO: filter out facts that belong to
+-		// packages not mentioned in the export data
+-		// to prevent side channels.
+-		//
+-		// The Pass.All{Object,Package}Facts accessors expose too much:
+-		// all facts, of all types, for all dependencies in the action
+-		// graph. Not only does the representation grow quadratically,
+-		// but it violates the separate compilation paradigm, allowing
+-		// analysis implementations to communicate with indirect
+-		// dependencies that are not mentioned in the export data.
+-		//
+-		// It's not clear how to fix this short of a rather expensive
+-		// filtering step after each action that enumerates all the
+-		// objects that would appear in export data, and deletes
+-		// facts associated with objects not in this set.
+-
+-		// Optionally serialize/deserialize fact
+-		// to verify that it works across address spaces
+-		// and is deterministic.
+-		if sanityCheck {
+-			encodedFact, err := codeFact(fact)
+-			if err != nil {
+-				act.runner.log.Panicf("internal error: encoding of %T fact failed in %v", fact, act)
+-			}
+-			fact = encodedFact
+-		}
+-
+-		if isFactsInheritDebug {
+-			factsInheritDebugf("%v: inherited %T fact for %s: %s", act, fact, key.pkg.Path(), fact)
+-		}
+-
+-		act.packageFacts[key] = fact
+-	}
+-}
+-
+-// NOTE(ldez) altered: `new` is renamed to `newFact`.
+-// codeFact encodes then decodes a fact,
+-// just to exercise that logic.
+-func codeFact(fact analysis.Fact) (analysis.Fact, error) {
+-	// We encode facts one at a time.
+-	// A real modular driver would emit all facts
+-	// into one encoder to improve gob efficiency.
+-	var buf bytes.Buffer
+-	if err := gob.NewEncoder(&buf).Encode(fact); err != nil {
+-		return nil, err
+-	}
+-
+-	// Encode it twice and assert that we get the same bits.
+-	// This helps detect nondeterministic Gob encoding (e.g. of maps).
+-	var buf2 bytes.Buffer
+-	if err := gob.NewEncoder(&buf2).Encode(fact); err != nil {
+-		return nil, err
+-	}
+-	if !bytes.Equal(buf.Bytes(), buf2.Bytes()) {
+-		return nil, fmt.Errorf("encoding of %T fact is nondeterministic", fact)
+-	}
+-
+-	newFact := reflect.New(reflect.TypeOf(fact).Elem()).Interface().(analysis.Fact)
+-	if err := gob.NewDecoder(&buf).Decode(newFact); err != nil {
+-		return nil, err
+-	}
+-	return newFact, nil
+-}
+-
+ // NOTE(ldez) no alteration.
+ // exportedFrom reports whether obj may be visible to a package that imports pkg.
+ // This includes not just the exported members of pkg, but also unexported
+@@ -358,7 +248,7 @@ func (act *action) ObjectFact(obj types.Object, ptr analysis.Fact) bool {
+ 		panic("nil object")
+ 	}
+ 	key := objectFactKey{obj, act.factType(ptr)}
+-	if v, ok := act.objectFacts[key]; ok {
++	if v, ok := act.objectFactsFor(obj)[key]; ok {
+ 		reflect.ValueOf(ptr).Elem().Set(reflect.ValueOf(v).Elem())
+ 		return true
+ 	}
+@@ -387,7 +277,7 @@ func (act *action) exportObjectFact(obj types.Object, fact analysis.Fact) {
+ 	}
+ }
+ 
+-// NOTE(ldez) no alteration.
++// NOTE(ldez) altered: facts of dependencies are read from their producers.
+ // AllObjectFacts returns a new slice containing all object facts of
+ // the analysis's FactTypes in unspecified order.
+ //
+@@ -397,6 +287,13 @@ func (act *action) AllObjectFacts() []analysis.ObjectFact {
+ 	for k, fact := range act.objectFacts {
+ 		facts = append(facts, analysis.ObjectFact{Object: k.obj, Fact: fact})
+ 	}
++	act.forEachDepProducer(func(pkg *types.Package, prod *action) {
++		for k, fact := range prod.objectFacts {
++			if act.objectFactVisible(k.obj, pkg) {
++				facts = append(facts, analysis.ObjectFact{Object: k.obj, Fact: fact})
++			}
++		}
++	})
+ 	return facts
+ }
+ 
+@@ -410,7 +307,7 @@ func (act *action) PackageFact(pkg *types.Package, ptr analysis.Fact) bool {
+ 		panic("nil package")
+ 	}
+ 	key := packageFactKey{pkg, act.factType(ptr)}
+-	if v, ok := act.packageFacts[key]; ok {
++	if v, ok := act.packageFactsFor(pkg)[key]; ok {
+ 		reflect.ValueOf(ptr).Elem().Set(reflect.ValueOf(v).Elem())
+ 		return true
+ 	}
+@@ -442,7 +339,7 @@ func (act *action) factType(fact analysis.Fact) reflect.Type {
+ 	return t
+ }
+ 
+-// NOTE(ldez) no alteration.
++// NOTE(ldez) altered: facts of dependencies are read from their producers.
+ // AllPackageFacts returns a new slice containing all package
+ // facts of the analysis's FactTypes in unspecified order.
+ //
+@@ -452,6 +349,11 @@ func (act *action) AllPackageFacts() []analysis.PackageFact {
+ 	for k, fact := range act.packageFacts {
+ 		facts = append(facts, analysis.PackageFact{Package: k.pkg, Fact: fact})
+ 	}
++	act.forEachDepProducer(func(_ *types.Package, prod *action) {
++		for k, fact := range prod.packageFacts {
++			facts = append(facts, analysis.PackageFact{Package: k.pkg, Fact: fact})
++		}
++	})
+ 	return facts
+ }
+ 
+diff --git b/pkg/goanalysis/runner_facts.go b/pkg/goanalysis/runner_facts.go
+new file mode 100644
+index 0000000..faf9455
+--- /dev/null
++++ b/pkg/goanalysis/runner_facts.go
+@@ -0,0 +1,141 @@
++package goanalysis
++
++import (
++	"go/types"
++
++	"golang.org/x/tools/go/analysis"
++	"golang.org/x/tools/go/packages"
++)
++
++// Facts of dependencies.
++//
++// Instead of copying the facts of every transitive dependency into each action
++// (which is quadratic in the size of the import graph, in both time and memory),
++// each action only keeps the facts about its own package,
++// and facts about other packages are read from the action that produced them.
++//
++// The runner keeps an index from a package's final *types.Package to the
++// fact-producing actions of that package. The entry is stored once the package
++// is loaded (for packages loaded from export data and then reloaded from source,
++// after the reload, so the key is the *types.Package dependents see), before any
++// of its actions run. Dependents only read it after the package's analyzeRecursive
++// has returned, i.e. after all its actions are done. The entry is deleted, and the
++// producers' maps are freed, by decUse once the package and all its transitive
++// dependents are done, so the index never outlives its readers.
++
++// registerFactProducers publishes the fact-producing actions of lp.
++func (lp *loadingPackage) registerFactProducers() {
++	pkg := lp.pkg
++	if pkg.Types == nil {
++		return
++	}
++
++	var producers []*action
++	for _, act := range lp.actions {
++		if len(act.Analyzer.FactTypes) > 0 {
++			producers = append(producers, act)
++		}
++	}
++	if len(producers) == 0 {
++		return
++	}
++
++	directDeps := make(map[*types.Package]struct{}, len(pkg.Imports))
++	for _, imp := range pkg.Imports {
++		if imp.Types != nil {
++			directDeps[imp.Types] = struct{}{}
++		}
++	}
++	for _, act := range producers {
++		act.directDeps = directDeps
++	}
++
++	lp.factProducers.Store(pkg.Types, producers)
++}
++
++// unregisterFactProducers is called by decUse when no dependent can read lp's facts anymore.
++func (lp *loadingPackage) unregisterFactProducers() {
++	if lp.pkg.Types != nil {
++		lp.factProducers.Delete(lp.pkg.Types)
++	}
++}
++
++// factProducer returns the action of the same analyzer for pkg, if any.
++func (act *action) factProducer(pkg *types.Package) *action {
++	v, ok := act.runner.factProducers.Load(pkg)
++	if !ok {
++		return nil
++	}
++	for _, prod := range v.([]*action) {
++		if prod.Analyzer == act.Analyzer {
++			return prod
++		}
++	}
++	return nil
++}
++
++// objectFactVisible reports whether a fact about obj, which belongs to the dependency pkg,
++// is visible to act, using the same filter as when facts were copied along every import edge:
++// a fact crossed an edge only if exportedFrom(obj, dep) held, dep being the imported package.
++// At the first edge dep is obj's own package. At any further edge dep is a package obj does
++// not belong to, and then exportedFrom only depends on obj (methods, fields, type names and
++// constants pass), so the result is the same for every import path.
++func (act *action) objectFactVisible(obj types.Object, pkg *types.Package) bool {
++	if !exportedFrom(obj, pkg) {
++		return false
++	}
++	if _, direct := act.directDeps[pkg]; direct {
++		return true
++	}
++	return exportedFrom(obj, nil) // obj.Pkg() != nil, so this is the "not obj's package" case.
++}
++
++// objectFactsFor returns the map that holds the facts about obj visible to act, or nil.
++func (act *action) objectFactsFor(obj types.Object) map[objectFactKey]analysis.Fact {
++	pkg := obj.Pkg()
++	if pkg == act.Package.Types {
++		return act.objectFacts
++	}
++	if pkg == nil || !act.objectFactVisible(obj, pkg) {
++		return nil
++	}
++	if prod := act.factProducer(pkg); prod != nil {
++		return prod.objectFacts
++	}
++	return nil
++}
++
++// packageFactsFor returns the map that holds the facts about pkg, or nil.
++func (act *action) packageFactsFor(pkg *types.Package) map[packageFactKey]analysis.Fact {
++	if pkg == act.Package.Types {
++		return act.packageFacts
++	}
++	if prod := act.factProducer(pkg); prod != nil {
++		return prod.packageFacts
++	}
++	return nil
++}
++
++// forEachDepProducer calls fn for the producer of every transitive dependency of act's package.
++// It walks packages.Package.Imports, which (unlike action.Deps) decUse never clears.
++func (act *action) forEachDepProducer(fn func(pkg *types.Package, prod *action)) {
++	seen := map[*packages.Package]bool{act.Package: true}
++	stack := []*packages.Package{act.Package}
++	for len(stack) > 0 {
++		p := stack[len(stack)-1]
++		stack = stack[:len(stack)-1]
++		for _, imp := range p.Imports {
++			if seen[imp] {
++				continue
++			}
++			seen[imp] = true
++			stack = append(stack, imp)
++			if imp.Types == nil {
++				continue
++			}
++			if prod := act.factProducer(imp.Types); prod != nil {
++				fn(imp.Types, prod)
++			}
++		}
++	}
++}
+diff --git a/pkg/goanalysis/runner_loadingpackage.go b/pkg/goanalysis/runner_loadingpackage.go
+index 496eead..2f64887 100644
+--- a/pkg/goanalysis/runner_loadingpackage.go
++++ b/pkg/goanalysis/runner_loadingpackage.go
+@@ -39,6 +39,8 @@ type loadingPackage struct {
+ 	dependents  int32 // number of depending on it packages
+ 	analyzeOnce sync.Once
+ 	decUseMutex sync.Mutex
++
++	factProducers *sync.Map // runner.factProducers
+ }
+ 
+ func (lp *loadingPackage) analyzeRecursive(ctx context.Context, cancel context.CancelFunc, loadMode LoadMode, loadSem chan struct{}) {
+@@ -92,6 +94,8 @@ func (lp *loadingPackage) analyze(ctx context.Context, cancel context.CancelFunc
+ 		return
+ 	}
+ 
++	lp.registerFactProducers()
++
+ 	actsWg, ctxGroup := errgroup.WithContext(ctx)
+ 
+ 	for _, act := range lp.actions {
+@@ -445,6 +449,9 @@ func (lp *loadingPackage) decUse(canClearTypes bool) {
+ 		return
+ 	}
+ 
++	// No dependent can read the facts of this package anymore.
++	lp.unregisterFactProducers()
++
+ 	if canClearTypes {
+ 		// canClearTypes is set to true if we can discard type
+ 		// information after the package and its dependents have been

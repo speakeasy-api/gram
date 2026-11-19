@@ -178,7 +178,7 @@ func createRemoteSessionResolverFixture(
 	})
 	require.NoError(t, err)
 
-	remoteClient, err := remoteRepo.CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
+	remoteClient, err := remoteRepo.CreateRemoteSessionClientFixture(ctx, remotesessions_repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
 		RemoteSessionIssuerID: remoteIssuer.ID,
 		ClientID:              "resolver-client-" + suffix,
@@ -241,7 +241,7 @@ func mintUserSessionBearerForSubject(
 
 	token, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
 		Subject:  subject,
-		Audience: urn.NewToolset(toolset.ID).String(),
+		Audience: urn.NewUserSessionIssuer(toolset.UserSessionIssuerID.UUID).String(),
 		Issuer:   ti.serverURL.String() + "/mcp/" + toolset.McpSlug.String,
 		Lifetime: time.Hour,
 	})

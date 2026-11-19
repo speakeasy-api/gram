@@ -24,6 +24,19 @@ def enforce_options() -> Sequence[click.Option]:
             help="Redis password for enforcement reply inboxes.",
         ),
         click.Option(
+            ["--redis-next-addr"],
+            type=str,
+            envvar="GRAM_REDIS_NEXT_ADDR",
+            help="Redis address (host:port) the process moves to when the "
+            "switch key on the current instance says so. Unset disables the switch.",
+        ),
+        click.Option(
+            ["--redis-next-password"],
+            type=str,
+            envvar="GRAM_REDIS_NEXT_PASSWORD",
+            help="Redis password for the next instance.",
+        ),
+        click.Option(
             ["--risk-fingerprint-pepper-keyring"],
             type=str,
             envvar="GRAM_RISK_FINGERPRINT_PEPPER_KEYRING",

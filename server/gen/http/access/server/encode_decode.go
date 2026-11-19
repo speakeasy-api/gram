@@ -5156,6 +5156,221 @@ func EncodeGetShadowMCPInventoryServerError(encoder func(context.Context, http.R
 	}
 }
 
+// EncodeFindShadowMCPInventoryServersResponse returns an encoder for responses
+// returned by the access findShadowMCPInventoryServers endpoint.
+func EncodeFindShadowMCPInventoryServersResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*access.FindShadowMCPInventoryServersResult)
+		enc := encoder(ctx, w)
+		body := NewFindShadowMCPInventoryServersResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeFindShadowMCPInventoryServersRequest returns a decoder for requests
+// sent to the access findShadowMCPInventoryServers endpoint.
+func DecodeFindShadowMCPInventoryServersRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.FindShadowMCPInventoryServersPayload, error) {
+	return func(r *http.Request) (*access.FindShadowMCPInventoryServersPayload, error) {
+		var payload *access.FindShadowMCPInventoryServersPayload
+		var (
+			projectID    string
+			serverUrls   []string
+			sessionToken *string
+			err          error
+		)
+		qp := r.URL.Query()
+		projectID = qp.Get("project_id")
+		if projectID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
+		serverUrls = qp["server_urls"]
+		if serverUrls == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("server_urls", "query string"))
+		}
+		if len(serverUrls) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("server_urls", serverUrls, len(serverUrls), 1, true))
+		}
+		if len(serverUrls) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("server_urls", serverUrls, len(serverUrls), 50, false))
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewFindShadowMCPInventoryServersPayload(projectID, serverUrls, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeFindShadowMCPInventoryServersError returns an encoder for errors
+// returned by the findShadowMCPInventoryServers access endpoint.
+func EncodeFindShadowMCPInventoryServersError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewFindShadowMCPInventoryServersUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewFindShadowMCPInventoryServersForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewFindShadowMCPInventoryServersBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewFindShadowMCPInventoryServersNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewFindShadowMCPInventoryServersConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewFindShadowMCPInventoryServersUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewFindShadowMCPInventoryServersInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewFindShadowMCPInventoryServersInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewFindShadowMCPInventoryServersUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewFindShadowMCPInventoryServersGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeUpdateShadowMCPInventoryServerNameResponse returns an encoder for
 // responses returned by the access updateShadowMCPInventoryServerName endpoint.
 func EncodeUpdateShadowMCPInventoryServerNameResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -5356,6 +5571,216 @@ func EncodeUpdateShadowMCPInventoryServerNameError(encoder func(context.Context,
 				body = formatter(ctx, res)
 			} else {
 				body = NewUpdateShadowMCPInventoryServerNameGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeSetShadowMCPOfficialServerResponse returns an encoder for responses
+// returned by the access setShadowMCPOfficialServer endpoint.
+func EncodeSetShadowMCPOfficialServerResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}
+}
+
+// DecodeSetShadowMCPOfficialServerRequest returns a decoder for requests sent
+// to the access setShadowMCPOfficialServer endpoint.
+func DecodeSetShadowMCPOfficialServerRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.SetShadowMCPOfficialServerPayload, error) {
+	return func(r *http.Request) (*access.SetShadowMCPOfficialServerPayload, error) {
+		var payload *access.SetShadowMCPOfficialServerPayload
+		var (
+			body SetShadowMCPOfficialServerRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateSetShadowMCPOfficialServerRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			sessionToken *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewSetShadowMCPOfficialServerPayload(&body, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeSetShadowMCPOfficialServerError returns an encoder for errors returned
+// by the setShadowMCPOfficialServer access endpoint.
+func EncodeSetShadowMCPOfficialServerError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetShadowMCPOfficialServerUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetShadowMCPOfficialServerForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetShadowMCPOfficialServerBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetShadowMCPOfficialServerNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetShadowMCPOfficialServerConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetShadowMCPOfficialServerUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetShadowMCPOfficialServerInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetShadowMCPOfficialServerInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetShadowMCPOfficialServerUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetShadowMCPOfficialServerGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -10502,6 +10927,12 @@ func marshalAccessShadowMCPInventoryServerToShadowMCPInventoryServerResponseBody
 	} else {
 		res.BlockedPolicyIds = []string{}
 	}
+	if v.OfficialServer != nil {
+		res.OfficialServer = marshalAccessShadowMCPOfficialServerToShadowMCPOfficialServerResponseBody(v.OfficialServer)
+	}
+	if v.SuggestedOfficialServer != nil {
+		res.SuggestedOfficialServer = marshalAccessShadowMCPSuggestedOfficialServerToShadowMCPSuggestedOfficialServerResponseBody(v.SuggestedOfficialServer)
+	}
 
 	return res
 }
@@ -10556,6 +10987,55 @@ func marshalAccessShadowMCPInventoryApprovalRequestToShadowMCPInventoryApprovalR
 		StandingDecision:  v.StandingDecision,
 		RequesterCount:    v.RequesterCount,
 		EvidenceChangedAt: v.EvidenceChangedAt,
+	}
+
+	return res
+}
+
+// marshalAccessShadowMCPOfficialServerToShadowMCPOfficialServerResponseBody
+// builds a value of type *ShadowMCPOfficialServerResponseBody from a value of
+// type *access.ShadowMCPOfficialServer.
+func marshalAccessShadowMCPOfficialServerToShadowMCPOfficialServerResponseBody(v *access.ShadowMCPOfficialServer) *ShadowMCPOfficialServerResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ShadowMCPOfficialServerResponseBody{
+		McpServerID:         v.McpServerID,
+		Name:                v.Name,
+		Slug:                v.Slug,
+		URL:                 v.URL,
+		GatewayName:         v.GatewayName,
+		DirectAccessAllowed: v.DirectAccessAllowed,
+	}
+
+	return res
+}
+
+// marshalAccessShadowMCPSuggestedOfficialServerToShadowMCPSuggestedOfficialServerResponseBody
+// builds a value of type *ShadowMCPSuggestedOfficialServerResponseBody from a
+// value of type *access.ShadowMCPSuggestedOfficialServer.
+func marshalAccessShadowMCPSuggestedOfficialServerToShadowMCPSuggestedOfficialServerResponseBody(v *access.ShadowMCPSuggestedOfficialServer) *ShadowMCPSuggestedOfficialServerResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ShadowMCPSuggestedOfficialServerResponseBody{
+		McpServerID: v.McpServerID,
+		Name:        v.Name,
+		Slug:        v.Slug,
+	}
+
+	return res
+}
+
+// marshalAccessShadowMCPInventoryServerMatchToShadowMCPInventoryServerMatchResponseBody
+// builds a value of type *ShadowMCPInventoryServerMatchResponseBody from a
+// value of type *access.ShadowMCPInventoryServerMatch.
+func marshalAccessShadowMCPInventoryServerMatchToShadowMCPInventoryServerMatchResponseBody(v *access.ShadowMCPInventoryServerMatch) *ShadowMCPInventoryServerMatchResponseBody {
+	res := &ShadowMCPInventoryServerMatchResponseBody{
+		ServerURL: v.ServerURL,
+	}
+	if v.Server != nil {
+		res.Server = marshalAccessShadowMCPInventoryServerToShadowMCPInventoryServerResponseBody(v.Server)
 	}
 
 	return res
@@ -10856,6 +11336,51 @@ func marshalAccessExplainedAccessDirectorySourceToExplainedAccessDirectorySource
 		DirectoryGroupName: v.DirectoryGroupName,
 		AttributeKey:       v.AttributeKey,
 		AttributeValue:     v.AttributeValue,
+	}
+
+	return res
+}
+
+// marshalAccessExplainedCredentialAccessToExplainedCredentialAccessResponseBody
+// builds a value of type *ExplainedCredentialAccessResponseBody from a value
+// of type *access.ExplainedCredentialAccess.
+func marshalAccessExplainedCredentialAccessToExplainedCredentialAccessResponseBody(v *access.ExplainedCredentialAccess) *ExplainedCredentialAccessResponseBody {
+	res := &ExplainedCredentialAccessResponseBody{
+		AuthClientID: v.AuthClientID,
+		Name:         v.Name,
+		ClientType:   v.ClientType,
+		Enabled:      v.Enabled,
+		Allowed:      v.Allowed,
+	}
+	if v.Rules != nil {
+		res.Rules = make([]*ExplainedCredentialRuleResponseBody, len(v.Rules))
+		for i, val := range v.Rules {
+			if val == nil {
+				res.Rules[i] = nil
+				continue
+			}
+			res.Rules[i] = marshalAccessExplainedCredentialRuleToExplainedCredentialRuleResponseBody(val)
+		}
+	} else {
+		res.Rules = []*ExplainedCredentialRuleResponseBody{}
+	}
+
+	return res
+}
+
+// marshalAccessExplainedCredentialRuleToExplainedCredentialRuleResponseBody
+// builds a value of type *ExplainedCredentialRuleResponseBody from a value of
+// type *access.ExplainedCredentialRule.
+func marshalAccessExplainedCredentialRuleToExplainedCredentialRuleResponseBody(v *access.ExplainedCredentialRule) *ExplainedCredentialRuleResponseBody {
+	res := &ExplainedCredentialRuleResponseBody{
+		PrincipalUrn:        v.PrincipalUrn,
+		Kind:                v.Kind,
+		DisplayName:         v.DisplayName,
+		AppliesTo:           v.AppliesTo,
+		ProjectBound:        v.ProjectBound,
+		Effect:              v.Effect,
+		Reason:              v.Reason,
+		ViaDirectoryMapping: v.ViaDirectoryMapping,
 	}
 
 	return res

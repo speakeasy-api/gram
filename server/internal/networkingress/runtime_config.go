@@ -21,6 +21,12 @@ var runtimeQueuePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$
 // on the customer's tailnet, so the cap keeps their device list tidy.
 const maxGatewaySlots = 16
 
+// DefaultGatewayTag is the ACL tag gateway nodes and services carry unless an
+// environment configures its own. Customers own it in their tailnet policy and
+// scope the OAuth client to it, and the dashboard shows it in the policy it
+// asks them to add.
+const DefaultGatewayTag = "tag:speakeasy"
+
 // DefaultHostname is the Tailscale Service label used when a create request
 // omits one; new ingresses are reachable at speakeasy.<tailnet>.ts.net.
 const DefaultHostname = "speakeasy"

@@ -16,12 +16,17 @@ type UseCase string
 const (
 	// UseCaseTailscaleGatewayState is the use case for Tailscale gateway state.
 	UseCaseTailscaleGatewayState UseCase = "tailscale-gateway-state"
+
+	// UseCaseOAuthClientSecrets is the use case for the client secrets of
+	// remote session clients, the OAuth clients Speakeasy uses upstream.
+	UseCaseOAuthClientSecrets UseCase = "oauth-client-secrets" //nolint:gosec // G101: a use case name, not a credential
 )
 
 // registeredUseCases lists every use case the package accepts. Add a consumer
 // here before calling any entry point with its name.
 var registeredUseCases = []UseCase{
 	UseCaseTailscaleGatewayState,
+	UseCaseOAuthClientSecrets,
 }
 
 // ParseUseCase returns the registered use case named value.

@@ -113,9 +113,17 @@ type Client struct {
 	// the getShadowMCPInventoryServer endpoint.
 	GetShadowMCPInventoryServerDoer goahttp.Doer
 
+	// FindShadowMCPInventoryServers Doer is the HTTP client used to make requests
+	// to the findShadowMCPInventoryServers endpoint.
+	FindShadowMCPInventoryServersDoer goahttp.Doer
+
 	// UpdateShadowMCPInventoryServerName Doer is the HTTP client used to make
 	// requests to the updateShadowMCPInventoryServerName endpoint.
 	UpdateShadowMCPInventoryServerNameDoer goahttp.Doer
+
+	// SetShadowMCPOfficialServer Doer is the HTTP client used to make requests to
+	// the setShadowMCPOfficialServer endpoint.
+	SetShadowMCPOfficialServerDoer goahttp.Doer
 
 	// ListShadowMCPInventoryUsers Doer is the HTTP client used to make requests to
 	// the listShadowMCPInventoryUsers endpoint.
@@ -241,7 +249,9 @@ func NewClient(
 		UpdateMemberRolesDoer:                    doer,
 		ListShadowMCPInventoryDoer:               doer,
 		GetShadowMCPInventoryServerDoer:          doer,
+		FindShadowMCPInventoryServersDoer:        doer,
 		UpdateShadowMCPInventoryServerNameDoer:   doer,
+		SetShadowMCPOfficialServerDoer:           doer,
 		ListShadowMCPInventoryUsersDoer:          doer,
 		ListShadowMCPInventoryServersForUserDoer: doer,
 		ResolveShadowMCPInventoryRequestDoer:     doer,
@@ -846,6 +856,30 @@ func (c *Client) GetShadowMCPInventoryServer() goa.Endpoint {
 	}
 }
 
+// FindShadowMCPInventoryServers returns an endpoint that makes HTTP requests
+// to the access service findShadowMCPInventoryServers server.
+func (c *Client) FindShadowMCPInventoryServers() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeFindShadowMCPInventoryServersRequest(c.encoder)
+		decodeResponse = DecodeFindShadowMCPInventoryServersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildFindShadowMCPInventoryServersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.FindShadowMCPInventoryServersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "findShadowMCPInventoryServers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // UpdateShadowMCPInventoryServerName returns an endpoint that makes HTTP
 // requests to the access service updateShadowMCPInventoryServerName server.
 func (c *Client) UpdateShadowMCPInventoryServerName() goa.Endpoint {
@@ -865,6 +899,30 @@ func (c *Client) UpdateShadowMCPInventoryServerName() goa.Endpoint {
 		resp, err := c.UpdateShadowMCPInventoryServerNameDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "updateShadowMCPInventoryServerName", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetShadowMCPOfficialServer returns an endpoint that makes HTTP requests to
+// the access service setShadowMCPOfficialServer server.
+func (c *Client) SetShadowMCPOfficialServer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetShadowMCPOfficialServerRequest(c.encoder)
+		decodeResponse = DecodeSetShadowMCPOfficialServerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetShadowMCPOfficialServerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetShadowMCPOfficialServerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "setShadowMCPOfficialServer", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -23,7 +23,7 @@ Declared in `pitchfork.toml`. Names are shown namespaced by project (e.g. `gram/
 | `worker`                                    | Temporal worker                                     |
 | `dashboard`                                 | Dashboard frontend dev server (depends on `server`) |
 | `streams`                                   | Go Pub/Sub consumers (`gram streams`)               |
-| `pystreams-multi`                           | Python Pub/Sub consumers                            |
+| `pystreams-multi`                           | Python Pub/Sub consumers (off unless stub disabled) |
 | `assistant-runtime`                         | Assistant runtime                                   |
 | `dev-idp`, `dev-idp-dashboard`, `mock-oidc` | Local identity providers (login is credential-less) |
 | `admin`                                     | Admin app (depends on `mock-oidc`)                  |

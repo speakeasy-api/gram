@@ -42,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 )
@@ -122,7 +123,7 @@ var (
 // disable that handler (it will 503 on call — used in tests that don't
 // need the surface). sharedHosts must match the hosts the MCP service serves
 // shared authorization servers on.
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager TokenRevoker, authzEngine *authz.Engine, auditLogger *audit.Logger, guardianPolicy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, enc *encryption.Client, signer *Signer, serverURL string, sharedHosts authserver.Hosts, verifyStore ratelimit.Store, codeModeSelection codemode.SelectionGate, assertionSigners ...remotesessions.TokenEndpointAssertionSigner) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager TokenRevoker, authzEngine *authz.Engine, auditLogger *audit.Logger, guardianPolicy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, enc *encryption.Client, clientSecrets *clientsecrets.Secrets, signer *Signer, serverURL string, sharedHosts authserver.Hosts, verifyStore ratelimit.Store, codeModeSelection codemode.SelectionGate, assertionSigners ...remotesessions.TokenEndpointAssertionSigner) *Service {
 	logger = logger.With(attr.SlogComponent("usersessions"))
 
 	return &Service{
@@ -139,7 +140,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		serverURL:         serverURL,
 		sharedHosts:       sharedHosts,
 		cimdResolver:      cimd.NewResolver(guardianPolicy, meterProvider, logger),
-		revoker:           remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnels, assertionSigners...),
+		revoker:           remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, clientSecrets, guardianPolicy, tunnels, assertionSigners...),
 		verifyLimiter: ratelimit.New(verifyStore, "cimd-url-verify",
 			ratelimit.PerMinute(verifyRatePerMin).WithBurst(verifyRateBurst),
 			ratelimit.WithMetrics(meterProvider)),

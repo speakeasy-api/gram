@@ -30,10 +30,6 @@ type Service interface {
 	GetSession(context.Context, *GetSessionPayload) (res *AdminSession, err error)
 	// GetOrganizationFeatures implements getOrganizationFeatures.
 	GetOrganizationFeatures(context.Context, *GetOrganizationFeaturesPayload) (res *ProductFeatures, err error)
-	// Enable or disable the temporary provider setup rollout for one organization.
-	// Staff only; disabled by default. Existing credential storage and OAuth flows
-	// are unaffected.
-	SetOrganizationProviderSetup(context.Context, *SetOrganizationProviderSetupPayload) (res *ProductFeatures, err error)
 	// SetOrganizationFeature implements setOrganizationFeature.
 	SetOrganizationFeature(context.Context, *SetOrganizationFeaturePayload) (res *ProductFeatures, err error)
 	// GetOrganizationChatAnalysisSettings implements
@@ -428,6 +424,11 @@ type Service interface {
 	// Queue an Organizational Memory eval run against the demo organization's
 	// synthetic corpus. Spends model credits; one run at a time and a daily limit.
 	StartMemoryEvalRun(context.Context, *StartMemoryEvalRunPayload) (res *AdminMemoryEvalRun, err error)
+	// Lists live organizations with live assistants in live projects.
+	ListAssistantOrganizations(context.Context, *ListAssistantOrganizationsPayload) (res *AdminAssistantOrganizations, err error)
+	// Repairs exact legacy generated names of live bound agents in one
+	// organization, preserving custom names and reporting conflicts. Safe to retry.
+	RepairOrganizationAssistantAgentNames(context.Context, *RepairOrganizationAssistantAgentNamesPayload) (res *AdminAssistantAgentNameRepairRun, err error)
 	// Lists every live assistant of one organization with its identity state,
 	// runtime, and whether its creator is still a member.
 	ListOrganizationAssistants(context.Context, *ListOrganizationAssistantsPayload) (res *AdminOrganizationAssistants, err error)
@@ -468,7 +469,24 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [122]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationProviderSetup", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "getOrganizationHookFleet", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "listPlatformMcpFeedback", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getProjectRedeployPreview", "redeployProject", "listCustomDomains", "listPlatformExternalCredentials", "getGcpIamPlatformCredential", "createGcpIamPlatformCredential", "updateGcpIamPlatformCredential", "verifyGcpIamPlatformCredential", "deleteGcpIamPlatformCredential", "getMemoryEvalOptions", "listMemoryEvalRuns", "getMemoryEvalRun", "startMemoryEvalRun", "listOrganizationAssistants", "migrateOrganizationAssistantIdentities", "migrateOrganizationAssistantsToKit"}
+var MethodNames = [123]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "getOrganizationHookFleet", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "listPlatformMcpFeedback", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getProjectRedeployPreview", "redeployProject", "listCustomDomains", "listPlatformExternalCredentials", "getGcpIamPlatformCredential", "createGcpIamPlatformCredential", "updateGcpIamPlatformCredential", "verifyGcpIamPlatformCredential", "deleteGcpIamPlatformCredential", "getMemoryEvalOptions", "listMemoryEvalRuns", "getMemoryEvalRun", "startMemoryEvalRun", "listAssistantOrganizations", "repairOrganizationAssistantAgentNames", "listOrganizationAssistants", "migrateOrganizationAssistantIdentities", "migrateOrganizationAssistantsToKit"}
+
+type AdminAssistantAgentNameRepairResult struct {
+	AssistantID string
+	ProjectID   string
+	Name        string
+	Outcome     string
+}
+
+// AdminAssistantAgentNameRepairRun is the result type of the admin service
+// repairOrganizationAssistantAgentNames method.
+type AdminAssistantAgentNameRepairRun struct {
+	OrganizationID string
+	Repaired       int64
+	Conflicts      int64
+	Failed         int64
+	Results        []*AdminAssistantAgentNameRepairResult
+}
 
 // What the identity migration did to one assistant.
 type AdminAssistantIdentityMigrationResult struct {
@@ -539,6 +557,19 @@ type AdminAssistantKitMigrationRun struct {
 	Failed int64
 	// One result per selected assistant.
 	Results []*AdminAssistantKitMigrationResult
+}
+
+type AdminAssistantOrganization struct {
+	ID         string
+	Name       string
+	Slug       string
+	Assistants int64
+}
+
+// AdminAssistantOrganizations is the result type of the admin service
+// listAssistantOrganizations method.
+type AdminAssistantOrganizations struct {
+	Organizations []*AdminAssistantOrganization
 }
 
 type AdminAuditLog struct {
@@ -1613,6 +1644,10 @@ type AdminOrganizationAssistant struct {
 	// its owner, ACTIVE when its dedicated agent is usable, and UNAVAILABLE when
 	// that agent is suspended, revoked, or deleted.
 	IdentityState string
+	// The live bound agent name, when available.
+	AgentName *string
+	// Whether the exact legacy generated agent name needs repair.
+	AgentNameRepairState string
 	// The dedicated agent, when the assistant has one.
 	AgentID *string
 	// The assistant's selected runtime: 2 for the default runtime, 3 for Kit.
@@ -3182,6 +3217,12 @@ type IssuerMigratePreflight struct {
 	TargetTenantClientCount int
 }
 
+// ListAssistantOrganizationsPayload is the payload type of the admin service
+// listAssistantOrganizations method.
+type ListAssistantOrganizationsPayload struct {
+	AdminSessionToken *string
+}
+
 // ListCustomDomainsPayload is the payload type of the admin service
 // listCustomDomains method.
 type ListCustomDomainsPayload struct {
@@ -3582,9 +3623,6 @@ type ProductFeatureName string
 // ProductFeatures is the result type of the admin service
 // getOrganizationFeatures method.
 type ProductFeatures struct {
-	// Whether the staff-managed provider setup rollout is enabled. Defaults to
-	// false when absent.
-	ProviderSetupEnabled *bool
 	// Whether logging is enabled
 	LogsEnabled bool
 	// Whether tool I/O logging is enabled
@@ -3642,6 +3680,14 @@ type ProductFeatures struct {
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent bool
+	// Whether this deployment can run assistants. A deployment-wide setting, not
+	// an organization entitlement: false when the deployment runs with the
+	// disabled assistant runtime provider. Absent from staff admin responses.
+	AssistantsAvailable *bool
+	// Whether this deployment can run Speakeasy Functions. A deployment-wide
+	// setting, not an organization entitlement: false when the deployment runs
+	// with the disabled Functions provider. Absent from staff admin responses.
+	FunctionsAvailable *bool
 	// Whether upstream auth enforcement is on for the organization. Absent when
 	// the state could not be read. Staff change it through the admin enforcement
 	// endpoint.
@@ -3714,6 +3760,13 @@ type RepairInferenceKeyPayload struct {
 	Confirmation string
 	// Nonblank audit reason, at most 2000 UTF-8 bytes (enforced by the handler).
 	Reason string
+}
+
+// RepairOrganizationAssistantAgentNamesPayload is the payload type of the
+// admin service repairOrganizationAssistantAgentNames method.
+type RepairOrganizationAssistantAgentNamesPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
 }
 
 // ResumeStripeSubscriptionPayload is the payload type of the admin service
@@ -3832,14 +3885,6 @@ type SetOrganizationOnboardingStackPayload struct {
 	MdmVendor string
 	// Required when mdm_vendor is other, ignored otherwise.
 	MdmVendorName *string
-}
-
-// SetOrganizationProviderSetupPayload is the payload type of the admin service
-// setOrganizationProviderSetup method.
-type SetOrganizationProviderSetupPayload struct {
-	AdminSessionToken *string
-	OrganizationID    string
-	Enabled           bool
 }
 
 // SetRegistryEntryPublishedPayload is the payload type of the admin service
@@ -4296,7 +4341,8 @@ func NewViewedProductFeatures(res *ProductFeatures, view string) *adminviews.Pro
 // ProductFeatures.
 func newProductFeatures(vres *adminviews.ProductFeaturesView) *ProductFeatures {
 	res := &ProductFeatures{
-		ProviderSetupEnabled: vres.ProviderSetupEnabled,
+		AssistantsAvailable:  vres.AssistantsAvailable,
+		FunctionsAvailable:   vres.FunctionsAvailable,
 		UpstreamAuthEnforced: vres.UpstreamAuthEnforced,
 	}
 	if vres.LogsEnabled != nil {
@@ -4372,7 +4418,6 @@ func newProductFeatures(vres *adminviews.ProductFeaturesView) *ProductFeatures {
 // type ProductFeaturesView using the "default" view.
 func newProductFeaturesView(res *ProductFeatures) *adminviews.ProductFeaturesView {
 	vres := &adminviews.ProductFeaturesView{
-		ProviderSetupEnabled:                    res.ProviderSetupEnabled,
 		LogsEnabled:                             &res.LogsEnabled,
 		ToolIoLogsEnabled:                       &res.ToolIoLogsEnabled,
 		SessionCaptureEnabled:                   &res.SessionCaptureEnabled,
@@ -4395,6 +4440,8 @@ func newProductFeaturesView(res *ProductFeatures) *adminviews.ProductFeaturesVie
 		OrganizationGatewayDisabled:             &res.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         &res.CodeModeEnabled,
 		DeviceAgent:                             &res.DeviceAgent,
+		AssistantsAvailable:                     res.AssistantsAvailable,
+		FunctionsAvailable:                      res.FunctionsAvailable,
 		UpstreamAuthEnforced:                    res.UpstreamAuthEnforced,
 	}
 	return vres

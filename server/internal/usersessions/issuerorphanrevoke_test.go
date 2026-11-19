@@ -118,7 +118,7 @@ func seedRevocableClient(t *testing.T, ctx context.Context, ti *testInstance, us
 	if orgLevel {
 		clientProject = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	}
-	client, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+	client, err := q.CreateRemoteSessionClientFixture(ctx, remotesessionsrepo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:               clientProject,
 		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   issuer.ID,
@@ -176,7 +176,7 @@ func seedLegacyProjectRevocableClient(t *testing.T, ctx context.Context, ti *tes
 		Passthrough:                       false,
 	})
 	require.NoError(t, err)
-	client, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+	client, err := q.CreateRemoteSessionClientFixture(ctx, remotesessionsrepo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:          pgtype.Text{String: "", Valid: false},
 		RemoteSessionIssuerID:   issuer.ID,

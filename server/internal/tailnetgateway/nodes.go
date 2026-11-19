@@ -62,12 +62,6 @@ func ParseNodeStatus(value string) (NodeStatus, error) {
 	}
 }
 
-const (
-	// DefaultTag is the ACL tag every gateway node advertises. Customers own it
-	// in their policy file and scope the OAuth client to it.
-	DefaultTag = "tag:speakeasy"
-)
-
 // ValidateTag accepts a Tailscale ACL tag such as tag:speakeasy.
 func ValidateTag(value string) error {
 	tag, ok := strings.CutPrefix(value, "tag:")

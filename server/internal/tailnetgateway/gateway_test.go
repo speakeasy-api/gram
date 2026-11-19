@@ -256,9 +256,9 @@ func newGatewayFixtureWithMeter(t *testing.T, name string, ordinal int32, meterP
 	runtime := &fakeRuntime{mu: sync.Mutex{}, nodes: nil, failStart: nil, writePartial: false, writeLogin: false, closeDelay: 0}
 	cfg := tailnetgateway.Config{
 		Ordinal: ordinal, PodName: "gram-tailnet-gateway-0", Shard: tailnetgateway.DefaultShard, StateDir: t.TempDir(),
-		Tag: tailnetgateway.DefaultTag, Namer: networkingress.ProductionNamer{}, Upstream: upstreamURL, UpstreamTransport: transport, TokenPath: tokenPath,
+		Tag: networkingress.DefaultGatewayTag, Namer: networkingress.ProductionNamer{}, Upstream: upstreamURL, UpstreamTransport: transport, TokenPath: tokenPath,
 		PollInterval: tailnetgateway.DefaultPollInterval, DrainTimeout: time.Second, StartTimeout: 5 * time.Second,
-		MaxHosts: 10, ReconcileTaskQueue: "test-tailnet-gateway", ControlURL: "",
+		ApprovalGrace: 0, MaxHosts: 10, ReconcileTaskQueue: "test-tailnet-gateway", ControlURL: "",
 	}
 	for _, apply := range configure {
 		apply(&cfg, runtime)
@@ -500,13 +500,16 @@ func TestGatewayResetsPartialStateAfterFailedRegistration(t *testing.T) {
 		row := f.slotRow(t, ingressID, orgID, 0)
 		assert.Equal(c, string(tailnetgateway.NodeStatusError), row.Status)
 		assert.False(c, row.AuthKeyEncrypted.Valid, "a consumed one-shot key is cleared so the reconciler mints another")
+		// The wake is enqueued after the heartbeat row is written, so it is
+		// polled for alongside the row rather than read once afterwards.
+		messages, err := nirepo.New(f.db).ListNetworkIngressReconcileRequests(ctx, orgID)
+		if assert.NoError(c, err) {
+			assert.Len(c, messages, 1, "the reconciler is woken to mint a new key")
+		}
 	}, 5*time.Second, 20*time.Millisecond)
 	store := newStateStore(t, f.db, ingressID, orgID, 0)
 	_, err := store.ReadState(ipn.MachineKeyStateKey)
 	require.ErrorIs(t, err, ipn.ErrStateNotExist, "partial state is reset")
-	messages, err := nirepo.New(f.db).ListNetworkIngressReconcileRequests(ctx, orgID)
-	require.NoError(t, err)
-	require.Len(t, messages, 1, "the reconciler is woken to mint a new key")
 }
 
 func TestGatewayRecordsStartFailures(t *testing.T) {
@@ -688,6 +691,32 @@ func TestGatewayReportsHostsAwaitingACertificate(t *testing.T) {
 	row = f.slotRow(t, ingressID, orgID, 0)
 	require.Equal(t, string(tailnetgateway.NodeStatusOnline), row.Status)
 	require.Equal(t, 2, wakes(), "coming online wakes the reconciler")
+}
+
+func TestGatewayWaitsForApprovalWithinTheGracePeriod(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newGatewayFixture(t, "tailnetgatewayapprovalgrace", 0, func(cfg *tailnetgateway.Config, _ *fakeRuntime) {
+		cfg.ApprovalGrace = time.Hour
+	})
+	ingressID, orgID := seedIngress(t, f.db, "gateway-approval-grace")
+	f.seedSlot(t, ingressID, orgID, 0, "tskey-auth-one-shot")
+
+	f.gateway.Poll(ctx)
+	f.waitForHosts(t, 1)
+	node := f.runtime.started()[0]
+
+	// Connected and not approved yet, as in the seconds before an
+	// auto-approval arrives.
+	node.setOnline("nWAITING")
+	node.setApproved(false)
+	f.gateway.Poll(ctx)
+	row := f.slotRow(t, ingressID, orgID, 0)
+	require.Equal(t, string(tailnetgateway.NodeStatusStarting), row.Status, "a node that just started is still expected to be approved")
+	require.Contains(t, row.LastError.String, "waiting for the tailnet to approve")
+	messages, err := nirepo.New(f.db).ListNetworkIngressReconcileRequests(ctx, orgID)
+	require.NoError(t, err)
+	require.Empty(t, messages, "waiting for approval within the grace period does not wake the reconciler")
 }
 
 func TestGatewayReportsHostsAwaitingApproval(t *testing.T) {

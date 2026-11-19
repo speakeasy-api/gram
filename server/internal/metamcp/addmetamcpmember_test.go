@@ -625,7 +625,7 @@ func TestAddMetaMcpMember_AutoAttachesProviderClient(t *testing.T) {
 		return issuer.ID
 	}
 	newClient := func(remoteIssuerID uuid.UUID, externalID string) uuid.UUID {
-		client, err := rsRepo.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		client, err := rsRepo.CreateRemoteSessionClientFixture(ctx, remotesessionsrepo.CreateRemoteSessionClientFixtureParams{
 			ProjectID:               conv.ToNullUUID(projectID),
 			OrganizationID:          conv.ToPGText(authCtx.ActiveOrganizationID),
 			RemoteSessionIssuerID:   remoteIssuerID,

@@ -1,4 +1,9 @@
-import { pendingAccountProvider } from "@/pages/catalog/account-provider";
+import {
+  accountCatalogProvider,
+  pendingAccountProvider,
+} from "@/pages/catalog/account-provider";
+import type { CatalogServer } from "@/pages/catalog/hooks";
+import type { McpServer } from "@gram/client/models/components/mcpserver";
 import { oktaSelectionForUrl } from "@/pages/catalog/provider-setup/okta";
 import { snowflakeSelectionForUrl } from "@/pages/catalog/provider-setup/snowflake";
 import {
@@ -46,6 +51,33 @@ export function setupProviderForUrl(
     return null;
   }
 }
+export type GuidedSetupStatus = "unavailable" | "pending" | "done";
+/**
+ * The team-wide guided setup state of an installed server: no guided setup,
+ * not yet marked done, or marked done. Per-tab step progress is local to the
+ * Setup page and deliberately not part of this.
+ */
+export function guidedSetupStatus(
+  mcpServer:
+    | Pick<McpServer, "remoteMcpServerId" | "setupGuideCompletedAt">
+    | undefined,
+  upstreamUrl: string | undefined,
+): GuidedSetupStatus {
+  if (!mcpServer?.remoteMcpServerId || !setupProviderForUrl(upstreamUrl))
+    return "unavailable";
+  return mcpServer.setupGuideCompletedAt ? "done" : "pending";
+}
+/** Catalog entries whose installed server opens a guided Setup page. */
+export function catalogServerHasGuidedSetup(server: CatalogServer): boolean {
+  return (
+    !!accountCatalogProvider(server) ||
+    !!server.remotes?.some(
+      (remote) =>
+        remote.transportType === "streamable-http" &&
+        !!setupProviderForUrl(remote.url),
+    )
+  );
+}
 export function providerSetupInstallTarget(
   servers: { remotes?: { url: string }[] | undefined }[],
   statuses: ServerInstallStatus[],
@@ -74,6 +106,19 @@ export function providerProgressKey(
   serverId: string,
 ): string {
   return `provider-setup:${provider}:v1:${[userId, orgId, projectId, serverId].map(encodeURIComponent).join(":")}`;
+}
+/** Forget this tab's saved Setup progress for a server, for every provider. */
+export function clearProviderProgress(serverId: string): void {
+  const suffix = `:${encodeURIComponent(serverId)}`;
+  try {
+    for (let i = sessionStorage.length - 1; i >= 0; i--) {
+      const key = sessionStorage.key(i);
+      if (key?.startsWith("provider-setup:") && key.endsWith(suffix))
+        sessionStorage.removeItem(key);
+    }
+  } catch {
+    // Storage can be unavailable; Setup then has nothing saved to restore.
+  }
 }
 export function saveProviderProgress(key: string, state: State): void {
   try {

@@ -256,9 +256,9 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 		return zero, fmt.Errorf("get Kit assistant: %w", err)
 	}
 	assistant := assistantRecordFromGetRow(row)
-	attachments, err := loadAssistantMcpServers(ctx, db, assistantrepo.LoadAssistantMcpServersParams{ProjectID: r.ProjectID, AssistantIds: []uuid.UUID{r.AssistantID}})
+	attachments, err := assistantrepo.New(db).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: r.ProjectID, AssistantIds: []uuid.UUID{r.AssistantID}})
 	for _, attached := range attachments {
-		assistant.MCPServers = append(assistant.MCPServers, assistantMCPServerRow{ServerSlug: attached.ServerSlug, ToolsetSlug: attached.ToolsetSlug, DefaultEnvironmentSlug: attached.DefaultEnvironmentSlug, EnvironmentID: attached.EnvironmentID, EnvironmentSlug: attached.EnvironmentSlug, MCPServerID: attached.McpServerID, Visibility: attached.Visibility, EndpointSlug: attached.EndpointSlug, EndpointDomain: attached.EndpointDomain})
+		assistant.MCPServers = append(assistant.MCPServers, assistantMCPServerRow{ServerSlug: attached.ServerSlug, ToolsetSlug: attached.ToolsetSlug, DefaultEnvironmentSlug: attached.DefaultEnvironmentSlug, EnvironmentID: attached.EnvironmentID, EnvironmentSlug: attached.EnvironmentSlug, MCPServerID: attached.McpServerID, Visibility: attached.Visibility, EndpointSlug: attached.EndpointSlug, EndpointDomain: attached.EndpointDomain, EndpointIsDomainRoot: attached.EndpointIsDomainRoot})
 	}
 	if err != nil {
 		return zero, fmt.Errorf("load Kit assistant MCP servers: %w", err)
@@ -348,7 +348,7 @@ type kitMCPConnection struct {
 	Name        string
 	Resource    *url.URL
 	Environment string
-	ProjectID   uuid.UUID `exhaustruct:"optional"`
+	ProjectID   uuid.UUID
 }
 
 func kitBuiltinMCPConnections(base *url.URL, projectID uuid.UUID, slugs []string) []kitMCPConnection {

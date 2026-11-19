@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP manifests rely on SDK defaults.
+//nolint:exhaustruct_v5 // MCP manifests rely on SDK defaults.
 package platformmcp
 
 import (
