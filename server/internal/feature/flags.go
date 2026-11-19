@@ -138,9 +138,9 @@ const (
 	// cleared to receive. An org gets a new hooks version only when its cleared
 	// version reaches it; a code-side version bump never touches the payload, so
 	// nothing auto-rolls — promoting a version is the deliberate act of raising
-	// the pin in PostHog. The always-immediate canary set lives in code (see
-	// plugins.canaryHooksOrgSlugs), independent of this flag, so a PostHog outage
-	// can't strand it on stale hooks.
+	// the pin in PostHog. The deployment's staff organization always gets the
+	// current version, independent of this flag, so a PostHog outage can't
+	// strand it on stale hooks.
 	FlagHooksRollout Flag = "hooks-rollout"
 
 	// FlagSignInEnforcement turns on, per organization (keyed by its id),

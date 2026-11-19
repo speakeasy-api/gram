@@ -23,7 +23,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -32,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
@@ -288,10 +288,11 @@ func AccountTypeCreditLimit(tier billing.Tier) (limit int, ok bool) {
 }
 
 // DefaultCreditLimit applies the complete mint-time policy after the caller
-// has resolved whether the organization is still trial-tier.
-func DefaultCreditLimit(orgID string, tier billing.Tier, activeTrial bool) (limit int, ok bool) {
-	if IsSpecialLimitOrg(orgID) {
-		return 500, true
+// has resolved whether the organization is still trial-tier. The staff
+// organization bypasses the tier policy.
+func DefaultCreditLimit(staffOrg staff.Organization, orgID string, tier billing.Tier, activeTrial bool) (limit int, ok bool) {
+	if staffOrg.Is(orgID) {
+		return staffOrganizationCreditLimit, true
 	}
 	if activeTrial {
 		return trialCreditLimit, true
@@ -309,11 +310,12 @@ func ResolveDefaultCreditLimit(
 	ctx context.Context,
 	logger *slog.Logger,
 	dbtx trialsRepo.DBTX,
+	staffOrg staff.Organization,
 	orgID string,
 	tier billing.Tier,
 ) (limit int, ok bool) {
-	if IsSpecialLimitOrg(orgID) {
-		return DefaultCreditLimit(orgID, tier, false)
+	if staffOrg.Is(orgID) {
+		return DefaultCreditLimit(staffOrg, orgID, tier, false)
 	}
 
 	trial, err := trialsRepo.New(dbtx).GetTrial(ctx, orgID)
@@ -325,7 +327,7 @@ func ResolveDefaultCreditLimit(
 		)
 	}
 
-	return DefaultCreditLimit(orgID, tier, activeTrial)
+	return DefaultCreditLimit(staffOrg, orgID, tier, activeTrial)
 }
 
 // trialCreditLimit caps each key an organization inside a trial holds, so its
@@ -337,14 +339,9 @@ func ResolveDefaultCreditLimit(
 // AGE-3141 cover the two lifecycle edges that leaves wrong.
 const trialCreditLimit = 50
 
-var specialLimitOrgs = []string{
-	constants.SpeakeasyTeamOrganizationID,
-}
-
-// IsSpecialLimitOrg reports whether the org bypasses standard credit limits.
-func IsSpecialLimitOrg(orgID string) bool {
-	return slices.Contains(specialLimitOrgs, orgID)
-}
+// staffOrganizationCreditLimit caps each key the staff organization holds in
+// place of its tier's limit.
+const staffOrganizationCreditLimit = 500
 
 type Provisioner interface {
 	ProvisionAPIKey(ctx context.Context, orgID string, keyType KeyType) (string, error)
@@ -414,6 +411,11 @@ type OpenRouter struct {
 	orClient        *guardian.HTTPClient
 	featureClient   *productfeatures.Client
 	enc             *encryption.Client
+
+	// staffOrg is the deployment's Speakeasy staff organization, whose keys
+	// bypass the tier credit limits.
+	staffOrg staff.Organization
+
 	// baseURL is OpenRouterBaseURL outside of tests.
 	baseURL string
 }
@@ -445,7 +447,7 @@ func WithTestBaseURL(baseURL string) (Option, error) {
 	}, nil
 }
 
-func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, env string, provisioningKey string, featureClient *productfeatures.Client, tracking billing.Tracker, enc *encryption.Client, options ...Option) *OpenRouter {
+func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, env string, provisioningKey string, featureClient *productfeatures.Client, tracking billing.Tracker, enc *encryption.Client, staffOrg staff.Organization, options ...Option) *OpenRouter {
 	orClient := guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig())
 
 	openRouter := &OpenRouter{
@@ -458,6 +460,7 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolic
 		orClient:        orClient,
 		featureClient:   featureClient,
 		enc:             enc,
+		staffOrg:        staffOrg,
 		baseURL:         OpenRouterBaseURL,
 	}
 	for _, option := range options {
@@ -1332,7 +1335,7 @@ func (o *OpenRouter) reconcileMonthlyCredits(ctx context.Context, db DBTX, orgID
 // entitled to by policy. It answers what a key would be minted at today, not
 // what an existing key carries: an operator raise leaves the key above this
 // amount, and only the key row records that. The account type is the last
-// resort, after the special-org list and the trial row.
+// resort, after the staff organization and the trial row.
 //
 // dbtx arrives from the caller because the provisioning path runs inside a
 // transaction that already holds an advisory lock and a pool connection, so it
@@ -1342,7 +1345,7 @@ func (o *OpenRouter) defaultLimitForOrg(ctx context.Context, dbtx trialsRepo.DBT
 	// cannot tell a trial apart from a paying enterprise customer. A read
 	// failure falls through to the account type rather than capping a paying
 	// customer on a transient database error.
-	limit, _ := ResolveDefaultCreditLimit(ctx, o.logger, dbtx, org.ID, billing.Tier(org.GramAccountType))
+	limit, _ := ResolveDefaultCreditLimit(ctx, o.logger, dbtx, o.staffOrg, org.ID, billing.Tier(org.GramAccountType))
 	return limit
 }
 

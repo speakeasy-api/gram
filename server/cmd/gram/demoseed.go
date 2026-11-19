@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/dailyoutcomes"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
 )
 
@@ -114,10 +116,11 @@ func newDemoSeedCommand() *cli.Command {
 				EnvVars: []string{"GRAM_ENVIRONMENT"},
 				Value:   "local",
 			},
-		}, append(clickHouseFlags(), redisFlags()...)...),
+		}, slices.Concat(clickHouseFlags(), redisFlags(), staffFlags())...),
 		Action: func(c *cli.Context) error {
 			var siteURL *url.URL
 			var upstreams demoseed.LocalUpstreamOptions
+			var staffOrg staff.Organization
 			if c.Bool("local") {
 				var err error
 				siteURL, err = parseSiteURL(c.String("site-url"))
@@ -132,6 +135,10 @@ func newDemoSeedCommand() *cli.Command {
 				}
 				if err := validateMockMCPURL(c.String("local-mock-mcp-url")); err != nil {
 					return fmt.Errorf("local seed local-mock-mcp-url: %w", err)
+				}
+				staffOrg, err = staffOrganizationFromCLI(c)
+				if err != nil {
+					return err
 				}
 			}
 			// HTTP is only for an environment explicitly declared local: the
@@ -244,7 +251,10 @@ func newDemoSeedCommand() *cli.Command {
 			// fills it, by running the daily job over the seeded days. Production
 			// never writes the demo organization's made-up attempts into it.
 			// Only the dev organization counts locally, so every provider, app and client name folds to other.
-			outcomes := dailyoutcomes.NewBuilder(logger, otel.GetMeterProvider(), db, ch)
+			if err := verifyStaffOrganization(ctx, db, staffOrg); err != nil {
+				return err
+			}
+			outcomes := dailyoutcomes.NewBuilder(logger, otel.GetMeterProvider(), db, ch, staffOrg)
 			now := time.Now()
 			for daysAgo := 1; daysAgo <= demoseed.ConnectionAttemptDays; daysAgo++ {
 				day := dailyoutcomes.StartOfDay(now.AddDate(0, 0, -daysAgo))

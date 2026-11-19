@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -81,6 +82,10 @@ type Service struct {
 	syncTrigger SyncTrigger
 	features    feature.Provider
 	reader      *Reader
+
+	// serverURL is this deployment's server URL, handed to providers as
+	// Deps.ServerURL.
+	serverURL *url.URL
 }
 
 // deviceLevelCoverage reports whether an org matches coverage on hardware
@@ -158,6 +163,7 @@ func NewService(
 	guardianPolicy *guardian.Policy,
 	syncTrigger SyncTrigger,
 	features feature.Provider,
+	serverURL *url.URL,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("deviceintegrations.api"))
 	return &Service{
@@ -173,6 +179,7 @@ func NewService(
 		syncTrigger: syncTrigger,
 		features:    features,
 		reader:      NewReader(logger, db, features),
+		serverURL:   serverURL,
 	}
 }
 
@@ -438,7 +445,7 @@ func (s *Service) TestConnection(ctx context.Context, payload *gen.TestConnectio
 // provider implements. All outbound HTTP uses the guardian SSRF-hardened
 // client: instance URLs are customer-supplied.
 func (s *Service) probeProvider(ctx context.Context, desc providers.Descriptor, creds providers.Credentials, settings providers.Settings) error {
-	deps := providers.Deps{Client: boundedProviderClient(s.guardian)}
+	deps := providers.Deps{Client: boundedProviderClient(s.guardian), ServerURL: s.serverURL}
 	switch {
 	case desc.NewInventorySource != nil:
 		if err := desc.NewInventorySource(deps).TestConnection(ctx, creds, settings); err != nil {
@@ -466,7 +473,7 @@ func (s *Service) probeProvider(ctx context.Context, desc providers.Descriptor, 
 // failure surfaces as an actionable bad-request so the customer fixes the
 // credentials/workspace instead of saving a config that can never sync.
 func (s *Service) provisionIfSupported(ctx context.Context, orgID string, desc providers.Descriptor, creds providers.Credentials, settings providers.Settings) (providers.Settings, error) {
-	deps := providers.Deps{Client: boundedProviderClient(s.guardian)}
+	deps := providers.Deps{Client: boundedProviderClient(s.guardian), ServerURL: s.serverURL}
 	var prov providers.Provisioner
 	switch {
 	case desc.NewEvidenceSink != nil:
