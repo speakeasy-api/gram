@@ -543,7 +543,7 @@ func (s *Service) authenticateTokenClient(
 	//
 	// Access tokens already minted stay valid until they expire, same as the
 	// disabled case (AIS-406).
-	if err := s.checkAIToolGatewayBlock(ctx, logger, endpoint.OrganizationID, clientID); err != nil {
+	if err := s.checkAIToolGatewayBlock(ctx, logger, clientCatalog, endpoint.OrganizationID, clientID); err != nil {
 		if blockedErr, ok := errors.AsType[*AIToolBlockedError](err); ok {
 			s.rejectTokenClient(ctx, logger, r, endpoint, grantType, clientID, presentedAuthMethod, "ai_tool_blocked", mcpmetrics.IDJAGRejectionClientBlocked)
 			// This refusal ends an authorization-code exchange before the grant

@@ -3,6 +3,7 @@ package usersessions_test
 import (
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -37,4 +38,7 @@ func TestListPresetsReturnsTheRegistryPresetsInOrder(t *testing.T) {
 	var want []listedPreset
 	require.NoError(t, json.Unmarshal(data, &want))
 	require.Equal(t, want, got)
+	for _, preset := range want {
+		require.Equal(t, strings.Contains(preset.URL, "*"), preset.Pattern, preset.URL)
+	}
 }

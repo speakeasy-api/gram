@@ -47,6 +47,9 @@ func TestDatabaseCatalogPreservesShippedAdmissionAndProducts(t *testing.T) {
 	actual, ok := snapshot.CatalogPreset("https://chatgpt.com/oauth/codex/client.json")
 	require.True(t, ok)
 	require.Equal(t, "codex", actual.ProductID)
+	for _, preset := range snapshot.Catalog() {
+		require.Equal(t, strings.Contains(preset.URL, "*"), preset.IsPattern(), preset.URL)
+	}
 	// Documents load in URL order, so matcher lists may differ in order only.
 	require.ElementsMatch(t, sortedMatchers(aitargets.Defaults(aivendors.CompiledSnapshot())), sortedMatchers(aitargets.Defaults(snapshot)))
 	require.NoError(t, aitargets.Validate(snapshot, aitargets.Defaults(snapshot)))
