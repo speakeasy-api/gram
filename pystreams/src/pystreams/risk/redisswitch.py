@@ -119,9 +119,9 @@ class RedisSwitch:
 
         - Nothing was sent to write: the keys said to wait, a key changed
           between the read and the write so the instance refused the
-          transaction, or the connection failed first. The operator's job
-          closes connections during a hold, and the client reports a watched
-          connection that dropped as WatchError.
+          transaction, or the connection failed first. Where the instance
+          allows it, the operator's job closes connections during a hold, and
+          the client reports a watched connection that dropped as WatchError.
         - The connection dropped during the write and its outcome is unknown.
           Trying again can then deliver a reply twice. That is allowed: the
           reply inbox is built for at-least-once delivery and discards a repeat.
