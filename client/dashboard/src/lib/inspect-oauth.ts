@@ -41,7 +41,9 @@ function base64url(bytes: Uint8Array) {
 
 const callbackUrl = () => new URL(INSPECT_OAUTH_CALLBACK, location.origin).href;
 
-export function readInspectGrant(grantKey: string | undefined) {
+export function readInspectGrant(
+  grantKey: string | undefined,
+): z.infer<typeof grantSchema> | undefined {
   if (!grantKey) return undefined;
   const grant = grantSchema.safeParse(readJSON(grantKey));
   if (grant.success && grant.data.expiresAt > Date.now()) return grant.data;
@@ -53,7 +55,7 @@ export async function prepareInspectAuthorization(input: {
   tokenUrl: string;
   grantKey: string;
   userId: string;
-}) {
+}): Promise<string> {
   const verifier = base64url(crypto.getRandomValues(new Uint8Array(32)));
   const state = base64url(crypto.getRandomValues(new Uint8Array(32)));
   const hash = await crypto.subtle.digest(
@@ -86,7 +88,14 @@ export async function prepareInspectAuthorization(input: {
   return authorize.href;
 }
 
-export function acceptInspectCallback(query: URLSearchParams) {
+type InspectCallback = {
+  returnTo: string;
+  exchange: () => Promise<string | undefined>;
+};
+
+export function acceptInspectCallback(
+  query: URLSearchParams,
+): InspectCallback | undefined {
   const pending = pendingSchema.safeParse(readJSON(pendingKey));
   if (
     !pending.success ||
@@ -102,7 +111,7 @@ export function acceptInspectCallback(query: URLSearchParams) {
   const code = query.get("code");
   return {
     returnTo: destination.href,
-    exchange: async () => {
+    exchange: async (): Promise<string | undefined> => {
       if (query.has("error") || !code) return "Sign-in wasn't completed.";
       const response = await fetch(tokenUrl, {
         method: "POST",

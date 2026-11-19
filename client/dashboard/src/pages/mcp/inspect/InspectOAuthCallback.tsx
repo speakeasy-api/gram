@@ -4,7 +4,7 @@ import {
 } from "@/lib/inspect-oauth";
 import { useEffect, useRef, useState } from "react";
 
-export function InspectOAuthCallback() {
+export function InspectOAuthCallback(): JSX.Element {
   const started = useRef(false);
   const [failure, setFailure] = useState<{
     message: string;

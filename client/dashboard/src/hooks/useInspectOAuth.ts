@@ -6,6 +6,14 @@ import {
 import { getServerURL, mcpConnectionUrl } from "@/lib/utils";
 import { useEffect, useState } from "react";
 
+type InspectOAuthConnection = {
+  accessToken: string | undefined;
+  serverUrl: string | undefined;
+  connect: (() => void) | undefined;
+  isConnecting: boolean;
+  error: boolean;
+};
+
 export function useInspectOAuth({
   platformSlug,
   issuerId,
@@ -14,7 +22,7 @@ export function useInspectOAuth({
   platformSlug: string | undefined;
   issuerId: string | undefined;
   serverId: string | undefined;
-}) {
+}): InspectOAuthConnection {
   const session = useSession();
   const userId = session.user.id;
   const serverUrl = platformSlug
