@@ -266,6 +266,9 @@ type Service struct {
 	// userSessionRefreshReplayCoordination elects the database rotation winner, claims attemptEndMarker and keeps member statuses.
 	userSessionRefreshReplayCoordination cache.Cache
 	sessionPolicyCache                   cache.TypedCacheObject[sessionPolicyEntry]
+	// sessionLiveness memoizes Postgres's answer on whether a bearer's session
+	// row is live, so revocation never depends on a Redis entry surviving.
+	sessionLiveness *expirable.LRU[sessionLivenessKey, bool]
 	// consentToolInventoryCache holds bounded gateway challenge captures and
 	// single-server attempt snapshots captured by the consent MCP transport.
 	consentToolInventoryCache cache.TypedCacheObject[consentToolInventory]
@@ -728,6 +731,7 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
+		sessionLiveness: newSessionLivenessMemo(),
 		consentToolInventoryCache: cache.NewTypedObjectCache[consentToolInventory](
 			logger.With(attr.SlogCacheNamespace("consent_tool_inventory")),
 			cacheImpl,
