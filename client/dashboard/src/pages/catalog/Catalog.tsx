@@ -5,7 +5,10 @@ import { Heading } from "@/components/ui/Heading";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
-import { useProject } from "@/contexts/Auth";
+import { useOrganization, useProject } from "@/contexts/Auth";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { useShadowMCPPolicyInventory } from "@/components/shadow-mcp/useShadowMCPPolicyInventory";
+import { useRBAC } from "@/hooks/useRBAC";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import { useSdkClient } from "@/contexts/Sdk";
 import { invalidateAllMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers.js";
@@ -37,6 +40,13 @@ import { filterAndSortServers } from "./hooks/serverMetadata";
 import { useFilterState, type SortOption } from "./hooks/useFilterState";
 import { ServerCard } from "./ServerCard";
 import { ServerTableRow } from "./ServerTableRow";
+import { TeamUsageTable } from "./TeamUsageTable";
+import {
+  CATALOG_SHOW_PARAM,
+  CATALOG_SHOW_TEAM,
+  type CatalogShow,
+  teamUsedServers,
+} from "./team-usage";
 
 // Sort options shown in the toolbar (mirrors the legacy SortDropdown order).
 const CATALOG_SORT_OPTIONS: { value: SortOption; label: string }[] = [
@@ -67,8 +77,46 @@ function CatalogInner() {
   const navigate = useNavigate();
   // Deep link from a gateway's Add member sheet: servers installed here get
   // attached to that gateway as members, and the flow returns to it.
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const attachToGatewayId = searchParams.get("attachToGateway");
+
+  // The team view reads the org's Shadow MCP inventory, which only org admins
+  // may see, so everyone else gets the catalog alone and never fires the call.
+  // It is also left out while adding members to a gateway, a flow about the
+  // catalog's own entries.
+  const organization = useOrganization();
+  const { hasScope, isLoading: rbacLoading } = useRBAC();
+  const canSeeTeamUsage =
+    !rbacLoading &&
+    !attachToGatewayId &&
+    hasScope("org:admin", organization.id);
+  const show: CatalogShow =
+    canSeeTeamUsage &&
+    searchParams.get(CATALOG_SHOW_PARAM) === CATALOG_SHOW_TEAM
+      ? CATALOG_SHOW_TEAM
+      : "all";
+  const setShow = (next: CatalogShow) => {
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        if (next === CATALOG_SHOW_TEAM) {
+          params.set(CATALOG_SHOW_PARAM, CATALOG_SHOW_TEAM);
+          return params;
+        }
+        params.delete(CATALOG_SHOW_PARAM);
+        return params;
+      },
+      { replace: true },
+    );
+  };
+  const teamInventory = useShadowMCPPolicyInventory(
+    project.id,
+    show === CATALOG_SHOW_TEAM,
+  );
+  const teamServers = useMemo(
+    () => teamUsedServers(teamInventory.data ?? []),
+    [teamInventory.data],
+  );
 
   const attachInstalledToGateway = async (result: {
     status: "succeeded" | "failed";
@@ -183,28 +231,79 @@ function CatalogInner() {
           onChange: setSearchQuery,
           placeholder: "Search MCP servers...",
         }}
-        filters={{
-          schema: CATALOG_FILTERS,
-          values: dimensionFilters.values,
-          optionsById: CATALOG_FILTER_OPTIONS,
-          onChange: dimensionFilters.setValue as (
-            id: string,
-            value: FilterValue,
-          ) => void,
-          onClear: dimensionFilters.clearValue as (id: string) => void,
-          onClearAll: dimensionFilters.clearAll,
+        toolbarActions={
+          canSeeTeamUsage ? (
+            <SegmentedControl<CatalogShow>
+              ariaLabel="Which servers to show"
+              value={show}
+              onChange={setShow}
+              options={[
+                {
+                  value: "all",
+                  label: "All servers",
+                  tooltip: "Every server in the catalog",
+                },
+                {
+                  value: CATALOG_SHOW_TEAM,
+                  label: "Used by your team",
+                  tooltip:
+                    "Remote servers your team's agents connect to directly, most used first",
+                },
+              ]}
+            />
+          ) : undefined
+        }
+        filters={
+          show === CATALOG_SHOW_TEAM
+            ? undefined
+            : {
+                schema: CATALOG_FILTERS,
+                values: dimensionFilters.values,
+                optionsById: CATALOG_FILTER_OPTIONS,
+                onChange: dimensionFilters.setValue as (
+                  id: string,
+                  value: FilterValue,
+                ) => void,
+                onClear: dimensionFilters.clearValue as (id: string) => void,
+                onClearAll: dimensionFilters.clearAll,
+              }
+        }
+        sort={
+          show === CATALOG_SHOW_TEAM
+            ? undefined
+            : {
+                value: pageState.sort,
+                onChange: (v) => pageState.setSort(v as SortOption),
+                options: CATALOG_SORT_OPTIONS,
+              }
+        }
+        viewToggle={
+          show === CATALOG_SHOW_TEAM
+            ? undefined
+            : { value: viewMode, onChange: setViewMode }
+        }
+        onRefresh={() => {
+          if (show === CATALOG_SHOW_TEAM) {
+            void teamInventory.refetch();
+            return;
+          }
+          void refetchCatalog();
         }}
-        sort={{
-          value: pageState.sort,
-          onChange: (v) => pageState.setSort(v as SortOption),
-          options: CATALOG_SORT_OPTIONS,
-        }}
-        viewToggle={{ value: viewMode, onChange: setViewMode }}
-        onRefresh={() => void refetchCatalog()}
-        isRefreshing={isFetching}
+        isRefreshing={
+          show === CATALOG_SHOW_TEAM ? teamInventory.isFetching : isFetching
+        }
       >
-        {/* Server grid / table */}
-        {isLoading ? (
+        {show === CATALOG_SHOW_TEAM ? (
+          <TeamUsageTable
+            servers={teamServers}
+            catalog={allServers}
+            search={searchQuery}
+            isLoading={teamInventory.isPending}
+            isError={teamInventory.isError}
+            onRetry={() => void teamInventory.refetch()}
+            onAddFromCatalog={handleAdd}
+          />
+        ) : isLoading ? (
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             {Array.from({ length: 6 }, (_, i) => `skeleton-${i}`).map((id) => (
               <Skeleton key={id} className="h-[200px]" />
@@ -257,7 +356,7 @@ function CatalogInner() {
         )}
 
         {/* Empty state */}
-        {!isLoading && filteredServers.length === 0 && (
+        {show === "all" && !isLoading && filteredServers.length === 0 && (
           <EmptySearchResult
             hasFilters={hasActiveFilters || searchQuery !== ""}
             onClear={() => {

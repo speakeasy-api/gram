@@ -18,7 +18,11 @@ import { useIsSpeakeasyStaff, useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { AlertCircle, Plug } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
+import {
+  PREFILL_NAME_PARAM,
+  PREFILL_URL_PARAM,
+} from "@/pages/catalog/team-usage";
 import { toast } from "sonner";
 import { useCreateRemoteMcpSource } from "./hooks";
 import { useCreateUnproxiedMcpSource } from "../unproxied-mcp/hooks";
@@ -65,8 +69,15 @@ function CreateRemoteMcpForm() {
   const issuerQuery = useEffectiveUserSessionIssuers();
   const newGuardrail = useNewServerGuardrail();
 
-  const [name, setName] = useState("");
-  const [url, setUrl] = useState("");
+  // A link from the catalog's "Used by your team" view opens the form with the
+  // server's URL and name already filled in; the admin still verifies and saves.
+  const [searchParams] = useSearchParams();
+  const [name, setName] = useState(
+    () => searchParams.get(PREFILL_NAME_PARAM)?.trim() ?? "",
+  );
+  const [url, setUrl] = useState(
+    () => searchParams.get(PREFILL_URL_PARAM)?.trim() ?? "",
+  );
   const [mode, setMode] = useState<ProxyMode>("proxied");
   const [issuerSelection, setIssuerSelection] = useState<string | null>(null);
   const [identityMode, setIdentityMode] =
