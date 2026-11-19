@@ -48,8 +48,8 @@ vi.mock("../../inspect/useChatSessionHeaders", () => ({
   }),
 }));
 
-vi.mock("@/pages/playground/PlaygroundChat", () => ({
-  PlaygroundChat: ({ mcpUrl }: { mcpUrl: string }) => (
+vi.mock("@/pages/mcp/inspect-chat/InspectChat", () => ({
+  InspectChat: ({ mcpUrl }: { mcpUrl: string }) => (
     <div data-testid="chat" data-url={mcpUrl} />
   ),
 }));

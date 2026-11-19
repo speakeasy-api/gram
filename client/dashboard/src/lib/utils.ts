@@ -32,8 +32,8 @@ export function cn(...inputs: ClassValue[]): string {
 // __GRAM_SERVER_URL__ is the server's authoritative URL (injected at build
 // time from GRAM_SERVER_URL). The viteprod profile leaves it unset, so fall
 // back to the current origin instead of degrading to `undefined/rpc/...`.
-// Use everywhere except the playground — MCP configs, callback URL
-// displays, anything operator-facing.
+// Use everywhere except in-browser MCP and chat clients — MCP configs,
+// callback URL displays, anything operator-facing.
 export function getServerURL(): string {
   return __GRAM_SERVER_URL__ ?? window.location.origin;
 }
@@ -95,12 +95,13 @@ export function tunnelGatewayURL(serverURL = getServerURL()): string {
   return `${server.protocol === "http:" ? "ws" : "wss"}://${host}/connect`;
 }
 
-// __PLAYGROUND_PROXY_URL__ is the dashboard origin in dev (so browser-side MCP
+// __DEV_PROXY_URL__ is the dashboard origin in dev (so browser-side MCP
 // requests can ride the vite proxy and ferry cookies the Vercel AI SDK can't
-// forward across origins), and undefined in prod. Consumed by the playground
-// and the remote-MCP tools listing; everything else uses getServerURL().
-export function getPlaygroundMcpBaseURL(): string {
-  return __PLAYGROUND_PROXY_URL__ ?? getServerURL();
+// forward across origins), and undefined in prod. Consumed by the MCP Inspect
+// chat, in-browser MCP clients and dashboard completions; everything else
+// uses getServerURL().
+export function getChatMcpBaseURL(): string {
+  return __DEV_PROXY_URL__ ?? getServerURL();
 }
 
 // mcpConnectionUrl rebases a display MCP URL (built from getServerURL) onto the
@@ -113,7 +114,7 @@ export function mcpConnectionUrl(
   displayUrl: string | undefined,
 ): string | undefined {
   if (!displayUrl) return displayUrl;
-  const base = getPlaygroundMcpBaseURL();
+  const base = getChatMcpBaseURL();
   const server = getServerURL();
   if (base === server) return displayUrl;
   try {

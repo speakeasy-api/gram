@@ -1126,7 +1126,6 @@ export function InsightsProvider({
   // exception: wrapping them would nest RemoteThreadListRuntimes before their
   // useHideInsightsDock layout effect can register with this parent.
   const pageOwnsRuntime =
-    routes.playground.active ||
     // Inspect's Chat tab mounts its own provider.
     routes.mcp.details.inspect.active ||
     routes.mcp.gateway.inspect.active ||
