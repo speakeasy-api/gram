@@ -51,18 +51,24 @@ func TestNotifyDMsAdministratorsButNotTheRequester(t *testing.T) {
 func TestEndOfDayUsesTheRequestersSlackTimeZone(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	const zone = "Pacific/Kiritimati"
-	f.slack.setZone("UREQUESTER", zone)
-	loc, err := time.LoadLocation(zone)
-	require.NoError(t, err)
-	local := time.Now().In(loc)
-	end := time.Date(local.Year(), local.Month(), local.Day(), 23, 59, 0, 0, loc)
-	if time.Until(end) < time.Hour {
-		t.Skip("too close to midnight in the requester's time zone for End of day to be offered")
+	// Two zones three hours apart on the clock and away from UTC: whenever
+	// one is close to midnight, End of day is offered in the other.
+	var end time.Time
+	for _, zone := range []string{"Pacific/Kiritimati", "America/Denver"} {
+		loc, err := time.LoadLocation(zone)
+		require.NoError(t, err)
+		local := time.Now().In(loc)
+		candidate := time.Date(local.Year(), local.Month(), local.Day(), 23, 59, 0, 0, loc)
+		if time.Until(candidate) >= time.Hour {
+			f.slack.setZone("UREQUESTER", zone)
+			end = candidate
+			break
+		}
 	}
+	require.False(t, end.IsZero())
 	target := f.pendingRequest(t)
 
-	_, err = f.notifier.Notify(t.Context(), target)
+	_, err := f.notifier.Notify(t.Context(), target)
 	require.NoError(t, err)
 
 	posts := f.slack.callsTo("chat.postMessage")
