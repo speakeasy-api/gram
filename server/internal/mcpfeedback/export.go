@@ -17,6 +17,7 @@ import (
 	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 )
 
 // exportEventName is the event name of every exported feedback record.
@@ -114,6 +115,29 @@ func newExportRecord(eventName string, at time.Time, severity log.Severity, seve
 		record.AddAttributes(log.KeyValueFromAttribute(kv))
 	}
 	return record
+}
+
+// webhookPayload is the webhook event for one stored report.
+func webhookPayload(stored storedReport) events.McpFeedbackSubmittedPayloadV1 {
+	return events.McpFeedbackSubmittedPayloadV1{
+		ID:             stored.id,
+		OrganizationID: stored.target.OrganizationID,
+		ProjectID:      stored.target.ProjectID,
+		McpServerID:    stored.target.McpServerID,
+		Content:        stored.report.Content,
+		Severity:       string(stored.report.Severity),
+		Workaround:     stored.report.Workaround,
+		Intention:      stored.report.Intention,
+		ToolName:       stored.report.ToolName,
+		Model:          stored.report.Model,
+		SessionID:      stored.caller.SessionID,
+		UserID:         stored.caller.UserID,
+		UserEmail:      stored.caller.UserEmail,
+		ExternalUserID: stored.caller.ExternalUserID,
+		ClientName:     stored.caller.ClientName,
+		ClientVersion:  stored.caller.ClientVersion,
+		CreatedAt:      stored.createdAt,
+	}
 }
 
 // TestSource builds the MCP feedback export's test event exactly as the

@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 )
 
@@ -33,9 +34,9 @@ const (
 	CallerReportsPerMinute = 5
 
 	// ServerReportsPerMinute bounds what one server stores and, with it, the
-	// exported records its callers can cause. A public server's callers are
-	// anonymous and can change session at will, so this is the limit that
-	// holds against them.
+	// webhook events and exported records its callers can cause. A public
+	// server's callers are anonymous and can change session at will, so this
+	// is the limit that holds against them.
 	ServerReportsPerMinute = 60
 
 	meterReports = "mcp.feedback.reports"
@@ -144,8 +145,8 @@ type CallResult struct {
 
 // Recorder serves the feedback tool for the gateway: it knows which servers
 // offer the tool and stores what agents send through it. Every stored report
-// queues an exported log record in the same transaction, so a report that
-// exists has left, and one that was refused has not.
+// queues a webhook event and an exported log record in the same transaction,
+// so a report that exists has left, and one that was refused has not.
 type Recorder struct {
 	logger   *slog.Logger
 	db       *pgxpool.Pool
@@ -246,7 +247,7 @@ func (r *Recorder) Call(ctx context.Context, target Target, caller Caller, argum
 	}
 }
 
-// Submit stores one report and queues its exported record.
+// Submit stores one report and queues its webhook event and exported record.
 // It returns ErrRateLimited when the caller or the server has sent too many.
 func (r *Recorder) Submit(ctx context.Context, target Target, caller Caller, report Report) (Receipt, error) {
 	var none Receipt
@@ -292,6 +293,13 @@ func (r *Recorder) Submit(ctx context.Context, target Target, caller Caller, rep
 		target:    target,
 		report:    report,
 		caller:    caller,
+	}
+
+	if _, err := outbox.PublishIdentifiedWebhookEvents(ctx, dbtx, target.OrganizationID, events.McpFeedbackSubmittedV1, []outbox.IdentifiedWebhookEvent[events.McpFeedbackSubmittedPayloadV1]{{
+		ID:      events.McpFeedbackSubmittedEventID(stored.id),
+		Payload: webhookPayload(stored),
+	}}); err != nil {
+		return none, fmt.Errorf("queue feedback webhook event: %w", err)
 	}
 
 	record := exportRecord(stored)

@@ -6634,6 +6634,62 @@ webhooks:
                                 - occurred_at
                             type: object
                 required: true
+    mcp_feedback.submitted_v1:
+        post:
+            description: An agent sent feedback through an MCP server's built-in feedback tool
+            operationId: mcp_feedback.submitted_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                client_name:
+                                    type: string
+                                client_version:
+                                    type: string
+                                content:
+                                    type: string
+                                created_at:
+                                    type: string
+                                external_user_id:
+                                    type: string
+                                id:
+                                    format: uuid
+                                    type: string
+                                intention:
+                                    type: string
+                                mcp_server_id:
+                                    format: uuid
+                                    type: string
+                                model:
+                                    type: string
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type: string
+                                session_id:
+                                    type: string
+                                severity:
+                                    type: string
+                                tool_name:
+                                    type: string
+                                user_email:
+                                    type: string
+                                user_id:
+                                    type: string
+                                workaround:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - project_id
+                                - mcp_server_id
+                                - content
+                                - created_at
+                            type: object
+                required: true
     risk_finding.created:
         post:
             description: A potential risk was detected in a LLM message or tool call
