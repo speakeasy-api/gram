@@ -4,8 +4,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { ViewOrgSessionsButton } from "./ViewOrgSessionsButton";
 
-const { hasScope } = vi.hoisted(() => ({
+const { hasScope, health } = vi.hoisted(() => ({
   hasScope: vi.fn(),
+  health: vi.fn(),
+}));
+
+vi.mock("@/pages/mcp-sessions/connection-health/flag", async (original) => ({
+  ...(await original<
+    typeof import("@/pages/mcp-sessions/connection-health/flag")
+  >()),
+  useConnectionHealthFlag: () => health(),
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -31,6 +39,7 @@ function link() {
 describe("ViewOrgSessionsButton", () => {
   beforeEach(() => {
     hasScope.mockReturnValue(true);
+    health.mockReturnValue("off");
   });
 
   afterEach(() => {
@@ -45,6 +54,16 @@ describe("ViewOrgSessionsButton", () => {
       "/org-slug/projects/project-slug/mcp-sessions",
     );
     expect(hasScope).toHaveBeenCalledWith("project:read", "project_example");
+  });
+
+  it("opens the sessions list instead of Overview with connection health on", () => {
+    health.mockReturnValue("on");
+
+    render(<ViewOrgSessionsButton />, { wrapper: MemoryRouter });
+
+    expect(link()?.getAttribute("href")).toBe(
+      "/org-slug/projects/project-slug/mcp-sessions?view=sessions",
+    );
   });
 
   it("renders nothing without read access to the active project", () => {

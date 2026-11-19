@@ -7,3 +7,7 @@ export function useConnectionHealthFlag(): "pending" | "on" | "off" {
   if (flag.status === "loading") return "pending";
   return flag.status === "enabled" ? "on" : "off";
 }
+
+/** `/mcp-sessions?view=sessions` opens Connections instead of Overview. */
+export const LANDING_VIEW_PARAM = "view";
+export const SESSIONS_LANDING_VIEW = "sessions";

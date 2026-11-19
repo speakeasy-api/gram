@@ -5,7 +5,11 @@ import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
 import { Navigate, useLocation, useParams } from "react-router";
-import { useConnectionHealthFlag } from "./connection-health/flag";
+import {
+  LANDING_VIEW_PARAM,
+  SESSIONS_LANDING_VIEW,
+  useConnectionHealthFlag,
+} from "./connection-health/flag";
 import {
   initialProvider,
   useLastProvider,
@@ -19,7 +23,8 @@ const LEGACY_PROVIDER_PARAM = "issuerId";
 
 /**
  * `/mcp-sessions`: opens a provider's Connections, or its Overview for a bare
- * visit while connection health is on. Links from People and killswitches
+ * visit while connection health is on (`?view=sessions` still opens
+ * Connections). Links from People and killswitches
  * carry their filters in the query, which the Connections tab reads, so the
  * query goes along.
  */
@@ -36,6 +41,9 @@ export default function McpSessionsIndex(): JSX.Element {
   const params = new URLSearchParams(search);
   const requested = params.get(LEGACY_PROVIDER_PARAM);
   params.delete(LEGACY_PROVIDER_PARAM);
+  const wantsSessions =
+    params.get(LANDING_VIEW_PARAM) === SESSIONS_LANDING_VIEW;
+  params.delete(LANDING_VIEW_PARAM);
   const provider = initialProvider(providers, { requested, last });
 
   if (!provider) {
@@ -60,7 +68,7 @@ export default function McpSessionsIndex(): JSX.Element {
   const query = params.toString();
   // A hand-off's filters belong to Connections; a bare visit opens Overview.
   const landing =
-    health === "on" && !query
+    health === "on" && !query && !wantsSessions
       ? routes.mcpSessions.provider.overview
       : routes.mcpSessions.provider.connections;
   return (
