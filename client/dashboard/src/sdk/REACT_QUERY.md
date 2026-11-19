@@ -224,11 +224,11 @@ infinite scrolling and "load more" user interfaces.
 > those hooks may be more suitable.
 
 ```tsx
-import { useGlobalRemoteSessionClientsInfinite } from "@gram/client/react-query/adminRemoteSessionsListGlobalClients.js";
+import { useShadowMCPInventoryInfinite } from "@gram/client/react-query/accessListShadowMCPInventory.js";
 
 export function Example() {
-  const { data, error, status, fetchNextPage, hasNextPage } = useGlobalRemoteSessionClientsInfinite({
-    remoteSessionIssuerId: "7c1fa209-8b42-46d5-9dae-1898e2a1e3bf",
+  const { data, error, status, fetchNextPage, hasNextPage } = useShadowMCPInventoryInfinite({
+    projectId: "6b899ed5-f939-40c4-b6bc-8a61c885cf97",
   });
 
   return (

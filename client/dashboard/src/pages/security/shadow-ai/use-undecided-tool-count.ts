@@ -36,7 +36,7 @@ export function useUndecidedToolCount(): UndecidedToolCount {
   );
   const aiTools = countUndecidedAITools(detectionsQuery.data?.detections ?? []);
   const mcpServers = countUndecidedMCPServers(
-    inventoryQuery.data?.servers ?? [],
+    inventoryQuery.data?.result.servers ?? [],
   );
   return {
     aiTools,
@@ -44,6 +44,6 @@ export function useUndecidedToolCount(): UndecidedToolCount {
     total: aiTools + mcpServers,
     isPending: detectionsQuery.isPending || inventoryQuery.isPending,
     isError: detectionsQuery.isError || inventoryQuery.isError,
-    truncated: !!inventoryQuery.data?.nextCursor,
+    truncated: !!inventoryQuery.data?.result.nextCursor,
   };
 }

@@ -23,7 +23,6 @@ export default function ShadowMCP(): JSX.Element {
       description="See the MCP servers your team's agents use, and decide which may connect."
       primaryAction={<ShadowMCPModeControl />}
       hideToolbar
-      fullHeight
     >
       <MCPApprovalsTab />
     </ResourceListPage>

@@ -5,13 +5,13 @@ import { Page } from "@/components/page-layout";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
-import { useShadowMCPInventory } from "@gram/client/react-query/shadowMCPInventory.js";
+import { useShadowMCPInventoryInfinite } from "@gram/client/react-query/shadowMCPInventory.js";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { type Column, type SortDescriptor, Table } from "@/components/ui/Table";
 import { sortTableData } from "@/components/ui/Table/sorting";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { cn } from "@/lib/utils";
@@ -68,15 +68,6 @@ const INVENTORY_FILTERS = defineFilters([
 ]);
 
 const INVENTORY_PAGE_LIMIT = 50;
-const FIRST_PAGE_CURSOR = "";
-
-type InventoryPage = {
-  cursor: string;
-  nextCursor?: string;
-  servers: ShadowMCPInventoryServer[];
-};
-
-const EMPTY_INVENTORY_PAGES: InventoryPage[] = [];
 
 function InventoryStatusCell({ server }: { server: ShadowMCPInventoryServer }) {
   const status = shadowMCPInventoryStatus(server);
@@ -149,38 +140,31 @@ export function ShadowMCPInventoryTable({
   roles: Role[];
   shadowMCPPolicies: ShadowMCPPolicy[];
 }): JSX.Element {
-  const inventoryScope = enabled && projectID.length > 0 ? projectID : "";
-  const [cursor, setCursor] = useState<string | undefined>(undefined);
-  const [pages, setPages] = useState<InventoryPage[]>([]);
-  const [paginationScope, setPaginationScope] = useState(inventoryScope);
-  const hasActivePagination = paginationScope === inventoryScope;
-  const activeCursor = hasActivePagination ? cursor : undefined;
-  const activePages = hasActivePagination ? pages : EMPTY_INVENTORY_PAGES;
-  const inventoryRequest = activeCursor
-    ? {
-        projectId: projectID,
-        limit: INVENTORY_PAGE_LIMIT,
-        cursor: activeCursor,
-      }
-    : { projectId: projectID, limit: INVENTORY_PAGE_LIMIT };
-  const inventoryQuery = useShadowMCPInventory(inventoryRequest, undefined, {
-    enabled: enabled && projectID.length > 0,
-    // The dashboard default throws every non-auth failure to the error
-    // boundary; the table has its own failure state and a retry.
-    throwOnError: false,
-  });
+  // React Query owns the pages: each "Load more" appends the next cursor's
+  // page, and a decision elsewhere invalidates and refetches every loaded
+  // page, so the list never mixes stale and fresh rows.
+  const queryEnabled = enabled && projectID.length > 0;
+  const inventoryQuery = useShadowMCPInventoryInfinite(
+    { projectId: projectID, limit: INVENTORY_PAGE_LIMIT },
+    undefined,
+    {
+      enabled: queryEnabled,
+      // The dashboard default throws every non-auth failure to the error
+      // boundary; the table has its own failure state and a retry.
+      throwOnError: false,
+    },
+  );
   // The row action and the stdio review's button wait while the policy list
   // is unavailable, the way the server page's button does.
   const decideDisabledReason = policiesUnavailable
     ? POLICIES_UNAVAILABLE_REASON
     : undefined;
   const [search, setSearch] = useState("");
-  // Most used first: the servers many people rely on are the ones worth
-  // making official, and the ones a block would hurt most.
-  const [sort, setSort] = useState<SortDescriptor | null>({
-    id: "usage",
-    direction: "desc",
-  });
+  // Unsorted by default, the rows keep the server's order: open requests
+  // first, then the most recently called. That order is the one the cursor
+  // pages through, so each "Load more" appends below the rows already shown
+  // instead of scattering them through a client-side sort of a partial list.
+  const [sort, setSort] = useState<SortDescriptor | null>(null);
   const [decideTarget, setDecideTarget] = useState<DecideAccessTarget | null>(
     null,
   );
@@ -194,77 +178,28 @@ export function ShadowMCPInventoryTable({
   const routes = useRoutes();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    setPaginationScope(inventoryScope);
-    setCursor(undefined);
-    setPages([]);
-  }, [inventoryScope]);
-
-  useEffect(() => {
-    if (
-      !hasActivePagination ||
-      !enabled ||
-      projectID.length === 0 ||
-      !inventoryQuery.data
-    ) {
-      return;
-    }
-
-    const pageCursor = activeCursor ?? FIRST_PAGE_CURSOR;
-    setPages((currentPages) => {
-      const page: InventoryPage = {
-        cursor: pageCursor,
-        nextCursor: inventoryQuery.data.nextCursor,
-        servers: inventoryQuery.data.servers,
-      };
-      const existingPageIndex = currentPages.findIndex(
-        (currentPage) => currentPage.cursor === pageCursor,
-      );
-
-      if (existingPageIndex === -1) {
-        return [...currentPages, page];
+  // A row can move to a later page between fetches when its usage changes;
+  // keep its first appearance so the table never renders a duplicate key.
+  const servers = useMemo(() => {
+    // A disabled query keeps its cached pages; a disabled table shows none.
+    if (!queryEnabled) return [];
+    const seen = new Set<string>();
+    const rows: ShadowMCPInventoryServer[] = [];
+    for (const page of inventoryQuery.data?.pages ?? []) {
+      for (const server of page.result.servers) {
+        if (seen.has(server.canonicalServerUrl)) continue;
+        seen.add(server.canonicalServerUrl);
+        rows.push(server);
       }
+    }
+    return rows;
+  }, [inventoryQuery.data, queryEnabled]);
 
-      return currentPages.map((currentPage, index) =>
-        index === existingPageIndex ? page : currentPage,
-      );
-    });
-  }, [
-    activeCursor,
-    enabled,
-    hasActivePagination,
-    inventoryQuery.data,
-    projectID,
-  ]);
-
-  const loadedServers = useMemo(() => {
-    return activePages.flatMap((page) => page.servers);
-  }, [activePages]);
-
-  const latestPage = activePages[activePages.length - 1];
-  const canUseInventoryQueryData =
-    enabled && projectID.length > 0 && hasActivePagination;
-  const nextCursor =
-    latestPage?.nextCursor ??
-    (canUseInventoryQueryData ? inventoryQuery.data?.nextCursor : undefined);
-  const hasLoadedPages = activePages.length > 0;
-  const isInitialLoading = inventoryQuery.isLoading && !hasLoadedPages;
-  const isInitialError = Boolean(inventoryQuery.error && !hasLoadedPages);
-  const isLoadingMore = Boolean(
-    hasLoadedPages && (inventoryQuery.isFetching || inventoryQuery.isLoading),
-  );
-
-  const loadMoreServers = () => {
-    if (!nextCursor || isLoadingMore) {
+  const loadMoreServers = async () => {
+    if (!inventoryQuery.hasNextPage || inventoryQuery.isFetchingNextPage) {
       return;
     }
-
-    if (activeCursor === nextCursor && inventoryQuery.error) {
-      void inventoryQuery.refetch();
-      return;
-    }
-
-    setCursor(nextCursor);
+    await inventoryQuery.fetchNextPage();
   };
 
   const isStdio = (server: ShadowMCPInventoryServer) =>
@@ -406,13 +341,6 @@ export function ShadowMCPInventoryTable({
     },
   ];
 
-  const servers = useMemo(() => {
-    if (loadedServers.length > 0) {
-      return loadedServers;
-    }
-
-    return canUseInventoryQueryData ? (inventoryQuery.data?.servers ?? []) : [];
-  }, [canUseInventoryQueryData, inventoryQuery.data?.servers, loadedServers]);
   const normalizedSearch = search.trim().toLowerCase();
   const reviewFilter = values.review ?? undefined;
   const filteredServers = useMemo(() => {
@@ -441,11 +369,11 @@ export function ShadowMCPInventoryTable({
         ? `No servers with review state “${reviewFilterLabel}”`
         : undefined;
 
-  if (isInitialLoading) {
+  if (inventoryQuery.isLoading) {
     return <SkeletonTable />;
   }
 
-  if (isInitialError) {
+  if (inventoryQuery.isError && servers.length === 0) {
     return (
       <div className="bg-background flex min-h-32 flex-col items-center justify-center gap-3 px-4 py-8 text-center">
         <div className="space-y-1">
@@ -472,12 +400,7 @@ export function ShadowMCPInventoryTable({
   }
 
   return (
-    <div
-      className={cn(
-        "flex min-h-0 shrink flex-col gap-4 overflow-hidden",
-        className,
-      )}
-    >
+    <div className={cn("flex flex-col gap-4", className)}>
       <ReviewRequestSheet
         request={
           reviewSheetServer?.approvalRequest
@@ -517,18 +440,17 @@ export function ShadowMCPInventoryTable({
         members={members}
         roles={roles}
         onDecided={() => {
-          setCursor(undefined);
-          setPages([]);
-          // A decision handed off from the stdio review sheet resolves that
+          // The sheet invalidates the inventory, which refetches every
+          // loaded page. A decision handed off from the stdio review sheet resolves that
           // review; leaving the sheet open underneath would return the admin
           // to a stale pending view of a request that was just decided.
           setReviewSheetServer(null);
         }}
       />
-      <Page.Toolbar className="shrink-0">
+      <Page.Toolbar>
         <Page.Toolbar.Search
           onChange={setSearch}
-          placeholder="Search servers..."
+          placeholder="Search loaded servers..."
           value={search}
         />
         <Page.Toolbar.Filters
@@ -540,21 +462,21 @@ export function ShadowMCPInventoryTable({
           onClearAll={clearAll}
         />
       </Page.Toolbar>
-      <Table
-        columns={columns}
-        className="min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] overflow-x-auto overflow-y-hidden"
-      >
+      {/* The table grows with its rows and the page scrolls, as on the
+        other dashboard list pages. A scrolling table body would carry the
+        Load more row, which sits at the body's bottom edge, up over the
+        rows as the body scrolls. */}
+      <Table columns={columns} className="overflow-x-auto">
         <Table.Header columns={columns} sort={sort} onSortChange={setSort} />
         <Table.Body
           columns={columns}
           data={sortedServers}
           handleLoadMore={loadMoreServers}
-          hasMore={Boolean(nextCursor)}
-          isLoading={isLoadingMore}
+          hasMore={Boolean(inventoryQuery.hasNextPage)}
+          isLoading={inventoryQuery.isFetchingNextPage}
           noResultsMessage={noResultsMessage}
           onRowClick={openRow}
           rowKey={(row) => row.canonicalServerUrl}
-          className="min-h-0 content-start overflow-y-auto"
           renderRow={(row, rowElement) => (
             <TableRowContextMenu
               key={row.canonicalServerUrl}
@@ -573,6 +495,20 @@ export function ShadowMCPInventoryTable({
           )}
         />
       </Table>
+      {inventoryQuery.isFetchNextPageError ? (
+        <div className="flex items-center justify-between border p-3">
+          <Text destructive small>
+            More servers could not be loaded.
+          </Text>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => void inventoryQuery.fetchNextPage()}
+          >
+            <Button.Text>Retry</Button.Text>
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

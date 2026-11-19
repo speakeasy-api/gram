@@ -48,8 +48,8 @@ export function useShadowMCPPolicyInventory(
           undefined,
           { signal },
         );
-        servers.push(...page.servers);
-        cursor = page.nextCursor;
+        servers.push(...page.result.servers);
+        cursor = page.result.nextCursor;
       } while (cursor);
 
       return servers;

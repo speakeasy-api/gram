@@ -4,6 +4,13 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { safeParse } from "../../lib/schemas.js";
+import { Result as SafeParseResult } from "../../types/fp.js";
+import {
+  ListShadowMCPInventoryResult,
+  ListShadowMCPInventoryResult$inboundSchema,
+} from "../components/listshadowmcpinventoryresult.js";
+import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type ListShadowMCPInventorySecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -20,6 +27,10 @@ export type ListShadowMCPInventoryRequest = {
    * Session header
    */
   gramSession?: string | undefined;
+};
+
+export type ListShadowMCPInventoryResponse = {
+  result: ListShadowMCPInventoryResult;
 };
 
 /** @internal */
@@ -86,5 +97,30 @@ export function listShadowMCPInventoryRequestToJSON(
     ListShadowMCPInventoryRequest$outboundSchema.parse(
       listShadowMCPInventoryRequest,
     ),
+  );
+}
+
+/** @internal */
+export const ListShadowMCPInventoryResponse$inboundSchema: z.ZodMiniType<
+  ListShadowMCPInventoryResponse,
+  unknown
+> = z.pipe(
+  z.object({
+    Result: ListShadowMCPInventoryResult$inboundSchema,
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "Result": "result",
+    });
+  }),
+);
+
+export function listShadowMCPInventoryResponseFromJSON(
+  jsonString: string,
+): SafeParseResult<ListShadowMCPInventoryResponse, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => ListShadowMCPInventoryResponse$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListShadowMCPInventoryResponse' from JSON`,
   );
 }
