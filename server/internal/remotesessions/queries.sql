@@ -1540,6 +1540,17 @@ WHERE s.subject_urn = @subject_urn
   AND c.id = s.remote_session_client_id
   AND (client_project.organization_id = @organization_id::text OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)));
 
+-- name: GetRemoteSessionClientSessionOrganization :one
+-- The organization a session under the client is stored with, resolved as
+-- UpsertRemoteSessionGrant resolves it: the client's project's organization
+-- first, then the client's own. No rows means a session under the client has
+-- no organization and stays on the platform key.
+SELECT org.id
+FROM remote_session_clients AS client
+LEFT JOIN projects AS project ON project.id = client.project_id
+JOIN organization_metadata AS org ON org.id = COALESCE(project.organization_id, client.organization_id)
+WHERE client.id = @remote_session_client_id;
+
 -- name: UpsertRemoteSessionGrant :one
 -- Used by /mcp/remote_login_callback to materialise a fresh authorization for the
 -- remote_session for a (subject, client) pair. It stores no tokens: the

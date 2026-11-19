@@ -5732,6 +5732,25 @@ func (q *Queries) GetRemoteSessionClientRevocationTargetByID(ctx context.Context
 	return i, err
 }
 
+const getRemoteSessionClientSessionOrganization = `-- name: GetRemoteSessionClientSessionOrganization :one
+SELECT org.id
+FROM remote_session_clients AS client
+LEFT JOIN projects AS project ON project.id = client.project_id
+JOIN organization_metadata AS org ON org.id = COALESCE(project.organization_id, client.organization_id)
+WHERE client.id = $1
+`
+
+// The organization a session under the client is stored with, resolved as
+// UpsertRemoteSessionGrant resolves it: the client's project's organization
+// first, then the client's own. No rows means a session under the client has
+// no organization and stays on the platform key.
+func (q *Queries) GetRemoteSessionClientSessionOrganization(ctx context.Context, remoteSessionClientID uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getRemoteSessionClientSessionOrganization, remoteSessionClientID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getRemoteSessionClientTenantOrganizationID = `-- name: GetRemoteSessionClientTenantOrganizationID :one
 SELECT COALESCE(c.organization_id, p.organization_id, '')::text AS organization_id
 FROM remote_session_clients AS c

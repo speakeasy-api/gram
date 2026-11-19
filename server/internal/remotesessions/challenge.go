@@ -2000,15 +2000,16 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnauthorized, err, "the remote session client's assertion audience is misconfigured").LogError(ctx, logger)
 	}
 	// The pair the exchange returns has to be stored, and the code cannot be
-	// redeemed twice, so the organization's key must be able to seal it first.
-	// The session takes its client's organization, through the client's
-	// project first; the login state names that project's organization.
-	sessionOrganization := client.OrganizationID
-	if client.ProjectID.Valid && client.ProjectID.UUID == state.ProjectID && state.OrganizationID != "" {
-		sessionOrganization = conv.ToPGText(state.OrganizationID)
-	}
-	if err := m.tokens.RequireUsable(ctx, nil, sessionOrganization); err != nil {
+	// redeemed twice, so the organization's key must be able to seal it first:
+	// the organization the session will be stored with, resolved as the grant
+	// upsert resolves it.
+	sessionOrganization, err := remotesessions_repo.New(m.db).GetRemoteSessionClientSessionOrganization(ctx, client.ID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+		return none, oops.E(oops.CodeUnexpected, err, "resolve the session's organization").LogError(ctx, logger)
+	}
+	if err := m.tokens.RequireUsable(ctx, nil, conv.ToPGTextEmpty(sessionOrganization)); err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeTransientFailure)
 		return none, oops.E(oops.CodeUnavailable, err, "the session's tokens cannot be stored right now; try signing in again shortly").LogError(ctx, logger)
 	}
 	tok, err := m.exchangeCode(ctx, doer, state, TokenEndpointClientAuth{
@@ -2226,10 +2227,11 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 			t.Refuse(ctx, mcpconnectionattempts.CodeExpired)
 			return none, oops.E(oops.CodeUnauthorized, err, "this login expired, start it again").LogWarn(ctx, logger)
 		}
-		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		if orgencryption.IsKeyProblem(err) {
+			t.Refuse(ctx, mcpconnectionattempts.CodeTransientFailure)
 			return none, oops.E(oops.CodeUnavailable, err, "the session's tokens cannot be stored right now; try signing in again shortly").LogError(ctx, logger)
 		}
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return none, oops.E(oops.CodeUnexpected, err, "store remote session").LogError(ctx, logger)
 	}
 

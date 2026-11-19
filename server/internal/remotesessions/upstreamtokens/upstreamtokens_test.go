@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/orgencryption/orgencryptiontest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // upstreamTokenQueriesPath is the only queries file allowed to write a copy of
@@ -401,4 +402,30 @@ func TestCopyStoresCoverEveryOrganizationKeyColumn(t *testing.T) {
 		require.True(t, got[column], "%s has no CopyStore, so finalize would leave its platform-key copies behind", column)
 	}
 	require.Len(t, got, len(want), "every CopyStore names an organization-key column of the use case's tables")
+}
+
+func TestSessionOrganizationOfAProjectClientWithoutOrganization(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	client, err := repo.New(ti.conn).CreateRemoteSessionClient(t.Context(), repo.CreateRemoteSessionClientParams{
+		ProjectID:               uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		OrganizationID:          nullText(),
+		RemoteSessionIssuerID:   ti.remoteIssuerID,
+		ClientID:                "client-" + uuid.NewString(),
+		TokenEndpointAuthMethod: conv.ToPGText("none"),
+	})
+	require.NoError(t, err)
+
+	organization, err := repo.New(ti.conn).GetRemoteSessionClientSessionOrganization(t.Context(), client.ID)
+	require.NoError(t, err)
+	require.Equal(t, ti.orgID, organization, "the key check uses the organization a session under the client is stored with")
+
+	session, err := repo.New(ti.conn).CreateRemoteSessionFixture(t.Context(), repo.CreateRemoteSessionFixtureParams{
+		SubjectUrn:            urn.NewUserSubject("user_" + uuid.NewString()),
+		UserSessionIssuerID:   ti.userSessionIssuer,
+		RemoteSessionClientID: client.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, conv.ToPGText(organization), session.OrganizationID, "the same organization the session row records")
 }
