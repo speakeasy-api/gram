@@ -2058,7 +2058,6 @@ func newStartCommand() *cli.Command {
 				Skills:                    skillsService,
 				GatewaySessions:           userSessionsService,
 				AgentAuthorizationChecks:  accessService,
-				GatewayProxy:              mcpService,
 				SkillInsights:             telemetryrepo.New(chReadDB),
 				RiskPolicyApprovals:       mcpApprovalService,
 				RiskPolicySignaler:        riskSignaler,
