@@ -11,6 +11,7 @@ import { MemberWorkflowCTA } from "@/components/platform-mcp/member-workflow-cta
 import { RankedBarList } from "@/components/chart/RankedBarList";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeriesChart";
@@ -31,6 +32,20 @@ import type { ParsedTargetFilter } from "@/components/observe/observeTargetFilte
 export type HostedServerRef =
   | { kind: "toolset"; id: string; slug: string; name: string }
   | { kind: "mcp-server"; id: string; slug: string; name: string };
+
+// Thin rows where the top-tools bars will land, instead of an empty-state
+// message that would claim there were no calls before the data arrives.
+function RankedBarListSkeleton(): React.JSX.Element {
+  return (
+    <div className="flex flex-col gap-3" aria-hidden="true">
+      {["w-[90%]", "w-[70%]", "w-1/2", "w-[35%]"].map((width) => (
+        <Skeleton key={width} className={`h-4 ${width}`} />
+      ))}
+    </div>
+  );
+}
+
+export const OVERVIEW_STALE_TIME_MS = 5 * 60_000;
 
 function toolLabelFromUrn(urn: string): string {
   const parts = urn.split(":");
@@ -87,6 +102,9 @@ export function MCPOverviewTab({
             }),
           ),
         placeholderData: keepPreviousData,
+        // Usage moves slowly; coming back within a few minutes shows the
+        // cached figures at once and refreshes them in the background.
+        staleTime: OVERVIEW_STALE_TIME_MS,
         throwOnError: false,
       }),
     );
@@ -210,7 +228,9 @@ export function MCPOverviewTab({
           <div className="grid grid-cols-1 gap-6 @3xl:grid-cols-2">
             <div className="border p-5">
               <h3 className="text-eyebrow mb-3">Top tools by call count</h3>
-              {topByCount.length > 0 ? (
+              {isLoading ? (
+                <RankedBarListSkeleton />
+              ) : topByCount.length > 0 ? (
                 <RankedBarList items={topByCount} />
               ) : (
                 <WidgetEmptyState message="No tool calls in the selected range." />
@@ -218,7 +238,9 @@ export function MCPOverviewTab({
             </div>
             <div className="border p-5">
               <h3 className="text-eyebrow mb-3">Top tools by failure rate</h3>
-              {topByFailureRate.length > 0 ? (
+              {isLoading ? (
+                <RankedBarListSkeleton />
+              ) : topByFailureRate.length > 0 ? (
                 <RankedBarList items={topByFailureRate} />
               ) : (
                 <WidgetEmptyState message="No failed tool calls in the selected range." />

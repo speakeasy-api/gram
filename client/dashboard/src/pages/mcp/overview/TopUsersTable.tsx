@@ -14,6 +14,7 @@ import { Table } from "@/components/ui/Table";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import type { HostedServerRef } from "./MCPOverviewTab";
+import { OVERVIEW_STALE_TIME_MS } from "./MCPOverviewTab";
 
 type UserRow = GetToolUsageUsersResult["users"][number] & {
   agent?: { id: string; name: string };
@@ -87,6 +88,7 @@ export function TopUsersTable({
             },
           }),
         ),
+      staleTime: OVERVIEW_STALE_TIME_MS,
       throwOnError: false,
     }),
   );
