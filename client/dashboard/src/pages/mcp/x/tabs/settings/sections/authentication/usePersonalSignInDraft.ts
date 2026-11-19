@@ -12,13 +12,17 @@ import {
 import type { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import { useRemoteSessionIssuer } from "@gram/client/react-query/remoteSessionIssuer.js";
-import { readableServiceNameFromUrl } from "@/lib/sources";
+import {
+  deriveRemoteSessionIssuerNameFromUrl,
+  readableServiceNameFromUrl,
+} from "@/lib/sources";
 import {
   detectAuthorizationServer,
   issuerFormFromDraft,
 } from "@/pages/sources/remote-mcp/detectAuthorizationServer";
 import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { useMemo, useState } from "react";
 import {
   availableClientTypes,
@@ -149,6 +153,7 @@ export function usePersonalSignInDraft({
   // Until someone picks one, the authorization server is the one the MCP
   // server advertises: preselected when the project has it, and added on
   // save when it does not, as setting up a new server does.
+  const queryClient = useQueryClient();
   const detection = useQuery({
     queryKey: ["detect-authorization-server", remoteMcpServerId],
     queryFn: ({ signal }) =>
@@ -160,8 +165,13 @@ export function usePersonalSignInDraft({
   const detectedIssuerId =
     detection.data?.kind === "existing" ? detection.data.issuer.id : "";
   const effectiveIssuerId = issuerId || detectedIssuerId;
+  // Never from a result being refreshed: another sheet may have added that
+  // authorization server since it was read.
   const pendingIssuer: RemoteSessionIssuerDraft | undefined =
-    source === "scratch" && !issuerId && detection.data?.kind === "new"
+    source === "scratch" &&
+    !issuerId &&
+    !detection.isFetching &&
+    detection.data?.kind === "new"
       ? detection.data.draft
       : undefined;
 
@@ -308,12 +318,20 @@ export function usePersonalSignInDraft({
       target = await sdk.remoteSessionIssuers.create({
         createRemoteSessionIssuerForm: issuerFormFromDraft(
           pendingIssuer,
-          readableServiceNameFromUrl(pendingIssuer.issuer) ?? "mcp",
+          readableServiceNameFromUrl(pendingIssuer.issuer) ??
+            (deriveRemoteSessionIssuerNameFromUrl(pendingIssuer.issuer) ||
+              "mcp"),
         ),
       });
-      // A retry after a later step fails uses the server just added.
+      // A retry after a later step fails uses the server just added. It
+      // stays if a later step fails: it is reusable, and the next attempt
+      // preselects it.
       setAddedIssuerId(target.id);
       setIssuerId(target.id);
+      void invalidateAllRemoteSessionIssuers(queryClient);
+      void queryClient.invalidateQueries({
+        queryKey: ["detect-authorization-server"],
+      });
     }
     if (!target) {
       throw new Error("Choose the authorization server people sign in with.");
@@ -414,7 +432,8 @@ export function usePersonalSignInDraft({
                     detection.data.issuer.name?.trim() ||
                     detection.data.issuer.issuer,
                   serviceName:
-                    readableServiceNameFromUrl(detection.data.issuer.issuer) ??
+                    detection.data.issuer.name?.trim() ||
+                    readableServiceNameFromUrl(detection.data.issuer.issuer) ||
                     detection.data.issuer.issuer,
                   inUse: effectiveIssuerId === detection.data.issuer.id,
                 }

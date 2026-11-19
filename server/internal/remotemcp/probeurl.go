@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -434,15 +435,28 @@ func isAuthTokenByte(b byte) bool {
 	return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9' || strings.ContainsRune("!#$%&'*+-.^_`|~", rune(b))
 }
 
+// maxReportedServerNameLength caps the name a server reports for itself. It
+// is suggested as a display name, which people read in one line.
+const maxReportedServerNameLength = 100
+
 // reportedServerName is the human name a server gives itself: its title, or
-// its name when it has none.
+// its name when it has none. The server controls it, so control characters
+// and runs of whitespace become single spaces and it is cut to
+// maxReportedServerNameLength characters.
 func reportedServerName(result *mcp.InitializeResult) *string {
 	if result == nil || result.ServerInfo == nil {
 		return nil
 	}
 	for _, candidate := range []string{result.ServerInfo.Title, result.ServerInfo.Name} {
-		if name := strings.TrimSpace(candidate); name != "" {
-			return &name
+		words := strings.FieldsFunc(candidate, func(r rune) bool {
+			return unicode.IsSpace(r) || unicode.IsControl(r)
+		})
+		name := []rune(strings.Join(words, " "))
+		if len(name) > maxReportedServerNameLength {
+			name = []rune(strings.TrimSpace(string(name[:maxReportedServerNameLength])))
+		}
+		if len(name) > 0 {
+			return new(string(name))
 		}
 	}
 	return nil

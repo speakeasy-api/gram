@@ -172,7 +172,8 @@ export function AddCredentialSheet({
       : "";
   const [nameEdited, setNameEdited] = useState(false);
   useEffect(() => {
-    if (!nameEdited && detectedService) setName(detectedService);
+    // Switching to another kind clears a name this sheet filled in.
+    if (!nameEdited) setName(detectedService);
   }, [nameEdited, detectedService]);
 
   // A sign-in made for an attempt whose credential then failed to save. A

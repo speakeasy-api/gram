@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/url"
 	"strings"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -161,11 +162,14 @@ func remoteMCPDisplayName(rawURL string, name pgtype.Text) string {
 	return strings.TrimPrefix(strings.TrimPrefix(rawURL, "https://"), "http://")
 }
 
-// serviceHostPrefixes are leading host labels that name a role, not the
-// service.
-var serviceHostPrefixes = map[string]bool{
-	"mcp": true, "api": true, "www": true, "app": true, "auth": true, "access": true,
-	"login": true, "sso": true, "oauth": true, "id": true, "accounts": true,
+// sharedHostingDomains are domains under which anyone can host a site, so the
+// label before them names the platform, not the service.
+var sharedHostingDomains = []string{
+	"amazonaws.com", "appspot.com", "azurecontainerapps.io", "azurewebsites.net",
+	"cloudfunctions.net", "deno.dev", "firebaseapp.com", "fly.dev", "github.io",
+	"herokuapp.com", "modal.run", "netlify.app", "ngrok-free.app", "ngrok.app",
+	"ngrok.io", "onrender.com", "pages.dev", "railway.app", "replit.app",
+	"run.app", "trycloudflare.com", "vercel.app", "web.app", "workers.dev",
 }
 
 // secondLevelSuffixes precede a two-letter country code in public suffixes
@@ -174,35 +178,38 @@ var secondLevelSuffixes = map[string]bool{"co": true, "com": true, "org": true, 
 
 // readableServiceName reads the service's name from a URL's host:
 // https://mcp.ramp.com/mcp reads "Ramp" and mcp.acme-wiki.example reads
-// "Acme Wiki". Hosts that cannot be read that way, such as IP addresses and
-// localhost, come back as they are; an unparsable URL gives "". The dashboard
-// suggests names with the same rules (readableServiceNameFromUrl).
+// "Acme Wiki". It gives "" when the host does not name a service: IP
+// addresses, single-label hosts such as localhost, internationalised
+// domains, and sites on shared hosting domains such as vercel.app. The
+// dashboard suggests names by the same rules (readableServiceNameFromUrl).
 func readableServiceName(rawURL string) string {
 	parsed, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil {
 		return ""
 	}
 	host := strings.ToLower(strings.TrimSuffix(parsed.Hostname(), "."))
-	if host == "" {
-		return ""
-	}
 	labels := strings.Split(host, ".")
 	last := labels[len(labels)-1]
-	if len(labels) < 2 || strings.Trim(last, "0123456789") == "" {
-		return host
+	if len(labels) < 2 || strings.Trim(last, "0123456789") == "" || strings.Contains(host, ":") || strings.Contains(host, "xn--") {
+		return ""
+	}
+	for _, r := range host {
+		if r > unicode.MaxASCII {
+			return ""
+		}
+	}
+	for _, domain := range sharedHostingDomains {
+		if host == domain || strings.HasSuffix(host, "."+domain) {
+			return ""
+		}
 	}
 	suffix := 1
 	if len(labels) >= 3 && len(last) == 2 && secondLevelSuffixes[labels[len(labels)-2]] {
 		suffix = 2
 	}
-	rest := labels[:len(labels)-suffix]
-	for len(rest) > 1 && serviceHostPrefixes[rest[0]] {
-		rest = rest[1:]
-	}
-	words := strings.FieldsFunc(rest[len(rest)-1], func(r rune) bool { return r == '-' || r == '_' })
+	words := strings.FieldsFunc(labels[len(labels)-1-suffix], func(r rune) bool { return r == '-' || r == '_' })
 	for i, word := range words {
-		runes := []rune(word)
-		words[i] = strings.ToUpper(string(runes[:1])) + string(runes[1:])
+		words[i] = strings.ToUpper(word[:1]) + word[1:]
 	}
 	return strings.Join(words, " ")
 }

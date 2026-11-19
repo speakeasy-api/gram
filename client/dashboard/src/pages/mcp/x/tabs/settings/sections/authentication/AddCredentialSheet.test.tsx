@@ -80,6 +80,7 @@ vi.mock("@gram/client/react-query/remoteSessionClients.js", () => ({
 }));
 
 vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
+  invalidateAllRemoteSessionIssuers: vi.fn(),
   useRemoteSessionIssuersInfinite: () => ({
     data: { pages: [{ result: { items: mocks.pickableIssuers } }] },
     isFetching: false,

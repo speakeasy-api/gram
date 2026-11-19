@@ -307,6 +307,20 @@ func TestProbeRemoteMcpURL_PrefersTheServersTitle(t *testing.T) {
 	require.Equal(t, "Acme Wiki", *result.ServerName)
 }
 
+func TestProbeRemoteMcpURL_CleansTheReportedName(t *testing.T) {
+	t.Parallel()
+	title := "Acme\n\tWiki  " + strings.Repeat("x", 200)
+	server := mcp.NewServer(&mcp.Implementation{Name: "acme-wiki-mcp", Title: title, Version: "1"}, nil)
+	upstream := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil))
+	t.Cleanup(upstream.Close)
+
+	result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL)
+	require.Equal(t, remotemcp.ProbeOutcomeMCPAvailable, result.Outcome)
+	require.NotNil(t, result.ServerName)
+	require.Len(t, []rune(*result.ServerName), 100)
+	require.True(t, strings.HasPrefix(*result.ServerName, "Acme Wiki x"))
+}
+
 func TestVerifyURL_AcceptsDiscoverOnlyUpstream(t *testing.T) {
 	t.Parallel()
 	upstream, _ := newDiscoverOnlyUpstream(t)

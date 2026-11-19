@@ -121,31 +121,44 @@ export function remoteSessionScopeTier(entity: {
   return "platform";
 }
 
-// Derive a default display name from an Issuer URL's hostname. Unlike the slug
-// transform this keeps the hostname human-readable: dots are preserved rather
-// than hyphenated. (URL parsing lowercases the host either way.) Returns null
-// for empty or unparseable URLs so callers can leave the prior value intact
-// while a partial URL is being typed.
-/** Leading host labels that name a role, not the service. */
-const SERVICE_HOST_PREFIXES = new Set([
-  "mcp",
-  "api",
-  "www",
-  "app",
-  "auth",
-  "access",
-  "login",
-  "sso",
-  "oauth",
-  "id",
-  "accounts",
-]);
+/**
+ * Domains under which anyone can host a site, so the label before them names
+ * the platform, not the service.
+ */
+const SHARED_HOSTING_DOMAINS = [
+  "amazonaws.com",
+  "appspot.com",
+  "azurecontainerapps.io",
+  "azurewebsites.net",
+  "cloudfunctions.net",
+  "deno.dev",
+  "firebaseapp.com",
+  "fly.dev",
+  "github.io",
+  "herokuapp.com",
+  "modal.run",
+  "netlify.app",
+  "ngrok-free.app",
+  "ngrok.app",
+  "ngrok.io",
+  "onrender.com",
+  "pages.dev",
+  "railway.app",
+  "replit.app",
+  "run.app",
+  "trycloudflare.com",
+  "vercel.app",
+  "web.app",
+  "workers.dev",
+];
 
 /**
  * A readable name for the service behind a URL, from its host:
  * "https://mcp.canva.com/mcp" reads "Canva" and "mcp.acme-wiki.example" reads
- * "Acme Wiki". Hosts it cannot read that way, such as IP addresses or
- * localhost, come back as they are. Null when the URL does not parse.
+ * "Acme Wiki". Null when the host does not name a service: IP addresses,
+ * single-label hosts such as localhost, internationalised domains, and sites
+ * on shared hosting domains such as vercel.app. The server names servers
+ * created without a name by the same rules (remoteMCPDisplayName).
  */
 export function readableServiceNameFromUrl(url: string): string | null {
   let host: string;
@@ -156,10 +169,17 @@ export function readableServiceNameFromUrl(url: string): string | null {
   }
   // A fully qualified name ends in a dot that names no label.
   host = host.replace(/\.$/, "");
-  if (!host) return null;
   const labels = host.split(".");
-  if (labels.length < 2 || /^\d+$/.test(labels[labels.length - 1]!)) {
-    return host;
+  if (
+    labels.length < 2 ||
+    /^\d+$/.test(labels[labels.length - 1]!) ||
+    host.startsWith("[") ||
+    labels.some((label) => label.startsWith("xn--")) ||
+    SHARED_HOSTING_DOMAINS.some(
+      (domain) => host === domain || host.endsWith(`.${domain}`),
+    )
+  ) {
+    return null;
   }
   // The registrable name sits before the public suffix: "canva" in
   // mcp.canva.com, "example" in api.example.co.uk.
@@ -171,16 +191,19 @@ export function readableServiceNameFromUrl(url: string): string | null {
     )
       ? 2
       : 1;
-  const rest = labels.slice(0, labels.length - suffixLength);
-  while (rest.length > 1 && SERVICE_HOST_PREFIXES.has(rest[0]!)) rest.shift();
-  const name = rest[rest.length - 1] ?? host;
-  return name
-    .split(/[-_]+/)
-    .filter(Boolean)
+  const name = labels[labels.length - 1 - suffixLength]!;
+  const words = name.split(/[-_]+/).filter(Boolean);
+  if (words.length === 0) return null;
+  return words
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
 }
 
+// Derive a default display name from an Issuer URL's hostname. Unlike the slug
+// transform this keeps the hostname human-readable: dots are preserved rather
+// than hyphenated. (URL parsing lowercases the host either way.) Returns null
+// for empty or unparseable URLs so callers can leave the prior value intact
+// while a partial URL is being typed.
 export function deriveRemoteSessionIssuerNameFromUrl(
   url: string,
 ): string | null {
