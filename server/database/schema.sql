@@ -4286,12 +4286,11 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   -- moves to organization encryption, and the only copy written once it is
   -- finalized. Both copies are cleared together when the secret is removed.
   client_secret_org_encrypted TEXT,
-  -- Meant to be incremented by every statement that sets, replaces or clears
-  -- the client secret, and left alone when the same secret is sealed again
-  -- (dual write, backfill, finalize, key rotation). Nothing increments it
-  -- until organization-key sealing of client secrets ships (AIM-1003). Code
-  -- that needs to know the secret changed should read this rather than hash a
-  -- ciphertext, which changes on every seal.
+  -- Incremented by every statement that sets, replaces or clears the client
+  -- secret, and left alone when the same secret is sealed again (dual write,
+  -- backfill, finalize, key rotation). Code that needs to know the secret
+  -- changed reads this rather than hashing a ciphertext, which changes on
+  -- every seal.
   client_secret_generation bigint NOT NULL DEFAULT 1,
   client_id_issued_at timestamptz,
   client_secret_expires_at timestamptz,
