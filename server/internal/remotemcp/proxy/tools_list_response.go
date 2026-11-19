@@ -131,3 +131,88 @@ func (r *ToolsListResponse) SetTools(tools []*mcp.Tool) error {
 	r.RemoteMessage.dirty = true
 	return nil
 }
+
+// replaceTakenTools removes every tool whose name is in taken from a
+// successful tools/list response and appends add, marking the underlying
+// remote message dirty when anything changed. It is how the proxy lists the
+// tools it serves itself.
+//
+// Unlike [ToolsListResponse.SetTools], the tools that stay are carried over as
+// the wire bytes they arrived in rather than re-marshaled from [mcp.Tool], so
+// members that type does not model survive. That matters here because this
+// runs on servers no other tools/list interceptor touches, whose results are
+// otherwise relayed byte for byte.
+//
+// Returns a [*MutationError] under the same conditions as SetTools, and when
+// the wire tools member is not an array. Nothing is mutated on those paths.
+func (r *ToolsListResponse) replaceTakenTools(taken map[string]struct{}, add []*mcp.Tool) error {
+	const op = "list local tools"
+
+	if r.Result == nil {
+		return &MutationError{Op: op, Cause: errors.New("response carries an error, not a result")}
+	}
+	if r.RemoteMessage == nil {
+		return &MutationError{Op: op, Cause: errors.New("response carries no remote message")}
+	}
+	rpcResp, ok := r.RemoteMessage.Message.(*jsonrpc.Response)
+	if !ok {
+		return &MutationError{Op: op, Cause: fmt.Errorf("underlying message is %T, want *jsonrpc.Response", r.RemoteMessage.Message)}
+	}
+
+	var wire struct {
+		Tools []json.RawMessage `json:"tools"`
+	}
+	if err := json.Unmarshal(rpcResp.Result, &wire); err != nil {
+		return &MutationError{Op: op, Cause: fmt.Errorf("decode wire tools array: %w", err)}
+	}
+
+	kept := make([]json.RawMessage, 0, len(wire.Tools)+len(add))
+	for _, raw := range wire.Tools {
+		var named struct {
+			Name string `json:"name"`
+		}
+		// A tool whose name cannot be read cannot hold a taken name either.
+		if err := json.Unmarshal(raw, &named); err == nil {
+			if _, shadowed := taken[named.Name]; shadowed {
+				continue
+			}
+		}
+		kept = append(kept, raw)
+	}
+	if len(kept) == len(wire.Tools) && len(add) == 0 {
+		return nil
+	}
+
+	for _, tool := range add {
+		encoded, err := marshalJSONNoHTMLEscape(tool)
+		if err != nil {
+			return &MutationError{Op: op, Cause: fmt.Errorf("marshal local tool: %w", err)}
+		}
+		kept = append(kept, encoded)
+	}
+
+	payload, err := marshalJSONNoHTMLEscape(kept)
+	if err != nil {
+		return &MutationError{Op: op, Cause: fmt.Errorf("marshal tools array: %w", err)}
+	}
+	result, err := spliceTopLevelKey(rpcResp.Result, "tools", payload)
+	if err != nil {
+		return &MutationError{Op: op, Cause: fmt.Errorf("splice tools array: %w", err)}
+	}
+
+	typed := make([]*mcp.Tool, 0, len(r.Result.Tools)+len(add))
+	for _, tool := range r.Result.Tools {
+		if tool != nil {
+			if _, shadowed := taken[tool.Name]; shadowed {
+				continue
+			}
+		}
+		typed = append(typed, tool)
+	}
+	typed = append(typed, add...)
+
+	r.Result.Tools = typed
+	rpcResp.Result = result
+	r.RemoteMessage.dirty = true
+	return nil
+}

@@ -55,10 +55,13 @@ type proxyBuildOptions struct {
 
 	// connections, when set, records refused and failed tools/call requests.
 	connections *ConnectionAttribution
+
+	// localTools, when set, resolves the tools the proxy serves itself.
+	localTools proxy.LocalToolsResolver
 }
 
 func newProxyBuildOptions(buildOptions []BuildOption) proxyBuildOptions {
-	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: "", headerPolicy: proxy.HeaderPolicyRemote, authClientHeaders: nil, authClientSelected: false, anonymousCaller: false, connections: nil}
+	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: "", headerPolicy: proxy.HeaderPolicyRemote, authClientHeaders: nil, authClientSelected: false, anonymousCaller: false, connections: nil, localTools: nil}
 	for _, option := range buildOptions {
 		if option.apply != nil {
 			option.apply(&options)
@@ -111,6 +114,15 @@ func WithHeaderPolicy(policy proxy.HeaderPolicy) BuildOption {
 func WithConnectionAttribution(attribution ConnectionAttribution) BuildOption {
 	return BuildOption{apply: func(options *proxyBuildOptions) {
 		options.connections = &attribution
+	}}
+}
+
+// WithLocalTools has the proxy serve the resolved tools itself, next to the
+// server's own. Routes that dispatch to a server on a gateway's behalf leave
+// it out, so a gateway lists each server's tools and nothing the proxy adds.
+func WithLocalTools(resolve proxy.LocalToolsResolver) BuildOption {
+	return BuildOption{apply: func(options *proxyBuildOptions) {
+		options.localTools = resolve
 	}}
 }
 
@@ -537,6 +549,7 @@ func (f *ProxyManager) BuildTarget(
 			NewToolsListPostHogEventInterceptor(f.posthog, identity, logger),
 		},
 		ToolsListResponseInterceptors: toolsListRespInterceptors,
+		LocalTools:                    options.localTools,
 		ResourcesReadRequestInterceptors: []proxy.ResourcesReadRequestInterceptor{
 			f.resourcesReadUsageLimitsInterceptor,
 		},
