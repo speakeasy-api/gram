@@ -13,7 +13,7 @@ import (
 )
 
 const getProviderIssuer = `-- name: GetProviderIssuer :one
-SELECT issuer.id, issuer.slug, issuer.session_duration
+SELECT issuer.id, issuer.session_duration
 FROM user_session_issuers AS issuer
 WHERE issuer.id = $1
   AND issuer.deleted IS FALSE
@@ -31,7 +31,6 @@ type GetProviderIssuerParams struct {
 
 type GetProviderIssuerRow struct {
 	ID              uuid.UUID
-	Slug            string
 	SessionDuration pgtype.Interval
 }
 
@@ -39,7 +38,7 @@ type GetProviderIssuerRow struct {
 func (q *Queries) GetProviderIssuer(ctx context.Context, arg GetProviderIssuerParams) (GetProviderIssuerRow, error) {
 	row := q.db.QueryRow(ctx, getProviderIssuer, arg.IssuerID, arg.ProjectID, arg.OrganizationID)
 	var i GetProviderIssuerRow
-	err := row.Scan(&i.ID, &i.Slug, &i.SessionDuration)
+	err := row.Scan(&i.ID, &i.SessionDuration)
 	return i, err
 }
 
@@ -56,7 +55,8 @@ WITH endpoints AS (
 candidates AS (
   SELECT session.id, session.project_id, session.organization_id, session.user_session_issuer_id, session.user_session_client_id, session.subject_urn, session.authorizer_user_id, session.delegated_grants, session.delegated_grants_version, session.jti, session.refresh_token_hash, session.refresh_expires_at, session.expires_at, session.tool_selection, session.last_used_at, session.resource, session.sign_in_id, session.credential_id, session.created_at, session.updated_at, session.deleted_at, session.deleted,
          substring(session.resource from '^https?://([^/?#]+)') AS resource_host,
-         regexp_replace(regexp_replace(session.resource, '^https?://[^/?#]+', ''), '[?#].*$', '') AS resource_path
+         regexp_replace(regexp_replace(session.resource, '^https?://[^/?#]+', ''), '[?#].*$', '') AS resource_path,
+         MIN(session.created_at) OVER (PARTITION BY COALESCE(session.credential_id, session.id)) AS signed_in_at
   FROM user_sessions AS session
   WHERE session.user_session_issuer_id = $4
     AND (session.project_id = $5 OR (session.project_id IS NULL AND session.organization_id = $3::text))
@@ -68,7 +68,7 @@ candidates AS (
     )
 ),
 addressed AS (
-  SELECT session.id, session.project_id, session.organization_id, session.user_session_issuer_id, session.user_session_client_id, session.subject_urn, session.authorizer_user_id, session.delegated_grants, session.delegated_grants_version, session.jti, session.refresh_token_hash, session.refresh_expires_at, session.expires_at, session.tool_selection, session.last_used_at, session.resource, session.sign_in_id, session.credential_id, session.created_at, session.updated_at, session.deleted_at, session.deleted, session.resource_host, session.resource_path,
+  SELECT session.id, session.project_id, session.organization_id, session.user_session_issuer_id, session.user_session_client_id, session.subject_urn, session.authorizer_user_id, session.delegated_grants, session.delegated_grants_version, session.jti, session.refresh_token_hash, session.refresh_expires_at, session.expires_at, session.tool_selection, session.last_used_at, session.resource, session.sign_in_id, session.credential_id, session.created_at, session.updated_at, session.deleted_at, session.deleted, session.resource_host, session.resource_path, session.signed_in_at,
          EXISTS (SELECT 1 FROM custom_domains AS domain WHERE domain.organization_id = $3::text AND domain.domain = session.resource_host) AS on_custom_domain,
          substring(session.resource_path from '/mcp/([^/]+)/?$') AS endpoint_slug,
          substring(session.resource_path from '/mcp/gateway/[^/]+/projects/([^/]+)/?$') AS gateway_project_slug,
@@ -89,12 +89,10 @@ scoped AS (
                      WHERE client.id = session.user_session_client_id AND client.organization_id = $3::text
                        AND client.project_id <> $5)
           OR session.gateway_project_slug <> (SELECT project.slug FROM projects AS project WHERE project.id = $5 AND project.organization_id = $3::text)
-          OR (EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id <> $5 AND endpoint.live_from <= session.created_at AND endpoint.gone_at > session.created_at
-                        AND (endpoint.host = session.resource_host OR (endpoint.host IS NULL AND NOT session.on_custom_domain))
-                        AND ((endpoint.is_root AND session.resource_path IN ('', '/')) OR endpoint.slug = session.endpoint_slug))
-              AND NOT EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id = $5 AND endpoint.live_from <= session.created_at AND endpoint.gone_at > session.created_at
-                        AND (endpoint.host = session.resource_host OR (endpoint.host IS NULL AND NOT session.on_custom_domain))
-                        AND ((endpoint.is_root AND session.resource_path IN ('', '/')) OR endpoint.slug = session.endpoint_slug))),
+          OR (SELECT bool_and(endpoint.project_id <> $5) FROM endpoints AS endpoint
+              WHERE endpoint.live_from <= session.signed_in_at AND endpoint.gone_at > session.signed_in_at
+                AND (endpoint.host = session.resource_host OR (endpoint.host IS NULL AND NOT session.on_custom_domain))
+                AND ((endpoint.is_root AND session.resource_path IN ('', '/')) OR endpoint.slug = session.endpoint_slug)),
           FALSE)
 ),
 lives AS (

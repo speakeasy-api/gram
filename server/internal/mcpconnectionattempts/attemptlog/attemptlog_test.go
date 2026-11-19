@@ -417,6 +417,7 @@ func TestSourceOf_NoneForSuccessLiveAttemptsOrThePersonsOwnDoing(t *testing.T) {
 		mcpconnectionattempts.CodeProviderUnavailable.String(),
 		mcpconnectionattempts.CodeProviderUnreachable.String(),
 		mcpconnectionattempts.CodeProviderRejected.String(),
+		mcpconnectionattempts.CodeUpstreamEMARefused.String(),
 	}
 	for _, code := range unattributed {
 		require.Empty(t, attemptlog.SourceOf(code, attemptlog.OutcomeFailed), code)

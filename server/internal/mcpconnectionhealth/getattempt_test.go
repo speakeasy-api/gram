@@ -31,6 +31,10 @@ func TestGetAttempt_ReturnsTheAttemptWithEmail(t *testing.T) {
 	require.NotNil(t, res.Attempt.Person.Email)
 	require.Len(t, res.Attempt.Steps, 1)
 	require.True(t, res.Attempt.Steps[0].Final)
+
+	padded, err := ti.service.GetAttempt(ctx, &gen.GetAttemptPayload{Reference: "x" + id.String() + "y"})
+	require.NoError(t, err)
+	require.False(t, *padded.Found)
 }
 
 func TestGetAttempt_NoMatchForAnotherOrganizationOrAnUnreadableReference(t *testing.T) {

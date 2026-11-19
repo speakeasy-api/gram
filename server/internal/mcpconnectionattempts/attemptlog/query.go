@@ -302,9 +302,9 @@ func attemptsSQL(s Scope, now time.Time) (string, []any, error) {
 			countIf(is_final) > 0 AS a_has_final,
 			if(a_has_final,
 				argMinIf((toString(step), toString(outcome), toString(reason), toString(grant_type), member_id, trace_id, ` + mcpconnectionattempts.AttemptHostSQL + `, event_time),
-					(event_time, step, outcome, reason), is_final),
+					(event_time, step, outcome, reason, ` + mcpconnectionattempts.AttemptHostSQL + `), is_final),
 				argMax((toString(step), toString(outcome), toString(reason), toString(grant_type), member_id, trace_id, ` + mcpconnectionattempts.AttemptHostSQL + `, event_time),
-					(event_time, step, reason))) AS a_end
+					(event_time, step, reason, ` + mcpconnectionattempts.AttemptHostSQL + `))) AS a_end
 		FROM ` + mcpconnectionattempts.EventsTable + `
 		WHERE ` + strings.Join(conds, " AND ") + `
 		GROUP BY attempt_id

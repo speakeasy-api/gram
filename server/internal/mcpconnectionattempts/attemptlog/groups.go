@@ -98,6 +98,7 @@ var unattributedReasons = []string{
 	mcpconnectionattempts.CodeProviderUnavailable.String(),
 	mcpconnectionattempts.CodeProviderUnreachable.String(),
 	mcpconnectionattempts.CodeProviderRejected.String(),
+	mcpconnectionattempts.CodeUpstreamEMARefused.String(),
 }
 
 // serverReasons come back from the MCP server Speakeasy connected to.
@@ -127,7 +128,6 @@ var serviceReasons = []string{
 	mcpconnectionattempts.CodeEMAProviderRejected.String(),
 	mcpconnectionattempts.CodeProviderTransientFailure.String(),
 	mcpconnectionattempts.CodeRemoteSessionUnavailable.String(),
-	mcpconnectionattempts.CodeUpstreamEMARefused.String(),
 	mcpconnectionattempts.CodeInvalidGrant.String(),
 	mcpconnectionattempts.CodeRefreshInvalidClient.String(),
 	mcpconnectionattempts.CodeRefreshRejected.String(),

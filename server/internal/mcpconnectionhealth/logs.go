@@ -182,7 +182,7 @@ func (s *Service) GetAttempt(ctx context.Context, payload *gen.GetAttemptPayload
 	result.Found = new(false)
 
 	id, err := uuid.Parse(payload.Reference)
-	if err != nil || id == uuid.Nil {
+	if err != nil || id == uuid.Nil || uuid.Validate(payload.Reference) != nil {
 		return result, nil //nolint:nilerr // an unreadable reference matches nothing
 	}
 	now := s.now()
