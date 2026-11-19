@@ -14,8 +14,6 @@ from typing import Final
 from gram.risk.v1 import enforcement_reply_pb2
 from redis import asyncio as redis_asyncio
 
-from pystreams.risk.redisswitch import RedisSwitch
-
 REPLY_URN_PREFIX: Final = "urn:gram:risk:enforce:"
 # Every write refreshes this expiry, so with a stalled drainer the loss
 # boundary is 60s after the LAST write; alert on risk.enforcement.drainer_alive
@@ -51,11 +49,8 @@ def inbox_key(replica_id: str) -> str:
 class ReplyWriter:
     """Appends enforcement replies to the replica inbox named by the reply URN."""
 
-    def __init__(
-        self, client: redis_asyncio.Redis, switch: RedisSwitch | None = None
-    ) -> None:
+    def __init__(self, client: redis_asyncio.Redis) -> None:
         self._client = client
-        self._switch = switch
 
     async def write(
         self, reply_urn: str, reply: enforcement_reply_pb2.EnforcementReply
@@ -67,14 +62,7 @@ class ReplyWriter:
             )
         payload = reply.SerializeToString()
         key = inbox_key(replica_id)
-
-        def queue(pipe: redis_asyncio.client.Pipeline) -> None:
+        async with self._client.pipeline(transaction=True) as pipe:
             pipe.rpush(key, payload)
             pipe.expire(key, REPLY_TTL_SECONDS)
-
-        if self._switch is not None:
-            await self._switch.execute(queue)
-            return
-        async with self._client.pipeline(transaction=True) as pipe:
-            queue(pipe)
             await pipe.execute()

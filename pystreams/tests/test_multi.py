@@ -74,8 +74,6 @@ async def test_blocking_detection_starts_after_scanner_initialization(
             max_inflight=None,
             redis_addr=None,
             redis_password=None,
-            redis_next_addr=None,
-            redis_next_password=None,
             risk_fingerprint_pepper_keyring=None,
         )
 
@@ -173,7 +171,5 @@ async def test_enforcement_role_requires_redis_and_pepper(
             max_inflight=None,
             redis_addr=None,
             redis_password=None,
-            redis_next_addr=None,
-            redis_next_password=None,
             risk_fingerprint_pepper_keyring=None,
         )
