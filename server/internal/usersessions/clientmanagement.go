@@ -36,13 +36,13 @@ var operatorAuthMethods = []string{oauthwire.AuthMethodClientSecretBasic, oauthw
 // caller's project is not enough to change who can sign in through it.
 func (s *Service) requireIssuerOwnerWrite(ctx context.Context, authCtx *contextvalues.AuthContext, issuer repo.UserSessionIssuer) error {
 	if issuer.ProjectID.Valid {
-		return s.authz.Require(ctx, authz.Project(issuer.ProjectID.UUID).Write())
+		return s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(issuer.ProjectID.UUID)).Write())
 	}
 
 	if authCtx.APIKeyID != "" {
 		return oops.E(oops.CodeForbidden, nil, "clients of an organization user session issuer can only be managed from a user session")
 	}
-	return s.authz.Require(ctx, authz.Org(authCtx.ActiveOrganizationID).Admin())
+	return s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin())
 }
 
 // auditActor is the request's authenticated actor, so a mutation made with an
