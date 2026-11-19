@@ -127,27 +127,30 @@ export function OverviewTab({
 
   return (
     <div className="space-y-10 pb-8">
-      {!showProblems ? null : problems.isPending ? (
-        <Skeleton className="h-40 w-full" />
-      ) : (
-        <SuspectedProblems
-          problems={problems.data?.problems ?? []}
-          now={now}
-          onOpen={(problem) => setParam(PROBLEM_PARAM, problem.id)}
-          rule={SIGN_IN_PROBLEMS_RULE}
-        />
-      )}
+      <div className="space-y-3">
+        {!showProblems ? null : problems.isPending ? (
+          <Skeleton className="h-40 w-full" />
+        ) : (
+          <SuspectedProblems
+            problems={problems.data?.problems ?? []}
+            now={now}
+            onOpen={(problem) => setParam(PROBLEM_PARAM, problem.id)}
+            rule={SIGN_IN_PROBLEMS_RULE}
+          />
+        )}
 
-      <p className="text-muted-foreground text-sm">
-        Problems connecting to a service show on that server&apos;s page, under{" "}
-        <Link
-          to={routes.mcpSessions.provider.mcpServers.href(providerId)}
-          className="text-foreground underline-offset-4 hover:underline"
-        >
-          MCP servers
-        </Link>
-        .
-      </p>
+        <p className="text-muted-foreground text-sm">
+          Problems connecting to a service show on that server&apos;s page,
+          under{" "}
+          <Link
+            to={routes.mcpSessions.provider.mcpServers.href(providerId)}
+            className="text-foreground underline-offset-4 hover:underline"
+          >
+            MCP servers
+          </Link>
+          .
+        </p>
+      </div>
 
       {activityPage?.viewerScope === "own" ? <OwnAttemptsNotice /> : null}
 
