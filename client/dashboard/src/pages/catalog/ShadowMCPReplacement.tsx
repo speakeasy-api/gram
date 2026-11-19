@@ -111,8 +111,8 @@ export function ShadowMCPReplacementNotice({
                 Shadow MCP replaced
               </Text>
               <Text small muted>
-                Direct use of {link} is blocked. Agents that try it are sent to{" "}
-                {outcome.serverName}.
+                Direct use of {link} is now blocked. Agents that try it are sent
+                to {outcome.serverName}, the server you just added.
               </Text>
             </div>
           );
