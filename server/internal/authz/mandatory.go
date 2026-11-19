@@ -45,8 +45,9 @@ const (
 	MandatoryDenyReasonBlocked            MandatoryDenyReason = "blocked"
 	MandatoryDenyReasonUnauthenticated    MandatoryDenyReason = "unauthenticated"
 	// MandatoryDenyReasonOwnerOnly is a personal connection used for anyone
-	// other than its owner, the user the request represents. Ownership filters
-	// permission and never grants it, so no grant changes this refusal.
+	// other than its owner: the user the request represents, which for an
+	// agent key is the member who issued it. Ownership filters permission and
+	// never grants it, so no grant changes this refusal.
 	MandatoryDenyReasonOwnerOnly MandatoryDenyReason = "owner_only"
 )
 

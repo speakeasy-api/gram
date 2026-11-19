@@ -154,7 +154,7 @@ func TestAttachedAgentAuthClientChecksTheAttachedConnectionOwner(t *testing.T) {
 		res, err := f.service.resolveAuthClientForServing(sessionContext(t, f.orgID, personalAuthGrant(), authz.NewGrant(authz.ScopeMCPAuth, authz.WildcardResource)), selector, f.serverID, f.projectID, agent)
 		require.NoError(t, err)
 		require.Equal(t, authClientNoAccess, res.outcome, "ownership filters grants and never grants, even against a wildcard")
-		require.Equal(t, authClientReasonOwnerOnly, res.reason, "the refusal says the connection is another member's")
+		require.Equal(t, authClientReasonOwnerOnly, res.reason, "the refusal says the connection is not the key issuer's")
 		require.Equal(t, map[string]int64{"deny/owner_only": 1}, authClientShadowOutcomes(t, reader))
 	})
 
@@ -173,7 +173,7 @@ func TestAttachedAgentAuthClientChecksTheAttachedConnectionOwner(t *testing.T) {
 		require.Len(t, rec.Rows(), 1)
 	})
 
-	t.Run("another member's connection explains itself and names no one", func(t *testing.T) {
+	t.Run("a connection the key's issuer does not own explains itself and names no one", func(t *testing.T) {
 		t.Parallel()
 		lookup := &fakeAttachedConnections{conn: remotesessions.AttachedConnection{RemoteSessionID: uuid.New(), OwnerUserID: "user_2"}, attached: true, err: nil}
 		f, selector, _, agent := setup(t, lookup)
@@ -182,8 +182,9 @@ func TestAttachedAgentAuthClientChecksTheAttachedConnectionOwner(t *testing.T) {
 		endpoint := &ResolvedMcpEndpoint{ProjectID: f.projectID, OrganizationID: f.orgID, UserSessionIssuerID: selector.userSessionIssuerID, McpServerID: validUUID(f.serverID)}
 		_, err := f.service.enforceAuthClient(sessionContext(t, f.orgID, personalAuthGrant()), httptest.NewRecorder(), &issuerGateAuthentication{endpoint: endpoint, subject: agent}, selector)
 		require.ErrorIs(t, err, errAuthClientNoAccess)
-		require.ErrorContains(t, err, "personal connection that belongs to another member")
-		require.ErrorContains(t, err, "connect your own account on the agent's MCP sign-in tab")
+		require.ErrorContains(t, err, "belongs to a different member than the one who issued the agent's key")
+		require.ErrorContains(t, err, "attach a connection owned by the key's issuer on the agent's MCP sign-in tab")
+		require.ErrorContains(t, err, "have the connection's owner issue the agent's key")
 		require.ErrorContains(t, err, "shared credential")
 		require.NotContains(t, err.Error(), "user_2", "the refusal never names the owner")
 		require.NotContains(t, err.Error(), "grant access", "no grant can fix it")
@@ -201,7 +202,7 @@ func TestAttachedAgentAuthClientChecksTheAttachedConnectionOwner(t *testing.T) {
 		_, err := f.service.enforceAuthClient(sessionContext(t, f.orgID), httptest.NewRecorder(), &issuerGateAuthentication{endpoint: endpoint, subject: agent}, selector)
 		require.ErrorIs(t, err, errAuthClientNoAccess)
 		require.ErrorContains(t, err, "you don't have access to the connection this MCP server uses. Ask an organization administrator to grant access.")
-		require.NotContains(t, err.Error(), "another member")
+		require.NotContains(t, err.Error(), "issued the agent's key")
 		row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess)
 		require.Equal(t, authClientReasonNotPermitted, row.SubReason)
 	})

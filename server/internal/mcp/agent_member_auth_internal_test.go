@@ -255,10 +255,11 @@ func TestAgentMemberLegacyClientUsesTheAgentKeysAuthorizer(t *testing.T) {
 	}
 }
 
-// An agent called for one member, with another member's personal connection
-// attached, is refused as owner-only: neither the agent's grants nor the
-// caller's change that, so the refusal says so instead of asking for a
-// permissions review. A refusal a grant can fix keeps asking for one.
+// An agent key issued by one member, with another member's personal
+// connection attached, is refused as owner-only whoever triggers the agent:
+// the key acts with its issuer's access, and no grant changes that, so the
+// refusal says so instead of asking for a permissions review. A refusal a
+// grant can fix keeps asking for one.
 func TestAgentMemberRefusesAnotherMembersAttachedConnectionAsOwnerOnly(t *testing.T) {
 	t.Parallel()
 	pool, err := TestInfra.CloneTestDatabase(t, "agent_member_owner_only")
@@ -273,7 +274,7 @@ func TestAgentMemberRefusesAnotherMembersAttachedConnectionAsOwnerOnly(t *testin
 		ownerOnly bool
 	}{
 		{"another member's attached connection", []authz.Grant{personal, wildcard}, "user_owner", true},
-		{"the caller's own attached connection without mcp:auth", []authz.Grant{connectOnly}, "user_caller", false},
+		{"the issuer's own attached connection without mcp:auth", []authz.Grant{connectOnly}, "user_issuer", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -285,7 +286,7 @@ func TestAgentMemberRefusesAnotherMembersAttachedConnectionAsOwnerOnly(t *testin
 				AdmitPrincipalCredential: func(context.Context, *pgxpool.Pool) (authz.PrincipalCredentialAdmission, error) {
 					return authz.PrincipalCredentialAdmission{
 						OwnerUserID: "user_owner", Credential: tc.agent, Agent: tc.agent, Owner: []authz.Grant{personal, wildcard},
-						Authorizer: authz.RepresentedUserPolicy{UserID: "user_caller", Policy: []authz.Grant{personal, wildcard}}, LegacyAuthCeiling: false,
+						Authorizer: authz.RepresentedUserPolicy{UserID: "user_issuer", Policy: []authz.Grant{personal, wildcard}}, LegacyAuthCeiling: false,
 					}, nil
 				},
 			})

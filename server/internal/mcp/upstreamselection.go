@@ -536,7 +536,7 @@ func (s *Service) directAgentKeyError(ctx context.Context, authentication *issue
 	case err == nil:
 		return nil
 	case access.ownerOnly:
-		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: agent may not use another member's personal connection", authClientReasonOwnerOnly, mcpconnectionattempts.CodeNoServerAccess)
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: agent key may not use a connection its issuer does not own", authClientReasonOwnerOnly, mcpconnectionattempts.CodeNoServerAccess)
 		return oops.E(oops.CodeForbidden, err, "%s", ownerOnlyConnectionMessage)
 	case errors.As(err, &refused):
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: agent may not use the server's connection", issuerGateReasonUpstreamSelectionUnavailable, mcpconnectionattempts.CodeNoServerAccess)

@@ -101,9 +101,9 @@ const (
 	authClientReasonNoAuthStale     = "no_auth_server_has_clients"
 	authClientReasonNotPermitted    = "not_permitted"
 	// authClientReasonOwnerOnly is a refusal to use a personal connection
-	// that belongs to a member other than the one the request represents. It
-	// serves only its owner's calls, so no grant changes it.
-	authClientReasonOwnerOnly       = "connection_owner_only"
+	// that belongs to a member other than the one the request represents: for
+	// an agent key, the member who issued it. No grant changes it.
+	authClientReasonOwnerOnly       = "connection_not_key_issuers"
 	authClientReasonSetup           = "setup"
 	authClientReasonHeadersStale    = "client_headers_stale"
 	authClientReasonLegacyMayChain  = "legacy_may_chain"
@@ -232,8 +232,9 @@ type authClientPermitter interface {
 type authClientPermit struct {
 	allowed bool
 	// ownerOnly marks a refusal to use a personal connection that belongs to
-	// a member other than the one the request represents. No grant changes
-	// it, so the refusal never asks for one.
+	// a member other than the one the request represents, for an agent key the
+	// member who issued it. No grant changes it, so the refusal never asks for
+	// one.
 	ownerOnly bool
 }
 
@@ -922,12 +923,12 @@ func (s *Service) serveAuthClient(ctx context.Context, w http.ResponseWriter, au
 	return res.choice, nil
 }
 
-// ownerOnlyConnectionMessage refuses a personal connection that belongs to a
-// member other than the one the request represents. No grant changes that, so
-// it offers no request-access link. It never names the owner or their
-// upstream account.
-const ownerOnlyConnectionMessage = "this MCP server uses a personal connection that belongs to another member of your organization, and that connection only serves that member's own calls. " +
-	"To use this server, connect your own account on the agent's MCP sign-in tab in Speakeasy, or ask an organization administrator to set up a shared credential for it."
+// ownerOnlyConnectionMessage refuses an agent key a personal connection owned
+// by a member other than the one who issued the key, whose access the key
+// acts with. No grant changes that, so it offers no request-access link. It
+// never names the owner, the issuer or their upstream accounts.
+const ownerOnlyConnectionMessage = "this MCP server's connection on the agent belongs to a different member than the one who issued the agent's key, and an agent key can only use connections owned by the member who issued it. " +
+	"To fix this, attach a connection owned by the key's issuer on the agent's MCP sign-in tab in Speakeasy, have the connection's owner issue the agent's key, or ask an organization administrator to set up a shared credential for this server."
 
 // authClientNoAccessError refuses a caller the chosen client. A refusal a
 // grant can fix links to request access to the server.

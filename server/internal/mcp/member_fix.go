@@ -199,17 +199,17 @@ func (g metaGateContext) withAgentMemberFix(member metaMember, err error) error 
 	return &metaMemberError{message: fmt.Sprintf(refused+"Ask %s to review its permissions at %s, then retry", member.slug, agentEditors, fix.accessURL)}
 }
 
-// agentOwnerOnlyError explains an agent refused another member's personal
-// connection. It names no one: not the owner, their email or their upstream
-// account. signInURL is the agent's MCP sign-in tab, empty when it could not
-// be built.
+// agentOwnerOnlyError explains an agent key refused a personal connection
+// owned by a member other than the one who issued the key. It names no one:
+// not the owner, the issuer, their emails or their upstream accounts.
+// signInURL is the agent's MCP sign-in tab, empty when it could not be built.
 func agentOwnerOnlyError(slug, signInURL string) error {
 	where := "on the agent's MCP sign-in tab in Speakeasy"
 	if signInURL != "" {
 		where = "on the agent's MCP sign-in tab at " + signInURL
 	}
-	return &metaMemberError{message: fmt.Sprintf("server %q refused this call: the agent uses a personal connection to it that belongs to another member, and that connection only serves that member's own calls. "+
-		"The agent's permissions and reconnecting do not change that. To use this server, connect your own account %s, or ask an organization administrator to set up a shared credential for it, then retry", slug, where)}
+	return &metaMemberError{message: fmt.Sprintf("server %q refused this call: the agent's connection to it belongs to a different member than the one who issued the agent's key, and an agent key can only use connections owned by the member who issued it. "+
+		"The agent's permissions do not change that. To fix this, attach a connection owned by the key's issuer %s, have the connection's owner issue the agent's key, or ask an organization administrator to set up a shared credential for this server, then retry", slug, where)}
 }
 
 // agentFixLinks builds an agent gateway's fix links. It reads the agent

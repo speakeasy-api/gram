@@ -323,9 +323,9 @@ func TestWithAgentMemberFix_SeparatesBrokenConnectionsFromRefusedAccess(t *testi
 	require.NotContains(t, unserved.Error(), testAgentSignIn)
 }
 
-// An agent refused another member's personal connection says why and what
-// the caller can do. Neither the agent's permissions nor a grant fix it, so
-// it never sends the caller there, and it names no one.
+// An agent key refused a connection its issuer does not own says why and
+// what fixes it. Neither the agent's permissions nor a grant fix it, so it
+// never sends the reader there, and it names no one.
 func TestWithAgentMemberFix_ExplainsAnotherMembersConnection(t *testing.T) {
 	t.Parallel()
 
@@ -338,19 +338,20 @@ func TestWithAgentMemberFix_ExplainsAnotherMembersConnection(t *testing.T) {
 
 	agent := testAgentGate(t, nil)
 	explained := agent.withAgentMemberFix(member, ownerOnly)
-	require.ErrorContains(t, explained, `server "linear" refused this call: the agent uses a personal connection to it that belongs to another member, and that connection only serves that member's own calls`)
-	require.ErrorContains(t, explained, "connect your own account on the agent's MCP sign-in tab at "+testAgentSignIn)
-	require.ErrorContains(t, explained, "ask an organization administrator to set up a shared credential for it")
+	require.ErrorContains(t, explained, `server "linear" refused this call: the agent's connection to it belongs to a different member than the one who issued the agent's key, and an agent key can only use connections owned by the member who issued it`)
+	require.ErrorContains(t, explained, "attach a connection owned by the key's issuer on the agent's MCP sign-in tab at "+testAgentSignIn)
+	require.ErrorContains(t, explained, "have the connection's owner issue the agent's key")
+	require.ErrorContains(t, explained, "ask an organization administrator to set up a shared credential for this server")
 	require.NotContains(t, explained.Error(), testAgentAccess, "the agent's permissions cannot fix it")
 	require.NotContains(t, explained.Error(), "review its permissions")
 
 	noLink := testAgentGate(t, nil)
 	noLink.agentFix.link = func(string) memberFix { return memberFix{agent: true, url: "", accessURL: ""} }
 	unlinked := noLink.withAgentMemberFix(member, ownerOnly)
-	require.ErrorContains(t, unlinked, "connect your own account on the agent's MCP sign-in tab in Speakeasy")
+	require.ErrorContains(t, unlinked, "attach a connection owned by the key's issuer on the agent's MCP sign-in tab in Speakeasy")
 
 	refused := agent.withAgentMemberFix(member, agentServerAccessError(member.slug))
-	require.NotContains(t, refused.Error(), "another member", "other refusals keep their message")
+	require.NotContains(t, refused.Error(), "issued the agent's key", "other refusals keep their message")
 }
 
 // connection_status marks a row the agent's sign-in step fixes by the error

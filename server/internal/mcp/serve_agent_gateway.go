@@ -366,9 +366,9 @@ func agentServerAccessError(slug string) error {
 	return agentAccessError{agentServerRefusal(slug), false, false}
 }
 
-// agentServerOwnerOnlyError refuses an agent a personal connection that
-// belongs to a member other than the one the call represents. Neither its
-// permissions nor a reconnect change that.
+// agentServerOwnerOnlyError refuses an agent key a personal connection owned
+// by a member other than the one who issued the key. The agent's permissions
+// do not change that.
 func agentServerOwnerOnlyError(slug string) error {
 	return agentAccessError{agentServerRefusal(slug), false, true}
 }
@@ -382,7 +382,7 @@ func agentServerGapError(slug string) error {
 // agentAccessError is an agent refused the use of a connection to a server,
 // which a person fixes in the agent's permissions or, when server is set,
 // in the server's auth clients, not by reconnecting. When ownerOnly is set
-// the connection is another member's, which only that member's calls use.
+// the connection belongs to a member other than the one who issued the key.
 type agentAccessError struct {
 	*metaMemberError
 	server    bool
