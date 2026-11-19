@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
-
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 // Facet names a filter that has counts.
@@ -158,22 +156,9 @@ func Count(ctx context.Context, ch driver.Conn, s Scope, f Filters, now time.Tim
 	GROUP BY c_outcome, c_step, c_server, c_member, c_subject, c_network, c_app, c_app_version, c_reason, c_service
 	ORDER BY c_attempts DESC
 	LIMIT ?` + readSettings
-	result, err := ch.Query(ctx, query, args...)
+	cube, err := queryAll[cubeRow](ctx, ch, "attempt counts", query, args...)
 	if err != nil {
-		return Counts{}, fmt.Errorf("query attempt counts: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return result.Close() })
-
-	var cube []cubeRow
-	for result.Next() {
-		var row cubeRow
-		if err := result.ScanStruct(&row); err != nil {
-			return Counts{}, fmt.Errorf("scan attempt counts: %w", err)
-		}
-		cube = append(cube, row)
-	}
-	if err := result.Err(); err != nil {
-		return Counts{}, fmt.Errorf("read attempt counts: %w", err)
+		return Counts{}, err
 	}
 	truncated := len(cube) > maxCubeRows
 	if truncated {

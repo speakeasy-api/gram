@@ -111,6 +111,7 @@ func (s *Service) GetSessionActivity(ctx context.Context, payload *gen.GetSessio
 
 	queries := repo.New(s.db)
 	project := uuid.NullUUID{UUID: c.projectID, Valid: true}
+	projectInferenceResource := mcp.InferenceResource + ":" + c.projectID.String()
 	firstDay := time.Date(from.Year(), from.Month(), from.Day(), 0, 0, 0, 0, time.UTC)
 	lastDay := time.Date(to.Year(), to.Month(), to.Day(), 0, 0, 0, 0, time.UTC)
 	if lastDay.Equal(to) {
@@ -126,12 +127,12 @@ func (s *Service) GetSessionActivity(ctx context.Context, payload *gen.GetSessio
 		LiveSince:                timestamptz(firstDay),
 		DashboardMintPattern:     dashboardMintPattern,
 		InferenceResourcePattern: inferenceResourcePattern,
-		ProjectInferenceResource: mcp.InferenceResource + ":" + c.projectID.String(),
+		ProjectInferenceResource: projectInferenceResource,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count active sessions").LogError(ctx, s.logger)
 	}
-	activeNow, err := queries.CountActiveSessionsNow(ctx, repo.CountActiveSessionsNowParams{IssuerID: issuer.ID, ProjectID: project, OrganizationID: c.organizationID, DashboardMintPattern: dashboardMintPattern, InferenceResourcePattern: inferenceResourcePattern, ProjectInferenceResource: mcp.InferenceResource + ":" + c.projectID.String(), LiveSince: timestamptz(now)})
+	activeNow, err := queries.CountActiveSessionsNow(ctx, repo.CountActiveSessionsNowParams{IssuerID: issuer.ID, ProjectID: project, OrganizationID: c.organizationID, DashboardMintPattern: dashboardMintPattern, InferenceResourcePattern: inferenceResourcePattern, ProjectInferenceResource: projectInferenceResource, LiveSince: timestamptz(now)})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count active sessions now").LogError(ctx, s.logger)
 	}
@@ -144,7 +145,7 @@ func (s *Service) GetSessionActivity(ctx context.Context, payload *gen.GetSessio
 		OrganizationID:           c.organizationID,
 		DashboardMintPattern:     dashboardMintPattern,
 		InferenceResourcePattern: inferenceResourcePattern,
-		ProjectInferenceResource: mcp.InferenceResource + ":" + c.projectID.String(),
+		ProjectInferenceResource: projectInferenceResource,
 		LiveSince:                timestamptz(averageFrom),
 	})
 	if err != nil {

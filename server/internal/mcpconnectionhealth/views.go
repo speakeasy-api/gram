@@ -2,6 +2,8 @@ package mcpconnectionhealth
 
 import (
 	"context"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -69,11 +71,7 @@ func (s *Service) resolve(ctx context.Context, c caller, ids *collector) (names,
 	out := names{servers: map[string][]repo.ListServerNamesRow{}, people: map[string]person{}}
 	queries := repo.New(s.db)
 	if len(ids.servers) > 0 {
-		serverIDs := make([]uuid.UUID, 0, len(ids.servers))
-		for id := range ids.servers {
-			serverIDs = append(serverIDs, id)
-		}
-		rows, err := queries.ListServerNames(ctx, repo.ListServerNamesParams{ProjectID: c.projectID, Ids: serverIDs, OrganizationID: c.organizationID})
+		rows, err := queries.ListServerNames(ctx, repo.ListServerNamesParams{ProjectID: c.projectID, Ids: slices.Collect(maps.Keys(ids.servers)), OrganizationID: c.organizationID})
 		if err != nil {
 			return out, oops.E(oops.CodeUnexpected, err, "load server names").LogError(ctx, s.logger)
 		}
@@ -82,11 +80,7 @@ func (s *Service) resolve(ctx context.Context, c caller, ids *collector) (names,
 		}
 	}
 	if len(ids.users) > 0 {
-		userIDs := make([]string, 0, len(ids.users))
-		for id := range ids.users {
-			userIDs = append(userIDs, id)
-		}
-		rows, err := queries.ListMemberNames(ctx, repo.ListMemberNamesParams{OrganizationID: c.organizationID, Ids: userIDs})
+		rows, err := queries.ListMemberNames(ctx, repo.ListMemberNamesParams{OrganizationID: c.organizationID, Ids: slices.Collect(maps.Keys(ids.users))})
 		if err != nil {
 			return out, oops.E(oops.CodeUnexpected, err, "load people").LogError(ctx, s.logger)
 		}
@@ -174,17 +168,6 @@ func (n names) person(subjectURN string, withEmail bool) *gen.ConnectionPerson {
 		}
 	}
 	return view
-}
-
-func (n names) personName(subjectURN string) *string {
-	kind, id, _ := strings.Cut(subjectURN, ":")
-	if kind != string(urn.SessionSubjectKindUser) {
-		return nil
-	}
-	if p, found := n.people[id]; found {
-		return conv.PtrEmpty(p.name)
-	}
-	return nil
 }
 
 func appView(family, version, appKey string) *gen.ConnectionApp {

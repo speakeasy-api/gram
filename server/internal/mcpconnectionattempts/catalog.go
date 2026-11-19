@@ -1,6 +1,9 @@
 package mcpconnectionattempts
 
-import "slices"
+import (
+	"maps"
+	"slices"
+)
 
 // Outcome is the overall result of an attempt, stored on its final step only.
 type Outcome string
@@ -164,12 +167,7 @@ func MeaningOf(reason string) (Meaning, bool) {
 
 // Codes returns every stored reason code, sorted.
 func Codes() []string {
-	codes := make([]string, 0, len(catalog))
-	for code := range catalog {
-		codes = append(codes, code)
-	}
-	slices.Sort(codes)
-	return codes
+	return slices.Sorted(maps.Keys(catalog))
 }
 
 func define(name string, outcome Outcome, who WhoFixes, what, todo string) Code {
