@@ -10,15 +10,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/server/internal/chatredact"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpfeedback"
 	"github.com/speakeasy-api/gram/server/internal/mcpfeedback/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
+
+const logRecordTopic = "gram.otel.v1.InboundLogRecord"
 
 // noLimits is a recorder that accepts every report.
 var noLimits = mcpfeedback.Limits{Caller: nil, Server: nil}
@@ -58,6 +65,30 @@ func storedFeedback(t *testing.T, ctx context.Context, ti *testInstance, server 
 	})
 	require.NoError(t, err)
 	return rows
+}
+
+// queuedFor returns the outbox messages queued for one topic, oldest first.
+func queuedFor(t *testing.T, ctx context.Context, ti *testInstance, topic string) []testrepo.ListPublishOutboxRowsRow {
+	t.Helper()
+
+	rows, err := testrepo.New(ti.conn).ListPublishOutboxRows(ctx)
+	require.NoError(t, err)
+
+	var queued []testrepo.ListPublishOutboxRowsRow
+	for _, row := range rows {
+		if row.Topic == topic {
+			queued = append(queued, row)
+		}
+	}
+	return queued
+}
+
+func recordAttributes(record *otelv1.InboundLogRecord) map[string]string {
+	attrs := make(map[string]string, len(record.GetAttributes()))
+	for _, kv := range record.GetAttributes() {
+		attrs[kv.GetKey()] = kv.GetValue().GetStringValue()
+	}
+	return attrs
 }
 
 func TestRecorderOffersTheToolOnlyWhenSwitchedOn(t *testing.T) {
@@ -110,7 +141,7 @@ func TestRecorderOffersTheToolOnlyWhenSwitchedOn(t *testing.T) {
 	require.False(t, offered, "switching the tool off keeps its settings and stops offering it")
 }
 
-func TestRecorderSubmitStoresTheReport(t *testing.T) {
+func TestRecorderSubmitStoresTheReportAndQueuesItsLogRecord(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -137,6 +168,36 @@ func TestRecorderSubmitStoresTheReport(t *testing.T) {
 	require.Equal(t, "idp|priya", row.ExternalUserID.String)
 	require.Equal(t, "claude-code", row.ClientName.String)
 	require.Equal(t, "2.1.0", row.ClientVersion.String)
+
+	// The log record is stamped with the feedback provenance source, which is
+	// what routes it to the MCP feedback export, under the server's tenant.
+	records := queuedFor(t, ctx, ti, logRecordTopic)
+	require.Len(t, records, 1)
+	var record otelv1.InboundLogRecord
+	require.NoError(t, proto.Unmarshal(records[0].Message, &record))
+	require.Equal(t, dialect.FeedbackLogSource, record.GetProvenance().GetSource())
+	require.Equal(t, target.OrganizationID, record.GetProvenance().GetOrganizationId())
+	require.Equal(t, server.ProjectID.String(), record.GetProvenance().GetProjectId())
+	require.Equal(t, dialect.FeedbackLogScope, record.GetScope().GetName())
+	require.Equal(t, receipt.ID.String(), record.GetRecordId())
+	require.Equal(t, "speakeasy.mcp_feedback", record.GetEventName())
+	require.Equal(t, "WARN", record.GetSeverityText())
+	require.Equal(t, sampleReport().Content, record.GetBody().GetStringValue())
+	require.Equal(t, map[string]string{
+		"speakeasy.mcp_feedback.id":             receipt.ID.String(),
+		"log.record.uid":                        receipt.ID.String(),
+		"speakeasy.mcp_feedback.server_id":      server.ID.String(),
+		"speakeasy.mcp_feedback.severity":       "degraded",
+		"speakeasy.mcp_feedback.tool_name":      "search_logs",
+		"speakeasy.mcp_feedback.workaround":     "Queried a wider range.",
+		"speakeasy.mcp_feedback.intention":      "Find a failing request.",
+		"speakeasy.mcp_feedback.model":          "Claude in Claude Code",
+		"speakeasy.mcp_feedback.client_name":    "claude-code",
+		"speakeasy.mcp_feedback.client_version": "2.1.0",
+		"speakeasy.mcp_feedback.user_id":        "user-1",
+		"user.email":                            "priya@acme.example",
+		"user.id":                               "idp|priya",
+	}, recordAttributes(&record))
 }
 
 // An anonymous caller's report leaves out everything nobody told the gateway.
@@ -149,7 +210,7 @@ func TestRecorderSubmitLeavesOutWhatIsUnknown(t *testing.T) {
 
 	anonymous := mcpfeedback.Caller{UserID: "", UserEmail: "", ExternalUserID: "", ClientName: "", ClientVersion: ""}
 	praise := mcpfeedback.Report{Content: "The tool descriptions are clear.", Severity: mcpfeedback.SeverityUnspecified, Workaround: "", Intention: "", ToolName: "", Model: ""}
-	_, err := recorder.Submit(ctx, targetOf(t, ctx, server), anonymous, praise)
+	receipt, err := recorder.Submit(ctx, targetOf(t, ctx, server), anonymous, praise)
 	require.NoError(t, err)
 
 	rows := storedFeedback(t, ctx, ti, server)
@@ -158,6 +219,40 @@ func TestRecorderSubmitLeavesOutWhatIsUnknown(t *testing.T) {
 	require.False(t, rows[0].ToolName.Valid)
 	require.False(t, rows[0].UserID.Valid)
 	require.False(t, rows[0].UserEmail.Valid)
+
+	records := queuedFor(t, ctx, ti, logRecordTopic)
+	require.Len(t, records, 1)
+	var record otelv1.InboundLogRecord
+	require.NoError(t, proto.Unmarshal(records[0].Message, &record))
+	require.Equal(t, "INFO", record.GetSeverityText())
+	require.Equal(t, map[string]string{
+		"speakeasy.mcp_feedback.id":        receipt.ID.String(),
+		"log.record.uid":                   receipt.ID.String(),
+		"speakeasy.mcp_feedback.server_id": server.ID.String(),
+	}, recordAttributes(&record))
+}
+
+func TestRecorderSubmitMapsSeverityToALogLevel(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := seedHostedServer(t, ctx, ti)
+	recorder := newTestRecorder(t, ti, noLimits)
+
+	for _, severity := range []mcpfeedback.Severity{mcpfeedback.SeverityBlocked, mcpfeedback.SeverityDegraded, mcpfeedback.SeverityCosmetic, mcpfeedback.SeverityUnspecified} {
+		report := sampleReport()
+		report.Severity = severity
+		_, err := recorder.Submit(ctx, targetOf(t, ctx, server), sampleCaller(), report)
+		require.NoError(t, err)
+	}
+
+	var levels []string
+	for _, queued := range queuedFor(t, ctx, ti, logRecordTopic) {
+		var record otelv1.InboundLogRecord
+		require.NoError(t, proto.Unmarshal(queued.Message, &record))
+		levels = append(levels, record.GetSeverityText())
+	}
+	require.Equal(t, []string{"ERROR", "WARN", "INFO", "INFO"}, levels)
 }
 
 func TestRecorderSubmitMasksSecretsAndPersonalData(t *testing.T) {
@@ -182,6 +277,11 @@ func TestRecorderSubmitMasksSecretsAndPersonalData(t *testing.T) {
 		require.Contains(t, stored, "[REDACTED]")
 	}
 	require.NotContains(t, rows[0].Content, "jane@customer.example")
+
+	records := queuedFor(t, ctx, ti, logRecordTopic)
+	require.Len(t, records, 1)
+	require.NotContains(t, string(records[0].Message), secret)
+	require.NotContains(t, string(records[0].Message), "jane@customer.example")
 }
 
 // Masking can lengthen a field, and the stored value must still fit its column.
@@ -190,7 +290,7 @@ func TestRecorderSubmitCutsMaskedTextBackToItsLimit(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 	server := seedHostedServer(t, ctx, ti)
-	recorder := mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, replacingRedactor{}, noLimits)
+	recorder := mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, replacingRedactor{}, noLimits, testServiceName, exportOn())
 
 	_, err := recorder.Submit(ctx, targetOf(t, ctx, server), sampleCaller(), sampleReport())
 	require.NoError(t, err)
@@ -226,10 +326,26 @@ func TestRecorderSubmitStoresNothingWhenTheScanFails(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 	server := seedHostedServer(t, ctx, ti)
-	recorder := mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, failingRedactor{}, noLimits)
+	recorder := mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, failingRedactor{}, noLimits, testServiceName, exportOn())
 
 	_, err := recorder.Submit(ctx, targetOf(t, ctx, server), sampleCaller(), sampleReport())
 	require.ErrorContains(t, err, "redact feedback")
+
+	require.Empty(t, storedFeedback(t, ctx, ti, server))
+	require.Empty(t, queuedFor(t, ctx, ti, logRecordTopic))
+}
+
+// A report is stored only together with its log record.
+func TestRecorderSubmitStoresNothingWhenADeliveryCannotBeQueued(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := seedHostedServer(t, ctx, ti)
+	recorder := newTestRecorder(t, ti, noLimits)
+	require.NoError(t, testrepo.New(ti.conn).RejectPublishOutboxWritesFixture(ctx))
+
+	_, err := recorder.Submit(ctx, targetOf(t, ctx, server), sampleCaller(), sampleReport())
+	require.ErrorContains(t, err, "queue feedback log record")
 
 	require.Empty(t, storedFeedback(t, ctx, ti, server))
 }
@@ -369,7 +485,7 @@ func TestRecorderCallDoesNotLeakWhyStoringFailed(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 	server := seedHostedServer(t, ctx, ti)
-	recorder := mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, failingRedactor{}, noLimits)
+	recorder := mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, failingRedactor{}, noLimits, testServiceName, exportOn())
 
 	failed := recorder.Call(ctx, targetOf(t, ctx, server), sampleCaller(), json.RawMessage(`{"content":"A problem."}`))
 	require.True(t, failed.IsError)
@@ -383,7 +499,7 @@ func TestRecorderServesSettingsFromMemoryWhileFresh(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 	server := seedHostedServer(t, ctx, ti)
-	recorder := mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, chatredact.New(), noLimits)
+	recorder := mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, chatredact.New(), noLimits, testServiceName, exportOn())
 
 	saveFeedbackConfig(t, ctx, ti, server, true)
 	_, offered, err := recorder.Tool(ctx, server.ProjectID, server.ID)
@@ -441,4 +557,18 @@ func saveFeedbackConfig(t *testing.T, ctx context.Context, ti *testInstance, ser
 		UpdatedByUserID: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
+}
+
+// Until the export flag is on, a report is stored but not queued for export.
+func TestRecorderSubmitStoresButDoesNotExportWhileTheExportIsHeldBack(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := seedHostedServer(t, ctx, ti)
+	recorder := mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, chatredact.New(), noLimits, testServiceName, new(feature.InMemory))
+
+	_, err := recorder.Submit(ctx, targetOf(t, ctx, server), sampleCaller(), sampleReport())
+	require.NoError(t, err)
+	require.Len(t, storedFeedback(t, ctx, ti, server), 1)
+	require.Empty(t, queuedFor(t, ctx, ti, logRecordTopic))
 }

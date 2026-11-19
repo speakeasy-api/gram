@@ -17,8 +17,11 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpfeedback/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/otelpub"
+	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 )
 
@@ -33,9 +36,10 @@ const (
 	// task report each of them, while a looping agent is stopped quickly.
 	CallerReportsPerMinute = 5
 
-	// ServerReportsPerMinute bounds what one server stores. A public server's
-	// callers are anonymous and can change session at will, so this is the
-	// limit that holds against them.
+	// ServerReportsPerMinute bounds what one server stores and, with it, the
+	// exported records its callers can cause. A public server's callers are
+	// anonymous and can change session at will, so this is the limit that
+	// holds against them.
 	ServerReportsPerMinute = 60
 
 	meterReports = "mcp.feedback.reports"
@@ -117,8 +121,8 @@ type Caller struct {
 	// the server's organization.
 	UserID string
 
-	// UserEmail is that member's email. It is not stored: readers resolve it
-	// from UserID.
+	// UserEmail is that member's email. It leaves with the exported record and
+	// is not stored: readers resolve it from UserID.
 	UserEmail string
 
 	// ExternalUserID is the caller's subject in the identity provider the
@@ -163,11 +167,15 @@ type CallResult struct {
 }
 
 // Recorder serves the feedback tool for the gateway: it knows which servers
-// offer the tool and stores what agents send through it.
+// offer the tool and stores what agents send through it. Every stored report
+// queues an exported log record in the same transaction, so a report that
+// exists has left, and one that was refused has not.
 type Recorder struct {
 	logger   *slog.Logger
 	db       *pgxpool.Pool
 	redactor Redactor
+	records  *otelpub.RecordBuilder
+	features feature.Provider
 	limits   Limits
 	reports  metric.Int64Counter
 	now      func() time.Time
@@ -216,7 +224,9 @@ func WithSettingsFreshFor(d time.Duration) RecorderOption {
 }
 
 // NewRecorder returns the recorder a gateway serves the feedback tool with.
-func NewRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, redactor Redactor, limits Limits, opts ...RecorderOption) *Recorder {
+// serviceName is the service.name exported records carry, and features
+// decides whether reports are queued for export.
+func NewRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, redactor Redactor, limits Limits, serviceName string, features feature.Provider, opts ...RecorderOption) *Recorder {
 	logger = logger.With(attr.SlogComponent("mcp-feedback"))
 
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcpfeedback")
@@ -233,6 +243,8 @@ func NewRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, db *pg
 		logger:   logger,
 		db:       db,
 		redactor: redactor,
+		records:  newRecordBuilder(serviceName),
+		features: features,
 		limits:   limits,
 		reports:  reports,
 		now:      time.Now,
@@ -383,7 +395,7 @@ func (r *Recorder) Call(ctx context.Context, target Target, caller Caller, argum
 	}
 }
 
-// Submit stores one report.
+// Submit stores one report and queues its exported record.
 // It returns ErrRateLimited when the caller or the server has sent too many.
 func (r *Recorder) Submit(ctx context.Context, target Target, caller Caller, report Report) (Receipt, error) {
 	var none Receipt
@@ -422,11 +434,53 @@ func (r *Recorder) Submit(ctx context.Context, target Target, caller Caller, rep
 		return none, fmt.Errorf("insert feedback: %w", err)
 	}
 
+	stored := storedReport{
+		id:        row.ID,
+		createdAt: row.CreatedAt.Time,
+		target:    target,
+		report:    report,
+		caller:    caller,
+	}
+
+	if !r.exportEnabled(ctx, target) {
+		if err := dbtx.Commit(ctx); err != nil {
+			return none, fmt.Errorf("commit feedback: %w", err)
+		}
+		return Receipt{ID: stored.id, Status: "received"}, nil
+	}
+
+	record := exportRecord(stored)
+	recordCtx := otelpub.WithRecordID(otelpub.WithTenant(ctx, target.OrganizationID, target.ProjectID.String()), stored.id.String())
+	inbound, err := r.records.Prepare(recordCtx, &record)
+	if err != nil {
+		return none, fmt.Errorf("build feedback log record: %w", err)
+	}
+	if _, err := outbox.Publish(ctx, dbtx, target.OrganizationID, outbox.Message{Proto: inbound, PublicID: uuid.Nil, Attributes: nil}); err != nil {
+		return none, fmt.Errorf("queue feedback log record: %w", err)
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return none, fmt.Errorf("commit feedback: %w", err)
 	}
 
-	return Receipt{ID: row.ID, Status: "received"}, nil
+	return Receipt{ID: stored.id, Status: "received"}, nil
+}
+
+// exportEnabled reports whether a report is queued for the OTLP data export.
+// It is held back until every log relay routes feedback to the feedback
+// export, and an answer the flag cannot give holds it back too.
+func (r *Recorder) exportEnabled(ctx context.Context, target Target) bool {
+	if r.features == nil {
+		return false
+	}
+
+	enabled, err := r.features.IsFlagEnabledLocal(ctx, feature.FlagMCPFeedbackExport, target.OrganizationID, nil, nil)
+	if err != nil {
+		r.logger.WarnContext(ctx, "evaluate mcp feedback export flag; not exporting", attr.SlogError(err), attr.SlogOrganizationID(target.OrganizationID))
+		return false
+	}
+
+	return enabled
 }
 
 // allow charges the caller's bucket and then the server's, so a throttled

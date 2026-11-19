@@ -86,7 +86,10 @@ func newConnectionLogExport(publisher gcp.Publisher[*otelv1.InboundLogRecord]) m
 
 // newDataExportRouteTester composes a test source for every data export source.
 func newDataExportRouteTester(logger *slog.Logger, meterProvider metric.MeterProvider, policy *guardian.Policy) (*otelsvc.RouteTester, error) {
-	sources := append(otelsvc.NewRouteTestSources(logger, meterProvider), otelsink.NewTestSource(otelsvc.NewConnectionLogTestRequestBuilder(logger, meterProvider), gatewayRecordsServiceName))
+	sources := append(otelsvc.NewRouteTestSources(logger, meterProvider),
+		otelsink.NewTestSource(otelsvc.NewConnectionLogTestRequestBuilder(logger, meterProvider), gatewayRecordsServiceName),
+		mcpfeedback.NewTestSource(otelsvc.NewFeedbackLogTestRequestBuilder(logger, meterProvider), gatewayRecordsServiceName),
+	)
 	tester, err := otelsvc.NewRouteTester(policy, sources...)
 	if err != nil {
 		return nil, fmt.Errorf("compose data export route tester: %w", err)
@@ -190,7 +193,7 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (service *mcp.Servi
 		return nil, fmt.Errorf("initialize MCP service: %w", err)
 	}
 	service.SetCallbackOrigins(d.CallbackOrigins)
-	service.SetFeedback(mcpfeedback.NewRecorder(d.Logger, d.Meter, d.DB, chatredact.New(), mcpfeedback.NewLimits(ratelimit.NewRedisStore(d.Redis), d.Meter)))
+	service.SetFeedback(mcpfeedback.NewRecorder(d.Logger, d.Meter, d.DB, chatredact.New(), mcpfeedback.NewLimits(ratelimit.NewRedisStore(d.Redis), d.Meter), gatewayRecordsServiceName, d.Features))
 	service.SetPlatformHosts(d.PlatformHosts)
 	service.SetOpenAIAppsChallengeToken(c.String("openai-apps-challenge-token"))
 	if err := service.SetMCPRegistryAuth(c.String("mcp-registry-auth")); err != nil {

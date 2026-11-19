@@ -12,14 +12,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The connection logs route trusts the provenance source, so only the connection
-// recorder's sink may stamp it. A new producer or ingest path that names it must be reviewed here.
-func TestConnectionLogSourceIsStampedOnlyByTheRecorderSink(t *testing.T) {
+// The connection logs route and the MCP feedback route each trust a provenance
+// source, so only the connection recorder's sink may stamp the first and only the
+// feedback recorder the second. A new producer or ingest path that names either
+// must be reviewed here.
+func TestRouteProvenanceSourcesAreStampedOnlyByTheirRecorders(t *testing.T) {
 	t.Parallel()
 
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	require.NoError(t, err)
-	uses := map[string][]string{"ConnectionLogSource": nil, "WithProvenanceSource(": nil}
+	uses := map[string][]string{"ConnectionLogSource": nil, "FeedbackLogSource": nil, "WithProvenanceSource(": nil}
 	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -60,7 +62,16 @@ func TestConnectionLogSourceIsStampedOnlyByTheRecorderSink(t *testing.T) {
 		"internal/otel/handler_log_relay.go",
 	}, uses["ConnectionLogSource"])
 	require.Equal(t, []string{
+		"internal/mcpfeedback/export.go",
+		"internal/otel/dialect/log_gateway.go",
+		"internal/otel/enrich/keys.go",
+		// Reads the source only, to leave feedback without directory enrichment.
+		"internal/otel/enrich/log_directory.go",
+		"internal/otel/handler_log_relay.go",
+	}, uses["FeedbackLogSource"])
+	require.Equal(t, []string{
 		"internal/mcpconnectionattempts/otelsink/sink.go",
+		"internal/mcpfeedback/export.go",
 		"internal/otelpub/logger.go",
 	}, uses["WithProvenanceSource("])
 }
