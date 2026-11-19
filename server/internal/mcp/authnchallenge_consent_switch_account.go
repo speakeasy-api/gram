@@ -1,0 +1,298 @@
+package mcp
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"slices"
+	"time"
+
+	redisCache "github.com/go-redis/cache/v9"
+	"github.com/google/uuid"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/signins"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+)
+
+// consentActionSwitchAccount is the consent action and check result that let
+// a person signed in with a personal account sign in again with another one.
+const consentActionSwitchAccount = "switch_account"
+
+// maxAccountSwitches lets a person pick the wrong account more than once
+// without letting one attempt restart sign-in forever.
+const maxAccountSwitches = 3
+
+// switchAccountMinRemaining is the least of the attempt's lifetime a fresh
+// sign-in must have left to finish in.
+const switchAccountMinRemaining = 2 * time.Minute
+
+// The switch action's errors: one short sentence each.
+const (
+	switchAccountRetry       = "Speakeasy couldn't start a new sign-in. Go back and try again."
+	switchAccountUnavailable = "This page can't start a new sign-in. Go back and use your own account."
+	switchAccountExpired     = "This page expired; start connecting again."
+	switchAccountTooLate     = "It's too late to switch accounts on this page. Go back and use your own account, or start connecting again."
+	switchAccountChanged     = "This page changed. Go back, reload it, and try again."
+)
+
+// accountSwitchVerdict is whether a consent can offer, and accept, a switch.
+type accountSwitchVerdict int
+
+const (
+	accountSwitchOK accountSwitchVerdict = iota
+	accountSwitchNotOffered
+	accountSwitchExpired
+)
+
+// accountSwitchEnabled evaluates FlagMCPConsentAccountSwitch locally for the owning organization; it fails closed.
+func (s *Service) accountSwitchEnabled(ctx context.Context, organizationID string) bool {
+	if s.features == nil || organizationID == "" {
+		return false
+	}
+	enabled, err := s.features.IsFlagEnabledLocal(ctx, feature.FlagMCPConsentAccountSwitch, organizationID, nil, nil)
+	return err == nil && enabled
+}
+
+// accountSwitchAllowed reports whether a consent can send its person back to
+// sign in to Speakeasy with another account: a WorkOS sign-in of their own,
+// not one a dashboard, workload, code-mode or federated flow is bound to.
+func accountSwitchAllowed(state AuthnChallengeState) bool {
+	return !state.FirstParty &&
+		state.Federation == nil && state.FederatedBinding == nil &&
+		state.CodeReconnect == nil && state.WorkloadReconnect == nil &&
+		state.SignInID != nil &&
+		state.Subject != nil && state.Subject.Kind == urn.SessionSubjectKindUser &&
+		state.AuthorizerUserID != "" && state.Subject.ID == state.AuthorizerUserID &&
+		state.AuthorizerImpersonated != nil && !*state.AuthorizerImpersonated &&
+		state.AccountSwitches < maxAccountSwitches
+}
+
+// accountSwitchTooLate reports an attempt without time left for a fresh sign-in.
+func accountSwitchTooLate(state AuthnChallengeState, now time.Time) bool {
+	return state.CreatedAt.IsZero() || now.After(state.CreatedAt.Add(state.TTL()-switchAccountMinRemaining))
+}
+
+// accountSwitchOffered is the one predicate both the check's offer and the
+// action's acceptance use: an eligible consent, with time left, whose own
+// sign-in Speakeasy refuses as a personal account, asked from the browser that
+// started it.
+func (s *Service) accountSwitchOffered(r *http.Request, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, now time.Time) (accountSwitchVerdict, error) {
+	ctx := r.Context()
+	if !accountSwitchAllowed(state) || !consentBrowserMatches(r, state, now) {
+		return accountSwitchNotOffered, nil
+	}
+	if accountSwitchTooLate(state, now) {
+		return accountSwitchExpired, nil
+	}
+	result, err := signins.CheckConsentIdentity(ctx, s.db, endpoint.OrganizationID, state.AuthorizerUserID, *state.SignInID, now)
+	if err != nil {
+		return accountSwitchNotOffered, fmt.Errorf("check consent sign-in: %w", err)
+	}
+	if result.Reason != signins.ReasonUnmanagedAccount {
+		return accountSwitchNotOffered, nil
+	}
+	return accountSwitchOK, nil
+}
+
+// sameAccountSwitch reports whether the consumed challenge is still the one the
+// action was checked against.
+func sameAccountSwitch(consumed, checked AuthnChallengeState) bool {
+	return consumed.ID == checked.ID && consumed.FlowID == checked.FlowID &&
+		consumed.CSRFToken == checked.CSRFToken && consumed.ConsentBrowserHash == checked.ConsentBrowserHash &&
+		consumed.AuthorizerUserID == checked.AuthorizerUserID &&
+		consumed.Subject != nil && *consumed.Subject == *checked.Subject &&
+		consumed.SignInID != nil && *consumed.SignInID == *checked.SignInID &&
+		consumed.AccountSwitches == checked.AccountSwitches &&
+		accountSwitchAllowed(consumed)
+}
+
+// switchSignInAccount ends the person's own Speakeasy sign-in and sends them to
+// sign in again, without reusing it, for this same authorization request. The
+// action endpoint has already checked method, endpoint, browser, CSRF,
+// resolution and a gateway's custom-domain lockdown.
+func (s *Service) switchSignInAccount(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) (err error) {
+	ctx := r.Context()
+	logger := endpoint.LogWith(s.logger).With(attr.SlogOAuthFlowID(state.FlowID))
+	// The display name the consent page showed, looked up once.
+	clientName, named := "", false
+	// A refused switch still names the client the page showed.
+	defer func() {
+		if err == nil {
+			return
+		}
+		if !named {
+			clientName = s.switchClientName(ctx, logger, endpoint, state.ClientID)
+		}
+		if clientName != "" {
+			err = oops.WithBrowserClient(err, clientName)
+		}
+	}()
+
+	if !consentBrowserMatches(r, state, time.Now()) {
+		return switchRefused(oops.E(oops.CodeBadRequest, nil, switchAccountExpired).LogWarn(ctx, logger))
+	}
+	focusServer := r.PostForm.Get("server")
+	if focusServer != "" {
+		if !endpoint.MetaMcpServerID.Valid || len(focusServer) > maxFocusServerLength {
+			return switchRefused(oops.E(oops.CodeBadRequest, nil, switchAccountChanged).LogWarn(ctx, logger))
+		}
+		members, err := s.consentSubjectMembers(ctx, endpoint, state)
+		if err != nil {
+			return switchRefused(oops.E(oops.CodeUnavailable, err, switchAccountRetry).LogError(ctx, logger))
+		}
+		if !slices.ContainsFunc(members, func(member metaMember) bool { return member.slug == focusServer }) {
+			return switchRefused(oops.E(oops.CodeBadRequest, nil, switchAccountChanged).LogWarn(ctx, logger))
+		}
+	}
+	if _, _, err := s.chainedConsentClient(ctx, logger, endpoint, state, r.PostForm.Get("client_id")); err != nil {
+		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeBadRequest {
+			return switchRefused(oops.E(oops.CodeBadRequest, err, switchAccountChanged))
+		}
+		return switchRefused(oops.E(oops.CodeUnavailable, err, switchAccountRetry))
+	}
+	verdict, err := s.accountSwitchOffered(r, endpoint, state, time.Now())
+	switch {
+	case err != nil:
+		return switchRefused(oops.E(oops.CodeUnavailable, err, switchAccountRetry).LogError(ctx, logger))
+	case verdict == accountSwitchExpired:
+		return switchRefused(oops.E(oops.CodeBadRequest, nil, switchAccountTooLate).LogWarn(ctx, logger))
+	case verdict != accountSwitchOK:
+		return switchRefused(oops.E(oops.CodeBadRequest, nil, switchAccountUnavailable).LogWarn(ctx, logger))
+	}
+	session, err := signins.SessionForSignIn(ctx, s.db, endpoint.OrganizationID, state.AuthorizerUserID, *state.SignInID)
+	if err != nil {
+		return switchRefused(oops.E(oops.CodeUnavailable, err, switchAccountRetry).LogError(ctx, logger))
+	}
+	if session.WorkOSSessionID == "" {
+		return switchRefused(oops.E(oops.CodeBadRequest, nil, switchAccountUnavailable).LogWarn(ctx, logger))
+	}
+
+	// Single use: a replayed or stale action finds nothing to restart.
+	consumed, err := s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+state.ID)
+	switch {
+	case errors.Is(err, redisCache.ErrCacheMiss):
+		// A second submit of a switch already under way explains the switch.
+		if switched := s.switchedChallengeError(ctx, logger, endpoint.UserSessionIssuerID, endpoint.Slug, state.ID); switched != nil {
+			return switched
+		}
+		return switchRefused(oops.E(oops.CodeBadRequest, err, switchAccountExpired).LogWarn(ctx, logger))
+	case err != nil:
+		return switchRefused(oops.E(oops.CodeUnavailable, err, switchAccountRetry).LogError(ctx, logger))
+	}
+	if !sameAccountSwitch(consumed, state) {
+		s.restoreConsentChallenge(r, logger, consumed)
+		return switchRefused(oops.E(oops.CodeBadRequest, nil, switchAccountChanged).LogWarn(ctx, logger))
+	}
+
+	// For the old page's message, and for this request's refusal below.
+	clientName, named = s.switchClientName(ctx, logger, endpoint, consumed.ClientID), true
+
+	next := consumed
+	next.Subject = nil
+	next.AuthorizerUserID = ""
+	next.AuthorizerImpersonated = nil
+	next.SignInID = nil
+	next.AccountSwitches++
+	if focusServer != "" {
+		next.FocusServer = focusServer
+	}
+	// Marked first, so a request racing this one finds why the page is spent.
+	marker := accountSwitchMarker{ID: consumed.ID, McpSlug: endpoint.Slug, UserSessionIssuerID: endpoint.UserSessionIssuerID.String(), ClientName: clientName}
+	if err := s.accountSwitchCache.Store(context.WithoutCancel(ctx), marker); err != nil {
+		logger.WarnContext(ctx, "mark consent challenge as switched", attr.SlogError(err))
+	}
+	err = s.restartSignIn(w, r, logger, endpoint, next, signInRestart{
+		WorkOSSessionID:      session.WorkOSSessionID,
+		Stage:                mcpmetrics.OAuthFlowStageConsent,
+		MustEnd:              true,
+		LoginHint:            session.WorkEmail,
+		WorkOSOrganizationID: session.WorkOSOrganizationID,
+	})
+	if err != nil {
+		s.restoreConsentChallenge(r, logger, consumed)
+		if derr := s.accountSwitchCache.DeleteByKey(context.WithoutCancel(ctx), marker.CacheKey()); derr != nil {
+			logger.WarnContext(ctx, "unmark consent challenge as switched", attr.SlogError(derr))
+		}
+		return switchRefused(oops.E(oops.CodeUnavailable, err, switchAccountRetry))
+	}
+	return nil
+}
+
+// restoreConsentChallenge puts back a challenge this request consumed and did
+// not move on, so the person's page keeps working.
+func (s *Service) restoreConsentChallenge(r *http.Request, logger *slog.Logger, state AuthnChallengeState) {
+	ctx := r.Context()
+	if err := s.authnChallengeCache.Store(context.WithoutCancel(ctx), state); err != nil {
+		logger.ErrorContext(ctx, "restore consent challenge", attr.SlogError(err))
+	}
+}
+
+// accountSwitchMarker records only that an account switch spent a consent
+// challenge, and the client name that page showed. It holds nothing about the
+// new sign-in, so presenting the old consent URL reveals and grants nothing.
+type accountSwitchMarker struct {
+	ID      string `json:"id"`
+	McpSlug string `json:"mcp_slug"`
+	// UserSessionIssuerID is the authorization server the page was served for; empty on markers written before it existed.
+	UserSessionIssuerID string `json:"user_session_issuer_id,omitempty"`
+	// ClientName is the MCP client's display name the consent page showed.
+	ClientName string `json:"client_name,omitempty"`
+}
+
+var _ cache.CacheableObject[accountSwitchMarker] = (*accountSwitchMarker)(nil)
+
+// CacheKey implements cache.CacheableObject.
+func (m accountSwitchMarker) CacheKey() string { return "authnChallengeSwitched:" + m.ID }
+
+// TTL implements cache.CacheableObject.
+func (m accountSwitchMarker) TTL() time.Duration {
+	var challenge AuthnChallengeState
+	return challenge.TTL()
+}
+
+// switchedConsentError explains a consent page an account switch spent, or
+// returns nil when no switch did or the switch is off for the organization.
+func (s *Service) switchedConsentError(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, stateID string) error {
+	if stateID == "" || !s.accountSwitchEnabled(ctx, endpoint.OrganizationID) {
+		return nil
+	}
+	return s.switchedChallengeError(ctx, logger, endpoint.UserSessionIssuerID, endpoint.Slug, stateID)
+}
+
+// switchedChallengeError explains a challenge an account switch spent on issuerID, and on slug unless it is empty.
+func (s *Service) switchedChallengeError(ctx context.Context, logger *slog.Logger, issuerID uuid.UUID, slug, stateID string) error {
+	if stateID == "" {
+		return nil
+	}
+	marker, err := s.accountSwitchCache.Get(ctx, "authnChallengeSwitched:"+stateID)
+	if err != nil || (slug != "" && marker.McpSlug != slug) || (marker.UserSessionIssuerID != "" && marker.UserSessionIssuerID != issuerID.String()) || (slug == "" && marker.UserSessionIssuerID == "") {
+		return nil
+	}
+	page := oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "this consent page started a new sign-in").LogInfo(ctx, logger), oauthui.ReasonSignInRestarted)
+	if marker.ClientName != "" {
+		page = oops.WithBrowserClient(page, marker.ClientName)
+	}
+	return fmt.Errorf("load consent challenge: %w", page)
+}
+
+// switchClientName is the display name the consent page showed for clientID, empty when it can't be found.
+func (s *Service) switchClientName(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, clientID string) string {
+	client, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientID, lookupClientOnly)
+	if err != nil {
+		return ""
+	}
+	return client.ClientName
+}
+
+// switchRefused shows a refused switch's one-sentence reason on the page.
+func switchRefused(err *oops.ShareableError) error {
+	return fmt.Errorf("switch account: %w", oops.WithBrowserReason(err, oauthui.ReasonSignInNotStarted))
+}

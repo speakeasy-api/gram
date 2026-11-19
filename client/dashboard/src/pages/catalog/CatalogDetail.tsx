@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { Text } from "@/components/ui/Text";
 import { SetupGuideCallout } from "@/components/setup-guide/SetupGuideCallout";
 import { ManualSetupBadge } from "@/pages/catalog/ManualSetupBadge";
+import { catalogServerHasGuidedSetup } from "@/pages/mcp/x/setup/provider-setup";
 import { CatalogInstallButton } from "@/pages/catalog/ServerCard";
 import { filterToHttpRemotes } from "@/pages/catalog/remotes";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
@@ -137,11 +138,14 @@ export default function CatalogDetail(): JSX.Element {
         />
       </Page.Header>
       <Page.Body>
-        <SetupGuideCallout
-          registrySpecifier={server.registrySpecifier}
-          serverUrl={serverUrl}
-          iconUrl={server.iconUrl}
-        />
+        {/* Guided setup carries these instructions on the server's Setup page. */}
+        {!catalogServerHasGuidedSetup(server) && (
+          <SetupGuideCallout
+            registrySpecifier={server.registrySpecifier}
+            serverUrl={serverUrl}
+            iconUrl={server.iconUrl}
+          />
+        )}
         {/* Container query, not a viewport one: the side panel narrows this
             column without narrowing the window, and `lg:` would not notice. */}
         <div className="@container">

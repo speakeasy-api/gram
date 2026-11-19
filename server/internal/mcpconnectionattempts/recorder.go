@@ -1173,7 +1173,8 @@ func (r *Recorder) countSteps(rows []Row) {
 			attr.ConnectionReason(row.Reason),
 			attr.ConnectionWhoFixes(row.WhoFixes),
 		}
-		if provider := ProviderLabel(row.ProviderHost); provider != "" {
+		// A listing row names its member's host for the log, not as a provider attempt.
+		if provider := ProviderLabel(row.ProviderHost); provider != "" && row.Step != StepDiscoveryMember.String() {
 			tags = append(tags, attr.ConnectionProvider(provider))
 		}
 		r.steps.Add(context.Background(), 1, metric.WithAttributes(tags...))

@@ -638,6 +638,17 @@
   guardActionButtons("button[data-connect-link]", "Connecting…");
   guardActionButtons("button[data-refresh-link]", "Refreshing…");
   guardActionButtons("button[data-validate-link]", "Checking…");
+  guardActionButtons("button[data-switch-account]", "Opening sign-in…");
+
+  // Back from the sign-in can restore this page with its buttons pending;
+  // reload it so they work again.
+  if (document.querySelector("button[data-switch-account]")) {
+    window.addEventListener("pageshow", function (event) {
+      if (event.persisted) {
+        window.location.reload();
+      }
+    });
+  }
 
   // Identity-chained cards render neutral, so they read right without script.
   // Check each exchange in the background and settle the card in place; any
@@ -713,6 +724,24 @@
         "Your identity provider sign-in wasn't accepted. Use " +
           ownAccount(card) +
           ".";
+      var switchAccount =
+        result.action === "switch_account"
+          ? card.querySelector("button[data-switch-account]")
+          : null;
+      if (switchAccount) {
+        // The company sign-in above the own-account button, at one width
+        // right of the text; under the text on a narrow screen.
+        switchAccount.removeAttribute("hidden");
+        var actions = card.querySelector("[data-card-actions]");
+        if (actions) {
+          actions.className =
+            "flex shrink-0 flex-col items-start gap-1.5 sm:items-stretch";
+        }
+        var own = card.querySelector("button[data-connect-fallback]");
+        if (own && own.className.indexOf("justify-center") < 0) {
+          own.className += " justify-center";
+        }
+      }
       signalChainRejected();
       return;
     }

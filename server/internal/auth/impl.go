@@ -976,6 +976,7 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 		LoginHint:       email,
 		ScreenHint:      screenHint,
 		Prompt:          "",
+		OrganizationID:  "",
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error building authorization URL").LogError(ctx, s.logger)

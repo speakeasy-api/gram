@@ -4,6 +4,7 @@ import {
 } from "@/components/observe/ObservabilitySummaryTiles";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { Link } from "react-router";
 
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
 import { MemberWorkflowCTA } from "@/components/platform-mcp/member-workflow-cta";
@@ -39,9 +40,12 @@ function toolLabelFromUrn(urn: string): string {
 export function MCPOverviewTab({
   server,
   logsTarget,
+  toolbarStart,
 }: {
   server: HostedServerRef;
   logsTarget?: ParsedTargetFilter | null;
+  /** Shown at the start of the row that holds View logs and the range. */
+  toolbarStart?: React.ReactNode;
 }): React.JSX.Element {
   const client = useGramContext();
   const project = useProject();
@@ -98,6 +102,10 @@ export function MCPOverviewTab({
     server.kind === "toolset"
       ? ({ type: "hosted", id: server.slug } satisfies ParsedTargetFilter)
       : logsTarget;
+  // Carries the selected time range, so the logs open on the same window.
+  const serverLogsHref = toolLogsTarget
+    ? observeLogsLink({ target: toolLogsTarget })
+    : undefined;
 
   const topByCount = (data?.topToolsByCount ?? []).map((tool) => {
     const toolName = toolLabelFromUrn(tool.gramUrn);
@@ -142,7 +150,13 @@ export function MCPOverviewTab({
         />
       )}
 
-      <div className="flex justify-end">
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">{toolbarStart}</div>
+        {serverLogsHref && (
+          <Button asChild variant="secondary">
+            <Link to={serverLogsHref}>View logs</Link>
+          </Button>
+        )}
         <TimeRangePicker
           preset={customRange ? null : dateRange}
           customRange={customRange}

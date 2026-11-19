@@ -186,6 +186,8 @@ type consentApprovalError struct {
 // consentTemplateData is the field set the consent template renders against.
 type consentTemplateData struct {
 	CatalogChanges *catalogChanges
+	// AccountSwitch renders the company sign-in action chained cards reveal when their check offers it.
+	AccountSwitch bool
 	// GatewayDefaultMode labels the gateway default when choosing discovery.
 	GatewayDefaultMode string
 	// CodeModeUnavailable explains a stored code choice that is currently served as Progressive.
@@ -618,6 +620,11 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
+		if errors.Is(err, redisCache.ErrCacheMiss) {
+			if switched := s.switchedConsentError(ctx, logger, endpoint, stateID); switched != nil {
+				return switched
+			}
+		}
 		return consentChallengeCacheError(ctx, logger, err)
 	}
 	if challengeState.FirstParty {
@@ -1098,7 +1105,10 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			gatewayDefaultMode = "Progressive"
 		}
 	}
+	accountSwitch := slices.ContainsFunc(cards, func(card remoteSessionCard) bool { return card.Chained }) &&
+		s.accountSwitchEnabled(ctx, endpoint.OrganizationID)
 	data := consentTemplateData{
+		AccountSwitch:           accountSwitch,
 		GatewayDefaultMode:      gatewayDefaultMode,
 		CodeModeUnavailable:     codeModeUnavailable,
 		ClientName:              clientName,
@@ -1184,6 +1194,11 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// against the consumed value, which stays the single-use authority.
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
+		if errors.Is(err, redisCache.ErrCacheMiss) {
+			if switched := s.switchedConsentError(ctx, logger, endpoint, stateID); switched != nil {
+				return switched
+			}
+		}
 		return consentChallengeCacheError(ctx, logger, err)
 	}
 	if challengeState.FirstParty {
@@ -1605,6 +1620,9 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		if errors.Is(err, redisCache.ErrCacheMiss) {
 			// Lost the race to a double submit: the winner records the attempt.
 			t.Continue()
+			if switched := s.switchedConsentError(ctx, logger, endpoint, stateID); switched != nil {
+				return switched
+			}
 		} else {
 			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		}

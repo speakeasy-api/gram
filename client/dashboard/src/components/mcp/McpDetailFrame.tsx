@@ -98,11 +98,6 @@ export function McpDetailFrame({
         {activeTab === "overview" && chrome?.overviewSetup ? (
           <div className="mb-6">{chrome.overviewSetup}</div>
         ) : null}
-        {activeTab === "overview" && chrome?.overviewBanner ? (
-          // The banner renders nothing for viewers who can't manage
-          // plugins, so the gap goes with it.
-          <div className="mb-6 empty:hidden">{chrome.overviewBanner}</div>
-        ) : null}
         {children}
       </ReadinessIssuesProvider>
     </DetailFrame>
@@ -250,7 +245,7 @@ function HeaderControls({
         <Link
           to={chrome.identity.href}
           state={HIGHLIGHT_STATE}
-          aria-label={`Upstream auth: ${chrome.identity.label}. Open authentication settings`}
+          aria-label={`Upstream auth: ${chrome.identity.label}. ${chrome.identity.opens ?? "Open authentication settings"}`}
           className={DETAIL_HEADER_CONTROL_BUTTON}
         >
           {chrome.identity.tone ? (

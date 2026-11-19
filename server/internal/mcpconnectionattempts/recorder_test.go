@@ -600,6 +600,23 @@ func TestRecord_MetricKeepsAKnownProvider(t *testing.T) {
 	}
 }
 
+// A listing row keeps its member's host for the log but is not counted as a provider attempt.
+func TestRecord_MetricLeavesListingRowsUntagged(t *testing.T) {
+	t.Parallel()
+
+	recorder := newTestRecorder(t, clickhouseConn(t), testConfig())
+	attempt := Begin(testScope())
+	recorder.End(t.Context(), attempt, StepDiscoveryMember, CodeProviderServerError, Provider("https://mcp.example.com/mcp"))
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	points := stepTags(t, recorder)
+	require.NotEmpty(t, points)
+	for _, tags := range points {
+		_, tagged := tags[string(attr.ConnectionProviderKey)]
+		require.False(t, tagged, "a listing row has no provider tag")
+	}
+}
+
 // stepTags returns each step metric point's tags.
 func stepTags(t *testing.T, recorder testRecorder) []map[string]string {
 	t.Helper()

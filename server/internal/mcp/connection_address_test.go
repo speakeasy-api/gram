@@ -276,7 +276,7 @@ func discoveryReasons(rec *mcpconnectionattemptstest.Recording) []string {
 }
 
 // A gateway member whose own address is refused or missing says so on the gateway list, and its row agrees.
-// A member that is unavailable for another reason keeps member_tools_missing.
+// A member that is unavailable for another reason says that reason instead.
 func TestGatewayConsentMemberAtUnusableAddress(t *testing.T) {
 	t.Parallel()
 
@@ -301,7 +301,7 @@ func TestGatewayConsentMemberAtUnusableAddress(t *testing.T) {
 	}{
 		{name: "refused", url: "https://192.0.2.10/mcp", label: "Can't connect · This server's address is private or internal. Ask your administrator.", reason: mcpconnectionattempts.CodeAddressNotAllowed},
 		{name: "missing", url: "https://" + missingMemberHost + "/mcp", label: "Can't connect · This server's address doesn't exist. Ask your administrator.", reason: mcpconnectionattempts.CodeAddressNotFound},
-		{name: "broken server", url: broken.URL, label: "Unavailable · try again shortly, or ask your administrator", reason: mcpconnectionattempts.CodeMemberToolsMissing},
+		{name: "broken server", url: broken.URL, label: "Unavailable · The server had an error. Try again shortly.", reason: mcpconnectionattempts.CodeProviderServerError},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

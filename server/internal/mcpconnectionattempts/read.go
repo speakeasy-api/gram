@@ -14,6 +14,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
+// attemptHost leaves out a listing row's host, which is its member's, not the attempt's provider.
+const attemptHost = `if(step = 'discovery_member', '', provider_host)`
+
 // attemptEndingColumns are the columns that decide how an attempt ended, plus its
 // provider (the one on the ending row, else the earliest) and weight. They reduce an
 // attempt's rows in ClickHouse as Summarize does in Go, with the same tie-breaks on equal times.
@@ -30,9 +33,9 @@ const attemptEndingColumns = `
 	toString(argMax((step, reason), (event_time, step, reason)).2) AS last_reason,
 	max(event_time) AS last_at,
 	ifNull(nullIf(if(countIf(is_final) > 0,
-			argMinIf(provider_host, (event_time, step, outcome, reason, provider_host), is_final),
-			argMax(provider_host, (event_time, step, reason, provider_host))), ''),
-		argMinIf(provider_host, (event_time, provider_host), provider_host != '')) AS provider,
+			argMinIf(` + attemptHost + `, (event_time, step, outcome, reason, ` + attemptHost + `), is_final),
+			argMax(` + attemptHost + `, (event_time, step, reason, ` + attemptHost + `))), ''),
+		argMinIf(` + attemptHost + `, (event_time, ` + attemptHost + `), ` + attemptHost + ` != '')) AS provider,
 	toUInt64(max(repeats)) + 1 AS weight`
 
 // attemptColumns reduces an attempt's rows to one AttemptSummary.

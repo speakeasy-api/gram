@@ -11,6 +11,7 @@ export const SETTINGS_GROUPS = {
   connection: { id: "settings-connection", title: "Connection" },
   tools: { id: "settings-tools", title: "Tools" },
   instructions: { id: "settings-instructions", title: "Server instructions" },
+  setup: { id: "settings-setup", title: "Guided setup" },
   danger: { id: "settings-danger-zone", title: "Danger zone" },
 } as const;
 
