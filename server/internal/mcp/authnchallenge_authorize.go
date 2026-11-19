@@ -129,7 +129,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		redirectURIs := s.dashboardInspectRedirectURIs()
 		if !slices.Contains(redirectURIs, req.RedirectURI) {
 			// This client ID is recognized by the server before it has a row.
-			t.Scope(connectionScope(endpoint, mcpconnectionattempts.AppOf(req.ClientID, mcpconnectionattempts.ClientIDAdmitted)))
+			t.Scope(connectionScope(endpoint, mcpconnectionattempts.AppOf(s.aiCatalog.Snapshot(), req.ClientID, mcpconnectionattempts.ClientIDAdmitted)))
 			t.Refuse(ctx, mcpconnectionattempts.CodeRedirectURIMismatch)
 			page.Reason = oauthui.ReasonInvalidClient
 			return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, page, "invalid_request", "redirect_uri is not registered for this client")

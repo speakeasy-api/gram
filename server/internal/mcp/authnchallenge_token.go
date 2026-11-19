@@ -575,7 +575,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 ) (retErr error) {
 	exchange, logger := s.startIDJAGExchange(endpoint, logger)
 	defer exchange.record(ctx)
-	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientRow.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundToken,
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(s.aiCatalog.Snapshot(), clientRow.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundToken,
 		mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(oauthwire.GrantTypeJWTBearer),
 		mcpconnectionattempts.UserSessionClient(clientRow.ID), mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID))
 	defer t.Finish(ctx)

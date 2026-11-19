@@ -447,7 +447,7 @@ func (s *Service) newOrganizationGatewayTokens(r *http.Request, endpoint *Resolv
 			return tokens, nil
 		},
 		resolveMember: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-			tokens, err := s.remoteChallengeMgr.ResolveAssociatedAccessTokens(ctx, remotesessions.RefreshIn(connectionScope(endpoint, requestApp(ctx))).NotingSkips(skipped).FromRequest(r), member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, member.associatedClients, true)
+			tokens, err := s.remoteChallengeMgr.ResolveAssociatedAccessTokens(ctx, remotesessions.RefreshIn(connectionScope(endpoint, requestApp(ctx, s.aiCatalog.Snapshot()))).NotingSkips(skipped).FromRequest(r), member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, member.associatedClients, true)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "resolve member remote session").LogError(ctx, s.logger)
 			}

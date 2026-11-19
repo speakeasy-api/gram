@@ -52,8 +52,11 @@ func Load(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, validate f
 	for _, p := range rows {
 		byID[p.ID] = len(products)
 		products = append(products, Product{
-			ID:          p.ID,
-			VendorKey:   p.VendorKey,
+			ID:        p.ID,
+			VendorKey: p.VendorKey,
+			// TODO(AIM-450): the catalog tables do not store families or
+			// aliases yet; Identify reads them from the compiled registry.
+			Family:      "",
 			DisplayName: p.DisplayName,
 			Category:    Category(p.Category.String),
 			Signatures: Signatures{
@@ -64,6 +67,7 @@ func Load(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, validate f
 			},
 			VersionPlistKey: p.VersionPlistKey.String,
 			ClientInfoNames: p.ClientInfoNames,
+			Aliases:         nil,
 			Documents:       nil,
 		})
 	}

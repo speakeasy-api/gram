@@ -57,4 +57,8 @@ Database parity, refresh, gateway isolation, and Platform MCP recognition tests
 cover these contracts. Demo provisioning already seeds the same reference rows.
 
 The compiled registry remains only as a test baseline pending AIM-450. Production
-readers receive the database store explicitly and do not fall back to it.
+readers receive the database store explicitly and do not fall back to it, with
+one exception still to migrate: telemetry identity (`Identify`, used by the OTel
+dialects and enrichment) and the analytics product family and vendor lookups
+read the compiled registry, because the database does not yet store product
+families or aliases.

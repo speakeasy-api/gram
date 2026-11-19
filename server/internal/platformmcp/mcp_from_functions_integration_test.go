@@ -638,7 +638,7 @@ func TestCreateMCPFromFunctionsRefusesWhenFunctionsDisabled(t *testing.T) {
 	require.True(t, fixture.service.valid())
 
 	describe := func(functionsAvailable bool) Descriptor {
-		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "create-from-functions-disabled", Version: "0.0.1"}, nil))
+		registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "create-from-functions-disabled", Version: "0.0.1"}, nil))
 		registrar.withProjects(&RegistrationStore{db: fixture.conn, icons: nil})
 		registerCreateMCPFromFunctionsTool(registrar, fixture.service, functionsAvailable)
 		descriptors := registrar.Descriptors()
