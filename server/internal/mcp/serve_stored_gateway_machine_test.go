@@ -124,8 +124,9 @@ func TestServePublic_StoredGatewayIssuerWorkloadListsAdmittedMember(t *testing.T
 	bearer := decodeSharedTokenResponse(t, tokenResponse).AccessToken
 	require.NotEmpty(t, bearer)
 
-	_, err := servePublicHTTP(t, t.Context(), f.ti, gatewaySlug, makeInitializeBody(), bearer, nil)
-	requireOopsCode(t, err, oops.CodeUnauthorized)
+	refused, err := servePublicHTTP(t, t.Context(), f.ti, gatewaySlug, makeInitializeBody(), bearer, nil)
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.Contains(t, refused.Header().Get("WWW-Authenticate"), `error="insufficient_scope"`)
 	f.ti.features.SetFlag(feature.FlagStoredGatewayMachineAccess, f.fx.orgID, true)
 
 	w, err := servePublicHTTP(t, t.Context(), f.ti, gatewaySlug, makeMetaRPCBody(t, "tools/call", map[string]any{

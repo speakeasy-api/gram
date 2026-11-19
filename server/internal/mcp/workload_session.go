@@ -37,6 +37,17 @@ var errWorkloadSessionOutOfReach = errors.New("workload session does not reach t
 // workloadSessionReach is which MCP servers a workload session was minted for.
 type workloadSessionReach string
 
+type workloadSessionReachContextKey struct{}
+
+func withWorkloadSessionReach(ctx context.Context, reach workloadSessionReach) context.Context {
+	return context.WithValue(ctx, workloadSessionReachContextKey{}, reach)
+}
+
+func workloadSessionReachFromContext(ctx context.Context) (workloadSessionReach, bool) {
+	reach, ok := ctx.Value(workloadSessionReachContextKey{}).(workloadSessionReach)
+	return reach, ok
+}
+
 const (
 	// workloadSessionReachResource is the one MCP server the grant named as
 	// its RFC 8707 resource.

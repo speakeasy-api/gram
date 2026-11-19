@@ -109,6 +109,9 @@ func (s *Service) admitGatewayCaller(
 		return ctx, nil, fmt.Errorf("evaluate gateway target: %w", err)
 	}
 	if !admitted {
+		if reach, ok := workloadSessionReachFromContext(authedCtx); caller.kind == gatewayCallerWorkload && ok && reach == workloadSessionReachIssuer {
+			return ctx, nil, writeInsufficientScopeChallenge(w, authentication.protectedResourceURL, "access token does not grant access to this gateway")
+		}
 		return ctx, nil, WriteAuthenticateChallenge(w, authentication.protectedResourceURL, "credential cannot enter this gateway")
 	}
 
