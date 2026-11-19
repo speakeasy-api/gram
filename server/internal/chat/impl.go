@@ -472,15 +472,29 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	return &gen.ListChatsResult{Chats: result, Total: int(total)}, nil
 }
 
+// chatFindingCountsTimeout bounds the ClickHouse risk count read that
+// decorates chat overviews.
+const chatFindingCountsTimeout = 5 * time.Second
+
 // chatOverviews enriches authorized session metadata without reading transcripts.
 func (s *Service) chatOverviews(ctx context.Context, authCtx *contextvalues.AuthContext, findingsProject *chatfindings.Project, rows []repo.ListChatsRow, visibility chatVisibility) ([]*gen.ChatOverview, error) {
 	ids := make([]uuid.UUID, len(rows))
 	for i := range rows {
 		ids[i] = rows[i].ID
 	}
-	riskCounts, err := findingsProject.Counts(ctx, ids)
+	// Risk counts come from ClickHouse and only decorate the list. Bound the
+	// read so a slow or unreachable ClickHouse cannot stall the whole page, and
+	// report the counts as unknown (absent) rather than zero when it fails.
+	countsCtx, cancelCounts := context.WithTimeout(ctx, chatFindingCountsTimeout)
+	riskCounts, err := findingsProject.Counts(countsCtx, ids)
+	cancelCounts()
+	riskCountsKnown := true
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count chat findings").LogError(ctx, s.logger)
+		if ctx.Err() != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "count chat findings").LogError(ctx, s.logger)
+		}
+		s.logger.WarnContext(ctx, "chat finding counts unavailable; omitting risk counts", attr.SlogError(err))
+		riskCountsKnown = false
 	}
 
 	result := make([]*gen.ChatOverview, 0, len(rows))
@@ -489,7 +503,10 @@ func (s *Service) chatOverviews(ctx context.Context, authCtx *contextvalues.Auth
 		if row.LastMessageTimestamp.Valid {
 			lastMessageTimestamp = row.LastMessageTimestamp.Time.Format(time.RFC3339)
 		}
-		riskCount := int(riskCounts[row.ID])
+		var riskCount *int
+		if riskCountsKnown {
+			riskCount = new(int(riskCounts[row.ID]))
+		}
 		pinned := row.PinnedAt.Valid
 		result = append(result, &gen.ChatOverview{
 			SlackTeamID:          nil,
@@ -512,7 +529,7 @@ func (s *Service) chatOverviews(ctx context.Context, authCtx *contextvalues.Auth
 			CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
 			LastMessageTimestamp: lastMessageTimestamp,
-			RiskFindingsCount:    &riskCount,
+			RiskFindingsCount:    riskCount,
 			AccountType:          conv.PtrEmpty(row.AccountType),
 			AccountEmail:         conv.PtrEmpty(row.AccountEmail),
 			Pinned:               &pinned,
