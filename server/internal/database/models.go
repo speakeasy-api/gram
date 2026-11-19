@@ -453,7 +453,7 @@ type AiProductAlias struct {
 	ID uuid.UUID
 	// @access: confidential
 	AiProductID string
-	// The reported name. Stored as written; lookups fold case and treat spaces, underscores and hyphens alike in application code.
+	// The reported name, stored as written. Lookups ignore case, spaces, tabs, underscores and hyphens, so claude_code and Claude Code are the same name.
 	// @access: opaque-confidential
 	Name string
 	// Kind of client the name implies (cli, ide, desktop, web, mobile, cloud, slack); null when the name implies none. Validated in application code.
