@@ -96,7 +96,8 @@ export function useRemoteMcpToolConnection({
   // Public tunnels serve anonymously and intentionally have no OAuth routes.
   const publicTunnel =
     inspectOAuth && !!tunneledMcpServerId && visibility === "public";
-  const isIssuerGated = !!userSessionIssuerId && !publicTunnel;
+  const isIssuerGated = !!userSessionIssuerId;
+  const requiresToken = isIssuerGated && !publicTunnel;
   const canFirstPartyConnect = supportsFirstPartyConnect({
     userSessionIssuerId,
     platformSlug,
@@ -108,7 +109,7 @@ export function useRemoteMcpToolConnection({
   // uses its own OAuth and MCP routes; the grant must stay on that same address.
   const oauth = useInspectOAuth({
     serverUrl:
-      enabled && inspectOAuth && isIssuerGated
+      enabled && inspectOAuth && requiresToken
         ? platformSlug
           ? `${getServerURL()}/mcp/${encodeURIComponent(platformSlug)}`
           : mcpUrl
@@ -142,7 +143,7 @@ export function useRemoteMcpToolConnection({
   );
   const connectionEnabled =
     enabled &&
-    (isIssuerGated ? !!accessToken : !usesChatSession || !!chat.headers);
+    (requiresToken ? !!accessToken : !usesChatSession || !!chat.headers);
 
   // Connect through the dev proxy origin (same-origin) so the AI SDK transport
   // carries the gram_session cookie and the gateway's proxied SSE response
@@ -180,7 +181,7 @@ export function useRemoteMcpToolConnection({
   const chatFailed = usesChatSession && !!chat.error && !chat.headers;
   const needsAuth =
     listingNeedsAuth ||
-    (enabled && inspectOAuth && isIssuerGated && !accessToken && !oauth.error);
+    (enabled && inspectOAuth && requiresToken && !accessToken && !oauth.error);
   const isError = isListError || chatFailed || oauth.error;
   const refetch =
     oauth.error && oauth.connect

@@ -373,6 +373,17 @@ describe("RemoteMcpToolsSection connect prompt", () => {
     );
   });
 
+  it("does not suggest configuring an issuer when an anonymous tunnel refuses listing", () => {
+    renderSection({
+      userSessionIssuerId: "issuer-1",
+      tunneledMcpServerId: "tunnel-1",
+      visibility: "public",
+    });
+
+    expect(screen.queryByRole("button", connectButton)).toBeNull();
+    expect(screen.getByText(/Connect isn't available/)).toBeTruthy();
+  });
+
   it("keeps tool listing off and hides the prompt while sign-in starts", () => {
     mocks.needsAuth = false;
     mocks.oauthConnecting = true;
