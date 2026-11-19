@@ -528,7 +528,14 @@ func (s *Service) resolveAuthClientChoiceForConsent(ctx context.Context, organiz
 	return s.resolveProposedAuthClient(ctx, organizationID, serverID, projectID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.NullUUID{UUID: authClientID, Valid: true}, subject)
 }
 
+// resolveProposedAuthClient resolves a proposed choice for serverID.
+//
+// A proposal is a preview, not a use of the client: a consent, catalog,
+// recovery or sign-in page asks what a member could be served. Its refusals
+// are not recorded as authorization checks, so viewing such a page adds no
+// failed checks the person did not trigger.
 func (s *Service) resolveProposedAuthClient(ctx context.Context, organizationID string, serverID, projectID uuid.UUID, registrationID, authClientID uuid.NullUUID, subject urn.SessionSubject) (authClientResolution, error) {
+	ctx = authz.WithoutChallenges(ctx)
 	enforced, err := s.authEnforcement.Enforced(ctx, organizationID)
 	if err != nil {
 		return gapResolution(authClientReasonMissingChoice), fmt.Errorf("read upstream auth enforcement: %w", err)

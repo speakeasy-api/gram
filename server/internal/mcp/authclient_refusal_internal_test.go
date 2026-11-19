@@ -107,7 +107,8 @@ func TestMandatoryPermitterRecordsARefusedUseOnce(t *testing.T) {
 	require.NotContains(t, selector, authz.SelectorKeyConnectionOwner)
 	require.NotContains(t, selector, authz.SelectorKeyUpstreamClient)
 
-	other := f.personalUse("user_a", uuid.New())
+	other := use
+	other.ServerID = uuid.New()
 	permitted, err := f.permitter.Permitted(ctx, other)
 	require.NoError(t, err)
 	require.False(t, permitted)
@@ -123,4 +124,15 @@ func TestMandatoryPermitterRecordsNothingForAnAllowedUse(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, permitted, "a member's own personal connection serves them")
 	require.Empty(t, f.read())
+}
+
+func TestMandatoryPermitterRecordsNothingForAPreview(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newRefusalFixture(t)
+
+	permitted, err := f.permitter.Permitted(authz.WithoutChallenges(ctx), f.personalUse("user_a", uuid.New()))
+	require.NoError(t, err)
+	require.False(t, permitted)
+	require.Empty(t, f.read(), "a consent or catalog preview is not a use")
 }

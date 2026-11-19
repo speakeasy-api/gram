@@ -237,8 +237,13 @@ type AgentCheckGroup struct {
 
 	ResourceID string `json:"resource_id"`
 
-	// ResourceName is the MCP server's name when the resource is one.
+	// ResourceName is the MCP server's name when the resource is one, or
+	// for an auth client (upstream credential) check, the name of the server
+	// it was used for.
 	ResourceName string `json:"resource_name,omitempty"`
+
+	// ServerID is, for an auth client check, the MCP server it was used for.
+	ServerID string `json:"server_id,omitempty"`
 
 	// Count is how many such checks the read found.
 	Count int `json:"count"`
@@ -246,7 +251,8 @@ type AgentCheckGroup struct {
 	// LastAt is the latest one, RFC3339.
 	LastAt string `json:"last_at"`
 
-	// Reason is why the latest one was decided as it was, such as no_grants.
+	// Reason is why the latest one was decided as it was, such as no_grants,
+	// or connection_owner_mismatch for another member's personal connection.
 	Reason string `json:"reason"`
 }
 
@@ -502,10 +508,7 @@ func (s *AgentIdentityReadService) mcpNames(ctx context.Context, organizationID 
 	var ids []uuid.UUID
 	for _, result := range results {
 		for _, check := range result.Challenges {
-			if conv.PtrValOr(check.ResourceKind, "") != authz.ResourceKindMCP {
-				continue
-			}
-			id, err := uuid.Parse(conv.PtrValOr(check.ResourceID, ""))
+			id, err := uuid.Parse(checkServerID(check))
 			if err != nil {
 				continue
 			}
@@ -700,23 +703,39 @@ func agentChecksWindow(rawFrom, rawTo *string, now time.Time) (time.Time, time.T
 
 // groupAgentChecks groups one outcome's checks by scope and resource. Rows
 // arrive newest first, so each group's first row is its latest.
+// checkServerID is the MCP server a check concerns: the resource of a server
+// check, or the server an auth client check recorded it was used for.
+func checkServerID(check *accessgen.AuthzChallenge) string {
+	switch conv.PtrValOr(check.ResourceKind, "") {
+	case authz.ResourceKindMCP:
+		return conv.PtrValOr(check.ResourceID, "")
+	case authz.ResourceKindMCPAuthClient:
+		return check.Selector[authz.ChallengeKeyMCPServerID]
+	default:
+		return ""
+	}
+}
+
 func groupAgentChecks(result *accessgen.ListChallengesResult, names map[string]string) AgentCheckOutcome {
 	groups := []AgentCheckGroup{}
 	index := make(map[string]int)
 	for _, check := range result.Challenges {
 		kind := conv.PtrValOr(check.ResourceKind, "")
 		resourceID := conv.PtrValOr(check.ResourceID, "")
-		key := check.Scope + "\x00" + kind + "\x00" + resourceID
+		serverID := checkServerID(check)
+		// An auth client serves several servers, so its checks are grouped
+		// by the server it was used for too.
+		key := check.Scope + "\x00" + kind + "\x00" + resourceID + "\x00" + serverID
 		if at, ok := index[key]; ok {
 			groups[at].Count++
 			continue
 		}
-		name := ""
-		if kind == authz.ResourceKindMCP {
-			name = names[resourceID]
+		groupServerID := ""
+		if kind == authz.ResourceKindMCPAuthClient {
+			groupServerID = serverID
 		}
 		index[key] = len(groups)
-		groups = append(groups, AgentCheckGroup{Scope: check.Scope, ResourceKind: kind, ResourceID: resourceID, ResourceName: name, Count: 1, LastAt: check.Timestamp, Reason: check.Reason})
+		groups = append(groups, AgentCheckGroup{Scope: check.Scope, ResourceKind: kind, ResourceID: resourceID, ResourceName: names[serverID], ServerID: groupServerID, Count: 1, LastAt: check.Timestamp, Reason: check.Reason})
 	}
 	return AgentCheckOutcome{Total: result.Total, Groups: groups, Truncated: result.Total > len(result.Challenges)}
 }
