@@ -293,9 +293,10 @@ func attemptsSQL(s Scope, now time.Time) (string, []any, error) {
 			any(app_key) AS a_app_key,
 			groupUniqArrayIf(user_session_issuer_id, user_session_issuer_id != '') AS a_issuers,
 			toString(multiIf(
-				countIf(client_family NOT IN ('', 'browser', 'other')) > 0,
-				argMinIf(client_family, (event_time, client_family), client_family NOT IN ('', 'browser', 'other')),
-				countIf(client_family = 'other') > 0, 'other',
+				countIf(client_family NOT IN ('', 'browser', 'other', 'script')) > 0,
+				argMinIf(client_family, (event_time, client_family), client_family NOT IN ('', 'browser', 'other', 'script')),
+				countIf(client_family IN ('other', 'script')) > 0,
+				argMinIf(client_family, (event_time, client_family), client_family IN ('other', 'script')),
 				countIf(client_family = 'browser') > 0, 'browser', '')) AS a_family,
 			arraySort(groupArrayIf((event_time, toString(client_family), client_version), client_version != '')) AS a_versions,
 			argMinIf(` + mcpconnectionattempts.AttemptHostSQL + `, (event_time, ` + mcpconnectionattempts.AttemptHostSQL + `), ` + mcpconnectionattempts.AttemptHostSQL + ` != '') AS a_first_service,

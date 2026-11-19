@@ -110,11 +110,8 @@ func (s *Service) GetSessionActivity(ctx context.Context, payload *gen.GetSessio
 		return nil, err
 	}
 
-	firstDay := time.Date(from.Year(), from.Month(), from.Day(), 0, 0, 0, 0, time.UTC)
-	lastDay := time.Date(to.Year(), to.Month(), to.Day(), 0, 0, 0, 0, time.UTC)
-	if lastDay.Equal(to) {
-		lastDay = lastDay.AddDate(0, 0, -1)
-	}
+	firstDay := from.Truncate(24 * time.Hour)
+	lastDay := to.Add(-time.Nanosecond).Truncate(24 * time.Hour)
 	averageFrom := now.Add(-averageSessionWindow)
 	liveSince := firstDay
 	if averageFrom.Before(liveSince) {

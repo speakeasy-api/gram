@@ -68,17 +68,17 @@ func SignIns(ctx context.Context, ch driver.Conn, s Scope, bucket Bucket, now ti
 	}
 	width := bucket.width()
 	startOf := fmt.Sprintf("toStartOfInterval(a_started, INTERVAL %d SECOND, 'UTC')", int64(width/time.Second))
-	signIns, renewals := groupStrings(signInGroups), groupStrings(renewalGroups)
-	// Placeholders bind in text order: the select list comes before the subquery.
-	args = append(append([]any{signIns, signIns, renewals, renewals}, args...), string(OutcomeInProgress), signIns, renewals)
+	// Placeholders bind in text order: the WITH list comes before the subquery.
+	args = append(append([]any{groupStrings(signInGroups), groupStrings(renewalGroups)}, args...), string(OutcomeInProgress))
 	query := `
+	WITH has(?, d_step) AS is_sign_in, has(?, d_step) AS is_renewal
 	SELECT ` + startOf + ` AS b_start,
-		sumIf(a_weight, has(?, d_step) AND d_outcome = '` + string(OutcomeConnected) + `') AS b_sign_in_ok,
-		sumIf(a_weight, has(?, d_step) AND d_outcome != '` + string(OutcomeConnected) + `') AS b_sign_in_not,
-		sumIf(a_weight, has(?, d_step) AND d_outcome = '` + string(OutcomeConnected) + `') AS b_renewal_ok,
-		sumIf(a_weight, has(?, d_step) AND d_outcome != '` + string(OutcomeConnected) + `') AS b_renewal_not
+		sumIf(a_weight, is_sign_in AND d_outcome = '` + string(OutcomeConnected) + `') AS b_sign_in_ok,
+		sumIf(a_weight, is_sign_in AND d_outcome != '` + string(OutcomeConnected) + `') AS b_sign_in_not,
+		sumIf(a_weight, is_renewal AND d_outcome = '` + string(OutcomeConnected) + `') AS b_renewal_ok,
+		sumIf(a_weight, is_renewal AND d_outcome != '` + string(OutcomeConnected) + `') AS b_renewal_not
 	FROM (` + attempts + `)
-	WHERE d_outcome != ? AND (has(?, d_step) OR has(?, d_step))
+	WHERE d_outcome != ? AND (is_sign_in OR is_renewal)
 	GROUP BY b_start
 	ORDER BY b_start` + readSettings
 	rows, err := queryAll[SignInBucket](ctx, ch, "sign-in summary", query, args...)

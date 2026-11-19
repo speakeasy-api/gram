@@ -130,11 +130,11 @@ days AS (
 SELECT days.day_start,
        COUNT(DISTINCT scoped.credential)::bigint AS active_sessions,
        (SELECT COUNT(DISTINCT live.credential) FROM scoped AS live
-        WHERE live.deleted IS FALSE AND live.ended_at > clock_timestamp())::bigint AS active_now,
+        WHERE live.deleted IS FALSE AND live.ended_at > statement_timestamp())::bigint AS active_now,
        (SELECT COALESCE(AVG(EXTRACT(EPOCH FROM ended.ended_at - ended.started_at)), -1) FROM lives AS ended
         WHERE ended.ended_at >= @average_from::timestamptz
           AND ended.ended_at < @average_to::timestamptz
-          AND ended.ended_at <= clock_timestamp())::float8 AS average_seconds
+          AND ended.ended_at <= statement_timestamp())::float8 AS average_seconds
 FROM days
 LEFT JOIN scoped
   ON scoped.started_at < days.day_start + '24 hours'::interval

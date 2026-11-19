@@ -1,6 +1,7 @@
 package mcpconnectionhealth_test
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -82,7 +83,10 @@ func TestGetSessionActivity_CountsSessionsPerDay(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1), res.ActiveNow)
 	require.Equal(t, int64(14*24*60*60), res.ConfiguredSessionSeconds)
-	require.Equal(t, int64(2), res.Days[len(res.Days)-1].ActiveSessions)
+	today := ti.now.UTC().Format(time.DateOnly)
+	created := slices.IndexFunc(res.Days, func(d *gen.ConnectionSessionDay) bool { return d.Day == today })
+	require.GreaterOrEqual(t, created, 0)
+	require.Equal(t, int64(2), res.Days[created].ActiveSessions)
 	require.Equal(t, int64(0), res.Days[0].ActiveSessions)
 	require.NotNil(t, res.AverageSessionSeconds)
 

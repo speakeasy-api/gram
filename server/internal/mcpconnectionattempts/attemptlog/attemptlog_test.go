@@ -568,14 +568,19 @@ func TestDecodeCursor_RejectsACursorWithoutATime(t *testing.T) {
 func TestList_AnIdentifiedAppWinsOverAnEarlierUnrecognizedOne(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	a := f.attempt(f.org, f.project, f.server, f.now.Add(-time.Hour))
-	f.row(a, mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultCodeIssued, false, time.Second).ClientFamily = mcpconnectionattempts.FamilyOther
-	late := f.row(a, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, 2*time.Second)
-	late.ClientFamily, late.ClientVersion = mcpconnectionattempts.FamilyCursor, "2.0.1"
+	for i, generic := range []string{mcpconnectionattempts.FamilyOther, mcpconnectionattempts.FamilyScript} {
+		a := f.attempt(f.org, f.project, f.server, f.now.Add(-time.Hour+time.Duration(i)*time.Minute))
+		early := f.row(a, mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultCodeIssued, false, time.Second)
+		early.ClientFamily, early.ClientVersion = generic, "9.9.9"
+		late := f.row(a, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, 2*time.Second)
+		late.ClientFamily, late.ClientVersion = mcpconnectionattempts.FamilyCursor, "2.0.1"
+	}
 	f.insert()
 
 	rows := list(t, f, f.scope(), attemptlog.Filters{})
-	require.Len(t, rows, 1)
-	require.Equal(t, mcpconnectionattempts.FamilyCursor, rows[0].App)
-	require.Equal(t, "2.0.1", rows[0].AppVersion)
+	require.Len(t, rows, 2)
+	for _, row := range rows {
+		require.Equal(t, mcpconnectionattempts.FamilyCursor, row.App)
+		require.Equal(t, "2.0.1", row.AppVersion)
+	}
 }
