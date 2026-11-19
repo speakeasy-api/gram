@@ -2192,50 +2192,69 @@ func (s *Service) observabilityOverview(ctx context.Context, scope repo.GetOverv
 	timeStart, timeEnd := scope.TimeStart, scope.TimeEnd
 	intervalSeconds := calculateInterval(timeStart, timeEnd)
 
-	// Fetch all data sequentially to avoid ClickHouse concurrent query limits
-	summary, err := s.chRepo.GetOverviewSummary(ctx, scope)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving overview summary")
-	}
+	// The reads are independent scans, so run them concurrently: the page
+	// waits for the slowest one instead of the sum of all five. The
+	// ClickHouse read pool bounds how many run at once (see
+	// overview.FetchClickHouse for the same pattern).
+	eg, egCtx := errgroup.WithContext(ctx)
+
+	var summary *repo.OverviewSummary
+	eg.Go(func() error {
+		var err error
+		summary, err = s.chRepo.GetOverviewSummary(egCtx, scope)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "error retrieving overview summary")
+		}
+		return nil
+	})
 
 	// Same duration, immediately before.
 	comparisonScope := scope
 	comparisonScope.TimeStart = timeStart - (timeEnd - timeStart)
 	comparisonScope.TimeEnd = timeStart
-	comparison, err := s.chRepo.GetOverviewSummary(ctx, comparisonScope)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving comparison summary")
-	}
+	var comparison *repo.OverviewSummary
+	eg.Go(func() error {
+		var err error
+		comparison, err = s.chRepo.GetOverviewSummary(egCtx, comparisonScope)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "error retrieving comparison summary")
+		}
+		return nil
+	})
 
 	var timeSeries []repo.TimeSeriesBucket
 	if includeTimeSeries {
-		timeSeries, err = s.chRepo.GetTimeSeriesMetrics(ctx, repo.GetTimeSeriesMetricsParams{
-			ExcludedHookSources: scope.ExcludedHookSources,
-			GramProjectIDs:      scope.GramProjectIDs,
-			TimeStart:           timeStart,
-			TimeEnd:             timeEnd,
-			IntervalSeconds:     intervalSeconds,
-			User:                scope.User,
-			CanonicalUser:       scope.CanonicalUser,
-			ExternalUserID:      scope.ExternalUserID,
-			APIKeyID:            scope.APIKeyID,
-			ToolsetSlug:         scope.ToolsetSlug,
-			ToolsetSlugServerID: scope.ToolsetSlugServerID,
-			RemoteMCPServerID:   scope.RemoteMCPServerID,
-			MCPServerID:         scope.MCPServerID,
-			MetaMCPServerID:     scope.MetaMCPServerID,
-			EventSource:         scope.EventSource,
-			HookSource:          scope.HookSource,
-			AccountType:         scope.AccountType,
-			ExternalOrgID:       scope.ExternalOrgID,
+		eg.Go(func() error {
+			var err error
+			timeSeries, err = s.chRepo.GetTimeSeriesMetrics(egCtx, repo.GetTimeSeriesMetricsParams{
+				ExcludedHookSources: scope.ExcludedHookSources,
+				GramProjectIDs:      scope.GramProjectIDs,
+				TimeStart:           timeStart,
+				TimeEnd:             timeEnd,
+				IntervalSeconds:     intervalSeconds,
+				User:                scope.User,
+				CanonicalUser:       scope.CanonicalUser,
+				ExternalUserID:      scope.ExternalUserID,
+				APIKeyID:            scope.APIKeyID,
+				ToolsetSlug:         scope.ToolsetSlug,
+				ToolsetSlugServerID: scope.ToolsetSlugServerID,
+				RemoteMCPServerID:   scope.RemoteMCPServerID,
+				MCPServerID:         scope.MCPServerID,
+				MetaMCPServerID:     scope.MetaMCPServerID,
+				EventSource:         scope.EventSource,
+				HookSource:          scope.HookSource,
+				AccountType:         scope.AccountType,
+				ExternalOrgID:       scope.ExternalOrgID,
+			})
+			if err != nil {
+				return oops.E(oops.CodeUnexpected, err, "error retrieving time series")
+			}
+			return nil
 		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error retrieving time series")
-		}
 	}
 
 	breakdown := func(sortBy string) ([]repo.ToolMetric, error) {
-		return s.chRepo.GetToolMetricsBreakdown(ctx, repo.GetToolMetricsBreakdownParams{
+		return s.chRepo.GetToolMetricsBreakdown(egCtx, repo.GetToolMetricsBreakdownParams{
 			ExcludedHookSources: scope.ExcludedHookSources,
 			GramProjectIDs:      scope.GramProjectIDs,
 			TimeStart:           timeStart,
@@ -2257,13 +2276,26 @@ func (s *Service) observabilityOverview(ctx context.Context, scope repo.GetOverv
 			SortBy:              sortBy,
 		})
 	}
-	toolsByCount, err := breakdown("count")
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving tools by count")
-	}
-	toolsByFailure, err := breakdown("failure_rate")
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving tools by failure rate")
+	var toolsByCount, toolsByFailure []repo.ToolMetric
+	eg.Go(func() error {
+		var err error
+		toolsByCount, err = breakdown("count")
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "error retrieving tools by count")
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		var err error
+		toolsByFailure, err = breakdown("failure_rate")
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "error retrieving tools by failure rate")
+		}
+		return nil
+	})
+
+	if err := eg.Wait(); err != nil {
+		return nil, err //nolint:wrapcheck // each lane already returns an oops error
 	}
 
 	return &telem_gen.GetObservabilityOverviewResult{
