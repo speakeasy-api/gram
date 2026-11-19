@@ -14,6 +14,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -35,11 +37,12 @@ func TestOrganizationUserSessionIssuerMigrateMergesUnusedDuplicateDcrClients(t *
 	targetID := uuid.MustParse(target.ID)
 
 	// One registration copied onto both issuers, as the removed legacy OAuth
-	// proxy registration lift did, plus a client only the source holds.
+	// proxy registration lift did, plus a client only the source holds. Each
+	// copy's secret hash differs, as bcrypt salts every hash.
 	duplicateClientID := "client_" + uuid.NewString()
-	sourceCopy, err := seedUserSessionClient(t, ctx, ti.conn, sourceID, duplicateClientID)
+	sourceCopy, err := seedUserSessionClientWithAuth(t, ctx, ti.conn, sourceID, duplicateClientID, oauthwire.AuthMethodClientSecretBasic, conv.ToPGText("source-copy-hash"))
 	require.NoError(t, err)
-	targetCopy, err := seedUserSessionClient(t, ctx, ti.conn, targetID, duplicateClientID)
+	targetCopy, err := seedUserSessionClientWithAuth(t, ctx, ti.conn, targetID, duplicateClientID, oauthwire.AuthMethodClientSecretBasic, conv.ToPGText("target-copy-hash"))
 	require.NoError(t, err)
 	sourceOnly, err := seedUserSessionClient(t, ctx, ti.conn, sourceID, "client_"+uuid.NewString())
 	require.NoError(t, err)
@@ -69,7 +72,7 @@ func TestOrganizationUserSessionIssuerMigrateMergesUnusedDuplicateDcrClients(t *
 	targetCopyAfter, err := repo.GetUserSessionClientByID(ctx, usersessionsrepo.GetUserSessionClientByIDParams{ID: targetCopy.ID, ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID})
 	require.NoError(t, err)
 	require.Equal(t, targetID, targetCopyAfter.UserSessionIssuerID)
-	require.Equal(t, targetCopy.ClientSecretHash, targetCopyAfter.ClientSecretHash, "the target copy keeps its own credential")
+	require.Equal(t, conv.ToPGText("target-copy-hash"), targetCopyAfter.ClientSecretHash, "the target copy keeps its own credential")
 	sourceOnlyAfter, err := repo.GetUserSessionClientByID(ctx, usersessionsrepo.GetUserSessionClientByIDParams{ID: sourceOnly.ID, ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID})
 	require.NoError(t, err)
 	require.Equal(t, targetID, sourceOnlyAfter.UserSessionIssuerID, "a client only the source holds moves as before")
