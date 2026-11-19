@@ -74,6 +74,7 @@ var adminMeanings = map[Code]adminMeaning{
 	CodeProviderTransientFailure:         {"The service had a temporary problem.", ""},
 	CodeReauthenticationRequired:         {"The person's company sign-in was missing, had expired, or no longer matched the current sign-in setup.", ""},
 	CodeIneligibleIdentity:               {"The person's account cannot be used for company-managed sign-in to this server.", ""},
+	CodeUnmanagedAccount:                 {"The person signed in to Speakeasy with an account the company does not manage, so company-managed sign-in refused it.", ""},
 	CodeToolPermissionDenied:             {"The person does not have permission to use this tool.", ""},
 	CodeMCPToolCallsPaused:               {"Tool calls are paused for this server.", ""},
 	CodePolicyBlocked:                    {"An organization policy blocked this request.", ""},
