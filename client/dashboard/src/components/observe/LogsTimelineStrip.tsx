@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Skeleton } from "@/components/ui/Skeleton";
 import type { ToolUsageTargetTimeSeriesPoint } from "@gram/client/models/components/toolusagetargettimeseriespoint.js";
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 import { useMemo } from "react";
 
 const HOUR_MS = 60 * 60 * 1000;

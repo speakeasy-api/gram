@@ -1,5 +1,5 @@
 import { formatCost } from "@/lib/money";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import {
   Tooltip,
   TooltipContent,
