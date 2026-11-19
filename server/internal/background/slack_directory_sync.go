@@ -4,20 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/speakeasy-api/gram/server/internal/constants"
-	slackrepo "github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
+	slackrepo "github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
-	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
-	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/activity"
@@ -25,6 +22,12 @@ import (
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
+	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
 )
 
 // Temporal actions/month ≈ 2N + R + 2,880 + 2,880·W, per namespace, where N is
@@ -52,8 +55,8 @@ type slackDirectoryActivities struct {
 	db   *pgxpool.Pool
 }
 
-func newSlackDirectoryActivities(db *pgxpool.Pool, enc *encryption.Client, httpClient *guardian.HTTPClient, refresher slackdirectoryconnections.TokenRefresher) *slackDirectoryActivities {
-	return &slackDirectoryActivities{db: db, sync: slackdirectoryconnections.NewDirectorySync(db, enc, slackdirectoryconnections.NewDirectoryProvider(slackapi.NewClient("", httpClient)), audit.NewLogger(), refresher)}
+func newSlackDirectoryActivities(db *pgxpool.Pool, credentials *integrationcredentials.Credentials, httpClient *guardian.HTTPClient, refresher slackdirectoryconnections.TokenRefresher) *slackDirectoryActivities {
+	return &slackDirectoryActivities{db: db, sync: slackdirectoryconnections.NewDirectorySync(db, credentials, slackdirectoryconnections.NewDirectoryProvider(slackapi.NewClient("", httpClient)), audit.NewLogger(), refresher)}
 }
 
 const (

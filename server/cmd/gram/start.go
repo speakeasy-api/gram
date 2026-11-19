@@ -86,6 +86,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/httpstream"
 	"github.com/speakeasy-api/gram/server/internal/identityapi"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
+	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
 	"github.com/speakeasy-api/gram/server/internal/integrations"
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/jsonwebkeysets"
@@ -898,6 +899,13 @@ func newStartCommand() *cli.Command {
 
 			auditLogger := newAuditLogger()
 
+			gcpIdentity := newGCPIdentity(ctx, logger, c)
+			orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
+			if err != nil {
+				return err
+			}
+			integrationCredentials := integrationcredentials.New(logger, orgEncryption.Cipher(logger, encryptionClient))
+
 			emailService, err := newEmailService(ctx, c, logger, guardianPolicy)
 			if err != nil {
 				return err
@@ -1163,7 +1171,7 @@ func newStartCommand() *cli.Command {
 			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient), serverURL)
 			assistantIdentities := newAssistantIdentities(c, auditLogger)
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, auditLogger, serverURL, siteURL, platformHosts, slackClient, cache.NewRedisCacheAdapter(redisClient), assistantIdentities)
-			speakeasySlackDirectory := newSpeakeasySlackDirectory(c, db, encryptionClient, guardianPolicy, auditLogger)
+			speakeasySlackDirectory := newSpeakeasySlackDirectory(c, db, integrationCredentials, guardianPolicy, auditLogger)
 			triggerApp.SetSpeakeasySlackTokens(speakeasySlackDirectory)
 
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
@@ -1181,17 +1189,12 @@ func newStartCommand() *cli.Command {
 			assistantPlatformExtras := append([]platformtools.ExternalTool{}, memoryTools...)
 			assistantPlatformExtras = append(assistantPlatformExtras, skillTools...)
 
-			gcpIdentity := newGCPIdentity(ctx, logger, c)
 			kmsSigningClients, err := newKMSSigningClients(ctx, logger, c)
 			if err != nil {
 				return fmt.Errorf("build kms signing client factory: %w", err)
 			}
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-			orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
-			if err != nil {
-				return err
-			}
 			clientSecrets := orgEncryption.ClientSecrets(logger, encryptionClient)
 			upstreamTokens := orgEncryption.UpstreamTokens(logger, encryptionClient)
 			identityProviderProvisioner, err := newIdentityProviderConnectionsProvisioner(ctx, logger, c, db, gcpIdentity, kmsSigningClients, auditLogger, clientSecrets, callbackOrigins.Outbound)
@@ -1660,13 +1663,13 @@ func newStartCommand() *cli.Command {
 				callbackURL := serverURL.JoinPath(slackdirectoryconnections.CallbackPath)
 				slackDirectoryProvider = slackdirectoryconnections.NewOAuthProvider(slackapi.NewClient("", guardianPolicy.PooledClient()), c.String("slack-client-id"), c.String("slack-client-secret"), callbackURL.String())
 			}
-			slackdirectoryconnections.Attach(mux, slackdirectoryconnections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, cache.NewRedisCacheAdapter(redisClient), encryptionClient, slackDirectoryProvider, siteURL, background.NewSlackDirectorySyncScheduler(temporalEnv)))
+			slackdirectoryconnections.Attach(mux, slackdirectoryconnections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, cache.NewRedisCacheAdapter(redisClient), integrationCredentials, slackDirectoryProvider, siteURL, background.NewSlackDirectorySyncScheduler(temporalEnv)))
 			dataExportRouteTests, err := newDataExportRouteTests(logger, meterProvider, db, auditLogger, encryptionClient, guardianPolicy, redisClient)
 			if err != nil {
 				return err
 			}
 			dataexports.Attach(mux, dataexports.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, dataExportRouteTests))
-			deviceintegrations.Attach(mux, deviceintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, guardianPolicy, &background.DeviceIntegrationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}, featureFlags))
+			deviceintegrations.Attach(mux, deviceintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, integrationCredentials, guardianPolicy, &background.DeviceIntegrationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}, featureFlags))
 			modelkeys.Attach(mux, modelkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, openRouter, productFeatures, auditLogger))
 			auditapi.Attach(mux, auditapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			identityapi.Attach(mux, identityapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
@@ -1880,7 +1883,7 @@ func newStartCommand() *cli.Command {
 				networkIngressClient.Client = temporalEnv.Client()
 			}
 			ingressPublicationRequester := plugins.PublicationRequests{Enabled: publicationEmit}
-			networkIngressService := networkingress.NewServiceWithPublication(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, auditLogger, networkIngressAdmission, networkingress.NewOutboxRequester(networkIngressQueue), ingressPublicationRequester, networkIngressClient).
+			networkIngressService := networkingress.NewServiceWithPublication(logger, tracerProvider, db, sessionManager, authzEngine, integrationCredentials, auditLogger, networkIngressAdmission, networkingress.NewOutboxRequester(networkIngressQueue), ingressPublicationRequester, networkIngressClient).
 				WithFeatures(featureFlags)
 			networkIngressService.UseGateway(networkIngressConfig.Gateway)
 			networkingress.Attach(mux, networkIngressService, networkIngressEnabled)
@@ -2320,6 +2323,7 @@ func newStartCommand() *cli.Command {
 						DB:                             db,
 						EncryptionClient:               encryptionClient,
 						ClientSecrets:                  clientSecrets,
+						IntegrationCredentials:         integrationCredentials,
 						UpstreamTokens:                 upstreamTokens,
 						FeatureProvider:                featureFlags,
 						AssetStorage:                   assetStorage,
@@ -2379,7 +2383,7 @@ func newStartCommand() *cli.Command {
 						return
 					}
 					defer lockDB.Close()
-					executor, err := newNetworkIngressExecutor(logger, meterProvider, db, lockDB, encryptionClient, orgEncryption.Service, orgEncryption.Provisioner, k8sClient, networkIngressConfig, ingressPublicationRequester)
+					executor, err := newNetworkIngressExecutor(logger, meterProvider, db, lockDB, integrationCredentials, orgEncryption.Service, orgEncryption.Provisioner, k8sClient, networkIngressConfig, ingressPublicationRequester)
 					if err != nil {
 						logger.ErrorContext(ctx, "configure network ingress worker", attr.SlogError(err))
 						return

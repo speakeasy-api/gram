@@ -185,7 +185,7 @@ func TestGetNetworkIngressReportsLiveStateWithoutCredentials(t *testing.T) {
 	const credentialSentinel = "sentinel-encrypted-tailscale-credentials"
 	const resourceSentinel = "sentinel-provider-resource"
 	attestor := "attestor-" + uuid.NewString()[:8]
-	created, err := networkingressrepo.New(conn).CreateNetworkIngress(ctx, networkingressrepo.CreateNetworkIngressParams{
+	_, err = networkingressrepo.New(conn).CreateNetworkIngress(ctx, networkingressrepo.CreateNetworkIngressParams{
 		ID:                     uuid.New(),
 		OrganizationID:         principal.OrganizationID,
 		Provider:               "tailscale",
@@ -194,11 +194,12 @@ func TestGetNetworkIngressReportsLiveStateWithoutCredentials(t *testing.T) {
 		CustomDomainID:         uuid.NullUUID{},
 		Enabled:                true,
 		IdentityRequired:       false,
-		CredentialsEncrypted:   pgtype.Text{String: credentialSentinel, Valid: true},
 		AttestorNamespace:      attestor,
 		AttestorServiceAccount: attestor,
 		ProviderResources:      []byte(`{"tailnet_key":"` + resourceSentinel + `"}`),
 	})
+	require.NoError(t, err)
+	created, err := networkingressrepo.New(conn).RotateNetworkIngressCredentials(ctx, networkingressrepo.RotateNetworkIngressCredentialsParams{PlatformCopy: pgtype.Text{String: credentialSentinel, Valid: true}, OrgCopy: pgtype.Text{}, OrganizationID: principal.OrganizationID, DecidedGeneration: 0})
 	require.NoError(t, err)
 	got, err = service.Get(ctx, principal)
 	require.NoError(t, err)
@@ -255,13 +256,15 @@ func TestGetNetworkIngressDoesNotReportUnknownProviderReady(t *testing.T) {
 	})
 	require.NoError(t, err)
 	attestor := "attestor-" + uuid.NewString()[:8]
-	created, err := networkingressrepo.New(conn).CreateNetworkIngress(ctx, networkingressrepo.CreateNetworkIngressParams{
+	_, err = networkingressrepo.New(conn).CreateNetworkIngress(ctx, networkingressrepo.CreateNetworkIngressParams{
 		ID: uuid.New(), OrganizationID: principal.OrganizationID,
 		Provider: "future-provider", Hostname: "private-mcp", EndpointNamespaceKind: "platform",
-		Enabled: true, CredentialsEncrypted: pgtype.Text{String: "sentinel-encrypted-credentials", Valid: true},
+		Enabled:           true,
 		AttestorNamespace: attestor, AttestorServiceAccount: attestor,
 		ProviderResources: []byte(`{}`),
 	})
+	require.NoError(t, err)
+	created, err := networkingressrepo.New(conn).RotateNetworkIngressCredentials(ctx, networkingressrepo.RotateNetworkIngressCredentialsParams{PlatformCopy: pgtype.Text{String: "sentinel-encrypted-credentials", Valid: true}, OrgCopy: pgtype.Text{}, OrganizationID: principal.OrganizationID, DecidedGeneration: 0})
 	require.NoError(t, err)
 	updated, err := networkingressrepo.New(conn).RecordNetworkIngressObservation(ctx, networkingressrepo.RecordNetworkIngressObservationParams{
 		Status: "online", DnsName: pgtype.Text{String: "private-mcp.example.test", Valid: true},
@@ -301,4 +304,37 @@ func TestNetworkIngressEncryptionKeyUnavailableMatchesReconcilerCode(t *testing.
 	t.Parallel()
 	require.Equal(t, k8s.NetworkIngressErrorEncryptionKeyUnavailable, networkIngressEncryptionKeyUnavailable)
 	require.Equal(t, networkIngressEncryptionKeyUnavailable, safeNetworkIngressErrorCode(networkIngressEncryptionKeyUnavailable), "the code is returned to clients, not withheld")
+}
+
+func TestGetNetworkIngressCountsOrganizationKeyCredentials(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_network_ingress")
+	require.NoError(t, err)
+	principal, _ := seedRegistrationLifecycle(t, ctx, conn)
+	service := NewPostgresReader(testenv.NewLogger(t), conn).
+		WithNetworkIngressStatus(mustParseURL(t, "https://app.getgram.test")).networkIngress
+	_, err = featurerepo.New(conn).EnableFeature(ctx, featurerepo.EnableFeatureParams{
+		OrganizationID: principal.OrganizationID,
+		FeatureName:    string(productfeatures.FeatureNetworkIngress),
+	})
+	require.NoError(t, err)
+
+	attestor := "attestor-" + uuid.NewString()[:8]
+	_, err = networkingressrepo.New(conn).CreateNetworkIngress(ctx, networkingressrepo.CreateNetworkIngressParams{
+		ID: uuid.New(), OrganizationID: principal.OrganizationID,
+		Provider: "tailscale", Hostname: "private-mcp", EndpointNamespaceKind: "platform",
+		CustomDomainID: uuid.NullUUID{}, Enabled: true, IdentityRequired: false,
+		AttestorNamespace: attestor, AttestorServiceAccount: attestor,
+		ProviderResources: []byte(`{}`),
+	})
+	require.NoError(t, err)
+	_, err = networkingressrepo.New(conn).RotateNetworkIngressCredentials(ctx, networkingressrepo.RotateNetworkIngressCredentialsParams{PlatformCopy: pgtype.Text{}, OrgCopy: pgtype.Text{String: "sentinel-org-copy", Valid: true}, OrganizationID: principal.OrganizationID, DecidedGeneration: 0})
+	require.NoError(t, err)
+
+	got, err := service.Get(ctx, principal)
+	require.NoError(t, err)
+	require.NotNil(t, got.Ingress)
+	require.True(t, got.Ingress.CredentialsConfigured, "only the organization copy remains after finalize")
+	require.Equal(t, networkIngressNextWait, got.NextAction)
 }

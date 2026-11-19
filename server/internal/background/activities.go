@@ -50,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
@@ -213,6 +214,7 @@ func NewActivities(
 	db *pgxpool.Pool,
 	encryption *encryption.Client,
 	clientSecrets *clientsecrets.Secrets,
+	integrationCredentials *integrationcredentials.Credentials,
 	upstreamTokens *upstreamtokens.Tokens,
 	features feature.Provider,
 	assetStorage assets.BlobStore,
@@ -429,8 +431,8 @@ func NewActivities(
 		collectPlatformUsageMetrics:      activities.NewCollectPlatformUsageMetrics(logger, db),
 		getAIIntegrationsCandidates:      activities.NewGetAIIntegrationsCandidates(logger, db, encryption),
 		pollAIData:                       activities.NewPollAIData(logger, db, encryption, telemetryLogger, guardianPolicy, chatWriter),
-		getDeviceIntegrationCandidates:   activities.NewGetDeviceIntegrationSyncCandidates(logger, meterProvider, db, encryption, guardianPolicy, features, growthEmitter),
-		runDeviceIntegrationSync:         activities.NewRunDeviceIntegrationSync(logger, meterProvider, db, encryption, guardianPolicy, features, growthEmitter),
+		getDeviceIntegrationCandidates:   activities.NewGetDeviceIntegrationSyncCandidates(logger, meterProvider, db, integrationCredentials, guardianPolicy, features, growthEmitter),
+		runDeviceIntegrationSync:         activities.NewRunDeviceIntegrationSync(logger, meterProvider, db, integrationCredentials, guardianPolicy, features, growthEmitter),
 		getOktaApplicationSyncCandidates: activities.NewGetOktaApplicationSyncCandidates(oktaApplicationSyncer),
 		runOktaApplicationSync:           activities.NewRunOktaApplicationSync(oktaApplicationSyncer),
 		customDomainIngress:              activities.NewCustomDomainIngress(logger, db, k8sClient),

@@ -10,12 +10,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	gen "github.com/speakeasy-api/gram/server/gen/slack_directory_connections"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
-	"github.com/stretchr/testify/require"
 )
 
 type directoryFunc func(context.Context, string, string, func(slackdirectoryconnections.SyncProgress)) ([]slackdirectoryconnections.DirectoryMember, error)
@@ -38,7 +39,7 @@ func syncRequest(f *fixture, c *gen.SlackDirectoryConnection) slackdirectoryconn
 	return slackdirectoryconnections.SyncInput{OrganizationID: f.auth.ActiveOrganizationID, ConnectionID: uuid.MustParse(c.ID), Generation: uuid.MustParse(c.Generation), ActorID: f.auth.UserID, StartedAt: time.Now().UTC().Truncate(time.Microsecond)}
 }
 func syncer(f *fixture, provider slackdirectoryconnections.DirectoryProvider) *slackdirectoryconnections.DirectorySync {
-	return slackdirectoryconnections.NewDirectorySync(f.db, f.enc, provider, audit.NewLogger(), nil)
+	return slackdirectoryconnections.NewDirectorySync(f.db, f.credentials, provider, audit.NewLogger(), nil)
 }
 func members(t *testing.T, ctx context.Context, f *fixture) []repo.ListSlackDirectoryMembersRow {
 	t.Helper()

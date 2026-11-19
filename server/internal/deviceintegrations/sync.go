@@ -22,10 +22,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/repo"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -116,7 +116,7 @@ func NewSyncer(
 	logger *slog.Logger,
 	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
-	enc *encryption.Client,
+	credentials *integrationcredentials.Credentials,
 	guardianPolicy *guardian.Policy,
 	features feature.Provider,
 	growthEmitter *growthsignals.Emitter,
@@ -126,7 +126,7 @@ func NewSyncer(
 		logger:   componentLogger,
 		db:       db,
 		repo:     repo.New(db),
-		store:    NewStore(logger, db, enc),
+		store:    NewStore(logger, db, credentials),
 		guardian: guardianPolicy,
 		features: features,
 		metrics:  newSyncMetrics(componentLogger, meterProvider),
@@ -200,7 +200,12 @@ func (s *Syncer) RunSync(ctx context.Context, syncID uuid.UUID) error {
 	// Decrypt/decode failures are deterministic — retrying cannot help — so
 	// they are recorded as sync failures (with backoff and eventual pause)
 	// rather than propagated: a silently hot-looping schedule helps nobody.
-	creds, err := s.store.decryptCredentials(target.CredentialsEncrypted.String)
+	creds, err := s.store.decryptCredentials(ctx, nil, target.OrganizationID, storedCredentials(target.CredentialsEncrypted, target.CredentialsOrgEncrypted))
+	if err != nil && !integrationcredentials.IsUnreadable(err) {
+		// The organization's key is unavailable for now. Nothing is recorded,
+		// so the schedule does not count toward auto-pause; Temporal retries.
+		return err
+	}
 	if err != nil {
 		return s.recordFailure(ctx, target, "stored credentials can no longer be decrypted; re-enter them to reconnect", true)
 	}

@@ -28,9 +28,10 @@ FOR NO KEY UPDATE;
 
 -- name: CreateSlackDirectoryConnection :one
 -- A new workspace answers for the organization's "default" project unless that
--- project already answers in another workspace.
-INSERT INTO slack_directory_connections (organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health, default_project_id)
-VALUES (@organization_id, @slack_team_id, @slack_team_name, @credentials_encrypted, @granted_scopes, @generation, 'connected', (
+-- project already answers in another workspace. Its credentials are stored by
+-- UpdateSlackDirectoryCredentials in the same transaction.
+INSERT INTO slack_directory_connections (organization_id, slack_team_id, slack_team_name, granted_scopes, generation, health, default_project_id)
+VALUES (@organization_id, @slack_team_id, @slack_team_name, @granted_scopes, @generation, 'connected', (
   SELECT p.id FROM projects p
   WHERE p.organization_id = @organization_id AND p.slug = 'default' AND p.deleted IS FALSE
     AND NOT EXISTS (SELECT 1 FROM slack_directory_connections c WHERE c.default_project_id = p.id)
@@ -39,9 +40,10 @@ ON CONFLICT (organization_id, slack_team_id) DO NOTHING
 RETURNING *;
 
 -- name: AuthorizeSlackDirectoryConnection :one
+-- The new credentials are stored by UpdateSlackDirectoryCredentials in the same
+-- transaction, under the new generation.
 UPDATE slack_directory_connections SET
 slack_team_name = @slack_team_name,
-credentials_encrypted = @credentials_encrypted,
 granted_scopes = @granted_scopes,
 generation = @generation,
 health = 'connected', disconnected_at = NULL, last_error_code = NULL,
@@ -57,8 +59,9 @@ WHERE slack_directory_connections.organization_id = @organization_id AND slack_d
 RETURNING *;
 
 -- name: DisconnectSlackDirectoryConnection :one
+-- orgencryption:unfenced erasing both copies is correct under any transition state
 UPDATE slack_directory_connections SET
-credentials_encrypted = NULL, granted_scopes = '{}', generation = @generation,
+credentials_encrypted = NULL, credentials_org_encrypted = NULL, granted_scopes = '{}', generation = @generation,
 health = 'disconnected', disconnected_at = clock_timestamp(), updated_at = clock_timestamp(), last_error_code = NULL
 WHERE organization_id = @organization_id AND id = @id AND generation = @expected_generation
 RETURNING *;
@@ -239,13 +242,24 @@ UPDATE slack_directory_connections SET last_full_sync_generation = NULL, last_fu
 WHERE organization_id = @organization_id AND id = @id;
 
 -- name: UpdateSlackDirectoryCredentials :execrows
-UPDATE slack_directory_connections SET credentials_encrypted = @credentials_encrypted, updated_at = clock_timestamp()
-WHERE organization_id = @organization_id AND id = @id AND generation = @generation AND disconnected_at IS NULL;
+-- Stores both copies sealed under the decided transition generation. No rows
+-- means the connection was disconnected or reauthorized, or the transition
+-- moved; integrationcredentials tells the two apart.
+UPDATE slack_directory_connections AS c SET
+credentials_encrypted = sqlc.narg('platform_copy'),
+credentials_org_encrypted = sqlc.narg('org_copy'),
+updated_at = clock_timestamp()
+WHERE c.organization_id = @organization_id AND c.id = @id AND c.generation = @generation AND c.disconnected_at IS NULL
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = c.organization_id AND t.use_case = 'integration-credentials'
+    FOR KEY SHARE
+  ), 0) = @decided_generation;
 
 -- name: ListDueSlackDirectorySyncs :many
 -- Connected workspaces whose last sync started before the cutoff, oldest first.
 SELECT organization_id, id, generation FROM slack_directory_connections
-WHERE disconnected_at IS NULL AND health = 'connected' AND credentials_encrypted IS NOT NULL
+WHERE disconnected_at IS NULL AND health = 'connected' AND (credentials_encrypted IS NOT NULL OR credentials_org_encrypted IS NOT NULL)
   AND organization_id <> @excluded_organization_id
   AND (last_sync_started_at IS NULL OR last_sync_started_at < @started_before)
   -- Back off a workspace whose latest attempt failed, so a permanent error is not retried every tick.

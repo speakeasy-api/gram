@@ -9,6 +9,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/require"
+
 	gen "github.com/speakeasy-api/gram/server/gen/slack_directory_connections"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -19,7 +21,6 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
-	"github.com/stretchr/testify/require"
 )
 
 func personAccountsRequest(userID string) *gen.ListPersonAccountsPayload {
@@ -135,7 +136,7 @@ func TestPersonAccountsDemoVisitorReadsActiveDemoPerson(t *testing.T) {
 	queries := repo.New(f.db)
 	connection, err := queries.CreateSlackDirectoryConnection(ctx, repo.CreateSlackDirectoryConnectionParams{
 		OrganizationID: constants.DemoOrganizationID, SlackTeamID: "TEXAMPLE01", SlackTeamName: conv.ToPGText("Example workspace"),
-		CredentialsEncrypted: conv.ToPGTextEmpty(""), GrantedScopes: []string{}, Generation: uuid.New(),
+		GrantedScopes: []string{}, Generation: uuid.New(),
 	})
 	require.NoError(t, err)
 	published := conv.ToPGTimestamptz(time.Now())

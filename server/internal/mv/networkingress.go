@@ -24,7 +24,7 @@ func BuildNetworkIngressView(ingress networkingressrepo.NetworkIngress) *gen.Net
 		CustomDomainID:        conv.FromNullableUUID(ingress.CustomDomainID),
 		Enabled:               ingress.Enabled,
 		IdentityRequired:      ingress.IdentityRequired,
-		CredentialsConfigured: ingress.CredentialsEncrypted.Valid && ingress.CredentialsEncrypted.String != "",
+		CredentialsConfigured: ingress.CredentialsOrgEncrypted.Valid || (ingress.CredentialsEncrypted.Valid && ingress.CredentialsEncrypted.String != ""),
 		Status:                ingress.Status,
 		DNSName:               conv.FromPGText[string](ingress.DnsName),
 		LastError:             conv.FromPGText[string](ingress.LastError),

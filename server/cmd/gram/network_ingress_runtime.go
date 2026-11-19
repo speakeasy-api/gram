@@ -10,8 +10,8 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
@@ -21,9 +21,9 @@ import (
 
 // newNetworkIngressExecutor registers the Tailscale provider as a composite
 // that routes by runtime: gateway ingresses to the tailnet gateway, every
-// other ingress to the operator provider while it is still enabled. enc
-// decrypts the customer's saved Tailscale credentials; the gateway's own
-// secrets use organization encryption (orgEnc, orgKeys), and either may be nil
+// other ingress to the operator provider while it is still enabled.
+// credentials opens the customer's saved Tailscale credentials; the gateway's
+// own secrets use organization encryption (orgEnc, orgKeys), which may be nil
 // when it is not configured.
 //
 // lockDB serves only the executor's reconcile connections, each held for a
@@ -31,7 +31,7 @@ import (
 // organization encryption use db. A reconcile then never waits for a
 // connection of the kind it holds, so reconciles cannot exhaust a pool between
 // them and wait on each other for good.
-func newNetworkIngressExecutor(logger *slog.Logger, meterProvider metric.MeterProvider, db, lockDB *pgxpool.Pool, enc *encryption.Client, orgEnc *orgencryption.Service, orgKeys *orgencryption.Provisioner, clients *k8s.KubernetesClients, config networkingress.RuntimeConfig, publicationRequester networkingress.PublicationRequester) (*networkingress.Executor, error) {
+func newNetworkIngressExecutor(logger *slog.Logger, meterProvider metric.MeterProvider, db, lockDB *pgxpool.Pool, credentials *integrationcredentials.Credentials, orgEnc *orgencryption.Service, orgKeys *orgencryption.Provisioner, clients *k8s.KubernetesClients, config networkingress.RuntimeConfig, publicationRequester networkingress.PublicationRequester) (*networkingress.Executor, error) {
 	providers := make(map[string]k8s.NetworkIngressProvisioner)
 	var operator *k8s.TailscaleNetworkIngressProvisioner
 	if config.OperatorProviderEnabled && clients != nil && clients.Clientset != nil && clients.DynamicClient != nil && config.Tailscale.OperatorNamespace != "" {
@@ -75,7 +75,7 @@ func newNetworkIngressExecutor(logger *slog.Logger, meterProvider metric.MeterPr
 	if err != nil {
 		return nil, fmt.Errorf("configure network ingress registry: %w", err)
 	}
-	return networkingress.NewExecutor(lockDB, enc, registry, networkingress.ExecutorOptions{
+	return networkingress.NewExecutor(lockDB, credentials, registry, networkingress.ExecutorOptions{
 		Queue: config.ReconcileTaskQueue, Image: config.AttestorImage,
 		BackendService: config.BackendService, BackendPort: config.BackendPort,
 		AttestorRequired:     !config.Gateway.Enabled,

@@ -45,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -108,6 +109,10 @@ type WorkerOptions struct {
 	// organization encryption.
 	ClientSecrets *clientsecrets.Secrets
 
+	// IntegrationCredentials opens Slack, device integration and network
+	// ingress credentials over the process's organization encryption. Nil
+	// opens them as a process without organization encryption.
+	IntegrationCredentials *integrationcredentials.Credentials
 	// UpstreamTokens opens and stores upstream OAuth tokens over the process's
 	// organization encryption. Nil handles them as a process without
 	// organization encryption.
@@ -245,6 +250,7 @@ func ForDeploymentProcessing(
 		TunnelHTTPClient:               nil,
 		EncryptionClient:               enc,
 		ClientSecrets:                  nil,
+		IntegrationCredentials:         nil,
 		UpstreamTokens:                 nil,
 		FeatureProvider:                f,
 		AssetStorage:                   assetStorage,
@@ -353,6 +359,7 @@ func NewTemporalWorker(
 		DB:                             nil,
 		EncryptionClient:               nil,
 		ClientSecrets:                  nil,
+		IntegrationCredentials:         nil,
 		UpstreamTokens:                 nil,
 		FeatureProvider:                nil,
 		AssetStorage:                   nil,
@@ -418,6 +425,7 @@ func NewTemporalWorker(
 			DB:                             conv.Default(o.DB, opts.DB),
 			EncryptionClient:               conv.Default(o.EncryptionClient, opts.EncryptionClient),
 			ClientSecrets:                  conv.Default(o.ClientSecrets, opts.ClientSecrets),
+			IntegrationCredentials:         conv.Default(o.IntegrationCredentials, opts.IntegrationCredentials),
 			UpstreamTokens:                 conv.Default(o.UpstreamTokens, opts.UpstreamTokens),
 			FeatureProvider:                conv.Default(o.FeatureProvider, opts.FeatureProvider),
 			AssetStorage:                   conv.Default(o.AssetStorage, opts.AssetStorage),
@@ -528,6 +536,13 @@ func NewTemporalWorker(
 		}
 	}
 
+	// Workers wired without the process's seam (test workers) open
+	// integration credentials as a process without organization encryption.
+	integrationCredentials := opts.IntegrationCredentials
+	if integrationCredentials == nil {
+		integrationCredentials = integrationcredentials.WithoutOrganizationEncryption(logger, opts.DB, opts.EncryptionClient)
+	}
+
 	activities := NewActivities(
 		logger,
 		tracerProvider,
@@ -537,6 +552,7 @@ func NewTemporalWorker(
 		opts.DB,
 		opts.EncryptionClient,
 		opts.ClientSecrets,
+		integrationCredentials,
 		opts.UpstreamTokens,
 		opts.FeatureProvider,
 		opts.AssetStorage,
@@ -789,7 +805,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(SlackDirectorySyncWorkflow)
 	temporalWorker.RegisterWorkflow(SlackDirectorySweepWorkflow)
 	if opts.DB != nil && opts.EncryptionClient != nil && opts.GuardianPolicy != nil {
-		slackDirectory := newSlackDirectoryActivities(opts.DB, opts.EncryptionClient, opts.GuardianPolicy.PooledClient(), opts.SlackDirectoryTokenRefresher)
+		slackDirectory := newSlackDirectoryActivities(opts.DB, integrationCredentials, opts.GuardianPolicy.PooledClient(), opts.SlackDirectoryTokenRefresher)
 		temporalWorker.RegisterActivity(slackDirectory.SyncSlackDirectory)
 		temporalWorker.RegisterActivity(slackDirectory.ListDueSlackDirectories)
 		if opts.ServerURL != nil {

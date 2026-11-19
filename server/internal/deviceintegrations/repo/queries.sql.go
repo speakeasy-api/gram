@@ -1075,6 +1075,7 @@ SELECT
   , c.organization_id
   , c.provider
   , c.credentials_encrypted
+  , c.credentials_org_encrypted
   , c.settings
   , c.enabled
   , c.deleted
@@ -1096,22 +1097,23 @@ WHERE s.id = $1
 `
 
 type GetSyncTargetRow struct {
-	ConfigID             uuid.UUID
-	OrganizationID       string
-	Provider             string
-	CredentialsEncrypted pgtype.Text
-	Settings             []byte
-	Enabled              bool
-	Deleted              bool
-	ConfigUpdatedAt      pgtype.Timestamptz
-	Schedule             string
-	DisabledAt           pgtype.Timestamptz
-	SyncID               uuid.UUID
-	PollWatermarkAt      pgtype.Timestamptz
-	ConsecutiveFailures  int32
-	AutoPausedAt         pgtype.Timestamptz
-	LastPushDigest       pgtype.Text
-	LastPollSuccessAt    pgtype.Timestamptz
+	ConfigID                uuid.UUID
+	OrganizationID          string
+	Provider                string
+	CredentialsEncrypted    pgtype.Text
+	CredentialsOrgEncrypted pgtype.Text
+	Settings                []byte
+	Enabled                 bool
+	Deleted                 bool
+	ConfigUpdatedAt         pgtype.Timestamptz
+	Schedule                string
+	DisabledAt              pgtype.Timestamptz
+	SyncID                  uuid.UUID
+	PollWatermarkAt         pgtype.Timestamptz
+	ConsecutiveFailures     int32
+	AutoPausedAt            pgtype.Timestamptz
+	LastPushDigest          pgtype.Text
+	LastPollSuccessAt       pgtype.Timestamptz
 }
 
 func (q *Queries) GetSyncTarget(ctx context.Context, syncID uuid.UUID) (GetSyncTargetRow, error) {
@@ -1122,6 +1124,7 @@ func (q *Queries) GetSyncTarget(ctx context.Context, syncID uuid.UUID) (GetSyncT
 		&i.OrganizationID,
 		&i.Provider,
 		&i.CredentialsEncrypted,
+		&i.CredentialsOrgEncrypted,
 		&i.Settings,
 		&i.Enabled,
 		&i.Deleted,
@@ -1142,32 +1145,29 @@ const insertConfig = `-- name: InsertConfig :one
 INSERT INTO device_integration_configs (
     organization_id
   , provider
-  , credentials_encrypted
   , settings
   , enabled
 ) VALUES (
     $1
   , $2
-  , $3::text
+  , $3
   , $4
-  , $5
 )
 RETURNING id, organization_id, provider, credentials_encrypted, credentials_org_encrypted, settings, enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type InsertConfigParams struct {
-	OrganizationID       string
-	Provider             string
-	CredentialsEncrypted string
-	Settings             []byte
-	Enabled              bool
+	OrganizationID string
+	Provider       string
+	Settings       []byte
+	Enabled        bool
 }
 
+// The credentials are stored by SetConfigCredentials in the same transaction.
 func (q *Queries) InsertConfig(ctx context.Context, arg InsertConfigParams) (DeviceIntegrationConfig, error) {
 	row := q.db.QueryRow(ctx, insertConfig,
 		arg.OrganizationID,
 		arg.Provider,
-		arg.CredentialsEncrypted,
 		arg.Settings,
 		arg.Enabled,
 	)
@@ -2576,6 +2576,69 @@ func (q *Queries) RetrySchedule(ctx context.Context, arg RetryScheduleParams) (D
 	return i, err
 }
 
+const setConfigCredentials = `-- name: SetConfigCredentials :one
+
+UPDATE device_integration_configs AS c
+SET credentials_encrypted = $1,
+    credentials_org_encrypted = $2,
+    settings = $3,
+    enabled = $4,
+    updated_at = clock_timestamp()
+WHERE c.id = $5
+  AND c.organization_id = $6
+  AND c.deleted IS FALSE
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = c.organization_id AND t.use_case = 'integration-credentials'
+    FOR KEY SHARE
+  ), 0) = $7
+RETURNING id, organization_id, provider, credentials_encrypted, credentials_org_encrypted, settings, enabled, created_at, updated_at, deleted_at, deleted
+`
+
+type SetConfigCredentialsParams struct {
+	PlatformCopy      pgtype.Text
+	OrgCopy           pgtype.Text
+	Settings          []byte
+	Enabled           bool
+	ID                uuid.UUID
+	OrganizationID    string
+	DecidedGeneration int64
+}
+
+// Credential rotation updates the row in place rather than replacing it:
+// mdm_devices hang off the config id, and rotating a secret must not orphan
+// the synced fleet inventory.
+// Stores both copies of the credentials sealed under the decided transition
+// generation, with the settings saved alongside them. No rows means the
+// config is gone or the transition moved; integrationcredentials tells the two
+// apart.
+func (q *Queries) SetConfigCredentials(ctx context.Context, arg SetConfigCredentialsParams) (DeviceIntegrationConfig, error) {
+	row := q.db.QueryRow(ctx, setConfigCredentials,
+		arg.PlatformCopy,
+		arg.OrgCopy,
+		arg.Settings,
+		arg.Enabled,
+		arg.ID,
+		arg.OrganizationID,
+		arg.DecidedGeneration,
+	)
+	var i DeviceIntegrationConfig
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.CredentialsEncrypted,
+		&i.CredentialsOrgEncrypted,
+		&i.Settings,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const setScheduleDisabled = `-- name: SetScheduleDisabled :one
 
 UPDATE device_integration_schedules
@@ -2626,55 +2689,6 @@ type SoftDeleteConfigParams struct {
 func (q *Queries) SoftDeleteConfig(ctx context.Context, arg SoftDeleteConfigParams) error {
 	_, err := q.db.Exec(ctx, softDeleteConfig, arg.OrganizationID, arg.Provider)
 	return err
-}
-
-const updateConfigCredentials = `-- name: UpdateConfigCredentials :one
-
-UPDATE device_integration_configs
-SET credentials_encrypted = $1::text,
-    settings = $2,
-    enabled = $3,
-    updated_at = clock_timestamp()
-WHERE organization_id = $4
-  AND provider = $5
-  AND deleted IS FALSE
-RETURNING id, organization_id, provider, credentials_encrypted, credentials_org_encrypted, settings, enabled, created_at, updated_at, deleted_at, deleted
-`
-
-type UpdateConfigCredentialsParams struct {
-	CredentialsEncrypted string
-	Settings             []byte
-	Enabled              bool
-	OrganizationID       string
-	Provider             string
-}
-
-// Credential rotation updates the row in place rather than replacing it:
-// mdm_devices hang off the config id, and rotating a secret must not orphan
-// the synced fleet inventory.
-func (q *Queries) UpdateConfigCredentials(ctx context.Context, arg UpdateConfigCredentialsParams) (DeviceIntegrationConfig, error) {
-	row := q.db.QueryRow(ctx, updateConfigCredentials,
-		arg.CredentialsEncrypted,
-		arg.Settings,
-		arg.Enabled,
-		arg.OrganizationID,
-		arg.Provider,
-	)
-	var i DeviceIntegrationConfig
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.Provider,
-		&i.CredentialsEncrypted,
-		&i.CredentialsOrgEncrypted,
-		&i.Settings,
-		&i.Enabled,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
 }
 
 const updateConfigSettings = `-- name: UpdateConfigSettings :one

@@ -42,7 +42,7 @@ func seedTagDirectory(t *testing.T, ti *chatTestInstance, team, sender, name str
 	q := slackrepo.New(ti.conn)
 	_, err := q.CreateSlackDirectoryConnection(t.Context(), slackrepo.CreateSlackDirectoryConnectionParams{
 		OrganizationID: ti.orgID, SlackTeamID: team, SlackTeamName: conv.ToPGText("Demo Workspace"),
-		CredentialsEncrypted: pgtype.Text{}, GrantedScopes: []string{}, Generation: uuid.New(),
+		GrantedScopes: []string{}, Generation: uuid.New(),
 	})
 	require.NoError(t, err)
 	require.NoError(t, q.UpsertSlackDirectoryMembershipBatch(t.Context(), slackrepo.UpsertSlackDirectoryMembershipBatchParams{

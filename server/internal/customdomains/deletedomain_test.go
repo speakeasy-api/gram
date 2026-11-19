@@ -57,11 +57,12 @@ func TestDeleteDomain_ActiveNetworkIngressPinConflicts(t *testing.T) {
 		CustomDomainID:         uuid.NullUUID{UUID: domain.ID, Valid: true},
 		Enabled:                true,
 		IdentityRequired:       false,
-		CredentialsEncrypted:   pgtype.Text{String: "ciphertext", Valid: true},
 		AttestorNamespace:      resources.Namespace,
 		AttestorServiceAccount: resources.AttestorServiceAccount,
 		ProviderResources:      encoded,
 	})
+	require.NoError(t, err)
+	_, err = networkingressrepo.New(ti.conn).RotateNetworkIngressCredentials(ctx, networkingressrepo.RotateNetworkIngressCredentialsParams{PlatformCopy: pgtype.Text{String: "ciphertext", Valid: true}, OrgCopy: pgtype.Text{}, OrganizationID: authCtx.ActiveOrganizationID, DecidedGeneration: 0})
 	require.NoError(t, err)
 
 	err = ti.service.DeleteDomain(ctx, &gen.DeleteDomainPayload{})
