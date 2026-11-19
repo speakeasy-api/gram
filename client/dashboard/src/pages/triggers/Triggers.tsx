@@ -1,4 +1,4 @@
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { useProject } from "@/contexts/Auth";

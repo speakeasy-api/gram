@@ -89,7 +89,7 @@ func TestConsentDirectScope_PersonalSessionIgnoresUnrelatedLegacyClient(t *testi
 	require.NoError(t, err)
 	refresh, err := fx.ti.enc.Encrypt([]byte("legacy-refresh-token"))
 	require.NoError(t, err)
-	_, err = remotesessionsrepo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+	_, err = remotesessionsrepo.New(fx.ti.conn).UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn: fx.subject, UserSessionIssuerID: fx.shared, RemoteSessionClientID: legacy,
 		AccessTokenEncrypted: access, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true},
 		RefreshTokenEncrypted: conv.ToPGText(refresh), RefreshExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},

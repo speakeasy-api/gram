@@ -23,7 +23,7 @@ chrome; you own the content.
 | a fullbleed analytics surface (sticky filter bar + big table/charts) | `WorkbenchPage`    |
 | a multi-step flow                                                    | `WizardPage`       |
 | auth / standalone, outside the app shell                             | `CenteredPage`     |
-| a genuine bespoke app canvas (chat, playground, builder)             | `FullBleedPage`\*  |
+| a genuine bespoke app canvas (chat, inspector, builder)              | `FullBleedPage`\*  |
 
 \* `FullBleedPage` is the **escape hatch**, not a content template. If your page
 doesn't fit one of the real templates, it's this — build custom inside it and

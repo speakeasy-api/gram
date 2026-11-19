@@ -434,7 +434,7 @@ func TestClientTokenEndpoint_SuspendedOrganizationKeyIsRetryable(t *testing.T) {
 	_, err := m.clientTokenEndpoint(t.Context(), client.row)
 	require.Error(t, err)
 	require.NotErrorIs(t, err, ErrTokenEndpointConfiguration, "a suspended key is retryable, not a broken client configuration")
-	require.True(t, clientsecrets.IsKeyProblem(err))
+	require.True(t, orgencryption.IsKeyProblem(err))
 }
 
 func TestEnrichmentTarget_OpensTheOrganizationKeyCopy(t *testing.T) {

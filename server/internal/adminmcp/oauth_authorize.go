@@ -432,6 +432,7 @@ func staffPreAuthenticationError(w http.ResponseWriter, r *http.Request, client 
 		ClientIDOrigin: "",
 		ServerName:     "Speakeasy Admin",
 		ProviderName:   "",
+		AdminDetail:    "",
 	}
 	_ = oauthui.WriteAuthorizationError(r.Context(), w, page)
 }
@@ -497,6 +498,7 @@ func staffBrowserError(w http.ResponseWriter, r *http.Request, status int, code,
 		ClientIDOrigin: "",
 		ServerName:     "Speakeasy Admin",
 		ProviderName:   "",
+		AdminDetail:    "",
 	})
 }
 

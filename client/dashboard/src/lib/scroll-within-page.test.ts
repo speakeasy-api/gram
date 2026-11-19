@@ -66,4 +66,27 @@ describe("scrollWithinPage", () => {
     // 700 - 100 + 250 - 32 (default offset)
     expect(scrollTo).toHaveBeenCalledWith({ top: 818, behavior: "auto" });
   });
+
+  it("lands below a sticky strip named by the pane's scroll padding", () => {
+    const target = mount(
+      `<div data-page-bound id="pane"><section id="target"></section></div>`,
+    );
+    const pane = document.getElementById("pane")!;
+    sizeScroller(pane, 1200, 400);
+    pane.style.scrollPaddingTop = "49px";
+    const scrollTo = vi.spyOn(pane, "scrollTo").mockImplementation(() => {});
+
+    vi.spyOn(pane, "getBoundingClientRect").mockReturnValue({
+      top: 100,
+    } as DOMRect);
+    vi.spyOn(target, "getBoundingClientRect").mockReturnValue({
+      top: 700,
+    } as DOMRect);
+    Object.defineProperty(pane, "scrollTop", { value: 250 });
+
+    scrollWithinPage(target, { behavior: "auto" });
+
+    // 700 - 100 + 250 - 32 (default offset) - 49 (sticky strip)
+    expect(scrollTo).toHaveBeenCalledWith({ top: 769, behavior: "auto" });
+  });
 });

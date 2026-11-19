@@ -74,6 +74,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskchrepo "github.com/speakeasy-api/gram/server/internal/risk/chrepo"
@@ -214,6 +215,7 @@ func NewActivities(
 	encryption *encryption.Client,
 	clientSecrets *clientsecrets.Secrets,
 	integrationCredentials *integrationcredentials.Credentials,
+	upstreamTokens *upstreamtokens.Tokens,
 	features feature.Provider,
 	assetStorage assets.BlobStore,
 	slackClient *slack_client.SlackClient,
@@ -319,6 +321,9 @@ func NewActivities(
 	if clientSecrets == nil {
 		clientSecrets = clientsecrets.WithoutOrganizationEncryption(logger, db, encryption)
 	}
+	if upstreamTokens == nil {
+		upstreamTokens = upstreamtokens.WithoutOrganizationEncryption(logger, db, encryption)
+	}
 
 	// The scheduled refresh shares the remotesessions single-flight primitive,
 	// which needs the Redis lock cache; workers wired without one (e.g.
@@ -337,6 +342,7 @@ func NewActivities(
 				remotesessions.WithRefreshConnectionRecorder(connections),
 				remotesessions.WithRefreshFeatureFlags(features),
 				remotesessions.WithRefreshClientSecrets(clientSecrets),
+				remotesessions.WithRefreshUpstreamTokens(upstreamTokens),
 			),
 		)
 	}

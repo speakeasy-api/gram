@@ -39,7 +39,6 @@ import { Hooks } from "./hooks.js";
 import { HooksServerNames } from "./hooksservernames.js";
 import { Identity } from "./identity.js";
 import { IdentityProviderConnections } from "./identityproviderconnections.js";
-import { Instances } from "./instances.js";
 import { Integrations } from "./integrations.js";
 import { InternalSessionIssuers } from "./internalsessionissuers.js";
 import { JsonWebKeySets } from "./jsonwebkeysets.js";
@@ -285,11 +284,6 @@ export class Gram extends ClientSDK {
   get identityProviderConnections(): IdentityProviderConnections {
     return (this._identityProviderConnections ??=
       new IdentityProviderConnections(this._options));
-  }
-
-  private _instances?: Instances;
-  get instances(): Instances {
-    return (this._instances ??= new Instances(this._options));
   }
 
   private _integrations?: Integrations;

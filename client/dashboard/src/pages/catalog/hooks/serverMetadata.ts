@@ -1,6 +1,7 @@
 import type { CatalogServer } from "../hooks";
 import type { SetupType } from "../filter-defaults";
 import type { FilterState } from "./useFilterState";
+import type { CatalogTeamUsageMap } from "../team-usage";
 
 export interface ParsedServerMetadata {
   status?: string;
@@ -101,6 +102,7 @@ export function filterAndSortServers(
   servers: CatalogServer[],
   filterState: FilterState,
   searchQuery?: string,
+  teamUsage?: CatalogTeamUsageMap,
 ): CatalogServer[] {
   // Parse metadata for all servers
   const serversWithMeta = servers.map((server) => ({
@@ -175,6 +177,19 @@ export function filterAndSortServers(
       filtered = filtered.sort((a, b) =>
         b.displayName.localeCompare(a.displayName),
       );
+      break;
+    case "team-usage":
+      // Most calls first; servers the team does not use keep A to Z order
+      // after them, so the list is stable while usage is still loading.
+      filtered = filtered.sort((a, b) => {
+        const usageA = teamUsage?.get(a.server.registrySpecifier);
+        const usageB = teamUsage?.get(b.server.registrySpecifier);
+        return (
+          (usageB?.callCount ?? 0) - (usageA?.callCount ?? 0) ||
+          (usageB?.userCount ?? 0) - (usageA?.userCount ?? 0) ||
+          a.displayName.localeCompare(b.displayName)
+        );
+      });
       break;
   }
 

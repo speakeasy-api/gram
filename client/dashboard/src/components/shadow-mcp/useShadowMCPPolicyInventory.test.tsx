@@ -72,10 +72,9 @@ describe("useShadowMCPPolicyInventory", () => {
     const linearServer = inventoryServer("https://linear.example.com/mcp");
     listInventory
       .mockResolvedValueOnce({
-        servers: [githubServer],
-        nextCursor: "page-2",
+        result: { servers: [githubServer], nextCursor: "page-2" },
       })
-      .mockResolvedValueOnce({ servers: [linearServer] });
+      .mockResolvedValueOnce({ result: { servers: [linearServer] } });
 
     const { result } = renderHook(
       () => useShadowMCPPolicyInventory("project-1", true),
@@ -120,7 +119,7 @@ describe("useShadowMCPPolicyInventory", () => {
     const githubServer = inventoryServer("https://github.example.com/mcp");
     listInventory
       .mockRejectedValueOnce(new Error("inventory unavailable"))
-      .mockResolvedValueOnce({ servers: [githubServer] });
+      .mockResolvedValueOnce({ result: { servers: [githubServer] } });
 
     const { result } = renderHook(
       () => useShadowMCPPolicyInventory("project-1", true),

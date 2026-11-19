@@ -58,6 +58,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval/slackapproval"
@@ -112,9 +113,13 @@ type WorkerOptions struct {
 	// ingress credentials over the process's organization encryption. Nil
 	// opens them as a process without organization encryption.
 	IntegrationCredentials *integrationcredentials.Credentials
-	FeatureProvider        feature.Provider
-	AssetStorage           assets.BlobStore
-	SlackClient            *slack_client.SlackClient
+	// UpstreamTokens opens and stores upstream OAuth tokens over the process's
+	// organization encryption. Nil handles them as a process without
+	// organization encryption.
+	UpstreamTokens  *upstreamtokens.Tokens
+	FeatureProvider feature.Provider
+	AssetStorage    assets.BlobStore
+	SlackClient     *slack_client.SlackClient
 	// SlackDirectoryTokenRefresher renews rotating Slack directory tokens; nil leaves expired tokens needing reconnect.
 	SlackDirectoryTokenRefresher slackdirectoryconnections.TokenRefresher
 	ChatMessageWriter            *chat.ChatMessageWriter
@@ -246,6 +251,7 @@ func ForDeploymentProcessing(
 		EncryptionClient:               enc,
 		ClientSecrets:                  nil,
 		IntegrationCredentials:         nil,
+		UpstreamTokens:                 nil,
 		FeatureProvider:                f,
 		AssetStorage:                   assetStorage,
 		FunctionsDeployer:              deployer,
@@ -354,6 +360,7 @@ func NewTemporalWorker(
 		EncryptionClient:               nil,
 		ClientSecrets:                  nil,
 		IntegrationCredentials:         nil,
+		UpstreamTokens:                 nil,
 		FeatureProvider:                nil,
 		AssetStorage:                   nil,
 		SlackClient:                    nil,
@@ -419,6 +426,7 @@ func NewTemporalWorker(
 			EncryptionClient:               conv.Default(o.EncryptionClient, opts.EncryptionClient),
 			ClientSecrets:                  conv.Default(o.ClientSecrets, opts.ClientSecrets),
 			IntegrationCredentials:         conv.Default(o.IntegrationCredentials, opts.IntegrationCredentials),
+			UpstreamTokens:                 conv.Default(o.UpstreamTokens, opts.UpstreamTokens),
 			FeatureProvider:                conv.Default(o.FeatureProvider, opts.FeatureProvider),
 			AssetStorage:                   conv.Default(o.AssetStorage, opts.AssetStorage),
 			SlackClient:                    conv.Default(o.SlackClient, opts.SlackClient),
@@ -545,6 +553,7 @@ func NewTemporalWorker(
 		opts.EncryptionClient,
 		opts.ClientSecrets,
 		integrationCredentials,
+		opts.UpstreamTokens,
 		opts.FeatureProvider,
 		opts.AssetStorage,
 		opts.SlackClient,

@@ -41,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -177,6 +178,8 @@ type AuthnChallengeState struct {
 	// FreshLoginForced marks a flow already sent back to the identity
 	// provider because its sign-in was revoked, so it never loops.
 	FreshLoginForced bool `json:"fresh_login_forced,omitempty"`
+	// AccountSwitches counts the person's switches to another Speakeasy account; maxAccountSwitches bounds it.
+	AccountSwitches int `json:"account_switches,omitempty"`
 	// AgentAuthorizationTarget fixes the only policy an agent selection may
 	// authorize. Older in-flight states omit it and remain self-only.
 	AgentAuthorizationTarget *AgentAuthorizationTarget `json:"agent_authorization_target,omitempty"`
@@ -463,6 +466,8 @@ func issuerGateFailureReason(err error) string {
 		return "tool_selection_resource_mismatch"
 	case errors.Is(err, errToolSelectionLoad):
 		return "tool_selection_load_failed"
+	case errors.Is(err, errSessionLivenessLoad):
+		return "session_liveness_load_failed"
 	case errors.Is(err, errAgentSessionCredentialLoad):
 		return "agent_session_load_failed"
 	case errors.Is(err, errWorkloadSessionCredentialLoad):
@@ -638,6 +643,14 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 	if err != nil {
 		return ctx, nil, nil, false, fmt.Errorf("%w: %w", errToolSelectionLoad, err)
 	}
+	if !policy.rowConfirmed {
+		if err := s.requireLiveSession(ctx, endpoint, session.JTI()); err != nil {
+			if errors.Is(err, errSessionPolicyGone) {
+				return ctx, nil, nil, false, fmt.Errorf("%w: %w", errCredentialRejected, err)
+			}
+			return ctx, nil, nil, false, fmt.Errorf("%w: %w", errSessionLivenessLoad, err)
+		}
+	}
 	toolSelection, sessionRefreshable := policy.selection, policy.refreshable
 	if toolSelection != nil && !endpointAcceptsToolSelectionResource(endpoint, toolSelection.Resource) {
 		// Issuer-scoped tokens are portable across endpoints sharing the
@@ -716,6 +729,7 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 		if err != nil {
 			return ctx, nil, nil, false, err
 		}
+		newCtx = withWorkloadSessionReach(newCtx, reach)
 	}
 	if subject.Kind == urn.SessionSubjectKindWorkload {
 		agentID, ok := authz.AdmittedWorkloadAgent(newCtx)
@@ -1340,10 +1354,12 @@ func clientCredentialMisconfiguredError(err error) *oops.ShareableError {
 	return oops.E(oops.CodeFailedPrecondition, err, "%s", selfClientMisconfiguredDescription)
 }
 
-// remoteSessionUnavailableError sets Retry-After on w and returns the 503 for a
-// required upstream token endpoint that is temporarily unavailable, so every
-// path that hits one tells the client the same thing and paces its retries.
+// remoteSessionUnavailableError returns the 503 for a required token endpoint that failed; only an outage sets its own Retry-After.
 func remoteSessionUnavailableError(w http.ResponseWriter, err error) *oops.ShareableError {
+	if address := remotesessions.OutageAddress(err); address != guardian.AddressFine {
+		// Still a 503, but without Retry-After: waiting does not fix an address.
+		return oops.E(oops.CodeUnavailable, err, "%s", address.EndUserMessage("This server", guardian.SignInAddress)).Unpaced()
+	}
 	if wait := remotesessions.RetryAfter(err); wait > oops.OutageRetryAfter {
 		outage := outageError(w, err, "This MCP server can't get the credential it needs right now. Retry "+outageWaitWords(wait)+". If it keeps happening, ask your administrator.")
 		w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())))
@@ -1401,6 +1417,9 @@ func (s *Service) recordRemoteSessionOutcome(ctx context.Context, authentication
 	}
 	if id, ok := remotesessions.UnreadableRemoteSessionID(errors.Join(causes...)); ok {
 		opts = append(opts, mcpconnectionattempts.RemoteSession(id))
+	}
+	if mcpconnectionattempts.AddressOf(code) != guardian.AddressFine {
+		opts = append(opts, remotesessions.OutageAddressOption(errors.Join(causes...)))
 	}
 	s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(ctx)), code, authentication.request, opts...)
 }

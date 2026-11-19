@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
@@ -185,6 +186,8 @@ type consentApprovalError struct {
 // consentTemplateData is the field set the consent template renders against.
 type consentTemplateData struct {
 	CatalogChanges *catalogChanges
+	// AccountSwitch renders the company sign-in action chained cards reveal when their check offers it.
+	AccountSwitch bool
 	// GatewayDefaultMode labels the gateway default when choosing discovery.
 	GatewayDefaultMode string
 	// CodeModeUnavailable explains a stored code choice that is currently served as Progressive.
@@ -411,6 +414,12 @@ type remoteSessionCard struct {
 	// UnavailableTunnel: the outage is on a tunnel, which reconnecting also goes through.
 	UnavailableTunnel bool
 
+	// SignInAddress: the sign-in provider's address can't be used, so an administrator must fix it.
+	SignInAddress bool
+
+	// signInAddressFailure is which address problem SignInAddress is.
+	signInAddressFailure guardian.AddressFailure
+
 	// Verified, Rejected, Inactive, Unverified: the last probe's verdict; all false when none ran.
 	Verified   bool
 	Rejected   bool
@@ -463,7 +472,7 @@ type cardPanel struct {
 
 // Panel decides the detail lines from the card's state.
 func (c remoteSessionCard) Panel() cardPanel {
-	reconnect := c.Unavailable || c.Rejected || c.Inactive || c.Expired || c.Unroutable || c.IdentityReconnect || c.AttachmentReconnect
+	reconnect := c.connectionDown() || c.Rejected || c.Inactive || c.Expired || c.Unroutable || c.IdentityReconnect || c.AttachmentReconnect
 	hasGrant := c.Connected || c.Expired || c.Unroutable
 	p := cardPanel{
 		GrantLive:            c.Connected && !reconnect,
@@ -611,6 +620,11 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
+		if errors.Is(err, redisCache.ErrCacheMiss) {
+			if switched := s.switchedConsentError(ctx, logger, endpoint, stateID); switched != nil {
+				return switched
+			}
+		}
 		return consentChallengeCacheError(ctx, logger, err)
 	}
 	if challengeState.FirstParty {
@@ -725,7 +739,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	if unfinished := r.URL.Query().Get("validate_unfinished"); unfinished != "" {
 		for i := range cards {
 			// An Unavailable card already says so, from stored state.
-			if cards[i].ClientID == unfinished && !cards[i].Unavailable {
+			if cards[i].ClientID == unfinished && !cards[i].connectionDown() {
 				cards[i].ValidationNotice = validationUnfinishedNotice
 			}
 		}
@@ -798,7 +812,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	everyCardAutoRefreshes := true
 	for _, c := range cards {
 		// The page's count: a chained service counts once its exchange works. consentCardsApprovable decides approval.
-		if (c.Connected && !c.Unavailable) || c.ChainCheck == chainCheckConnected {
+		if (c.Connected && !c.connectionDown()) || c.ChainCheck == chainCheckConnected {
 			connectedCardCount++
 		}
 		if c.Connected || c.Expired || c.Unroutable {
@@ -1091,7 +1105,10 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			gatewayDefaultMode = "Progressive"
 		}
 	}
+	accountSwitch := slices.ContainsFunc(cards, func(card remoteSessionCard) bool { return card.Chained }) &&
+		s.accountSwitchEnabled(ctx, endpoint.OrganizationID)
 	data := consentTemplateData{
+		AccountSwitch:           accountSwitch,
 		GatewayDefaultMode:      gatewayDefaultMode,
 		CodeModeUnavailable:     codeModeUnavailable,
 		ClientName:              clientName,
@@ -1177,6 +1194,11 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// against the consumed value, which stays the single-use authority.
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
+		if errors.Is(err, redisCache.ErrCacheMiss) {
+			if switched := s.switchedConsentError(ctx, logger, endpoint, stateID); switched != nil {
+				return switched
+			}
+		}
 		return consentChallengeCacheError(ctx, logger, err)
 	}
 	if challengeState.FirstParty {
@@ -1366,11 +1388,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		if err := s.remoteChallengeMgr.CheckAccessTokens(agentCtx, consentRefreshAttribution(r, endpoint, pickState), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, endpoint.proxiedServerID()); err != nil {
 			if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
 				s.refuseRemoteSessionUnavailable(ctx, t, err)
-				outage := remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
-				if remotesessions.OutageKindOf(err) != remotesessions.RefreshOutageNone {
-					return fmt.Errorf("check agent connections: %w", oops.WithBrowserProvider(oops.WithBrowserReason(outage, oauthui.ReasonProviderUnavailable), remotesessions.OutageProviderHost(err)))
-				}
-				return outage
+				return agentConnectionsOutage(remoteSessionUnavailableError(w, err).LogWarn(ctx, logger), err)
 			}
 			if errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) {
 				t.Refuse(ctx, mcpconnectionattempts.CodeCredentialMisconfigured)
@@ -1602,6 +1620,9 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		if errors.Is(err, redisCache.ErrCacheMiss) {
 			// Lost the race to a double submit: the winner records the attempt.
 			t.Continue()
+			if switched := s.switchedConsentError(ctx, logger, endpoint, stateID); switched != nil {
+				return switched
+			}
 		} else {
 			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		}
@@ -1874,9 +1895,30 @@ func isUniqueViolation(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation
 }
 
+// agentConnectionsOutage presents an agent's connection outage on the sign-in error page; an address cause adds its problem to Technical details only.
+func agentConnectionsOutage(outage *oops.ShareableError, err error) error {
+	if address := remotesessions.OutageAddress(err); address != guardian.AddressFine {
+		return fmt.Errorf("check agent connections: %w", oops.WithBrowserAdminDetail(oops.WithBrowserReason(outage, remotesessions.SignInAddressReason(address)), remotesessions.SignInAddressDetail(address)))
+	}
+	if remotesessions.OutageKindOf(err) != remotesessions.RefreshOutageNone {
+		return fmt.Errorf("check agent connections: %w", oops.WithBrowserProvider(oops.WithBrowserReason(outage, oauthui.ReasonProviderUnavailable), remotesessions.OutageProviderHost(err)))
+	}
+	return outage
+}
+
+// connectionDown reports a connected card whose credential can't be renewed right now: an outage, or an address an admin must fix.
+func (c remoteSessionCard) connectionDown() bool {
+	return c.Unavailable || c.SignInAddress
+}
+
+// SignInAddressStatus is the card's status line when its sign-in setup stops it; the reason stays on the connection row.
+func (c remoteSessionCard) SignInAddressStatus() string {
+	return c.signInAddressFailure.CardStatus(guardian.ThisSignInAddress)
+}
+
 // needsAction reports a card with a reconnect or verification still open.
 func (c remoteSessionCard) needsAction() bool {
-	return c.Unavailable || c.ValidationNotice != "" || c.IdentityReconnect || c.AttachmentReconnect || c.Rejected || c.Inactive || c.Pending || (c.CanValidate && !c.Verified)
+	return c.connectionDown() || c.ValidationNotice != "" || c.IdentityReconnect || c.AttachmentReconnect || c.Rejected || c.Inactive || c.Pending || (c.CanValidate && !c.Verified)
 }
 
 // expiredConnectionOutage reads recorded state, never the provider: a page load must not spend a refresh token.
@@ -2303,9 +2345,12 @@ func (s *Service) buildRemoteSessionCards(
 		if chained {
 			chainCheck = s.consentChainCheckAtRender(ctx, chainRequests[c.ID])
 		}
-		unavailable, unavailableTunnel := false, false
+		unavailable, unavailableTunnel, signInAddressFailure := false, false, guardian.AddressFine
 		if connected && state.AccessExpiresAt != nil && !state.AccessExpiresAt.After(renderedAt) {
-			unavailable, unavailableTunnel = s.expiredConnectionOutage(ctx, *challengeState.Subject, c.ID)
+			signInAddressFailure = s.remoteChallengeMgr.RecordedAddress(ctx, *challengeState.Subject, c.ID)
+			if signInAddressFailure == guardian.AddressFine {
+				unavailable, unavailableTunnel = s.expiredConnectionOutage(ctx, *challengeState.Subject, c.ID)
+			}
 		}
 		identityReconnect := connected && !slices.Contains(state.Scopes, "openid") && slices.Contains(requested, "openid")
 		requested = slices.Clone(requested)
@@ -2355,6 +2400,8 @@ func (s *Service) buildRemoteSessionCards(
 			TokenExpiresIn:         tokenExpiresIn,
 			Unavailable:            unavailable,
 			UnavailableTunnel:      unavailableTunnel,
+			SignInAddress:          signInAddressFailure != guardian.AddressFine,
+			signInAddressFailure:   signInAddressFailure,
 			Verified:               state.ValidationStatus == remotesessions.ValidationOutcomeValid,
 			Rejected:               state.ValidationStatus == remotesessions.ValidationOutcomeRejectedByMember,
 			Inactive:               state.ValidationStatus == remotesessions.ValidationOutcomeInactive,

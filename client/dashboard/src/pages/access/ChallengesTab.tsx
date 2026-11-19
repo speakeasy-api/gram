@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { actingPrincipalText } from "@/components/ui/ActingPrincipal/text";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import type { AuthzChallenge } from "@gram/client/models/components/authzchallenge.js";

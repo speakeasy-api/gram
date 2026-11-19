@@ -253,6 +253,7 @@ var (
 	CodeProviderTransientFailure = define("provider_transient_failure", OutcomeFailed, WhoProvider, "The service had a temporary problem.", "Try again in a few minutes.")
 	CodeReauthenticationRequired = define("reauthentication_required", OutcomeFailed, WhoPerson, "Your company sign-in is missing or has expired.", "Sign in again.")
 	CodeIneligibleIdentity       = define("ineligible_identity", OutcomeBlocked, WhoAdmin, "This account cannot be used for company-managed sign-in here.", "Use an allowed account, or ask your admin to allow this one.")
+	CodeUnmanagedAccount         = define("unmanaged_account", OutcomeBlocked, WhoPerson, "You signed in to Speakeasy with an account your company doesn't manage.", "Use your own account for the service, or sign out of Speakeasy and use a company account.")
 
 	// Every MCP request.
 	CodeToolPermissionDenied       = define("tool_permission_denied", OutcomeBlocked, WhoAdmin, "This person is not allowed to use this tool.", "Ask for permission to use the tool.")
@@ -311,4 +312,8 @@ var (
 	CodeUpstreamCredentialNotChosen = define("upstream_credential_not_chosen", OutcomeFailed, WhoAdmin, "This server has more than one sign-in for the service, and none was chosen.", "Choose which sign-in this identity uses for the server.")
 	CodeSignInMethodNotAccepted     = define("sign_in_method_not_accepted", OutcomeFailed, WhoApp, "This server does not accept this kind of sign-in.", "Connect to a server that accepts it, or use another way to sign in.")
 	CodeCredentialChoiceInvalid     = define("credential_choice_invalid", OutcomeFailed, WhoApp, "The app's sign-in choice does not fit this server.", "Update the app, or report the problem to its makers.")
+
+	// Configured addresses Speakeasy did not dial.
+	CodeAddressNotAllowed = define("address_not_allowed", OutcomeFailed, WhoAdmin, "This server or its sign-in uses a private or internal address Speakeasy can't reach.", "Use a public address, or connect the private network with a tunnel.")
+	CodeAddressNotFound   = define("address_not_found", OutcomeFailed, WhoAdmin, "The address for this server or its sign-in doesn't exist.", "Check the server and sign-in addresses.")
 )

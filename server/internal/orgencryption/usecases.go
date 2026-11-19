@@ -25,6 +25,10 @@ const (
 	// holds for third-party integrations: Slack workspaces, device management
 	// and compliance providers, and network ingress providers.
 	UseCaseIntegrationCredentials UseCase = "integration-credentials"
+	// UseCaseOAuthSessionTokens is the use case for the upstream OAuth tokens
+	// and related values Speakeasy stores for remote sessions, trusted issuer
+	// sessions and EMA credentials.
+	UseCaseOAuthSessionTokens UseCase = "oauth-session-tokens" //nolint:gosec // G101: a use case name, not a credential
 )
 
 // registeredUseCases lists every use case the package accepts. Add a consumer
@@ -33,6 +37,7 @@ var registeredUseCases = []UseCase{
 	UseCaseTailscaleGatewayState,
 	UseCaseOAuthClientSecrets,
 	UseCaseIntegrationCredentials,
+	UseCaseOAuthSessionTokens,
 }
 
 // ParseUseCase returns the registered use case named value.

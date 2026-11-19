@@ -959,8 +959,6 @@ tags:
     description: Resolves the identifiers Speakeasy records activity under into a single identity.
   - name: identityProviderConnections
     description: 'Manage the organization''s Okta connection: provision the private_key_jwt credential, submit the Okta client ID, verify granted scopes, and revoke.'
-  - name: instances
-    description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
   - name: integrations
     description: Explore third-party tools in Speakeasy.
   - name: internalSessionIssuers

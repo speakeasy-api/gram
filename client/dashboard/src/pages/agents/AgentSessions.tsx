@@ -5,7 +5,7 @@ import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Table, type Column } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { SimpleTooltip, TooltipProvider } from "@/components/ui/Tooltip";
