@@ -640,7 +640,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 		return oauthAuthorityError(err).LogError(ctx, logger)
 	}
-	// One snapshot attributes the whole consent request.
+	// One snapshot covers admission and consent lookups; attempt labelling reads the store per call.
 	clientCatalog := s.aiCatalog.Snapshot()
 	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientCatalog, challengeState.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.Subject(challengeState.Subject), mcpconnectionattempts.FromRequest(r))
 	t.Attach(challengeState.connectionAttempt(clientCatalog, endpoint))
@@ -1232,7 +1232,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		return oops.E(oops.CodeBadRequest, nil, `action must be "approve", "approve_agent", "reuse", or "deny"`).LogError(ctx, logger)
 	}
 
-	// One snapshot attributes the whole consent request.
+	// One snapshot covers admission and consent lookups; attempt labelling reads the store per call.
 	clientCatalog := s.aiCatalog.Snapshot()
 	// Until the state is consumed the page stays usable, so a refusal does not end the attempt.
 	attempt := challengeState.connectionAttempt(clientCatalog, endpoint)
