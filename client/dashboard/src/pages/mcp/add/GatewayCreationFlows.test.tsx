@@ -468,3 +468,68 @@ describe("source wrapper recovery", () => {
     },
   );
 });
+
+describe("remote creation from a Shadow MCP server", () => {
+  const SHADOW_START =
+    "/start?url=https%3A%2F%2Ftracker.example.com%2Fmcp&name=Tracker&shadow-mcp=tracker-slug";
+  function ShadowRouter({ children }: { children: React.ReactNode }) {
+    return (
+      <MemoryRouter initialEntries={[SHADOW_START]}>
+        <LocationProbe />
+        {children}
+      </MemoryRouter>
+    );
+  }
+  beforeEach(() => {
+    state.flow.gatewayId = null;
+    state.flow.cancel.mockReturnValue(false);
+  });
+
+  it("fills in the form and says where saving leads", () => {
+    render(<CreateRemoteMcp />, { wrapper: ShadowRouter });
+    expect(
+      (screen.getByLabelText("MCP server URL") as HTMLInputElement).value,
+    ).toBe("https://tracker.example.com/mcp");
+    expect(
+      (screen.getByLabelText("Display name (optional)") as HTMLInputElement)
+        .value,
+    ).toBe("Tracker");
+    expect(
+      screen.getByText(/becomes the official version of Tracker/),
+    ).toBeTruthy();
+  });
+
+  it("goes back to the Shadow MCP server to link the new server", async () => {
+    render(<CreateRemoteMcp />, { wrapper: ShadowRouter });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(location()).toMatch(/\/shadow-ai\/mcps\/tracker-slug$/),
+    );
+    expect(state.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Tracker",
+        url: "https://tracker.example.com/mcp",
+      }),
+    );
+  });
+
+  it("keeps the official server behind the Speakeasy proxy", () => {
+    render(<CreateRemoteMcp />, { wrapper: ShadowRouter });
+    const direct = screen
+      .getAllByRole("radio")
+      .find((radio) => radio.getAttribute("value") === "unproxied");
+    expect(direct?.hasAttribute("disabled")).toBe(true);
+    expect(
+      screen.getByText(/An official server must proxy through Speakeasy/),
+    ).toBeTruthy();
+  });
+
+  it("goes back to the Shadow MCP server on cancel", async () => {
+    render(<CreateRemoteMcp />, { wrapper: ShadowRouter });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    });
+    expect(location()).toMatch(/\/shadow-ai\/mcps\/tracker-slug$/);
+    expect(state.create).not.toHaveBeenCalled();
+  });
+});
