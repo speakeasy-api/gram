@@ -50,7 +50,7 @@ const COPY: Record<
   allowed: {
     title: "Allow servers by default?",
     description:
-      "Every MCP server connects unless you deny it. Servers you denied stay blocked, and linked servers still send agents to their official version.",
+      "Every MCP server connects unless you deny it. Servers you denied stay blocked, and servers with an official version still send agents to it.",
     confirm: "Allow by default",
     done: "MCP servers are now allowed by default.",
   },
@@ -190,7 +190,7 @@ export function ShadowMCPModeControl(): JSX.Element | null {
             disabled: heldByGuardrails,
             tooltip: heldByGuardrails
               ? guardrailsTooltip
-              : "Servers connect unless you deny them. Linked servers send agents to their official version.",
+              : "Servers connect unless you deny them. Servers with an official version send agents to it.",
           },
           {
             value: "blocked",
