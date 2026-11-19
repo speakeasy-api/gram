@@ -39,7 +39,6 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // OrganizationGatewayRoute is the organization gateway's path, addressed by
@@ -296,7 +295,7 @@ func (s *Service) loadOrganizationGateway(ctx context.Context, gatewaySlug strin
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(organization.ID))
 
-	metaServer, endpoint, unavailable, err := s.organizationGatewayRows(ctx, organization, orggateway.Availability)
+	metaServer, endpoint, unavailable, err := s.organizationGatewayRows(ctx, organization)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve organization gateway issuer").LogError(ctx, logger)
 	}
@@ -328,9 +327,9 @@ func (s *Service) loadOrganizationGateway(ctx context.Context, gatewaySlug strin
 }
 
 // organizationGatewayRows builds the synthetic rows an organization's gateway
-// is shaped around, or reports why availability serves the organization none.
-func (s *Service) organizationGatewayRows(ctx context.Context, organization orgsrepo.OrganizationMetadatum, availability gatewayAvailability) (*metamcprepo.MetaMcpServer, *mcpendpointsrepo.McpEndpoint, orggateway.Unavailability, error) {
-	issuerID, unavailable, err := availability(ctx, s.db, organization)
+// is shaped around, or reports why the organization is served none.
+func (s *Service) organizationGatewayRows(ctx context.Context, organization orgsrepo.OrganizationMetadatum) (*metamcprepo.MetaMcpServer, *mcpendpointsrepo.McpEndpoint, orggateway.Unavailability, error) {
+	issuerID, unavailable, err := orggateway.Availability(ctx, s.db, organization)
 	if err != nil {
 		return nil, nil, unavailable, fmt.Errorf("resolve organization gateway availability: %w", err)
 	}
@@ -362,9 +361,6 @@ func (s *Service) organizationGatewayRows(ctx context.Context, organization orgs
 	}
 	return metaServer, endpoint, orggateway.UnavailabilityNone, nil
 }
-
-// gatewayAvailability is orggateway.Availability or one of its variants.
-type gatewayAvailability func(context.Context, usersessionsrepo.DBTX, orgsrepo.OrganizationMetadatum) (uuid.UUID, orggateway.Unavailability, error)
 
 // projectTokenCache resolves a derived gateway's upstream credentials on
 // first use and keeps them for the rest of the request: one member at a time

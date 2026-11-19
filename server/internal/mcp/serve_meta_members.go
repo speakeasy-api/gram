@@ -315,7 +315,7 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 // redistribute or re-install.
 //
 // userSessionIssuerID limits legacy sign-in eligibility to the gateway's clients;
-// uuid.Nil skips issuer matching for the agent gateway and Platform MCP.
+// uuid.Nil skips issuer matching for the agent gateway.
 // Enforced typed offers replace this check for proxied members; pending setup
 // retains it. A nonzero scopeProjectID restricts candidates before admission
 // and credential association for project gateways.

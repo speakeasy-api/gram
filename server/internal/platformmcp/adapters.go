@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/management/readmodel"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -374,7 +373,6 @@ type PostgresReader struct {
 	teamMemory                *TeamMemoryService
 	organizationGateway       *OrganizationGatewayService
 	inboundEMATrust           *InboundEMATrustService
-	gatewayProxy              *GatewayProxyService
 	gatewaySessions           GatewaySessionManagement
 	agentIdentityReads        *AgentIdentityReadService
 	channelsAccess            *ChannelsAccessService
@@ -430,7 +428,6 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		teamMemory:                nil,
 		organizationGateway:       nil,
 		inboundEMATrust:           nil,
-		gatewayProxy:              nil,
 		gatewaySessions:           nil,
 		agentIdentityReads:        nil,
 		channelsAccess:            nil,
@@ -1248,16 +1245,6 @@ func inventoryQueryResult(mcps []MCP, query string, limit int) []MCP {
 		}
 	}
 	return mcps[:min(len(mcps), limit)]
-}
-
-// WithGatewayProxy serves the caller's own MCP servers through their
-// organization gateway. Call it after WithOrganizationGateway, whose
-// availability answer the proxy tools share.
-func (r *PostgresReader) WithGatewayProxy(proxy GatewayProxy, flags feature.Provider) *PostgresReader {
-	if r != nil {
-		r.gatewayProxy = &GatewayProxyService{gateway: r.organizationGateway, proxy: proxy, flags: flags}
-	}
-	return r
 }
 
 // WithGatewaySessions shares the dashboard gateway connection reads.

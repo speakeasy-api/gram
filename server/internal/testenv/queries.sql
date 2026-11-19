@@ -2565,11 +2565,6 @@ SET resource = sqlc.narg('resource'), created_at = @created_at,
     deleted_at = sqlc.narg('deleted_at')
 WHERE id = @id AND organization_id = @organization_id;
 
--- name: ClearOrganizationFeatureSettingFixture :execrows
--- Returns a feature setting to never configured, removing even the
--- soft-deleted row that records an explicit opt-in.
-DELETE FROM organization_features WHERE organization_id = @organization_id AND feature_name = @feature_name;
-
 -- name: SetAPIKeyCreatorFixture :exec
 -- Test-only fixture: an agent key issued by another member of the organization.
 UPDATE api_keys
