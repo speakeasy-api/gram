@@ -298,17 +298,17 @@ func (q *Queries) ClearTrustedIssuerSessionUpstreamSubjectPlatformCopies(ctx con
 const countEMACredentialAccessTokenCopies = `-- name: CountEMACredentialAccessTokenCopies :one
 SELECT
     COUNT(*) FILTER (
-        WHERE c.access_token_encrypted IS NOT NULL
+        WHERE c.access_token_encrypted <> ''
           AND c.access_token_org_encrypted IS NULL
           AND u.id IS NULL
     )::bigint AS waiting,
     COUNT(*) FILTER (
-        WHERE c.access_token_encrypted IS NOT NULL
+        WHERE c.access_token_encrypted <> ''
           AND c.access_token_org_encrypted IS NULL
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
     0::bigint AS unattributed,
-    COUNT(*) FILTER (WHERE c.access_token_encrypted IS NOT NULL)::bigint AS platform_copies
+    COUNT(*) FILTER (WHERE c.access_token_encrypted <> '')::bigint AS platform_copies
 FROM remote_session_ema_credentials AS c
 LEFT JOIN organization_encryption_unreadable_values AS u
   ON u.organization_id = c.organization_id
@@ -346,23 +346,23 @@ const countRemoteSessionAccessTokenCopies = `-- name: CountRemoteSessionAccessTo
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = $1::text
-          AND s.access_token_encrypted IS NOT NULL
+          AND s.access_token_encrypted <> ''
           AND s.access_token_org_encrypted IS NULL
           AND u.id IS NULL
     )::bigint AS waiting,
     COUNT(*) FILTER (
         WHERE s.organization_id = $1::text
-          AND s.access_token_encrypted IS NOT NULL
+          AND s.access_token_encrypted <> ''
           AND s.access_token_org_encrypted IS NULL
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
     COUNT(*) FILTER (
         WHERE s.organization_id IS NULL
-          AND (s.access_token_encrypted IS NOT NULL OR s.access_token_org_encrypted IS NOT NULL)
+          AND (s.access_token_encrypted <> '' OR s.access_token_org_encrypted IS NOT NULL)
     )::bigint AS unattributed,
     COUNT(*) FILTER (
         WHERE s.organization_id = $1::text
-          AND s.access_token_encrypted IS NOT NULL
+          AND s.access_token_encrypted <> ''
     )::bigint AS platform_copies
 FROM remote_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
@@ -406,23 +406,23 @@ const countRemoteSessionRefreshTokenCopies = `-- name: CountRemoteSessionRefresh
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = $1::text
-          AND s.refresh_token_encrypted IS NOT NULL
+          AND s.refresh_token_encrypted <> ''
           AND s.refresh_token_org_encrypted IS NULL
           AND u.id IS NULL
     )::bigint AS waiting,
     COUNT(*) FILTER (
         WHERE s.organization_id = $1::text
-          AND s.refresh_token_encrypted IS NOT NULL
+          AND s.refresh_token_encrypted <> ''
           AND s.refresh_token_org_encrypted IS NULL
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
     COUNT(*) FILTER (
         WHERE s.organization_id IS NULL
-          AND (s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL)
+          AND (s.refresh_token_encrypted <> '' OR s.refresh_token_org_encrypted IS NOT NULL)
     )::bigint AS unattributed,
     COUNT(*) FILTER (
         WHERE s.organization_id = $1::text
-          AND s.refresh_token_encrypted IS NOT NULL
+          AND s.refresh_token_encrypted <> ''
     )::bigint AS platform_copies
 FROM remote_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
@@ -462,23 +462,23 @@ const countTrustedIssuerSessionIdentityAssertionCopies = `-- name: CountTrustedI
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = $1::text
-          AND s.identity_assertion_encrypted IS NOT NULL
+          AND s.identity_assertion_encrypted <> ''
           AND s.identity_assertion_org_encrypted IS NULL
           AND u.id IS NULL
     )::bigint AS waiting,
     COUNT(*) FILTER (
         WHERE s.organization_id = $1::text
-          AND s.identity_assertion_encrypted IS NOT NULL
+          AND s.identity_assertion_encrypted <> ''
           AND s.identity_assertion_org_encrypted IS NULL
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
     COUNT(*) FILTER (
         WHERE s.organization_id IS NULL
-          AND (s.identity_assertion_encrypted IS NOT NULL OR s.identity_assertion_org_encrypted IS NOT NULL)
+          AND (s.identity_assertion_encrypted <> '' OR s.identity_assertion_org_encrypted IS NOT NULL)
     )::bigint AS unattributed,
     COUNT(*) FILTER (
         WHERE s.organization_id = $1::text
-          AND s.identity_assertion_encrypted IS NOT NULL
+          AND s.identity_assertion_encrypted <> ''
     )::bigint AS platform_copies
 FROM trusted_issuer_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
@@ -518,23 +518,23 @@ const countTrustedIssuerSessionNonceCopies = `-- name: CountTrustedIssuerSession
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = $1::text
-          AND s.nonce_encrypted IS NOT NULL
+          AND s.nonce_encrypted <> ''
           AND s.nonce_org_encrypted IS NULL
           AND u.id IS NULL
     )::bigint AS waiting,
     COUNT(*) FILTER (
         WHERE s.organization_id = $1::text
-          AND s.nonce_encrypted IS NOT NULL
+          AND s.nonce_encrypted <> ''
           AND s.nonce_org_encrypted IS NULL
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
     COUNT(*) FILTER (
         WHERE s.organization_id IS NULL
-          AND (s.nonce_encrypted IS NOT NULL OR s.nonce_org_encrypted IS NOT NULL)
+          AND (s.nonce_encrypted <> '' OR s.nonce_org_encrypted IS NOT NULL)
     )::bigint AS unattributed,
     COUNT(*) FILTER (
         WHERE s.organization_id = $1::text
-          AND s.nonce_encrypted IS NOT NULL
+          AND s.nonce_encrypted <> ''
     )::bigint AS platform_copies
 FROM trusted_issuer_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
@@ -574,23 +574,23 @@ const countTrustedIssuerSessionRefreshTokenCopies = `-- name: CountTrustedIssuer
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = $1::text
-          AND s.refresh_token_encrypted IS NOT NULL
+          AND s.refresh_token_encrypted <> ''
           AND s.refresh_token_org_encrypted IS NULL
           AND u.id IS NULL
     )::bigint AS waiting,
     COUNT(*) FILTER (
         WHERE s.organization_id = $1::text
-          AND s.refresh_token_encrypted IS NOT NULL
+          AND s.refresh_token_encrypted <> ''
           AND s.refresh_token_org_encrypted IS NULL
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
     COUNT(*) FILTER (
         WHERE s.organization_id IS NULL
-          AND (s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL)
+          AND (s.refresh_token_encrypted <> '' OR s.refresh_token_org_encrypted IS NOT NULL)
     )::bigint AS unattributed,
     COUNT(*) FILTER (
         WHERE s.organization_id = $1::text
-          AND s.refresh_token_encrypted IS NOT NULL
+          AND s.refresh_token_encrypted <> ''
     )::bigint AS platform_copies
 FROM trusted_issuer_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
@@ -630,23 +630,23 @@ const countTrustedIssuerSessionUpstreamSubjectCopies = `-- name: CountTrustedIss
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = $1::text
-          AND s.upstream_subject_encrypted IS NOT NULL
+          AND s.upstream_subject_encrypted <> ''
           AND s.upstream_subject_org_encrypted IS NULL
           AND u.id IS NULL
     )::bigint AS waiting,
     COUNT(*) FILTER (
         WHERE s.organization_id = $1::text
-          AND s.upstream_subject_encrypted IS NOT NULL
+          AND s.upstream_subject_encrypted <> ''
           AND s.upstream_subject_org_encrypted IS NULL
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
     COUNT(*) FILTER (
         WHERE s.organization_id IS NULL
-          AND (s.upstream_subject_encrypted IS NOT NULL OR s.upstream_subject_org_encrypted IS NOT NULL)
+          AND (s.upstream_subject_encrypted <> '' OR s.upstream_subject_org_encrypted IS NOT NULL)
     )::bigint AS unattributed,
     COUNT(*) FILTER (
         WHERE s.organization_id = $1::text
-          AND s.upstream_subject_encrypted IS NOT NULL
+          AND s.upstream_subject_encrypted <> ''
     )::bigint AS platform_copies
 FROM trusted_issuer_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
@@ -843,7 +843,7 @@ const listEMACredentialAccessTokensSealed = `-- name: ListEMACredentialAccessTok
 SELECT c.id, c.access_token_encrypted::text AS platform_copy, c.access_token_org_encrypted::text AS org_copy
 FROM remote_session_ema_credentials AS c
 WHERE c.organization_id = $1::text
-  AND c.access_token_encrypted IS NOT NULL
+  AND c.access_token_encrypted <> ''
   AND c.access_token_org_encrypted IS NOT NULL
   AND ($2::uuid IS NULL OR c.id > $2::uuid)
 ORDER BY c.id
@@ -888,7 +888,7 @@ const listEMACredentialAccessTokensWaiting = `-- name: ListEMACredentialAccessTo
 SELECT c.id, c.access_token_encrypted::text AS platform_copy
 FROM remote_session_ema_credentials AS c
 WHERE c.organization_id = $1::text
-  AND c.access_token_encrypted IS NOT NULL
+  AND c.access_token_encrypted <> ''
   AND c.access_token_org_encrypted IS NULL
   AND ($2::uuid IS NULL OR c.id > $2::uuid)
 ORDER BY c.id
@@ -963,7 +963,7 @@ const listRemoteSessionAccessTokensSealed = `-- name: ListRemoteSessionAccessTok
 SELECT s.id, s.access_token_encrypted::text AS platform_copy, s.access_token_org_encrypted::text AS org_copy
 FROM remote_sessions AS s
 WHERE s.organization_id = $1::text
-  AND s.access_token_encrypted IS NOT NULL
+  AND s.access_token_encrypted <> ''
   AND s.access_token_org_encrypted IS NOT NULL
   AND ($2::uuid IS NULL OR s.id > $2::uuid)
 ORDER BY s.id
@@ -1008,7 +1008,7 @@ const listRemoteSessionAccessTokensWaiting = `-- name: ListRemoteSessionAccessTo
 SELECT s.id, s.access_token_encrypted::text AS platform_copy
 FROM remote_sessions AS s
 WHERE s.organization_id = $1::text
-  AND s.access_token_encrypted IS NOT NULL
+  AND s.access_token_encrypted <> ''
   AND s.access_token_org_encrypted IS NULL
   AND ($2::uuid IS NULL OR s.id > $2::uuid)
 ORDER BY s.id
@@ -1052,7 +1052,7 @@ const listRemoteSessionRefreshTokensSealed = `-- name: ListRemoteSessionRefreshT
 SELECT s.id, s.refresh_token_encrypted::text AS platform_copy, s.refresh_token_org_encrypted::text AS org_copy
 FROM remote_sessions AS s
 WHERE s.organization_id = $1::text
-  AND s.refresh_token_encrypted IS NOT NULL
+  AND s.refresh_token_encrypted <> ''
   AND s.refresh_token_org_encrypted IS NOT NULL
   AND ($2::uuid IS NULL OR s.id > $2::uuid)
 ORDER BY s.id
@@ -1097,7 +1097,7 @@ const listRemoteSessionRefreshTokensWaiting = `-- name: ListRemoteSessionRefresh
 SELECT s.id, s.refresh_token_encrypted::text AS platform_copy
 FROM remote_sessions AS s
 WHERE s.organization_id = $1::text
-  AND s.refresh_token_encrypted IS NOT NULL
+  AND s.refresh_token_encrypted <> ''
   AND s.refresh_token_org_encrypted IS NULL
   AND ($2::uuid IS NULL OR s.id > $2::uuid)
 ORDER BY s.id
@@ -1141,7 +1141,7 @@ const listTrustedIssuerSessionIdentityAssertionsSealed = `-- name: ListTrustedIs
 SELECT s.id, s.identity_assertion_encrypted::text AS platform_copy, s.identity_assertion_org_encrypted::text AS org_copy
 FROM trusted_issuer_sessions AS s
 WHERE s.organization_id = $1::text
-  AND s.identity_assertion_encrypted IS NOT NULL
+  AND s.identity_assertion_encrypted <> ''
   AND s.identity_assertion_org_encrypted IS NOT NULL
   AND ($2::uuid IS NULL OR s.id > $2::uuid)
 ORDER BY s.id
@@ -1186,7 +1186,7 @@ const listTrustedIssuerSessionIdentityAssertionsWaiting = `-- name: ListTrustedI
 SELECT s.id, s.identity_assertion_encrypted::text AS platform_copy
 FROM trusted_issuer_sessions AS s
 WHERE s.organization_id = $1::text
-  AND s.identity_assertion_encrypted IS NOT NULL
+  AND s.identity_assertion_encrypted <> ''
   AND s.identity_assertion_org_encrypted IS NULL
   AND ($2::uuid IS NULL OR s.id > $2::uuid)
 ORDER BY s.id
@@ -1230,7 +1230,7 @@ const listTrustedIssuerSessionNoncesSealed = `-- name: ListTrustedIssuerSessionN
 SELECT s.id, s.nonce_encrypted::text AS platform_copy, s.nonce_org_encrypted::text AS org_copy
 FROM trusted_issuer_sessions AS s
 WHERE s.organization_id = $1::text
-  AND s.nonce_encrypted IS NOT NULL
+  AND s.nonce_encrypted <> ''
   AND s.nonce_org_encrypted IS NOT NULL
   AND ($2::uuid IS NULL OR s.id > $2::uuid)
 ORDER BY s.id
@@ -1275,7 +1275,7 @@ const listTrustedIssuerSessionNoncesWaiting = `-- name: ListTrustedIssuerSession
 SELECT s.id, s.nonce_encrypted::text AS platform_copy
 FROM trusted_issuer_sessions AS s
 WHERE s.organization_id = $1::text
-  AND s.nonce_encrypted IS NOT NULL
+  AND s.nonce_encrypted <> ''
   AND s.nonce_org_encrypted IS NULL
   AND ($2::uuid IS NULL OR s.id > $2::uuid)
 ORDER BY s.id
@@ -1319,7 +1319,7 @@ const listTrustedIssuerSessionRefreshTokensSealed = `-- name: ListTrustedIssuerS
 SELECT s.id, s.refresh_token_encrypted::text AS platform_copy, s.refresh_token_org_encrypted::text AS org_copy
 FROM trusted_issuer_sessions AS s
 WHERE s.organization_id = $1::text
-  AND s.refresh_token_encrypted IS NOT NULL
+  AND s.refresh_token_encrypted <> ''
   AND s.refresh_token_org_encrypted IS NOT NULL
   AND ($2::uuid IS NULL OR s.id > $2::uuid)
 ORDER BY s.id
@@ -1364,7 +1364,7 @@ const listTrustedIssuerSessionRefreshTokensWaiting = `-- name: ListTrustedIssuer
 SELECT s.id, s.refresh_token_encrypted::text AS platform_copy
 FROM trusted_issuer_sessions AS s
 WHERE s.organization_id = $1::text
-  AND s.refresh_token_encrypted IS NOT NULL
+  AND s.refresh_token_encrypted <> ''
   AND s.refresh_token_org_encrypted IS NULL
   AND ($2::uuid IS NULL OR s.id > $2::uuid)
 ORDER BY s.id
@@ -1408,7 +1408,7 @@ const listTrustedIssuerSessionUpstreamSubjectsSealed = `-- name: ListTrustedIssu
 SELECT s.id, s.upstream_subject_encrypted::text AS platform_copy, s.upstream_subject_org_encrypted::text AS org_copy
 FROM trusted_issuer_sessions AS s
 WHERE s.organization_id = $1::text
-  AND s.upstream_subject_encrypted IS NOT NULL
+  AND s.upstream_subject_encrypted <> ''
   AND s.upstream_subject_org_encrypted IS NOT NULL
   AND ($2::uuid IS NULL OR s.id > $2::uuid)
 ORDER BY s.id
@@ -1453,7 +1453,7 @@ const listTrustedIssuerSessionUpstreamSubjectsWaiting = `-- name: ListTrustedIss
 SELECT s.id, s.upstream_subject_encrypted::text AS platform_copy
 FROM trusted_issuer_sessions AS s
 WHERE s.organization_id = $1::text
-  AND s.upstream_subject_encrypted IS NOT NULL
+  AND s.upstream_subject_encrypted <> ''
   AND s.upstream_subject_org_encrypted IS NULL
   AND ($2::uuid IS NULL OR s.id > $2::uuid)
 ORDER BY s.id
@@ -1868,6 +1868,12 @@ type SetRemoteSessionTokensParams struct {
 // organization_id. A row without one (a session under a global client) finds
 // no transition row and reads generation 0, the only generation such a row is
 // sealed under.
+//
+// A platform-key copy of ” stores no value: rows written before
+// remote_sessions.access_token_encrypted became nullable can hold it. The
+// waiting, sealed and count queries compare platform-key copies with <> ”,
+// which also excludes NULL, so such a copy is never waiting, unreadable,
+// unattributed or counted. Clearing platform-key copies still removes it.
 // Stores the access token, and the refresh token when replace_refresh_token
 // is set, as the copies sealed under the decided transition generation. A
 // refresh token that is not replaced keeps both stored copies as they are.

@@ -488,16 +488,63 @@ WHERE organization_id = @organization_id
   AND platform_copies_cleared_at IS NULL
 RETURNING *;
 
--- name: RecordEncryptionTransitionBackfillStarted :exec
+-- Lists a page of the dual_write transitions of the given use cases across
+-- organizations, keyed by organization and use case. after_organization_id
+-- and after_use_case are the last row of the previous page, or '' for the
+-- first page.
+-- name: ListEncryptionTransitionsInDualWrite :many
+SELECT *
+FROM organization_encryption_transitions
+WHERE state = 'dual_write'
+  AND use_case = ANY(@use_cases::text[])
+  AND (organization_id, use_case) > (@after_organization_id::text, @after_use_case::text)
+ORDER BY organization_id, use_case
+LIMIT @limit_value;
+
+-- Lists the org_kms transitions of the given use cases that may still need
+-- work: a clear that never finished and was entered more than
+-- stalled_clear_grace ago (so it is not racing the finalize that just
+-- started it), or a clear that finished but whose state was entered within
+-- straggler_window, when a write decided before the move could still land.
+-- Stalled clears come first, in random order: a failed clear records nothing,
+-- so a fixed order would offer the same failing clears first every run.
+-- name: ListEncryptionTransitionsInOrgKMSForSweep :many
+SELECT *
+FROM organization_encryption_transitions
+WHERE state = 'org_kms'
+  AND use_case = ANY(@use_cases::text[])
+  AND (
+    (platform_copies_cleared_at IS NULL AND state_changed_at < clock_timestamp() - @stalled_clear_grace::interval)
+    OR (platform_copies_cleared_at IS NOT NULL AND state_changed_at > clock_timestamp() - @straggler_window::interval)
+  )
+ORDER BY (platform_copies_cleared_at IS NOT NULL), random()
+LIMIT @limit_value;
+
+-- Claims a backfill run and returns its start, which identifies the claim. It
+-- lands only while the use case is still in dual_write at the generation the
+-- run decided under, and no other run holds the claim: no run started yet,
+-- the last run completed, or the last run started more than lease ago and so
+-- can no longer be running. No rows means one of those does not hold.
+-- name: RecordEncryptionTransitionBackfillStarted :one
 UPDATE organization_encryption_transitions
 SET last_backfill_started_at = clock_timestamp(),
     last_backfill_completed_at = NULL,
     last_backfill_error = NULL,
     updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
-  AND use_case = @use_case;
+  AND use_case = @use_case
+  AND state = 'dual_write'
+  AND generation = @generation
+  AND (
+    last_backfill_started_at IS NULL
+    OR last_backfill_completed_at IS NOT NULL
+    OR last_backfill_started_at < clock_timestamp() - @lease::interval
+  )
+RETURNING last_backfill_started_at;
 
--- name: RecordEncryptionTransitionBackfillCompleted :exec
+-- Records the end of the run that holds the claim started at started_at. No
+-- rows means another run took the claim over.
+-- name: RecordEncryptionTransitionBackfillCompleted :execrows
 UPDATE organization_encryption_transitions
 SET last_backfill_completed_at = clock_timestamp(),
     last_backfill_converted_count = @converted_count::bigint,
@@ -506,7 +553,9 @@ SET last_backfill_completed_at = clock_timestamp(),
     last_backfill_error = sqlc.narg('error'),
     updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
-  AND use_case = @use_case;
+  AND use_case = @use_case
+  AND last_backfill_started_at = @started_at::timestamptz
+  AND last_backfill_completed_at IS NULL;
 
 -- The database clock, so times compared with state_changed_at and the
 -- backfill columns come from the same clock.
@@ -556,6 +605,16 @@ WHERE organization_id = @organization_id
 -- name: SetEncryptionTransitionStateChangedAt :exec
 UPDATE organization_encryption_transitions
 SET state_changed_at = @state_changed_at
+WHERE organization_id = @organization_id
+  AND use_case = @use_case;
+
+-- Test fixture: sets the last backfill's start and end and the last clean
+-- verification, so tests can place a run in the past without waiting.
+-- name: SetEncryptionTransitionRunTimesFixture :exec
+UPDATE organization_encryption_transitions
+SET last_backfill_started_at = sqlc.narg('last_backfill_started_at'),
+    last_backfill_completed_at = sqlc.narg('last_backfill_completed_at'),
+    last_verified_at = sqlc.narg('last_verified_at')
 WHERE organization_id = @organization_id
   AND use_case = @use_case;
 

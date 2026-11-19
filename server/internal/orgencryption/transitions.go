@@ -443,8 +443,9 @@ func (t *Transitions) Finalize(ctx context.Context, organizationID string, useCa
 }
 
 // checkFinalizeTiming checks the minimum time in dual_write and that a clean
-// verification pass started after both the move to dual_write and the last
-// backfill, all on the database clock.
+// verification pass started after both the move to dual_write and the start
+// of the last backfill, which verifies inside its own claim, all on the
+// database clock.
 func checkFinalizeTiming(row repo.OrganizationEncryptionTransition, now time.Time, minimum time.Duration) error {
 	if elapsed := now.Sub(row.StateChangedAt.Time); elapsed < minimum {
 		return fmt.Errorf("%w: in dual_write for %s, needs %s", ErrFinalizeBlocked, elapsed.Truncate(time.Second), minimum)
@@ -458,7 +459,7 @@ func checkFinalizeTiming(row repo.OrganizationEncryptionTransition, now time.Tim
 		return fmt.Errorf("%w: a backfill is running or did not complete", ErrFinalizeBlocked)
 	}
 
-	if row.LastBackfillCompletedAt.Valid && row.LastVerifiedAt.Time.Before(row.LastBackfillCompletedAt.Time) {
+	if row.LastBackfillStartedAt.Valid && row.LastVerifiedAt.Time.Before(row.LastBackfillStartedAt.Time) {
 		return fmt.Errorf("%w: no clean verification pass since the last backfill", ErrFinalizeBlocked)
 	}
 
@@ -536,22 +537,108 @@ func (t *Transitions) ClearPlatformCopies(ctx context.Context, organizationID st
 		})
 }
 
+// StragglerCount reports the platform-key copies one column held after its
+// use case's clear had finished.
+type StragglerCount struct {
+	// Columns names the column pair.
+	Columns CopyColumns
+
+	// PlatformOnly counts platform-key copies with no organization-key copy
+	// beside them, counted before clearing. Clearing destroys these values:
+	// nothing reads a platform-key copy in org_kms.
+	PlatformOnly int64
+
+	// BesideOrgCopy counts platform-key copies beside an organization-key
+	// copy, counted before clearing. Clearing them loses nothing.
+	BesideOrgCopy int64
+
+	// Cleared is how many platform-key copies the sweep cleared. It can
+	// exceed the counts above when a copy landed between counting and
+	// clearing.
+	Cleared int64
+}
+
+// SweepPlatformCopies clears platform-key copies that appeared after a use
+// case's clear finished, and reports one StragglerCount per column that held
+// any. It changes no transition state and records nothing on the transition
+// row. Any copy it finds means a writer bypassed the fence or held a
+// transaction open far longer than the server's timeouts allow, because
+// writers decide org_kms after finalize and write only the organization-key
+// copy. It requires org_kms with the clear finished.
+func (t *Transitions) SweepPlatformCopies(ctx context.Context, organizationID string, useCase UseCase, stores []CopyStore) ([]StragglerCount, error) {
+	if err := useCase.validate(); err != nil {
+		return nil, err
+	}
+	if err := requireStores(useCase, stores); err != nil {
+		return nil, err
+	}
+
+	current, err := t.GetFresh(ctx, organizationID, useCase)
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case current.State != TransitionStateOrgKMS:
+		return nil, fmt.Errorf("%w: sweep platform-key copies in %s", ErrTransitionNotAllowed, current.State)
+	case current.PlatformCopiesClearedAt == nil:
+		return nil, fmt.Errorf("%w: sweep platform-key copies before they were cleared", ErrTransitionNotAllowed)
+	}
+
+	var stragglers []StragglerCount
+	for _, store := range stores {
+		columns := store.Columns()
+
+		counts, err := store.Count(ctx, organizationID)
+		if err != nil {
+			return stragglers, fmt.Errorf("count values in %s: %w", columns.PlatformColumn, err)
+		}
+		if counts.PlatformCopies == 0 {
+			continue
+		}
+
+		platformOnly := counts.Waiting + counts.Unreadable
+		cleared, err := clearStore(ctx, organizationID, current.Generation, store)
+		stragglers = append(stragglers, StragglerCount{
+			Columns:       columns,
+			PlatformOnly:  platformOnly,
+			BesideOrgCopy: max(counts.PlatformCopies-platformOnly, 0),
+			Cleared:       cleared,
+		})
+		if err != nil {
+			return stragglers, err
+		}
+	}
+
+	return stragglers, nil
+}
+
 func clearStores(ctx context.Context, organizationID string, generation int64, stores []CopyStore) (int64, error) {
 	var cleared int64
 	for _, store := range stores {
-		for {
-			n, err := store.ClearPlatformCopies(ctx, organizationID, generation, clearBatchSize)
-			cleared += n
-			if err != nil {
-				return cleared, fmt.Errorf("clear platform-key copies in %s: %w", store.Columns().PlatformColumn, err)
-			}
-			if n < clearBatchSize {
-				break
-			}
+		n, err := clearStore(ctx, organizationID, generation, store)
+		cleared += n
+		if err != nil {
+			return cleared, err
 		}
 	}
 
 	return cleared, nil
+}
+
+// clearStore clears one column's platform-key copies in batches until a
+// batch comes back short.
+func clearStore(ctx context.Context, organizationID string, generation int64, store CopyStore) (int64, error) {
+	var cleared int64
+	for {
+		n, err := store.ClearPlatformCopies(ctx, organizationID, generation, clearBatchSize)
+		cleared += n
+		if err != nil {
+			return cleared, fmt.Errorf("clear platform-key copies in %s: %w", store.Columns().PlatformColumn, err)
+		}
+		if n < clearBatchSize {
+			return cleared, nil
+		}
+	}
 }
 
 func countStores(ctx context.Context, organizationID string, stores []CopyStore) (CopyCounts, error) {

@@ -859,6 +859,10 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
+			orgEncryptionMigrator, err := orgEncryption.Migrator(logger, db, encryptionClient, meterProvider)
+			if err != nil {
+				return err
+			}
 			// Issuer URLs are pinned to the outbound origin, as on the server.
 			// The worker only sweeps issuer keys, so a bad issuer setting turns
 			// the sweep off with an error log instead of stopping every
@@ -934,6 +938,7 @@ func newWorkerCommand() *cli.Command {
 				Connections:                    connectionRecorder,
 				IssuerKeySweeper:               issuerKeySweeper(issuerProvisioner),
 				OrganizationEncryptionSweeper:  orgEncryptionSweeper(orgEncryption.Provisioner),
+				OrganizationEncryptionMigrator: orgEncryptionMigrator,
 				StartupSeeds:                   startupSeeds(logger, db, siteURL),
 				AssistantsCore:                 assistantsCore,
 				TemporalEnv:                    temporalEnv,

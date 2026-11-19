@@ -324,6 +324,52 @@ func TestCopyStoreCountsUnreadableTokens(t *testing.T) {
 	require.Equal(t, orgencryption.CopyCounts{Waiting: 0, Unreadable: 1, Unattributed: 0, PlatformCopies: 1}, counts)
 }
 
+func TestCopyStoresTreatAnEmptyPlatformCopyAsNoValue(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	session := ti.createSession(t)
+	unattributed := ti.createUnattributedSession(t)
+
+	// Rows written before access_token_encrypted became nullable store ''
+	// for a session without an access token.
+	for _, row := range []repo.RemoteSession{session, unattributed} {
+		_, err := repo.New(ti.conn).SetRemoteSessionTokens(t.Context(), repo.SetRemoteSessionTokensParams{
+			AccessPlatformCopy:  conv.ToPGText(""),
+			AccessOrgCopy:       nullText(),
+			ReplaceRefreshToken: false,
+			RefreshPlatformCopy: nullText(),
+			RefreshOrgCopy:      nullText(),
+			ID:                  row.ID,
+			OrganizationID:      row.OrganizationID,
+			DecidedGeneration:   0,
+		})
+		require.NoError(t, err)
+	}
+
+	stores := upstreamtokens.CopyStores(ti.conn)
+	access := stores[0]
+	require.Equal(t, upstreamtokens.RemoteSessionAccessToken, access.Columns())
+
+	counts, err := access.Count(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, orgencryption.CopyCounts{Waiting: 0, Unreadable: 0, Unattributed: 0, PlatformCopies: 0}, counts, "'' is neither waiting, unreadable, unattributed nor a platform-key copy")
+
+	waiting, err := access.ListWaiting(t.Context(), ti.orgID, "", 10)
+	require.NoError(t, err)
+	require.Empty(t, waiting)
+
+	ti.enroll(t)
+	result, err := ti.runner(t).Run(t.Context(), ti.orgID, orgencryption.UseCaseOAuthSessionTokens, stores)
+	require.NoError(t, err)
+	require.Zero(t, result.Converted)
+	require.Zero(t, result.Unreadable)
+	require.True(t, result.VerificationPassed)
+
+	ti.finalize(t)
+	require.False(t, ti.stored(t, session.ID).AccessTokenEncrypted.Valid, "clearing still removes ''")
+}
+
 // remoteSessionStores are the CopyStores of the remote session columns.
 func remoteSessionStores(conn *pgxpool.Pool) []orgencryption.CopyStore {
 	var stores []orgencryption.CopyStore
