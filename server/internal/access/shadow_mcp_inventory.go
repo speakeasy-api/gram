@@ -437,6 +437,7 @@ func buildShadowMCPRequestOnlyServer(request mcpapprovalrepo.ListApprovalRequest
 		FirstCalled:        nil,
 		LastCalled:         nil,
 		CallCount:          0,
+		BlockedCallCount:   0,
 		UserCount:          0,
 		TopUsers:           []string{},
 	}
@@ -1721,6 +1722,7 @@ func buildShadowMCPInventoryServer(row telemetryrepo.ShadowMCPInventoryURLRow, u
 		LastSeen:                formatTimeValue(row.LastSeen),
 		LastCalled:              formatTimePtrValue(usage.LastCalled),
 		ObservedUseCount:        shadowMCPInventoryCount(usage.CallCount),
+		BlockedCallCount:        shadowMCPInventoryCount(usage.BlockedCallCount),
 		UserCount:               shadowMCPInventoryCount(usage.UserCount),
 		TopUsers:                topUsers,
 		Access:                  rowState.Access,

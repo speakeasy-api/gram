@@ -11554,6 +11554,7 @@ func unmarshalShadowMCPInventoryServerResponseBodyToAccessShadowMCPInventoryServ
 		LastSeen:           *v.LastSeen,
 		LastCalled:         v.LastCalled,
 		ObservedUseCount:   *v.ObservedUseCount,
+		BlockedCallCount:   *v.BlockedCallCount,
 		UserCount:          *v.UserCount,
 		Access:             *v.Access,
 		RequestCount:       *v.RequestCount,

@@ -50,6 +50,7 @@ func TestShadowInventoryProjectionSuppressesIdentityAndReferencesRoundTrip(t *te
 		FirstSeen:          "2026-09-06T10:00:00Z",
 		LastSeen:           "2026-09-06T11:00:00Z",
 		ObservedUseCount:   7,
+		BlockedCallCount:   3,
 		UserCount:          1,
 		AccessSummary: &accessgen.ShadowMCPAccessSummary{
 			State: "restricted", AllowedFor: "selected", BlockedFor: "some", BlockingDefault: "deny", Decision: &decision, DecisionCoverage: "partial",
@@ -77,6 +78,7 @@ func TestShadowInventoryProjectionSuppressesIdentityAndReferencesRoundTrip(t *te
 	require.True(t, listed.Targets[0].UserCount.Suppressed())
 	require.True(t, listed.Targets[0].Review.RequesterCount.Suppressed())
 	require.Equal(t, "Observed MCP server", listed.Targets[0].Display)
+	require.Equal(t, 3, listed.Targets[0].BlockedCallCount)
 	require.NotContains(t, listed.Targets[0].TargetReference, "private")
 
 	detail, err := service.GetReview(t.Context(), principal, GetShadowMCPReviewInput{ProjectID: project.ID.String(), TargetReference: listed.Targets[0].TargetReference})

@@ -117373,6 +117373,10 @@ components:
             type: string
         approval_request:
           $ref: '#/components/schemas/ShadowMCPInventoryApprovalRequest'
+        blocked_call_count:
+          type: integer
+          description: Calls to this server that a Speakeasy hook blocked, within the telemetry retention window. Included in observed_use_count.
+          format: int64
         blocked_policy_ids:
           type: array
           items:
@@ -117429,6 +117433,7 @@ components:
         - first_seen
         - last_seen
         - observed_use_count
+        - blocked_call_count
         - user_count
         - top_users
         - access

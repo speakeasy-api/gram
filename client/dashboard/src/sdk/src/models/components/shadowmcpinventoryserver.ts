@@ -71,6 +71,10 @@ export type ShadowMCPInventoryServer = {
    */
   approvalRequest?: ShadowMCPInventoryApprovalRequest | undefined;
   /**
+   * Calls to this server that a Speakeasy hook blocked, within the telemetry retention window. Included in observed_use_count.
+   */
+  blockedCallCount: number;
+  /**
    * Enabled blocking policies that block this server via a risk_policy:block grant (allow_all policies only).
    */
   blockedPolicyIds: Array<string>;
@@ -126,6 +130,7 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
     approval_request: z.optional(
       ShadowMCPInventoryApprovalRequest$inboundSchema,
     ),
+    blocked_call_count: z.int(),
     blocked_policy_ids: z.array(z.string()),
     canonical_server_url: z.string(),
     first_seen: z.pipe(
@@ -158,6 +163,7 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
       "access_summary": "accessSummary",
       "allowed_policy_ids": "allowedPolicyIds",
       "approval_request": "approvalRequest",
+      "blocked_call_count": "blockedCallCount",
       "blocked_policy_ids": "blockedPolicyIds",
       "canonical_server_url": "canonicalServerUrl",
       "first_seen": "firstSeen",

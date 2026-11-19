@@ -620,8 +620,11 @@ type ShadowMCPInventoryUsageRow struct {
 	FirstCalled        *time.Time
 	LastCalled         *time.Time
 	CallCount          uint64
-	UserCount          uint64
-	TopUsers           []string
+	// BlockedCallCount counts the calls a Speakeasy hook denied, such as a
+	// Shadow MCP block. They are included in CallCount too.
+	BlockedCallCount uint64
+	UserCount        uint64
+	TopUsers         []string
 }
 
 type ListShadowMCPInventoryUsersParams struct {
@@ -651,6 +654,7 @@ type shadowMCPInventoryTraceUsageRow struct {
 	UserKey    string    `ch:"user_key"`
 	UserEmail  string    `ch:"user_email"`
 	HookSource string    `ch:"hook_source"`
+	Blocked    uint8     `ch:"blocked"`
 	CalledAt   time.Time `ch:"called_at"`
 }
 
@@ -1353,6 +1357,7 @@ func (q *Queries) ListShadowMCPInventoryUsage(ctx context.Context, arg ListShado
 				FirstCalled:        &firstCalled,
 				LastCalled:         &lastCalled,
 				CallCount:          0,
+				BlockedCallCount:   0,
 				UserCount:          0,
 				TopUsers:           nil,
 			}
@@ -1370,6 +1375,9 @@ func (q *Queries) ListShadowMCPInventoryUsage(ctx context.Context, arg ListShado
 			usage.LastCalled = &lastCalled
 		}
 		usage.CallCount++
+		if traceRow.Blocked > 0 {
+			usage.BlockedCallCount++
+		}
 
 		if traceRow.UserKey == "" {
 			continue
@@ -1496,6 +1504,7 @@ func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, orgID st
 		"if(max(trace_summaries.user_email) != '', max(trace_summaries.user_email), max(trace_summaries.user_id)) AS user_key",
 		"max(trace_summaries.user_email) AS user_email",
 		"max(hook_source) AS hook_source",
+		"max(has_block) AS blocked",
 		"fromUnixTimestamp64Nano(max(start_time_unix_nano)) AS called_at",
 	).
 		From("trace_summaries").
