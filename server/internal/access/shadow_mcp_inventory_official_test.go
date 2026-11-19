@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -21,12 +22,58 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
+// enableShadowMCPAutoLink turns automatic official-server links on for the
+// test organization.
+func enableShadowMCPAutoLink(ti *testInstance, organizationID string) {
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagShadowMCPAutoLink, organizationID, true)
+	ti.service.WithFeatureFlags(flags)
+}
+
+func TestService_ReadShadowMCPInventoryTarget_SuggestsWithoutAutoLink(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	seedShadowMCPInventoryServer(t, ctx, ti, authCtx.ProjectID.String(), "Tracker")
+	insertShadowMCPInventoryTelemetry(t, ctx, ti, shadowMCPInventoryTelemetryInput{
+		ProjectID:  authCtx.ProjectID.String(),
+		ServerURL:  "https://github.example.com/mcp",
+		ServerName: "Tracker",
+		UserEmail:  "reader@example.com",
+		ObservedAt: time.Now().UTC(),
+	})
+	official := seedAccessOfficialServer(t, ctx, ti, *authCtx.ProjectID, "Tracker (official)", "https://github.example.com/mcp", "private")
+
+	// The flag is off: the server that proxies to the URL is only offered,
+	// and a kept direct connection is not reported.
+	require.NoError(t, ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
+		SessionToken: nil,
+		ProjectID:    authCtx.ProjectID.String(),
+		ServerURL:    "https://github.example.com/mcp",
+		McpServerID:  nil,
+		KeepShadow:   new(true),
+	}))
+	server, err := ti.service.ReadShadowMCPInventoryTarget(ctx, ShadowMCPInventoryTargetInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		TargetKind:     shadowMCPTargetKindServerURL,
+		TargetKey:      "https://github.example.com/mcp",
+	})
+	require.NoError(t, err)
+	require.Nil(t, server.OfficialServer)
+	require.Nil(t, server.OfficialServerDeclined)
+	require.NotNil(t, server.SuggestedOfficialServer)
+	require.Equal(t, official.ID.String(), server.SuggestedOfficialServer.McpServerID)
+}
+
 func TestService_ReadShadowMCPInventoryTarget_LinksAutomaticallyThenHonorsOverrides(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
 	authCtx := testAccessAuthContext(t, ctx)
 	ti.service.WithServerURL(ti.siteURL)
+	enableShadowMCPAutoLink(ti, authCtx.ActiveOrganizationID)
 
 	seedShadowMCPInventoryServer(t, ctx, ti, authCtx.ProjectID.String(), "Tracker")
 	insertShadowMCPInventoryTelemetry(t, ctx, ti, shadowMCPInventoryTelemetryInput{

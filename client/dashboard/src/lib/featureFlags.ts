@@ -17,6 +17,10 @@ export const FEATURE_FLAGS = {
   // Okta application and suggestion APIs behind it are not gated.
   oktaMcpImport: "okta-mcp-import",
   promptPolicies: "gram-prompt-policies",
+  // Project-targeted, read server-side under the same key: whether a Shadow
+  // MCP server is linked automatically to the project server that proxies its
+  // URL. Here it only picks the official server panel's actions.
+  shadowMCPAutoLink: "shadow-mcp-auto-link",
   // Org-targeted, read server-side under the same key when a private network
   // connection is created: the tailnet gateway when enabled, the Tailscale
   // operator otherwise. The setup sheet shows the matching steps.

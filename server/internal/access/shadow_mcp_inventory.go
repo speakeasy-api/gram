@@ -279,7 +279,8 @@ func (s *Service) attachShadowMCPOfficialServers(ctx context.Context, organizati
 		return
 	}
 
-	links, err := shadowmcp.LoadOfficialServerLinks(ctx, s.db, organizationID, projectID, s.serverURL, keys)
+	automatic := shadowmcp.AutoLinkEnabled(ctx, s.logger, riskrepo.New(s.db), s.flags, organizationID, projectID)
+	links, err := shadowmcp.LoadOfficialServerLinks(ctx, s.db, organizationID, projectID, s.serverURL, keys, automatic)
 	if err != nil {
 		s.logger.WarnContext(ctx, "resolve official servers for shadow mcp inventory",
 			attr.SlogError(err),
@@ -310,7 +311,7 @@ func (s *Service) attachShadowMCPOfficialServers(ctx context.Context, organizati
 		if !keyOK {
 			continue
 		}
-		if links.Declined[key] {
+		if links.Automatic && links.Declined[key] {
 			declined := true
 			server.OfficialServerDeclined = &declined
 		}

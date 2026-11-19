@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -480,6 +481,42 @@ func TestRenderShadowMCPUserBlockReason_KeepsRequestLinkWithoutOfficialServer(t 
 	require.NotContains(t, reason, "official version")
 }
 
+// enableShadowMCPAutoLink turns automatic official-server links on for the
+// test organization.
+func enableShadowMCPAutoLink(ti *testInstance, organizationID string) {
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagShadowMCPAutoLink, organizationID, true)
+	ti.service.shadowMCPClient.WithFeatureFlags(flags)
+}
+
+func TestEnforceShadowMCPToolAccess_ServerAtSameURLIsNotLinkedWithoutAutoLink(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	// The flag is off: a server at the same URL is only a suggestion, as
+	// before automatic links.
+	serverURL := "https://unlinked.example.com/mcp"
+	serverID := seedOfficialServer(t, ctx, ti.conn, *authCtx.ProjectID, officialServerSeed{
+		Name: "Unlinked", RemoteURL: serverURL, Visibility: "", EndpointSlug: "unlinked-" + uuid.NewString(), Unlinked: true,
+	})
+	evidence := shadowmcp.AccessEvidence{FullURL: serverURL, URLHost: "", ServerIdentity: "unlinked"}
+	detail, denied := ti.service.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID,
+		allowAllTestPolicy(uuid.NewString()), "search", evidence)
+	require.False(t, denied)
+	require.Empty(t, detail)
+
+	// An administrator's link still applies.
+	setOfficialServerChoice(t, ctx, ti.conn, *authCtx.ProjectID, serverURL, uuid.NullUUID{UUID: serverID, Valid: true})
+	detail, denied = ti.service.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID,
+		allowAllTestPolicy(uuid.NewString()), "search", evidence)
+	require.True(t, denied)
+	require.Contains(t, detail, `official version "Unlinked", chosen by an administrator`)
+}
+
 func TestEnforceShadowMCPToolAccess_ServerAtSameURLIsLinkedAutomatically(t *testing.T) {
 	t.Parallel()
 
@@ -487,6 +524,7 @@ func TestEnforceShadowMCPToolAccess_ServerAtSameURLIsLinkedAutomatically(t *test
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
+	enableShadowMCPAutoLink(ti, authCtx.ActiveOrganizationID)
 
 	// The project serves the same upstream, and nobody chose anything.
 	serverURL := "https://coincidence.example.com/mcp"
@@ -523,6 +561,7 @@ func TestEnforceShadowMCPToolAccess_AutomaticLinkPicksOldestServerUntilOneIsChos
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
+	enableShadowMCPAutoLink(ti, authCtx.ActiveOrganizationID)
 
 	// Two project servers proxy to the same upstream.
 	serverURL := "https://shared.example.com/mcp"

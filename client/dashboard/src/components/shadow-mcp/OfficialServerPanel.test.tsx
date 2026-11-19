@@ -19,11 +19,21 @@ const mocks = vi.hoisted(() => ({
   toastError: vi.fn(),
   save: vi.fn(),
   canWriteMcp: true,
+  autoLinks: true,
   catalogServers: [] as Array<{
     registrySpecifier: string;
     title?: string;
     remotes: Array<{ url: string }>;
   }>,
+}));
+
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: (flag: string) => ({
+    status:
+      flag === "shadow-mcp-auto-link" && mocks.autoLinks
+        ? "enabled"
+        : "disabled",
+  }),
 }));
 
 vi.mock("@gram/client/react-query/probeRemoteMcpURL.js", () => ({
@@ -187,6 +197,7 @@ describe("OfficialServerPanel", () => {
     mocks.save.mockResolvedValue(undefined);
     mocks.catalogServers = [];
     mocks.canWriteMcp = true;
+    mocks.autoLinks = true;
     window.localStorage.clear();
   });
   afterEach(cleanup);
@@ -482,6 +493,31 @@ describe("OfficialServerPanel", () => {
       serverUrl: "https://tracker.example.com/mcp",
       mcpServerId: official.mcpServerId,
     });
+  });
+
+  it("only removes the link when automatic links are off", async () => {
+    mocks.autoLinks = false;
+    const official = {
+      mcpServerId: "11111111-1111-4111-8111-111111111111",
+      name: "Tracker",
+      url: "https://app.example.com/mcp/tracker",
+    };
+    renderPanel(server({ officialServer: official }));
+
+    expect(
+      screen.queryByRole("button", { name: "Keep direct connection" }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove choice" })).toBeNull();
+    expect(screen.queryByText("Advanced")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Remove link" }));
+    await vi.waitFor(() =>
+      expect(mocks.save).toHaveBeenLastCalledWith({
+        serverUrl: "https://tracker.example.com/mcp",
+      }),
+    );
+    expect(mocks.toastSuccess.mock.calls[0]?.[0]).toBe(
+      "Link to “Tracker” removed",
+    );
   });
 
   it("keeps the direct connection instead of the automatic link", async () => {

@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/email"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -74,6 +75,8 @@ type Service struct {
 	// addresses are built on. Nil leaves official-server addresses on the
 	// platform domain empty.
 	serverURL *url.URL
+	// flags gates automatic Shadow MCP official-server links. Nil reads as off.
+	flags feature.Provider
 }
 
 // WithServerURL sets the base URL that platform MCP endpoint addresses are
@@ -81,6 +84,13 @@ type Service struct {
 // served.
 func (s *Service) WithServerURL(serverURL *url.URL) *Service {
 	s.serverURL = serverURL
+	return s
+}
+
+// WithFeatureFlags sets the provider that gates automatic Shadow MCP
+// official-server links. Without one, only links an administrator made apply.
+func (s *Service) WithFeatureFlags(flags feature.Provider) *Service {
+	s.flags = flags
 	return s
 }
 
@@ -125,6 +135,7 @@ func NewService(
 		orgHosts:   orgHosts,
 		foldGate:   foldGate,
 		serverURL:  nil,
+		flags:      nil,
 	}
 }
 

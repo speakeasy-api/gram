@@ -21,8 +21,10 @@ import { useOrganization, useProject } from "@/contexts/Auth";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
 import { mcpServerRouteParam } from "@/lib/sources";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { cn } from "@/lib/utils";
 import { CatalogLogo } from "@/pages/catalog/CatalogLogo";
 import { type CatalogServer, useListMCPCatalog } from "@/pages/catalog/hooks";
@@ -237,6 +239,11 @@ function OpenServerButton({
 
 function LinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
   const { save, isPending } = useSaveShadowMCPOfficialServer();
+  // Without automatic links, removing the link is the only way out, as it
+  // always was. The server decides which links are automatic; this only
+  // picks the actions.
+  const autoLinks =
+    useFeatureFlag(FEATURE_FLAGS.shadowMCPAutoLink).status === "enabled";
   const official = server.officialServer;
   if (!official) return null;
   const automatic = official.automatic === true;
@@ -322,50 +329,75 @@ function LinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
         />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Text muted small className="max-w-xl">
-          {automatic
-            ? "A server that proxies this URL is linked by default. If it is not ready yet, keep the direct connection; you can link it again at any time."
-            : "You chose this server. Remove your choice to go back to the default: a server that proxies this URL is linked automatically."}
-        </Text>
-        <div className="flex flex-wrap items-center gap-2">
-          {automatic ? null : (
-            <Button
-              variant="tertiary"
-              size="sm"
-              disabled={isPending}
-              onClick={() =>
-                void change(
-                  { serverUrl: server.canonicalServerUrl },
-                  `Choice of “${official.name}” removed`,
-                )
-              }
-            >
-              <Button.Text>Remove choice</Button.Text>
-            </Button>
-          )}
+      {autoLinks || automatic ? null : (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Text muted small className="max-w-xl">
+            Remove the link to let direct connections follow the usual rules
+            again. You can add it back at any time.
+          </Text>
           <Button
-            variant="secondary"
+            variant="tertiary"
             size="sm"
             disabled={isPending}
             onClick={() =>
               void change(
-                { serverUrl: server.canonicalServerUrl, keepShadow: true },
-                "Direct connection kept. Agents are no longer sent elsewhere.",
+                { serverUrl: server.canonicalServerUrl },
+                `Link to “${official.name}” removed`,
               )
             }
           >
-            <Button.Text>Keep direct connection</Button.Text>
+            <Button.Text>Remove link</Button.Text>
           </Button>
         </div>
-      </div>
+      )}
+      {autoLinks || automatic ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Text muted small className="max-w-xl">
+            {automatic
+              ? "A server that proxies this URL is linked by default. If it is not ready yet, keep the direct connection; you can link it again at any time."
+              : "You chose this server. Remove your choice to go back to the default: a server that proxies this URL is linked automatically."}
+          </Text>
+          <div className="flex flex-wrap items-center gap-2">
+            {automatic ? null : (
+              <Button
+                variant="tertiary"
+                size="sm"
+                disabled={isPending}
+                onClick={() =>
+                  void change(
+                    { serverUrl: server.canonicalServerUrl },
+                    `Choice of “${official.name}” removed`,
+                  )
+                }
+              >
+                <Button.Text>Remove choice</Button.Text>
+              </Button>
+            )}
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={isPending}
+              onClick={() =>
+                void change(
+                  { serverUrl: server.canonicalServerUrl, keepShadow: true },
+                  "Direct connection kept. Agents are no longer sent elsewhere.",
+                )
+              }
+            >
+              <Button.Text>Keep direct connection</Button.Text>
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
-      <Advanced>
-        <LinkAnotherServer
-          server={server}
-          excludeMcpServerId={official.mcpServerId}
-        />
-      </Advanced>
+      {autoLinks || automatic ? (
+        <Advanced>
+          <LinkAnotherServer
+            server={server}
+            excludeMcpServerId={official.mcpServerId}
+          />
+        </Advanced>
+      ) : null}
     </section>
   );
 }
