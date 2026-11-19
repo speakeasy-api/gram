@@ -2007,6 +2007,7 @@ SELECT
     c.client_id                            AS external_client_id,
     c.client_secret_encrypted              AS client_secret_encrypted,
     c.client_secret_org_encrypted          AS client_secret_org_encrypted,
+    c.client_secret_generation             AS client_secret_generation,
     c.client_secret_expires_at             AS client_secret_expires_at,
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.token_endpoint_auth_audience_format  AS token_endpoint_auth_audience_format,
@@ -4939,10 +4940,13 @@ WHERE id = @id
   AND deleted IS FALSE;
 
 -- name: SetOrganizationRemoteSessionClientCredentialsFixture :exec
--- Test fixture: change an organization-level login client during a browser flow.
+-- Test fixture: change an organization-level login client during a browser
+-- flow. A planted secret counts a new revision, as every secret writer does.
 UPDATE remote_session_clients
 SET client_id = coalesce(sqlc.narg('client_id')::text, client_id),
-    client_secret_encrypted = coalesce(sqlc.narg('client_secret_encrypted')::text, client_secret_encrypted)
+    client_secret_encrypted = coalesce(sqlc.narg('client_secret_encrypted')::text, client_secret_encrypted),
+    client_secret_org_encrypted = CASE WHEN sqlc.narg('client_secret_encrypted')::text IS NULL THEN client_secret_org_encrypted ELSE NULL END,
+    client_secret_generation = client_secret_generation + CASE WHEN sqlc.narg('client_secret_encrypted')::text IS NULL THEN 0 ELSE 1 END
 WHERE id = @id AND organization_id = @organization_id AND project_id IS NULL;
 
 -- name: SetOrganizationRemoteSessionClientCallbackBaseURLFixture :exec
