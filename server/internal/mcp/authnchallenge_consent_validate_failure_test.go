@@ -17,6 +17,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -65,10 +67,12 @@ func checkRows(rec *mcpconnectionattemptstest.Recording) []mcpconnectionattempts
 func TestServeConsentAction_ValidateTokenLookupFaultRecordsAndSaysNoRetry(t *testing.T) {
 	t.Parallel()
 
-	ctx, fx := seedStandaloneValidationFixture(t, "check-fault")
+	ctx, fx := seedMetaValidationFixture(t, "check-fault")
 	rec := recordValidationAttempts(t, ctx, fx)
 	projectID, orgID := consentTestTenant(t, ctx)
-	// A second client on the card's own issuer breaks the one-client-per-issuer invariant token lookup asserts.
+	// The member is associated with the card's client and a second client of
+	// the same issuer, which breaks the one-client-per-issuer invariant its
+	// credential lookup asserts.
 	q := remotesessions_repo.New(fx.ti.conn)
 	twin, err := q.CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
 		ProjectID:             conv.ToNullUUID(projectID),
@@ -83,6 +87,12 @@ func TestServeConsentAction_ValidateTokenLookupFaultRecordsAndSaysNoRetry(t *tes
 		RemoteSessionClientID: twin.ID,
 		UserSessionIssuerID:   fx.endpoint.UserSessionIssuerID,
 	}))
+	member, err := mcpserversrepo.New(fx.ti.conn).GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{Slug: conv.ToPGText(fx.server), ProjectID: projectID})
+	require.NoError(t, err)
+	for _, clientID := range []uuid.UUID{fx.clientID, twin.ID} {
+		_, err := upstreamclientsrepo.New(fx.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: orgID, ProjectID: projectID, McpServerID: member.ID, RemoteSessionClientID: clientID})
+		require.NoError(t, err)
+	}
 
 	status, page := postValidatePage(t, fx, fx.clientID)
 	require.Equal(t, http.StatusInternalServerError, status)

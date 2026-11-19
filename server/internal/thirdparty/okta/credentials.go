@@ -34,8 +34,11 @@ type CredentialProvider interface {
 // is accepted because the caller must not take a second pool connection while
 // it holds the connection lock.
 type CredentialLease interface {
-	// EncryptedSecret is the client secret ciphertext current under the lease.
-	EncryptedSecret() string
+	// ClientSecret opens the client secret current under the lease, reading
+	// through the lease's own transaction. A secret that does not decrypt is
+	// ErrClientSecretUndecryptable; a key that cannot be used right now is
+	// ErrClientSecretKeyUnavailable.
+	ClientSecret(ctx context.Context) (string, error)
 
 	// RequireDPoP reports whether the connection is pinned to DPoP-bound tokens.
 	RequireDPoP() bool

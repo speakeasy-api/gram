@@ -51,3 +51,8 @@ func UpdateRouteDataExportsPath() string {
 func DeleteRouteDataExportsPath() string {
 	return "/rpc/dataExports.deleteRoute"
 }
+
+// TestRouteDataExportsPath returns the URL path to the dataExports service testRoute HTTP endpoint.
+func TestRouteDataExportsPath() string {
+	return "/rpc/dataExports.testRoute"
+}

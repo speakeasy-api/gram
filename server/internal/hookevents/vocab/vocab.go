@@ -8,6 +8,10 @@ package vocab
 // report that an earlier event could not reach the control plane.
 const EventTypeClientDeliveryFailed = "client.delivery_failed"
 
+// EventTypeClientInstallFailed is the event type a bootstrap script uses to
+// report that it could not install the hooks binary.
+const EventTypeClientInstallFailed = "client.install_failed"
+
 // activityEventTypes are the events a hook sender emits about agent activity.
 var activityEventTypes = []string{
 	"session.started",
@@ -26,8 +30,8 @@ var activityEventTypes = []string{
 }
 
 // EventTypes is the vocabulary of HookIngestEvent.type: every activity event
-// plus the delivery failure report.
-var EventTypes = append(append([]string{}, activityEventTypes...), EventTypeClientDeliveryFailed)
+// plus the delivery and install failure reports.
+var EventTypes = append(append([]string{}, activityEventTypes...), EventTypeClientDeliveryFailed, EventTypeClientInstallFailed)
 
 // FailedEventTypes is the vocabulary of HookDeliveryFailureData.failed_event_type.
 // It excludes the report type itself so a report can never describe another
@@ -40,6 +44,9 @@ var DeliveryPhases = []string{"live", "drain"}
 
 // DeliveryCauses is the vocabulary of HookDeliveryFailureData.cause.
 var DeliveryCauses = []string{"dns", "tls", "timeout", "canceled", "connection", "unreadable-response", "unknown", "http"}
+
+// InstallFailureCauses is the vocabulary of HookInstallFailureData.cause.
+var InstallFailureCauses = []string{"download", "checksum_mismatch"}
 
 // Set indexes a vocabulary for membership checks.
 func Set(values []string) map[string]struct{} {

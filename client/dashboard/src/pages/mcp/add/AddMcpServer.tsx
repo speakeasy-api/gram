@@ -1,3 +1,4 @@
+import { useFunctionsAvailable } from "@/hooks/useFunctionsAvailability";
 import { InputDialog } from "@/components/input-dialog";
 import { SettingsPage, SettingsSection } from "@/components/page-templates";
 import { Card } from "@/components/ui/Card";
@@ -168,6 +169,7 @@ export default function AddMcpServer(): JSX.Element {
     routes.mcp.gateway.overview.goTo(gateway.id);
   };
 
+  const functionsAvailable = useFunctionsAvailable();
   const oktaSync = useFeatureFlag(FEATURE_FLAGS.oktaMcpImport);
   // The Sync from Okta page needs org:admin, so nobody else is offered it.
   const { hasScope } = useRBAC();
@@ -235,15 +237,22 @@ export default function AddMcpServer(): JSX.Element {
       href: routes.mcp.add.fromSource.href(),
       icon: <Boxes className="text-foreground size-10" strokeWidth={1.25} />,
       title: "From an existing source",
-      description:
-        "Build a server from an OpenAPI document or function this project already has.",
+      description: functionsAvailable
+        ? "Build a server from an OpenAPI document or function this project already has."
+        : "Build a server from an OpenAPI document this project already has.",
     },
-    {
-      href: routes.mcp.add.function.href(),
-      icon: <Code className="text-foreground size-10" strokeWidth={1.25} />,
-      title: "Write custom code",
-      description: "Create tools with TypeScript functions.",
-    },
+    ...(functionsAvailable
+      ? [
+          {
+            href: routes.mcp.add.function.href(),
+            icon: (
+              <Code className="text-foreground size-10" strokeWidth={1.25} />
+            ),
+            title: "Write custom code",
+            description: "Create tools with TypeScript functions.",
+          },
+        ]
+      : []),
   ];
 
   return (

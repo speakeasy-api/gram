@@ -50,6 +50,9 @@ import (
 // outcome, and the surface-resolved protocol version. Assembled once in
 // serveResolvedMetaMCPEndpoint and threaded through dispatch.
 type metaGateContext struct {
+	// caller is the identity and credential boundary admitted for this request.
+	caller gatewayCaller
+
 	// fromRequest is what the request says about its client, for connection rows.
 	fromRequest mcpconnectionattempts.Option
 	projectID   uuid.UUID
@@ -478,7 +481,7 @@ func (s *Service) handleMetaInitialize(
 	// Record who handshaked so every member dispatch in this session can
 	// attribute its tool calls to a client. Scoped to the gateway, not to a
 	// toolset: members each carry their own slug.
-	storeSessionClientInfo(ctx, logger, s.sessionClientInfo, &mcpInputs{ //nolint:exhaustruct // only the record's identity fields matter here
+	storeSessionClientInfo(ctx, logger, s.sessionClientInfo, &mcpInputs{ //nolint:exhaustruct_v5 // only the record's identity fields matter here
 		projectID:       gate.projectID,
 		sessionID:       gate.sessionID,
 		clientInfoScope: metaClientInfoScope(gate.metaServerID),
@@ -769,14 +772,30 @@ func (s *Service) handleMetaListServersCall(
 		})
 	}
 
-	result := metamcp.ListServersResult{Servers: servers, Hidden: nil, ConnectURL: "", Note: ""}
-	for _, member := range catalogSelectedMembers(gate, gate.hiddenMembers) {
+	result := metamcp.ListServersResult{Servers: servers, Hidden: nil, Unapproved: nil, ConnectURL: "", Note: ""}
+	// A tool selection narrows the approved hidden members like the served
+	// ones; a hidden member outside the approval has no selection to narrow.
+	// A hidden member outside the approval is listed under both: showing it
+	// again does not approve it.
+	hidden, unapproved := gate.hiddenMembers, gate.unapprovedMembers
+	if gate.catalog != nil {
+		approvedHidden, unapprovedHidden := gate.catalog.approvedMembers(hidden)
+		hidden = slices.Concat(catalogSelectedMembers(gate, approvedHidden), unapprovedHidden)
+		unapproved = slices.Concat(unapproved, unapprovedHidden)
+	}
+	for _, member := range hidden {
 		result.Hidden = append(result.Hidden, metamcp.HiddenServer{Slug: member.slug, Name: member.name})
 	}
-	notes := make([]string, 0, 2)
+	for _, member := range unapproved {
+		result.Unapproved = append(result.Unapproved, metamcp.UnapprovedServer{Slug: member.slug, Name: member.name})
+	}
+	notes := make([]string, 0, 3)
 	if len(result.Hidden) > 0 && gate.connectURL != "" {
 		result.ConnectURL = gate.connectURL
 		notes = append(notes, metamcp.HiddenNote)
+	}
+	if len(result.Unapproved) > 0 {
+		notes = append(notes, metamcp.UnapprovedNote)
 	}
 	if slices.ContainsFunc(servers, func(server metamcp.ListedServer) bool { return server.Status == metamcp.StatusUnknown }) {
 		notes = append(notes, metamcp.UnknownNote)
@@ -814,16 +833,28 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 	agentKeyChoicesRead := false
 	var gatePolicy *toolfilter.SessionPolicy
 	var gateAuthentication *issuerGateAuthentication
+	var gateCaller gatewayCaller
 	switch {
 	case !metaServer.UserSessionIssuerID.Valid:
+		// Ungated stored gateways still pass through the shared network
+		// boundary. Agent gateways already applied the same organization rule
+		// after authenticating the path-bound key.
+		if membership.agentID == uuid.Nil {
+			if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
+				return ctx, nil, err
+			}
+		}
 	case membership.organization:
 		// Members span projects, so credentials resolve per member project
 		// when a member first needs them rather than once for the gateway.
-		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, r, request.bearer, request.baseURL, resolvedEndpoint)
+		newCtx, admission, err := s.admitGatewayCaller(ctx, w, r, logger, request.bearer, request.baseURL, resolvedEndpoint)
 		if err != nil {
 			return ctx, nil, fmt.Errorf("authenticate organization gateway: %w", err)
 		}
 		ctx = newCtx
+		authentication := admission.authentication
+		toolSelection := admission.toolSelection
+		gateCaller = admission.caller
 		authentication.skippedUpstreams = skipped
 		gateProjectTokens = s.newOrganizationGatewayTokens(r, authentication.endpoint, authentication.subject, skipped)
 		gateMemberChoices, err = s.newMemberChoices(ctx, authentication)
@@ -840,11 +871,14 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 			}
 			resolvedEndpoint = built
 		}
-		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, r, request.bearer, request.baseURL, resolvedEndpoint)
+		newCtx, admission, err := s.admitGatewayCaller(ctx, w, r, logger, request.bearer, request.baseURL, resolvedEndpoint)
 		if err != nil {
-			return ctx, nil, fmt.Errorf("apply issuer gate: %w", err)
+			return ctx, nil, fmt.Errorf("apply gateway admission: %w", err)
 		}
 		ctx = newCtx
+		authentication := admission.authentication
+		toolSelection := admission.toolSelection
+		gateCaller = admission.caller
 		authentication.skippedUpstreams = skipped
 		gateMemberChoices, err = s.newMemberChoices(ctx, authentication)
 		if err != nil {
@@ -894,6 +928,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		}
 	}
 	gate := &metaGateContext{
+		caller:           gateCaller,
 		fromRequest:      request.fromRequest,
 		skippedUpstreams: skipped,
 		request:          r,

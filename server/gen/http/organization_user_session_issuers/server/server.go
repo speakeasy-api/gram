@@ -19,23 +19,24 @@ import (
 // Server lists the organizationUserSessionIssuers service endpoint HTTP
 // handlers.
 type Server struct {
-	Mounts                      []*MountPoint
-	CreateIssuer                http.Handler
-	ListIssuers                 http.Handler
-	GetIssuer                   http.Handler
-	UpdateIssuer                http.Handler
-	ListMcpServers              http.Handler
-	GetAuthenticationHostImpact http.Handler
-	SetAuthenticationHost       http.Handler
-	GetIssuerDeletePreflight    http.Handler
-	DeleteIssuer                http.Handler
-	MoveIssuer                  http.Handler
-	GetIssuerMigratePreflight   http.Handler
-	MigrateIssuer               http.Handler
-	CreateCimdClient            http.Handler
-	ListCimdClients             http.Handler
-	GetCimdClient               http.Handler
-	DeleteCimdClient            http.Handler
+	Mounts                          []*MountPoint
+	CreateIssuer                    http.Handler
+	ListIssuers                     http.Handler
+	GetIssuer                       http.Handler
+	UpdateIssuer                    http.Handler
+	ListMcpServers                  http.Handler
+	ListRemoteSessionClientBindings http.Handler
+	GetAuthenticationHostImpact     http.Handler
+	SetAuthenticationHost           http.Handler
+	GetIssuerDeletePreflight        http.Handler
+	DeleteIssuer                    http.Handler
+	MoveIssuer                      http.Handler
+	GetIssuerMigratePreflight       http.Handler
+	MigrateIssuer                   http.Handler
+	CreateCimdClient                http.Handler
+	ListCimdClients                 http.Handler
+	GetCimdClient                   http.Handler
+	DeleteCimdClient                http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -70,6 +71,7 @@ func New(
 			{"GetIssuer", "GET", "/rpc/organizationUserSessionIssuers.get"},
 			{"UpdateIssuer", "POST", "/rpc/organizationUserSessionIssuers.update"},
 			{"ListMcpServers", "GET", "/rpc/organizationUserSessionIssuers.listMcpServers"},
+			{"ListRemoteSessionClientBindings", "GET", "/rpc/organizationUserSessionIssuers.listRemoteSessionClientBindings"},
 			{"GetAuthenticationHostImpact", "GET", "/rpc/organizationUserSessionIssuers.getAuthenticationHostImpact"},
 			{"SetAuthenticationHost", "POST", "/rpc/organizationUserSessionIssuers.setAuthenticationHost"},
 			{"GetIssuerDeletePreflight", "GET", "/rpc/organizationUserSessionIssuers.getDeletePreflight"},
@@ -82,22 +84,23 @@ func New(
 			{"GetCimdClient", "GET", "/rpc/organizationUserSessionIssuers.getCimdClient"},
 			{"DeleteCimdClient", "DELETE", "/rpc/organizationUserSessionIssuers.deleteCimdClient"},
 		},
-		CreateIssuer:                NewCreateIssuerHandler(e.CreateIssuer, mux, decoder, encoder, errhandler, formatter),
-		ListIssuers:                 NewListIssuersHandler(e.ListIssuers, mux, decoder, encoder, errhandler, formatter),
-		GetIssuer:                   NewGetIssuerHandler(e.GetIssuer, mux, decoder, encoder, errhandler, formatter),
-		UpdateIssuer:                NewUpdateIssuerHandler(e.UpdateIssuer, mux, decoder, encoder, errhandler, formatter),
-		ListMcpServers:              NewListMcpServersHandler(e.ListMcpServers, mux, decoder, encoder, errhandler, formatter),
-		GetAuthenticationHostImpact: NewGetAuthenticationHostImpactHandler(e.GetAuthenticationHostImpact, mux, decoder, encoder, errhandler, formatter),
-		SetAuthenticationHost:       NewSetAuthenticationHostHandler(e.SetAuthenticationHost, mux, decoder, encoder, errhandler, formatter),
-		GetIssuerDeletePreflight:    NewGetIssuerDeletePreflightHandler(e.GetIssuerDeletePreflight, mux, decoder, encoder, errhandler, formatter),
-		DeleteIssuer:                NewDeleteIssuerHandler(e.DeleteIssuer, mux, decoder, encoder, errhandler, formatter),
-		MoveIssuer:                  NewMoveIssuerHandler(e.MoveIssuer, mux, decoder, encoder, errhandler, formatter),
-		GetIssuerMigratePreflight:   NewGetIssuerMigratePreflightHandler(e.GetIssuerMigratePreflight, mux, decoder, encoder, errhandler, formatter),
-		MigrateIssuer:               NewMigrateIssuerHandler(e.MigrateIssuer, mux, decoder, encoder, errhandler, formatter),
-		CreateCimdClient:            NewCreateCimdClientHandler(e.CreateCimdClient, mux, decoder, encoder, errhandler, formatter),
-		ListCimdClients:             NewListCimdClientsHandler(e.ListCimdClients, mux, decoder, encoder, errhandler, formatter),
-		GetCimdClient:               NewGetCimdClientHandler(e.GetCimdClient, mux, decoder, encoder, errhandler, formatter),
-		DeleteCimdClient:            NewDeleteCimdClientHandler(e.DeleteCimdClient, mux, decoder, encoder, errhandler, formatter),
+		CreateIssuer:                    NewCreateIssuerHandler(e.CreateIssuer, mux, decoder, encoder, errhandler, formatter),
+		ListIssuers:                     NewListIssuersHandler(e.ListIssuers, mux, decoder, encoder, errhandler, formatter),
+		GetIssuer:                       NewGetIssuerHandler(e.GetIssuer, mux, decoder, encoder, errhandler, formatter),
+		UpdateIssuer:                    NewUpdateIssuerHandler(e.UpdateIssuer, mux, decoder, encoder, errhandler, formatter),
+		ListMcpServers:                  NewListMcpServersHandler(e.ListMcpServers, mux, decoder, encoder, errhandler, formatter),
+		ListRemoteSessionClientBindings: NewListRemoteSessionClientBindingsHandler(e.ListRemoteSessionClientBindings, mux, decoder, encoder, errhandler, formatter),
+		GetAuthenticationHostImpact:     NewGetAuthenticationHostImpactHandler(e.GetAuthenticationHostImpact, mux, decoder, encoder, errhandler, formatter),
+		SetAuthenticationHost:           NewSetAuthenticationHostHandler(e.SetAuthenticationHost, mux, decoder, encoder, errhandler, formatter),
+		GetIssuerDeletePreflight:        NewGetIssuerDeletePreflightHandler(e.GetIssuerDeletePreflight, mux, decoder, encoder, errhandler, formatter),
+		DeleteIssuer:                    NewDeleteIssuerHandler(e.DeleteIssuer, mux, decoder, encoder, errhandler, formatter),
+		MoveIssuer:                      NewMoveIssuerHandler(e.MoveIssuer, mux, decoder, encoder, errhandler, formatter),
+		GetIssuerMigratePreflight:       NewGetIssuerMigratePreflightHandler(e.GetIssuerMigratePreflight, mux, decoder, encoder, errhandler, formatter),
+		MigrateIssuer:                   NewMigrateIssuerHandler(e.MigrateIssuer, mux, decoder, encoder, errhandler, formatter),
+		CreateCimdClient:                NewCreateCimdClientHandler(e.CreateCimdClient, mux, decoder, encoder, errhandler, formatter),
+		ListCimdClients:                 NewListCimdClientsHandler(e.ListCimdClients, mux, decoder, encoder, errhandler, formatter),
+		GetCimdClient:                   NewGetCimdClientHandler(e.GetCimdClient, mux, decoder, encoder, errhandler, formatter),
+		DeleteCimdClient:                NewDeleteCimdClientHandler(e.DeleteCimdClient, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -111,6 +114,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetIssuer = m(s.GetIssuer)
 	s.UpdateIssuer = m(s.UpdateIssuer)
 	s.ListMcpServers = m(s.ListMcpServers)
+	s.ListRemoteSessionClientBindings = m(s.ListRemoteSessionClientBindings)
 	s.GetAuthenticationHostImpact = m(s.GetAuthenticationHostImpact)
 	s.SetAuthenticationHost = m(s.SetAuthenticationHost)
 	s.GetIssuerDeletePreflight = m(s.GetIssuerDeletePreflight)
@@ -135,6 +139,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetIssuerHandler(mux, h.GetIssuer)
 	MountUpdateIssuerHandler(mux, h.UpdateIssuer)
 	MountListMcpServersHandler(mux, h.ListMcpServers)
+	MountListRemoteSessionClientBindingsHandler(mux, h.ListRemoteSessionClientBindings)
 	MountGetAuthenticationHostImpactHandler(mux, h.GetAuthenticationHostImpact)
 	MountSetAuthenticationHostHandler(mux, h.SetAuthenticationHost)
 	MountGetIssuerDeletePreflightHandler(mux, h.GetIssuerDeletePreflight)
@@ -400,6 +405,61 @@ func NewListMcpServersHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listMcpServers")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationUserSessionIssuers")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListRemoteSessionClientBindingsHandler configures the mux to serve the
+// "organizationUserSessionIssuers" service "listRemoteSessionClientBindings"
+// endpoint.
+func MountListRemoteSessionClientBindingsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/organizationUserSessionIssuers.listRemoteSessionClientBindings", f)
+}
+
+// NewListRemoteSessionClientBindingsHandler creates a HTTP handler which loads
+// the HTTP request and calls the "organizationUserSessionIssuers" service
+// "listRemoteSessionClientBindings" endpoint.
+func NewListRemoteSessionClientBindingsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListRemoteSessionClientBindingsRequest(mux, decoder)
+		encodeResponse = EncodeListRemoteSessionClientBindingsResponse(encoder)
+		encodeError    = EncodeListRemoteSessionClientBindingsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listRemoteSessionClientBindings")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationUserSessionIssuers")
 		payload, err := decodeRequest(r)
 		if err != nil {

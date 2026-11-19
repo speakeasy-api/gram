@@ -84,7 +84,7 @@ func organizationSearchPayload(input FindOrganizationsInput) (*gen.ListOrganizat
 	if limit == 0 {
 		limit = defaultOrganizationSearchLimit
 	}
-	//nolint:exhaustruct // Only the optional filters supplied by this MCP request are populated.
+	//nolint:exhaustruct_v5 // Only the optional filters supplied by this MCP request are populated.
 	payload := &gen.ListOrganizationsPayload{Limit: &limit, AccountTypes: input.AccountTypes, TrialStates: input.TrialStates, MinMembers: minMembers, MaxMembers: maxMembers}
 	if query != "" {
 		payload.Q = &query

@@ -73,6 +73,7 @@ const OPERATOR_POLICY_SNIPPET = `"tagOwners": {
 
 function tailscalePolicySnippet(
   hostname: string,
+  gatewayTag: string,
   accessGroup?: string,
 ): string {
   const groups = accessGroup
@@ -83,11 +84,11 @@ function tailscalePolicySnippet(
     : "";
   const source = accessGroup ?? "autogroup:member";
   return `${groups}"tagOwners": {
-  "tag:speakeasy": ["autogroup:admin"]
+  "${gatewayTag}": ["autogroup:admin"]
 },
 "autoApprovers": {
   "services": {
-    "svc:${hostname}": ["tag:speakeasy"]
+    "svc:${hostname}": ["${gatewayTag}"]
   }
 },
 "grants": [
@@ -103,12 +104,16 @@ export function PrivateNetworkSetupSheet({
   open,
   onOpenChange,
   ingress,
+  gatewayTag,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   // The organization's existing connection. With one, the sheet shows the
   // steps for how it is hosted instead of the form that creates one.
   ingress?: NetworkIngress;
+  // The Tailscale tag this environment's gateway carries, which the policy
+  // and OAuth client must use.
+  gatewayTag: string;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const [hostname, setHostname] = useState(DEFAULT_HOSTNAME);
@@ -261,13 +266,15 @@ export function PrivateNetworkSetupSheet({
                     Tailscale Services require.
                   </li>
                   <li>
-                    The policy owns a <code>tag:speakeasy</code> tag,
+                    The policy owns a <code>{gatewayTag}</code> tag,
                     auto-approves the <code>svc:{serviceLabel}</code> service
                     for it, and grants your users access to that service.
                   </li>
                 </ul>
                 <pre className="overflow-x-auto border bg-muted/30 p-3 text-xs">
-                  <code>{tailscalePolicySnippet(serviceLabel)}</code>
+                  <code>
+                    {tailscalePolicySnippet(serviceLabel, gatewayTag)}
+                  </code>
                 </pre>
                 <Text small muted>
                   Keep the tag dedicated to Speakeasy. This grant lets every
@@ -295,7 +302,11 @@ export function PrivateNetworkSetupSheet({
                     </Text>
                     <pre className="overflow-x-auto border bg-muted/30 p-3 text-xs">
                       <code>
-                        {tailscalePolicySnippet(serviceLabel, ACCESS_GROUP)}
+                        {tailscalePolicySnippet(
+                          serviceLabel,
+                          gatewayTag,
+                          ACCESS_GROUP,
+                        )}
                       </code>
                     </pre>
                   </CollapsibleContent>
@@ -310,7 +321,7 @@ export function PrivateNetworkSetupSheet({
                   In the Tailscale admin console, open{" "}
                   <TailscaleTrustCredentialsLink /> and create an OAuth client.
                   Grant Auth Keys, Devices Core, and Services write scopes, then
-                  apply the <code>tag:speakeasy</code> tag. Speakeasy uses the
+                  apply the <code>{gatewayTag}</code> tag. Speakeasy uses the
                   OAuth client only to register its gateway nodes and define the
                   service. The client never leaves Speakeasy&apos;s control
                   plane.

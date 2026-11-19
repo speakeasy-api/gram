@@ -25,6 +25,7 @@ var registry = []Product{
 	{
 		ID:          "claude-code",
 		VendorKey:   "anthropic",
+		Family:      "claude",
 		DisplayName: "Claude Code",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -34,7 +35,14 @@ var registry = []Product{
 			ProcessNames: []string{"claude"},
 		},
 		VersionPlistKey: "",
-		ClientInfoNames: []string{"claude-code", "Claude Code", "claude-ai"},
+		ClientInfoNames: []string{"claude-code", "Claude Code"},
+		Aliases: []Alias{
+			{Name: "claude-code", Client: ClientUnknown},
+			{Name: "claude-code-cli", Client: ClientCLI},
+			{Name: "claude-code-web", Client: ClientCloud},
+			{Name: "claude-code-desktop", Client: ClientDesktop},
+			{Name: "claude-tag", Client: ClientSlack},
+		},
 		Documents: []Document{{
 			URL:         "https://claude.ai/oauth/claude-code-client-metadata",
 			Pattern:     false,
@@ -45,17 +53,45 @@ var registry = []Product{
 	{
 		ID:              "claude",
 		VendorKey:       "anthropic",
+		Family:          "claude",
 		DisplayName:     "Claude",
 		Category:        "",
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
+		Aliases: []Alias{
+			{Name: "claude-chat", Client: ClientUnknown},
+			{Name: "claude-chat-web", Client: ClientWeb},
+			{Name: "claude-web", Client: ClientWeb},
+			{Name: "claude-desktop", Client: ClientDesktop},
+			{Name: "claude-chat-desktop", Client: ClientDesktop},
+			{Name: "Anthropic/ClaudeAI", Client: ClientUnknown},
+			{Name: "claude-ai", Client: ClientDesktop},
+		},
 		Documents: []Document{{
 			URL:         "https://claude.ai/oauth/mcp-oauth-client-metadata",
 			Pattern:     false,
 			DisplayName: "Anthropic (Claude)",
 			Enabled:     true,
 		}},
+	},
+	// Cowork runs in the Claude desktop app but is its own product, known only
+	// from hooks.
+	{
+		ID:              "cowork",
+		VendorKey:       "anthropic",
+		Family:          "claude",
+		DisplayName:     "Cowork",
+		Category:        "",
+		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Aliases: []Alias{
+			{Name: "cowork", Client: ClientDesktop},
+			{Name: "claude-cowork", Client: ClientDesktop},
+			{Name: "cowork-desktop", Client: ClientDesktop},
+		},
+		Documents: nil,
 	},
 
 	// Verified 2026-07. Insiders ships a distinct document; both are literal
@@ -64,11 +100,13 @@ var registry = []Product{
 	{
 		ID:              "vscode",
 		VendorKey:       "microsoft",
+		Family:          "",
 		DisplayName:     "Visual Studio Code",
 		Category:        "",
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
+		Aliases:         nil,
 		Documents: []Document{
 			{
 				URL:         "https://vscode.dev/oauth/client-metadata.json",
@@ -93,6 +131,7 @@ var registry = []Product{
 	{
 		ID:          "zed",
 		VendorKey:   "zed",
+		Family:      "",
 		DisplayName: "Zed",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -103,6 +142,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
+		Aliases:         nil,
 		Documents: []Document{{
 			URL:         "https://zed.dev/oauth/client-metadata.json",
 			Pattern:     false,
@@ -123,6 +163,7 @@ var registry = []Product{
 	{
 		ID:          "goose",
 		VendorKey:   "block",
+		Family:      "",
 		DisplayName: "Goose",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -133,6 +174,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
+		Aliases:         nil,
 		Documents: []Document{{
 			URL:         "https://goose-docs.ai/oauth/client-metadata.json",
 			Pattern:     false,
@@ -164,6 +206,7 @@ var registry = []Product{
 	{
 		ID:          "chatgpt",
 		VendorKey:   "openai",
+		Family:      "",
 		DisplayName: "ChatGPT",
 		Category:    CategoryAssistant,
 		// Verified 2026-09 against the shipping app (ChatGPT 26.903.71938):
@@ -188,6 +231,11 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"ChatGPT", "chatgpt"},
+		Aliases: []Alias{
+			{Name: "chatgpt", Client: ClientUnknown},
+			{Name: "chatgpt-work", Client: ClientUnknown},
+			{Name: "openai-mcp", Client: ClientUnknown},
+		},
 		Documents: []Document{
 			{
 				// One document per ChatGPT connector, {id} derived from the
@@ -228,6 +276,7 @@ var registry = []Product{
 	{
 		ID:          "chatgpt-classic",
 		VendorKey:   "openai",
+		Family:      "",
 		DisplayName: "ChatGPT Classic",
 		Category:    CategoryAssistant,
 		// Verified 2026-09 against the Homebrew cask (chatgpt-classic
@@ -259,11 +308,13 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 	{
 		ID:          "codex",
 		VendorKey:   "openai",
+		Family:      "",
 		DisplayName: "Codex",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -274,6 +325,18 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"codex", "codex-cli", "Codex CLI"},
+		Aliases: []Alias{
+			{Name: "codex", Client: ClientUnknown},
+			{Name: "codex-cli", Client: ClientCLI},
+			{Name: "codex-web", Client: ClientCloud},
+			{Name: "openai-mcp (Codex)", Client: ClientCloud},
+			{Name: "codex-cli-rs", Client: ClientCLI},
+			{Name: "codex-exec", Client: ClientCLI},
+			{Name: "codex-tui", Client: ClientCLI},
+			{Name: "codex-exec-server", Client: ClientUnknown},
+			{Name: "codex-app-server", Client: ClientUnknown},
+			{Name: "codex-mcp-client", Client: ClientUnknown},
+		},
 		Documents: []Document{
 			{
 				// Codex CLI >=0.148.0 (first stable release 2026-08-18,
@@ -317,11 +380,13 @@ var registry = []Product{
 	{
 		ID:              "notion",
 		VendorKey:       "notion",
+		Family:          "",
 		DisplayName:     "Notion",
 		Category:        "",
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
+		Aliases:         nil,
 		Documents: []Document{
 			{
 				URL:         "https://www.notion.so/oauth/mcp-client-metadata.json",
@@ -342,11 +407,13 @@ var registry = []Product{
 	{
 		ID:              "mcpjam",
 		VendorKey:       "mcpjam",
+		Family:          "",
 		DisplayName:     "MCPJam Inspector",
 		Category:        "",
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
+		Aliases:         nil,
 		Documents: []Document{{
 			URL:         "https://www.mcpjam.com/.well-known/oauth/client-metadata.json",
 			Pattern:     false,
@@ -359,11 +426,13 @@ var registry = []Product{
 	{
 		ID:              "factory-droid",
 		VendorKey:       "factory",
+		Family:          "",
 		DisplayName:     "Factory Droid",
 		Category:        "",
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
+		Aliases:         nil,
 		Documents: []Document{{
 			URL:         "https://api.factory.ai/mcp/oauth-client",
 			Pattern:     false,
@@ -376,11 +445,13 @@ var registry = []Product{
 	{
 		ID:              "toolhive",
 		VendorKey:       "stacklok",
+		Family:          "",
 		DisplayName:     "ToolHive",
 		Category:        "",
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
+		Aliases:         nil,
 		Documents: []Document{{
 			URL:         "https://toolhive.dev/oauth/client-metadata.json",
 			Pattern:     false,
@@ -401,6 +472,7 @@ var registry = []Product{
 	{
 		ID:          "hermes-agent",
 		VendorKey:   "nousresearch",
+		Family:      "",
 		DisplayName: "Hermes Agent",
 		Category:    CategoryAssistant,
 		Signatures: Signatures{
@@ -411,6 +483,9 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
+		Aliases: []Alias{
+			{Name: "hermes-agent", Client: ClientUnknown},
+		},
 		Documents: []Document{{
 			URL:         "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json",
 			Pattern:     false,
@@ -425,11 +500,13 @@ var registry = []Product{
 	{
 		ID:              "skydive",
 		VendorKey:       "skydive",
+		Family:          "",
 		DisplayName:     "Skydive",
 		Category:        "",
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
+		Aliases:         nil,
 		Documents: []Document{{
 			URL:         "https://www.skydive.com/api/v1/external-oauth/client-metadata",
 			Pattern:     false,
@@ -445,6 +522,7 @@ var registry = []Product{
 	{
 		ID:          "opencode",
 		VendorKey:   "opencode",
+		Family:      "",
 		DisplayName: "opencode",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -455,6 +533,9 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"opencode"},
+		Aliases: []Alias{
+			{Name: "opencode", Client: ClientCLI},
+		},
 		Documents: []Document{{
 			URL:         "https://opencode.ai/oauth/opencode/client.json",
 			Pattern:     false,
@@ -469,11 +550,15 @@ var registry = []Product{
 	{
 		ID:              "github-copilot-cli",
 		VendorKey:       "github",
+		Family:          "",
 		DisplayName:     "GitHub Copilot CLI",
 		Category:        "",
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
+		Aliases: []Alias{
+			{Name: "copilot-cli", Client: ClientCLI},
+		},
 		Documents: []Document{{
 			URL:         "https://github.com/copilot/cli/client-metadata.json",
 			Pattern:     false,
@@ -496,6 +581,7 @@ var registry = []Product{
 	{
 		ID:          "conductor",
 		VendorKey:   "conductor",
+		Family:      "",
 		DisplayName: "Conductor",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -506,6 +592,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
+		Aliases:         nil,
 		Documents: []Document{{
 			URL:         "https://api.conductor.build/oauth/client-metadata.json",
 			Pattern:     false,
@@ -527,11 +614,13 @@ var registry = []Product{
 	{
 		ID:              "vercel-connect",
 		VendorKey:       "vercel",
+		Family:          "",
 		DisplayName:     "Vercel Connect",
 		Category:        "",
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
+		Aliases:         nil,
 		Documents: []Document{{
 			URL:         "https://connect.vercel.com/connectors/*",
 			Pattern:     true,
@@ -548,11 +637,13 @@ var registry = []Product{
 	{
 		ID:              "linear",
 		VendorKey:       "linear",
+		Family:          "",
 		DisplayName:     "Linear",
 		Category:        "",
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
+		Aliases:         nil,
 		Documents: []Document{{
 			URL:         "https://linear.app/.well-known/oauth-client-metadata/mcp.json",
 			Pattern:     false,
@@ -570,11 +661,13 @@ var registry = []Product{
 	{
 		ID:              "lovable",
 		VendorKey:       "lovable",
+		Family:          "",
 		DisplayName:     "Lovable",
 		Category:        "",
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
+		Aliases:         nil,
 		Documents: []Document{{
 			URL:         "https://api.lovable.dev/.well-known/oauth-client",
 			Pattern:     false,
@@ -604,6 +697,7 @@ var registry = []Product{
 	{
 		ID:          "antigravity",
 		VendorKey:   "google",
+		Family:      "",
 		DisplayName: "Google Antigravity",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -614,6 +708,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
+		Aliases:         nil,
 		Documents: []Document{{
 			URL:         "https://antigravity.google/oauth/client-metadata.json",
 			Pattern:     false,
@@ -630,6 +725,7 @@ var registry = []Product{
 	{
 		ID:          "cursor",
 		VendorKey:   "cursor",
+		Family:      "",
 		DisplayName: "Cursor",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -640,7 +736,12 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"Cursor", "cursor", "cursor-vscode"},
-		Documents:       nil,
+		Aliases: []Alias{
+			{Name: "cursor", Client: ClientIDE},
+			{Name: "cursor-vscode", Client: ClientIDE},
+			{Name: "cursor-cli", Client: ClientCLI},
+		},
+		Documents: nil,
 	},
 	{
 		// ~/.gemini itself is shared with Google Antigravity, which keeps its
@@ -650,6 +751,7 @@ var registry = []Product{
 		// which neither Antigravity 2.23.0 nor its CLI 1.3.5 references.
 		ID:          "gemini-cli",
 		VendorKey:   "google",
+		Family:      "",
 		DisplayName: "Gemini CLI",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -660,7 +762,11 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"gemini-cli", "Gemini CLI"},
-		Documents:       nil,
+		Aliases: []Alias{
+			{Name: "gemini", Client: ClientUnknown},
+			{Name: "gemini-cli", Client: ClientCLI},
+		},
+		Documents: nil,
 	},
 	{
 		// Rebranded as Devin Desktop in June 2026 and still writing to
@@ -670,6 +776,7 @@ var registry = []Product{
 		// extension are a separate product below.
 		ID:          "windsurf",
 		VendorKey:   "codeium",
+		Family:      "",
 		DisplayName: "Windsurf",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -680,11 +787,15 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"Windsurf", "windsurf"},
-		Documents:       nil,
+		Aliases: []Alias{
+			{Name: "windsurf", Client: ClientIDE},
+		},
+		Documents: nil,
 	},
 	{
 		ID:          "aider",
 		VendorKey:   "aider",
+		Family:      "",
 		DisplayName: "Aider",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -695,11 +806,13 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"aider"},
+		Aliases:         nil,
 		Documents:       nil,
 	},
 	{
 		ID:          "openclaw",
 		VendorKey:   "openclaw",
+		Family:      "",
 		DisplayName: "OpenClaw",
 		Category:    CategoryAssistant,
 		Signatures: Signatures{
@@ -710,7 +823,10 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"openclaw", "OpenClaw"},
-		Documents:       nil,
+		Aliases: []Alias{
+			{Name: "openclaw", Client: ClientUnknown},
+		},
+		Documents: nil,
 	},
 
 	// Signatures verified 2026-09-16 against pi.dev: the binary is `pi`, with
@@ -724,6 +840,7 @@ var registry = []Product{
 	{
 		ID:          "pi",
 		VendorKey:   "pi",
+		Family:      "",
 		DisplayName: "Pi",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -734,10 +851,37 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"pi"},
+		Aliases: []Alias{
+			{Name: "pi", Client: ClientCLI},
+		},
 		Documents: []Document{
 			{URL: "https://pi.dev/oauth/client.json", Pattern: false, DisplayName: "Pi", Enabled: true},
 			{URL: "https://pi.dev/oauth/*/client.json", Pattern: true, DisplayName: "Pi (per-server document)", Enabled: true},
 		},
+	},
+
+	// Mistral Vibe (mistralai/mistral-vibe): the binary is `vibe` (uv tool
+	// install mistral-vibe), global configuration under ~/.vibe (config.toml,
+	// hooks.toml, plugins/, skills/), overridable via VIBE_HOME. ~/.vibe is
+	// matched rather than a deeper subdir so a fresh install counts before
+	// anything has populated it. No CIMD document published, so no access
+	// decision can be recorded or enforced for it — detection only.
+	{
+		ID:          "vibe",
+		VendorKey:   "mistral",
+		Family:      "",
+		DisplayName: "Mistral Vibe",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     []string{"vibe"},
+			ConfigDirs:   []string{"~/.vibe"},
+			ProcessNames: []string{"vibe"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"vibe", "mistral-vibe", "Mistral Vibe"},
+		Aliases:         nil,
+		Documents:       nil,
 	},
 
 	// Signatures verified 2026-09-11 against charmbracelet/crush: the binary
@@ -748,6 +892,7 @@ var registry = []Product{
 	{
 		ID:          "crush",
 		VendorKey:   "charm",
+		Family:      "",
 		DisplayName: "Crush",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -758,6 +903,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"crush", "Crush"},
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -769,6 +915,7 @@ var registry = []Product{
 	{
 		ID:          "qwen-code",
 		VendorKey:   "alibaba",
+		Family:      "",
 		DisplayName: "Qwen Code",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -779,6 +926,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"qwen-code", "Qwen Code"},
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -795,6 +943,7 @@ var registry = []Product{
 	{
 		ID:          "cline",
 		VendorKey:   "cline",
+		Family:      "",
 		DisplayName: "Cline",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -805,6 +954,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"cline", "Cline"},
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -820,6 +970,7 @@ var registry = []Product{
 	{
 		ID:          "roo-code",
 		VendorKey:   "roocode",
+		Family:      "",
 		DisplayName: "Roo Code",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -830,6 +981,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"roo-code", "Roo Code"},
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -837,6 +989,7 @@ var registry = []Product{
 	{
 		ID:          "continue",
 		VendorKey:   "continue",
+		Family:      "",
 		DisplayName: "Continue",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -847,6 +1000,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"continue", "Continue"},
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -856,6 +1010,7 @@ var registry = []Product{
 	{
 		ID:          "kilo-code",
 		VendorKey:   "kilocode",
+		Family:      "",
 		DisplayName: "Kilo Code",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -866,6 +1021,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"kilo-code", "Kilo Code"},
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -873,6 +1029,7 @@ var registry = []Product{
 	{
 		ID:          "augment",
 		VendorKey:   "augment",
+		Family:      "",
 		DisplayName: "Augment Code",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -883,6 +1040,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"augment", "Augment Code"},
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -893,6 +1051,7 @@ var registry = []Product{
 	{
 		ID:          "devin",
 		VendorKey:   "cognition",
+		Family:      "",
 		DisplayName: "Devin",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -903,6 +1062,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"devin", "Devin"},
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -914,6 +1074,7 @@ var registry = []Product{
 	{
 		ID:          "amp",
 		VendorKey:   "sourcegraph",
+		Family:      "",
 		DisplayName: "Amp",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -924,13 +1085,18 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"amp", "Amp"},
-		Documents:       nil,
+		Aliases: []Alias{
+			{Name: "amp-thread-actor", Client: ClientUnknown},
+			{Name: "amp-mcp-client", Client: ClientUnknown},
+		},
+		Documents: nil,
 	},
 
 	// Binary verified 2026-09-11 from PyPI openhands-ai.
 	{
 		ID:          "openhands",
 		VendorKey:   "allhands",
+		Family:      "",
 		DisplayName: "OpenHands",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -941,6 +1107,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"openhands", "OpenHands"},
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -948,6 +1115,7 @@ var registry = []Product{
 	{
 		ID:          "trae",
 		VendorKey:   "bytedance",
+		Family:      "",
 		DisplayName: "Trae",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -958,6 +1126,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"trae", "Trae"},
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -967,6 +1136,7 @@ var registry = []Product{
 	{
 		ID:          "warp",
 		VendorKey:   "warp",
+		Family:      "",
 		DisplayName: "Warp",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -977,6 +1147,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"warp", "Warp"},
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -989,6 +1160,7 @@ var registry = []Product{
 	{
 		ID:          "cherry-studio",
 		VendorKey:   "cherrystudio",
+		Family:      "",
 		DisplayName: "Cherry Studio",
 		Category:    CategoryAssistant,
 		Signatures: Signatures{
@@ -999,11 +1171,13 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"cherry-studio", "Cherry Studio"},
+		Aliases:         nil,
 		Documents:       nil,
 	},
 	{
 		ID:          "msty",
 		VendorKey:   "msty",
+		Family:      "",
 		DisplayName: "Msty",
 		Category:    CategoryAssistant,
 		Signatures: Signatures{
@@ -1014,11 +1188,13 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"msty", "Msty"},
+		Aliases:         nil,
 		Documents:       nil,
 	},
 	{
 		ID:          "anythingllm",
 		VendorKey:   "mintplexlabs",
+		Family:      "",
 		DisplayName: "AnythingLLM",
 		Category:    CategoryAssistant,
 		Signatures: Signatures{
@@ -1029,6 +1205,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"anythingllm", "AnythingLLM"},
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -1039,6 +1216,7 @@ var registry = []Product{
 	{
 		ID:          "open-webui",
 		VendorKey:   "openwebui",
+		Family:      "",
 		DisplayName: "Open WebUI",
 		Category:    CategoryAssistant,
 		Signatures: Signatures{
@@ -1049,6 +1227,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"open-webui", "Open WebUI"},
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -1060,6 +1239,7 @@ var registry = []Product{
 	{
 		ID:          "jan",
 		VendorKey:   "menlo",
+		Family:      "",
 		DisplayName: "Jan",
 		Category:    CategoryLocalModel,
 		Signatures: Signatures{
@@ -1070,6 +1250,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -1077,6 +1258,7 @@ var registry = []Product{
 	{
 		ID:          "gpt4all",
 		VendorKey:   "nomic",
+		Family:      "",
 		DisplayName: "GPT4All",
 		Category:    CategoryLocalModel,
 		Signatures: Signatures{
@@ -1087,6 +1269,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -1095,6 +1278,7 @@ var registry = []Product{
 	{
 		ID:          "llamacpp",
 		VendorKey:   "ggml",
+		Family:      "",
 		DisplayName: "llama.cpp",
 		Category:    CategoryLocalModel,
 		Signatures: Signatures{
@@ -1105,6 +1289,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -1114,6 +1299,7 @@ var registry = []Product{
 	{
 		ID:          "vllm",
 		VendorKey:   "vllm",
+		Family:      "",
 		DisplayName: "vLLM",
 		Category:    CategoryLocalModel,
 		Signatures: Signatures{
@@ -1124,12 +1310,14 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
 	{
 		ID:          "localai",
 		VendorKey:   "localai",
+		Family:      "",
 		DisplayName: "LocalAI",
 		Category:    CategoryLocalModel,
 		Signatures: Signatures{
@@ -1140,12 +1328,14 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
 	{
 		ID:          "koboldcpp",
 		VendorKey:   "koboldcpp",
+		Family:      "",
 		DisplayName: "KoboldCpp",
 		Category:    CategoryLocalModel,
 		Signatures: Signatures{
@@ -1156,12 +1346,14 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
 	{
 		ID:          "ollama",
 		VendorKey:   "ollama",
+		Family:      "",
 		DisplayName: "Ollama",
 		Category:    CategoryLocalModel,
 		Signatures: Signatures{
@@ -1172,11 +1364,13 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 	{
 		ID:          "lmstudio",
 		VendorKey:   "lmstudio",
+		Family:      "",
 		DisplayName: "LM Studio",
 		Category:    CategoryLocalModel,
 		Signatures: Signatures{
@@ -1187,6 +1381,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 }

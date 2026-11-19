@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/openapi"
@@ -287,21 +286,6 @@ func (s *Service) evaluateSource(ctx context.Context, projectID uuid.UUID, base,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing toolsets using openapi source").LogError(ctx, s.logger)
-	}
-	var aliasCandidates []uuid.UUID
-	for _, ts := range toolsets {
-		if ts.Hosted && ts.McpSlug == "" {
-			aliasCandidates = append(aliasCandidates, ts.ID)
-		}
-	}
-	aliases, err := legacyalias.List(ctx, s.db, projectID, aliasCandidates)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing toolset aliases").LogError(ctx, s.logger)
-	}
-	for i := range toolsets {
-		if alias, ok := aliases[toolsets[i].ID]; ok && toolsets[i].McpSlug == "" {
-			toolsets[i].McpSlug = alias.Slug.String
-		}
 	}
 
 	if next == nil {

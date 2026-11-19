@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"context"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"testing"
 	"time"
 
@@ -28,6 +29,7 @@ func TestPluginAudienceDeliversExistingUseThroughMCP(t *testing.T) {
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Role delivery", "role-delivery")
+	enableAutoAddServers(t, ctx, conn, plugin)
 	servers, err := platformrepo.New(conn).ListPlatformMCPServers(ctx, platformrepo.ListPlatformMCPServersParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID, LimitValue: 10})
 	require.NoError(t, err)
 	require.NotEmpty(t, servers)
@@ -120,6 +122,7 @@ func TestPluginAudienceAssignmentSignalsPublishWithoutPublicationRequests(t *tes
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Role signal", "role-signal")
+	enableAutoAddServers(t, ctx, conn, plugin)
 	servers, err := platformrepo.New(conn).ListPlatformMCPServers(ctx, platformrepo.ListPlatformMCPServersParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID, LimitValue: 10})
 	require.NoError(t, err)
 	require.NotEmpty(t, servers)
@@ -171,4 +174,15 @@ func TestPluginAudienceAssignmentSignalsPublishWithoutPublicationRequests(t *tes
 	require.False(t, unchanged.Receipt.Replayed)
 	require.Equal(t, "not_requested", unchanged.PublishSignal)
 	require.Len(t, signaler.recorded(), 1, "a replay or an unchanged audience must not signal again")
+}
+
+// enableAutoAddServers opts a seeded plugin in to automatic server adding, so
+// role audiences deliver servers to it.
+func enableAutoAddServers(t *testing.T, ctx context.Context, conn *pgxpool.Pool, plugin pluginsrepo.Plugin) {
+	t.Helper()
+	_, err := pluginsrepo.New(conn).UpdatePlugin(ctx, pluginsrepo.UpdatePluginParams{
+		ID: plugin.ID, OrganizationID: plugin.OrganizationID, ProjectID: plugin.ProjectID, Name: plugin.Name, Slug: plugin.Slug,
+		Description: plugin.Description, AutoSyncEnabled: pgtype.Bool{}, AutoAddServersEnabled: pgtype.Bool{Bool: true, Valid: true},
+	})
+	require.NoError(t, err)
 }

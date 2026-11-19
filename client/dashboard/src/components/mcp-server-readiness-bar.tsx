@@ -12,6 +12,11 @@ export type ReadinessCheck = {
   ready: boolean | null;
   /** An optional check never counts as a step and never blocks readiness. */
   optional?: boolean;
+  /**
+   * Something that is failing now, such as a tunnel with no agent, rather
+   * than a setup step not yet taken. The header counts these as issues.
+   */
+  broken?: boolean;
   href?: string;
 };
 

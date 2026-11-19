@@ -124,7 +124,12 @@ type NetworkIngress struct {
 	// Observed private DNS name
 	DNSName *string
 	// Latest redacted error code
-	LastError       *string
+	LastError *string
+	// The gateway's explanation of last_error when it is
+	// provider_certificate_unavailable: why the TLS certificate request failed,
+	// such as a Let's Encrypt rate limit, and when the gateway retries. Returned
+	// by getIngress only.
+	StatusDetail    *string
 	HealthCheckedAt *string
 	ConnectedSince  *string
 	CreatedAt       string
@@ -144,6 +149,10 @@ type NetworkIngressDeleteImpact struct {
 // getIngress method.
 type NetworkIngressResult struct {
 	Ingress *NetworkIngress
+	// Tailscale tag this environment's gateway nodes and services carry. The
+	// organization's tailnet policy must own it, auto-approve the connection's
+	// service for it, and the OAuth client must be scoped to it.
+	GatewayTag string
 }
 
 // RotateCredentialsPayload is the payload type of the networkIngress service

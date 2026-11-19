@@ -187,7 +187,7 @@ func registerSetupResources(reg *Registrar, resources []SetupResource, now func(
 		if !validSetupResource(resource) {
 			continue
 		}
-		addResource(reg, &mcp.Resource{ //nolint:exhaustruct // MCP SDK metadata and annotations are intentionally omitted.
+		addResource(reg, &mcp.Resource{ //nolint:exhaustruct_v5 // MCP SDK metadata and annotations are intentionally omitted.
 			URI:         resource.URI,
 			Name:        resource.Name,
 			Title:       resource.Title,

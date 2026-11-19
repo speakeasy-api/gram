@@ -284,3 +284,17 @@ SET
 WHERE id = @id
   AND organization_id = @organization_id
   AND deleted IS TRUE;
+
+-- name: GetNetworkIngressCertificateFailure :one
+-- The message of the most recently seen gateway slot that holds no valid TLS
+-- certificate because a request failed. The gateway writes it, naming the
+-- cause and when it retries.
+SELECT last_error
+FROM network_ingress_nodes
+WHERE network_ingress_id = @network_ingress_id
+  AND organization_id = @organization_id
+  AND retired_at IS NULL
+  AND status = 'awaiting_certificate'
+  AND last_error IS NOT NULL
+ORDER BY last_seen_at DESC NULLS LAST
+LIMIT 1;

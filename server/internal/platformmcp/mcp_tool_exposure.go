@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Mutation inputs and repository literals only set fields applicable to the selected operation.
+//nolint:exhaustruct_v5 // Mutation inputs and repository literals only set fields applicable to the selected operation.
 package platformmcp
 
 import (

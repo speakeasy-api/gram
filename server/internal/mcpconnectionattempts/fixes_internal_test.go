@@ -31,6 +31,8 @@ var touchedOnlyFixes = map[string]string{
 	CodeInvalidIdentity.String():             "the issuer",
 	CodeCatalogTooLarge.String():             "the server's or gateway's tools",
 	CodeMemberToolsMissing.String():          "the gateway members",
+	CodeAddressNotAllowed.String():           "the server's or auth client's address",
+	CodeAddressNotFound.String():             "the server's or auth client's address, or its DNS outside Speakeasy",
 
 	// Fixed outside Speakeasy, where we see no change, so the fix stays unattributed.
 	CodeAccessDenied.String():        "an assignment in the company sign-in service",

@@ -21,6 +21,7 @@ var NetworkIngress = Type("NetworkIngress", func() {
 	Attribute("status", String, "Latest redacted lifecycle status")
 	Attribute("dns_name", String, "Observed private DNS name")
 	Attribute("last_error", String, "Latest redacted error code")
+	Attribute("status_detail", String, "The gateway's explanation of last_error when it is provider_certificate_unavailable: why the TLS certificate request failed, such as a Let's Encrypt rate limit, and when the gateway retries. Returned by getIngress only.")
 	Attribute("health_checked_at", String, func() { Format(FormatDateTime) })
 	Attribute("connected_since", String, func() { Format(FormatDateTime) })
 	Attribute("created_at", String, func() { Format(FormatDateTime) })
@@ -31,6 +32,10 @@ var NetworkIngress = Type("NetworkIngress", func() {
 var GetResult = Type("NetworkIngressResult", func() {
 	Description("The organization's active private network ingress, when configured.")
 	Attribute("ingress", NetworkIngress)
+	Attribute("gateway_tag", String, "Tailscale tag this environment's gateway nodes and services carry. The organization's tailnet policy must own it, auto-approve the connection's service for it, and the OAuth client must be scoped to it.", func() {
+		Example("tag:speakeasy")
+	})
+	Required("gateway_tag")
 })
 
 var DeleteImpact = Type("NetworkIngressDeleteImpact", func() {

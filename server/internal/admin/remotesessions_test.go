@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
@@ -69,7 +70,7 @@ func TestStandaloneIssuerRoutes_ValidAdminDispatch(t *testing.T) {
 	require.NoError(t, err)
 	var auditLog bytes.Buffer
 	auditLogger := slog.New(slog.NewJSONHandler(&auditLog, nil))
-	svc.SetRemoteSessionService(remotesessions.NewGlobalService(auditLogger, tp, testenv.NewMeterProvider(t), db, enc, policy))
+	svc.SetRemoteSessionService(remotesessions.NewGlobalService(auditLogger, tp, testenv.NewMeterProvider(t), db, enc, clientsecretstest.New(t, db, enc), policy))
 	svc.dashboardURL, _ = url.Parse("https://public.example.test")
 	svc.SetAssetService(assets.NewPlatformService(svc.logger, tp, policy, db, assetstest.NewTestBlobStore(t)))
 	sessionID, err := svc.sessions.Store(ctx, StoreParams{Email: "operator@example.com", Name: "Test Operator", OIDCSubject: "sub-admin", HD: testAdminHD, AccessToken: "access-token", RefreshToken: "refresh-token", ExpiresAt: time.Now().Add(time.Hour)})

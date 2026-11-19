@@ -120,7 +120,7 @@ func prepareResourceClient(t *testing.T, db *pgxpool.Pool, enc *encryption.Clien
 	require.NoError(t, err)
 	encrypted, err := enc.Encrypt([]byte(secret))
 	require.NoError(t, err)
-	client, err := q.CreateRemoteSessionClient(t.Context(), repo.CreateRemoteSessionClientParams{
+	client, err := q.CreateRemoteSessionClientFixture(t.Context(), repo.CreateRemoteSessionClientFixtureParams{
 		OrganizationID: pgtype.Text{String: org, Valid: true}, RemoteSessionIssuerID: issuer.ID, ClientID: clientID,
 		ClientSecretEncrypted:   pgtype.Text{String: encrypted, Valid: true},
 		TokenEndpointAuthMethod: pgtype.Text{String: oauthwire.AuthMethodClientSecretPost, Valid: true},
@@ -654,7 +654,7 @@ func TestStore_RequestsTheScopesRecordedAtTurnOn(t *testing.T) {
 	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(t.Context(), repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: f.sel.clientID, UserSessionIssuerID: f.req.UserSessionIssuerID}))
 	_, err := q.UpdateOrganizationRemoteSessionClient(t.Context(), repo.UpdateOrganizationRemoteSessionClientParams{
 		Scope: []string{"openid", "read", "write"}, ID: f.sel.clientID, OrganizationID: pgtype.Text{String: f.req.OrganizationID, Valid: true},
-		ClientSecretEncrypted: pgtype.Text{}, TokenEndpointAuthMethod: pgtype.Text{}, TokenEndpointAuthAudienceFormat: pgtype.Text{}, Audience: pgtype.Text{}, LegacyCallbackUrl: pgtype.Bool{},
+		TokenEndpointAuthMethod: pgtype.Text{}, TokenEndpointAuthAudienceFormat: pgtype.Text{}, Audience: pgtype.Text{}, LegacyCallbackUrl: pgtype.Bool{},
 	})
 	require.NoError(t, err)
 
@@ -673,7 +673,7 @@ func TestStore_OIDCOnlyConnectionBoundsTheGrant(t *testing.T) {
 	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: f.sel.clientID, UserSessionIssuerID: f.req.UserSessionIssuerID}))
 	_, err := q.UpdateOrganizationRemoteSessionClient(ctx, repo.UpdateOrganizationRemoteSessionClientParams{
 		Scope: []string{"openid", "email"}, ID: f.sel.clientID, OrganizationID: pgtype.Text{String: f.req.OrganizationID, Valid: true},
-		ClientSecretEncrypted: pgtype.Text{}, TokenEndpointAuthMethod: pgtype.Text{}, TokenEndpointAuthAudienceFormat: pgtype.Text{}, Audience: pgtype.Text{}, LegacyCallbackUrl: pgtype.Bool{},
+		TokenEndpointAuthMethod: pgtype.Text{}, TokenEndpointAuthAudienceFormat: pgtype.Text{}, Audience: pgtype.Text{}, LegacyCallbackUrl: pgtype.Bool{},
 	})
 	require.NoError(t, err)
 	remote, err := remotemcprepo.New(f.db).CreateServer(ctx, remotemcprepo.CreateServerParams{ID: uuid.New(), ProjectID: f.req.ProjectID, TransportType: "streamable-http", Url: testResource})

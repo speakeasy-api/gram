@@ -85,7 +85,7 @@ func (m *ChallengeManager) RefreshFederatedIdentity(ctx context.Context, p *Fede
 	if err := m.validateFederatedMetadataHosts(ctx, p.issuer, p.metadata); err != nil {
 		return nil, federatedRefreshSetupError(err)
 	}
-	doer, auth, err := m.federatedTokenClient(p)
+	doer, auth, err := m.federatedTokenClient(ctx, p)
 	if err != nil {
 		return nil, federatedRefreshSetupError(err)
 	}

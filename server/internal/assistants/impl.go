@@ -171,6 +171,9 @@ func (s *Service) CreateAssistant(ctx context.Context, payload *gen.CreateAssist
 	if err := s.authz.Require(ctx, authz.AssistantCheck(authz.ScopeAssistantWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
+	if err := s.requireRuntimeAvailable(ctx); err != nil {
+		return nil, err
+	}
 	if authCtx.UserID == "" {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "create assistant requires a user identity").LogError(ctx, s.logger)
 	}
@@ -222,6 +225,14 @@ func (s *Service) UpdateAssistant(ctx context.Context, payload *gen.UpdateAssist
 	}
 	if err := s.authz.Require(ctx, authz.AssistantCheck(authz.ScopeAssistantWrite, assistantID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
+	}
+	// Switching runtime versions stops and retires the current runtime, which
+	// needs a backend. Other updates, including one that keeps the expected
+	// version, only change stored configuration.
+	if payload.RuntimeVersion != nil && payload.ExpectedRuntimeVersion != nil && *payload.RuntimeVersion != *payload.ExpectedRuntimeVersion {
+		if err := s.requireRuntimeAvailable(ctx); err != nil {
+			return nil, err
+		}
 	}
 
 	canEnableMCP, err := s.requireAttachmentAccess(ctx, *authCtx.ProjectID, payload.Toolsets, payload.McpServers)
@@ -289,6 +300,9 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogError(ctx, s.logger)
 	}
 	if err := s.authz.Require(ctx, authz.AssistantCheck(authz.ScopeAssistantRead, assistantID.String(), authCtx.ProjectID.String())); err != nil {
+		return nil, err
+	}
+	if err := s.requireRuntimeAvailable(ctx); err != nil {
 		return nil, err
 	}
 	if len(payload.SkillIds) > 0 {
@@ -407,6 +421,9 @@ func (s *Service) InterruptTurn(ctx context.Context, payload *gen.InterruptTurnP
 	if err := s.authz.Require(ctx, authz.AssistantCheck(authz.ScopeAssistantRead, assistantID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
+	if err := s.requireRuntimeAvailable(ctx); err != nil {
+		return nil, err
+	}
 	// Chat ownership is per user, so a stop needs the same user identity the
 	// send carried.
 	if authCtx.UserID == "" {
@@ -465,6 +482,9 @@ func (s *Service) EnsureManagedAssistant(ctx context.Context, _ *gen.EnsureManag
 	if err := s.authz.Require(ctx, authz.AssistantCheck(authz.ScopeAssistantWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
+	if err := s.requireRuntimeAvailable(ctx); err != nil {
+		return nil, err
+	}
 	// Provisioning records the creating user, so a user identity is required.
 	if authCtx.UserID == "" {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "the project assistant requires a user identity").LogError(ctx, s.logger)
@@ -512,6 +532,24 @@ func (s *Service) requireAttachmentAccess(ctx context.Context, projectID uuid.UU
 		return nil, err
 	}
 	return idSetPredicate(writable), nil
+}
+
+// requireRuntimeAvailable rejects requests that need an assistant runtime
+// when the deployment runs with the disabled runtime provider. It returns
+// 501 rather than 503: the condition is deliberate configuration, and
+// generated SDK clients retry 503 responses.
+func (s *Service) requireRuntimeAvailable(ctx context.Context) error {
+	if s.core.RuntimeAvailable() {
+		return nil
+	}
+	return oops.E(oops.CodeNotImplemented, ErrRuntimeDisabled, "%s", ErrRuntimeDisabled.Error()).LogWarn(ctx, s.logger)
+}
+
+// TargetAvailable reports whether assistant triggers can run on this
+// deployment, so the trigger app refuses new or updated assistant triggers
+// when the runtime provider is disabled.
+func (s *Service) TargetAvailable() bool {
+	return s.core.RuntimeAvailable()
 }
 
 func (s *Service) Kind() string {
@@ -575,6 +613,8 @@ func mapAssistantStoreError(ctx context.Context, logger *slog.Logger, err error,
 		}
 	}
 	switch {
+	case errors.Is(err, ErrRuntimeDisabled):
+		return oops.E(oops.CodeNotImplemented, err, "%s", ErrRuntimeDisabled.Error()).LogWarn(ctx, logger)
 	case errors.Is(err, errRuntimeSwitchBusy):
 		return oops.E(oops.CodeConflict, err, "%s", errRuntimeSwitchBusy.Error()).LogWarn(ctx, logger)
 	case errors.Is(err, errRuntimeSwitchConflict):

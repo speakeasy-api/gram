@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP SDK options deliberately rely on documented zero-value defaults.
+//nolint:exhaustruct_v5 // MCP SDK options deliberately rely on documented zero-value defaults.
 package platformmcp
 
 import (

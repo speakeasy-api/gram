@@ -151,69 +151,132 @@ DO UPDATE SET name = EXCLUDED.name, updated_at = clock_timestamp();
 UPDATE meta_mcp_servers SET discovery_mode = 'code_mode', updated_at = clock_timestamp()
 WHERE organization_id = @organization_id::text AND project_id = @project_id::uuid AND name = 'Python Code Gateway' AND deleted IS FALSE;
 
--- name: LocalUpsertMCPAppAsset :exec
--- The assets row the archive is uploaded to.
-INSERT INTO assets (id, project_id, organization_id, name, url, kind, content_type, content_length, sha256)
-VALUES (@id::uuid, @project_id::uuid, @organization_id::text, 'playground-mcp-app.zip', @url::text, 'functions', 'application/zip', @content_length::bigint, @sha256::text)
-ON CONFLICT (id) DO UPDATE
-  SET url = EXCLUDED.url, content_length = EXCLUDED.content_length,
-      sha256 = EXCLUDED.sha256, content_type = EXCLUDED.content_type,
-      deleted_at = NULL, updated_at = clock_timestamp();
+-- The Enterprise Sign-In (ID-JAG) Server (local_ema.go). Locally the company
+-- identity provider is the dev-idp's OAuth 2.1 server.
+-- name: LocalEMAPointIdentityProvider :execrows
+UPDATE remote_session_issuers
+SET issuer = @issuer::text,
+    authorization_endpoint = @issuer::text || '/authorize',
+    token_endpoint = @issuer::text || '/token',
+    userinfo_endpoint = @issuer::text || '/userinfo',
+    revocation_endpoint = @issuer::text || '/revoke',
+    registration_endpoint = NULL,
+    jwks_uri = @issuer::text || '/.well-known/jwks.json',
+    jwks = NULL, jwks_fetched_at = NULL, jwks_cache_expires_at = NULL, jwks_etag = NULL,
+    scopes_supported = ARRAY['openid', 'email', 'profile'],
+    grant_types_supported = ARRAY['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:token-exchange'],
+    response_types_supported = ARRAY['code'],
+    token_endpoint_auth_methods_supported = ARRAY['client_secret_post'],
+    code_challenge_methods_supported = ARRAY['S256'],
+    id_token_signing_alg_values_supported = ARRAY['RS256'],
+    authorization_response_iss_parameter_supported = TRUE,
+    oidc = TRUE,
+    name = @name::text,
+    updated_at = clock_timestamp()
+WHERE id = @id::uuid AND organization_id = @organization_id::text AND project_id IS NULL AND deleted IS FALSE;
 
--- name: LocalUpsertMCPApp :exec
--- The function stack hangs off the deployment the seed already created, so the
--- seed's existing scoped delete of that deployment cascades all of it away on
--- the next run — no extra cleanup, and nothing new for the safety test to
--- police.
-WITH fn AS (
-  INSERT INTO deployments_functions (id, deployment_id, asset_id, name, slug, runtime)
-  VALUES (@function_id::uuid, @deployment_id::uuid, @asset_id::uuid, 'Playground MCP App', @function_slug::text, @runtime::text)
-  ON CONFLICT (deployment_id, slug) DO UPDATE
-    SET asset_id = EXCLUDED.asset_id, runtime = EXCLUDED.runtime
-  RETURNING id
-),
-tool AS (
-  INSERT INTO function_tool_definitions
-    (tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, meta)
-  SELECT @tool_urn::text, @project_id::uuid, @deployment_id::uuid, fn.id, @runtime::text, @tool_name::text, @tool_description::text, @input_schema::jsonb,
-         jsonb_build_object('ui/resourceUri', @resource_uri::text)
-  FROM fn
-  ON CONFLICT (deployment_id, tool_urn) WHERE deleted IS FALSE
-  DO UPDATE SET
-    function_id = EXCLUDED.function_id, input_schema = EXCLUDED.input_schema,
-    description = EXCLUDED.description, meta = EXCLUDED.meta,
-    deleted_at = NULL, updated_at = clock_timestamp()
-  RETURNING id
-)
-INSERT INTO function_resource_definitions
-  (resource_urn, project_id, deployment_id, function_id, runtime, name, description, uri, title, mime_type, meta)
-SELECT @resource_urn::text, @project_id::uuid, @deployment_id::uuid, fn.id, @runtime::text, 'playground_dashboard',
-       'A tiny interactive HTML dashboard for validating MCP Apps in the playground',
-       @resource_uri::text, 'Playground MCP App', 'text/html;profile=mcp-app',
-       jsonb_build_object('ui', jsonb_build_object('prefersBorder', true))
-FROM fn
-ON CONFLICT (deployment_id, resource_urn) WHERE deleted IS FALSE
-DO UPDATE SET
-  function_id = EXCLUDED.function_id, uri = EXCLUDED.uri, meta = EXCLUDED.meta,
-  deleted_at = NULL, updated_at = clock_timestamp();
+-- Speakeasy's registration at the dev-idp: its static login client, with the
+-- checked-in local secret the dev-idp EMA app also holds.
+-- name: LocalEMAPointIdentityProviderClient :execrows
+UPDATE remote_session_clients
+SET client_id = @client_id::text,
+    client_secret_encrypted = @client_secret_encrypted::text,
+    -- A replaced secret is a new revision, and the organization-key copy
+    -- would hold the previous secret.
+    client_secret_org_encrypted = NULL,
+    client_secret_generation = client_secret_generation + 1,
+    token_endpoint_auth_method = 'client_secret_post',
+    grant_types = ARRAY['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:token-exchange'],
+    scope = ARRAY['openid', 'email', 'profile'],
+    callback_base_url = @callback_base_url::text,
+    updated_at = clock_timestamp()
+WHERE id = @id::uuid AND organization_id = @organization_id::text AND project_id IS NULL AND deleted IS FALSE;
 
--- name: LocalAttachMCPAppToToolset :exec
--- The tool is only reachable from the Playground once a toolset lists it. The
--- seed stamps a fresh toolset_versions row per run (the version is epoch
--- seconds, to bust the Redis content cache), so append to the newest version
--- of the primary seeded toolset — named, not "whichever sorts last", so the
--- Playground always finds the app in the same place.
-UPDATE toolset_versions
-SET tool_urns = array_append(tool_urns, @tool_urn::text),
-    resource_urns = array_append(resource_urns, @resource_urn::text)
-WHERE id = (
-  SELECT tv.id FROM toolset_versions tv
-  JOIN toolsets t ON t.id = tv.toolset_id
-  WHERE t.organization_id = @organization_id::text AND t.slug = @toolset_slug::text AND t.deleted IS FALSE
-  ORDER BY tv.version DESC, tv.id DESC
-  LIMIT 1
-)
-AND NOT (@tool_urn::text = ANY(tool_urns));
+-- The Enterprise Sign-In (ID-JAG) Server exists only in the local org: it
+-- needs the dev-idp and the MCP fixture, which the demo org does not have.
+-- Its rows sit in the seeded project (the project delete cascades them away)
+-- except its organization sign-in, which the org-scoped user session issuer
+-- delete removes on every reseed. Its organization sign-in federates through
+-- the company provider: its trusted client is the one the caller signs in
+-- with, and the ID token it returns is what Speakeasy exchanges for an ID-JAG.
+-- name: LocalEMAInsertUserSessionIssuer :exec
+INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                  authn_challenge_mode, session_duration,
+                                  authorization_server_mode,
+                                  trusted_remote_session_issuer_id,
+                                  trusted_remote_session_client_id) VALUES
+  (@id::uuid, NULL, @org_id::text, 'enterprise-sign-in',
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint',
+   @trusted_issuer_id::uuid, @trusted_client_id::uuid);
+
+-- name: LocalEMAInsertRemoteMCPServer :exec
+INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
+  (@id::uuid, @project_id::uuid, 'Enterprise Sign-In (ID-JAG) Server', 'enterprise-sign-in',
+   'streamable-http', @url::text);
+
+-- name: LocalEMAInsertMCPServer :exec
+INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
+                         remote_mcp_server_id, user_session_issuer_id,
+                         visibility) VALUES
+  (@id::uuid, @project_id::uuid, 'Enterprise Sign-In (ID-JAG) Server', 'enterprise-sign-in',
+   NULL, @remote_id::uuid, @issuer_id::uuid, 'private');
+
+-- name: LocalEMAInsertEndpoint :exec
+INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
+  (@id::uuid, @project_id::uuid, NULL, @mcp_server_id::uuid, @slug::text);
+
+-- The server's authorization server is the dev-idp resource authorization
+-- server for the fixture's /mcp/ema endpoint, which accepts ID-JAGs from a
+-- confidential client. Identity chaining trusts its JWT-bearer and ID-JAG
+-- support only from a discovered document, so the row records when that
+-- document was read; without it the binding reads as incomplete metadata and
+-- the consent page offers an interactive sign-in the server does not have.
+-- name: LocalEMAInsertVendorIssuer :exec
+INSERT INTO remote_session_issuers
+  (id, project_id, organization_id, slug, issuer, token_endpoint,
+   introspection_endpoint, jwks_uri, name, scopes_supported,
+   grant_types_supported, authorization_grant_profiles_supported,
+   token_endpoint_auth_methods_supported, metadata_fetched_at)
+VALUES
+  (@id::uuid, @project_id::uuid, @org_id::text,
+   'enterprise-sign-in-auth', @issuer::text, @issuer::text || '/token',
+   @issuer::text || '/introspect', @issuer::text || '/.well-known/jwks.json',
+   'Enterprise Sign-In Authorization Server', @scopes::text[],
+   ARRAY['urn:ietf:params:oauth:grant-type:jwt-bearer'],
+   ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'],
+   ARRAY['client_secret_post'], clock_timestamp());
+
+-- name: LocalEMAInsertVendorClient :exec
+INSERT INTO remote_session_clients
+  (id, project_id, organization_id, remote_session_issuer_id, client_id,
+   client_secret_encrypted, token_endpoint_auth_method, grant_types, scope)
+VALUES
+  (@id::uuid, @project_id::uuid, @org_id::text,
+   @issuer_id::uuid, @client_id::text,
+   @client_secret_encrypted::text, 'client_secret_post',
+   ARRAY['urn:ietf:params:oauth:grant-type:jwt-bearer'],
+   @scopes::text[]);
+
+-- name: LocalEMAInsertProtectedResource :exec
+INSERT INTO remote_protected_resources
+  (id, project_id, organization_id, resource_identifier, metadata_url,
+   authorization_servers, scopes_supported, metadata_fetched_at)
+VALUES
+  (@id::uuid, @project_id::uuid, @org_id::text, @resource::text,
+   @metadata_url::text, ARRAY[@issuer::text], @scopes::text[],
+   clock_timestamp());
+
+-- name: LocalEMAInsertBinding :exec
+INSERT INTO remote_session_ema_bindings
+  (id, project_id, organization_id, user_session_issuer_id,
+   remote_session_issuer_id, resource, remote_session_client_id, generation,
+   state, grant_source, created_at, updated_at)
+VALUES
+  (@id::uuid, @project_id::uuid, @org_id::text,
+   @user_session_issuer_id::uuid, @issuer_id::uuid,
+   @resource::text, @client_id::uuid, 1,
+   'ready', 'administrator_declared',
+   now() - interval '6 days', now() - interval '6 days');
 
 -- Locally a vendor (Linear, Notion) cannot fetch a client ID metadata
 -- document from localhost, so the shared seed's metadata document client
@@ -224,6 +287,23 @@ UPDATE remote_session_clients
 SET client_id = @client_id::text, client_id_metadata_uri = NULL,
     callback_base_url = @callback_base_url::text, updated_at = clock_timestamp()
 WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- Provisions the developer in the local org's directory, linked to their
+-- user, the way directory sync would. Federated sign-in (the Enterprise
+-- Sign-In server) admits only directory-provisioned people.
+-- name: LocalProvisionDeveloperDirectoryUser :exec
+INSERT INTO directory_users
+  (organization_id, user_id, workos_directory_user_id, email, first_name,
+   last_name, workos_created_at, workos_updated_at)
+VALUES (@organization_id::text, @user_id::text, 'devidp_dir_' || @user_id::text,
+        @email::text, @first_name::text, NULLIF(@last_name::text, ''),
+        clock_timestamp(), clock_timestamp())
+ON CONFLICT (workos_directory_user_id) DO UPDATE
+SET organization_id = EXCLUDED.organization_id, user_id = EXCLUDED.user_id,
+    email = EXCLUDED.email, first_name = EXCLUDED.first_name,
+    last_name = EXCLUDED.last_name,
+    deleted_at = NULL, workos_deleted_at = NULL,
+    workos_updated_at = clock_timestamp(), updated_at = clock_timestamp();
 
 -- name: LocalUpsertInspectRemoteServer :exec
 -- Remote MCP servers for the Inspect tab that exist only locally: the mock

@@ -959,6 +959,48 @@ func BuildGetShadowMCPInventoryServerPayload(accessGetShadowMCPInventoryServerPr
 	return v, nil
 }
 
+// BuildFindShadowMCPInventoryServersPayload builds the payload for the access
+// findShadowMCPInventoryServers endpoint from CLI flags.
+func BuildFindShadowMCPInventoryServersPayload(accessFindShadowMCPInventoryServersProjectID string, accessFindShadowMCPInventoryServersServerUrls string, accessFindShadowMCPInventoryServersSessionToken string) (*access.FindShadowMCPInventoryServersPayload, error) {
+	var err error
+	var projectID string
+	{
+		projectID = accessFindShadowMCPInventoryServersProjectID
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var serverUrls []string
+	{
+		err = json.Unmarshal([]byte(accessFindShadowMCPInventoryServersServerUrls), &serverUrls)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for serverUrls, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\",\n      \"abc123\"\n   ]'")
+		}
+		if len(serverUrls) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("server_urls", serverUrls, len(serverUrls), 1, true))
+		}
+		if len(serverUrls) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("server_urls", serverUrls, len(serverUrls), 50, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessFindShadowMCPInventoryServersSessionToken != "" {
+			sessionToken = &accessFindShadowMCPInventoryServersSessionToken
+		}
+	}
+	v := &access.FindShadowMCPInventoryServersPayload{}
+	v.ProjectID = projectID
+	v.ServerUrls = serverUrls
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildUpdateShadowMCPInventoryServerNamePayload builds the payload for the
 // access updateShadowMCPInventoryServerName endpoint from CLI flags.
 func BuildUpdateShadowMCPInventoryServerNamePayload(accessUpdateShadowMCPInventoryServerNameBody string, accessUpdateShadowMCPInventoryServerNameSessionToken string) (*access.UpdateShadowMCPInventoryServerNamePayload, error) {
@@ -988,6 +1030,41 @@ func BuildUpdateShadowMCPInventoryServerNamePayload(accessUpdateShadowMCPInvento
 		ProjectID: body.ProjectID,
 		ServerURL: body.ServerURL,
 		Name:      body.Name,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildSetShadowMCPOfficialServerPayload builds the payload for the access
+// setShadowMCPOfficialServer endpoint from CLI flags.
+func BuildSetShadowMCPOfficialServerPayload(accessSetShadowMCPOfficialServerBody string, accessSetShadowMCPOfficialServerSessionToken string) (*access.SetShadowMCPOfficialServerPayload, error) {
+	var err error
+	var body SetShadowMCPOfficialServerRequestBody
+	{
+		err = json.Unmarshal([]byte(accessSetShadowMCPOfficialServerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", body.ServerURL, goa.FormatURI))
+		if body.McpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessSetShadowMCPOfficialServerSessionToken != "" {
+			sessionToken = &accessSetShadowMCPOfficialServerSessionToken
+		}
+	}
+	v := &access.SetShadowMCPOfficialServerPayload{
+		ProjectID:   body.ProjectID,
+		ServerURL:   body.ServerURL,
+		McpServerID: body.McpServerID,
 	}
 	v.SessionToken = sessionToken
 

@@ -2,6 +2,7 @@ package remotesessions_test
 
 import (
 	"context"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"net/http"
 	"net/http/httptest"
@@ -86,8 +87,8 @@ func TestRotationSnapshot_RejectsChangesDuringHTTP(t *testing.T) {
 				enc := testenv.NewEncryptionClient(t)
 				base, err := url.Parse(testServerURL)
 				require.NoError(t, err)
-				revoker := remotesessions.NewUpstreamRevoker(logger, tracer, meter, ti.conn, enc, policy, nil)
-				rotator := remotesessions.NewClientRotator(logger, ti.conn, enc, policy, nil, ti.redisCache, base, revoker, audit.NewLogger(), nil)
+				revoker := remotesessions.NewUpstreamRevoker(logger, tracer, meter, ti.conn, enc, clientsecretstest.New(t, ti.conn, enc), policy, nil)
+				rotator := remotesessions.NewClientRotator(logger, ti.conn, enc, clientsecretstest.New(t, ti.conn, enc), policy, nil, ti.redisCache, base, revoker, audit.NewLogger(), nil)
 				done := make(chan error, 1)
 				go func() {
 					if stage == "registration" {

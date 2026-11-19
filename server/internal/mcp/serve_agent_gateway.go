@@ -99,7 +99,7 @@ func (s *Service) ServeAgentGateway(w http.ResponseWriter, r *http.Request) erro
 		DeletedAt:         pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		Deleted:           false,
 	}
-	endpoint := &mcpendpointsrepo.McpEndpoint{ //nolint:exhaustruct // synthetic: only the fields the meta runtime reads are meaningful
+	endpoint := &mcpendpointsrepo.McpEndpoint{ //nolint:exhaustruct_v5 // synthetic: only the fields the meta runtime reads are meaningful
 		ProjectID: uuid.Nil,
 	}
 

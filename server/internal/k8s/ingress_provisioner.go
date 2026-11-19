@@ -201,6 +201,19 @@ func (p *IngressProvisioner) buildIngress(domain string, ipAllowlist []string) (
 									},
 								},
 								{
+									// The per-agent gateway (/agent-mcp/{agentID}). An
+									// organization whose domain has an IP allowlist is locked
+									// out of the platform host, so this is its only route.
+									Path:     "/agent-mcp",
+									PathType: &pathTypePrefix,
+									Backend: networkingv1.IngressBackend{
+										Service: &networkingv1.IngressServiceBackend{
+											Name: p.mcpBackendService,
+											Port: networkingv1.ServiceBackendPort{Number: 80},
+										},
+									},
+								},
+								{
 									Path:     "/oauth",
 									PathType: &pathTypePrefix,
 									Backend: networkingv1.IngressBackend{

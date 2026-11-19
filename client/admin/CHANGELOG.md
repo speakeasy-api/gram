@@ -1,5 +1,21 @@
 # admin
 
+## 0.14.0
+
+### Minor Changes
+
+- 477e3ab: Staff can download the original OpenAPI documents used by a toolset-backed MCP server from the Sources section on its admin health page. Source files are not exposed through Admin MCP or customer-facing tools by this change.
+
+### Patch Changes
+
+- 57a8691: The support matrix adds Claude · Unified Chat for Desktop and Web, the merged chat and Cowork view in the Claude apps. Claude Chat and Cowork are now labelled deprecated, and their rows and recorded coverage stay in place. On an organization's observed coverage, Unified Chat claims count toward the Cowork column for methods that report through the plugin's hooks, and toward Claude Chat for the Compliance API and inference hooks.
+
+## 0.13.1
+
+### Patch Changes
+
+- d077556: Remove the external MCP fields from the API. Deployments no longer list external MCP sources, evolving a deployment ignores `exclude_external_mcps`, toolsets no longer carry external MCP header definitions, and the `externalmcp` tool type is no longer a valid tool filter. The deployment external MCP counts stay, always 0, so older clients keep working. The dashboard drops its external MCP views, warnings and OAuth auto-setup.
+
 ## 0.13.0
 
 ### Minor Changes

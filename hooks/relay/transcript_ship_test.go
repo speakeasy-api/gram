@@ -223,6 +223,73 @@ func TestCoworkShipsNewLinesOnEachStop(t *testing.T) {
 	require.Len(t, uploads, 2)
 }
 
+// TestCoworkReportsInvalidTranscriptPath: a Stop whose transcript path the
+// binary refuses ships no lines, so it tells the server why instead of
+// skipping silently.
+func TestCoworkReportsInvalidTranscriptPath(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	ts := newTranscriptServer(t)
+	cfg := coworkConfig(t, ts.URL)
+	claudeTranscriptFile(t) // sets the Claude config root
+	outside := filepath.Join(t.TempDir(), "sess-cowork-1.jsonl")
+	appendTranscript(t, outside, transcriptUser)
+
+	res := invokeClaude(t, cfg, claudeStop(outside))
+	require.Equal(t, 0, res.ExitCode, res.Stderr)
+
+	uploads, headers := ts.recorded()
+	require.Len(t, uploads, 1)
+	require.NotNil(t, uploads[0].Diagnostic)
+	require.Equal(t, transcriptSkipPathInvalid, uploads[0].Diagnostic.Reason)
+	require.Contains(t, uploads[0].Diagnostic.Detail, "outside claude transcript root")
+	require.Equal(t, "sess-cowork-1", uploads[0].SessionID)
+	require.Empty(t, uploads[0].Entries)
+	require.Equal(t, "test-hooks-key", headers[0].Get("Gram-Key"))
+}
+
+// TestCoworkReportsEmptyTranscript: a Stop follows a reply, so a transcript
+// with no complete line is reported once rather than skipped silently.
+func TestCoworkReportsEmptyTranscript(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	ts := newTranscriptServer(t)
+	cfg := coworkConfig(t, ts.URL)
+	transcript := claudeTranscriptFile(t)
+	appendTranscript(t, transcript, "")
+
+	res := invokeClaude(t, cfg, claudeStop(transcript))
+	require.Equal(t, 0, res.ExitCode, res.Stderr)
+
+	uploads, _ := ts.recorded()
+	require.Len(t, uploads, 1)
+	require.NotNil(t, uploads[0].Diagnostic)
+	require.Equal(t, transcriptSkipEmpty, uploads[0].Diagnostic.Reason)
+	require.Empty(t, uploads[0].Entries)
+
+	// A later Stop on the same empty file does not report it again.
+	invokeClaude(t, cfg, claudeStop(transcript))
+	uploads, _ = ts.recorded()
+	require.Len(t, uploads, 1)
+}
+
+// TestCoworkRetriesEmptyReportAfterFailure: a skip report the server did not
+// acknowledge is sent again on the next Stop.
+func TestCoworkRetriesEmptyReportAfterFailure(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	ts := newTranscriptServer(t)
+	ts.respond(http.StatusServiceUnavailable)
+	cfg := coworkConfig(t, ts.URL)
+	transcript := claudeTranscriptFile(t)
+	appendTranscript(t, transcript, "")
+
+	invokeClaude(t, cfg, claudeStop(transcript))
+	ts.respond(http.StatusOK)
+	invokeClaude(t, cfg, claudeStop(transcript))
+	invokeClaude(t, cfg, claudeStop(transcript))
+
+	uploads, _ := ts.recorded()
+	require.Len(t, uploads, 2, "the failed report is retried once, then not again")
+}
+
 func TestCoworkRetriesUnsettledUpload(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	ts := newTranscriptServer(t)

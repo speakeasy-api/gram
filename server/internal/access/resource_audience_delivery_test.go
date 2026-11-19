@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"strings"
 	"testing"
 
@@ -119,7 +120,7 @@ func TestResourceAudienceRoleDeliveryProjects_LockUnionInProjectOrder(t *testing
 	// one, so per-role locking would invert the global project order.
 	for i, role := range roles {
 		plugin, err := q.CreatePlugin(ctx, pluginsrepo.CreatePluginParams{
-			OrganizationID: f.ac.ActiveOrganizationID, ProjectID: projects[1-i], Name: "Lock order", Slug: "lock-order",
+			OrganizationID: f.ac.ActiveOrganizationID, ProjectID: projects[1-i], Name: "Lock order", Slug: "lock-order", AutoAddServersEnabled: pgtype.Bool{Bool: true, Valid: true},
 		})
 		require.NoError(t, err)
 		_, err = q.AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{

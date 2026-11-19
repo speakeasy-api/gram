@@ -797,8 +797,13 @@ INSERT INTO meta_mcp_server_members (project_id, meta_mcp_server_id, mcp_server_
 VALUES (@project_id, @meta_mcp_server_id, @mcp_server_id);
 
 -- name: SeedGrantFixture :exec
-INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, resource)
-VALUES (@subject_urn, @user_session_issuer_id, @remote_session_client_id, 'encrypted', @resource);
+INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted, resource)
+VALUES (@subject_urn, @user_session_issuer_id, @remote_session_client_id,
+  (SELECT org.id FROM remote_session_clients AS client
+   LEFT JOIN projects AS project ON project.id = client.project_id
+   JOIN organization_metadata AS org ON org.id = COALESCE(project.organization_id, client.organization_id)
+   WHERE client.id = @remote_session_client_id),
+  'encrypted', @resource);
 
 -- name: SetDerivedIssuerFixture :exec
 UPDATE mcp_servers SET remote_session_issuer_id = @remote_session_issuer_id WHERE id = @id;

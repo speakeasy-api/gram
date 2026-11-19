@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Management payloads and tool outputs use optional zero values.
+//nolint:exhaustruct_v5 // Management payloads and tool outputs use optional zero values.
 package platformmcp
 
 import (

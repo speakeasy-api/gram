@@ -234,7 +234,7 @@ When Gutternote comments arrive on your PR's preview: fetch them with the MCP, f
 | fullbleed analytics/observe surface (sticky filters + big table/charts)    | `WorkbenchPage`                |
 | multi-step flow                                                            | `WizardPage`                   |
 | auth / standalone, outside the app shell                                   | `CenteredPage`                 |
-| genuine bespoke app canvas (chat, playground, builder)                     | `FullBleedPage` (escape hatch) |
+| genuine bespoke app canvas (chat, inspector, builder)                      | `FullBleedPage` (escape hatch) |
 
 ```tsx
 import { ResourceListPage } from "@/components/page-templates";

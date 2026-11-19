@@ -224,6 +224,52 @@ describe("ServerUrlSection", () => {
     expect(updateEndpoint).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps an unprefixed platform address as it is until edited", () => {
+    const legacy = { id: "endpoint-5", slug: "example" } as McpEndpoint;
+    renderSection(hosted(), [legacy]);
+
+    const input = screen.getByPlaceholderText("endpoint") as HTMLInputElement;
+    expect(input.value).toBe("example");
+    const save = screen.getByLabelText("Save address") as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    expect(updateEndpoint).not.toHaveBeenCalled();
+  });
+
+  it("keeps Save disabled when an address is cleared", () => {
+    const legacy = { id: "endpoint-5", slug: "example" } as McpEndpoint;
+    renderSection(hosted(), [legacy]);
+
+    fireEvent.change(screen.getByPlaceholderText("endpoint"), {
+      target: { value: "  " },
+    });
+    const save = screen.getByLabelText("Save address") as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+  });
+
+  it("adds the organization prefix when renaming an unprefixed platform address", () => {
+    const legacy = { id: "endpoint-5", slug: "example" } as McpEndpoint;
+    renderSection(hosted(), [legacy]);
+
+    fireEvent.change(screen.getByPlaceholderText("endpoint"), {
+      target: { value: "renamed" },
+    });
+    expect(
+      screen.getByText(/This saves as .*\/mcp\/acme-renamed\./),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Save address"));
+    confirmWithServerName("Change address");
+    expect(updateEndpoint).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: {
+          updateMcpEndpointForm: expect.objectContaining({
+            id: "endpoint-5",
+            slug: "acme-renamed",
+          }),
+        },
+      }),
+    );
+  });
+
   it("confirms before removing the last address that can serve", () => {
     const dead = {
       id: "endpoint-4",
@@ -289,35 +335,6 @@ describe("ServerUrlSection", () => {
     expect(screen.getAllByRole("button", { name: "Add" })).toHaveLength(1);
     expect(screen.getByText("No hosted address")).toBeTruthy();
     expect(screen.getByText("No custom address")).toBeTruthy();
-  });
-
-  it("shows the legacy Speakeasy address a custom-domain alias still serves", () => {
-    renderSection(
-      server({
-        id: "toolset-1",
-        toolsetId: "toolset-1",
-        legacyPlatformSlug: "example",
-      }),
-      [customEndpoint],
-    );
-
-    expect(screen.queryByText("No hosted address")).toBeNull();
-    expect(screen.getByText(/\/mcp\/example$/)).toBeTruthy();
-    expect(screen.getByLabelText("Add hosted address")).toBeTruthy();
-    cleanup();
-
-    renderSection(
-      server({
-        id: "server-2",
-        toolsetId: "toolset-1",
-        legacyPlatformSlug: "example",
-      }),
-      [customEndpoint],
-    );
-    expect(
-      screen.queryByText(/\/mcp\/example$/),
-      "only the canonical server shows the legacy address",
-    ).toBeNull();
   });
 
   it("lets a hosted server add another platform address", () => {
@@ -423,11 +440,10 @@ describe("ServerUrlSection", () => {
       "domain-1",
       "example",
       true,
-      "toolset-1",
     );
   });
 
-  it("checks a new hosted address against the server so its own legacy alias reads as available", () => {
+  it("checks a new hosted address without naming the server", () => {
     renderSection(hosted(), [platformEndpoint]);
     slugValidation.mockClear();
 
@@ -437,7 +453,6 @@ describe("ServerUrlSection", () => {
       null,
       undefined,
       false,
-      "toolset-1",
     );
   });
 });

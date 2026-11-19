@@ -245,60 +245,66 @@ flowchart LR
   s_gram_ping_v2_processor --> c49
   c50[\"📥<br/>pystreams/src/pystreams/cmd/multi.py<br/>PingHandler.handle"\]:::python
   s_gram_ping_v2_py_processor --> c50
-  c51[\"📥<br/>server/cmd/gram/streams.go<br/>organizationPublicationHandler<br/>(batch)"\]:::go
-  s_gram_plugins_v1_organization_publication_scheduler --> c51
-  c52[\"📥<br/>server/cmd/gram/streams.go<br/>publicationHandler<br/>(batch)"\]:::go
-  s_gram_plugins_v1_publication_scheduler --> c52
-  c53[\"📥<br/>server/cmd/gram/streams.go<br/>accountIdentityHandler"\]:::go
-  s_gram_risk_v1_account_identity_analyzer --> c53
-  c54[\"📥<br/>server/cmd/gram/streams.go<br/>customRulesHandler"\]:::go
-  s_gram_risk_v1_custom_rules_analyzer --> c54
-  c55[\"📥<br/>server/cmd/gram/streams.go<br/>customRulesEnforceHandler"\]:::go
-  s_gram_risk_v1_custom_rules_enforcer --> c55
-  c56[\"📥<br/>server/cmd/gram/streams.go<br/>risk.NewFindingCHWriter<br/>(batch)"\]:::go
-  s_gram_risk_v1_finding_ch_writer --> c56
-  c57[\"📥<br/>server/cmd/gram/streams.go<br/>riskFindingRelayHandler<br/>(batch)"\]:::go
-  s_gram_risk_v1_finding_otel_relay --> c57
-  c58[\"📥<br/>server/cmd/gram/streams.go<br/>gitleaksHandler"\]:::go
-  s_gram_risk_v1_gitleaks_analyzer --> c58
-  c59[\"📥<br/>server/cmd/gram/streams.go<br/>gitleaksEnforceHandler"\]:::go
-  s_gram_risk_v1_gitleaks_enforcer --> c59
-  c60[\"📥<br/>server/cmd/gram/streams.go<br/>llmAnalyzerHandler"\]:::go
-  s_gram_risk_v1_llm_analyzer --> c60
-  c61[\"📥<br/>server/cmd/gram/streams.go<br/>llmanalyzer.NewEnforceHandler"\]:::go
-  s_gram_risk_v1_llm_enforcer --> c61
-  c62[\"📥<br/>pystreams/src/pystreams/cmd/multi.py<br/>presidio_handler.handle"\]:::python
-  s_gram_risk_v1_presidio_analyzer --> c62
-  c63[\"📥<br/>pystreams/src/pystreams/cmd/multi.py<br/>enforce_handler.handle"\]:::python
-  s_gram_risk_v1_presidio_enforcer --> c63
-  c64[\"📥<br/>server/cmd/gram/streams.go<br/>promptInjectionHandler"\]:::go
-  s_gram_risk_v1_prompt_injection_analyzer --> c64
-  c65[\"📥<br/>server/cmd/gram/streams.go<br/>promptInjectionEnforceHandler"\]:::go
-  s_gram_risk_v1_prompt_injection_enforcer --> c65
-  c66[\"📥<br/>server/cmd/gram/streams.go<br/>promptPolicyHandler"\]:::go
-  s_gram_risk_v1_prompt_policy_analyzer --> c66
-  c67[\"📥<br/>server/cmd/gram/streams.go<br/>promptPolicyEnforceHandler"\]:::go
-  s_gram_risk_v1_prompt_policy_enforcer --> c67
-  c68[\"📥<br/>server/cmd/gram/streams.go<br/>toolCallHandler"\]:::go
-  s_gram_risk_v1_tool_call_analyzer --> c68
-  c69[\"📥<br/>server/cmd/gram/streams.go<br/>streams.HandlerFunc[*roledistributionv1.RoleDistributionSetupRequestedV1]"\]:::go
-  s_gram_role_distribution_v1_role_distribution_setup_handler --> c69
-  c70[\"📥<br/>server/cmd/gram/streams.go<br/>handler<br/>(batch)"\]:::go
-  s_gram_sigint_v1_evaluator --> c70
-  c71[\"📥<br/>server/cmd/gram/streams.go<br/>sigint.NewOutcomeCHWriter<br/>(batch)"\]:::go
-  s_gram_sigint_v1_outcome_ch_writer --> c71
-  c72[\"📥<br/>server/cmd/gram/streams.go<br/>sigint.NewReadingCHWriter<br/>(batch)"\]:::go
-  s_gram_sigint_v1_reading_ch_writer --> c72
-  c73[\"📥<br/>server/cmd/gram/streams.go<br/>new"\]:::go
-  s_gram_telemetry_v1_noop --> c73
-  c74[\"📥<br/>server/cmd/gram/streams.go<br/>telemetry.NewSessionObservedHandler<br/>(batch)"\]:::go
-  s_gram_telemetry_v1_session_observed_ch_writer --> c74
-  c75[\"📥<br/>server/cmd/gram/streams.go<br/>toolCallLogRelayHandler<br/>(batch)"\]:::go
-  s_gram_telemetry_v1_tool_call_log_relay --> c75
-  c76[\"📥<br/>server/cmd/gram/streams.go<br/>tunnelmetrics.NewWriter<br/>(batch)"\]:::go
-  s_gram_tunnel_v1_metrics_ch_writer --> c76
-  c77[\"📥<br/>server/cmd/gram/streams.go<br/>webhookEventHandler"\]:::go
-  s_gram_webhooks_v1_svix_relay --> c77
+  c51[\"📥<br/>server/cmd/gram/streams.go<br/>new"\]:::go
+  s_gram_ping_v2_py_processor --> c51
+  c52[\"📥<br/>server/cmd/gram/streams.go<br/>organizationPublicationHandler<br/>(batch)"\]:::go
+  s_gram_plugins_v1_organization_publication_scheduler --> c52
+  c53[\"📥<br/>server/cmd/gram/streams.go<br/>publicationHandler<br/>(batch)"\]:::go
+  s_gram_plugins_v1_publication_scheduler --> c53
+  c54[\"📥<br/>server/cmd/gram/streams.go<br/>accountIdentityHandler"\]:::go
+  s_gram_risk_v1_account_identity_analyzer --> c54
+  c55[\"📥<br/>server/cmd/gram/streams.go<br/>customRulesHandler"\]:::go
+  s_gram_risk_v1_custom_rules_analyzer --> c55
+  c56[\"📥<br/>server/cmd/gram/streams.go<br/>customRulesEnforceHandler"\]:::go
+  s_gram_risk_v1_custom_rules_enforcer --> c56
+  c57[\"📥<br/>server/cmd/gram/streams.go<br/>risk.NewFindingCHWriter<br/>(batch)"\]:::go
+  s_gram_risk_v1_finding_ch_writer --> c57
+  c58[\"📥<br/>server/cmd/gram/streams.go<br/>riskFindingRelayHandler<br/>(batch)"\]:::go
+  s_gram_risk_v1_finding_otel_relay --> c58
+  c59[\"📥<br/>server/cmd/gram/streams.go<br/>gitleaksHandler"\]:::go
+  s_gram_risk_v1_gitleaks_analyzer --> c59
+  c60[\"📥<br/>server/cmd/gram/streams.go<br/>gitleaksEnforceHandler"\]:::go
+  s_gram_risk_v1_gitleaks_enforcer --> c60
+  c61[\"📥<br/>server/cmd/gram/streams.go<br/>llmAnalyzerHandler"\]:::go
+  s_gram_risk_v1_llm_analyzer --> c61
+  c62[\"📥<br/>server/cmd/gram/streams.go<br/>llmanalyzer.NewEnforceHandler"\]:::go
+  s_gram_risk_v1_llm_enforcer --> c62
+  c63[\"📥<br/>pystreams/src/pystreams/cmd/multi.py<br/>presidio_handler.handle"\]:::python
+  s_gram_risk_v1_presidio_analyzer --> c63
+  c64[\"📥<br/>server/cmd/gram/streams.go<br/>new"\]:::go
+  s_gram_risk_v1_presidio_analyzer --> c64
+  c65[\"📥<br/>pystreams/src/pystreams/cmd/multi.py<br/>enforce_handler.handle"\]:::python
+  s_gram_risk_v1_presidio_enforcer --> c65
+  c66[\"📥<br/>server/cmd/gram/streams.go<br/>presidiostub.NewEnforceHandler"\]:::go
+  s_gram_risk_v1_presidio_enforcer --> c66
+  c67[\"📥<br/>server/cmd/gram/streams.go<br/>promptInjectionHandler"\]:::go
+  s_gram_risk_v1_prompt_injection_analyzer --> c67
+  c68[\"📥<br/>server/cmd/gram/streams.go<br/>promptInjectionEnforceHandler"\]:::go
+  s_gram_risk_v1_prompt_injection_enforcer --> c68
+  c69[\"📥<br/>server/cmd/gram/streams.go<br/>promptPolicyHandler"\]:::go
+  s_gram_risk_v1_prompt_policy_analyzer --> c69
+  c70[\"📥<br/>server/cmd/gram/streams.go<br/>promptPolicyEnforceHandler"\]:::go
+  s_gram_risk_v1_prompt_policy_enforcer --> c70
+  c71[\"📥<br/>server/cmd/gram/streams.go<br/>toolCallHandler"\]:::go
+  s_gram_risk_v1_tool_call_analyzer --> c71
+  c72[\"📥<br/>server/cmd/gram/streams.go<br/>streams.HandlerFunc[*roledistributionv1.RoleDistributionSetupRequestedV1]"\]:::go
+  s_gram_role_distribution_v1_role_distribution_setup_handler --> c72
+  c73[\"📥<br/>server/cmd/gram/streams.go<br/>handler<br/>(batch)"\]:::go
+  s_gram_sigint_v1_evaluator --> c73
+  c74[\"📥<br/>server/cmd/gram/streams.go<br/>sigint.NewOutcomeCHWriter<br/>(batch)"\]:::go
+  s_gram_sigint_v1_outcome_ch_writer --> c74
+  c75[\"📥<br/>server/cmd/gram/streams.go<br/>sigint.NewReadingCHWriter<br/>(batch)"\]:::go
+  s_gram_sigint_v1_reading_ch_writer --> c75
+  c76[\"📥<br/>server/cmd/gram/streams.go<br/>new"\]:::go
+  s_gram_telemetry_v1_noop --> c76
+  c77[\"📥<br/>server/cmd/gram/streams.go<br/>telemetry.NewSessionObservedHandler<br/>(batch)"\]:::go
+  s_gram_telemetry_v1_session_observed_ch_writer --> c77
+  c78[\"📥<br/>server/cmd/gram/streams.go<br/>toolCallLogRelayHandler<br/>(batch)"\]:::go
+  s_gram_telemetry_v1_tool_call_log_relay --> c78
+  c79[\"📥<br/>server/cmd/gram/streams.go<br/>tunnelmetrics.NewWriter<br/>(batch)"\]:::go
+  s_gram_tunnel_v1_metrics_ch_writer --> c79
+  c80[\"📥<br/>server/cmd/gram/streams.go<br/>webhookEventHandler"\]:::go
+  s_gram_webhooks_v1_svix_relay --> c80
 ```
 
 ## Topics
@@ -361,7 +367,7 @@ flowchart LR
 | [`gram-otel-v1-span-event-ch-writer`](../infra/proto/gram/otel/v1/span_event_ch_writer.proto) | `gram-otel-v1-span` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-otel-v1-span-relay`](../infra/proto/gram/otel/v1/span_relay.proto) | `gram-otel-v1-span` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-ping-v2-processor`](../infra/proto/gram/ping/v2/processor.proto) | `gram-ping-v2-message` | 30s | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
-| [`gram-ping-v2-py-processor`](../infra/proto/gram/ping/v2/processor.proto) | `gram-ping-v2-message` | 30s | — | [`pystreams/src/pystreams/cmd/multi.py`](../pystreams/src/pystreams/cmd/multi.py) |
+| [`gram-ping-v2-py-processor`](../infra/proto/gram/ping/v2/processor.proto) | `gram-ping-v2-message` | 30s | — | [`pystreams/src/pystreams/cmd/multi.py`](../pystreams/src/pystreams/cmd/multi.py)<br/>[`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-plugins-v1-organization-publication-scheduler`](../infra/proto/gram/plugins/v1/organization_publication_scheduler.proto) | `gram-plugins-v1-organization-publication-requested` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-plugins-v1-publication-scheduler`](../infra/proto/gram/plugins/v1/publication_scheduler.proto) | `gram-plugins-v1-publication-requested` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-account-identity-analyzer`](../infra/proto/gram/risk/v1/account_identity_analyzer.proto) | `gram-risk-v1-account-identity-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
@@ -373,8 +379,8 @@ flowchart LR
 | [`gram-risk-v1-gitleaks-enforcer`](../infra/proto/gram/risk/v1/gitleaks_enforcer.proto) | `gram-risk-v1-gitleaks-enforcement` | 10s | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-llm-analyzer`](../infra/proto/gram/risk/v1/llm_analyzer.proto) | `gram-risk-v1-llm-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-llm-enforcer`](../infra/proto/gram/risk/v1/llm_enforcer.proto) | `gram-risk-v1-llm-enforcement` | 30s | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
-| [`gram-risk-v1-presidio-analyzer`](../infra/proto/gram/risk/v1/presidio_analyzer.proto) | `gram-risk-v1-presidio-analysis` | 1m | — | [`pystreams/src/pystreams/cmd/multi.py`](../pystreams/src/pystreams/cmd/multi.py) |
-| [`gram-risk-v1-presidio-enforcer`](../infra/proto/gram/risk/v1/presidio_enforcer.proto) | `gram-risk-v1-presidio-enforcement` | 10s | — | [`pystreams/src/pystreams/cmd/multi.py`](../pystreams/src/pystreams/cmd/multi.py) |
+| [`gram-risk-v1-presidio-analyzer`](../infra/proto/gram/risk/v1/presidio_analyzer.proto) | `gram-risk-v1-presidio-analysis` | 1m | — | [`pystreams/src/pystreams/cmd/multi.py`](../pystreams/src/pystreams/cmd/multi.py)<br/>[`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-risk-v1-presidio-enforcer`](../infra/proto/gram/risk/v1/presidio_enforcer.proto) | `gram-risk-v1-presidio-enforcement` | 10s | — | [`pystreams/src/pystreams/cmd/multi.py`](../pystreams/src/pystreams/cmd/multi.py)<br/>[`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-prompt-injection-analyzer`](../infra/proto/gram/risk/v1/prompt_injection_analyzer.proto) | `gram-risk-v1-prompt-injection-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-prompt-injection-enforcer`](../infra/proto/gram/risk/v1/prompt_injection_enforcer.proto) | `gram-risk-v1-prompt-injection-enforcement` | 90s | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-prompt-policy-analyzer`](../infra/proto/gram/risk/v1/prompt_policy_analyzer.proto) | `gram-risk-v1-prompt-policy-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |

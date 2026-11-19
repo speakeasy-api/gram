@@ -17,6 +17,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -172,11 +174,7 @@ func TestGovernor_RefreshDecisionTrustedRegistrationRotated(t *testing.T) {
 	f.retainRefreshableDelegation(t, "durable_credential_present")
 	require.Equal(t, RefreshServed, g.RefreshDecision(t.Context(), f.req).Decision)
 
-	rotated, err := f.chainer.enc.Encrypt([]byte("rotated-secret"))
-	require.NoError(t, err)
-	_, err = repo.New(f.db).UpdateOrganizationRemoteSessionClient(t.Context(), repo.UpdateOrganizationRemoteSessionClientParams{
-		ClientSecretEncrypted: pgtype.Text{String: rotated, Valid: true}, ID: f.sel.trustedClientID, OrganizationID: pgtype.Text{String: f.req.OrganizationID, Valid: true},
-	})
+	_, err := clientsecretstest.New(t, f.db, f.chainer.enc).Set(t.Context(), f.db, f.sel.trustedClientID, clientsecrets.OwnerOf(pgtype.Text{String: f.req.OrganizationID, Valid: true}, uuid.NullUUID{UUID: uuid.Nil, Valid: false}), []byte("rotated-secret"), pgtype.Timestamptz{})
 	require.NoError(t, err)
 	require.Equal(t, RefreshVerdict{Decision: RefreshReauthenticate, RemoteSessionIssuerID: f.sel.remoteIssuerID, Provider: remotesessions.EMAProviderExternal, Reason: ReasonReauthenticationRequired}, g.RefreshDecision(t.Context(), f.req),
 		"a delegation retained under the previous registration is replaced by the next sign-in")
@@ -230,11 +228,7 @@ func TestGovernor_TrustedRegistrationRotationMakesCredentialUnusable(t *testing.
 	require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("downstream-token")))
 	require.True(t, g.HasUsableCredential(t.Context(), f.req))
 
-	rotated, err := f.chainer.enc.Encrypt([]byte("rotated-secret"))
-	require.NoError(t, err)
-	_, err = repo.New(f.db).UpdateOrganizationRemoteSessionClient(t.Context(), repo.UpdateOrganizationRemoteSessionClientParams{
-		ClientSecretEncrypted: pgtype.Text{String: rotated, Valid: true}, ID: f.sel.trustedClientID, OrganizationID: pgtype.Text{String: f.req.OrganizationID, Valid: true},
-	})
+	_, err := clientsecretstest.New(t, f.db, f.chainer.enc).Set(t.Context(), f.db, f.sel.trustedClientID, clientsecrets.OwnerOf(pgtype.Text{String: f.req.OrganizationID, Valid: true}, uuid.NullUUID{UUID: uuid.Nil, Valid: false}), []byte("rotated-secret"), pgtype.Timestamptz{})
 	require.NoError(t, err)
 	require.False(t, g.HasUsableCredential(t.Context(), f.req), "an unexpired token minted under the previous trusted registration is not usable")
 	require.False(t, NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, nil).HasUsableCredential(t.Context(), f.req), "without a delegation check nothing is usable")

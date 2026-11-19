@@ -516,8 +516,10 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 		cancel            bool
 		cancelReadFailure bool
 		otherBrowser      bool
+		orgIssuer         bool
 	}{
 		{name: "all tools"},
+		{name: "organization issuer on a project gateway", orgIssuer: true},
 		{name: "another browser cannot review", otherBrowser: true},
 		{name: "commit failure preserves catalogue", commitFailure: true},
 		{name: "completion failure can retry", completionFailure: true},
@@ -548,6 +550,18 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 			configureCodeRunner(t, ctx, ti)
 			_, issuerRow, downstream := seedPrivateToolsetWithIssuer(t, ctx, ti)
 			issuer := issuerRow.ID
+			if tc.orgIssuer {
+				issuer = createOrganizationIssuer(t, ctx, ti, auth.ActiveOrganizationID)
+				orgClient, err := usersessionsrepo.New(ti.conn).CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{
+					UserSessionIssuerID:     issuer,
+					ClientID:                "org-client-" + uuid.NewString()[:8],
+					ClientName:              "org client",
+					RedirectUris:            []string{"http://localhost:3000/callback"},
+					TokenEndpointAuthMethod: "none",
+				})
+				require.NoError(t, err)
+				downstream = orgClient
+			}
 			slug := "code-reconnect-" + uuid.NewString()
 			gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer)
 			upstream := newRecordingUpstream(t, "ping")

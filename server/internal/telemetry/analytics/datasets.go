@@ -77,12 +77,62 @@ var ToolCalls = &Dataset{
 			Typeahead:    "user_email",
 		},
 		{
-			Name:      "surface",
-			Type:      TypeString,
-			Role:      RoleDimension,
-			Operators: equalsIn,
-			Expr:      "surface",
-			Typeahead: "surface",
+			Name:        "surface",
+			Type:        TypeString,
+			Role:        RoleDimension,
+			Operators:   equalsIn,
+			Expr:        "surface",
+			Typeahead:   "surface",
+			Description: surfaceDescription,
+		},
+		{
+			Name:        "product",
+			Type:        TypeString,
+			Role:        RoleDimension,
+			Operators:   equalsIn,
+			Expr:        "product",
+			Typeahead:   "product",
+			Description: productDescription,
+		},
+		{
+			Name:        "family",
+			Type:        TypeString,
+			Role:        RoleDimension,
+			Operators:   equalsIn,
+			Expr:        "product",
+			Typeahead:   "product",
+			Description: familyDescription,
+			Lookup:      ProductFamiliesLookup,
+		},
+		{
+			Name:        "vendor",
+			Type:        TypeString,
+			Role:        RoleDimension,
+			Operators:   equalsIn,
+			Expr:        "product",
+			Typeahead:   "product",
+			Description: vendorDescription,
+			Lookup:      ProductVendorsLookup,
+		},
+		{
+			Name:        "client",
+			Type:        TypeString,
+			Role:        RoleDimension,
+			Operators:   equalsIn,
+			Expr:        "client",
+			Typeahead:   "client",
+			Description: clientDescription,
+		},
+		{
+			Name:         "agent",
+			Type:         TypeString,
+			Role:         RoleDimension,
+			Operators:    equalsIn,
+			Aggregations: countDistinct,
+			Expr:         "agent_id",
+			Typeahead:    "agent_id",
+			Description:  agentDescription,
+			Lookup:       AgentNamesLookup,
 		},
 		// status reads outcome in agent vocabulary, not a protocol status
 		// code: ok, error, rejected (a call a decision blocked) or refused (a
@@ -159,12 +209,62 @@ var Skills = &Dataset{
 			Typeahead:    "user_email",
 		},
 		{
-			Name:      "surface",
-			Type:      TypeString,
-			Role:      RoleDimension,
-			Operators: equalsIn,
-			Expr:      "surface",
-			Typeahead: "surface",
+			Name:        "surface",
+			Type:        TypeString,
+			Role:        RoleDimension,
+			Operators:   equalsIn,
+			Expr:        "surface",
+			Typeahead:   "surface",
+			Description: surfaceDescription,
+		},
+		{
+			Name:        "product",
+			Type:        TypeString,
+			Role:        RoleDimension,
+			Operators:   equalsIn,
+			Expr:        "product",
+			Typeahead:   "product",
+			Description: productDescription,
+		},
+		{
+			Name:        "family",
+			Type:        TypeString,
+			Role:        RoleDimension,
+			Operators:   equalsIn,
+			Expr:        "product",
+			Typeahead:   "product",
+			Description: familyDescription,
+			Lookup:      ProductFamiliesLookup,
+		},
+		{
+			Name:        "vendor",
+			Type:        TypeString,
+			Role:        RoleDimension,
+			Operators:   equalsIn,
+			Expr:        "product",
+			Typeahead:   "product",
+			Description: vendorDescription,
+			Lookup:      ProductVendorsLookup,
+		},
+		{
+			Name:        "client",
+			Type:        TypeString,
+			Role:        RoleDimension,
+			Operators:   equalsIn,
+			Expr:        "client",
+			Typeahead:   "client",
+			Description: clientDescription,
+		},
+		{
+			Name:         "agent",
+			Type:         TypeString,
+			Role:         RoleDimension,
+			Operators:    equalsIn,
+			Aggregations: countDistinct,
+			Expr:         "agent_id",
+			Typeahead:    "agent_id",
+			Description:  agentDescription,
+			Lookup:       AgentNamesLookup,
 		},
 		// status is the invocation's outcome in the same vocabulary as a tool
 		// call's: ok, error, rejected or refused.
@@ -327,6 +427,24 @@ func sqlStrings(values []string) string {
 // display name both match; the field says which name it shows.
 const mcpServerDescription = "MCP server the call went to, under the display name set in Hooks settings. A raw name with no override shows as reported; a filter may name either."
 
+const (
+	surfaceDescription = "Agent surface as the producer named it, mixing the product with where it ran. Deprecated: use product and client."
+	productDescription = "Agent product that made the call, as the AI products catalog names it: claude-code, claude (Claude chat), cowork, codex, chatgpt, cursor and others. Empty when the producer named none the catalog knows."
+	familyDescription  = "Product family, e.g. claude for Claude Code, Claude and Cowork; a product with no family is its own."
+	vendorDescription  = "Vendor that ships the product, e.g. anthropic or openai."
+	clientDescription  = "Kind of client the product ran in: cli, ide, desktop, web, mobile, cloud or slack. Empty when the producer gives no signal for it."
+	agentDescription   = "Speakeasy agent the call ran as, under its name. Empty for a call a person made."
+)
+
+// AgentNamesLookup reads agent ids as the organization's agent names.
+const AgentNamesLookup = "agent_names"
+
+// ProductFamiliesLookup reads product ids as their families in the AI products catalog.
+const ProductFamiliesLookup = "product_families"
+
+// ProductVendorsLookup reads product ids as their vendors in the AI products catalog.
+const ProductVendorsLookup = "product_vendors"
+
 // MCPServerDisplayNamesLookup names the lookup mcp_server reads through: the
 // project's hook server-name overrides, raw name to display name.
 const MCPServerDisplayNamesLookup = "mcp_server_display_names"
@@ -347,6 +465,18 @@ var Lookups = []*Lookup{
 	{
 		Name:        MCPServerDisplayNamesLookup,
 		Description: "The project's hook server-name overrides, set in Hooks settings: a reported MCP server name with an override shows as its display name, the rest as reported.",
+	},
+	{
+		Name:        AgentNamesLookup,
+		Description: "The organization's agents: an agent id shows as the agent's name, an id with no agent as reported.",
+	},
+	{
+		Name:        ProductFamiliesLookup,
+		Description: "The AI products catalog: a product id shows as its family, an id the catalog does not know as reported.",
+	},
+	{
+		Name:        ProductVendorsLookup,
+		Description: "The AI products catalog: a product id shows as its vendor, an id the catalog does not know as reported.",
 	},
 	{
 		Name:        RiskPolicyNamesLookup,

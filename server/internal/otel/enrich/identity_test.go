@@ -4,8 +4,66 @@ import (
 	"testing"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/stretchr/testify/require"
 )
+
+func TestIdentityNamesTheAgentOnlyOnSpeakeasyRecords(t *testing.T) {
+	t.Parallel()
+
+	actor := []*otelv1.InboundLogRecord_KeyValue{
+		logStringAttribute("gen_ai.tool.call.id", "call-1"),
+		logStringAttribute("gram.authorization.actor.type", "agent"),
+		logStringAttribute("gram.authorization.actor.id", "agent-1"),
+	}
+	internal := func(record *otelv1.InboundLogRecord) *otelv1.InboundLogRecord {
+		record.GetProvenance().SetSource(InternalProvenanceSource)
+		return record
+	}
+
+	tests := []struct {
+		name   string
+		record *otelv1.InboundLogRecord
+		want   string
+	}{
+		{
+			name:   "it names the agent a hook row Speakeasy emitted ran as",
+			record: internal(inboundTestLog(dialect.HooksLogScope, "claude-code", "PostToolUse", actor...)),
+			want:   "agent-1",
+		},
+		{
+			name:   "it names the agent a gateway call ran as",
+			record: internal(inboundTestLog(dialect.GatewayLogScope, "gram", "execute_tool", append(actor, logStringAttribute("gen_ai.operation.name", "execute_tool"))...)),
+			want:   "agent-1",
+		},
+		{
+			name:   "it never believes the same attributes from a record the ingest edge received",
+			record: inboundTestLog(dialect.HooksLogScope, "claude-code", "PostToolUse", actor...),
+			want:   "",
+		},
+		{
+			name: "it names no agent when a person made the call",
+			record: internal(inboundTestLog(dialect.HooksLogScope, "claude-code", "PostToolUse",
+				logStringAttribute("gram.authorization.actor.type", "user"),
+				logStringAttribute("gram.authorization.actor.id", "user-1"),
+			)),
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			attrs := identity(t, tt.record)
+			if tt.want == "" {
+				require.NotContains(t, attrs, AgentAgentIDKey)
+				return
+			}
+			require.Equal(t, tt.want, attrs[AgentAgentIDKey].AsString())
+		})
+	}
+}
 
 func TestIdentityForClaudeCode(t *testing.T) {
 	t.Parallel()

@@ -26,6 +26,7 @@ const state = vi.hoisted(() => ({
   featuresLoading: false,
   ingressError: false,
   ingressPending: false,
+  gatewayTag: "tag:speakeasy",
   ingressOptions: undefined as
     | {
         enabled?: boolean;
@@ -54,6 +55,7 @@ const state = vi.hoisted(() => ({
         credentialsConfigured: boolean;
         status: string;
         lastError?: string;
+        statusDetail?: string;
         runtime?: string;
         createdAt: Date;
         updatedAt: Date;
@@ -102,7 +104,7 @@ vi.mock("@gram/client/react-query/networkIngress.js", () => ({
   useNetworkIngress: (...args: unknown[]) => {
     state.ingressOptions = args[2] as typeof state.ingressOptions;
     return {
-      data: { ingress: state.ingress },
+      data: { ingress: state.ingress, gatewayTag: state.gatewayTag },
       error: state.ingressError ? new Error("unavailable") : null,
       isLoading: false,
       isPending: state.ingressPending,
@@ -170,6 +172,7 @@ beforeEach(() => {
   state.featuresLoading = false;
   state.ingressError = false;
   state.ingressPending = false;
+  state.gatewayTag = "tag:speakeasy";
   state.ingressOptions = undefined;
   state.createMutate.mockReset();
   state.createOptions = undefined;
@@ -335,6 +338,21 @@ describe("PrivateNetworkSection", () => {
     ).toBeTruthy();
     expect(screen.getByText(/"dst": \["svc:speakeasy"\]/)).toBeTruthy();
     expect(screen.getByText(/run Tailscale 1\.86 or later/)).toBeTruthy();
+  });
+
+  it("uses the environment's gateway tag in the policy and OAuth steps", () => {
+    state.gatewayTag = "tag:speakeasy-dev";
+    render(<PrivateNetworkSection />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
+
+    expect(
+      screen.getByText(/"tag:speakeasy-dev": \["autogroup:admin"\]/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/"svc:speakeasy": \["tag:speakeasy-dev"\]/),
+    ).toBeTruthy();
+    expect(screen.getAllByText("tag:speakeasy-dev")).toHaveLength(2);
+    expect(screen.queryByText(/"tag:speakeasy"/)).toBeNull();
   });
 
   it.each(["disabled", "missing", "error"] as const)(
@@ -780,6 +798,21 @@ describe("PrivateNetworkSection", () => {
     ).toBe(false);
   });
 
+  it("names the environment's gateway tag when asking for approval", () => {
+    state.gatewayTag = "tag:speakeasy-dev";
+    state.ingress = configuredIngress({
+      hostname: "private-mcp",
+      status: "error",
+      lastError: "provider_service_not_approved",
+    });
+
+    render(<PrivateNetworkSection />);
+
+    expect(
+      screen.getByText(/"svc:private-mcp": \["tag:speakeasy-dev"\]/),
+    ).toBeTruthy();
+  });
+
   it("explains a missing certificate and waits instead of offering a retry", () => {
     state.ingress = {
       id: "ingress-1",
@@ -799,11 +832,9 @@ describe("PrivateNetworkSection", () => {
     render(<PrivateNetworkSection />);
 
     expect(
-      screen.getByText(/hasn.t\s+obtained an HTTPS certificate for/),
+      screen.getByText(/couldn.t get\s+a valid HTTPS certificate for/),
     ).toBeTruthy();
-    expect(
-      screen.getByText(/weekly allowance of new certificates/),
-    ).toBeTruthy();
+    expect(screen.queryByText(/Latest attempt:/)).toBeNull();
     expect(screen.queryByText(/Latest check:/)).toBeNull();
     expect(
       screen.queryByRole("button", { name: "Retry provisioning" }),
@@ -820,6 +851,33 @@ describe("PrivateNetworkSection", () => {
         },
       }),
     ).toBe(30_000);
+  });
+
+  it("names why the certificate request was refused", () => {
+    state.ingress = {
+      id: "ingress-1",
+      organizationId: "org-1",
+      provider: "tailscale",
+      hostname: "private-mcp",
+      endpointNamespaceKind: "platform",
+      enabled: true,
+      identityRequired: false,
+      credentialsConfigured: true,
+      status: "error",
+      lastError: "provider_certificate_unavailable",
+      statusDetail:
+        "Let's Encrypt is rate limiting new certificates for this tailnet; retrying after 2026-11-12 22:53 UTC",
+      createdAt: new Date(0),
+      updatedAt: new Date(1_000),
+    };
+
+    render(<PrivateNetworkSection />);
+
+    expect(
+      screen.getByText(
+        "Latest attempt: Let's Encrypt is rate limiting new certificates for this tailnet; retrying after 2026-11-12 22:53 UTC",
+      ),
+    ).toBeTruthy();
   });
 
   it("keeps cached cleanup controls visible when polling fails", () => {

@@ -634,7 +634,7 @@ func extractDefaultServerSpeakeasy(ctx context.Context, logger *slog.Logger, doc
 }
 
 func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, doc *openapi.OpenAPI, schemaCache *concurrentSchemaCache, task operationTask[openapi.Operation, openapi.ReferencedParameter]) (repo.CreateOpenAPIv3ToolDefinitionParams, []*repo.LogDeploymentEventParams, error) {
-	empty := repo.CreateOpenAPIv3ToolDefinitionParams{} //nolint:exhaustruct //empty struct
+	empty := repo.CreateOpenAPIv3ToolDefinitionParams{} //nolint:exhaustruct_v5 //empty struct
 
 	var deploymentEvents []*repo.LogDeploymentEventParams
 
@@ -884,7 +884,7 @@ type capturedRequestBodySpeakeasy struct {
 }
 
 func captureRequestBodySpeakeasy(ctx context.Context, doc *openapi.OpenAPI, schemaCache *concurrentSchemaCache, requestBody *openapi.RequestBody) (capturedRequestBodySpeakeasy, error) {
-	empty := capturedRequestBodySpeakeasy{} //nolint:exhaustruct // empty struct
+	empty := capturedRequestBodySpeakeasy{} //nolint:exhaustruct_v5 // empty struct
 
 	if requestBody == nil || requestBody.GetContent().Len() == 0 {
 		return empty, nil

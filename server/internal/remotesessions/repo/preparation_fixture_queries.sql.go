@@ -437,7 +437,7 @@ func (q *Queries) ListPreparationTypedClientsFixture(ctx context.Context, arg Li
 }
 
 const setPreparationInheritedClientSecretFixture = `-- name: SetPreparationInheritedClientSecretFixture :exec
-UPDATE remote_session_clients SET token_endpoint_auth_method = 'client_secret_basic', client_secret_encrypted = $1, grant_types = $2 WHERE id = $3 AND organization_id = $4 AND project_id IS NULL
+UPDATE remote_session_clients SET token_endpoint_auth_method = 'client_secret_basic', client_secret_encrypted = $1, client_secret_org_encrypted = NULL, client_secret_generation = client_secret_generation + 1, grant_types = $2 WHERE id = $3 AND organization_id = $4 AND project_id IS NULL
 `
 
 type SetPreparationInheritedClientSecretFixtureParams struct {

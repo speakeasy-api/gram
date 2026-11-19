@@ -59,4 +59,17 @@ describe("useObservabilityPluginDownload", () => {
     vi.runAllTimers();
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:plugin");
   });
+
+  it("requests the vibe platform package", async () => {
+    mocks.fetch.mockResolvedValue(new Response(new Blob(["zip"])));
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const { result } = renderHook(() =>
+      useObservabilityPluginDownload("vibe", "observability-vibe.zip"),
+    );
+    await act(() => result.current.download());
+    expect(mocks.fetch).toHaveBeenCalledWith(
+      "/rpc/plugins.downloadObservabilityPlugin?platform=vibe",
+      {},
+    );
+  });
 });

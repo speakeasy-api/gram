@@ -1,3 +1,4 @@
+import { InlineEmptyState } from "@/components/inline-empty-state";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -59,19 +60,17 @@ export function GuardrailsTab({
   return (
     <RequireScope scope="org:admin" resourceId={organization.id} level="page">
       <RequireScope scope="mcp:read" resourceId={mcpServer.id} level="page">
-        <Stack gap={6} className="py-8">
+        <Stack gap={6}>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="font-display text-3xl font-thin">Guardrails</h2>
-              <Text small muted>
-                Risk policies that inspect traffic through this server.
-              </Text>
-            </div>
+            <Text small muted>
+              Guardrails check traffic through this server for secrets,
+              sensitive data and risky tool calls.
+            </Text>
             <SegmentedControl<GuardrailsView>
               value={view}
               onChange={setView}
               options={[
-                { value: "policies", label: "Policies" },
+                { value: "policies", label: "Guardrails" },
                 { value: "events", label: "Risk events" },
               ]}
             />
@@ -124,26 +123,49 @@ function PoliciesView({ mcpServer }: { mcpServer: McpServer }): JSX.Element {
     <Stack gap={6}>
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="text-eyebrow">Scoped to this server</h3>
-          <Button size="sm" onClick={() => setAdding(true)}>
-            <Button.Text>Add guardrail</Button.Text>
-          </Button>
+          <h3 className="text-eyebrow">This server</h3>
+          {/* The empty state carries the add action, so only one shows. */}
+          {scoped.length > 0 && (
+            <Button size="sm" onClick={() => setAdding(true)}>
+              <Button.Text>Add guardrail</Button.Text>
+            </Button>
+          )}
         </div>
         {policiesQuery.isLoading ? (
           <Text small muted>
-            Loading policies…
+            Loading guardrails…
           </Text>
         ) : policiesQuery.isError ? (
-          <Text small className="text-destructive" role="alert">
-            {policiesQuery.error?.message ?? "Failed to load policies"}
-          </Text>
-        ) : scoped.length === 0 ? (
-          <div className="border-border border border-dashed p-6 text-center">
-            <Text small muted>
-              No guardrail is scoped to this server yet. Add one to inspect its
-              traffic for secrets, sensitive data and risky tool calls.
-            </Text>
+          <div role="alert">
+            <InlineEmptyState
+              icon="triangle-alert"
+              heading="Couldn't load guardrails"
+              description="Check your connection, then try again."
+              action={
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    void applicableQuery.refetch();
+                    void allQuery.refetch();
+                  }}
+                >
+                  <Button.Text>Retry</Button.Text>
+                </Button>
+              }
+            />
           </div>
+        ) : scoped.length === 0 ? (
+          <InlineEmptyState
+            icon="shield-check"
+            heading="Protect this server's traffic"
+            description="Add a guardrail to catch secrets, sensitive data and risky tool calls on this server."
+            action={
+              <Button size="sm" onClick={() => setAdding(true)}>
+                <Button.Text>Add guardrail</Button.Text>
+              </Button>
+            }
+          />
         ) : (
           <PolicyRows
             policies={scoped}
@@ -153,9 +175,9 @@ function PoliciesView({ mcpServer }: { mcpServer: McpServer }): JSX.Element {
       </section>
       <section className="space-y-3">
         <div>
-          <h3 className="text-eyebrow">Inherited</h3>
+          <h3 className="text-eyebrow">All servers</h3>
           <Text small muted>
-            Policies scoped to every MCP server. Manage them under{" "}
+            Guardrails that apply to every MCP server. Manage them under{" "}
             <Link
               to={routes.policyCenter.href()}
               className="underline underline-offset-2"
@@ -167,7 +189,7 @@ function PoliciesView({ mcpServer }: { mcpServer: McpServer }): JSX.Element {
         </div>
         {policiesQuery.isError ? null : inherited.length === 0 ? (
           <Text small muted>
-            No all-servers policies apply to this server.
+            No guardrails apply to every server yet.
           </Text>
         ) : (
           <PolicyRows policies={inherited} detail={() => "All servers"} />

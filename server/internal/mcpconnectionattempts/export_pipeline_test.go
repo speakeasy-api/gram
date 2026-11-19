@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/otelsink"
 	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
+	"github.com/speakeasy-api/gram/server/internal/otel/oteltest"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -161,4 +162,7 @@ func TestExportPipeline_RealRecordReachesASensitiveExcludedDestinationUnredacted
 	for key, value := range got {
 		require.NotEqual(t, "[REDACTED]", value.GetStringValue(), key)
 	}
+	collisions, err := oteltest.DottedPrefixCollisions(received[0], nil)
+	require.NoError(t, err)
+	require.Empty(t, collisions, "no attribute key may be a dotted prefix of another")
 }

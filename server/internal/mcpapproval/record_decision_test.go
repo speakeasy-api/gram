@@ -44,8 +44,8 @@ func TestRecordDecision_Approve(t *testing.T) {
 	require.Equal(t, "approved", requestStatus(t, ctx, ti, ti.projectID, requestID))
 }
 
-// A denial grants nobody anything, whatever the caller sent alongside it.
-func TestRecordDecision_DenyDropsGrants(t *testing.T) {
+// A denial with no principals covers everyone.
+func TestRecordDecision_DenyForEveryone(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -54,13 +54,31 @@ func TestRecordDecision_DenyDropsGrants(t *testing.T) {
 
 	payload := decisionPayload(requestID.String(), "denied")
 	payload.Rationale = "demands a broad token and publishes no source"
-	payload.GrantedPrincipalUrns = []string{"role:platform", "urn:gram:user:someone"}
 
 	decision, err := ti.service.RecordDecision(ctx, payload)
 	require.NoError(t, err)
 	require.Equal(t, "denied", decision.Decision)
 	require.Empty(t, decision.GrantedPrincipalUrns)
 	require.Equal(t, "denied", requestStatus(t, ctx, ti, ti.projectID, requestID))
+}
+
+// A denial narrowed to a person keeps who it covers.
+func TestRecordDecision_DenyForSomeone(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
+
+	principal := seedMemberPrincipal(t, ctx, ti, "user-contractor")
+	payload := decisionPayload(requestID.String(), "denied")
+	payload.Rationale = "contractors may not use this server"
+	payload.GrantedPrincipalUrns = []string{principal}
+
+	decision, err := ti.service.RecordDecision(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "denied", decision.Decision)
+	require.Equal(t, []string{principal}, decision.GrantedPrincipalUrns)
 }
 
 // The evidence a reviewer actually saw is frozen onto the decision, so a later

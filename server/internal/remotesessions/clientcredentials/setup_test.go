@@ -211,7 +211,7 @@ func (f fixture) secretClientAt(t *testing.T, issuerID uuid.UUID) uuid.UUID {
 	encrypted, err := f.enc.Encrypt([]byte("client-secret"))
 	require.NoError(t, err)
 
-	client, err := repo.New(f.db).CreateRemoteSessionClient(t.Context(), repo.CreateRemoteSessionClientParams{
+	client, err := repo.New(f.db).CreateRemoteSessionClientFixture(t.Context(), repo.CreateRemoteSessionClientFixtureParams{
 		OrganizationID: pgtype.Text{String: f.org, Valid: true}, RemoteSessionIssuerID: issuerID, ClientID: "gram-client",
 		ClientSecretEncrypted:   pgtype.Text{String: encrypted, Valid: true},
 		TokenEndpointAuthMethod: pgtype.Text{String: oauthwire.AuthMethodClientSecretBasic, Valid: true},
@@ -253,7 +253,7 @@ func (f fixture) secretClient(t *testing.T, method string, scope []string) uuid.
 	encrypted, err := f.enc.Encrypt([]byte("client-secret"))
 	require.NoError(t, err)
 
-	client, err := repo.New(f.db).CreateRemoteSessionClient(t.Context(), repo.CreateRemoteSessionClientParams{
+	client, err := repo.New(f.db).CreateRemoteSessionClientFixture(t.Context(), repo.CreateRemoteSessionClientFixtureParams{
 		OrganizationID: pgtype.Text{String: f.org, Valid: true}, RemoteSessionIssuerID: f.issuerID, ClientID: "gram-client",
 		ClientSecretEncrypted:   pgtype.Text{String: encrypted, Valid: true},
 		TokenEndpointAuthMethod: pgtype.Text{String: method, Valid: true},
@@ -276,7 +276,7 @@ func (f fixture) keySetClient(t *testing.T, audienceFormat string) (uuid.UUID, u
 
 	f.activateKey(t, keySetID, "kid-1")
 
-	client, err := repo.New(f.db).CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+	client, err := repo.New(f.db).CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 		OrganizationID: pgtype.Text{String: f.org, Valid: true}, RemoteSessionIssuerID: f.issuerID, ClientID: "gram-client",
 		TokenEndpointAuthMethod:         pgtype.Text{String: oauthwire.AuthMethodPrivateKeyJWT, Valid: true},
 		TokenEndpointAuthAudienceFormat: pgtype.Text{String: audienceFormat, Valid: audienceFormat != ""},

@@ -39,6 +39,14 @@ const (
 	// registration includes a certificate request, which can take ~30s.
 	DefaultStartTimeout = 60 * time.Second
 
+	// DefaultApprovalGrace is how long after its node starts a slot that the
+	// tailnet has not approved keeps reporting starting rather than
+	// awaiting_approval. An auto-approval arrives about 3s after the node is
+	// Running and Start waits up to approvalWait for it; a minute covers a
+	// slow control plane and a poll or two, while still showing a missing
+	// approval, which only the customer can fix, within about a minute.
+	DefaultApprovalGrace = time.Minute
+
 	// DefaultMaxHosts caps nodes per pod so memory stays bounded; each tsnet
 	// node costs tens of MiB.
 	DefaultMaxHosts = 200
@@ -99,6 +107,11 @@ type Config struct {
 	// StartTimeout bounds one node start.
 	StartTimeout time.Duration
 
+	// ApprovalGrace is how long after its node starts an unapproved slot
+	// reports starting before it reports awaiting_approval. Zero reports it
+	// at once.
+	ApprovalGrace time.Duration
+
 	// MaxHosts caps nodes hosted by this pod.
 	MaxHosts int
 
@@ -142,6 +155,9 @@ func (c Config) Validate() error {
 	if c.PollInterval <= 0 || c.DrainTimeout <= 0 || c.StartTimeout <= 0 || c.MaxHosts <= 0 {
 		return errors.New("tailnet gateway intervals and host cap must be positive")
 	}
+	if c.ApprovalGrace < 0 {
+		return errors.New("tailnet gateway approval grace must not be negative")
+	}
 	return nil
 }
 
@@ -173,9 +189,12 @@ type desiredIngress struct {
 //     the service.
 //   - starting | online -> awaiting_approval: the node is up but the tailnet
 //     has not approved it, or revoked its approval; -> online once approved.
+//     For ApprovalGrace after the node is up, an unapproved node stays
+//     starting, since auto-approval takes a few seconds.
 //   - starting | awaiting_approval -> awaiting_certificate: the node is
-//     approved but holds no TLS certificate for the service yet; -> online
-//     once the certificate is issued.
+//     approved but a request for its TLS certificate failed; -> online once
+//     a retry succeeds. While the first request runs the node stays
+//     starting.
 //   - starting -> error: the start failed; retried next poll, backing off
 //     after maxStartFailures attempts in a row that did not reach online.
 //   - any running state -> draining -> error: the node failed while running;
@@ -209,6 +228,10 @@ type slot struct {
 	node    Node
 	nodeID  string
 	dnsName string
+
+	// startedAt is when the running node finished starting; the approval
+	// grace is measured from it, so a slow registration does not use it up.
+	startedAt time.Time
 
 	// authKeyCleared is set once the one-shot key has been removed from the
 	// slot row after the node persisted its state.
@@ -271,8 +294,10 @@ func wakes(from, to NodeStatus) bool {
 }
 
 // probeTransition maps one status probe of a running node to the slot's next
-// state.
-func probeTransition(from NodeStatus, serviceName string, state NodeState, err error) transition {
+// state. inApprovalGrace is whether the node started less than the
+// configured ApprovalGrace ago: an unapproved node then reports starting,
+// since approval is normally on its way.
+func probeTransition(from NodeStatus, serviceName string, state NodeState, err error, inApprovalGrace bool) transition {
 	t := transition{to: NodeStatusStarting, message: state.BackendState, wake: false}
 	switch {
 	case err != nil:
@@ -281,11 +306,16 @@ func probeTransition(from NodeStatus, serviceName string, state NodeState, err e
 		t.to, t.message = NodeStatusOnline, ""
 	case state.NeedsLogin:
 		t.to = NodeStatusNeedsLogin
+	case state.AwaitingApproval && inApprovalGrace:
+		t.message = "waiting for the tailnet to approve this node to host " + serviceName
 	case state.AwaitingApproval:
 		t.to = NodeStatusAwaitingApproval
 		t.message = "the tailnet has not approved this node to host " + serviceName
 	case state.AwaitingCertificate:
 		t.to = NodeStatusAwaitingCertificate
+		t.message = state.CertificateStatus
+	case state.CertificateStatus != "":
+		// Approved, with the first certificate request still running.
 		t.message = state.CertificateStatus
 	}
 	t.wake = wakes(from, t.to)
@@ -513,7 +543,7 @@ func (g *Gateway) startable(ctx context.Context, desired map[uuid.UUID]desiredIn
 		s, ok := g.slots[id]
 		if !ok {
 			s = &slot{
-				mu: sync.Mutex{}, ingress: want, state: "", lastError: "", node: nil, nodeID: "", dnsName: "",
+				mu: sync.Mutex{}, ingress: want, state: "", lastError: "", node: nil, nodeID: "", dnsName: "", startedAt: time.Time{},
 				authKeyCleared: false, inFlight: false, failures: 0, retryAt: time.Time{},
 				certificate: atomic.Pointer[CertificateObservation]{},
 			}
@@ -738,6 +768,7 @@ func (g *Gateway) start(ctx context.Context, s *slot) {
 		return
 	}
 	s.node = node
+	s.startedAt = g.now()
 	s.nodeID = ""
 	s.dnsName = state.FQDN
 	// The key row is the source of truth: a restart after a failed clear
@@ -806,7 +837,7 @@ func (g *Gateway) probe(ctx context.Context, s *slot) NodeStatus {
 		s.dnsName = state.FQDN
 	}
 
-	t := probeTransition(s.state, s.ingress.serviceName, state, err)
+	t := probeTransition(s.state, s.ingress.serviceName, state, err, g.now().Sub(s.startedAt) < g.cfg.ApprovalGrace)
 	g.move(ctx, s, t)
 
 	if t.to == NodeStatusOnline {

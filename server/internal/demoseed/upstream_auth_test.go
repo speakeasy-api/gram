@@ -66,7 +66,7 @@ func TestSeedUpstreamAuthReadyAfterReseed(t *testing.T) {
 // shared token. Each agent attachment grant is bound to the agent's owner and
 // the attachment's upstream client.
 func expectedSeedAuthGrants() []string {
-	sharedClients := []string{"Static credential", "Shared service token", "Acme Wiki", "Acme Tracker"}
+	sharedClients := []string{"Static credential", "Shared service token", "Acme Wiki"}
 	var out []string
 	shared := func(principal, kind string, clients ...string) {
 		for _, client := range clients {
@@ -85,7 +85,7 @@ func expectedSeedAuthGrants() []string {
 	for _, role := range []string{"analyst", "collaborator", "read-only-tools", "temporary-escalation"} {
 		shared("role "+role, "shared_client", sharedClients...)
 	}
-	shared("role engineer", "shared_client", "Static credential", "Acme Wiki", "Acme Tracker")
+	shared("role engineer", "shared_client", "Static credential", "Acme Wiki")
 	shared("role engineer", "", "Shared service token")
 	shared("role support-desk", "shared_client", "Static credential")
 	out = append(out, "role contractors | mcp:blocked_auth | Shared service token | type= | owner= | upstream= | ")
@@ -96,8 +96,8 @@ func expectedSeedAuthGrants() []string {
 	shared("user mateo", "shared_client", sharedClients...)
 	shared("user priya", "shared_client", "Static credential")
 
-	personal("agent Identity-bound assistant agent")
-	shared("agent Identity-bound assistant agent", "shared_client", sharedClients...)
+	personal("agent Identity-bound assistant")
+	shared("agent Identity-bound assistant", "shared_client", sharedClients...)
 	for _, agent := range []struct{ name, owner string }{
 		{"Release assistant", demoUsers[0].handle},
 		{"Release notes assistant", demoUsers[1].handle},

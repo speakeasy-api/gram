@@ -327,6 +327,33 @@ func (q *Queries) GetNetworkIngressByOrganization(ctx context.Context, organizat
 	return i, err
 }
 
+const getNetworkIngressCertificateFailure = `-- name: GetNetworkIngressCertificateFailure :one
+SELECT last_error
+FROM network_ingress_nodes
+WHERE network_ingress_id = $1
+  AND organization_id = $2
+  AND retired_at IS NULL
+  AND status = 'awaiting_certificate'
+  AND last_error IS NOT NULL
+ORDER BY last_seen_at DESC NULLS LAST
+LIMIT 1
+`
+
+type GetNetworkIngressCertificateFailureParams struct {
+	NetworkIngressID uuid.UUID
+	OrganizationID   string
+}
+
+// The message of the most recently seen gateway slot that holds no valid TLS
+// certificate because a request failed. The gateway writes it, naming the
+// cause and when it retries.
+func (q *Queries) GetNetworkIngressCertificateFailure(ctx context.Context, arg GetNetworkIngressCertificateFailureParams) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getNetworkIngressCertificateFailure, arg.NetworkIngressID, arg.OrganizationID)
+	var last_error pgtype.Text
+	err := row.Scan(&last_error)
+	return last_error, err
+}
+
 const getNetworkIngressForReconcile = `-- name: GetNetworkIngressForReconcile :one
 SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, runtime, gateway_shard, gateway_service_hostname, gateway_service_hostnames, created_at, updated_at, deleted_at, deleted
 FROM network_ingresses

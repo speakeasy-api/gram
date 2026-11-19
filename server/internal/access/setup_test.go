@@ -148,7 +148,7 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 		LegacyDefaultHost:          nil,
 		NewOrganizationDefaultHost: nil,
 	})
-	svc := NewService(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), logger, tracerProvider, conn, chConn, sessionManager, roleManager, authzEngine, auditLogger, emailService, orgHosts, foldAlwaysOn{})
+	svc := NewService(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), logger, tracerProvider, conn, chConn, chConn, sessionManager, roleManager, authzEngine, auditLogger, emailService, orgHosts, foldAlwaysOn{})
 
 	return ctx, &testInstance{
 		service:     svc,

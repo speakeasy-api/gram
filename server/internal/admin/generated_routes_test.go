@@ -37,7 +37,6 @@ func TestGeneratedAdminRoutes_ExposeExactMigratedMounts(t *testing.T) {
 		"ListGlobalIssuers":                      "GET /admin/remote-session-issuers.list",
 		"GetSession":                             "GET /admin/session.get",
 		"GetOrganizationFeatures":                "GET /admin/organization.features",
-		"SetOrganizationProviderSetup":           "POST /admin/organization.providerSetup",
 		"SetOrganizationFeature":                 "POST /admin/organization.features",
 		"GetOrganizationChatAnalysisSettings":    "GET /admin/organization.chatAnalysisSettings",
 		"SetOrganizationChatAnalysisSettings":    "POST /admin/organization.chatAnalysisSettings",
@@ -56,6 +55,8 @@ func TestGeneratedAdminRoutes_ExposeExactMigratedMounts(t *testing.T) {
 		"UpdateGcpIamPlatformCredential":         "POST /admin/externalCredentials.updateGcpIam",
 		"VerifyGcpIamPlatformCredential":         "POST /admin/externalCredentials.verifyGcpIam",
 		"DeleteGcpIamPlatformCredential":         "POST /admin/externalCredentials.deleteGcpIam",
+		"ListAssistantOrganizations":             "GET /admin/assistants.organizations",
+		"RepairOrganizationAssistantAgentNames":  "POST /admin/organization.repairAssistantAgentNames",
 		"ListOrganizationAssistants":             "GET /admin/organization.assistants",
 		"MigrateOrganizationAssistantIdentities": "POST /admin/organization.migrateAssistantIdentities",
 		"MigrateOrganizationAssistantsToKit":     "POST /admin/organization.migrateAssistantsToKit",
@@ -115,9 +116,10 @@ func TestGeneratedAdminRoutes_AuthenticateBeforeDecode(t *testing.T) {
 	unauthenticatedHandler := handler
 
 	for name, request := range map[string]*http.Request{
+		"assistant organizations":           httptest.NewRequest(http.MethodGet, "/admin/assistants.organizations", nil),
+		"repair assistant names":            httptest.NewRequest(http.MethodPost, "/admin/organization.repairAssistantAgentNames", bytes.NewBufferString(`{`)),
 		"session":                           httptest.NewRequest(http.MethodGet, "/admin/session.get", nil),
 		"features get":                      httptest.NewRequest(http.MethodGet, "/admin/organization.features", nil),
-		"provider setup":                    httptest.NewRequest(http.MethodPost, "/admin/organization.providerSetup", bytes.NewBufferString(`{`)),
 		"features set":                      httptest.NewRequest(http.MethodPost, "/admin/organization.features", bytes.NewBufferString(`{`)),
 		"settings get":                      httptest.NewRequest(http.MethodGet, "/admin/organization.chatAnalysisSettings", nil),
 		"settings set":                      httptest.NewRequest(http.MethodPost, "/admin/organization.chatAnalysisSettings", bytes.NewBufferString(`{`)),

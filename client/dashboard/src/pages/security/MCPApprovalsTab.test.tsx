@@ -9,7 +9,6 @@ const mocks = vi.hoisted(() => ({
   useRiskListPolicies: vi.fn(),
   useRoles: vi.fn(),
   refetchPolicies: vi.fn(),
-  insightsConfig: vi.fn(),
 }));
 
 vi.mock("@gram/client/react-query/riskListPolicies.js", () => ({
@@ -26,15 +25,6 @@ vi.mock("@gram/client/react-query/roles.js", () => ({
 
 vi.mock("@/components/ui/Skeleton", () => ({
   SkeletonTable: () => <div>Loading table</div>,
-}));
-
-// The dock needs the insights provider; the tab test only checks what it
-// is told.
-vi.mock("@/components/insights-dock", () => ({
-  InsightsConfig: (props: { title: string; contextInfo: string }) => {
-    mocks.insightsConfig(props);
-    return null;
-  },
 }));
 
 vi.mock("@/contexts/Sdk", () => ({
@@ -132,23 +122,21 @@ describe("MCPApprovalsTab", () => {
     });
   });
 
-  it("renders the inventory with the policy status beside the heading", () => {
+  it("renders the inventory with no intro or policy card", () => {
     render(
       <MemoryRouter>
         <MCPApprovalsTab />
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("heading", { name: "MCP approvals" })).toBeTruthy();
+    // The page title and tab name it; the tab adds no heading of its own.
+    expect(screen.queryByRole("heading")).toBeNull();
+    // The page header already says what the page is for.
     expect(
-      screen.getByText(/Every MCP server this project knows about/),
-    ).toBeTruthy();
-    expect(screen.getByText("No Policy")).toBeTruthy();
-    expect(
-      screen.getByText(
-        "No policy is enabled. All Shadow MCP servers are allowed.",
-      ),
-    ).toBeTruthy();
+      screen.queryByText(/Every MCP server this project knows about/),
+    ).toBeNull();
+    // The mode lives in the page header, so the tab shows no policy card.
+    expect(screen.queryByText("No Policy")).toBeNull();
     expect(screen.getByText("Shadow MCP inventory for project-1")).toBeTruthy();
     expect(screen.getByText("Shadow MCP policies: none")).toBeTruthy();
     expect(
@@ -157,23 +145,6 @@ describe("MCPApprovalsTab", () => {
         .getAttribute("data-policies-unavailable"),
     ).toBe("false");
     expect(screen.queryByText(/Policy data could not be loaded/)).toBeNull();
-  });
-
-  it("tells the assistant which tab it is on and the policy posture", () => {
-    render(
-      <MemoryRouter>
-        <MCPApprovalsTab />
-      </MemoryRouter>,
-    );
-
-    expect(mocks.insightsConfig).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: "MCP approval insights",
-        contextInfo: expect.stringContaining(
-          "Page: Guardrails, MCP approvals tab. Shadow MCP policy posture: none.",
-        ),
-      }),
-    );
   });
 
   it("holds the inventory until the policy, member and role reads settle", () => {
@@ -218,12 +189,6 @@ describe("MCPApprovalsTab", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("Blocking")).toBeTruthy();
-    expect(
-      screen.getByText(
-        "Block policy is enabled. Servers without allow rules are blocked for the policy's audience.",
-      ),
-    ).toBeTruthy();
     expect(
       screen.getByText("Shadow MCP policies: block-policy-1"),
     ).toBeTruthy();

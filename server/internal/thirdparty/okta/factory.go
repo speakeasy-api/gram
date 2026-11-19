@@ -26,7 +26,6 @@ type clientFactory struct {
 	logger     *slog.Logger
 	httpClient *guardian.HTTPClient
 	signer     remotesessions.TokenEndpointAssertionSigner
-	decrypter  SecretDecrypter
 
 	mu      sync.Mutex
 	clients map[uuid.UUID]memoizedClient
@@ -42,7 +41,7 @@ var _ ClientFactory = (*clientFactory)(nil)
 // NewClientFactory returns a factory backed by the real Okta Management API.
 // The pooled client is built without retries so the per-client no-redirect
 // policy NewClient installs is honored by the exchange itself.
-func NewClientFactory(logger *slog.Logger, guardianPolicy *guardian.Policy, signer remotesessions.TokenEndpointAssertionSigner, decrypter SecretDecrypter) ClientFactory {
+func NewClientFactory(logger *slog.Logger, guardianPolicy *guardian.Policy, signer remotesessions.TokenEndpointAssertionSigner) ClientFactory {
 	httpClient := guardianPolicy.PooledClient(
 		guardian.WithResilience("okta", guardian.ResilienceConfig{
 			Partition:       partitionByHashedHost(),
@@ -62,7 +61,6 @@ func NewClientFactory(logger *slog.Logger, guardianPolicy *guardian.Policy, sign
 		logger:     logger,
 		httpClient: httpClient,
 		signer:     signer,
-		decrypter:  decrypter,
 		mu:         sync.Mutex{},
 		clients:    map[uuid.UUID]memoizedClient{},
 	}
@@ -86,7 +84,7 @@ func (f *clientFactory) Client(cfg Config) (Client, error) {
 	if m, ok := f.clients[cfg.RemoteSessionClientID]; ok && m.cfg == cfg {
 		return m.client, nil
 	}
-	c, err := NewClient(f.logger, f.httpClient, f.signer, f.decrypter, cfg)
+	c, err := NewClient(f.logger, f.httpClient, f.signer, cfg)
 	if err != nil {
 		delete(f.clients, cfg.RemoteSessionClientID)
 		return nil, err

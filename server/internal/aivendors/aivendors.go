@@ -62,7 +62,11 @@ type Product struct {
 	// even for unscanned products, so both projections agree on names.
 	ID string `json:"id"`
 	// VendorKey groups products by vendor. Not unique; stable.
-	VendorKey   string `json:"vendor_key"`
+	VendorKey string `json:"vendor_key"`
+	// Family groups a vendor's related products, such as Claude Code, Claude and
+	// Cowork. Empty means the product is a family of its own. Omitted when empty
+	// so database snapshots, which do not store it, keep their fingerprint.
+	Family      string `json:"family,omitempty"`
 	DisplayName string `json:"display_name"`
 	// Category is required when Signatures are set.
 	Category Category `json:"category"`
@@ -75,6 +79,11 @@ type Product struct {
 	// ClientInfoNames are what the product reports at initialize. Attribution
 	// only — self-reported, so any client can claim any name.
 	ClientInfoNames []string `json:"client_info_names"`
+	// Aliases are the other names producers report for the product: hook
+	// sources and the surfaces telemetry dialects state, each with the client
+	// the name implies. Attribution only, like ClientInfoNames. Omitted when
+	// empty so database snapshots, which do not store it, keep their fingerprint.
+	Aliases []Alias `json:"aliases,omitempty"`
 	// Documents are the CIMD documents it publishes.
 	Documents []Document `json:"documents"`
 }
@@ -86,6 +95,14 @@ type Product struct {
 // vendor be classified as enforceable.
 func (p Product) SpeaksCIMD() bool {
 	return hasEnabledDocument(p)
+}
+
+// FamilyID is the product's family, or its own ID when it declares none.
+func (p Product) FamilyID() string {
+	if p.Family == "" {
+		return p.ID
+	}
+	return p.Family
 }
 
 // IsScanned reports whether device agents probe for this product.
@@ -191,6 +208,7 @@ func (p Product) clone() Product {
 		ProcessNames: slices.Clone(p.Signatures.ProcessNames),
 	}
 	out.ClientInfoNames = slices.Clone(p.ClientInfoNames)
+	out.Aliases = slices.Clone(p.Aliases)
 	out.Documents = slices.Clone(p.Documents)
 	return out
 }

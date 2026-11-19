@@ -8,6 +8,7 @@ import { accessCreateTemporaryGrant } from "../funcs/accessCreateTemporaryGrant.
 import { accessDeleteDirectoryRoleMapping } from "../funcs/accessDeleteDirectoryRoleMapping.js";
 import { accessDeleteRole } from "../funcs/accessDeleteRole.js";
 import { accessExplainResourceAccess } from "../funcs/accessExplainResourceAccess.js";
+import { accessFindShadowMCPInventoryServers } from "../funcs/accessFindShadowMCPInventoryServers.js";
 import { accessGetDirectoryReviewSettings } from "../funcs/accessGetDirectoryReviewSettings.js";
 import { accessGetRole } from "../funcs/accessGetRole.js";
 import { accessGetShadowMCPInventoryServer } from "../funcs/accessGetShadowMCPInventoryServer.js";
@@ -41,6 +42,7 @@ import { accessRevokeTemporaryGrant } from "../funcs/accessRevokeTemporaryGrant.
 import { accessSetAIToolDecision } from "../funcs/accessSetAIToolDecision.js";
 import { accessSetDirectoryRoleMappings } from "../funcs/accessSetDirectoryRoleMappings.js";
 import { accessSetResourceAudience } from "../funcs/accessSetResourceAudience.js";
+import { accessSetShadowMCPOfficialServer } from "../funcs/accessSetShadowMCPOfficialServer.js";
 import { accessSyncDirectoryGroups } from "../funcs/accessSyncDirectoryGroups.js";
 import { accessUpdateDirectoryReviewSettings } from "../funcs/accessUpdateDirectoryReviewSettings.js";
 import { accessUpdateMemberRoles } from "../funcs/accessUpdateMemberRoles.js";
@@ -53,6 +55,7 @@ import { DirectoryReviewSettings } from "../models/components/directoryreviewset
 import { DirectoryRoleMapping } from "../models/components/directoryrolemapping.js";
 import { DirectoryRoleSetupPreviewResult } from "../models/components/directoryrolesetuppreviewresult.js";
 import { ExplainResourceAccessResult } from "../models/components/explainresourceaccessresult.js";
+import { FindShadowMCPInventoryServersResult } from "../models/components/findshadowmcpinventoryserversresult.js";
 import { ListAgentPolicyScopesResult } from "../models/components/listagentpolicyscopesresult.js";
 import { ListAIDetectionsResult } from "../models/components/listaidetectionsresult.js";
 import { ListAIDetectionUsersResult } from "../models/components/listaidetectionusersresult.js";
@@ -104,6 +107,10 @@ import {
   ExplainResourceAccessRequest,
   ExplainResourceAccessSecurity,
 } from "../models/operations/explainresourceaccess.js";
+import {
+  FindShadowMCPInventoryServersRequest,
+  FindShadowMCPInventoryServersSecurity,
+} from "../models/operations/findshadowmcpinventoryservers.js";
 import {
   GetDirectoryReviewSettingsRequest,
   GetDirectoryReviewSettingsSecurity,
@@ -182,6 +189,7 @@ import {
 } from "../models/operations/listscopes.js";
 import {
   ListShadowMCPInventoryRequest,
+  ListShadowMCPInventoryResponse,
   ListShadowMCPInventorySecurity,
 } from "../models/operations/listshadowmcpinventory.js";
 import {
@@ -237,6 +245,10 @@ import {
   SetResourceAudienceSecurity,
 } from "../models/operations/setresourceaudience.js";
 import {
+  SetShadowMCPOfficialServerRequest,
+  SetShadowMCPOfficialServerSecurity,
+} from "../models/operations/setshadowmcpofficialserver.js";
+import {
   SyncDirectoryGroupsRequest,
   SyncDirectoryGroupsSecurity,
 } from "../models/operations/syncdirectorygroups.js";
@@ -257,6 +269,7 @@ import {
   UpdateShadowMCPInventoryServerNameSecurity,
 } from "../models/operations/updateshadowmcpinventoryservername.js";
 import { unwrapAsync } from "../types/fp.js";
+import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
 export class Access extends ClientSDK {
   /**
@@ -366,6 +379,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ExplainResourceAccessResult> {
     return unwrapAsync(accessExplainResourceAccess(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * findShadowMCPInventoryServers access
+   *
+   * @remarks
+   * Find the Shadow MCP servers in use whose upstream URL matches one of the given URLs, for example the endpoints of a server about to be added from the catalog. URLs match when they name the same upstream (case, default ports and a trailing slash are ignored). Requires an authenticated session authorized for org:admin on the active organization.
+   */
+  async findShadowMCPInventoryServers(
+    request: FindShadowMCPInventoryServersRequest,
+    security?: FindShadowMCPInventoryServersSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<FindShadowMCPInventoryServersResult> {
+    return unwrapAsync(accessFindShadowMCPInventoryServers(
       this,
       request,
       security,
@@ -744,8 +776,8 @@ export class Access extends ClientSDK {
     request: ListShadowMCPInventoryRequest,
     security?: ListShadowMCPInventorySecurity | undefined,
     options?: RequestOptions,
-  ): Promise<ListShadowMCPInventoryResult> {
-    return unwrapAsync(accessListShadowMCPInventory(
+  ): Promise<PageIterator<ListShadowMCPInventoryResponse, { cursor: string }>> {
+    return unwrapResultIterator(accessListShadowMCPInventory(
       this,
       request,
       security,
@@ -993,6 +1025,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ResourceAudienceResult> {
     return unwrapAsync(accessSetResourceAudience(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setShadowMCPOfficialServer access
+   *
+   * @remarks
+   * Link one project-scoped Shadow MCP server to its official version, or remove the link. While a link exists, direct connections are blocked wherever a Shadow MCP policy applies and agents are pointed at the linked server. With mcp_server_id the link is added (or restored, when it was removed before) or pointed at that server; omitting mcp_server_id removes the link. Each add, change and removal is recorded in the audit log. Requires an authenticated session authorized for org:admin on the active organization.
+   */
+  async setShadowMCPOfficialServer(
+    request: SetShadowMCPOfficialServerRequest,
+    security?: SetShadowMCPOfficialServerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(accessSetShadowMCPOfficialServer(
       this,
       request,
       security,

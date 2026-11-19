@@ -206,6 +206,10 @@
   allow: [list_data_exports]
   args:
     min_severity: error
+- id: risk-test-data-export
+  prompt: I just rotated the API key on our Splunk SIEM export. Can you check Splunk still accepts what we send?
+  expect: [send_data_export_test_event]
+  allow: [list_data_exports]
 
 # Shadow MCP: unsanctioned MCP servers vs shadow AI tools on devices vs the device probe list.
 - id: risk-shadow-mcp-inventory
