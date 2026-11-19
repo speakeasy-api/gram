@@ -99,7 +99,10 @@ func (t *TurnStream) Reset(ctx context.Context, chatID uuid.UUID) error {
 	if t == nil || chatID == uuid.Nil {
 		return nil
 	}
-	return t.client.XTrimMaxLen(ctx, turnStreamKey(chatID), 0).Err()
+	if err := t.client.XTrimMaxLen(ctx, turnStreamKey(chatID), 0).Err(); err != nil {
+		return fmt.Errorf("trim previous turn frames: %w", err)
+	}
+	return nil
 }
 
 // Publish appends a frame and returns its cursor. Callers treat failures as

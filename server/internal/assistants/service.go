@@ -3354,6 +3354,8 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		// still be running) or retry (the frames belong to this same turn).
 		if thread.SourceKind == sourceKindDashboard && event.Attempts == 1 {
 			if err := s.turnStream.Reset(turnCtx, thread.ChatID); err != nil {
+				// Redis retries transient failures. If they are exhausted,
+				// keep serving the turn rather than fail it on a cache error.
 				s.logger.WarnContext(turnCtx, "reset assistant turn replay", attr.SlogError(err))
 			}
 		}
