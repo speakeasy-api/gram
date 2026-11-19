@@ -66,6 +66,12 @@ export function OverviewTab({
     return (
       <UnproxiedMcpOverviewTab
         unproxiedMcpServerId={mcpServer.unproxiedMcpServerId}
+        header={
+          <PluginDistributionLine
+            server={pluginServerRef(mcpServer)}
+            settingsHref={pluginSettingsHref}
+          />
+        }
       />
     );
   }
@@ -124,6 +130,8 @@ export function OverviewTab({
     : undefined;
   return (
     <Stack gap={6}>
+      {/* Without a usage dashboard there is no toolbar to carry the line. */}
+      {!usage && pluginLine}
       <TunneledMcpConnectionsPanel
         tunneledMcpServerId={mcpServer.tunneledMcpServerId}
         agentSetupHref={agentSetupHref}

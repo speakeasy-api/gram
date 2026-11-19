@@ -1,4 +1,5 @@
 import { cleanup, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -21,21 +22,31 @@ vi.mock("@tanstack/react-query", async (original) => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "example", projectSlug: "test" }),
 }));
-// Plugin distribution lives in the page header, so the overview only frames
-// the usage dashboard and tunnel status.
 vi.mock("@/pages/mcp/overview/MCPOverviewTab", () => ({
-  MCPOverviewTab: ({ server }: { server: { kind: string; slug: string } }) => (
+  MCPOverviewTab: ({
+    server,
+    toolbarStart,
+  }: {
+    server: { kind: string; slug: string };
+    toolbarStart?: ReactNode;
+  }) => (
     <div>
+      {toolbarStart}
       <div>Shared usage dashboard</div>
       <div data-testid="scope" data-scope={`${server.kind}:${server.slug}`} />
     </div>
   ),
 }));
 vi.mock("@/pages/mcp/overview/PluginDistributionLine", () => ({
-  PluginDistributionLine: () => null,
+  PluginDistributionLine: () => <span>Plugins</span>,
 }));
 vi.mock("./UnproxiedMcpOverviewTab", () => ({
-  UnproxiedMcpOverviewTab: () => <div>Unproxied overview</div>,
+  UnproxiedMcpOverviewTab: ({ header }: { header?: ReactNode }) => (
+    <div>
+      {header}
+      Unproxied overview
+    </div>
+  ),
 }));
 vi.mock("./TunneledMcpConnectionsPanel", () => ({
   TunneledMcpConnectionsPanel: ({ logsHref }: { logsHref?: string }) =>
@@ -61,7 +72,9 @@ it("places tunnel status above the usage dashboard", () => {
     />,
     { wrapper: MemoryRouter },
   );
-  expect(container.textContent).toBe("Tunnel statusShared usage dashboard");
+  expect(container.textContent).toBe(
+    "Tunnel statusPluginsShared usage dashboard",
+  );
   const url = new URL(
     screen.getByRole("link").getAttribute("href")!,
     "https://example.test",
@@ -97,7 +110,19 @@ it("shows the tunnel status without a usage dashboard when the server has no slu
     />,
     { wrapper: MemoryRouter },
   );
-  expect(container.textContent).toBe("Tunnel status");
+  expect(container.textContent).toBe("PluginsTunnel status");
+});
+
+it("shows plugin status above an unproxied server's activity", () => {
+  const { container } = render(
+    <OverviewTab
+      mcpServer={{ ...server, unproxiedMcpServerId: "unproxied" }}
+      agentSetupHref="/settings"
+      pluginSettingsHref="/settings#publishing"
+    />,
+    { wrapper: MemoryRouter },
+  );
+  expect(container.textContent).toBe("PluginsUnproxied overview");
 });
 
 it("retains the shared overview for servers without tunnels", () => {
