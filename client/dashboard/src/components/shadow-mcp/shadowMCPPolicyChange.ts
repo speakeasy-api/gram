@@ -40,7 +40,7 @@ export function serversChangedByPolicy(
 }
 
 /** Most blocked calls first, then most used: the servers people notice. */
-export function sortForPolicyChange(
+function sortForPolicyChange(
   servers: readonly ShadowMCPInventoryServer[],
 ): ShadowMCPInventoryServer[] {
   return [...servers].sort(
