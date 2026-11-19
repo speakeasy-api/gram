@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Admin trial calendar fixture</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module">
+      import React, { useRef, useState } from "react";
+      import { createRoot } from "react-dom/client";
+      import { TrialDaysDialog } from "../src/pages/organizations/OrganizationActions.tsx";
+      import { utcTodayDay } from "../src/lib/trialDates.ts";
+      import "../src/index.css";
+
+      // The real dialog and picker, without backend writes or customer data.
+      function Fixture() {
+        const [open, setOpen] = useState(false);
+        const [saved, setSaved] = useState(false);
+        const trigger = useRef(null);
+        const today = utcTodayDay();
+        return React.createElement(
+          "main",
+          { className: "p-6" },
+          React.createElement("h1", null, "Organization trial"),
+          React.createElement(
+            "button",
+            { ref: trigger, onClick: () => setOpen(true) },
+            "Change end date",
+          ),
+          saved && React.createElement("p", { role: "status" }, "Date saved"),
+          open &&
+            React.createElement(TrialDaysDialog, {
+              range: { anchor: today + 14, earliest: today + 1 },
+              title: "Change trial end date",
+              description: "Choose when the trial ends.",
+              submitLabel: "Save",
+              pendingLabel: "Saving…",
+              failureLead: "Could not change trial end date",
+              pending: false,
+              failure: null,
+              onCancel: () => setOpen(false),
+              onCloseAutoFocus: (event) => {
+                event.preventDefault();
+                trigger.current?.focus();
+              },
+              onSubmit: () => {
+                setSaved(true);
+                setOpen(false);
+              },
+            }),
+        );
+      }
+      createRoot(document.getElementById("root")).render(
+        React.createElement(Fixture),
+      );
+    </script>
+  </body>
+</html>

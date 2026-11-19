@@ -18,6 +18,7 @@ export default defineConfig({
       input: [
         path.resolve(import.meta.dirname, "registry-editor.html"),
         path.resolve(import.meta.dirname, "admin-layout.html"),
+        path.resolve(import.meta.dirname, "trial-calendar.html"),
       ],
     },
   },
