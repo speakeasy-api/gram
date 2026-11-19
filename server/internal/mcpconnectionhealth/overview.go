@@ -10,6 +10,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_connection_health"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/attemptlog"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionhealth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -76,11 +77,12 @@ func (s *Service) ListDeniedClients(ctx context.Context, payload *gen.ListDenied
 	result.LoggingEnabled = true
 	result.Clients = make([]*gen.ConnectionDeniedClient, len(clients))
 	for i, client := range clients {
+		meaning, _ := mcpconnectionattempts.MeaningOf(client.Reason)
 		result.Clients[i] = &gen.ConnectionDeniedClient{
 			App:              appView(client.App, "", client.AppKey),
 			Reason:           client.Reason,
-			Message:          attemptlog.MessageOf(client.Reason),
-			TechnicalMessage: conv.PtrEmpty(attemptlog.TechnicalOf(client.Reason)),
+			Message:          meaning.WhatHappenedForAdmin,
+			TechnicalMessage: conv.PtrEmpty(meaning.Technical),
 			Attempts:         count(client.Attempts),
 			People:           count(client.People),
 			Networks:         count(client.Networks),
@@ -108,11 +110,8 @@ func (s *Service) GetSessionActivity(ctx context.Context, payload *gen.GetSessio
 		return nil, err
 	}
 
-	firstDay := time.Date(from.Year(), from.Month(), from.Day(), 0, 0, 0, 0, time.UTC)
-	lastDay := time.Date(to.Year(), to.Month(), to.Day(), 0, 0, 0, 0, time.UTC)
-	if lastDay.Equal(to) {
-		lastDay = lastDay.AddDate(0, 0, -1)
-	}
+	firstDay := from.Truncate(24 * time.Hour)
+	lastDay := to.Add(-time.Nanosecond).Truncate(24 * time.Hour)
 	averageFrom := now.Add(-averageSessionWindow)
 	liveSince := firstDay
 	if averageFrom.Before(liveSince) {

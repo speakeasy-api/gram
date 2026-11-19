@@ -1,12 +1,14 @@
 package mcpconnectionhealth_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	srv "github.com/speakeasy-api/gram/server/gen/http/mcp_connection_health/server"
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_connection_health"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -29,6 +31,10 @@ func TestGetAttempt_ReturnsTheAttemptWithEmail(t *testing.T) {
 	require.NotNil(t, res.Attempt.Person.Email)
 	require.Len(t, res.Attempt.Steps, 1)
 	require.True(t, res.Attempt.Steps[0].Final)
+
+	padded, err := ti.service.GetAttempt(ctx, &gen.GetAttemptPayload{Reference: "x" + id.String() + "y"})
+	require.NoError(t, err)
+	require.False(t, *padded.Found)
 }
 
 func TestGetAttempt_NoMatchForAnotherOrganizationOrAnUnreadableReference(t *testing.T) {
@@ -37,7 +43,9 @@ func TestGetAttempt_NoMatchForAnotherOrganizationOrAnUnreadableReference(t *test
 	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
 	elsewhere := ti.insert(t, "org-"+uuid.NewString(), ti.project, ti.now.Add(-time.Hour), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidBearerToken)
 
-	for _, reference := range []string{elsewhere.String(), "not-a-reference"} {
+	long := strings.Repeat("x", 1000)
+	require.NoError(t, srv.ValidateGetAttemptRequestBody(&srv.GetAttemptRequestBody{Reference: &long}))
+	for _, reference := range []string{elsewhere.String(), "not-a-reference", long} {
 		res, err := ti.service.GetAttempt(ctx, &gen.GetAttemptPayload{Reference: reference})
 		require.NoError(t, err)
 		require.True(t, res.LoggingEnabled)

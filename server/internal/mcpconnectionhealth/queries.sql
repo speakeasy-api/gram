@@ -1,6 +1,6 @@
 -- name: GetProviderIssuer :one
 -- A project's issuer, or an organization issuer of the project's organization.
-SELECT issuer.id, issuer.slug, issuer.session_duration
+SELECT issuer.id, issuer.session_duration
 FROM user_session_issuers AS issuer
 WHERE issuer.id = @issuer_id
   AND issuer.deleted IS FALSE
@@ -78,7 +78,8 @@ WITH endpoints AS (
 candidates AS (
   SELECT session.*,
          substring(session.resource from '^https?://([^/?#]+)') AS resource_host,
-         regexp_replace(regexp_replace(session.resource, '^https?://[^/?#]+', ''), '[?#].*$', '') AS resource_path
+         regexp_replace(regexp_replace(session.resource, '^https?://[^/?#]+', ''), '[?#].*$', '') AS resource_path,
+         MIN(session.created_at) OVER (PARTITION BY COALESCE(session.credential_id, session.id)) AS signed_in_at
   FROM user_sessions AS session
   WHERE session.user_session_issuer_id = @issuer_id
     AND (session.project_id = @project_id OR (session.project_id IS NULL AND session.organization_id = @organization_id::text))
@@ -111,12 +112,10 @@ scoped AS (
                      WHERE client.id = session.user_session_client_id AND client.organization_id = @organization_id::text
                        AND client.project_id <> @project_id)
           OR session.gateway_project_slug <> (SELECT project.slug FROM projects AS project WHERE project.id = @project_id AND project.organization_id = @organization_id::text)
-          OR (EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id <> @project_id AND endpoint.live_from <= session.created_at AND endpoint.gone_at > session.created_at
-                        AND (endpoint.host = session.resource_host OR (endpoint.host IS NULL AND NOT session.on_custom_domain))
-                        AND ((endpoint.is_root AND session.resource_path IN ('', '/')) OR endpoint.slug = session.endpoint_slug))
-              AND NOT EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id = @project_id AND endpoint.live_from <= session.created_at AND endpoint.gone_at > session.created_at
-                        AND (endpoint.host = session.resource_host OR (endpoint.host IS NULL AND NOT session.on_custom_domain))
-                        AND ((endpoint.is_root AND session.resource_path IN ('', '/')) OR endpoint.slug = session.endpoint_slug))),
+          OR (SELECT bool_and(endpoint.project_id <> @project_id) FROM endpoints AS endpoint
+              WHERE endpoint.live_from <= session.signed_in_at AND endpoint.gone_at > session.signed_in_at
+                AND (endpoint.host = session.resource_host OR (endpoint.host IS NULL AND NOT session.on_custom_domain))
+                AND ((endpoint.is_root AND session.resource_path IN ('', '/')) OR endpoint.slug = session.endpoint_slug)),
           FALSE)
 ),
 lives AS (
@@ -131,11 +130,11 @@ days AS (
 SELECT days.day_start,
        COUNT(DISTINCT scoped.credential)::bigint AS active_sessions,
        (SELECT COUNT(DISTINCT live.credential) FROM scoped AS live
-        WHERE live.deleted IS FALSE AND live.ended_at > clock_timestamp())::bigint AS active_now,
+        WHERE live.deleted IS FALSE AND live.ended_at > statement_timestamp())::bigint AS active_now,
        (SELECT COALESCE(AVG(EXTRACT(EPOCH FROM ended.ended_at - ended.started_at)), -1) FROM lives AS ended
         WHERE ended.ended_at >= @average_from::timestamptz
           AND ended.ended_at < @average_to::timestamptz
-          AND ended.ended_at <= clock_timestamp())::float8 AS average_seconds
+          AND ended.ended_at <= statement_timestamp())::float8 AS average_seconds
 FROM days
 LEFT JOIN scoped
   ON scoped.started_at < days.day_start + '24 hours'::interval

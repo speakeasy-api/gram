@@ -9,6 +9,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_connection_health"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/attemptlog"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -160,7 +161,8 @@ func (n names) facetLabel(facet attemptlog.Facet, value string) *string {
 		family, version, _ := strings.Cut(value, "@")
 		return new(attemptlog.AppName(family) + " " + version)
 	case attemptlog.FacetReasons:
-		return conv.PtrEmpty(attemptlog.MessageOf(value))
+		meaning, _ := mcpconnectionattempts.MeaningOf(value)
+		return conv.PtrEmpty(meaning.WhatHappenedForAdmin)
 	case attemptlog.FacetOutcomes, attemptlog.FacetSteps, attemptlog.FacetServices:
 		return nil
 	default:
@@ -182,7 +184,7 @@ func (s *Service) GetAttempt(ctx context.Context, payload *gen.GetAttemptPayload
 	result.Found = new(false)
 
 	id, err := uuid.Parse(payload.Reference)
-	if err != nil || id == uuid.Nil {
+	if err != nil || id == uuid.Nil || uuid.Validate(payload.Reference) != nil {
 		return result, nil //nolint:nilerr // an unreadable reference matches nothing
 	}
 	now := s.now()
@@ -246,6 +248,7 @@ func (s *Service) GetAttempt(ctx context.Context, payload *gen.GetAttemptPayload
 		if step.Final && step.SubReason != "" && detail.Context.SubReason == nil {
 			detail.Context.SubReason = &step.SubReason
 		}
+		meaning, _ := mcpconnectionattempts.MeaningOf(step.Reason)
 		detail.Steps[i] = &gen.ConnectionAttemptStep{
 			At:               formatTime(step.At),
 			Step:             gen.ConnectionStepGroup(step.Group),
@@ -253,8 +256,8 @@ func (s *Service) GetAttempt(ctx context.Context, payload *gen.GetAttemptPayload
 			Result:           step.Result,
 			Final:            step.Final,
 			Reason:           conv.PtrEmpty(step.Reason),
-			Message:          conv.PtrEmpty(attemptlog.MessageOf(step.Reason)),
-			TechnicalMessage: conv.PtrEmpty(attemptlog.TechnicalOf(step.Reason)),
+			Message:          conv.PtrEmpty(meaning.WhatHappenedForAdmin),
+			TechnicalMessage: conv.PtrEmpty(meaning.Technical),
 			Member:           n.member(step.MemberID),
 			Service:          conv.PtrEmpty(step.Service),
 		}

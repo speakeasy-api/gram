@@ -6,7 +6,7 @@ import * as z from "zod/v4-mini";
 
 export type GetAttemptRequestBody = {
   /**
-   * The attempt reference a person was shown, or a row id from listAttempts.
+   * The attempt reference a person was shown, or a row id from listAttempts. Any string; one that matches nothing is not found.
    */
   reference: string;
 };

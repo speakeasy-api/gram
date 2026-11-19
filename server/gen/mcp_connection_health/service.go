@@ -316,7 +316,8 @@ type GetAttemptCountsPayload struct {
 // GetAttemptPayload is the payload type of the mcpConnectionHealth service
 // getAttempt method.
 type GetAttemptPayload struct {
-	// The attempt reference a person was shown, or a row id from listAttempts.
+	// The attempt reference a person was shown, or a row id from listAttempts. Any
+	// string; one that matches nothing is not found.
 	Reference        string
 	SessionToken     *string
 	ApikeyToken      *string

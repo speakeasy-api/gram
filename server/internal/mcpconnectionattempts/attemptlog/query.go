@@ -293,8 +293,9 @@ func attemptsSQL(s Scope, now time.Time) (string, []any, error) {
 			any(app_key) AS a_app_key,
 			groupUniqArrayIf(user_session_issuer_id, user_session_issuer_id != '') AS a_issuers,
 			toString(multiIf(
-				countIf(client_family NOT IN ('', 'browser', 'other')) > 0,
-				argMinIf(client_family, (event_time, client_family), client_family NOT IN ('', 'browser', 'other')),
+				countIf(client_family NOT IN ('', 'browser', 'other', 'script')) > 0,
+				argMinIf(client_family, (event_time, client_family), client_family NOT IN ('', 'browser', 'other', 'script')),
+				countIf(client_family = 'script') > 0, 'script',
 				countIf(client_family = 'other') > 0, 'other',
 				countIf(client_family = 'browser') > 0, 'browser', '')) AS a_family,
 			arraySort(groupArrayIf((event_time, toString(client_family), client_version), client_version != '')) AS a_versions,
@@ -302,9 +303,9 @@ func attemptsSQL(s Scope, now time.Time) (string, []any, error) {
 			countIf(is_final) > 0 AS a_has_final,
 			if(a_has_final,
 				argMinIf((toString(step), toString(outcome), toString(reason), toString(grant_type), member_id, trace_id, ` + mcpconnectionattempts.AttemptHostSQL + `, event_time),
-					(event_time, step, outcome, reason), is_final),
+					(event_time, step, outcome, reason, ` + mcpconnectionattempts.AttemptHostSQL + `), is_final),
 				argMax((toString(step), toString(outcome), toString(reason), toString(grant_type), member_id, trace_id, ` + mcpconnectionattempts.AttemptHostSQL + `, event_time),
-					(event_time, step, reason))) AS a_end
+					(event_time, step, reason, ` + mcpconnectionattempts.AttemptHostSQL + `))) AS a_end
 		FROM ` + mcpconnectionattempts.EventsTable + `
 		WHERE ` + strings.Join(conds, " AND ") + `
 		GROUP BY attempt_id

@@ -114848,8 +114848,7 @@ components:
             properties:
                 reference:
                     type: string
-                    description: The attempt reference a person was shown, or a row id from listAttempts.
-                    maxLength: 200
+                    description: The attempt reference a person was shown, or a row id from listAttempts. Any string; one that matches nothing is not found.
             required:
                 - reference
         GetConnectionAttemptResult:

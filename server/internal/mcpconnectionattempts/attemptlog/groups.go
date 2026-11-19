@@ -98,6 +98,7 @@ var unattributedReasons = []string{
 	mcpconnectionattempts.CodeProviderUnavailable.String(),
 	mcpconnectionattempts.CodeProviderUnreachable.String(),
 	mcpconnectionattempts.CodeProviderRejected.String(),
+	mcpconnectionattempts.CodeUpstreamEMARefused.String(),
 }
 
 // serverReasons come back from the MCP server Speakeasy connected to.
@@ -127,7 +128,6 @@ var serviceReasons = []string{
 	mcpconnectionattempts.CodeEMAProviderRejected.String(),
 	mcpconnectionattempts.CodeProviderTransientFailure.String(),
 	mcpconnectionattempts.CodeRemoteSessionUnavailable.String(),
-	mcpconnectionattempts.CodeUpstreamEMARefused.String(),
 	mcpconnectionattempts.CodeInvalidGrant.String(),
 	mcpconnectionattempts.CodeRefreshInvalidClient.String(),
 	mcpconnectionattempts.CodeRefreshRejected.String(),
@@ -169,24 +169,6 @@ func SourceOf(reason string, outcome Outcome) Source {
 	default:
 		return SourceSpeakeasy
 	}
-}
-
-// MessageOf is the administrator's sentence for a reason, empty when the reason is unknown or empty.
-func MessageOf(reason string) string {
-	meaning, ok := mcpconnectionattempts.MeaningOf(reason)
-	if !ok {
-		return ""
-	}
-	return meaning.WhatHappenedForAdmin
-}
-
-// TechnicalOf is the precise technical fact for a reason, empty when there is none.
-func TechnicalOf(reason string) string {
-	meaning, ok := mcpconnectionattempts.MeaningOf(reason)
-	if !ok {
-		return ""
-	}
-	return meaning.Technical
 }
 
 // UnlistedAppName is shown for an app that is not on the family list.

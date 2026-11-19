@@ -1,6 +1,7 @@
 package mcpconnectionhealth_test
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -82,7 +83,10 @@ func TestGetSessionActivity_CountsSessionsPerDay(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1), res.ActiveNow)
 	require.Equal(t, int64(14*24*60*60), res.ConfiguredSessionSeconds)
-	require.Equal(t, int64(2), res.Days[len(res.Days)-1].ActiveSessions)
+	today := ti.now.UTC().Format(time.DateOnly)
+	created := slices.IndexFunc(res.Days, func(d *gen.ConnectionSessionDay) bool { return d.Day == today })
+	require.GreaterOrEqual(t, created, 0)
+	require.Equal(t, int64(2), res.Days[created].ActiveSessions)
 	require.Equal(t, int64(0), res.Days[0].ActiveSessions)
 	require.NotNil(t, res.AverageSessionSeconds)
 
@@ -254,6 +258,56 @@ func TestGetSessionActivity_AnEndpointCreatedLaterDoesNotClaimAnOlderSession(t *
 	require.NoError(t, err)
 	_, err = endpoints.CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{ProjectID: ti.project, CustomDomainID: uuid.NullUUID{}, McpServerID: uuid.NullUUID{}, MetaMcpServerID: uuid.NullUUID{UUID: ti.server, Valid: true}, Slug: slug})
 	require.NoError(t, err)
+
+	res, err := ti.service.GetSessionActivity(ctx, &gen.GetSessionActivityPayload{
+		UserSessionIssuerID: issuer.ID.String(),
+		From:                ti.now.Add(-24 * time.Hour).Format(time.RFC3339),
+		To:                  ti.now.Add(time.Minute).Format(time.RFC3339),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(0), res.ActiveNow)
+}
+
+func TestGetSessionActivity_ARefreshKeepsTheProjectOfTheFirstSignIn(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead)
+	other, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{Name: "Other", Slug: "other-" + uuid.NewString()[:8], OrganizationID: ti.org})
+	require.NoError(t, err)
+	otherGateway, err := metamcprepo.New(ti.conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{
+		OrganizationID: ti.org, ProjectID: other.ID, Name: "Elsewhere", UserSessionIssuerID: uuid.NullUUID{}, Visibility: "private", NetworkAccessMode: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	endpoints := mcpendpointsrepo.New(ti.conn)
+	slug := "taken-" + uuid.NewString()[:8]
+	theirs, err := endpoints.CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{ProjectID: other.ID, CustomDomainID: uuid.NullUUID{}, McpServerID: uuid.NullUUID{}, MetaMcpServerID: uuid.NullUUID{UUID: otherGateway.ID, Valid: true}, Slug: slug})
+	require.NoError(t, err)
+
+	sessions := usersessionsrepo.New(ti.conn)
+	issuer, err := sessions.CreateOrganizationUserSessionIssuer(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
+		OrganizationID: pgtype.Text{String: ti.org, Valid: true}, Slug: "org-" + uuid.NewString()[:8], AuthnChallengeMode: "interactive",
+		SessionDuration: pgtype.Interval{Microseconds: 0, Days: 14, Months: 0, Valid: true}, TrustedRemoteSessionIssuerID: uuid.NullUUID{}, TrustedRemoteSessionClientID: uuid.NullUUID{},
+	})
+	require.NoError(t, err)
+	create := func(credential uuid.NullUUID) uuid.UUID {
+		row, err := sessions.CreateUserSession(ctx, usersessionsrepo.CreateUserSessionParams{
+			SubjectUrn:          urn.NewUserSubject(ti.userID),
+			Jti:                 uuid.NewString(),
+			RefreshExpiresAt:    pgtype.Timestamptz{Time: ti.now.Add(14 * 24 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+			ExpiresAt:           pgtype.Timestamptz{Time: ti.now.Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+			Resource:            pgtype.Text{String: "https://example.com/mcp/" + slug, Valid: true},
+			UserSessionIssuerID: issuer.ID,
+			CredentialID:        credential,
+		})
+		require.NoError(t, err)
+		return row.ID
+	}
+	first := create(uuid.NullUUID{})
+	_, err = endpoints.DeleteMCPEndpoint(ctx, mcpendpointsrepo.DeleteMCPEndpointParams{ID: theirs.ID, ProjectID: other.ID})
+	require.NoError(t, err)
+	_, err = endpoints.CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{ProjectID: ti.project, CustomDomainID: uuid.NullUUID{}, McpServerID: uuid.NullUUID{}, MetaMcpServerID: uuid.NullUUID{UUID: ti.server, Valid: true}, Slug: slug})
+	require.NoError(t, err)
+	create(uuid.NullUUID{UUID: first, Valid: true})
 
 	res, err := ti.service.GetSessionActivity(ctx, &gen.GetSessionActivityPayload{
 		UserSessionIssuerID: issuer.ID.String(),

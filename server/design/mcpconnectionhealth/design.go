@@ -89,9 +89,7 @@ var _ = Service("mcpConnectionHealth", func() {
 	Method("getAttempt", func() {
 		Description("Get one connection attempt by its reference.")
 		Payload(func() {
-			Attribute("reference", String, "The attempt reference a person was shown, or a row id from listAttempts.", func() {
-				MaxLength(200)
-			})
+			Attribute("reference", String, "The attempt reference a person was shown, or a row id from listAttempts. Any string; one that matches nothing is not found.")
 			Required("reference")
 			security.SessionPayload()
 			security.ByKeyPayload()
