@@ -212,20 +212,20 @@ func agentOwnerOnlyError(slug, signInURL string) error {
 	if signInURL != "" {
 		where = "on the agent's MCP sign-in tab at " + signInURL
 	}
-	return agentOwnerOnlyRefusal{&metaMemberError{message: fmt.Sprintf("server %q refused this call: the agent's connection to it belongs to a different member than the one who issued the agent's key, and an agent key can only use connections owned by the member who issued it. "+
+	return agentOwnerOnlyRefusalError{&metaMemberError{message: fmt.Sprintf("server %q refused this call: the agent's connection to it belongs to a different member than the one who issued the agent's key, and an agent key can only use connections owned by the member who issued it. "+
 		"The agent's permissions do not change that. To fix this, attach a connection owned by the key's issuer %s, have the connection's owner issue the agent's key, or ask an organization administrator to set up a shared credential for this server, then retry", slug, where)}}
 }
 
-// agentOwnerOnlyRefusal is an agent gateway member refused a connection its
+// agentOwnerOnlyRefusalError is an agent gateway member refused a connection its
 // key's issuer does not own.
-type agentOwnerOnlyRefusal struct{ *metaMemberError }
+type agentOwnerOnlyRefusalError struct{ *metaMemberError }
 
-func (e agentOwnerOnlyRefusal) Unwrap() error { return e.metaMemberError }
+func (e agentOwnerOnlyRefusalError) Unwrap() error { return e.metaMemberError }
 
 // memberFailureDetail is the row detail a member failure carries beyond its
 // code, if any.
 func memberFailureDetail(err error) []mcpconnectionattempts.Option {
-	if _, ok := errors.AsType[agentOwnerOnlyRefusal](err); ok {
+	if _, ok := errors.AsType[agentOwnerOnlyRefusalError](err); ok {
 		return []mcpconnectionattempts.Option{mcpconnectionattempts.Detail(authClientReasonNotKeyIssuers)}
 	}
 	return nil
