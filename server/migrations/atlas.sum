@@ -1,4 +1,4 @@
-h1:W3KmEwsJZ9Qs0PGK3xaJmHpV3ynwUaw2iqVeQELPkjA=
+h1:7qIO+ov5xnCl/HvKHZh5PXAAE5bVDz4aRowldu+viY0=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -545,3 +545,9 @@ h1:W3KmEwsJZ9Qs0PGK3xaJmHpV3ynwUaw2iqVeQELPkjA=
 20261116152521_network-ingress-gateway-nodes.sql h1:GYKf326hFzfGH1KgKvxkmqZiUP/sgqRWuGUp2/s16MA=
 20261116174350_network-ingresses-add-gateway-service-hostnames.sql h1:oqw0AT+V/BS5/8amHLJ0SRA68guGGUE/bM4LUlI7mXM=
 20261116190000_drop-toolset-mcp-hosting-columns.sql h1:X/NMp6pHxYUzoqCnH6IMvRI5F+uC6Gkks/wDUavmiTk=
+20261118092045_shadow-mcp-official-servers.sql h1:6LA0E0flUWPlETsxcTwm31pMwwaqiAv5bc4YziT4ehA=
+20261118105848_chat-messages-autoanalyze-cadence.sql h1:HayTcJk0nGsIU72S1gdbEoo3QXNxYFDNGxh8efvg4x4=
+20261118143218_plugins-auto-add-servers-enabled.sql h1:CA3UfIPIXI5Zr5gbrvq9LiW4UtucA6jRoMUIgpjVkr0=
+20261118202235_binding-session-fk-any-issuer.sql h1:qmj+sBFXP3meXpljlvX6SeZdhSLxTzUiwwJ9n2GG6HM=
+20261119103854_drop-external-oauth-tables.sql h1:xPGduCyXFiqt55pmfQLCMU3p93SInfs4rPeDvbPk8iw=
+20261119105934_chat-messages-drop-redundant-indexes.sql h1:AFFX+uJXYJ3cZ9ADBJV0MBPqmNpzfBCpAuFlVLwxoqc=

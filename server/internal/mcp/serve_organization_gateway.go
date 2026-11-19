@@ -356,7 +356,7 @@ func (s *Service) organizationGatewayRows(ctx context.Context, organization orgs
 		DeletedAt:         pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		Deleted:           false,
 	}
-	endpoint := &mcpendpointsrepo.McpEndpoint{ //nolint:exhaustruct // synthetic: only the fields the meta runtime reads are meaningful
+	endpoint := &mcpendpointsrepo.McpEndpoint{ //nolint:exhaustruct_v5 // synthetic: only the fields the meta runtime reads are meaningful
 		ProjectID: uuid.Nil,
 		Slug:      organization.Slug,
 	}

@@ -136,16 +136,24 @@ func endingProvider(rows []Row, hasFinal bool) string {
 			continue
 		case best == nil:
 			best = row
-		case hasFinal && rowOrder(*row, *best, func(r Row) []string { return []string{r.Step, r.Outcome, r.Reason, r.ProviderHost} }) < 0:
+		case hasFinal && rowOrder(*row, *best, func(r Row) []string { return []string{r.Step, r.Outcome, r.Reason, r.attemptHost()} }) < 0:
 			best = row
-		case !hasFinal && rowOrder(*row, *best, func(r Row) []string { return []string{r.Step, r.Reason, r.ProviderHost} }) > 0:
+		case !hasFinal && rowOrder(*row, *best, func(r Row) []string { return []string{r.Step, r.Reason, r.attemptHost()} }) > 0:
 			best = row
 		}
 	}
 	if best == nil {
 		return ""
 	}
-	return best.ProviderHost
+	return best.attemptHost()
+}
+
+// attemptHost leaves out a listing row's host, which is its member's, not the attempt's provider.
+func (r Row) attemptHost() string {
+	if r.Step == StepDiscoveryMember.String() {
+		return ""
+	}
+	return r.ProviderHost
 }
 
 // Summarize reduces one attempt's rows, in any order. It is the reference for the
@@ -191,7 +199,7 @@ func Summarize(rows []Row) AttemptSummary {
 	s.RemoteSessionClientID = earliest(rows, func(r Row) bool { return r.RemoteSessionClientID != "" }, func(r Row) string { return r.RemoteSessionClientID })
 	s.ProviderHost = endingProvider(rows, final != nil)
 	if s.ProviderHost == "" {
-		s.ProviderHost = earliest(rows, func(r Row) bool { return r.ProviderHost != "" }, func(r Row) string { return r.ProviderHost })
+		s.ProviderHost = earliest(rows, func(r Row) bool { return r.attemptHost() != "" }, func(r Row) string { return r.attemptHost() })
 	}
 	s.ClientFamily = earliest(rows, func(r Row) bool { return r.ClientFamily != "" && r.ClientFamily != FamilyBrowser }, func(r Row) string { return r.ClientFamily })
 	if s.ClientFamily == "" && browser {

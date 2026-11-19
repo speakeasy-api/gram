@@ -13,8 +13,11 @@ import { HTTPClient } from "@gram/admin-client/lib/http";
 import { adminListOrganizations } from "@gram/admin-client/funcs/adminListOrganizations";
 import { ServiceError } from "@gram/admin-client/models/errors/serviceerror";
 
+import * as adminAuth from "@/lib/adminAuth";
+
 import {
   GramAdminError,
+  gramAdminDownload,
   bulkUpdateAccountType,
   cancelStripeSubscription,
   createOrganization,
@@ -887,5 +890,31 @@ describe("user directory contract", () => {
       status: 400,
     });
     fetcher.mockRestore();
+  });
+});
+
+describe("gramAdminDownload", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("redirects an expired read session to login", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(null, { status: 401 })),
+    );
+    const redirect = vi
+      .spyOn(adminAuth, "redirectOnUnauthorized")
+      .mockImplementation((error) => {
+        throw error;
+      });
+
+    await expect(
+      gramAdminDownload("/admin/mcpServerSourceDownload"),
+    ).rejects.toMatchObject({ status: 401 });
+    expect(redirect).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 401 }),
+    );
   });
 });

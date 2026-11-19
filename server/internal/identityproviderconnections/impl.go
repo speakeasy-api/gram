@@ -36,7 +36,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
 	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
@@ -49,6 +48,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/okta"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -121,7 +121,7 @@ type Service struct {
 	audit         *audit.Logger
 	provisioner   *Provisioner
 	oktaClients   okta.ClientFactory
-	enc           *encryption.Client
+	secrets       *clientsecrets.Secrets
 	discover      Discoverer
 	verifyLimiter *ratelimit.Limiter
 	createLimiter *ratelimit.Limiter
@@ -171,7 +171,7 @@ func NewService(
 	auditLogger *audit.Logger,
 	provisioner *Provisioner,
 	oktaClients okta.ClientFactory,
-	enc *encryption.Client,
+	secrets *clientsecrets.Secrets,
 	discover Discoverer,
 	limitStore ratelimit.Store,
 	syncTrigger ApplicationSyncTrigger,
@@ -186,7 +186,7 @@ func NewService(
 		audit:       auditLogger,
 		provisioner: provisioner,
 		oktaClients: oktaClients,
-		enc:         enc,
+		secrets:     secrets,
 		discover:    discover,
 		verifyLimiter: ratelimit.New(limitStore, "identity-provider-connection-verify",
 			ratelimit.PerMinute(verifyRatePerMinute),
@@ -519,9 +519,9 @@ func listingAuthMethod(listingMode string) remotesessions.TokenEndpointAuthMetho
 	return remotesessions.TokenEndpointAuthMethodPrivateKeyJWT
 }
 
-// encryptClientSecret validates and encrypts an admin-entered secret; messages
-// never echo the value. A nil secret encrypts to "".
-func (s *Service) encryptClientSecret(ctx context.Context, logger *slog.Logger, secret *string) (string, error) {
+// validateClientSecret validates and trims an admin-entered secret; messages
+// never echo the value. A nil secret is "".
+func validateClientSecret(secret *string) (string, error) {
 	if secret == nil {
 		return "", nil
 	}
@@ -534,11 +534,7 @@ func (s *Service) encryptClientSecret(ctx context.Context, logger *slog.Logger, 
 	case strings.ContainsFunc(trimmed, unicode.IsSpace):
 		return "", oops.E(oops.CodeBadRequest, nil, "client_secret must not contain whitespace")
 	}
-	encrypted, err := s.enc.Encrypt([]byte(trimmed))
-	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "encrypt client secret").LogError(ctx, logger)
-	}
-	return encrypted, nil
+	return trimmed, nil
 }
 
 func connectionIssuerSlug(connectionID uuid.UUID) string {
@@ -784,7 +780,7 @@ func (s *Service) SubmitClientID(ctx context.Context, payload *gen.SubmitClientI
 	}
 	logger = logger.With(attr.SlogIdentityProviderConnectionID(id.String()))
 
-	secretEncrypted, err := s.encryptClientSecret(ctx, logger, payload.ClientSecret)
+	secret, err := validateClientSecret(payload.ClientSecret)
 	if err != nil {
 		return nil, err
 	}
@@ -812,13 +808,13 @@ func (s *Service) SubmitClientID(ctx context.Context, payload *gen.SubmitClientI
 	}
 
 	managed, err := s.provisioner.SetClientID(ctx, dbtx, SetClientIDParams{
-		OrganizationID:        authCtx.ActiveOrganizationID,
-		ConnectionID:          id,
-		Provider:              ProviderOkta,
-		ClientID:              clientID,
-		ClientSecretEncrypted: secretEncrypted,
-		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:      authCtx.Email,
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ConnectionID:     id,
+		Provider:         ProviderOkta,
+		ClientID:         clientID,
+		ClientSecret:     secret,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
 	})
 	switch {
 	case errors.Is(err, ErrClientSecretRequired):
@@ -831,6 +827,8 @@ func (s *Service) SubmitClientID(ctx context.Context, payload *gen.SubmitClientI
 		return nil, oops.E(oops.CodeConflict, err, "this client id is already registered against the Okta org")
 	case errors.Is(err, ErrNotProvisioned):
 		return nil, oops.E(oops.CodeFailedPrecondition, err, "the connection has no credential to bind the client id to")
+	case clientsecrets.IsKeyProblem(err):
+		return nil, oops.E(oops.CodeUnavailable, err, "the organization's encryption key is unavailable, so the client secret could not be stored; try again shortly").LogError(ctx, logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "record client id").LogError(ctx, logger)
 	}
@@ -884,7 +882,7 @@ func (s *Service) ReplaceClientSecret(ctx context.Context, payload *gen.ReplaceC
 	}
 	logger = logger.With(attr.SlogIdentityProviderConnectionID(id.String()))
 
-	secretEncrypted, err := s.encryptClientSecret(ctx, logger, &payload.ClientSecret)
+	secret, err := validateClientSecret(&payload.ClientSecret)
 	if err != nil {
 		return nil, err
 	}
@@ -912,18 +910,20 @@ func (s *Service) ReplaceClientSecret(ctx context.Context, payload *gen.ReplaceC
 	}
 
 	managed, err := s.provisioner.ReplaceClientSecret(ctx, dbtx, ReplaceClientSecretParams{
-		OrganizationID:        authCtx.ActiveOrganizationID,
-		ConnectionID:          id,
-		Provider:              ProviderOkta,
-		ClientSecretEncrypted: secretEncrypted,
-		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:      authCtx.Email,
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ConnectionID:     id,
+		Provider:         ProviderOkta,
+		ClientSecret:     secret,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
 	})
 	switch {
 	case errors.Is(err, ErrClientSecretNotAccepted):
 		return nil, oops.E(oops.CodeBadRequest, err, "only connections installed from the Okta Integration Network use a client secret")
 	case errors.Is(err, ErrNotProvisioned):
 		return nil, oops.E(oops.CodeFailedPrecondition, err, "the connection has no credential to replace")
+	case clientsecrets.IsKeyProblem(err):
+		return nil, oops.E(oops.CodeUnavailable, err, "the organization's encryption key is unavailable, so the client secret could not be stored; try again shortly").LogError(ctx, logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "replace client secret").LogError(ctx, logger)
 	}
@@ -1096,7 +1096,7 @@ func (s *Service) verificationCredentials(ctx context.Context, logger *slog.Logg
 		return nil, func() {}
 	}
 	observed := &atomic.Bool{}
-	provider := oktacredentials.Provider{DB: nil, Tx: tx, ConnectionID: rows.Connection.ID, ObservedDPoP: observed}
+	provider := oktacredentials.Provider{DB: nil, Tx: tx, Secrets: s.secrets, ConnectionID: rows.Connection.ID, ObservedDPoP: observed}
 	return provider, func() {
 		if !observed.Load() {
 			return
@@ -1115,17 +1115,17 @@ func (s *Service) runVerification(ctx context.Context, logger *slog.Logger, cred
 	// A client-secret connection once seen DPoP-bound must stay bound.
 	dpopPinned := rows.Managed.AuthMethod == remotesessions.TokenEndpointAuthMethodBasic && rows.Okta.DpopRequired
 	client, err := s.oktaClients.Client(okta.Config{
-		OrgURL:                rows.Okta.OrgUrl,
-		ClientID:              rows.Managed.ClientID,
-		AudienceFormat:        string(remotesessions.TokenEndpointAuthAudienceTokenEndpoint),
-		RemoteSessionClientID: rows.Managed.ClientRowID,
-		OrganizationID:        rows.Connection.OrganizationID,
-		AuthMethod:            rows.Managed.AuthMethod,
-		JSONWebKeySetID:       rows.Managed.JSONWebKeySetID.UUID,
-		ClientSecretEncrypted: rows.Managed.ClientSecretEncrypted,
-		Credentials:           credentials,
-		RequireDPoP:           dpopPinned,
-		MaxPages:              verifyMaxPages,
+		OrgURL:                 rows.Okta.OrgUrl,
+		ClientID:               rows.Managed.ClientID,
+		AudienceFormat:         string(remotesessions.TokenEndpointAuthAudienceTokenEndpoint),
+		RemoteSessionClientID:  rows.Managed.ClientRowID,
+		OrganizationID:         rows.Connection.OrganizationID,
+		AuthMethod:             rows.Managed.AuthMethod,
+		JSONWebKeySetID:        rows.Managed.JSONWebKeySetID.UUID,
+		ClientSecretGeneration: rows.Managed.ClientSecretGeneration,
+		Credentials:            credentials,
+		RequireDPoP:            dpopPinned,
+		MaxPages:               verifyMaxPages,
 	})
 	if err != nil {
 		s.oktaClients.Forget(rows.Managed.ClientRowID)
@@ -1148,6 +1148,13 @@ func (s *Service) runVerification(ctx context.Context, logger *slog.Logger, cred
 // the attempt locked: a concurrent run that committed in between wins. A
 // rejected credential degrades a verified connection.
 func (s *Service) recordFailure(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, rows *connectionRows, cause error, submittedClientID bool) {
+	// A key outage says nothing about Okta or the credential, and clears on
+	// its own: the connection's state and last error are left as they were.
+	if errors.Is(cause, okta.ErrClientSecretKeyUnavailable) {
+		s.metrics.recordVerify(ctx, ProviderOkta, verifyOutcomeKeyUnavailable)
+		return
+	}
+
 	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), keyCleanupTimeout)
 	defer cancel()
 
@@ -1206,6 +1213,9 @@ func (s *Service) mapVerificationError(ctx context.Context, logger *slog.Logger,
 	}
 	if errors.Is(err, okta.ErrClientSecretUndecryptable) {
 		return oops.E(oops.CodeUnexpected, err, "the stored client secret could not be read; replace it").LogError(ctx, logger)
+	}
+	if errors.Is(err, okta.ErrClientSecretKeyUnavailable) {
+		return oops.E(oops.CodeUnavailable, err, "the organization's encryption key is unavailable, so the connection could not be verified; try again shortly").LogError(ctx, logger)
 	}
 	return oops.E(oops.CodeUnavailable, err, "Okta could not be reached to verify the connection").LogError(ctx, logger)
 }

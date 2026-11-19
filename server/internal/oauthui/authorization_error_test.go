@@ -2,6 +2,7 @@ package oauthui_test
 
 import (
 	"context"
+	stdhtml "html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -202,6 +203,7 @@ func TestAuthorizationErrorPageReasonOverridesCode(t *testing.T) {
 		{"expired", oauthui.ReasonExpired, "link expired or was already used"},
 		{"unavailable", oauthui.ReasonUnavailable, "This is a problem on our side"},
 		{"session", oauthui.ReasonSessionChanged, "current browser or sign-in session"},
+		{"restarted", oauthui.ReasonSignInRestarted, "If that sign-in is still open, finish it there. Otherwise, start connecting again from"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -239,6 +241,45 @@ func TestAuthorizationErrorPageProviderOutage(t *testing.T) {
 			require.NotContains(t, page, "isn't allowed")
 		})
 	}
+}
+
+func TestAuthorizationErrorPageSignInAddress(t *testing.T) {
+	t.Parallel()
+
+	response := httptest.NewRecorder()
+	require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Status: http.StatusBadGateway, Code: "gateway_error", Reason: oauthui.ReasonSignInAddress, ClientName: "Example Client", ServerName: "example-server"}))
+	page := strings.Join(strings.Fields(response.Body.String()), " ")
+	require.Equal(t, http.StatusBadGateway, response.Code)
+	require.Contains(t, page, "because its sign-in address is a private or internal one that Speakeasy can't reach. This isn't something you did.")
+	require.Contains(t, page, "Ask your IT administrators to fix this server's sign-in address. Share the technical details below with them.")
+	require.NotContains(t, page, "isn't available right now")
+	require.NotContains(t, page, "shortly")
+	require.NotContains(t, page, "problem on our side")
+}
+
+// The administrator's detail appears only under Technical details and in their copied text.
+func TestAuthorizationErrorPageAdminDetailIsTechnicalOnly(t *testing.T) {
+	t.Parallel()
+
+	response := httptest.NewRecorder()
+	require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Status: http.StatusBadGateway, Code: "gateway_error", Description: "plain sentence", Reason: oauthui.ReasonSignInAddress, AdminDetail: "The exact problem."}))
+	body := response.Body.String()
+	require.Contains(t, body, `data-admin-detail>The exact problem.</dd>`)
+	require.Contains(t, body, "Problem: The exact problem.", "the copied technical details carry it")
+	require.Equal(t, 2, strings.Count(body, "The exact problem."), "only the Problem row and the copied details carry it")
+	page := strings.Join(strings.Fields(body), " ")
+	require.Contains(t, page, "because its sign-in address is a private or internal one that Speakeasy can't reach. This isn't something you did.")
+}
+
+func TestAuthorizationErrorPageSignInAddressMissing(t *testing.T) {
+	t.Parallel()
+
+	response := httptest.NewRecorder()
+	require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Status: http.StatusBadGateway, Code: "gateway_error", Reason: oauthui.ReasonSignInAddressMissing, ClientName: "Example Client", ServerName: "example-server"}))
+	page := strings.Join(strings.Fields(response.Body.String()), " ")
+	require.Contains(t, page, "because its sign-in address doesn't exist. This isn't something you did.")
+	require.Contains(t, page, "Ask your IT administrators to fix this server's sign-in address. Share the technical details below with them.")
+	require.NotContains(t, page, "private or internal")
 }
 
 func TestAuthorizationErrorRecoveryLink(t *testing.T) {
@@ -437,4 +478,15 @@ func TestAuthorizationErrorConnectionReference(t *testing.T) {
 	require.Contains(t, body, "data-connection-reference")
 	require.Contains(t, body, "6f1c0000-0000-0000-0000-000000000000")
 	require.Contains(t, body, "Reference: <span")
+}
+
+func TestAuthorizationErrorPage_SignInNotStartedShowsItsSentence(t *testing.T) {
+	t.Parallel()
+	response := httptest.NewRecorder()
+	require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Status: http.StatusBadRequest, Code: "bad_request", Reason: oauthui.ReasonSignInNotStarted, Description: "This page expired; start connecting again."}))
+	page := strings.Join(strings.Fields(stdhtml.UnescapeString(response.Body.String())), " ")
+	require.Contains(t, page, "Couldn't start a new sign-in")
+	require.Contains(t, page, "data-what-happened> This page expired; start connecting again. </p>")
+	require.NotContains(t, page, "close this tab")
+	require.NotContains(t, page, "Couldn't connect")
 }

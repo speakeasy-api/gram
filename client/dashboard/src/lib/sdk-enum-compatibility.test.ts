@@ -3,7 +3,7 @@ import { AgentPolicyGrantEffect$inboundSchema } from "@gram/client/models/compon
 import { KillswitchSchedule$inboundSchema } from "@gram/client/models/components/killswitchschedule.js";
 import { KillswitchScope$inboundSchema } from "@gram/client/models/components/killswitchscope.js";
 import { NotApplicableReason$inboundSchema } from "@gram/client/models/components/oktaresourceconnectionserver.js";
-import { Engine$inboundSchema } from "@gram/client/models/components/prompttemplate.js";
+import { PromptTemplateEngine$inboundSchema } from "@gram/client/models/components/prompttemplate.js";
 import { UpdatePromptTemplateFormEngine$outboundSchema } from "@gram/client/models/components/updateprompttemplateform.js";
 import { describe, expect, it } from "vitest";
 
@@ -11,7 +11,7 @@ describe("generated singleton enum compatibility", () => {
   it.each([
     ["Okta connection reason", NotApplicableReason$inboundSchema],
     ["agent policy effect", AgentPolicyGrantEffect$inboundSchema],
-    ["prompt engine", Engine$inboundSchema],
+    ["prompt engine", PromptTemplateEngine$inboundSchema],
   ])("preserves unknown %s response values", (_, schema) => {
     expect(schema.parse("future_value")).toBe("future_value");
     expect(schema.safeParse(42).success).toBe(false);

@@ -6,7 +6,6 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateAllMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers";
 import { oktaSelectionForUrl } from "@/pages/catalog/provider-setup/okta";
-import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { SetupBody } from "@/pages/catalog/provider-setup/SetupBody";
@@ -17,7 +16,8 @@ import {
   salesforceInstanceConfiguration,
 } from "@/pages/catalog/provider-setup/salesforce";
 import type { State } from "@/pages/catalog/provider-setup/state";
-import { useEffect, useReducer } from "react";
+import { useEffect, useReducer, useState } from "react";
+import { invalidateMcpServerQueries } from "@/lib/mcp-server-visibility";
 import { useProviderConnection } from "./useProviderConnection";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth";
@@ -27,7 +27,8 @@ import { mcpServerRouteParam } from "@/lib/sources";
 import type { McpServer } from "@gram/client/models/components/mcpserver";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer";
 import { SetupContext } from "@/pages/catalog/provider-setup/setup-context";
-import { names, reduce } from "@/pages/catalog/provider-setup/state";
+import { names, reduce, steps } from "@/pages/catalog/provider-setup/state";
+import { GuideSetupPage } from "./GuideSetupPage";
 import {
   type SetupProvider,
   providerProgressKey,
@@ -35,6 +36,7 @@ import {
   loadProviderProgress,
   saveProviderProgress,
   providerSourceFingerprint,
+  guidedSetupStatus,
 } from "./provider-setup";
 
 export function ProviderSetupPage({
@@ -54,29 +56,31 @@ export function ProviderSetupPage({
   if (!remoteId) return <Navigate to={overview} replace />;
   if (remote.isLoading)
     return (
-      <Page>
-        <Page.Header>{null}</Page.Header>
-        <Page.Body>
-          <Skeleton className="h-64 w-full" />
-        </Page.Body>
-      </Page>
+      <>
+        <Skeleton className="h-64 w-full" />
+      </>
     );
   if (remote.isError)
     return (
-      <Page>
-        <Page.Header>{null}</Page.Header>
-        <Page.Body>
-          <Alert variant="error">
-            Couldn’t load this server’s setup.{" "}
-            <Button variant="secondary" onClick={() => void remote.refetch()}>
-              <Button.Text>Retry</Button.Text>
-            </Button>
-          </Alert>
-        </Page.Body>
-      </Page>
+      <>
+        <Alert variant="error">
+          Couldn’t load this server’s setup.{" "}
+          <Button variant="secondary" onClick={() => void remote.refetch()}>
+            <Button.Text>Retry</Button.Text>
+          </Button>
+        </Alert>
+      </>
     );
   const provider = setupProviderForUrl(remote.data?.url);
-  if (!provider) return <Navigate to={overview} replace />;
+  // Providers without a guided flow get their written guide, full page.
+  if (!provider)
+    return (
+      <GuideSetupPage
+        serverUrl={remote.data?.url}
+        mcpServer={mcpServer}
+        overviewHref={overview}
+      />
+    );
   if (provider === "okta")
     return (
       <ProviderSetupFlow
@@ -131,26 +135,20 @@ function SalesforceSetupEntry({
   );
   if (headers.isPending)
     return (
-      <Page>
-        <Page.Header>{null}</Page.Header>
-        <Page.Body>
-          <Skeleton className="h-64 w-full" />
-        </Page.Body>
-      </Page>
+      <>
+        <Skeleton className="h-64 w-full" />
+      </>
     );
   if (headers.isError)
     return (
-      <Page>
-        <Page.Header>{null}</Page.Header>
-        <Page.Body>
-          <Alert variant="error">
-            Couldn’t load Salesforce connection configuration.{" "}
-            <Button variant="secondary" onClick={() => void headers.refetch()}>
-              <Button.Text>Retry</Button.Text>
-            </Button>
-          </Alert>
-        </Page.Body>
-      </Page>
+      <>
+        <Alert variant="error">
+          Couldn’t load Salesforce connection configuration.{" "}
+          <Button variant="secondary" onClick={() => void headers.refetch()}>
+            <Button.Text>Retry</Button.Text>
+          </Button>
+        </Alert>
+      </>
     );
   let instanceUrl;
   try {
@@ -159,25 +157,21 @@ function SalesforceSetupEntry({
     ).instanceUrl;
   } catch (error) {
     return (
-      <Page>
-        <Page.Header>{null}</Page.Header>
-        <Page.Body>
-          <Alert variant="error">
-            {error instanceof Error
-              ? error.message
-              : "Review the MCP-Instance-URL header in identity settings."}{" "}
-            <Link
-              to={
-                routes.mcp.details.settings.href(
-                  mcpServerRouteParam(mcpServer),
-                ) + "#authentication"
-              }
-            >
-              Open identity settings
-            </Link>
-          </Alert>
-        </Page.Body>
-      </Page>
+      <>
+        <Alert variant="error">
+          {error instanceof Error
+            ? error.message
+            : "Review the MCP-Instance-URL header in identity settings."}{" "}
+          <Link
+            to={
+              routes.mcp.details.settings.href(mcpServerRouteParam(mcpServer)) +
+              "#authentication"
+            }
+          >
+            Open identity settings
+          </Link>
+        </Alert>
+      </>
     );
   }
   return (
@@ -267,7 +261,7 @@ function RetainedProviderSetup({
         ? routes.mcp.gateway.overview.href(gatewayId)
         : overviewHref;
   const [s, dispatch] = useReducer(reduce, storageKey, (key) => {
-    return loadProviderProgress(
+    const progress = loadProviderProgress(
       provider,
       key,
       initialValues,
@@ -280,14 +274,30 @@ function RetainedProviderSetup({
           })
         : undefined,
     );
+    // A completed setup reopens on its connection check, not the plan. A
+    // saved path without one (Salesforce support) keeps its own step.
+    const ids = steps(progress).map((step) => step.id);
+    if (
+      guidedSetupStatus(mcpServer, serverUrl) !== "done" ||
+      !ids.includes("test")
+    )
+      return progress;
+    return {
+      ...progress,
+      step: "test",
+      done: ids.filter((id) => id !== "test"),
+    };
   });
   useEffect(() => {
     saveProviderProgress(storageKey, s);
-    if (s.screen === "success")
-      void navigate(completionHref, { replace: true });
+    if (s.screen === "success") void navigate(completionHref);
   }, [storageKey, s, completionHref, navigate]);
+  // Each step starts at the top of the Setup page. The page body is bound
+  // too, so target the detail frame's scroller nested inside it.
   useEffect(() => {
-    window.scrollTo(0, 0);
+    document
+      .querySelector("[data-page-bound] [data-page-bound]")
+      ?.scrollTo?.(0, 0);
   }, [s.step, s.screen]);
   if (s.screen === "success") return <></>;
   return (
@@ -350,9 +360,43 @@ function LiveSetupConnection({
   const settingsHref =
     routes.mcp.details.settings.href(mcpServerRouteParam(mcpServer)) +
     "#authentication";
+  const [completing, setCompleting] = useState(false);
+  const [completionError, setCompletionError] = useState<string | null>(null);
+  // Record completion before leaving so a reopened Setup starts at its
+  // connection check; a failed write keeps the user here to retry.
+  const complete = async () => {
+    setCompleting(true);
+    setCompletionError(null);
+    try {
+      await sdk.mcpServers.setSetupGuideCompleted({
+        setSetupGuideCompletedRequestBody: {
+          id: mcpServer.id,
+          completed: true,
+        },
+      });
+    } catch {
+      setCompletionError("Unable to save setup status.");
+      setCompleting(false);
+      return;
+    }
+    // Overview reads the done mark, so refresh it before going there. The
+    // mark is saved; a failed refresh only leaves the cache stale.
+    await invalidateMcpServerQueries(cache).catch(() => {});
+    dispatch({ type: "complete" });
+  };
   return (
     <SetupContext
-      value={{ s, dispatch: live.dispatch, live: { ...live, settingsHref } }}
+      value={{
+        s,
+        dispatch: live.dispatch,
+        live: {
+          ...live,
+          settingsHref,
+          complete: () => void complete(),
+          completing,
+          completionError,
+        },
+      }}
     >
       <SetupBody serverUrl={serverUrl} serverName={serverName} />
     </SetupContext>

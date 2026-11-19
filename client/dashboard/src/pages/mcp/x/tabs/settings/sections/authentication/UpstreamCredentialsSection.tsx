@@ -182,11 +182,16 @@ function RequirementRow({
     remoteMcpServerId ?? "",
     canManage && !!remoteMcpServerId,
   );
-  const detected = DETECTED_REQUIREMENT[probe];
   const presentation =
     status === "no_auth_required" && probe === "authentication-required"
       ? SIGN_IN_DETECTED_STATUS
       : enumPresentation(UPSTREAM_AUTH_STATUS, status, UNKNOWN_STATUS);
+  // When nothing can sign in, say what that costs rather than restating the
+  // probe.
+  const detected =
+    presentation.tone === "destructive" && probe === "authentication-required"
+      ? "The upstream turns away calls without credentials, so every tool call fails until one is turned on."
+      : DETECTED_REQUIREMENT[probe];
 
   return (
     <AuthRow label="Upstream sign-in" hint={presentation.hint}>

@@ -32,7 +32,7 @@ import {
   vi,
 } from "vitest";
 
-// Runs Playground chat turns through the real AI SDK, OpenRouter provider and
+// Runs Elements chat turns through the real AI SDK, OpenRouter provider and
 // @ai-sdk/mcp client. Only the network edges are local: a real MCP server and
 // an OpenRouter endpoint that replays recorded streams. These tests exist to
 // catch AI SDK dependency updates that unit tests with mocked SDK calls miss.
@@ -131,7 +131,7 @@ function weatherCallIn(fixture: string) {
 
 // Recording waits on the real model.
 describe(
-  "Playground chat turn",
+  "Elements chat turn",
   { timeout: isRecordingFixtures ? 120_000 : undefined },
   () => {
     it("lists MCP tools through @ai-sdk/mcp", () => {

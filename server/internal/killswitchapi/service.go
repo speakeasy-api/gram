@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Optional transport and nullable database fields intentionally use documented zero values.
+//nolint:exhaustruct_v5 // Optional transport and nullable database fields intentionally use documented zero values.
 package killswitchapi
 
 import (

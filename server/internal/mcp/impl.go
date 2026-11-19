@@ -223,12 +223,14 @@ type Service struct {
 	toolsetCache      cache.TypedCacheObject[mv.ToolsetBaseContents]
 	telemLogger       *tm.Logger
 	// toolCallLogger emits tool call records into the OTel pipeline.
-	toolCallLogger         *otelpub.Logger
-	vectorToolStore        *rag.ToolsetVectorStore
-	assistantTokens        *assistanttokens.Manager
-	principalCredentials   *principalcredential.Issuer
-	deviceAgentTokens      *deviceagenttoken.Issuer
-	sessions               *sessions.Manager
+	toolCallLogger       *otelpub.Logger
+	vectorToolStore      *rag.ToolsetVectorStore
+	assistantTokens      *assistanttokens.Manager
+	principalCredentials *principalcredential.Issuer
+	deviceAgentTokens    *deviceagenttoken.Issuer
+	sessions             *sessions.Manager
+	// idpSessions ends identity provider sessions; the sessions manager outside tests.
+	idpSessions            sessions.SessionRevoker
 	consentBindings        ConsentBindingService
 	identityResolver       IdentityResolver
 	identityValidator      *mcpidentity.ValidatorBoundary
@@ -242,6 +244,8 @@ type Service struct {
 	platformFeatureChecker platformtools.FeatureChecker
 	platformToolsets       map[string]platformtools.Toolset
 	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
+	// accountSwitchCache marks consent challenges an account switch spent.
+	accountSwitchCache cache.TypedCacheObject[accountSwitchMarker]
 	// Short-lived install codes. Holds a live agent key, so it is
 	// cache-only and never written to the database.
 	agentInstallCache cache.TypedCacheObject[agentInstallCode]
@@ -680,6 +684,7 @@ func NewService(
 		principalCredentials:   principalCredentials,
 		deviceAgentTokens:      deviceagenttoken.New(callerAssertions, db),
 		sessions:               sessions,
+		idpSessions:            sessions,
 		chatSessionsManager:    chatSessionsManager,
 		enc:                    enc,
 		authz:                  authzEngine,
@@ -690,6 +695,11 @@ func NewService(
 		platformToolsets:       platformToolsets,
 		authnChallengeCache: cache.NewTypedObjectCache[AuthnChallengeState](
 			logger.With(attr.SlogCacheNamespace("authn_challenge")),
+			cacheImpl,
+			cache.SuffixNone,
+		),
+		accountSwitchCache: cache.NewTypedObjectCache[accountSwitchMarker](
+			logger.With(attr.SlogCacheNamespace("account_switch")),
 			cacheImpl,
 			cache.SuffixNone,
 		),

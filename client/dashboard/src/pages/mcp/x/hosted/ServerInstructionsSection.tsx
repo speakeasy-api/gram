@@ -9,7 +9,7 @@ import { Stack } from "@/components/ui/Stack";
 import { useRBAC } from "@/hooks/useRBAC";
 import { DEFAULT_MODEL } from "@/lib/models";
 import { cn } from "@/lib/utils";
-import { useModel } from "@/pages/playground/Openrouter";
+import { useOpenRouterModel } from "@/hooks/useOpenRouterModel";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { generateText } from "ai";
@@ -110,7 +110,7 @@ function GenerateInstructionsButton({
   form: UseMcpMetadataMetadataFormResult;
 }) {
   const [generating, setGenerating] = useState(false);
-  const model = useModel(DEFAULT_MODEL);
+  const model = useOpenRouterModel(DEFAULT_MODEL);
 
   const handleGenerate = async () => {
     if (tools.length === 0) {

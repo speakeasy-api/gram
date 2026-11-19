@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Catalogue values intentionally omit documented optional fields.
+//nolint:exhaustruct_v5 // Catalogue values intentionally omit documented optional fields.
 package platformmcp
 
 import (

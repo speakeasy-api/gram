@@ -6,19 +6,17 @@ import { unwrapAsync } from "@gram/client/types/fp";
 import { useQuery } from "@tanstack/react-query";
 import { serializeFilters } from "@/pages/logs/log-filter-url";
 import { Operator } from "@gram/client/models/components/logfilter";
-import { PluginStatusBanner } from "@/pages/mcp/overview/PluginStatusBanner";
 import { Stack } from "@/components/ui/Stack";
 import {
   type HostedServerRef,
   MCPOverviewTab,
 } from "@/pages/mcp/overview/MCPOverviewTab";
-import {
-  isCanonicalHostedWrapper,
-  standsInForToolset,
-} from "@/pages/mcp/x/MCPServerDetailsRouting";
+import { standsInForToolset } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { TunneledMcpConnectionsPanel } from "./TunneledMcpConnectionsPanel";
 import { UnproxiedMcpOverviewTab } from "./UnproxiedMcpOverviewTab";
+import { PluginDistributionLine } from "@/pages/mcp/overview/PluginDistributionLine";
+import { pluginServerRef } from "@/pages/mcp/overview/serverMatchesRef";
 
 // Picks the overview for the server's backend. Unproxied servers have no
 // Speakeasy-proxied traffic and get their own scoped-down tab; tunneled servers
@@ -26,10 +24,13 @@ import { UnproxiedMcpOverviewTab } from "./UnproxiedMcpOverviewTab";
 export function OverviewTab({
   mcpServer,
   agentSetupHref,
+  pluginSettingsHref,
   hostedToolset: loadedToolset,
 }: {
   mcpServer: McpServer;
   agentSetupHref: string;
+  /** The Plugins section of this server's settings. */
+  pluginSettingsHref: string;
   /** The hosted toolset when loaded, for when the read's summary is missing. */
   hostedToolset?: { id: string; slug: string; name: string };
 }): JSX.Element | null {
@@ -65,9 +66,12 @@ export function OverviewTab({
     return (
       <UnproxiedMcpOverviewTab
         unproxiedMcpServerId={mcpServer.unproxiedMcpServerId}
-        mcpServerId={mcpServer.id}
-        mcpServerSlug={mcpServer.slug ?? ""}
-        mcpServerName={mcpServer.name ?? "MCP Server"}
+        header={
+          <PluginDistributionLine
+            server={pluginServerRef(mcpServer)}
+            settingsHref={pluginSettingsHref}
+          />
+        }
       />
     );
   }
@@ -94,24 +98,18 @@ export function OverviewTab({
   const tunneled = !!mcpServer.tunneledMcpServerId;
   // The usage dashboard is keyed by slug; a tunneled server without one still
   // gets its tunnel status.
-  // Plugin entries name a non-canonical host by its own id; only the canonical wrapper shares the toolset's.
-  const pluginServer: HostedServerRef =
-    hostedToolset && !isCanonicalHostedWrapper(mcpServer)
-      ? {
-          kind: "mcp-server",
-          id: mcpServer.id,
-          slug: mcpServer.slug ?? "",
-          name: mcpServer.name ?? "MCP Server",
-        }
-      : server;
+  const pluginLine = (
+    <PluginDistributionLine
+      server={pluginServerRef(mcpServer, hostedToolset)}
+      settingsHref={pluginSettingsHref}
+    />
+  );
   const usage = hostedToolset ? (
-    <MCPOverviewTab server={server} pluginServer={pluginServer} />
+    <MCPOverviewTab server={server} toolbarStart={pluginLine} />
   ) : mcpServer.slug ? (
     <MCPOverviewTab
       server={server}
-      // For tunneled servers the marketplace banner sits above the tunnel
-      // status, so the usage dashboard must not show it a second time.
-      showPluginBanner={!tunneled}
+      toolbarStart={pluginLine}
       // Tool Logs lists no tunneled servers as filter options yet.
       logsTarget={tunneled ? null : { type: "mcp_server", id: mcpServer.id }}
     />
@@ -132,7 +130,8 @@ export function OverviewTab({
     : undefined;
   return (
     <Stack gap={6}>
-      <PluginStatusBanner server={server} />
+      {/* Without a usage dashboard there is no toolbar to carry the line. */}
+      {!usage && pluginLine}
       <TunneledMcpConnectionsPanel
         tunneledMcpServerId={mcpServer.tunneledMcpServerId}
         agentSetupHref={agentSetupHref}

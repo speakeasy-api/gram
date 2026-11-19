@@ -1,5 +1,4 @@
-import { useOrganization } from "@/contexts/Auth";
-import { useRBAC } from "@/hooks/useRBAC";
+import { StatusDot } from "@/components/ui/StatusDot";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -11,7 +10,6 @@ import {
 import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
-import type { PluginServer } from "@gram/client/models/components/pluginserver.js";
 import { useAddPluginServerMutation } from "@gram/client/react-query/addPluginServer";
 import {
   invalidateAllPlugins,
@@ -23,41 +21,16 @@ import {
   usePublishStatus,
 } from "@gram/client/react-query/publishStatus";
 import { useRemovePluginServerMutation } from "@gram/client/react-query/removePluginServer";
-import { useResourceAudience } from "@gram/client/react-query/resourceAudience.js";
-import { ResourceAudienceEntryAppliesTo } from "@gram/client/models/components/resourceaudienceentry.js";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ChevronDown, CircleCheck, Plus } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { StatusBanner } from "@/components/status-banner";
-import { InstallInstructionsDialog } from "@/pages/plugins/InstallInstructionsDialog";
 import type { HostedServerRef } from "./MCPOverviewTab";
+import { serverMatchesRef } from "./serverMatchesRef";
 import { Spinner } from "@/components/ui/Spinner";
-
-function serverMatchesRef(server: PluginServer, ref: HostedServerRef): boolean {
-  // A hosted entry may be keyed by its canonical mcp_server, which shares the toolset id.
-  return ref.kind === "toolset"
-    ? server.toolsetId === ref.id || server.mcpServerId === ref.id
-    : server.mcpServerId === ref.id;
-}
-
-// A little fanned stack of client badges — purely decorative, gestures at
-// "this is what publishing unlocks" without claiming these are the only
-// supported clients.
-export function ClientIconFan(): React.JSX.Element {
-  return (
-    <div className="relative hidden h-36 shrink-0 sm:block" aria-hidden="true">
-      <div className="absolute inset-6 rounded-full bg-black/15 blur-2xl" />
-      <img
-        src="/icons/decorative/plugin-clients.webp"
-        alt=""
-        className="relative h-full w-full mr-10 object-contain drop-shadow-xl"
-      />
-    </div>
-  );
-}
+import { SettingsSection } from "@/components/detail/settings-section";
 
 function summarizePluginSelection(
   selectedIds: string[],
@@ -69,23 +42,6 @@ function summarizePluginSelection(
     selectedIds[0];
   if (selectedIds.length === 1) return firstName ?? "1 plugin";
   return `${firstName} & ${selectedIds.length - 1} more`;
-}
-
-// Why the server sits in each plugin: Default takes every enabled server, and
-// a plugin assigned to a role takes the servers that role can use.
-function describeMembership(
-  plugin: Plugin,
-  roles: { name: string; allServers: boolean }[],
-): string | null {
-  if (plugin.isDefault) return "every enabled server is added to Default";
-  if (roles.length === 0) return null;
-  return roles
-    .map((role) =>
-      role.allServers
-        ? `via role ${role.name}, which can use all servers`
-        : `via role ${role.name}`,
-    )
-    .join("; ");
 }
 
 function describeSaveResult(addedCount: number, removedCount: number): string {
@@ -102,6 +58,7 @@ function describeSaveResult(addedCount: number, removedCount: number): string {
     : "Added to plugin and published to GitHub";
 }
 
+/** The Plugins section on an MCP server's Settings tab. */
 export function PluginStatusBanner({
   server,
 }: {
@@ -119,35 +76,25 @@ function WritablePluginStatusBanner({
   server: HostedServerRef;
 }): React.JSX.Element | null {
   const scope = usePluginQueryScope();
-  const organization = useOrganization();
-  const { hasScope } = useRBAC();
-  const canAdmin = hasScope("org:admin", organization.id);
   const routes = useRoutes();
   const queryClient = useQueryClient();
   // throwOnError: false — this query calls EnsureDefaultPlugin server-side,
-  // which self-heals most conflicts but can still fail; a banner on the MCP
-  // detail page shouldn't crash the whole page via the error boundary when
+  // which self-heals most conflicts but can still fail; a section on the MCP
+  // Settings tab shouldn't crash the whole page via the error boundary when
   // it does. The existing `if (!data) return null` below already degrades
   // gracefully on a failed fetch.
-  const { data, isFetching: isPluginsFetching } = usePlugins(scope, undefined, {
+  const { data } = usePlugins(scope, undefined, {
     throwOnError: false,
   });
-  const [isInstallDialogOpen, setIsInstallDialogOpen] = useState(false);
-  // Polled so the banner picks up the Temporal generator-rollout schedule's
-  // auto-sync without a manual refresh.
-  const { data: publishStatus, isFetching: isPublishStatusFetching } =
-    usePublishStatus(scope, undefined, {
-      refetchInterval: 5_000,
-    });
+  // Polled so the section picks up the Temporal generator-rollout schedule's
+  // auto-sync without a manual refresh. The poll is silent: a spinner keyed
+  // to it would reappear every 5s beside the status and never settle. Saving
+  // shows its own spinner on the Publish button.
+  const { data: publishStatus } = usePublishStatus(scope, undefined, {
+    refetchInterval: 5_000,
+  });
   const [selectedPluginIds, setSelectedPluginIds] = useState<string[]>([]);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
-
-  // Role plugin matches are only disclosed to org admins.
-  const { data: audience } = useResourceAudience(
-    { resourceKind: "mcp", resourceId: server.id },
-    undefined,
-    { throwOnError: false, enabled: canAdmin },
-  );
 
   const addServerMutation = useAddPluginServerMutation();
   const removeServerMutation = useRemovePluginServerMutation();
@@ -175,27 +122,10 @@ function WritablePluginStatusBanner({
   if (!data) return null;
 
   const plugins = data.plugins;
-  const isRefetching = (isPluginsFetching || isPublishStatusFetching) && !!data;
   const memberPlugins = plugins.filter((plugin) =>
     plugin.servers?.some((s) => serverMatchesRef(s, server)),
   );
   const isPublished = memberPlugins.length > 0;
-  const rolesByPlugin = new Map<
-    string,
-    { name: string; allServers: boolean }[]
-  >();
-  for (const match of (canAdmin ? audience?.rolePlugins : undefined) ?? []) {
-    const entry = audience?.entries.find(
-      (e) => e.principalUrn === match.principalUrn,
-    );
-    const roles = rolesByPlugin.get(match.pluginId) ?? [];
-    roles.push({
-      name: entry?.displayName ?? match.principalUrn,
-      allServers:
-        entry?.appliesTo === ResourceAudienceEntryAppliesTo.AllResources,
-    });
-    rolesByPlugin.set(match.pluginId, roles);
-  }
   // A repo existing isn't enough — a marketplace with no active collaborator
   // isn't discoverable in Claude/Codex/etc, so it isn't truly set up yet.
   // Mirrors the connected/hasCollaborators gate on the Plugins page.
@@ -294,183 +224,137 @@ function WritablePluginStatusBanner({
   if (isPublished) saveButtonText = "Update";
   if (isSaving) saveButtonText = "Publishing";
 
-  return (
-    <StatusBanner tone={isTrulyPublished ? "success" : "warning"}>
-      <div className="flex items-center justify-between gap-8 p-6">
-        <div className="flex max-w-md flex-col gap-3">
-          <div className="flex items-center gap-2">
-            {isTrulyPublished ? (
-              <CircleCheck className="text-emerald-500 h-4 w-4 shrink-0" />
-            ) : (
-              <AlertTriangle className="text-warning-foreground h-4 w-4 shrink-0" />
+  // Alphabetical, so a plugin is found where its name says it should be.
+  const sortedPlugins = [...plugins].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+  );
+  const picker = (
+    <Popover open={isPickerOpen} onOpenChange={setIsPickerOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label="Plugins"
+          className="border-input bg-background hover:bg-muted flex h-9 w-full max-w-md min-w-0 items-center justify-between gap-2 border px-3 text-sm shadow-xs outline-none"
+        >
+          <span
+            className={cn(
+              "truncate",
+              selectedPluginIds.length === 0 && "text-muted-foreground",
             )}
-            <Text
-              className={cn(
-                "text-warning-foreground text-base font-semibold",
-                isTrulyPublished && "text-emerald-500",
-              )}
+          >
+            {summarizePluginSelection(selectedPluginIds, plugins)}
+          </span>
+          <ChevronDown className="text-muted-foreground size-4 shrink-0" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-80 p-1">
+        <div className="flex max-h-56 flex-col gap-0.5 overflow-y-auto">
+          {sortedPlugins.map((plugin) => (
+            <label
+              key={plugin.id}
+              className="hover:bg-accent flex cursor-pointer items-start gap-2 px-2 py-1.5 text-sm"
             >
-              {isTrulyPublished
-                ? `Published to ${memberPlugins.length} plugin${
-                    memberPlugins.length > 1 ? "s" : ""
-                  }`
-                : isPublished
-                  ? "Marketplace needs setup"
-                  : "Not published to any plugin"}
-            </Text>
-            {isRefetching && (
-              <Spinner className="text-muted-foreground ml-1 h-3.5 w-3.5" />
-            )}
-          </div>
-          {isTrulyPublished && (
-            <ul className="flex flex-col gap-1">
-              {memberPlugins.map((plugin) => {
-                const reason = describeMembership(
-                  plugin,
-                  rolesByPlugin.get(plugin.id) ?? [],
-                );
-                return (
-                  <li key={plugin.id}>
-                    <Text variant="small">
-                      <span className="font-medium">{plugin.name}</span>
-                      {reason && (
-                        <span className="text-muted-foreground">
-                          {" "}
-                          · {reason}
-                        </span>
-                      )}
-                    </Text>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          <Text variant="small" className="text-muted-foreground/90">
-            Plugins are the preferred way to distribute MCP servers to your
-            organization's users. Plugins are installed via marketplaces which
-            are GitHub repositories that Speakeasy hosts on your behalf.
-          </Text>
-          {plugins.length > 0 && (
-            <div className="flex items-center gap-2">
-              <Popover open={isPickerOpen} onOpenChange={setIsPickerOpen}>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    className="border-input bg-background hover:bg-muted flex h-8 w-56 items-center justify-between gap-2 border px-3 text-sm shadow-xs outline-none"
-                  >
-                    <span
-                      className={cn(
-                        "truncate",
-                        selectedPluginIds.length === 0 &&
-                          "text-muted-foreground",
-                      )}
-                    >
-                      {summarizePluginSelection(selectedPluginIds, plugins)}
-                    </span>
-                    <ChevronDown className="text-muted-foreground size-4 shrink-0" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent align="start" className="w-80 p-1">
-                  <div className="flex max-h-56 flex-col gap-0.5 overflow-y-auto">
-                    {plugins.map((plugin) => (
-                      <label
-                        key={plugin.id}
-                        className="hover:bg-accent flex cursor-pointer items-start gap-2 px-2 py-1.5 text-sm"
-                      >
-                        <Checkbox
-                          checked={selectedPluginIds.includes(plugin.id)}
-                          onCheckedChange={() => togglePlugin(plugin.id)}
-                          className="mt-0.5"
-                        />
-                        <div className="flex flex-col">
-                          <span>{plugin.name}</span>
-                          {plugin.description && (
-                            <span className="text-muted-foreground text-xs">
-                              {plugin.description}
-                            </span>
-                          )}
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                </PopoverContent>
-              </Popover>
-              <Button
-                size="sm"
-                disabled={!hasChanges || isSaving}
-                onClick={() => void handleSave()}
-              >
-                {isSaving && (
-                  <Button.LeftIcon>
-                    <Spinner />
-                  </Button.LeftIcon>
-                )}
-                <Button.Text>{saveButtonText}</Button.Text>
-              </Button>
-            </div>
-          )}
-        </div>
-        <ClientIconFan />
-      </div>
-
-      {isPublished && (
-        <>
-          <div className="border-border border-t" />
-          <div className="flex items-center justify-between gap-4 p-6">
-            <div className="flex flex-col gap-1">
-              <Text className="text-sm font-semibold">Install the plugin</Text>
-              <Text variant="small" className="text-muted-foreground/90">
-                {marketplaceReady
-                  ? "Your team installs the plugin in their AI client to start using this server."
-                  : "Your project marketplace isn't fully set up yet, which means you won't be able to install this MCP via the plugin."}
-              </Text>
-            </div>
-            {marketplaceReady &&
-            publishStatus?.repoOwner &&
-            publishStatus.repoName ? (
-              <div className="flex items-center gap-2">
-                {canAdmin && (
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    onClick={() => setIsInstallDialogOpen(true)}
-                  >
-                    <Button.LeftIcon>
-                      <Plus className="h-4 w-4" />
-                    </Button.LeftIcon>
-                    <Button.Text>Install</Button.Text>
-                  </Button>
-                )}
-                <routes.plugins.Link>
-                  <Button size="sm" variant="secondary">
-                    <Button.Text>Go to plugins</Button.Text>
-                  </Button>
-                </routes.plugins.Link>
-                {canAdmin && (
-                  <InstallInstructionsDialog
-                    open={isInstallDialogOpen}
-                    onOpenChange={setIsInstallDialogOpen}
-                    repoOwner={publishStatus.repoOwner}
-                    repoName={publishStatus.repoName}
-                    marketplaceUrl={publishStatus.marketplaceUrl}
-                    candidatePlugins={memberPlugins.map((plugin) => ({
-                      name: plugin.name,
-                      slug: plugin.slug,
-                      description: plugin.description,
-                    }))}
-                  />
+              <Checkbox
+                checked={selectedPluginIds.includes(plugin.id)}
+                onCheckedChange={() => togglePlugin(plugin.id)}
+                className="mt-0.5"
+              />
+              {/* The checkbox lines up with the name; the description, when
+                  there is one, sits under it. */}
+              <div className="flex min-w-0 flex-col">
+                <span>{plugin.name}</span>
+                {plugin.description && (
+                  <span className="text-muted-foreground text-xs">
+                    {plugin.description}
+                  </span>
                 )}
               </div>
-            ) : (
-              <routes.plugins.Link>
-                <Button size="sm" variant="primary">
-                  Set up marketplace
-                </Button>
-              </routes.plugins.Link>
-            )}
-          </div>
-        </>
+            </label>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+
+  const publishButton = (
+    <Button
+      size="md"
+      variant="primary"
+      disabled={!hasChanges || isSaving}
+      onClick={() => void handleSave()}
+    >
+      {isSaving && (
+        <Button.LeftIcon>
+          <Spinner />
+        </Button.LeftIcon>
       )}
-    </StatusBanner>
+      <Button.Text>{saveButtonText}</Button.Text>
+    </Button>
+  );
+
+  const statusLabel = isTrulyPublished
+    ? `In ${memberPlugins.length} plugin${memberPlugins.length > 1 ? "s" : ""}`
+    : isPublished
+      ? "Marketplace needs setup"
+      : "Not in a plugin";
+
+  // Plugins are optional, so a server in none is neutral; one in a plugin
+  // nobody can install yet is the case worth a warning.
+  const statusTone = isTrulyPublished
+    ? "success"
+    : isPublished
+      ? "warning"
+      : "neutral";
+
+  const statusHint = isTrulyPublished
+    ? memberPlugins.map((plugin) => plugin.name).join(", ")
+    : isPublished && !marketplaceReady
+      ? "Set up the marketplace on the Plugins page to make it installable."
+      : "Add it to a plugin so your team can install it.";
+
+  return (
+    <SettingsSection>
+      <SettingsSection.Header>
+        <SettingsSection.Title>Plugins</SettingsSection.Title>
+        <SettingsSection.Description>
+          Choose which plugins distribute this server to your team&apos;s
+          agents.
+        </SettingsSection.Description>
+      </SettingsSection.Header>
+      <SettingsSection.Panel>
+        <SettingsSection.Body>
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <StatusDot tone={statusTone} />
+              {statusLabel}
+            </div>
+            <Text muted small className="block max-w-2xl pl-4">
+              {statusHint}
+            </Text>
+          </div>
+          {plugins.length > 0 ? (
+            picker
+          ) : (
+            <Text muted small className="block">
+              This project has no plugins yet.{" "}
+              <routes.plugins.Link className="text-foreground underline underline-offset-2">
+                Create one on the Plugins page
+              </routes.plugins.Link>
+              .
+            </Text>
+          )}
+        </SettingsSection.Body>
+        {plugins.length > 0 ? (
+          <SettingsSection.Footer>
+            <SettingsSection.FooterHint>
+              Publishing pushes your plugins to your GitHub marketplace.
+            </SettingsSection.FooterHint>
+            <SettingsSection.FooterActions>
+              {publishButton}
+            </SettingsSection.FooterActions>
+          </SettingsSection.Footer>
+        ) : null}
+      </SettingsSection.Panel>
+    </SettingsSection>
   );
 }

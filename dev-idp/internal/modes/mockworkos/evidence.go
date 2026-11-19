@@ -83,7 +83,7 @@ func (h *Handler) handleGoogleUserInfo(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_token"})
 		return
 	}
-	info := map[string]any{"email_verified": true}
+	info := map[string]any{"sub": "mock-google-" + token, "email_verified": true}
 	if len(hd) > 0 {
 		info["hd"] = string(hd)
 	}

@@ -36,7 +36,11 @@ import SkillVersionHistory from "./pages/skills/SkillVersionHistory";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import ProjectIdentityRedirect from "./pages/org/ProjectIdentityRedirect";
-import UserSessions from "./pages/org/UserSessions";
+import McpSessionsIndex, {
+  LegacyMcpSessionsConfiguration,
+  LegacyMcpSessionsProviderDetail,
+} from "./pages/mcp-sessions/McpSessionsIndex";
+import McpSessionsProvider from "./pages/mcp-sessions/McpSessionsProvider";
 import EventFeed from "./pages/data/EventFeed";
 import DataExports from "./pages/data-exports/DataExports";
 import { LegacyDataRedirect } from "./pages/data-exports/LegacyDataRedirect";
@@ -130,14 +134,7 @@ import {
 import OrgWebhooks from "./pages/org/OrgWebhooks";
 import UserSessionIssuerDetail from "./pages/user-session-issuers/UserSessionIssuerDetail";
 import { SyncFromOkta } from "./pages/mcp/sync-from-okta/SyncFromOkta";
-import {
-  McpSessionsConfiguration,
-  McpSessionsProviderDetail,
-} from "./pages/user-session-issuers/McpSessionsConfiguration";
-import {
-  UserSessionIssuersPage,
-  UserSessionIssuersRoot,
-} from "./pages/user-session-issuers/UserSessionIssuers";
+import { UserSessionIssuersPage } from "./pages/user-session-issuers/UserSessionIssuers";
 import {
   RemoteIdentityProvidersPage,
   RemoteIdentityProvidersRoot,
@@ -148,11 +145,9 @@ import PlatformAdminOverview from "./pages/platform-admin/Overview";
 import PlatformAdminRbacOverride from "./pages/platform-admin/RbacOverride";
 import PlatformAdminOnboarding from "./pages/platform-admin/Onboarding";
 import PlatformAdminOpenRouterKeys from "./pages/platform-admin/OpenRouterKeys";
-import Playground from "./pages/playground/Playground";
 import NewPromptPage from "./pages/prompts/NewPrompt";
 import PromptPage from "./pages/prompts/Prompt";
 import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
-import SDK from "./pages/sdk/SDK";
 import Access from "./pages/access/Access";
 import { RoleEditorPage } from "./pages/access/RoleEditorPage";
 import RequestAccess from "./pages/access/RequestAccess";
@@ -169,6 +164,7 @@ import {
   ShadowMCPServerLegacyRedirect,
 } from "./pages/shadow-ai/ShadowAI";
 import ShadowAIToolDetail from "./pages/shadow-ai/ShadowAIToolDetail";
+import ShadowMCP from "./pages/shadow-mcp/ShadowMCP";
 import ShadowMCPServerDetail from "./pages/shadow-mcp/ShadowMCPServerDetail";
 import PolicyCenter, { PolicyCenterRoot } from "./pages/security/PolicyCenter";
 import PolicyDetail, { PolicyNew } from "./pages/security/PolicyDetail";
@@ -233,9 +229,6 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
         component: ChatConversation,
       },
     },
-  },
-  playground: {
-    component: Playground,
   },
   integrations: {
     component: Integrations,
@@ -428,14 +421,22 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
   },
   mcpSessions: {
     component: Outlet,
-    indexComponent: UserSessions,
+    indexComponent: McpSessionsIndex,
     subPages: {
+      provider: {
+        component: McpSessionsProvider,
+        subPages: {
+          connections: {},
+          mcpServers: {},
+          settings: {},
+        },
+      },
       configuration: {
-        component: UserSessionIssuersRoot,
-        indexComponent: McpSessionsConfiguration,
+        component: Outlet,
+        indexComponent: LegacyMcpSessionsConfiguration,
         subPages: {
           issuerDetail: {
-            component: McpSessionsProviderDetail,
+            component: LegacyMcpSessionsProviderDetail,
           },
         },
       },
@@ -653,15 +654,12 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
   },
   shadowMCP: {
     component: ShadowAIRoot,
-    indexComponent: ShadowMCPIndexRedirect,
+    indexComponent: ShadowMCP,
     subPages: {
       detail: {
         component: ShadowMCPServerLegacyRedirect,
       },
     },
-  },
-  sdks: {
-    component: SDK,
   },
   deployments: {
     component: DeploymentsRoot,
@@ -743,7 +741,7 @@ const ORG_ROUTE_PAGES: PageTree<OrgRouteStructure> = {
     component: OrgWebhooks,
   },
   userSessionIssuers: {
-    component: UserSessionIssuersRoot,
+    component: Outlet,
     indexComponent: UserSessionIssuersPage,
     subPages: {
       issuerDetail: {

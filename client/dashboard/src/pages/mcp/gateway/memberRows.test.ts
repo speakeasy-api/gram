@@ -9,7 +9,6 @@ import {
   classifyMemberServer,
   memberBackendKind,
   nextSortOrder,
-  planReorder,
 } from "./memberRows";
 
 function server(overrides: Partial<McpServer> = {}): McpServer {
@@ -115,39 +114,6 @@ describe("buildMemberRows", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.server).toBeUndefined();
     expect(rows[0]!.classification).toBe("unknown");
-  });
-});
-
-describe("planReorder", () => {
-  const members = [
-    member({ id: "a", sortOrder: 0 }),
-    member({ id: "b", sortOrder: 1 }),
-    member({ id: "c", sortOrder: 2 }),
-  ];
-
-  it("writes only the rows whose position actually changed", () => {
-    expect(planReorder(members, 2, 1)).toEqual([
-      { id: "c", sortOrder: 1 },
-      { id: "b", sortOrder: 2 },
-    ]);
-  });
-
-  it("renumbers every row when the list starts with duplicate sortOrders", () => {
-    const flat = [
-      member({ id: "a", sortOrder: 0 }),
-      member({ id: "b", sortOrder: 0 }),
-      member({ id: "c", sortOrder: 0 }),
-    ];
-    expect(planReorder(flat, 0, 2)).toEqual([
-      { id: "c", sortOrder: 1 },
-      { id: "a", sortOrder: 2 },
-    ]);
-  });
-
-  it("is a no-op for a move that goes nowhere or off the ends", () => {
-    expect(planReorder(members, 1, 1)).toEqual([]);
-    expect(planReorder(members, 0, -1)).toEqual([]);
-    expect(planReorder(members, 2, 3)).toEqual([]);
   });
 });
 

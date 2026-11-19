@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -44,28 +45,36 @@ func (s *Service) handleMetaConnectionStatusCall(
 		withStatusReference(memberCtx, &row)
 		servers = append(servers, row)
 	}
-	// A cached connection reports members its consent did not approve,
-	// whether unavailable at consent or added since, so the person knows
-	// renewed consent would add them.
-	if gate.catalog != nil && gate.catalogRef != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
+	// A connection with a stored approval reports members it did not
+	// approve, whether left out at consent or added since, in either catalog
+	// mode, so the person knows renewed consent would add them.
+	if gate.catalog != nil {
 		for _, member := range gate.unapprovedMembers {
 			servers = append(servers, metamcp.ConnectionStatusServer{
 				Slug:      member.slug,
 				Name:      member.name,
 				Status:    metamcp.SignInNeedsConsent,
-				Detail:    catalogMemberNotApproved,
+				Detail:    gate.catalog.notApprovedMessage(member.serverID),
 				Reconnect: false,
 				Outage:    nil,
 			})
 		}
 	}
 
+	// A hidden member outside the approval also says why showing it again
+	// will not make it usable.
 	for _, member := range gate.hiddenMembers {
+		detail := ""
+		if gate.catalog != nil {
+			if _, unapproved := gate.catalog.approvedMembers([]metaMember{member}); len(unapproved) > 0 {
+				detail = gate.catalog.notApprovedMessage(member.serverID)
+			}
+		}
 		servers = append(servers, metamcp.ConnectionStatusServer{
 			Slug:      member.slug,
 			Name:      member.name,
 			Status:    metamcp.SignInHidden,
-			Detail:    "",
+			Detail:    detail,
 			Reconnect: false,
 			Outage:    nil,
 		})
@@ -310,15 +319,18 @@ func memberFailureSignIn(ctx context.Context, gate metaGateContext, member metaM
 		return signInRow(metamcp.SignInError, memberErrorMessage(err), nil)
 	}
 	name := cmp.Or(member.name, member.slug)
+	if unavailable.address != guardian.AddressFine {
+		return signInRow(metamcp.SignInUnavailable, memberErrorMessage(err), &metamcp.ConnectionStatusOutage{Message: unavailable.address.EndUserMessage(name, guardian.SignInAddress), ReconnectURL: "", NeedsAdmin: true})
+	}
 	if unavailable.session == nil {
-		return signInRow(metamcp.SignInUnavailable, memberErrorMessage(err), &metamcp.ConnectionStatusOutage{Message: name + " isn't available right now. Try again shortly.", ReconnectURL: ""})
+		return signInRow(metamcp.SignInUnavailable, memberErrorMessage(err), &metamcp.ConnectionStatusOutage{Message: name + " isn't available right now. Try again shortly.", ReconnectURL: "", NeedsAdmin: false})
 	}
 	kind := remotesessions.OutageKindOf(unavailable.session)
 	reconnectURL := ""
 	if kind == remotesessions.RefreshOutageProvider {
 		reconnectURL = gate.memberCallerURL(member)
 	}
-	return signInRow(metamcp.SignInUnavailable, memberErrorMessage(err), &metamcp.ConnectionStatusOutage{Message: connectionOutageMessage(name, kind, remotesessions.RetryAfter(unavailable.session)), ReconnectURL: reconnectURL})
+	return signInRow(metamcp.SignInUnavailable, memberErrorMessage(err), &metamcp.ConnectionStatusOutage{Message: connectionOutageMessage(name, kind, remotesessions.RetryAfter(unavailable.session)), ReconnectURL: reconnectURL, NeedsAdmin: false})
 }
 
 // refreshProvenance reports an error known to come from a refresh that wrote its own failed row.

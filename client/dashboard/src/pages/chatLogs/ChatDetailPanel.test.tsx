@@ -35,6 +35,9 @@ const messages: ChatMessage[] = [
   },
 ];
 
+vi.mock("@/hooks/useAssistantsAvailability", () => ({
+  useAssistantsAvailable: () => true,
+}));
 vi.mock("./useChatTranscript", () => ({
   useChatTranscript: () => ({
     chat: state.chat,

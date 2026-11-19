@@ -36,7 +36,7 @@ func (s *seeder) seedDeployment(ctx context.Context) error {
 
 // seedDeploymentStack writes one completed deployment with 8 HTTP tools whose
 // URNs (tools:http:acme:*) match the ClickHouse telemetry, feeding the
-// Deployments, Sources, MCP, Playground, and Catalog surfaces.
+// Deployments, Sources, MCP, and Catalog surfaces.
 func (s *seeder) seedDeploymentStack(ctx context.Context) error {
 	proj := s.projectID()
 

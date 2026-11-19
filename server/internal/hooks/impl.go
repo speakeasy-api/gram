@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/hookversions"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -108,6 +109,9 @@ type Service struct {
 	// relative to the attribute_metrics_summaries MV cutoff. Defaults to
 	// time.Now via NewService; access through now() for nil-safety.
 	nowFunc func() time.Time
+	// versionPolicy classifies the sender's hooks version for the
+	// hooks_version effect. Zero leaves the effect off.
+	versionPolicy hookversions.Policy
 	// claudeBudget bounds how long the legacy /rpc/hooks.claude endpoint waits
 	// for a verdict before it answers from the org's fail-open posture.
 	claudeBudget time.Duration
@@ -336,7 +340,13 @@ func NewService(
 		claudeBudget:       legacyClaudeHookDecisionBudget,
 		claudeDrains:       sync.WaitGroup{},
 		deviceAgentTokens:  deviceAgentTokens,
+		versionPolicy:      hookversions.Policy{Latest: nil, Minimum: nil},
 	}
+}
+
+// SetVersionPolicy turns on the hooks_version effect on ingest responses.
+func (s *Service) SetVersionPolicy(policy hookversions.Policy) {
+	s.versionPolicy = policy
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
@@ -519,12 +529,15 @@ func (s *Service) withAuthContext(ctx context.Context, logger *slog.Logger) *slo
 	return logger
 }
 
-// lookupShadowMCPBlockingPolicy returns the first enabled shadow_mcp policy
-// with action=block for the given project, or nil when no such policy exists.
-// A nil scanner (test setups) or lookup failure returns nil so the hook falls
-// back to permissive behaviour. Flag-action policies are intentionally ignored
-// here — they surface as findings via the batch scanner instead of denying at
-// the hook layer.
+// lookupShadowMCPBlockingPolicy returns the shadow_mcp policy that governs a
+// user's MCP calls in a project. An enabled blocking policy that applies to
+// the user wins. Without one the project is in the built-in blocklist mode:
+// an implicit allow-all policy whose blocked list is the servers an
+// administrator denied, so a denial and a link to an official version take
+// effect with no policy to set up. Flag-action policies are intentionally
+// ignored here; they surface as findings via the batch scanner instead of
+// denying at the hook layer. A nil scanner (test setups) or a lookup failure
+// returns nil so the hook falls back to permissive behaviour.
 func (s *Service) lookupShadowMCPBlockingPolicy(ctx context.Context, organizationID, projectID, userID string) *risk.ShadowMCPPolicy {
 	if s.riskScanner == nil || projectID == "" {
 		return nil
@@ -540,5 +553,36 @@ func (s *Service) lookupShadowMCPBlockingPolicy(ctx context.Context, organizatio
 		)
 		return nil
 	}
-	return policy
+	if policy != nil {
+		return policy
+	}
+	return s.implicitShadowMCPPolicy(ctx, organizationID, pid, userID)
+}
+
+// implicitShadowMCPPolicy is the built-in blocklist for a user no blocking
+// policy covers. Its blocked URLs are this user's own: servers denied for
+// everyone or for a person or role the user holds, and servers approved only
+// for people or roles the user holds none of. It has no ID: blocks it causes
+// are recorded without a policy, and the block message offers no request
+// link, since a server is only on this list because of an administrator's
+// decision.
+func (s *Service) implicitShadowMCPPolicy(ctx context.Context, organizationID string, projectID uuid.UUID, userID string) *risk.ShadowMCPPolicy {
+	if s.shadowMCPClient == nil {
+		return nil
+	}
+	denied, err := s.shadowMCPClient.BlockedServerURLs(ctx, organizationID, projectID, userID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to list denied shadow mcp servers; defaulting to off",
+			attr.SlogError(err),
+		)
+		return nil
+	}
+	return &risk.ShadowMCPPolicy{
+		ID:          "",
+		Name:        shadowmcp.ImplicitPolicyName,
+		Version:     0,
+		UserMessage: nil,
+		Disposition: risk.ShadowMCPDispositionAllowAll,
+		BlockedURLs: denied,
+	}
 }

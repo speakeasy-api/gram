@@ -157,13 +157,16 @@ func TestDirectUpstreamChainingRefusalWritesARequestRow(t *testing.T) {
 	pool, err := TestInfra.CloneTestDatabase(t, "mcp_direct_chaining_refusal")
 	require.NoError(t, err)
 	for _, tc := range []struct {
-		stage  identitychaining.Stage
-		reason identitychaining.Reason
-		code   mcpconnectionattempts.Code
+		stage   identitychaining.Stage
+		reason  identitychaining.Reason
+		code    mcpconnectionattempts.Code
+		who     mcpconnectionattempts.WhoFixes
+		message string
 	}{
-		{identitychaining.StageAuthorization, identitychaining.ReasonReauthenticationRequired, mcpconnectionattempts.CodeReauthenticationRequired},
+		{identitychaining.StageAuthorization, identitychaining.ReasonReauthenticationRequired, mcpconnectionattempts.CodeReauthenticationRequired, mcpconnectionattempts.WhoPerson, ""},
 		// At runtime only the signer refuses an account as ineligible.
-		{identitychaining.StageExchange, identitychaining.ReasonIneligibleIdentity, mcpconnectionattempts.CodeIneligibleIdentity},
+		{identitychaining.StageExchange, identitychaining.ReasonIneligibleIdentity, mcpconnectionattempts.CodeIneligibleIdentity, mcpconnectionattempts.WhoAdmin, "Company sign-in for this server isn't working. Contact your administrator."},
+		{identitychaining.StageAuthorization, identitychaining.ReasonUnmanagedAccount, mcpconnectionattempts.CodeUnmanagedAccount, mcpconnectionattempts.WhoPerson, "Company sign-in for this server can't use your account, because your company doesn't manage it."},
 	} {
 		t.Run(string(tc.reason), func(t *testing.T) {
 			t.Parallel()
@@ -184,12 +187,13 @@ func TestDirectUpstreamChainingRefusalWritesARequestRow(t *testing.T) {
 				subject:  subject, chosenClient: validUUID(f.registration),
 			}
 			_, err := f.service.resolveDirectUpstreamToken(ctx, httptest.NewRecorder(), testenv.NewLogger(t), authentication, "https://upstream.example.com", false, validUUID(f.issuerID))
-			if tc.reason == identitychaining.ReasonIneligibleIdentity {
-				require.Error(t, err, "an ineligible account is refused, not challenged")
+			if tc.message != "" {
+				require.EqualError(t, err, tc.message, "a refused account is told why, not challenged")
 			}
 			require.Len(t, chainer.requests, 1)
 			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.code)
 			require.Equal(t, subject.String(), row.SubjectURN)
+			require.Equal(t, string(tc.who), row.WhoFixes)
 			require.Len(t, rec.Rows(), 1)
 		})
 	}

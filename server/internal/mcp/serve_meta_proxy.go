@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
@@ -294,6 +295,9 @@ type memberUnavailableError struct {
 
 	// session is the refresh failure when the outage hit a person's connection.
 	session error
+
+	// address is a sign-in provider address Speakeasy did not dial, which no retry fixes.
+	address guardian.AddressFailure
 }
 
 func (e memberUnavailableError) Unwrap() error { return e.memberDiscoveryError }
@@ -302,6 +306,7 @@ func newMemberUnavailableError(message string, session error) memberUnavailableE
 	return memberUnavailableError{
 		memberDiscoveryError: memberDiscoveryError{metaMemberError: &metaMemberError{message: message}, status: 0, retryable: false, retryAfter: 0},
 		session:              session,
+		address:              guardian.AddressFine,
 	}
 }
 
@@ -668,7 +673,7 @@ func (s *Service) executeProxiedMemberTool(
 	ctx = s.memberServerContext(ctx, logger, gate, member)
 	// A proxied member's tool-call log is written by the remotemcp interceptor,
 	// which never sees the gate, so carry the caller's identity down to it.
-	clientIdentity, _ := resolveClientIdentity(ctx, logger, s.sessionClientInfo, &mcpInputs{ //nolint:exhaustruct // only the record's identity fields matter here
+	clientIdentity, _ := resolveClientIdentity(ctx, logger, s.sessionClientInfo, &mcpInputs{ //nolint:exhaustruct_v5 // only the record's identity fields matter here
 		projectID:       member.projectID,
 		sessionID:       gate.sessionID,
 		clientInfoScope: metaClientInfoScope(gate.metaServerID),
@@ -709,7 +714,7 @@ func (s *Service) executeProxiedMemberTool(
 	}
 	if err != nil {
 		if failure, ok := errors.AsType[memberConnectionError](err); ok {
-			s.recordMemberFailure(ctx, gate, member, failure.code, memberUpstreamHost(err))
+			s.recordMemberFailure(ctx, gate, member, failure.code, mcpconnectionattempts.Provider(memberUpstreamHost(err)))
 		}
 		// The gateway logs this failure only when the call never reached
 		// the upstream interceptor.
@@ -797,8 +802,13 @@ func (s *Service) describeProxiedMember(ctx context.Context, logger *slog.Logger
 	}
 	dial, err := redial(ctx, gate, member)
 	if err != nil {
+		cut := listingCutOff(ctx, tokenEndpointAnswered(err))
 		// Member-scoped errors stay detectable through the %w chain.
-		return nil, fmt.Errorf("dial meta MCP member: %w", err)
+		err = fmt.Errorf("dial meta MCP member: %w", err)
+		if cut {
+			err = listingCutError{err}
+		}
+		return nil, err
 	}
 
 	// One deadline and one upstream session cover the whole pagination.

@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -109,6 +110,12 @@ type CreatePluginMutation struct {
 	// out of the marketplace until someone syncs it by hand.
 	AutoSyncEnabled *bool
 
+	// AutoAddServersEnabled sets whether the plugin's role audiences add and
+	// remove its MCP servers automatically. Nil leaves the default, which is
+	// off. A new plugin has no role audiences, so turning it on here adds
+	// nothing until roles are assigned.
+	AutoAddServersEnabled *bool
+
 	// Actor is who the creation is attributed to.
 	Actor PluginMetadataActor
 }
@@ -146,6 +153,17 @@ type UpdatePluginMutation struct {
 	// run Service.RequireAutoSyncCanTurnOffInTransaction in the same
 	// transaction.
 	AutoSyncEnabled *bool
+
+	// AutoAddServersEnabled turns automatic server adding on or off. Nil keeps
+	// the current setting. Turning it on adds the MCP servers the plugin's
+	// assigned roles can use now, except ones an admin removed before, so it
+	// needs DeliveryGuard. Turning it off changes no servers: the plugin keeps
+	// its current list and only manual changes alter it from then on.
+	AutoAddServersEnabled *bool
+
+	// DeliveryGuard checks Shadow MCP admission for servers added when
+	// AutoAddServersEnabled turns on. It is required only then.
+	DeliveryGuard *admission.Guard
 
 	// Actor is who the update is attributed to.
 	Actor PluginMetadataActor
@@ -278,12 +296,13 @@ func (c *PluginMetadataCore) CreateInTransaction(ctx context.Context, tx pgx.Tx,
 		return PluginMetadataResult{}, err
 	}
 	plugin, err := queries.CreatePlugin(ctx, repo.CreatePluginParams{
-		OrganizationID:  mutation.OrganizationID,
-		ProjectID:       mutation.ProjectID,
-		Name:            mutation.Name,
-		Slug:            slug,
-		Description:     conv.PtrToPGText(mutation.Description),
-		AutoSyncEnabled: conv.PtrToPGBool(mutation.AutoSyncEnabled),
+		OrganizationID:        mutation.OrganizationID,
+		ProjectID:             mutation.ProjectID,
+		Name:                  mutation.Name,
+		Slug:                  slug,
+		Description:           conv.PtrToPGText(mutation.Description),
+		AutoSyncEnabled:       conv.PtrToPGBool(mutation.AutoSyncEnabled),
+		AutoAddServersEnabled: conv.PtrToPGBool(mutation.AutoAddServersEnabled),
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -334,10 +353,12 @@ func (c *PluginMetadataCore) CreateInTransaction(ctx context.Context, tx pgx.Tx,
 	return PluginMetadataResult{Plugin: plugin, Before: nil, DeliveredToEveryone: isDefaultProject, Publication: outcome}, nil
 }
 
-// UpdateInTransaction rewrites a plugin's name, slug, description, and auto
-// sync setting, keeping the ones the mutation leaves out. It never touches the
-// plugin's members, assignments, or published packages directly; the
-// publication request it writes regenerates packages from the new metadata.
+// UpdateInTransaction rewrites a plugin's name, slug, description, auto sync
+// setting, and automatic server adding setting, keeping the ones the mutation
+// leaves out. It never touches the plugin's assignments or published packages
+// directly; the publication request it writes regenerates packages from the
+// new metadata. Its servers change only when automatic server adding turns
+// on: the plugin then receives the servers its assigned roles can use.
 func (c *PluginMetadataCore) UpdateInTransaction(ctx context.Context, tx pgx.Tx, mutation UpdatePluginMutation) (PluginMetadataResult, error) {
 	if mutation.Name != nil && *mutation.Name == "" {
 		return PluginMetadataResult{}, ErrPluginNameEmpty
@@ -391,13 +412,14 @@ func (c *PluginMetadataCore) UpdateInTransaction(ctx context.Context, tx pgx.Tx,
 		description = before.Description
 	}
 	plugin, err := queries.UpdatePlugin(ctx, repo.UpdatePluginParams{
-		ID:              mutation.PluginID,
-		OrganizationID:  mutation.OrganizationID,
-		ProjectID:       mutation.ProjectID,
-		Name:            name,
-		Slug:            slug,
-		Description:     description,
-		AutoSyncEnabled: conv.PtrToPGBool(mutation.AutoSyncEnabled),
+		ID:                    mutation.PluginID,
+		OrganizationID:        mutation.OrganizationID,
+		ProjectID:             mutation.ProjectID,
+		Name:                  name,
+		Slug:                  slug,
+		Description:           description,
+		AutoSyncEnabled:       conv.PtrToPGBool(mutation.AutoSyncEnabled),
+		AutoAddServersEnabled: conv.PtrToPGBool(mutation.AutoAddServersEnabled),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return PluginMetadataResult{}, ErrPluginMetadataTargetNotFound
@@ -407,6 +429,11 @@ func (c *PluginMetadataCore) UpdateInTransaction(ctx context.Context, tx pgx.Tx,
 			return PluginMetadataResult{}, ErrPluginSlugConflict
 		}
 		return PluginMetadataResult{}, fmt.Errorf("update plugin: %w", err)
+	}
+	if !before.AutoAddServersEnabled && plugin.AutoAddServersEnabled {
+		if err := populateFromRoleAudiences(ctx, tx, plugin, mutation.DeliveryGuard); err != nil {
+			return PluginMetadataResult{}, err
+		}
 	}
 
 	if err := c.audit.LogPluginUpdate(ctx, tx, audit.LogPluginUpdateEvent{
@@ -435,11 +462,39 @@ func (c *PluginMetadataCore) UpdateInTransaction(ctx context.Context, tx pgx.Tx,
 // sync resolved to its effective setting.
 func PluginAuditSnapshot(plugin repo.Plugin) *audit.PluginSnapshot {
 	return &audit.PluginSnapshot{
-		Name:            plugin.Name,
-		Slug:            plugin.Slug,
-		Description:     conv.FromPGText[string](plugin.Description),
-		AutoSyncEnabled: new(PluginAutoSyncEnabled(plugin.AutoSyncEnabled)),
+		Name:                  plugin.Name,
+		Slug:                  plugin.Slug,
+		Description:           conv.FromPGText[string](plugin.Description),
+		AutoSyncEnabled:       new(PluginAutoSyncEnabled(plugin.AutoSyncEnabled)),
+		AutoAddServersEnabled: new(plugin.AutoAddServersEnabled),
 	}
+}
+
+// populateFromRoleAudiences gives a plugin that just turned on automatic server
+// adding the MCP servers its assigned roles can use. It skips servers an admin
+// removed before, the same way role setup does. The caller holds the project's
+// admission lock and the plugin row lock, the order role delivery uses.
+func populateFromRoleAudiences(ctx context.Context, tx pgx.Tx, plugin repo.Plugin, guard *admission.Guard) error {
+	if guard == nil {
+		return errors.New("turn on automatic server adding: no delivery guard")
+	}
+	assignments, err := repo.New(tx).ListPluginAssignments(ctx, repo.ListPluginAssignmentsParams{
+		PluginID:       plugin.ID,
+		OrganizationID: plugin.OrganizationID,
+		ProjectID:      plugin.ProjectID,
+	})
+	if err != nil {
+		return fmt.Errorf("list plugin audiences for automatic server adding: %w", err)
+	}
+	for _, assignment := range assignments {
+		if !roledelivery.IsRole(assignment.PrincipalUrn) {
+			continue
+		}
+		if _, err := roledelivery.Populate(ctx, tx, plugin.OrganizationID, plugin.ProjectID, plugin.ID, assignment.PrincipalUrn, guard); err != nil {
+			return fmt.Errorf("add role audience servers: %w", err)
+		}
+	}
+	return nil
 }
 
 // PluginAutoSyncEnabled resolves a plugin's stored auto sync setting: NULL

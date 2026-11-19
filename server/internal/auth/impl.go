@@ -278,7 +278,7 @@ func loginNonceBindingMiddleware(env string) func(http.Handler) http.Handler {
 				return
 			}
 
-			//nolint:exhaustruct // we only desire these fields and dont want to accidentally change behavior with some unexpected zero value
+			//nolint:exhaustruct_v5 // we only desire these fields and dont want to accidentally change behavior with some unexpected zero value
 			http.SetCookie(w, &http.Cookie{
 				Name:     nonceBindingCookie,
 				Value:    binding,
@@ -305,7 +305,7 @@ func callbackNonceBindingMiddleware(next http.Handler) http.Handler {
 		}
 
 		// Clear the cookie regardless of outcome — it's single-use.
-		//nolint:exhaustruct // we only desire these fields and dont want to accidentally change behavior with some unexpected zero value
+		//nolint:exhaustruct_v5 // we only desire these fields and dont want to accidentally change behavior with some unexpected zero value
 		http.SetCookie(w, &http.Cookie{
 			Name:     nonceBindingCookie,
 			Value:    "",
@@ -473,10 +473,11 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		WorkOSSessionID:        idpUser.WorkOSSessionID,
 		AuthenticationMethod:   idpUser.AuthenticationMethod,
 		Evidence: signins.Evidence{
-			HostedDomain:       idpUser.Evidence.HostedDomain,
-			TenantID:           idpUser.Evidence.TenantID,
-			VerifiedEmail:      idpUser.Evidence.VerifiedEmail,
-			IDPAuthenticatedAt: idpUser.Evidence.AuthenticatedAt,
+			HostedDomain:        idpUser.Evidence.HostedDomain,
+			HostedDomainChecked: idpUser.Evidence.HostedDomainChecked,
+			TenantID:            idpUser.Evidence.TenantID,
+			VerifiedEmail:       idpUser.Evidence.VerifiedEmail,
+			IDPAuthenticatedAt:  idpUser.Evidence.AuthenticatedAt,
 		},
 		Impersonated:    idpUser.ImpersonatorEmail() != "",
 		AuthenticatedAt: authenticatedAt,
@@ -975,6 +976,7 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 		LoginHint:       email,
 		ScreenHint:      screenHint,
 		Prompt:          "",
+		OrganizationID:  "",
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error building authorization URL").LogError(ctx, s.logger)

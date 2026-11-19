@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Optional MCP response fields use their zero values.
+//nolint:exhaustruct_v5 // Optional MCP response fields use their zero values.
 package platformmcp
 
 import (

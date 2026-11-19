@@ -337,30 +337,6 @@ export const INSIGHTS_SUGGESTIONS = {
     },
   ],
 
-  playground: [
-    {
-      title: "Which tools should I test?",
-      label: "Recently failing tools",
-      icon: "wrench",
-      prompt:
-        "Which tools in this project have been failing recently? I want to test them in the playground.",
-    },
-    {
-      title: "Any recent errors?",
-      label: "Recent tool errors",
-      icon: "alert",
-      prompt:
-        "Show me recent tool call errors with their inputs so I can reproduce them here.",
-    },
-    {
-      title: "Which tools are slow?",
-      label: "Latency outliers",
-      icon: "gauge",
-      prompt:
-        "Which tools have the slowest latency? Help me figure out what to test.",
-    },
-  ],
-
   integrations: [
     {
       title: "Which integrations are used?",

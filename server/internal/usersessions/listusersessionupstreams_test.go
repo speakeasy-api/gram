@@ -219,7 +219,7 @@ func seedUpstream(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientP
 	})
 	require.NoError(t, err)
 
-	client, err := q.CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
+	client, err := q.CreateRemoteSessionClientFixture(ctx, remotesessions_repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:               clientProject,
 		OrganizationID:          pgtype.Text{String: "", Valid: false},
 		RemoteSessionIssuerID:   issuer.ID,
@@ -558,14 +558,16 @@ func TestListUserSessionsAgentAttachmentUpstreams(t *testing.T) {
 			}
 			return rows, nil
 		}, humanRemains: true},
-		{name: "different source client", wantConstraint: "principal_remote_session_bindings_session_fkey", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+		{name: "different source client", wantConstraint: "principal_remote_session_bindings_client_session_fkey", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
 			rows, err := q.MutateAttachmentDifferentSourceClientFixture(ctx, testrepo.MutateAttachmentDifferentSourceClientFixtureParams{OtherClient: args.OtherClient, Project: args.Project, Agent: args.Agent})
 			if err != nil {
 				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
 			}
 			return rows, nil
 		}, humanRemains: true},
-		{name: "different requesting issuer", wantConstraint: "principal_remote_session_bindings_session_fkey", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+		// An attachment on another issuer bound to the same client is valid,
+		// but it serves calls made through that issuer, not the requesting one.
+		{name: "different requesting issuer", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
 			rows, err := q.MutateAttachmentDifferentRequestingIssuerFixture(ctx, testrepo.MutateAttachmentDifferentRequestingIssuerFixtureParams{Provenance: args.OtherIssuer, Project: args.Project, Agent: args.Agent})
 			if err != nil {
 				return rows, fmt.Errorf("mutate attachment fixture: %w", err)

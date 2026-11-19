@@ -185,16 +185,3 @@ const getToolSourcePrefix = (tool: Tool, context: ToolDisplayContext = {}) => {
       return null;
   }
 };
-
-export const getToolTypeLabel = (tool: Tool): string => {
-  switch (tool.type) {
-    case "http":
-      return "HTTP";
-    case "function":
-      return "Function";
-    case "platform":
-      return "Platform";
-    case "prompt":
-      return "Prompt";
-  }
-};

@@ -4161,6 +4161,91 @@ paths:
       x-speakeasy-react-hook:
         name: SetResourceAudience
         type: mutation
+  /rpc/access.setShadowMCPOfficialServer:
+    post:
+      description: Link one project-scoped Shadow MCP server to its official version, switch the link off or on, or remove it. A link with allow_direct_access false blocks direct connections wherever a Shadow MCP policy applies and points agents at the linked server; true keeps the link but lets direct connections follow the ordinary rules. Omitting mcp_server_id (with allow_direct_access false) removes the link. Requires an authenticated session authorized for org:admin on the active organization.
+      operationId: setShadowMCPOfficialServer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetShadowMCPOfficialServerForm'
+        required: true
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: setShadowMCPOfficialServer access
+      tags:
+        - access
+      x-speakeasy-name-override: setShadowMCPOfficialServer
+      x-speakeasy-react-hook:
+        name: SetShadowMCPOfficialServer
+        type: mutation
   /rpc/access.syncDirectoryGroups:
     post:
       description: Fetch the organization's directory groups from WorkOS and save any that are new or changed.
@@ -31686,125 +31771,6 @@ paths:
       x-speakeasy-name-override: verify
       x-speakeasy-react-hook:
         name: VerifyIdentityProviderConnection
-  /rpc/instances.get:
-    get:
-      description: Load all relevant data for an instance of a toolset and environment
-      operationId: getInstance
-      parameters:
-        - allowEmptyValue: true
-          description: The slug of the toolset to load
-          in: query
-          name: toolset_slug
-          required: true
-          schema:
-            description: A short url-friendly label that uniquely identifies a resource.
-            maxLength: 40
-            pattern: ^[a-z0-9_-]{1,128}$
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Chat Sessions token header
-          in: header
-          name: Gram-Chat-Session
-          schema:
-            description: Chat Sessions token header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GetInstanceResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - chat_sessions_token_header_Gram-Chat-Session: []
-        - {}
-      summary: getInstance instances
-      tags:
-        - instances
-      x-speakeasy-name-override: getBySlug
-      x-speakeasy-react-hook:
-        name: Instance
   /rpc/integrations.get:
     get:
       tags:
@@ -52086,6 +52052,7 @@ paths:
               - copilot
               - openclaw
               - pi
+              - vibe
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -60392,7 +60359,7 @@ paths:
         name: RevokeRemoteSession
   /rpc/remoteSessions.testServerConnection:
     post:
-      description: Initialize a directly Remote MCP-backed server and discover all tools using the signed-in user's saved authorization. Never executes tools. A provider tab returning is not evidence of authorization. Requires an ordinary dashboard session and mcp:connect on the exact server; API keys are refused. Requires the staff-managed provider_setup organization feature, disabled by default; unavailable organizations receive HTTP 404.
+      description: Initialize a directly Remote MCP-backed server and discover all tools using the signed-in user's saved authorization. Never executes tools. A provider tab returning is not evidence of authorization. Requires an ordinary dashboard session and mcp:connect on the exact server; API keys are refused.
       operationId: testServerConnection
       parameters:
         - allowEmptyValue: true
@@ -95158,6 +95125,9 @@ components:
     CreatePluginForm:
       type: object
       properties:
+        auto_add_servers_enabled:
+          type: boolean
+          description: Whether the plugin's role audiences add and remove its MCP servers automatically. Defaults to false.
         auto_sync_enabled:
           type: boolean
           description: Whether changes to this plugin publish to the marketplace automatically. Defaults to true. When false, the plugin stays out of the marketplace until someone syncs it by hand.
@@ -100225,49 +100195,6 @@ components:
         connection:
           $ref: '#/components/schemas/OktaIdentityProviderConnection'
       description: The organization's Okta connection, or nothing when none is connected.
-    GetInstanceResult:
-      type: object
-      properties:
-        description:
-          type: string
-          description: The description of the toolset
-        function_environment_variables:
-          type: array
-          items:
-            $ref: '#/components/schemas/FunctionEnvironmentVariable'
-          description: The function environment variables that are relevant to the toolset
-        mcp_servers:
-          type: array
-          items:
-            $ref: '#/components/schemas/InstanceMcpServer'
-          description: The MCP servers that are relevant to the toolset
-        name:
-          type: string
-          description: The name of the toolset
-        prompt_templates:
-          type: array
-          items:
-            $ref: '#/components/schemas/PromptTemplate'
-          description: The list of prompt templates
-        security_variables:
-          type: array
-          items:
-            $ref: '#/components/schemas/SecurityVariable'
-          description: The security variables that are relevant to the toolset
-        server_variables:
-          type: array
-          items:
-            $ref: '#/components/schemas/ServerVariable'
-          description: The server variables that are relevant to the toolset
-        tools:
-          type: array
-          items:
-            $ref: '#/components/schemas/Tool'
-          description: The list of tools
-      required:
-        - name
-        - tools
-        - mcp_servers
     GetIntegrationResult:
       type: object
       properties:
@@ -101589,6 +101516,8 @@ components:
       properties:
         delivery_failure:
           $ref: '#/components/schemas/HookDeliveryFailureData'
+        install_failure:
+          $ref: '#/components/schemas/HookInstallFailureData'
         mcp:
           $ref: '#/components/schemas/HookMCPData'
         mcp_attribution:
@@ -101647,6 +101576,7 @@ components:
             - skill.activated
             - notification.reported
             - client.delivery_failed
+            - client.install_failed
       description: Canonical Speakeasy feature event.
       required:
         - type
@@ -101690,6 +101620,39 @@ components:
       description: Metadata about the local hook adapter that translated a provider event into the Speakeasy hook contract.
       required:
         - adapter
+    HookInstallFailureData:
+      type: object
+      properties:
+        arch:
+          type: string
+          description: CPU architecture of the device.
+          maxLength: 32
+        attempted_at:
+          type: string
+          description: RFC3339 time of the failed install, on the device clock.
+          format: date-time
+        cause:
+          type: string
+          description: Why a bootstrap script could not install the hooks binary.
+          enum:
+            - download
+            - checksum_mismatch
+        harness:
+          type: string
+          description: Coding agent harness the hook ran under.
+          maxLength: 64
+        os:
+          type: string
+          description: Operating system of the device.
+          maxLength: 32
+        version:
+          type: string
+          description: speakeasy-hooks version the script tried to install.
+          maxLength: 64
+      description: Bootstrap install failure report, sent with event type client.install_failed. A plugin's bootstrap script sends one, best effort, when it cannot download the hooks binary or the download fails its checksum. It is diagnostic only and never counts as agent activity.
+      required:
+        - cause
+        - attempted_at
     HookMCPAttributionEntry:
       type: object
       properties:
@@ -102629,14 +102592,6 @@ components:
       required:
         - input_type
         - request_data
-    InstanceMcpServer:
-      type: object
-      properties:
-        url:
-          type: string
-          description: The address of the MCP server
-      required:
-        - url
     Integration:
       type: object
       properties:
@@ -109932,6 +109887,9 @@ components:
           items:
             $ref: '#/components/schemas/PluginAssignment'
           description: Role/user assignments.
+        auto_add_servers_enabled:
+          type: boolean
+          description: Whether the plugin's role audiences add and remove its MCP servers automatically, based on the MCP servers those roles can use. When false, only manual changes alter the plugin's server list.
         auto_created:
           type: boolean
           description: Whether automatic role distribution created this plugin. Read-only; preserved after edits and reuse.
@@ -109979,6 +109937,7 @@ components:
         - slug
         - auto_created
         - auto_sync_enabled
+        - auto_add_servers_enabled
         - agent_plugins_v1_compatible
         - created_at
         - updated_at
@@ -110357,6 +110316,14 @@ components:
         reason:
           type: string
           description: Stable machine-readable reason code. Present only when outcome is unreachable; currently timeout, rate_limited, server_error, dns_error, tls_error, guardian_rejected, or transport_error.
+        sign_in_setup:
+          type: string
+          description: 'How Speakeasy can register as a client with the server''s sign-in provider. Present only when authentication is required and the challenge advertised protected resource metadata: dcr (dynamic client registration), cimd (client ID metadata document), manual (a client must be registered by hand), or unknown (the provider''s metadata could not be read).'
+          enum:
+            - dcr
+            - cimd
+            - manual
+            - unknown
       description: Structured outcome of probing a remote MCP server URL. Variant-specific fields are populated only when applicable.
       required:
         - outcome
@@ -110366,6 +110333,9 @@ components:
         ai_platform_push_integrations_enabled:
           type: boolean
           description: Whether the organization can provision push integrations for AI platforms
+        assistants_available:
+          type: boolean
+          description: 'Whether this deployment can run assistants. A deployment-wide setting, not an organization entitlement: false when the deployment runs with the disabled assistant runtime provider. Absent from staff admin responses.'
         authz_challenge_logging_enabled:
           type: boolean
           description: Whether authz challenge logging to ClickHouse is enabled
@@ -110381,6 +110351,9 @@ components:
         device_agent:
           type: boolean
           description: Whether the organization uses the device agent (any device has polled agent.getPlugins). Derived from device-agent syncs, not an admin-settable feature.
+        functions_available:
+          type: boolean
+          description: 'Whether this deployment can run Speakeasy Functions. A deployment-wide setting, not an organization entitlement: false when the deployment runs with the disabled Functions provider. Absent from staff admin responses.'
         hooks_browser_login_enabled:
           type: boolean
           description: Whether generated hook plugins may mint per-user keys via the interactive browser login
@@ -110399,9 +110372,6 @@ components:
         platform_mcp_enabled:
           type: boolean
           description: Whether the organization can use the Speakeasy Platform MCP capability
-        provider_setup_enabled:
-          type: boolean
-          description: Whether the staff-managed provider setup rollout is enabled. Defaults to false when absent.
         remote_session_auto_refresh_enabled:
           type: boolean
           description: Whether consent screens expose automatic remote-session refresh for the organization
@@ -111173,6 +111143,12 @@ components:
         up_to_date:
           type: boolean
           description: Whether the project's current plugin state matches what was last published to GitHub, including changes of plugins whose auto sync is off that wait for a manual sync. Absent when the project is not connected, or when the connection predates content fingerprinting (freshness can't be determined).
+        vibe_observability_available:
+          type: boolean
+          description: 'Whether the Mistral Vibe observability plugin ZIP can be downloaded right now: the pinned hooks release''s relay carries the vibe provider and the org name satisfies the Agent Plugins 1.0 name schema. Present (true or false) when connected and observability is enabled for the project.'
+        vibe_observability_plugin:
+          type: string
+          description: Slug of the generated Mistral Vibe observability plugin's install directory (`~/.vibe/plugins/<slug>`) — present only when connected, observability is enabled, the vibe package is available, and the stored published hooks version equals the current generator version, i.e. the published marketplace repo actually carries the package. The marketplace repo directory is `<slug>-vibe`.
       required:
         - configured
         - connected
@@ -111520,6 +111496,7 @@ components:
             - codex
             - cursor
             - opencode
+            - vibe
             - other
       required:
         - client_family
@@ -117100,6 +117077,27 @@ components:
       required:
         - id
         - completed
+    SetShadowMCPOfficialServerForm:
+      type: object
+      properties:
+        allow_direct_access:
+          type: boolean
+          description: 'Switch the link off: keep direct connections to the Shadow MCP server working under the ordinary Shadow MCP rules instead of blocking them. Requires mcp_server_id.'
+        mcp_server_id:
+          type: string
+          description: The MCP server to link as the official version. Omit it to remove the link.
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        server_url:
+          type: string
+          description: The Shadow MCP server's URL.
+          format: uri
+      required:
+        - project_id
+        - server_url
+        - allow_direct_access
     SetSlackDirectoryDefaultProjectRequestBody:
       type: object
       properties:
@@ -117478,6 +117476,8 @@ components:
         observed_use_count:
           type: integer
           format: int64
+        official_server:
+          $ref: '#/components/schemas/ShadowMCPOfficialServer'
         request_count:
           type: integer
           format: int64
@@ -117485,6 +117485,8 @@ components:
           type: string
         server_slug:
           type: string
+        suggested_official_server:
+          $ref: '#/components/schemas/ShadowMCPSuggestedOfficialServer'
         target_kind:
           type: string
           description: 'What the row identifies: a server URL observed or requested, or a local stdio command known only through its review. Absent means server_url.'
@@ -117583,6 +117585,48 @@ components:
       required:
         - source
         - observed_use_count
+    ShadowMCPOfficialServer:
+      type: object
+      properties:
+        direct_access_allowed:
+          type: boolean
+          description: 'True while the link is switched off: direct connections to the Shadow MCP server follow the ordinary Shadow MCP rules instead of being blocked.'
+        gateway_name:
+          type: string
+          description: The gateway that serves the official server, when url is a gateway's address.
+        mcp_server_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: The official server's display name.
+        slug:
+          type: string
+          description: The official server's slug, when it has one.
+        url:
+          type: string
+          description: Where agents connect. A gateway's address when the server is a gateway member. Absent while the server has no endpoint.
+      description: The official, Speakeasy-served version of a Shadow MCP server, linked by an administrator.
+      required:
+        - mcp_server_id
+        - name
+        - direct_access_allowed
+    ShadowMCPSuggestedOfficialServer:
+      type: object
+      properties:
+        mcp_server_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: The server's display name.
+        slug:
+          type: string
+          description: The server's slug, when it has one.
+      description: A project MCP server that already serves a Shadow MCP server's upstream URL and can be linked as its official version.
+      required:
+        - mcp_server_id
+        - name
     ShareSkillRequestBody:
       type: object
       properties:
@@ -123686,6 +123730,9 @@ components:
     UpdatePluginForm:
       type: object
       properties:
+        auto_add_servers_enabled:
+          type: boolean
+          description: Whether the plugin's role audiences add and remove its MCP servers automatically. Omit to keep the current setting. Turning it on adds the MCP servers its assigned roles can use now, except ones an admin removed before.
         auto_sync_enabled:
           type: boolean
           description: Whether changes to this plugin publish to the marketplace automatically. Omit to keep the current setting. Turning it off is refused while the plugin has changes that haven't been synced, and the slug can't change while it is off.
@@ -126941,8 +126988,6 @@ tags:
     description: Resolves the identifiers Speakeasy records activity under into a single identity.
   - name: identityProviderConnections
     description: 'Manage the organization''s Okta connection: provision the private_key_jwt credential, submit the Okta client ID, verify granted scopes, and revoke.'
-  - name: instances
-    description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
   - name: integrations
     description: Explore third-party tools in Speakeasy.
   - name: internalSessionIssuers

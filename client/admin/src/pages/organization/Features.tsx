@@ -12,7 +12,6 @@ import {
 } from "@/lib/adminQueries";
 import {
   organizationFeaturesQuery,
-  setAdminOrganizationProviderSetup,
   setAdminOrganizationFeature,
 } from "@/lib/gramAdminClient";
 import {
@@ -40,16 +39,7 @@ type ProductFeatureDecision =
     }
   | { kind: "omitted"; where: string };
 
-type AdminFeatureName = FeatureName | "provider_setup";
-
 const PRODUCT_FEATURES = {
-  provider_setup: {
-    kind: "toggle",
-    enabledKey: "providerSetupEnabled",
-    label: "MCP provider setup",
-    description:
-      "Enables guided OAuth app setup for supported MCP providers in this organization.",
-  },
   ai_platform_push_integrations: {
     kind: "toggle",
     enabledKey: "aiPlatformPushIntegrationsEnabled",
@@ -177,7 +167,7 @@ const PRODUCT_FEATURES = {
     kind: "omitted",
     where: "Dashboard Gateway settings",
   },
-} satisfies Record<AdminFeatureName, ProductFeatureDecision>;
+} satisfies Record<FeatureName, ProductFeatureDecision>;
 
 export function FeaturesRoute(): JSX.Element | null {
   const { idOrSlug } = useParams({ from: "/organizations/$idOrSlug" });
@@ -233,12 +223,9 @@ function ProductFeatures({ org }: { org: AdminOrganization }): JSX.Element {
       enabled,
     }: {
       organizationId: string;
-      featureName: AdminFeatureName;
+      featureName: FeatureName;
       enabled: boolean;
-    }) =>
-      featureName === "provider_setup"
-        ? setAdminOrganizationProviderSetup({ organizationId, enabled })
-        : setAdminOrganizationFeature({ organizationId, featureName, enabled }),
+    }) => setAdminOrganizationFeature({ organizationId, featureName, enabled }),
     onMutate: async ({ featureName, enabled }) => {
       await queryClient.cancelQueries({ queryKey: query.queryKey });
       const previous = queryClient.getQueryData<ProductFeatures>(
@@ -297,7 +284,7 @@ function ProductFeatures({ org }: { org: AdminOrganization }): JSX.Element {
         <div className="divide-border divide-y">
           {Object.entries(PRODUCT_FEATURES).map(([featureName, feature]) => {
             if (feature.kind === "omitted") return null;
-            const typedFeatureName = featureName as AdminFeatureName;
+            const typedFeatureName = featureName as FeatureName;
             const rowError =
               mutation.isError &&
               mutation.variables.featureName === typedFeatureName

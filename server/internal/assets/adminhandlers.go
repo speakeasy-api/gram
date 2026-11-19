@@ -176,6 +176,8 @@ func NewPlatformService(logger *slog.Logger, tp trace.TracerProvider, policy *gu
 		db:             db,
 		storage:        storage,
 		repo:           repo.New(db),
+		// The platform service only serves and uploads images.
+		functionsAvailable: false,
 	}
 }
 

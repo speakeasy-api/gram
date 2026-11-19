@@ -216,6 +216,7 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 			McpAttribution:        nil,
 			PromptAttachments:     nil,
 			DeliveryFailure:       nil,
+			InstallFailure:        nil,
 		},
 		Raw: nil,
 	}
@@ -350,6 +351,7 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 			McpAttribution:        nil,
 			PromptAttachments:     nil,
 			DeliveryFailure:       nil,
+			InstallFailure:        nil,
 		},
 		Raw: nil,
 	}

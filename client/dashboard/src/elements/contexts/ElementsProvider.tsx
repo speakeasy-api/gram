@@ -343,7 +343,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           ...validHeaders,
           "Gram-Chat-ID": chatId,
           "X-Gram-Source": "elements",
-          ...config.api?.headers, // We do this after X-Gram-Source so the playground can override it
+          ...config.api?.headers, // We do this after X-Gram-Source so the MCP Inspect chat can override it
           ...(environmentSlug && {
             "Gram-Environment": environmentSlug,
           }),

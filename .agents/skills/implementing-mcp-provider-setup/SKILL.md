@@ -36,7 +36,7 @@ If the contract cannot safely preserve this sequence, identify the exact missing
 
 ## 3. Reuse connection actions and write usable instructions
 
-Extend shared behavior when another provider needs it; keep provider contracts isolated. Use the backend contract for save/read/sign-in/test semantics. Preserve dedicated-issuer safeguards, exact-server/user checks, API-provided callbacks and the generated `testServerConnectionRequestBody` binding. Keep `providerSetupEnabled` fail-closed at catalog, sidebar and direct route; the backend independently gates testing.
+Extend shared behavior when another provider needs it; keep provider contracts isolated. Use the backend contract for save/read/sign-in/test semantics. Preserve dedicated-issuer safeguards, exact-server/user checks, API-provided callbacks and the generated `testServerConnectionRequestBody` binding. Setup is available to every organization; there is no rollout switch.
 
 Persist only non-secret choices and navigation. Configuration/source changes invalidate authorization and test results; stale operations cannot restore readiness. Returning from OAuth is not authorization evidence. Reopening requires fresh verification. Complete only after `ready` with a tool count, to the approved Overview, gateway or policy destination. Salesforce's support branch terminates at its documented handoff.
 

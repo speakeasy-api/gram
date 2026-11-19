@@ -178,17 +178,15 @@ func TestListRemoteSessions_GatewayLoginOrder(t *testing.T) {
 				require.NoError(t, err)
 				require.EqualValues(t, 1, count.Subjects)
 
+				// The client is bound to both issuers, so the connection made
+				// through either one can be attached on both.
 				for _, target := range issuers {
 					eligible, err := env.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{
 						PrincipalID: new(agent.ID.String()), UserSessionIssuerID: new(target.String()),
 					})
 					require.NoError(t, err)
-					if target == issuers[0] {
-						require.Len(t, eligible.Items, 1)
-						require.Equal(t, sessionID.String(), eligible.Items[0].ID)
-					} else {
-						require.Empty(t, eligible.Items, "a shared client does not authorize cross-issuer attachment")
-					}
+					require.Len(t, eligible.Items, 1, "a client bound to both issuers makes its connection attachable on each")
+					require.Equal(t, sessionID.String(), eligible.Items[0].ID)
 				}
 			}
 

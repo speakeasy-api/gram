@@ -57,14 +57,22 @@ import (
 )
 
 type Service struct {
-	auth                  *auth.Auth
-	db                    *pgxpool.Pool
-	chatRepo              *chatRepo.Queries
-	hooksRepo             *hooksRepo.Queries
-	orgsRepo              *orgsRepo.Queries
-	projectsRepo          *projectsRepo.Queries
-	chConn                clickhouse.Conn
-	chRepo                *repo.Queries
+	auth         *auth.Auth
+	db           *pgxpool.Pool
+	chatRepo     *chatRepo.Queries
+	hooksRepo    *hooksRepo.Queries
+	orgsRepo     *orgsRepo.Queries
+	projectsRepo *projectsRepo.Queries
+
+	// chConn is the read-write ClickHouse connection. Only mutations run on
+	// it; every query goes through chRepo.
+	chConn clickhouse.Conn
+
+	// chRepo runs on the read replica, so a write surge on the primary cannot
+	// starve the dashboards this service serves. Reads are eventually
+	// consistent with chConn and nothing here reads its own write.
+	chRepo *repo.Queries
+
 	logger                *slog.Logger
 	tracer                trace.Tracer
 	posthog               PosthogClient
@@ -84,6 +92,7 @@ func NewService(
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	chConn clickhouse.Conn,
+	chReadConn clickhouse.Conn,
 	sessions *sessions.Manager,
 	chatSessions *chatsessions.Manager,
 	logsEnabled FeatureChecker,
@@ -92,7 +101,7 @@ func NewService(
 	authzEngine *authz.Engine,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("telemetry"))
-	chRepo := repo.New(chConn)
+	chRepo := repo.New(chReadConn)
 
 	// The sessions and chatSessions parameters may be nil for callers that only need
 	// telemetry emission (e.g., Temporal workers using CreateLog). When nil, the HTTP
@@ -2178,91 +2187,28 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 }
 
 // observabilityOverview reads the overview for one scope: its summary, the
-// same summary for the period immediately before, and the tool breakdowns.
+// same summary for the period immediately before, the time series, and the
+// tool breakdowns. One grouped ClickHouse query serves all of them, so a page
+// load costs one scan and one connection.
 func (s *Service) observabilityOverview(ctx context.Context, scope repo.GetOverviewSummaryParams, includeTimeSeries bool) (*telem_gen.GetObservabilityOverviewResult, error) {
-	timeStart, timeEnd := scope.TimeStart, scope.TimeEnd
-	intervalSeconds := calculateInterval(timeStart, timeEnd)
+	intervalSeconds := calculateInterval(scope.TimeStart, scope.TimeEnd)
 
-	// Fetch all data sequentially to avoid ClickHouse concurrent query limits
-	summary, err := s.chRepo.GetOverviewSummary(ctx, scope)
+	overview, err := s.chRepo.GetObservabilityOverview(ctx, repo.GetObservabilityOverviewParams{
+		Scope:             scope,
+		IntervalSeconds:   intervalSeconds,
+		IncludeTimeSeries: includeTimeSeries,
+		ToolLimit:         10,
+	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving overview summary")
-	}
-
-	// Same duration, immediately before.
-	comparisonScope := scope
-	comparisonScope.TimeStart = timeStart - (timeEnd - timeStart)
-	comparisonScope.TimeEnd = timeStart
-	comparison, err := s.chRepo.GetOverviewSummary(ctx, comparisonScope)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving comparison summary")
-	}
-
-	var timeSeries []repo.TimeSeriesBucket
-	if includeTimeSeries {
-		timeSeries, err = s.chRepo.GetTimeSeriesMetrics(ctx, repo.GetTimeSeriesMetricsParams{
-			ExcludedHookSources: scope.ExcludedHookSources,
-			GramProjectIDs:      scope.GramProjectIDs,
-			TimeStart:           timeStart,
-			TimeEnd:             timeEnd,
-			IntervalSeconds:     intervalSeconds,
-			User:                scope.User,
-			CanonicalUser:       scope.CanonicalUser,
-			ExternalUserID:      scope.ExternalUserID,
-			APIKeyID:            scope.APIKeyID,
-			ToolsetSlug:         scope.ToolsetSlug,
-			ToolsetSlugServerID: scope.ToolsetSlugServerID,
-			RemoteMCPServerID:   scope.RemoteMCPServerID,
-			MCPServerID:         scope.MCPServerID,
-			MetaMCPServerID:     scope.MetaMCPServerID,
-			EventSource:         scope.EventSource,
-			HookSource:          scope.HookSource,
-			AccountType:         scope.AccountType,
-			ExternalOrgID:       scope.ExternalOrgID,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error retrieving time series")
-		}
-	}
-
-	breakdown := func(sortBy string) ([]repo.ToolMetric, error) {
-		return s.chRepo.GetToolMetricsBreakdown(ctx, repo.GetToolMetricsBreakdownParams{
-			ExcludedHookSources: scope.ExcludedHookSources,
-			GramProjectIDs:      scope.GramProjectIDs,
-			TimeStart:           timeStart,
-			TimeEnd:             timeEnd,
-			User:                scope.User,
-			CanonicalUser:       scope.CanonicalUser,
-			ExternalUserID:      scope.ExternalUserID,
-			APIKeyID:            scope.APIKeyID,
-			ToolsetSlug:         scope.ToolsetSlug,
-			ToolsetSlugServerID: scope.ToolsetSlugServerID,
-			RemoteMCPServerID:   scope.RemoteMCPServerID,
-			MCPServerID:         scope.MCPServerID,
-			MetaMCPServerID:     scope.MetaMCPServerID,
-			EventSource:         scope.EventSource,
-			HookSource:          scope.HookSource,
-			AccountType:         scope.AccountType,
-			ExternalOrgID:       scope.ExternalOrgID,
-			Limit:               10,
-			SortBy:              sortBy,
-		})
-	}
-	toolsByCount, err := breakdown("count")
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving tools by count")
-	}
-	toolsByFailure, err := breakdown("failure_rate")
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving tools by failure rate")
+		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving observability overview")
 	}
 
 	return &telem_gen.GetObservabilityOverviewResult{
-		Summary:               toObservabilitySummary(summary),
-		Comparison:            toObservabilitySummary(comparison),
-		TimeSeries:            toTimeSeriesBuckets(timeSeries),
-		TopToolsByCount:       toToolMetrics(toolsByCount),
-		TopToolsByFailureRate: toToolMetrics(toolsByFailure),
+		Summary:               toObservabilitySummary(overview.Summary),
+		Comparison:            toObservabilitySummary(overview.Comparison),
+		TimeSeries:            toTimeSeriesBuckets(overview.TimeSeries),
+		TopToolsByCount:       toToolMetrics(overview.TopToolsByCount),
+		TopToolsByFailureRate: toToolMetrics(overview.TopToolsByFailureRate),
 		IntervalSeconds:       intervalSeconds,
 	}, nil
 }
@@ -2578,15 +2524,13 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 	})
 
 	eg.Go(func() error {
-		var fetchErr error
-		chatMetrics, fetchErr = s.chatRepo.GetChatMetricsSummary(egCtx, chatRepo.GetChatMetricsSummaryParams{
-			ProjectID: *authCtx.ProjectID,
-			TimeStart: conv.ToPGTimestamptz(time.Unix(0, timeStart)),
-			TimeEnd:   conv.ToPGTimestamptz(time.Unix(0, timeEnd)),
+		chatMetrics = s.fetchOverviewChatMetrics(egCtx, chatMetricsTimeout, func(ctx context.Context) (chatRepo.GetChatMetricsSummaryRow, error) {
+			return s.chatRepo.GetChatMetricsSummary(ctx, chatRepo.GetChatMetricsSummaryParams{
+				ProjectID: *authCtx.ProjectID,
+				TimeStart: conv.ToPGTimestamptz(time.Unix(0, timeStart)),
+				TimeEnd:   conv.ToPGTimestamptz(time.Unix(0, timeEnd)),
+			})
 		})
-		if fetchErr != nil {
-			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving chat metrics summary")
-		}
 		return nil
 	})
 
@@ -2640,6 +2584,41 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		UsageByAgent: usage.byAgent,
 		McpUsage:     usage.mcpUsage,
 	}, nil
+}
+
+// chatMetricsTimeout bounds the PostgreSQL chat metrics read in the project
+// overview. Nothing else in the overview depends on it, so a slow read costs
+// only the chat count rather than holding the whole request until the 60s
+// statement timeout.
+const chatMetricsTimeout = 10 * time.Second
+
+// fetchOverviewChatMetrics runs fetch with the given timeout. On failure it
+// logs the error, records it on the request span, and returns zero metrics so
+// the rest of the project overview still renders. When ctx itself is done,
+// because another overview lane failed or the client went away, the failure
+// is not the chat read's own and is not reported.
+func (s *Service) fetchOverviewChatMetrics(
+	ctx context.Context,
+	timeout time.Duration,
+	fetch func(context.Context) (chatRepo.GetChatMetricsSummaryRow, error),
+) chatRepo.GetChatMetricsSummaryRow {
+	var unavailable chatRepo.GetChatMetricsSummaryRow
+
+	fetchCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	metrics, err := fetch(fetchCtx)
+	if err == nil {
+		return metrics
+	}
+	if ctx.Err() != nil {
+		return unavailable
+	}
+
+	trace.SpanFromContext(ctx).RecordError(err)
+	s.logger.ErrorContext(ctx, "chat metrics unavailable for project overview", attr.SlogError(err))
+
+	return unavailable
 }
 
 // calculateInterval determines the appropriate time bucket interval based on the time range.
@@ -5029,7 +5008,7 @@ func toToolUsageClientToolBreakdownRows(rows []repo.ToolUsageClientToolBreakdown
 func toToolUsageSummaryResult(summary *repo.ToolUsageSummary) *telem_gen.GetToolUsageSummaryResult {
 	if summary == nil {
 		summary = &repo.ToolUsageSummary{
-			Totals:              repo.ToolUsageTotalsRow{}, //nolint:exhaustruct // zero totals for the empty result
+			Totals:              repo.ToolUsageTotalsRow{}, //nolint:exhaustruct_v5 // zero totals for the empty result
 			Targets:             nil,
 			Users:               nil,
 			TargetTimeSeries:    nil,

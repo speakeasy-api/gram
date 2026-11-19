@@ -12,13 +12,7 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
-
-// MCPNetworkRequestEventURN identifies the telemetry row written once per
-// resolved inbound MCP HTTP request. The mcp_network_traffic_hourly_summaries
-// materialized view filters on it.
-var MCPNetworkRequestEventURN = urn.NewTelemetryEvent(urn.TelemetryEventOriginGramService, urn.TelemetryEventKindLog, "mcp_network_request").String()
 
 // recordMCPNetworkRequest writes one observation of an inbound MCP request and
 // the network surface it arrived on, feeding the public versus private
@@ -43,7 +37,7 @@ func (s *Service) recordMCPNetworkRequest(ctx context.Context, projectID, mcpSer
 
 func mcpNetworkRequestAttributes(ctx context.Context, mcpServerID, metaServerID uuid.UUID) map[attr.Key]any {
 	attrs := map[attr.Key]any{
-		attr.EventURNKey:       MCPNetworkRequestEventURN,
+		attr.EventURNKey:       tm.MCPNetworkRequestEventURN,
 		attr.NetworkSurfaceKey: string(mcpmetrics.NetworkSurfaceFromContext(ctx)),
 	}
 	if mcpServerID != uuid.Nil {

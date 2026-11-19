@@ -8,6 +8,7 @@ import {
   RedirectToAddUnproxiedMcp,
   RedirectToCatalog,
   RedirectToCatalogDetail,
+  RedirectToMcp,
   RedirectToSourceDetail,
   RedirectToSources,
 } from "@/pages/mcp/add/LegacyRedirects";
@@ -47,6 +48,8 @@ export const legacyMcpRedirects = (
       path="mcp/x/:mcpServerSlug/*"
       element={<RedirectFromMcpXNamespace />}
     />
+    <Route path="playground/*" element={<RedirectToMcp />} />
+    <Route path="sdks" element={<RedirectToMcp />} />
   </>
 );
 

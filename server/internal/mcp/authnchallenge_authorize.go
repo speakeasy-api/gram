@@ -275,6 +275,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		AuthorizerImpersonated:   nil,
 		SignInID:                 nil,
 		FreshLoginForced:         false,
+		AccountSwitches:          0,
 		AgentAuthorizationTarget: agentTarget,
 		Endpoint:                 endpointRef,
 		ClientID:                 req.ClientID,
@@ -335,6 +336,20 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			http.Redirect(w, r, federatedURL.String(), http.StatusFound)
 			return nil
 		}
+		if endpoint.servingSharedAuthorizationServer() == nil && s.accountSwitchEnabled(ctx, endpoint.OrganizationID) {
+			if err := bindConsentBrowser(w, &challengeState); err != nil {
+				_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
+				s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
+				t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+				return oops.E(oops.CodeUnexpected, err, "bind consent browser").LogError(ctx, logger)
+			}
+			if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
+				_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
+				s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
+				t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+				return oops.E(oops.CodeUnexpected, err, "store authn challenge state").LogError(ctx, logger)
+			}
+		}
 		callbackURL, err := endpoint.IDPCallbackURL(s.outboundOrigin().String())
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
@@ -349,6 +364,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			LoginHint:       "",
 			ScreenHint:      "",
 			Prompt:          "",
+			OrganizationID:  "",
 		})
 		if err != nil {
 			// A failure to build the IDP authorization URL typically means the
@@ -447,6 +463,7 @@ func authorizationErrorPage(client *usersessions_repo.UserSessionClient, clientI
 		ClientIDOrigin: "",
 		ServerName:     serverName,
 		ProviderName:   "",
+		AdminDetail:    "",
 	}
 	if client == nil {
 		return page

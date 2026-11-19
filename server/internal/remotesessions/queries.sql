@@ -731,8 +731,8 @@ WHERE remote_session_issuer_id = @remote_session_issuer_id
   AND deleted IS FALSE;
 
 -- Remote session clients — credentials Speakeasy uses when acting as an OAuth
--- client of a remote_session_issuer. client_secret_encrypted is stored
--- encrypted via the project encryption key.
+-- client of a remote_session_issuer. Their secret is written only through
+-- clientsecrets.Secrets, after the client row exists.
 
 -- name: CreateRemoteSessionClient :one
 INSERT INTO remote_session_clients (
@@ -740,7 +740,6 @@ INSERT INTO remote_session_clients (
     organization_id,
     remote_session_issuer_id,
     client_id,
-    client_secret_encrypted,
     client_id_issued_at,
     client_secret_expires_at,
     token_endpoint_auth_method,
@@ -760,7 +759,6 @@ VALUES (
     @organization_id,
     @remote_session_issuer_id,
     @client_id,
-    @client_secret_encrypted,
     @client_id_issued_at,
     @client_secret_expires_at,
     @token_endpoint_auth_method,
@@ -886,7 +884,6 @@ ORDER BY link.user_session_issuer_id;
 -- to the identity provider connection.
 UPDATE remote_session_clients
 SET client_id = @client_id,
-    client_secret_encrypted = @client_secret_encrypted,
     client_id_issued_at = @client_id_issued_at,
     client_secret_expires_at = @client_secret_expires_at,
     token_endpoint_auth_method = @token_endpoint_auth_method,
@@ -1260,11 +1257,12 @@ ORDER BY c.id DESC
 LIMIT sqlc.arg('limit_value');
 
 -- name: UpdateRemoteSessionClient :one
--- A rotated secret or corrected client_id also clears the upstream rejection
--- marker: the rejection may have been the old value, and a client whose
--- refreshes succeed again should not stay flagged for re-registration. A
--- corrected client_id is a new registration as far as the issuer is
--- concerned, so it drops the old one's grant evidence and issue time.
+-- A corrected client_id also clears the upstream rejection marker: the
+-- rejection may have been the old value, and a client whose refreshes succeed
+-- again should not stay flagged for re-registration. A corrected client_id is
+-- a new registration as far as the issuer is concerned, so it drops the old
+-- one's grant evidence and issue time. A replaced secret is written by
+-- clientsecrets.Secrets in the same transaction, which clears the marker too.
 UPDATE remote_session_clients
 SET
     client_id = COALESCE(sqlc.narg('client_id'), client_id),
@@ -1280,17 +1278,9 @@ SET
         WHEN sqlc.narg('display_name')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('display_name'), display_name)
     END,
-    client_secret_encrypted = COALESCE(sqlc.narg('client_secret_encrypted'), client_secret_encrypted),
     upstream_rejected_at = CASE
-        WHEN sqlc.narg('client_secret_encrypted')::text IS NOT NULL THEN NULL
         WHEN sqlc.narg('client_id')::text IS DISTINCT FROM client_id AND sqlc.narg('client_id')::text IS NOT NULL THEN NULL
         ELSE upstream_rejected_at
-    END,
-    -- A replaced secret takes the expiry supplied with it, or none: keeping
-    -- the old secret's deadline would flag the new secret as expired.
-    client_secret_expires_at = CASE
-        WHEN sqlc.narg('client_secret_encrypted')::text IS NULL THEN client_secret_expires_at
-        ELSE sqlc.narg('client_secret_expires_at')
     END,
     token_endpoint_auth_method = COALESCE(sqlc.narg('token_endpoint_auth_method'), token_endpoint_auth_method),
     token_endpoint_auth_audience_format = COALESCE(sqlc.narg('token_endpoint_auth_audience_format'), token_endpoint_auth_audience_format),
@@ -1946,6 +1936,7 @@ SELECT
     c.client_id                            AS external_client_id,
     c.organization_id                     AS client_organization_id,
     c.client_secret_encrypted              AS client_secret_encrypted,
+    c.client_secret_org_encrypted          AS client_secret_org_encrypted,
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.token_endpoint_auth_audience_format  AS token_endpoint_auth_audience_format,
     c.json_web_key_set_id                  AS json_web_key_set_id,
@@ -2015,6 +2006,7 @@ SELECT
     c.organization_id                      AS organization_id,
     c.client_id                            AS external_client_id,
     c.client_secret_encrypted              AS client_secret_encrypted,
+    c.client_secret_org_encrypted          AS client_secret_org_encrypted,
     c.client_secret_expires_at             AS client_secret_expires_at,
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.token_endpoint_auth_audience_format  AS token_endpoint_auth_audience_format,
@@ -2087,6 +2079,7 @@ SELECT
     c.client_id                            AS external_client_id,
     c.organization_id                      AS client_organization_id,
     c.client_secret_encrypted              AS client_secret_encrypted,
+    c.client_secret_org_encrypted          AS client_secret_org_encrypted,
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.token_endpoint_auth_audience_format  AS token_endpoint_auth_audience_format,
     c.json_web_key_set_id                  AS json_web_key_set_id,
@@ -2119,7 +2112,6 @@ SELECT
     c.id                                   AS client_id,
     c.project_id                           AS client_project_id,
     c.client_id                            AS external_client_id,
-    c.client_secret_encrypted              AS client_secret_encrypted,
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
@@ -3507,9 +3499,9 @@ WHERE id = @id
 RETURNING *;
 
 -- name: UpdateOrganizationRemoteSessionClient :one
--- Patch a client's fields. The handler encrypts a rotated client_secret before
--- passing it as client_secret_encrypted; an omitted narg keeps the existing
--- secret. See the ORG REACHABILITY note on
+-- Patch a client's fields. A replaced secret is written by
+-- clientsecrets.Secrets in the same transaction. See the ORG REACHABILITY
+-- note on
 -- ListOrganizationRemoteSessionClientsByIssuerID. Note this mutates the CLIENT,
 -- which the tenant owns, never the platform issuer it points at. A corrected
 -- client_id resets the registration state as UpdateRemoteSessionClient does.
@@ -3528,17 +3520,9 @@ SET
         WHEN sqlc.narg('display_name')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('display_name'), c.display_name)
     END,
-    client_secret_encrypted = COALESCE(sqlc.narg('client_secret_encrypted'), c.client_secret_encrypted),
     upstream_rejected_at = CASE
-        WHEN sqlc.narg('client_secret_encrypted')::text IS NOT NULL THEN NULL
         WHEN sqlc.narg('client_id')::text IS DISTINCT FROM c.client_id AND sqlc.narg('client_id')::text IS NOT NULL THEN NULL
         ELSE c.upstream_rejected_at
-    END,
-    -- A pasted-in replacement secret carries no issuer-reported expiry, and
-    -- keeping the old secret's deadline would flag the new one as expired.
-    client_secret_expires_at = CASE
-        WHEN sqlc.narg('client_secret_encrypted')::text IS NULL THEN c.client_secret_expires_at
-        ELSE NULL
     END,
     token_endpoint_auth_method = COALESCE(sqlc.narg('token_endpoint_auth_method'), c.token_endpoint_auth_method),
     token_endpoint_auth_audience_format = COALESCE(sqlc.narg('token_endpoint_auth_audience_format'), c.token_endpoint_auth_audience_format),
@@ -4657,12 +4641,10 @@ WHERE id = @id
   AND deleted IS FALSE;
 
 -- name: UpdateGlobalRemoteSessionClient :one
--- Patch a global client's non-issuer fields. The handler encrypts a rotated
--- client_secret before passing it as client_secret_encrypted; an omitted narg
--- keeps the existing secret.
+-- Patch a global client's non-issuer fields. A replaced secret is written by
+-- clientsecrets.Secrets in the same transaction.
 UPDATE remote_session_clients
 SET
-    client_secret_encrypted = COALESCE(sqlc.narg('client_secret_encrypted'), client_secret_encrypted),
     token_endpoint_auth_method = COALESCE(sqlc.narg('token_endpoint_auth_method'), token_endpoint_auth_method),
     token_endpoint_auth_audience_format = COALESCE(sqlc.narg('token_endpoint_auth_audience_format'), token_endpoint_auth_audience_format),
     scope = COALESCE(sqlc.narg('scope')::text[], scope),
@@ -5055,7 +5037,10 @@ JOIN user_session_issuers AS source ON source.id = s.user_session_issuer_id
 JOIN projects AS p ON p.id = @project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
 LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
 WHERE link.user_session_issuer_id = @user_session_issuer_id
-  AND s.user_session_issuer_id = link.user_session_issuer_id
+  -- The issuer a connection was made through, such as a team gateway's, is
+  -- provenance only, as at runtime: it must still exist in this tenant, but
+  -- whether it binds the client now does not matter. The binding's own issuer
+  -- must bind the client.
   AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
   AND (usi.project_id = p.id OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
   AND (source.project_id = p.id OR (source.project_id IS NULL AND source.organization_id = p.organization_id))
@@ -5079,7 +5064,10 @@ JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 JOIN user_session_issuers AS source ON source.id = s.user_session_issuer_id
 JOIN projects AS p ON p.id = @project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
 WHERE link.user_session_issuer_id = @user_session_issuer_id
-  AND s.user_session_issuer_id = link.user_session_issuer_id
+  -- The issuer a connection was made through, such as a team gateway's, is
+  -- provenance only, as at runtime: it must still exist in this tenant, but
+  -- whether it binds the client now does not matter. The binding's own issuer
+  -- must bind the client.
   AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
   AND (usi.project_id = p.id OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
   AND (source.project_id = p.id OR (source.project_id IS NULL AND source.organization_id = p.organization_id))
@@ -6116,7 +6104,6 @@ SELECT
     c.id                                   AS client_id,
     c.project_id                           AS client_project_id,
     c.client_id                            AS external_client_id,
-    c.client_secret_encrypted              AS client_secret_encrypted,
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
@@ -6186,7 +6173,6 @@ SELECT
     c.id                                   AS client_id,
     c.project_id                           AS client_project_id,
     c.client_id                            AS external_client_id,
-    c.client_secret_encrypted              AS client_secret_encrypted,
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
@@ -7071,3 +7057,50 @@ SELECT EXISTS (
     AND b.user_session_issuer_id = @user_session_issuer_id
     AND b.state IS DISTINCT FROM 'unlinked'
 )::boolean;
+
+-- name: CreateRemoteSessionClientFixture :one
+-- Test fixture: CreateRemoteSessionClient that also plants a platform-key
+-- secret copy as given, bypassing clientsecrets.Secrets.
+INSERT INTO remote_session_clients (
+    project_id,
+    organization_id,
+    remote_session_issuer_id,
+    client_id,
+    client_secret_encrypted,
+    client_id_issued_at,
+    client_secret_expires_at,
+    token_endpoint_auth_method,
+    token_endpoint_auth_audience_format,
+    scope,
+    audience,
+    forward_client_name,
+    legacy_callback_url,
+    json_web_key_set_id,
+    identity_provider_connection_id,
+    callback_base_url,
+    grant_types,
+    credential_owner
+)
+VALUES (
+    @project_id,
+    @organization_id,
+    @remote_session_issuer_id,
+    @client_id,
+    @client_secret_encrypted,
+    @client_id_issued_at,
+    @client_secret_expires_at,
+    @token_endpoint_auth_method,
+    @token_endpoint_auth_audience_format,
+    sqlc.narg('scope')::text[],
+    @audience,
+    @forward_client_name,
+    @legacy_callback_url,
+    sqlc.narg('json_web_key_set_id'),
+    sqlc.narg('identity_provider_connection_id'),
+    sqlc.narg('callback_base_url'),
+    sqlc.narg('grant_types')::text[],
+    -- NULL creates a subject client, so callers that predate credential_owner
+    -- need not name it. Allowed values are validated in application code.
+    COALESCE(sqlc.narg('credential_owner')::text, 'subject')
+)
+RETURNING *;

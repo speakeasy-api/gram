@@ -340,7 +340,7 @@ jobs:
           retry go mod download
           retry go -C glint mod download
           retry mise run go:tidy
-          (cd server && retry golangci-lint custom)
+          retry mise run build:gcl
 
       - name: Save Go module cache
         if: steps.lookup.outputs.cache-hit != 'true'
@@ -1503,7 +1503,7 @@ jobs:
       - name: Compute golangci-lint cache key
         id: lint-cache-key
         env:
-          FILES_HASH: ${{ hashFiles('server/.golangci.yaml', 'server/.custom-gcl.yml', 'glint/**') }}
+          FILES_HASH: ${{ hashFiles('server/.golangci.yaml', 'server/gcl/**', '.mise-tasks/build/gcl.sh', 'glint/**') }}
         run: echo "inputs=$(go env GOVERSION)-${FILES_HASH}" >> "$GITHUB_OUTPUT"
 
       - name: Restore golangci-lint cache
@@ -1513,6 +1513,25 @@ jobs:
           path: ~/.cache/golangci-lint
           key: golangci-lint-server-blacksmith-v1-${{ steps.lint-cache-key.outputs.inputs }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: golangci-lint-server-blacksmith-v1-${{ steps.lint-cache-key.outputs.inputs }}-
+
+      # The lint action would build an unpatched binary itself if it found a
+      # .custom-gcl.yml. gcl is built here instead, with the patches in
+      # server/gcl/patches, and put on PATH as the golangci-lint the action
+      # runs with install-mode none.
+      - name: Build gcl
+        run: |
+          mise run build:gcl
+          mkdir -p "$RUNNER_TEMP/gcl"
+          ln -sf "$GITHUB_WORKSPACE/server/bin/gcl" "$RUNNER_TEMP/gcl/golangci-lint"
+          echo "$RUNNER_TEMP/gcl" >> "$GITHUB_PATH"
+
+      # Lint the package list the local task uses rather than the action's
+      # default ./..., which also analyses the generated server/gen packages.
+      - name: List server lint packages
+        id: lint-packages
+        run: |
+          packages=$(mise run -q go:server-lint-packages)
+          echo "packages=${packages//$'\n'/ }" >> "$GITHUB_OUTPUT"
 
       - name: Start lint timer
         run: echo "LINT_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
@@ -1524,6 +1543,7 @@ jobs:
           # Skips a JSONSchema fetch from golangci-lint.run on every run.
           verify: false
           working-directory: server
+          args: ${{ steps.lint-packages.outputs.packages }}
           # Cached by the steps around this one.
           skip-cache: true
         env:
@@ -1614,7 +1634,7 @@ jobs:
       - name: Compute golangci-lint cache key
         id: lint-cache-key
         env:
-          FILES_HASH: ${{ hashFiles('server/.golangci.yaml', 'server/.custom-gcl.yml', 'glint/**') }}
+          FILES_HASH: ${{ hashFiles('server/.golangci.yaml', 'server/gcl/**', '.mise-tasks/build/gcl.sh', 'glint/**') }}
         run: echo "inputs=$(go env GOVERSION)-${FILES_HASH}" >> "$GITHUB_OUTPUT"
 
       - name: Restore golangci-lint cache
@@ -1625,6 +1645,21 @@ jobs:
           key: golangci-lint-server-blacksmith-v1-${{ steps.lint-cache-key.outputs.inputs }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: golangci-lint-server-blacksmith-v1-${{ steps.lint-cache-key.outputs.inputs }}-
 
+      - name: Build gcl
+        run: |
+          mise run build:gcl
+          mkdir -p "$RUNNER_TEMP/gcl"
+          ln -sf "$GITHUB_WORKSPACE/server/bin/gcl" "$RUNNER_TEMP/gcl/golangci-lint"
+          echo "$RUNNER_TEMP/gcl" >> "$GITHUB_PATH"
+
+      # Keep the package list in step with server-checks, or the cache saved
+      # here would not cover what pull requests lint.
+      - name: List server lint packages
+        id: lint-packages
+        run: |
+          packages=$(mise run -q go:server-lint-packages)
+          echo "packages=${packages//$'\n'/ }" >> "$GITHUB_OUTPUT"
+
       - name: Lint with golangci-lint
         continue-on-error: true
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
@@ -1632,6 +1667,7 @@ jobs:
           install-mode: none
           verify: false
           working-directory: server
+          args: ${{ steps.lint-packages.outputs.packages }}
           skip-cache: true
         env:
           GOMEMLIMIT: 12GiB

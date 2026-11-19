@@ -1,6 +1,6 @@
 export type McpToolsAvailability = "loading" | "ready" | "unavailable";
 
-/** Shown when tools/list settled empty or failed — Playground must not claim access. */
+/** Shown when tools/list settled empty or failed — the chat must not claim access. */
 export const NO_MCP_TOOLS_MESSAGE =
   "No tools loaded from this server — connect authentication to test it.";
 

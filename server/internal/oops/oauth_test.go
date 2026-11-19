@@ -1,4 +1,4 @@
-package oops
+package oops_test
 
 import (
 	"encoding/json"
@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 func TestOAuthErrHandleMappings(t *testing.T) {
@@ -23,17 +24,17 @@ func TestOAuthErrHandleMappings(t *testing.T) {
 		code   string
 	}{
 		{"unexpected", errors.New("private database details"), http.StatusInternalServerError, oautherr.CodeServerError},
-		{"unavailable", fmt.Errorf("operation: %w", E(CodeUnavailable, errors.New("private database details"), "private service details")), http.StatusServiceUnavailable, oautherr.CodeTemporarilyUnavailable},
-		{"unclassified unauthorized", C(CodeUnauthorized), http.StatusInternalServerError, oautherr.CodeServerError},
-		{"unclassified not found", C(CodeNotFound), http.StatusInternalServerError, oautherr.CodeServerError},
-		{"invalid grant", NewOAuthError(http.StatusBadRequest, oautherr.CodeInvalidGrant, "authorization expired", errors.New("private grant details")), http.StatusBadRequest, oautherr.CodeInvalidGrant},
-		{"unserved endpoint", NewOAuthError(http.StatusNotFound, oautherr.CodeInvalidRequest, "authorization endpoint not found", errors.New("private issuer details")), http.StatusNotFound, oautherr.CodeInvalidRequest},
+		{"unavailable", fmt.Errorf("operation: %w", oops.E(oops.CodeUnavailable, errors.New("private database details"), "private service details")), http.StatusServiceUnavailable, oautherr.CodeTemporarilyUnavailable},
+		{"unclassified unauthorized", oops.C(oops.CodeUnauthorized), http.StatusInternalServerError, oautherr.CodeServerError},
+		{"unclassified not found", oops.C(oops.CodeNotFound), http.StatusInternalServerError, oautherr.CodeServerError},
+		{"invalid grant", oops.NewOAuthError(http.StatusBadRequest, oautherr.CodeInvalidGrant, "authorization expired", errors.New("private grant details")), http.StatusBadRequest, oautherr.CodeInvalidGrant},
+		{"unserved endpoint", oops.NewOAuthError(http.StatusNotFound, oautherr.CodeInvalidRequest, "authorization endpoint not found", errors.New("private issuer details")), http.StatusNotFound, oautherr.CodeInvalidRequest},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			logger, _ := captureLogger()
 			response := httptest.NewRecorder()
-			OAuthErrHandle(logger, func(w http.ResponseWriter, _ *http.Request) error {
+			oops.OAuthErrHandle(logger, func(w http.ResponseWriter, _ *http.Request) error {
 				w.Header().Set("Retry-After", "5")
 				return tc.err
 			}).ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/token", nil))
@@ -54,7 +55,7 @@ func TestOAuthErrHandlePreservesSuccessfulRevocation(t *testing.T) {
 	t.Parallel()
 	logger, logs := captureLogger()
 	response := httptest.NewRecorder()
-	OAuthErrHandle(logger, func(w http.ResponseWriter, _ *http.Request) error {
+	oops.OAuthErrHandle(logger, func(w http.ResponseWriter, _ *http.Request) error {
 		w.WriteHeader(http.StatusOK)
 		return nil
 	}).ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/revoke", nil))
@@ -70,7 +71,7 @@ func TestOAuthErrHandleDoesNotAppendToCommittedResponse(t *testing.T) {
 			t.Parallel()
 			logger, _ := captureLogger()
 			response := httptest.NewRecorder()
-			OAuthErrHandle(logger, func(w http.ResponseWriter, _ *http.Request) error {
+			oops.OAuthErrHandle(logger, func(w http.ResponseWriter, _ *http.Request) error {
 				if explicitHeader {
 					w.WriteHeader(http.StatusBadRequest)
 				}
@@ -98,7 +99,7 @@ func TestOAuthErrHandleDoesNotRetryFailedBodyWrite(t *testing.T) {
 	t.Parallel()
 	logger, _ := captureLogger()
 	response := &failingOAuthResponseWriter{ResponseRecorder: httptest.NewRecorder()}
-	OAuthErrHandle(logger, func(w http.ResponseWriter, _ *http.Request) error {
+	oops.OAuthErrHandle(logger, func(w http.ResponseWriter, _ *http.Request) error {
 		w.WriteHeader(http.StatusOK)
 		_, err := w.Write([]byte(`{"access_token":"test"}`))
 		if err != nil {
@@ -113,6 +114,6 @@ func TestOAuthErrHandleDoesNotRetryFailedBodyWrite(t *testing.T) {
 func TestOAuthErrorPreservesCause(t *testing.T) {
 	t.Parallel()
 	cause := errors.New("revoked sign-in")
-	err := NewOAuthError(http.StatusBadRequest, oautherr.CodeInvalidGrant, "authorization expired", cause)
+	err := oops.NewOAuthError(http.StatusBadRequest, oautherr.CodeInvalidGrant, "authorization expired", cause)
 	require.ErrorIs(t, err, cause)
 }

@@ -2804,12 +2804,8 @@ type GetOverviewSummaryParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummaryParams) (*OverviewSummary, error) {
-	// A canonical user scope is a user filter even though arg.User stays empty
-	// in fold mode, so it must force the raw path off the unfiltered MV.
-	hasFilters := !arg.User.IsEmpty() || arg.CanonicalUser.Enabled() || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.MetaMCPServerID != "" || arg.EventSource != "" || arg.HookSource != "" || arg.AccountType != "" || arg.ExternalOrgID != "" || len(arg.ExcludedHookSources) > 0
-
 	var sb squirrel.SelectBuilder
-	if hasFilters {
+	if arg.hasFilters() {
 		sb = q.getOverviewSummaryRaw(arg)
 	} else {
 		sb = q.getOverviewSummaryMV(arg)
@@ -2860,6 +2856,14 @@ func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummary
 	}
 
 	return &summary, nil
+}
+
+// hasFilters reports whether the scope narrows below whole projects, which
+// the metrics_summaries view cannot express. A canonical user scope is a user
+// filter even though User stays empty in fold mode, so it must force the raw
+// path off the unfiltered view.
+func (arg GetOverviewSummaryParams) hasFilters() bool {
+	return !arg.User.IsEmpty() || arg.CanonicalUser.Enabled() || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.MetaMCPServerID != "" || arg.EventSource != "" || arg.HookSource != "" || arg.AccountType != "" || arg.ExternalOrgID != "" || len(arg.ExcludedHookSources) > 0
 }
 
 // getOverviewSummaryMV builds a query against the pre-aggregated metrics_summaries table.

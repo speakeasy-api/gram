@@ -13,6 +13,7 @@ import { getIdentityTint, useIsDarkTheme } from "@/components/gradient-colors";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useAssistantsAvailable } from "@/hooks/useAssistantsAvailability";
 import { useSlugs } from "@/contexts/Sdk";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { useGramContext } from "@gram/client/react-query/_context.js";
@@ -809,7 +810,12 @@ function CardActions({ children }: { children: ReactNode }) {
 function ExploreWithAIButton({ onClick }: { onClick: () => void }) {
   const project = useProject();
   const { hasScope } = useRBAC();
-  if (!hasScope("assistant:read", undefined, project.id)) return null;
+  const assistantsAvailable = useAssistantsAvailable();
+  if (
+    !assistantsAvailable ||
+    !hasScope("assistant:read", undefined, project.id)
+  )
+    return null;
 
   return (
     <button

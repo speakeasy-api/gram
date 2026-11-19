@@ -33,7 +33,6 @@ const AREA_BY_PAGE_SLUG: Record<string, NavArea> = {
   "detection-rules": "Security and Policy",
   // MCP Gateway
   mcp: "MCP Gateway",
-  playground: "MCP Gateway",
   deployments: "MCP Gateway",
   skills: "MCP Gateway",
   plugins: "MCP Gateway",

@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
@@ -76,8 +77,9 @@ type memberDescribeResult struct {
 // failures, and returns results in member order. Every describe and retry
 // shares one listing deadline.
 func (s *Service) describeMetaMembers(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember) []memberDescribeResult {
-	ctx, cancelAll := context.WithTimeout(ctx, min(memberDescribeBudget*s.metaRuntime.MemberCallTimeout, maxGatewayListingTime))
+	budget, cancelAll := context.WithTimeout(ctx, min(memberDescribeBudget*s.metaRuntime.MemberCallTimeout, maxGatewayListingTime))
 	defer cancelAll()
+	ctx = context.WithValue(budget, listingBudgetKey{}, budget)
 	results := make([]memberDescribeResult, len(members))
 	slots := semaphore.NewWeighted(maxConcurrentMemberDescribes)
 	var group sync.WaitGroup
@@ -111,10 +113,15 @@ func (s *Service) describeMetaMemberWithRetry(ctx context.Context, logger *slog.
 			slots.Release(1)
 			return result
 		}
+		previous := result
 		memberCtx, cancel := context.WithTimeout(ctx, s.metaRuntime.MemberCallTimeout)
 		result.catalog, result.err = s.describeMetaMember(memberCtx, logger, gate, member)
 		cancel()
 		slots.Release(1)
+		// A retry the listing's time cut off with no answer of its own keeps the earlier one.
+		if _, cut := errors.AsType[listingCutError](result.err); cut && attempt > 1 {
+			return previous
+		}
 		failure, ok := errors.AsType[memberDiscoveryError](result.err)
 		if !ok || !failure.retryable || attempt == maxMemberDescribeAttempts {
 			return result
@@ -141,6 +148,26 @@ func (s *Service) describeMetaMemberWithRetry(ctx context.Context, logger *slog.
 		timer.Stop()
 	}
 }
+
+// listingBudgetKey holds a whole listing's own deadline on its context.
+type listingBudgetKey struct{}
+
+// listingCutOff reports the listing's own time had run out when an operation that got no answer ended; call it as it ends.
+func listingCutOff(ctx context.Context, answered bool) bool {
+	budget, ok := ctx.Value(listingBudgetKey{}).(context.Context)
+	return !answered && ok && budget.Err() != nil
+}
+
+// tokenEndpointAnswered reports a credential exchange the token endpoint answered.
+func tokenEndpointAnswered(err error) bool {
+	answered, ok := errors.AsType[*remotesessions.TokenEndpointError](err)
+	return ok && answered.StatusCode != 0
+}
+
+// listingCutError is a member operation the listing's own time ended, which says nothing about the member.
+type listingCutError struct{ error }
+
+func (e listingCutError) Unwrap() error { return e.error }
 
 // retryFitsListing reports whether a retry starting after wait still has
 // minMemberRetryBudget before ctx's deadline.
