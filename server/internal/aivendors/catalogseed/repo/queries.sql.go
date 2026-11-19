@@ -61,25 +61,18 @@ func (q *Queries) EditDocumentFixture(ctx context.Context, arg EditDocumentFixtu
 
 const editProductFixture = `-- name: EditProductFixture :exec
 UPDATE ai_products
-SET display_name = $1, family = $2,
-    deleted_at = $3
-WHERE id = $4
+SET display_name = $1, deleted_at = $2
+WHERE id = $3
 `
 
 type EditProductFixtureParams struct {
 	DisplayName string
-	Family      pgtype.Text
 	DeletedAt   pgtype.Timestamptz
 	ID          string
 }
 
 func (q *Queries) EditProductFixture(ctx context.Context, arg EditProductFixtureParams) error {
-	_, err := q.db.Exec(ctx, editProductFixture,
-		arg.DisplayName,
-		arg.Family,
-		arg.DeletedAt,
-		arg.ID,
-	)
+	_, err := q.db.Exec(ctx, editProductFixture, arg.DisplayName, arg.DeletedAt, arg.ID)
 	return err
 }
 
@@ -122,11 +115,11 @@ func (q *Queries) InsertDocument(ctx context.Context, arg InsertDocumentParams) 
 const insertProduct = `-- name: InsertProduct :execrows
 INSERT INTO ai_products (
   id, vendor_key, display_name, category, bundle_ids, binaries, config_dirs,
-  process_names, version_plist_key, client_info_names, family
+  process_names, version_plist_key, client_info_names
 ) VALUES (
   $1, $2, $3, $4, $5::text[],
   $6::text[], $7::text[], $8::text[],
-  $9, $10::text[], $11
+  $9, $10::text[]
 )
 ON CONFLICT DO NOTHING
 `
@@ -142,7 +135,6 @@ type InsertProductParams struct {
 	ProcessNames    []string
 	VersionPlistKey pgtype.Text
 	ClientInfoNames []string
-	Family          pgtype.Text
 }
 
 // Catalog rows are global reference data, not tenant-owned records.
@@ -158,7 +150,6 @@ func (q *Queries) InsertProduct(ctx context.Context, arg InsertProductParams) (i
 		arg.ProcessNames,
 		arg.VersionPlistKey,
 		arg.ClientInfoNames,
-		arg.Family,
 	)
 	if err != nil {
 		return 0, err
@@ -206,7 +197,7 @@ func (q *Queries) ListDocuments(ctx context.Context) ([]AiProductCimdDocument, e
 }
 
 const listProducts = `-- name: ListProducts :many
-SELECT id, vendor_key, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, client_info_names, family, created_by, updated_by, created_at, updated_at, deleted_at, deleted FROM ai_products ORDER BY id
+SELECT id, vendor_key, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, client_info_names, created_by, updated_by, created_at, updated_at, deleted_at, deleted FROM ai_products ORDER BY id
 `
 
 func (q *Queries) ListProducts(ctx context.Context) ([]AiProduct, error) {
@@ -229,7 +220,6 @@ func (q *Queries) ListProducts(ctx context.Context) ([]AiProduct, error) {
 			&i.ProcessNames,
 			&i.VersionPlistKey,
 			&i.ClientInfoNames,
-			&i.Family,
 			&i.CreatedBy,
 			&i.UpdatedBy,
 			&i.CreatedAt,

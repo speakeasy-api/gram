@@ -55,7 +55,6 @@ func TestApplyCompleteAndIdempotent(t *testing.T) {
 			require.Equal(t, conv.DefaultSlice(p.Signatures.ProcessNames, []string{}), row.ProcessNames)
 			require.Equal(t, conv.ToPGTextEmpty(p.VersionPlistKey), row.VersionPlistKey)
 			require.Equal(t, conv.DefaultSlice(p.ClientInfoNames, []string{}), row.ClientInfoNames)
-			require.Equal(t, conv.ToPGTextEmpty(p.Family), row.Family)
 			require.False(t, row.Deleted)
 			require.False(t, row.CreatedBy.Valid)
 			require.False(t, row.UpdatedBy.Valid)
@@ -98,12 +97,6 @@ func TestApplyPreservesStaffEditsAndDeletions(t *testing.T) {
 	require.NoError(t, q.EditProductFixture(ctx, repo.EditProductFixtureParams{
 		ID: "claude-code", DisplayName: "Staff title",
 		DeletedAt: pgtype.Timestamptz{Time: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), Valid: true},
-	}))
-	require.NoError(t, q.EditProductFixture(ctx, repo.EditProductFixtureParams{
-		ID: "claude", DisplayName: "Claude", Family: pgtype.Text{},
-	}))
-	require.NoError(t, q.EditProductFixture(ctx, repo.EditProductFixtureParams{
-		ID: "cursor", DisplayName: "Cursor", Family: conv.ToPGText("staff-family"),
 	}))
 	docs, err := q.ListDocuments(ctx)
 	require.NoError(t, err)
@@ -263,7 +256,7 @@ func TestBackfillSkipsDeletedProduct(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, EnsureCatalog(ctx, db))
 	require.NoError(t, repo.New(db).EditProductFixture(ctx, repo.EditProductFixtureParams{
-		ID: "claude-code", DisplayName: "Claude Code", Family: conv.ToPGText("claude"),
+		ID: "claude-code", DisplayName: "Claude Code",
 		DeletedAt: pgtype.Timestamptz{Time: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), Valid: true},
 	}))
 	require.NoError(t, Apply(ctx, testenv.NewLogger(t), db))
@@ -340,7 +333,13 @@ func TestApplySkipsDocumentsOfDeletedProduct(t *testing.T) {
 	}
 }
 
-// Aliases stay in the compiled registry; every other field must match the file.
+// codeOnly lists registry fields the seed never writes; they stay in code.
+var codeOnly = map[string]bool{
+	"Aliases": true, // Reported names change with plugin and telemetry code.
+	"Family":  true, // Product families change with plugin and telemetry code.
+}
+
+// Every registry field except codeOnly must match the file.
 func TestCatalogMatchesRegistry(t *testing.T) {
 	t.Parallel()
 	var data snapshot
@@ -359,7 +358,7 @@ func TestCatalogMatchesRegistry(t *testing.T) {
 		if i > 0 {
 			actual.WriteByte(',')
 		}
-		actual.Write(withoutKey(t, p, "Aliases"))
+		actual.Write(withoutCodeOnly(t, p))
 	}
 	actual.WriteString("]}")
 	if f := flag.Lookup("update"); f == nil || f.Value.String() != "true" {
@@ -368,8 +367,8 @@ func TestCatalogMatchesRegistry(t *testing.T) {
 	testenv.RequireJSONGolden(t, "catalog.json", actual.Bytes())
 }
 
-// withoutKey drops one key from a JSON object and keeps the others in order.
-func withoutKey(t *testing.T, object json.RawMessage, key string) []byte {
+// withoutCodeOnly drops codeOnly keys from a JSON object and keeps the rest in order.
+func withoutCodeOnly(t *testing.T, object json.RawMessage) []byte {
 	t.Helper()
 	decoder := json.NewDecoder(bytes.NewReader(object))
 	open, err := decoder.Token()
@@ -381,7 +380,7 @@ func withoutKey(t *testing.T, object json.RawMessage, key string) []byte {
 		require.NoError(t, err)
 		var value json.RawMessage
 		require.NoError(t, decoder.Decode(&value))
-		if name == key {
+		if key, ok := name.(string); ok && codeOnly[key] {
 			continue
 		}
 		if len(out) > 1 {

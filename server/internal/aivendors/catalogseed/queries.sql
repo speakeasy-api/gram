@@ -2,11 +2,11 @@
 -- name: InsertProduct :execrows
 INSERT INTO ai_products (
   id, vendor_key, display_name, category, bundle_ids, binaries, config_dirs,
-  process_names, version_plist_key, client_info_names, family
+  process_names, version_plist_key, client_info_names
 ) VALUES (
   @id, @vendor_key, @display_name, sqlc.narg('category'), @bundle_ids::text[],
   @binaries::text[], @config_dirs::text[], @process_names::text[],
-  sqlc.narg('version_plist_key'), @client_info_names::text[], sqlc.narg('family')
+  sqlc.narg('version_plist_key'), @client_info_names::text[]
 )
 ON CONFLICT DO NOTHING;
 
@@ -41,8 +41,7 @@ SELECT * FROM ai_product_cimd_documents ORDER BY id;
 
 -- name: EditProductFixture :exec
 UPDATE ai_products
-SET display_name = @display_name, family = sqlc.narg('family'),
-    deleted_at = sqlc.narg('deleted_at')
+SET display_name = @display_name, deleted_at = sqlc.narg('deleted_at')
 WHERE id = @id;
 
 -- name: EditDocumentFixture :exec

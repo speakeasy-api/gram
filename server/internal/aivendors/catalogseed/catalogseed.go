@@ -116,7 +116,6 @@ func insertCatalog(ctx context.Context, db *pgxpool.Pool, data snapshot) (insert
 				ProcessNames:    conv.DefaultSlice(p.Signatures.ProcessNames, []string{}),
 				VersionPlistKey: conv.ToPGTextEmpty(p.VersionPlistKey),
 				ClientInfoNames: conv.DefaultSlice(p.ClientInfoNames, []string{}),
-				Family:          conv.ToPGTextEmpty(p.Family),
 			})
 			if err != nil {
 				return fmt.Errorf("seed AI product %s: %w", p.ID, err)
