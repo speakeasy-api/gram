@@ -428,7 +428,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
       ]
     : [];
 
-  // A provider with only a written guide is set up on the Setup tab too,
+  // A provider with only a written guide is set up on the Setup page too,
   // after Authentication: most guides need the redirect URL or credentials
   // it sets up. The step stays open until someone marks the guide done.
   const setupGuideDoneAt = mcpServer?.setupGuideCompletedAt;
