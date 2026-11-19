@@ -17,7 +17,7 @@ import {
   monoFont,
 } from "./format";
 import { HealthBarChart, LegendDot } from "./HealthBarChart";
-import type { SignInSummaryResponse, SummaryBucket } from "./types";
+import type { SignInSummaryResponse, StepGroup, SummaryBucket } from "./types";
 
 export type SummaryMetric = "sign-ins" | "sessions";
 
@@ -56,8 +56,11 @@ export function SummaryPanel({
   rangeControl,
   logsHref,
   sessionsHref,
+  steps,
 }: {
   providerId: string;
+  /** The steps counted, the same as the Connection Logs link's step filter. */
+  steps: readonly StepGroup[];
   window: Window;
   days: number;
   metric: SummaryMetric;
@@ -69,7 +72,7 @@ export function SummaryPanel({
   const scope = useMemo(() => ({ providerId }), [providerId]);
   const bucket: SummaryBucket =
     days <= 1 ? "hour" : days <= 7 ? "six_hours" : "day";
-  const signIns = useSignInSummary(scope, window, bucket);
+  const signIns = useSignInSummary(scope, window, bucket, steps);
   const sessions = useSessionActivity(providerId, window, {
     enabled: metric === "sessions",
   });
@@ -85,7 +88,7 @@ export function SummaryPanel({
           </h2>
           <p className="text-muted-foreground mt-1 text-sm">
             {metric === "sign-ins"
-              ? "Sign-ins and renewals through this provider."
+              ? "Sign-ins and renewals to Speakeasy through this provider."
               : "Sessions through this provider: signed in, not expired or revoked."}
           </p>
         </div>

@@ -6,6 +6,7 @@ import type {
   GetSuspectedProblemResponse,
   ListSuspectedProblemsResponse,
   Person,
+  ProblemPart,
   ServerRef,
   Source,
   SuspectedProblem,
@@ -190,6 +191,7 @@ function problems(): SuspectedProblemDetail[] {
     since: at(0, "09:48").toISOString(),
     peopleCount: 5,
     rule: "three_people_same_service",
+    part: "service",
     lastFailedAt: at(0, "11:04:12").toISOString(),
     scope: { kind: "service", id: "linear.app", name: "Linear service" },
     filters: {
@@ -274,6 +276,7 @@ function problems(): SuspectedProblemDetail[] {
     since: at(-1, "16:05").toISOString(),
     peopleCount: 4,
     rule: "three_people_same_server",
+    part: "service",
     lastFailedAt: at(0, "10:52:08").toISOString(),
     scope: { kind: "server", id: SERVERS.wiki.id, name: "Internal Wiki" },
     filters: {
@@ -307,11 +310,12 @@ function problems(): SuspectedProblemDetail[] {
   };
   const cursor: SuspectedProblemDetail = {
     id: "problem_cursor_github",
-    headline: "3 people on Cursor 2.0.1 can't renew their sign-in to GitHub",
-    fact: "Other apps renewed on GitHub in this time.",
+    headline: "3 people on Cursor 2.0.1 can't renew their sign-in to Speakeasy",
+    fact: "On the GitHub server. Other apps renewed there in this time.",
     since: at(-2, "10:20").toISOString(),
     peopleCount: 3,
     rule: "three_people_same_app_version",
+    part: "speakeasy",
     lastFailedAt: at(0, "10:41:26").toISOString(),
     scope: { kind: "app_version", id: "cursor@2.0.1", name: "Cursor 2.0.1" },
     filters: {
@@ -351,11 +355,12 @@ function problems(): SuspectedProblemDetail[] {
   };
   const dana: SuspectedProblemDetail = {
     id: "problem_dana_linear",
-    headline: "Dana Reyes can't renew a sign-in to Linear",
-    fact: "Sign-in reached its time limit.",
+    headline: "Dana Reyes can't renew a sign-in to Speakeasy",
+    fact: "On the Linear server. Sign-in reached its time limit.",
     since: at(-3, "09:12").toISOString(),
     peopleCount: 1,
     rule: "one_person_24_hours",
+    part: "speakeasy",
     lastFailedAt: at(-3, "16:38:05").toISOString(),
     scope: { kind: "person", id: PEOPLE.dana.subjectUrn, name: "Dana Reyes" },
     filters: {
@@ -420,13 +425,16 @@ function later<T>(value: () => T): Promise<T> {
 
 export function fixtureListSuspectedProblems({
   serverId,
+  part,
 }: {
   userSessionIssuerId: string;
   serverId?: string;
+  /** Only problems signing in to Speakeasy, or only connecting to the service. */
+  part?: ProblemPart;
 }): Promise<ListSuspectedProblemsResponse> {
   return later(() => {
     if (quiet()) return { loggingEnabled: true, problems: [] };
-    const list = problems();
+    const list = problems().filter((p) => !part || p.part === part);
     if (!serverId)
       return { loggingEnabled: true, problems: list.map(summaryOf) };
     // A server's tab shows the sample server Linear's problems as its own.

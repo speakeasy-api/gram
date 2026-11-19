@@ -9,15 +9,22 @@ const VISIBLE = 3;
 const SUSPECTED_PROBLEMS_RULE =
   "Failed the same way and not connected since: 3 or more people on one server, service or app version, or one person for 24 hours.";
 
+/** The rule as the provider Overview states it, which lists only problems signing in to Speakeasy. */
+export const SIGN_IN_PROBLEMS_RULE =
+  "Failed to sign in the same way and not signed in since: 3 or more people on one server or app version, or one person for 24 hours.";
+
 /** The one panel that says we suspect something; nothing when there is none. */
 export function SuspectedProblems({
   problems,
   now,
   onOpen,
+  rule = SUSPECTED_PROBLEMS_RULE,
 }: {
   problems: SuspectedProblem[];
   now: Date;
   onOpen: (problem: SuspectedProblem) => void;
+  /** The hint under the heading. */
+  rule?: string;
 }): JSX.Element | null {
   const [expanded, setExpanded] = useState(false);
   if (problems.length === 0) return null;
@@ -33,9 +40,7 @@ export function SuspectedProblems({
             Sample data
           </Badge>
         </h2>
-        <p className="text-muted-foreground mt-1 text-sm">
-          {SUSPECTED_PROBLEMS_RULE}
-        </p>
+        <p className="text-muted-foreground mt-1 text-sm">{rule}</p>
       </div>
       <ul className="bg-card border-l-destructive divide-y border border-l-2">
         {shown.map((problem) => (

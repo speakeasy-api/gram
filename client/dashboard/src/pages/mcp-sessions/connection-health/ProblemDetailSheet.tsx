@@ -126,7 +126,11 @@ function investigationFor(problem: SuspectedProblemDetail): Investigation {
       problem.peopleCount === 1 && problem.people[0]
         ? personLabel(problem.people[0])
         : `these ${problem.peopleCount} people`
-    } connect${target ? ` to ${target}` : ""}, and is there anything I should change?`,
+    } ${
+      problem.part === "speakeasy"
+        ? `sign in to Speakeasy${target ? ` on ${target}` : ""}`
+        : `connect${target ? ` to ${target}` : ""}`
+    }, and is there anything I should change?`,
     context: [
       `Suspected problem · ${problem.headline}`,
       SUSPECTED_PROBLEMS_ARE_SAMPLE
@@ -166,6 +170,7 @@ function ProblemBody({
   const logsHref = `${routes.mcpSessions.provider.connectionLogs.href(providerId)}${logsSearch(problem.filters, now)}`;
   const peopleCount = problem.peopleCount;
   const sinceLabel = formatSince(problem.since, now);
+  const succeeded = problem.part === "speakeasy" ? "signed in" : "connected";
   return (
     <div className="flex min-h-full flex-col">
       <SheetHeader className="gap-1.5 border-b px-6 py-5 pr-12">
@@ -198,8 +203,8 @@ function ProblemBody({
             {problemPlace(problem)} since {sinceLabel}.
             {problem.lastConnectedAt
               ? problem.scope.kind === "person"
-                ? ` ${problem.scope.name} has not connected since ${formatSince(problem.lastConnectedAt, now)}.`
-                : ` No one has connected to it since ${formatSince(problem.lastConnectedAt, now)}.`
+                ? ` ${problem.scope.name} has not ${succeeded} since ${formatSince(problem.lastConnectedAt, now)}.`
+                : ` No one has ${succeeded}${problem.part === "speakeasy" ? " there" : " to it"} since ${formatSince(problem.lastConnectedAt, now)}.`
               : ""}
           </p>
           <p className="text-muted-foreground">

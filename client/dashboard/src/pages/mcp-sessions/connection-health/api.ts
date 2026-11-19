@@ -30,7 +30,9 @@ import type {
   ListAttemptsResponse,
   ListSuspectedProblemsResponse,
   SessionActivityResponse,
+  ProblemPart,
   SignInSummaryResponse,
+  StepGroup,
   SummaryBucket,
 } from "./types";
 
@@ -145,16 +147,26 @@ export function useSignInSummary(
   scope: Scope,
   window: Window,
   bucket?: SummaryBucket,
+  steps?: readonly StepGroup[],
 ): UseQueryResult<SignInSummaryResponse> {
   const { client, gramProject, projectId } = useClient();
   return useQuery({
-    queryKey: [ROOT, projectId, "getSignInSummary", scope, window, bucket],
+    queryKey: [
+      ROOT,
+      projectId,
+      "getSignInSummary",
+      scope,
+      window,
+      bucket,
+      steps,
+    ],
     queryFn: () =>
       sdk.getSignInSummary(client, gramProject, {
         userSessionIssuerId: scope.providerId,
         serverId: scope.serverId,
         ...window,
         bucket,
+        steps,
       }),
     retry,
     throwOnError: false,
@@ -289,14 +301,16 @@ export const SUSPECTED_PROBLEMS_ARE_SAMPLE = true;
 /** FIXTURES: suspected problems have no detector or API yet. */
 export function useSuspectedProblems(
   scope: Scope,
+  part?: ProblemPart,
 ): UseQueryResult<ListSuspectedProblemsResponse> {
   const { projectId } = useClient();
   return useQuery({
-    queryKey: [ROOT, projectId, "listSuspectedProblems", scope],
+    queryKey: [ROOT, projectId, "listSuspectedProblems", scope, part],
     queryFn: () =>
       fixtureListSuspectedProblems({
         userSessionIssuerId: scope.providerId,
         serverId: scope.serverId,
+        part,
       }),
     throwOnError: false,
   });

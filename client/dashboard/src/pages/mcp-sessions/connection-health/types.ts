@@ -27,13 +27,14 @@ export const FILTER_STEPS: readonly StepGroup[] = STEP_GROUPS.filter(
   (step) => step !== "other",
 );
 
-/** Sign-in activity lists attempts that ended at these steps. */
+/** Signing in to Speakeasy: the provider Overview counts attempts that ended at these steps. */
 export const SIGN_IN_STEPS: readonly StepGroup[] = [
   "sign_in",
-  "service_sign_in",
   "sign_in_renewal",
-  "service_renewal",
 ];
+
+/** Signing in to Speakeasy, or connecting to the service behind a server. */
+export type ProblemPart = "speakeasy" | "service";
 
 /** The party that returned a failure. */
 export type Source =
@@ -267,6 +268,8 @@ export interface SuspectedProblem {
     name: string;
   };
   rule: ProblemRule;
+  /** Whether the failures are signing in to Speakeasy or connecting to the service. */
+  part: ProblemPart;
   /** Opens Connection Logs with exactly this item's rows. */
   filters: { from: string } & AttemptFilters;
 }

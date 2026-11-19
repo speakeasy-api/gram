@@ -199,6 +199,7 @@ export async function getSignInSummary(
     from: string;
     to: string;
     bucket?: SummaryBucket;
+    steps?: readonly StepGroup[];
   },
 ): Promise<SignInSummaryResponse> {
   const result = await unwrapAsync(
@@ -210,6 +211,7 @@ export async function getSignInSummary(
         from: since(request.from),
         to: new Date(request.to),
         bucket: request.bucket,
+        steps: request.steps && [...request.steps],
       },
     }),
   );

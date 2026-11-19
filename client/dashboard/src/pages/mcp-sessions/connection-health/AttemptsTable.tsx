@@ -51,17 +51,24 @@ export function OutcomeLabel({
   outcome,
   count = 1,
   className,
+  connectedLabel,
 }: {
   outcome: Outcome;
   count?: number;
   className?: string;
+  /** Replaces "Connected" where only signing in is counted. */
+  connectedLabel?: string;
 }): JSX.Element {
   // The API may add an outcome before the dashboard knows it.
   const Icon = OUTCOME_ICONS[outcome] ?? CircleDashed;
   return (
     <span className={cn("inline-flex items-center gap-1.5", className)}>
       <Icon className="text-muted-foreground size-3.5 shrink-0" aria-hidden />
-      <span>{outcomeLabel(outcome)}</span>
+      <span>
+        {outcome === "connected" && connectedLabel
+          ? connectedLabel
+          : outcomeLabel(outcome)}
+      </span>
       {count > 1 ? (
         <span className="border-destructive text-destructive border px-1 font-mono text-[11px] leading-4">
           <span aria-hidden>×{formatCount(count)}</span>
@@ -120,6 +127,7 @@ export function AttemptsTable({
   footer,
   className,
   selectedId,
+  connectedLabel,
 }: {
   rows: AttemptRow[];
   now: Date;
@@ -132,6 +140,8 @@ export function AttemptsTable({
   className?: string;
   /** The row whose sheet is open. */
   selectedId?: string | null;
+  /** Replaces "Connected" where only signing in is counted. */
+  connectedLabel?: string;
 }): JSX.Element {
   const sentinel = useRef<HTMLDivElement>(null);
   const loading = useRef(false);
@@ -200,7 +210,11 @@ export function AttemptsTable({
         header: "Outcome",
         width: "140px",
         render: (row) => (
-          <OutcomeLabel outcome={row.outcome} count={row.count} />
+          <OutcomeLabel
+            outcome={row.outcome}
+            count={row.count}
+            connectedLabel={connectedLabel}
+          />
         ),
       },
       {
@@ -237,7 +251,7 @@ export function AttemptsTable({
       });
     }
     return base;
-  }, [rowActions]);
+  }, [rowActions, connectedLabel]);
 
   return (
     <div className={className}>

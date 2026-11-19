@@ -45,7 +45,7 @@ import {
 } from "./format";
 import { ProblemDetailSheet } from "./ProblemDetailSheet";
 import { SummaryPanel, type SummaryMetric } from "./SummaryPanel";
-import { SuspectedProblems } from "./SuspectedProblems";
+import { SIGN_IN_PROBLEMS_RULE, SuspectedProblems } from "./SuspectedProblems";
 import {
   SIGN_IN_STEPS,
   type ActiveKillswitch,
@@ -98,7 +98,7 @@ export function OverviewTab({
 
   const setParam = useSetSearchParam(SHEET_PARAMS);
 
-  const problems = useSuspectedProblems(scope);
+  const problems = useSuspectedProblems(scope, "speakeasy");
   const killswitches = useActiveKillswitches();
   const denied = useDeniedClients(scope, window);
   const activity = useConnectionAttempts(
@@ -127,8 +127,20 @@ export function OverviewTab({
           problems={problems.data?.problems ?? []}
           now={now}
           onOpen={(problem) => setParam(PROBLEM_PARAM, problem.id)}
+          rule={SIGN_IN_PROBLEMS_RULE}
         />
       )}
+
+      <p className="text-muted-foreground text-sm">
+        Problems connecting to a service show on that server&apos;s page, under{" "}
+        <Link
+          to={routes.mcpSessions.provider.mcpServers.href(providerId)}
+          className="text-foreground underline-offset-4 hover:underline"
+        >
+          MCP servers
+        </Link>
+        .
+      </p>
 
       {activityPage?.viewerScope === "own" ? <OwnAttemptsNotice /> : null}
 
@@ -163,6 +175,7 @@ export function OverviewTab({
           logsSearch({ range: range.value, steps: [...SIGN_IN_STEPS] }, now),
         )}
         sessionsHref={routes.mcpSessions.provider.connections.href(providerId)}
+        steps={SIGN_IN_STEPS}
       />
 
       {killswitches.isError || denied.isError ? (
@@ -205,7 +218,7 @@ export function OverviewTab({
 
       <OverviewSection
         title="Sign-in activity"
-        description="Latest first. Sign-ins and renewals through this provider."
+        description="Latest first. Sign-ins and renewals to Speakeasy through this provider."
         action={
           <ArrowLink
             to={logsHref(
@@ -228,7 +241,7 @@ export function OverviewTab({
           </p>
         ) : activityRows.length === 0 ? (
           <p className="text-muted-foreground border px-4 py-6 text-sm">
-            No sign-ins or renewals in the last 30 days.
+            No sign-ins or renewals to Speakeasy in the last 30 days.
           </p>
         ) : (
           <AttemptsTable
@@ -236,6 +249,7 @@ export function OverviewTab({
             now={now}
             onOpen={(row) => setParam(ATTEMPT_PARAM, row.id)}
             selectedId={searchParams.get(ATTEMPT_PARAM)}
+            connectedLabel="Signed in"
           />
         )}
       </OverviewSection>
