@@ -107,12 +107,14 @@ type Service interface {
 	// Update or clear the administrator-defined display name for one
 	// project-scoped Shadow MCP inventory server URL.
 	UpdateShadowMCPInventoryServerName(context.Context, *UpdateShadowMCPInventoryServerNamePayload) (err error)
-	// Link one project-scoped Shadow MCP server to its official version, or remove
-	// the link. While a link exists, direct connections are blocked wherever a
-	// Shadow MCP policy applies and agents are pointed at the linked server. With
-	// mcp_server_id the link is added (or restored, when it was removed before) or
-	// pointed at that server; omitting mcp_server_id removes the link. Each add,
-	// change and removal is recorded in the audit log. Requires an authenticated
+	// Choose the official version of one project-scoped Shadow MCP server. By
+	// default a project MCP server that proxies to the Shadow MCP server's URL is
+	// linked automatically (the oldest, when several do). While a link exists,
+	// direct connections are blocked wherever a Shadow MCP policy applies and
+	// agents are pointed at the linked server. With mcp_server_id that server is
+	// linked instead; with keep_shadow no server is linked, so direct use follows
+	// the ordinary Shadow MCP rules; with neither, the automatic link applies
+	// again. Each change is recorded in the audit log. Requires an authenticated
 	// session authorized for org:admin on the active organization.
 	SetShadowMCPOfficialServer(context.Context, *SetShadowMCPOfficialServerPayload) (err error)
 	// List users with observed telemetry usage for one project-scoped Shadow MCP
@@ -1674,8 +1676,12 @@ type SetShadowMCPOfficialServerPayload struct {
 	ProjectID    string
 	// The Shadow MCP server's URL.
 	ServerURL string
-	// The MCP server to link as the official version. Omit it to remove the link.
+	// The MCP server to link as the official version. Omit it, with keep_shadow
+	// unset, to go back to the automatic link.
 	McpServerID *string
+	// Keep using the Shadow MCP server directly: no official server is linked, not
+	// even automatically. Cannot be combined with mcp_server_id.
+	KeepShadow *bool
 }
 
 // The enforcement verdict for a shadow MCP server, computed server-side from
@@ -1790,6 +1796,9 @@ type ShadowMCPInventoryServer struct {
 	// A project MCP server that proxies to the same upstream URL, offered as the
 	// server to link. Present only while no official server is linked.
 	SuggestedOfficialServer *ShadowMCPSuggestedOfficialServer
+	// True when an administrator chose to keep using the Shadow MCP server
+	// directly, so no official server is linked automatically.
+	OfficialServerDeclined *bool
 }
 
 // ShadowMCPInventoryURLState is the result type of the access service
@@ -1829,8 +1838,8 @@ type ShadowMCPInventoryUserSource struct {
 	ObservedUseCount int
 }
 
-// The official, Speakeasy-served version of a Shadow MCP server, linked by an
-// administrator.
+// The official, Speakeasy-served version of a Shadow MCP server: a project MCP
+// server that proxies to its URL, or one an administrator chose.
 type ShadowMCPOfficialServer struct {
 	McpServerID string
 	// The official server's display name.
@@ -1842,6 +1851,9 @@ type ShadowMCPOfficialServer struct {
 	URL *string
 	// The gateway that serves the official server, when url is a gateway's address.
 	GatewayName *string
+	// True when the link was made automatically because the server proxies to the
+	// Shadow MCP server's URL; false when an administrator chose it.
+	Automatic *bool
 }
 
 // A project MCP server that already serves a Shadow MCP server's upstream URL

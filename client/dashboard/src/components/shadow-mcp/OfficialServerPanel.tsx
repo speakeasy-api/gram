@@ -46,7 +46,10 @@ import {
   shadowMCPCatalogMatch,
   shadowMCPOfficialServerDescription,
 } from "./shadowMCPOfficialServer";
-import { useSaveShadowMCPOfficialServer } from "./useSaveShadowMCPOfficialServer";
+import {
+  type OfficialServerChoice,
+  useSaveShadowMCPOfficialServer,
+} from "./useSaveShadowMCPOfficialServer";
 
 /**
  * The event a request for help records. Speakeasy staff are notified from
@@ -204,29 +207,32 @@ function LinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
   const { save, isPending } = useSaveShadowMCPOfficialServer();
   const official = server.officialServer;
   if (!official) return null;
-  const restoreLink = async () => {
-    try {
-      await save({
+  const automatic = official.automatic === true;
+  // Undo puts back exactly what was there: the automatic link, or the
+  // server the admin chose.
+  const previous: OfficialServerChoice = automatic
+    ? { serverUrl: server.canonicalServerUrl }
+    : {
         serverUrl: server.canonicalServerUrl,
         mcpServerId: official.mcpServerId,
-      });
-      toast.success(`Link to “${official.name}” restored`);
+      };
+  const restoreLink = async () => {
+    try {
+      await save(previous);
+      toast.success(`Linked to “${official.name}” again`);
     } catch {
       toast.error("Could not restore the link. Try again.");
     }
   };
 
-  const removeLink = async () => {
+  const change = async (choice: OfficialServerChoice, done: string) => {
     try {
-      await save({
-        serverUrl: server.canonicalServerUrl,
-        mcpServerId: undefined,
-      });
-      toast.success(`Link to “${official.name}” removed`, {
+      await save(choice);
+      toast.success(done, {
         action: { label: "Undo", onClick: () => void restoreLink() },
       });
     } catch {
-      toast.error("Could not remove the link. Try again.");
+      toast.error("Could not change the link. Try again.");
     }
   };
 
@@ -236,9 +242,18 @@ function LinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
         title="Official server"
         description={shadowMCPOfficialServerDescription(server)}
         badge={
-          <Badge variant="success" size="sm">
-            <Badge.Text>{SHADOW_MCP_OFFICIAL_STATE_LABEL.onboarded}</Badge.Text>
-          </Badge>
+          <>
+            <Badge variant="success" size="sm">
+              <Badge.Text>
+                {SHADOW_MCP_OFFICIAL_STATE_LABEL.onboarded}
+              </Badge.Text>
+            </Badge>
+            {automatic ? (
+              <Badge variant="neutral" size="sm">
+                <Badge.Text>Automatic</Badge.Text>
+              </Badge>
+            ) : null}
+          </>
         }
       />
 
@@ -277,18 +292,48 @@ function LinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Text muted small className="max-w-xl">
-          Remove the link to let direct connections follow the usual rules
-          again. You can add it back at any time.
+          {automatic
+            ? "A server that proxies this URL is linked by default. If it is not ready yet, keep the direct connection; you can link it again at any time."
+            : "You chose this server. Remove your choice to go back to the default: a server that proxies this URL is linked automatically."}
         </Text>
-        <Button
-          variant="tertiary"
-          size="sm"
-          disabled={isPending}
-          onClick={() => void removeLink()}
-        >
-          <Button.Text>Remove link</Button.Text>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {automatic ? null : (
+            <Button
+              variant="tertiary"
+              size="sm"
+              disabled={isPending}
+              onClick={() =>
+                void change(
+                  { serverUrl: server.canonicalServerUrl },
+                  `Choice of “${official.name}” removed`,
+                )
+              }
+            >
+              <Button.Text>Remove choice</Button.Text>
+            </Button>
+          )}
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={isPending}
+            onClick={() =>
+              void change(
+                { serverUrl: server.canonicalServerUrl, keepShadow: true },
+                "Direct connection kept. Agents are no longer sent elsewhere.",
+              )
+            }
+          >
+            <Button.Text>Keep direct connection</Button.Text>
+          </Button>
+        </div>
       </div>
+
+      <Advanced>
+        <LinkAnotherServer
+          server={server}
+          excludeMcpServerId={official.mcpServerId}
+        />
+      </Advanced>
     </section>
   );
 }
@@ -433,6 +478,8 @@ function UnlinkedPanel({
   const url = server.canonicalServerUrl;
   const serverName = server.serverName || server.urlHost || url;
   const suggested = server.suggestedOfficialServer;
+  // The admin kept the direct connection although a server proxies this URL.
+  const declined = server.officialServerDeclined === true;
   const { mutateAsync } = probe;
   const latestUrl = useRef(url);
   latestUrl.current = url;
@@ -505,10 +552,13 @@ function UnlinkedPanel({
   const linkSuggested = async () => {
     if (!suggested) return;
     try {
-      await save({
-        serverUrl: url,
-        mcpServerId: suggested.mcpServerId,
-      });
+      // After keeping the direct connection, linking again removes that
+      // choice, so the server that proxies the URL is linked by default.
+      await save(
+        declined
+          ? { serverUrl: url }
+          : { serverUrl: url, mcpServerId: suggested.mcpServerId },
+      );
       toast.success(`Linked to “${suggested.name}”`);
     } catch {
       toast.error("Could not link the server. Try again.");
@@ -566,7 +616,11 @@ function UnlinkedPanel({
           recommended={isRecommended}
           icon={<Icon name="link" className="size-4" />}
           title={`Already served as “${suggested.name}”`}
-          description="A server in this project proxies the same URL. Link it to make it the official version: no new server, no setup."
+          description={
+            declined
+              ? "A server in this project proxies the same URL. You kept the direct connection instead; link it again to send agents there."
+              : "A server in this project proxies the same URL. Link it to make it the official version: no new server, no setup."
+          }
           actions={
             <>
               <OpenServerButton
@@ -687,7 +741,18 @@ function UnlinkedPanel({
     <section aria-label="Make this server official" className={PANEL_CLASS}>
       <PanelHeading
         title="Make this an official server"
-        description="Serve it through Speakeasy so you decide who may use it and can see what it does. Direct connections are then blocked, and agents are sent to the official server."
+        description={
+          declined
+            ? "You kept the direct connection, so no server is linked automatically. Direct connections follow the usual Shadow MCP rules."
+            : "Serve it through Speakeasy so you decide who may use it and can see what it does. Direct connections are then blocked, and agents are sent to the official server."
+        }
+        badge={
+          declined ? (
+            <Badge variant="neutral" size="sm">
+              <Badge.Text>Direct connection kept</Badge.Text>
+            </Badge>
+          ) : undefined
+        }
       />
       {primaryKey ? options[primaryKey](true) : <ChecksSkeleton />}
       <Advanced>
@@ -719,8 +784,11 @@ function Advanced({ children }: { children: React.ReactNode }) {
  */
 function LinkAnotherServer({
   server,
+  excludeMcpServerId,
 }: {
   server: ShadowMCPInventoryServer;
+  /** The server already linked, which is not offered again. */
+  excludeMcpServerId?: string;
 }): JSX.Element {
   const gramProject = useProjectSlugForRequests();
   const serversQuery = useMcpServers({ gramProject }, undefined, {
@@ -730,7 +798,9 @@ function LinkAnotherServer({
   const [selected, setSelected] = useState("");
 
   const enabled = (serversQuery.data?.mcpServers ?? []).filter(
-    (candidate) => candidate.visibility !== "disabled",
+    (candidate) =>
+      candidate.visibility !== "disabled" &&
+      candidate.id !== excludeMcpServerId,
   );
   const nameCounts = new Map<string, number>();
   for (const candidate of enabled) {
@@ -766,7 +836,7 @@ function LinkAnotherServer({
     <OptionRow
       icon={<Icon name="server" className="size-4" />}
       title="Link another server"
-      description="Link any server in this project as the official version, for example one at a different URL."
+      description="Link any server in this project as the official version, for example when several servers proxy this URL or one is at a different URL."
     >
       <div className="flex max-w-xl items-center gap-2">
         <Select value={selected} onValueChange={setSelected}>

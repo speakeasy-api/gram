@@ -59,15 +59,15 @@ describe("AUDIT_ACTIONS", () => {
   it.each([
     [
       "shadow_mcp_official_server:create",
-      "linked an official server to Shadow MCP server",
+      "chose the official server of Shadow MCP server",
     ],
     [
       "shadow_mcp_official_server:update",
-      "changed the official server linked to Shadow MCP server",
+      "changed the official server choice of Shadow MCP server",
     ],
     [
       "shadow_mcp_official_server:delete",
-      "removed the official server link of Shadow MCP server",
+      "restored the automatic official server of Shadow MCP server",
     ],
     [
       "shadow_mcp_official_server:set",

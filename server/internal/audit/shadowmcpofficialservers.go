@@ -12,18 +12,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// A link names the MCP server that is the official version of a Shadow MCP
-// server. While it exists, direct connections to the Shadow MCP server are
-// blocked wherever a Shadow MCP policy applies.
+// A Shadow MCP server is linked automatically to the project MCP server that
+// proxies to its URL. A stored link is an administrator's override: it names
+// another MCP server, or keeps the Shadow MCP server in direct use. While a
+// server is linked, direct connections to the Shadow MCP server are blocked
+// wherever a Shadow MCP policy applies.
 const (
-	// ActionShadowMCPOfficialServerCreate records an administrator adding a
-	// link, including adding back a link that was removed.
+	// ActionShadowMCPOfficialServerCreate records an administrator
+	// overriding the automatic link, including adding back an override that
+	// was removed.
 	ActionShadowMCPOfficialServerCreate Action = "shadow_mcp_official_server:create"
-	// ActionShadowMCPOfficialServerUpdate records an administrator pointing
-	// a link at another MCP server.
+	// ActionShadowMCPOfficialServerUpdate records an administrator changing
+	// an override: another MCP server, or keeping direct use.
 	ActionShadowMCPOfficialServerUpdate Action = "shadow_mcp_official_server:update"
-	// ActionShadowMCPOfficialServerDelete records an administrator removing a
-	// link.
+	// ActionShadowMCPOfficialServerDelete records an administrator removing
+	// an override, which brings back the automatic link.
 	ActionShadowMCPOfficialServerDelete Action = "shadow_mcp_official_server:delete"
 	// ActionShadowMCPOfficialServerSet is kept so earlier entries still
 	// read: one verb used to cover every change to a link, including the
@@ -35,6 +38,9 @@ const (
 type ShadowMCPOfficialServerSnapshot struct {
 	ServerURL   string `json:"server_url"`
 	MCPServerID string `json:"mcp_server_id"`
+	// KeepShadow is true when the override keeps the Shadow MCP server in
+	// direct use; MCPServerID is then empty.
+	KeepShadow bool `json:"keep_shadow"`
 }
 
 // ShadowMCPOfficialServerEvent identifies who changed which link.

@@ -1719,6 +1719,74 @@ func (q *Queries) ServersInsertServerClientAssociation(ctx context.Context, arg 
 	return err
 }
 
+const serversInsertShadowOfficialEndpoint = `-- name: ServersInsertShadowOfficialEndpoint :exec
+INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, custom_domain_id, slug) VALUES
+  ($1::uuid, $2::uuid, $3::uuid, NULL, $4::text)
+`
+
+type ServersInsertShadowOfficialEndpointParams struct {
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+	McpServerID uuid.UUID
+	Slug        string
+}
+
+func (q *Queries) ServersInsertShadowOfficialEndpoint(ctx context.Context, arg ServersInsertShadowOfficialEndpointParams) error {
+	_, err := q.db.Exec(ctx, serversInsertShadowOfficialEndpoint,
+		arg.ID,
+		arg.ProjectID,
+		arg.McpServerID,
+		arg.Slug,
+	)
+	return err
+}
+
+const serversInsertShadowOfficialMCPServer = `-- name: ServersInsertShadowOfficialMCPServer :exec
+INSERT INTO mcp_servers (id, project_id, name, slug,
+                         remote_mcp_server_id, user_session_issuer_id,
+                         visibility) VALUES
+  ($1::uuid, $2::uuid, 'Support Tools', 'support-tools-official',
+   $3::uuid, $4::uuid, 'private')
+`
+
+type ServersInsertShadowOfficialMCPServerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	RemoteID  uuid.UUID
+	IssuerID  uuid.UUID
+}
+
+func (q *Queries) ServersInsertShadowOfficialMCPServer(ctx context.Context, arg ServersInsertShadowOfficialMCPServerParams) error {
+	_, err := q.db.Exec(ctx, serversInsertShadowOfficialMCPServer,
+		arg.ID,
+		arg.ProjectID,
+		arg.RemoteID,
+		arg.IssuerID,
+	)
+	return err
+}
+
+const serversInsertShadowOfficialRemoteMCPServer = `-- name: ServersInsertShadowOfficialRemoteMCPServer :exec
+INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
+  ($1::uuid, $2::uuid, 'Support Tools', 'support-tools-official',
+   'streamable-http', 'https://support-tools.example.com/mcp')
+`
+
+type ServersInsertShadowOfficialRemoteMCPServerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Support Tools: the Speakeasy-served version of the Customer Support server
+// that people also call directly (the Shadow MCP inventory seeds its URL).
+// It proxies the same URL, so the Shadow MCP page shows the two linked
+// automatically and direct calls are sent here. Reserved example hosts keep
+// it inert.
+func (q *Queries) ServersInsertShadowOfficialRemoteMCPServer(ctx context.Context, arg ServersInsertShadowOfficialRemoteMCPServerParams) error {
+	_, err := q.db.Exec(ctx, serversInsertShadowOfficialRemoteMCPServer, arg.ID, arg.ProjectID)
+	return err
+}
+
 const serversInsertSlackIdentityHeader = `-- name: ServersInsertSlackIdentityHeader :exec
 INSERT INTO remote_mcp_server_headers
   (id, remote_mcp_server_id, name, description, is_required, is_secret, value)

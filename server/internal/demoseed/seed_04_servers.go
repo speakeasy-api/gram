@@ -312,6 +312,9 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	if err := s.seedServersEMA(ctx); err != nil {
 		return err
 	}
+	if err := s.seedServersShadowOfficial(ctx); err != nil {
+		return err
+	}
 
 	if err := s.q.ServersInsertUserSessionClients(ctx, repo.ServersInsertUserSessionClientsParams{
 		LinearClientID:  s.det("usc-linear"),
@@ -841,6 +844,36 @@ func (s *seeder) seedServersEMAWiki(ctx context.Context) error {
 		RemoteSessionIssuerID: s.det("ema-idp"),
 	}); err != nil {
 		return fmt.Errorf("insert demo acme wiki provider order: %w", err)
+	}
+	return nil
+}
+
+// seedServersShadowOfficial: Support Tools proxies the URL of the Customer
+// Support server in the Shadow MCP inventory, so that Shadow MCP server is
+// linked to it automatically and its page shows the official version.
+func (s *seeder) seedServersShadowOfficial(ctx context.Context) error {
+	proj := s.projectID()
+	if err := s.q.ServersInsertShadowOfficialRemoteMCPServer(ctx, repo.ServersInsertShadowOfficialRemoteMCPServerParams{
+		ID:        s.det("remotemcp-shadow-official"),
+		ProjectID: proj,
+	}); err != nil {
+		return fmt.Errorf("insert demo shadow official remote mcp server: %w", err)
+	}
+	if err := s.q.ServersInsertShadowOfficialMCPServer(ctx, repo.ServersInsertShadowOfficialMCPServerParams{
+		ID:        s.det("mcpserver-shadow-official"),
+		ProjectID: proj,
+		RemoteID:  s.det("remotemcp-shadow-official"),
+		IssuerID:  s.det("issuer-workforce"),
+	}); err != nil {
+		return fmt.Errorf("insert demo shadow official mcp server: %w", err)
+	}
+	if err := s.q.ServersInsertShadowOfficialEndpoint(ctx, repo.ServersInsertShadowOfficialEndpointParams{
+		ID:          s.det("endpoint-shadow-official"),
+		ProjectID:   proj,
+		McpServerID: s.det("mcpserver-shadow-official"),
+		Slug:        s.spec.OrgSlug + "-support-tools-official",
+	}); err != nil {
+		return fmt.Errorf("insert demo shadow official endpoint: %w", err)
 	}
 	return nil
 }

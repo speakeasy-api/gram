@@ -145,8 +145,12 @@ type SetShadowMCPOfficialServerRequestBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The Shadow MCP server's URL.
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
-	// The MCP server to link as the official version. Omit it to remove the link.
+	// The MCP server to link as the official version. Omit it, with keep_shadow
+	// unset, to go back to the automatic link.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// Keep using the Shadow MCP server directly: no official server is linked, not
+	// even automatically. Cannot be combined with mcp_server_id.
+	KeepShadow *bool `form:"keep_shadow,omitempty" json:"keep_shadow,omitempty" xml:"keep_shadow,omitempty"`
 }
 
 // ResolveShadowMCPInventoryRequestRequestBody is the type of the "access"
@@ -585,6 +589,9 @@ type GetShadowMCPInventoryServerResponseBody struct {
 	// A project MCP server that proxies to the same upstream URL, offered as the
 	// server to link. Present only while no official server is linked.
 	SuggestedOfficialServer *ShadowMCPSuggestedOfficialServerResponseBody `form:"suggested_official_server,omitempty" json:"suggested_official_server,omitempty" xml:"suggested_official_server,omitempty"`
+	// True when an administrator chose to keep using the Shadow MCP server
+	// directly, so no official server is linked automatically.
+	OfficialServerDeclined *bool `form:"official_server_declined,omitempty" json:"official_server_declined,omitempty" xml:"official_server_declined,omitempty"`
 }
 
 // ListShadowMCPInventoryUsersResponseBody is the type of the "access" service
@@ -9846,6 +9853,9 @@ type ShadowMCPInventoryServerResponseBody struct {
 	// A project MCP server that proxies to the same upstream URL, offered as the
 	// server to link. Present only while no official server is linked.
 	SuggestedOfficialServer *ShadowMCPSuggestedOfficialServerResponseBody `form:"suggested_official_server,omitempty" json:"suggested_official_server,omitempty" xml:"suggested_official_server,omitempty"`
+	// True when an administrator chose to keep using the Shadow MCP server
+	// directly, so no official server is linked automatically.
+	OfficialServerDeclined *bool `form:"official_server_declined,omitempty" json:"official_server_declined,omitempty" xml:"official_server_declined,omitempty"`
 }
 
 // ShadowMCPAccessSummaryResponseBody is used to define fields on response body
@@ -9926,6 +9936,9 @@ type ShadowMCPOfficialServerResponseBody struct {
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The gateway that serves the official server, when url is a gateway's address.
 	GatewayName *string `form:"gateway_name,omitempty" json:"gateway_name,omitempty" xml:"gateway_name,omitempty"`
+	// True when the link was made automatically because the server proxies to the
+	// Shadow MCP server's URL; false when an administrator chose it.
+	Automatic *bool `form:"automatic,omitempty" json:"automatic,omitempty" xml:"automatic,omitempty"`
 }
 
 // ShadowMCPSuggestedOfficialServerResponseBody is used to define fields on
@@ -11004,18 +11017,19 @@ func NewListShadowMCPInventoryResponseBody(res *access.ListShadowMCPInventoryRes
 // "access" service.
 func NewGetShadowMCPInventoryServerResponseBody(res *access.ShadowMCPInventoryServer) *GetShadowMCPInventoryServerResponseBody {
 	body := &GetShadowMCPInventoryServerResponseBody{
-		CanonicalServerURL: res.CanonicalServerURL,
-		ServerSlug:         res.ServerSlug,
-		URLHost:            res.URLHost,
-		TargetKind:         res.TargetKind,
-		ServerName:         res.ServerName,
-		FirstSeen:          res.FirstSeen,
-		LastSeen:           res.LastSeen,
-		LastCalled:         res.LastCalled,
-		ObservedUseCount:   res.ObservedUseCount,
-		UserCount:          res.UserCount,
-		Access:             res.Access,
-		RequestCount:       res.RequestCount,
+		CanonicalServerURL:     res.CanonicalServerURL,
+		ServerSlug:             res.ServerSlug,
+		URLHost:                res.URLHost,
+		TargetKind:             res.TargetKind,
+		ServerName:             res.ServerName,
+		FirstSeen:              res.FirstSeen,
+		LastSeen:               res.LastSeen,
+		LastCalled:             res.LastCalled,
+		ObservedUseCount:       res.ObservedUseCount,
+		UserCount:              res.UserCount,
+		Access:                 res.Access,
+		RequestCount:           res.RequestCount,
+		OfficialServerDeclined: res.OfficialServerDeclined,
 	}
 	if res.TopUsers != nil {
 		body.TopUsers = make([]string, len(res.TopUsers))
@@ -18658,6 +18672,7 @@ func NewSetShadowMCPOfficialServerPayload(body *SetShadowMCPOfficialServerReques
 		ProjectID:   *body.ProjectID,
 		ServerURL:   *body.ServerURL,
 		McpServerID: body.McpServerID,
+		KeepShadow:  body.KeepShadow,
 	}
 	v.SessionToken = sessionToken
 

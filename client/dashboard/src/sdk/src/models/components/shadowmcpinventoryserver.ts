@@ -81,9 +81,13 @@ export type ShadowMCPInventoryServer = {
   latestRequest?: ShadowMCPInventoryRequestSummary | undefined;
   observedUseCount: number;
   /**
-   * The official, Speakeasy-served version of a Shadow MCP server, linked by an administrator.
+   * The official, Speakeasy-served version of a Shadow MCP server: a project MCP server that proxies to its URL, or one an administrator chose.
    */
   officialServer?: ShadowMCPOfficialServer | undefined;
+  /**
+   * True when an administrator chose to keep using the Shadow MCP server directly, so no official server is linked automatically.
+   */
+  officialServerDeclined?: boolean | undefined;
   requestCount: number;
   serverName?: string | undefined;
   serverSlug: string;
@@ -142,6 +146,7 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
     latest_request: z.optional(ShadowMCPInventoryRequestSummary$inboundSchema),
     observed_use_count: z.int(),
     official_server: z.optional(ShadowMCPOfficialServer$inboundSchema),
+    official_server_declined: z.optional(z.boolean()),
     request_count: z.int(),
     server_name: z.optional(z.string()),
     server_slug: z.string(),
@@ -166,6 +171,7 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
       "latest_request": "latestRequest",
       "observed_use_count": "observedUseCount",
       "official_server": "officialServer",
+      "official_server_declined": "officialServerDeclined",
       "request_count": "requestCount",
       "server_name": "serverName",
       "server_slug": "serverSlug",

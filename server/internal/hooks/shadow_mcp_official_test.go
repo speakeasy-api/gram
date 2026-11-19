@@ -29,8 +29,9 @@ type officialServerSeed struct {
 	// EndpointSlug gives the server its own address; empty leaves it
 	// without one.
 	EndpointSlug string
-	// Unlinked leaves the server unlinked from the Shadow MCP server at its
-	// own URL; by default an administrator has linked it.
+	// Unlinked stores no administrator's choice for the Shadow MCP server at
+	// the server's own URL, which leaves it linked automatically; by default
+	// an administrator has chosen it.
 	Unlinked bool
 
 	// NoSlug creates the server without a slug, like servers made before
@@ -368,7 +369,7 @@ func removeOfficialServerChoice(t *testing.T, ctx context.Context, conn *pgxpool
 	require.Equal(t, int64(1), removed)
 }
 
-func TestEnforceShadowMCPToolAccess_RemovedLinkFollowsOrdinaryRules(t *testing.T) {
+func TestEnforceShadowMCPToolAccess_KeptShadowFollowsOrdinaryRules(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
@@ -380,9 +381,10 @@ func TestEnforceShadowMCPToolAccess_RemovedLinkFollowsOrdinaryRules(t *testing.T
 	testingID := seedOfficialServer(t, ctx, ti.conn, *authCtx.ProjectID, officialServerSeed{
 		Name: "Testing", RemoteURL: serverURL, Visibility: "", EndpointSlug: "testing-" + uuid.NewString(), Unlinked: false,
 	})
-	// The link is added, then removed: removal soft-deletes it.
+	// The link is chosen, then the administrator keeps the server in direct
+	// use, for example while the official version is tested.
 	setOfficialServerChoice(t, ctx, ti.conn, *authCtx.ProjectID, serverURL, uuid.NullUUID{UUID: testingID, Valid: true})
-	removeOfficialServerChoice(t, ctx, ti.conn, *authCtx.ProjectID, serverURL)
+	setOfficialServerChoice(t, ctx, ti.conn, *authCtx.ProjectID, serverURL, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 
 	// Allow-by-default: the direct connection works again.
 	detail, denied := ti.service.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID,
@@ -400,7 +402,7 @@ func TestEnforceShadowMCPToolAccess_RemovedLinkFollowsOrdinaryRules(t *testing.T
 	require.NotContains(t, detail, "official version")
 
 	// The message an agent reads does not send it to the official server
-	// either: without the link, that server is not the answer.
+	// either: while direct use is kept, that server is not the answer.
 	reason := ti.service.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
 		OrganizationID:  authCtx.ActiveOrganizationID,
 		ProjectID:       authCtx.ProjectID.String(),
@@ -478,7 +480,7 @@ func TestRenderShadowMCPUserBlockReason_KeepsRequestLinkWithoutOfficialServer(t 
 	require.NotContains(t, reason, "official version")
 }
 
-func TestEnforceShadowMCPToolAccess_ServerAtSameURLIsNotOfficialUntilLinked(t *testing.T) {
+func TestEnforceShadowMCPToolAccess_ServerAtSameURLIsLinkedAutomatically(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
@@ -486,21 +488,66 @@ func TestEnforceShadowMCPToolAccess_ServerAtSameURLIsNotOfficialUntilLinked(t *t
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	// The project happens to serve the same upstream, but nobody linked it.
+	// The project serves the same upstream, and nobody chose anything.
 	serverURL := "https://coincidence.example.com/mcp"
-	serverID := seedOfficialServer(t, ctx, ti.conn, *authCtx.ProjectID, officialServerSeed{
+	seedOfficialServer(t, ctx, ti.conn, *authCtx.ProjectID, officialServerSeed{
 		Name: "Coincidence", RemoteURL: serverURL, Visibility: "", EndpointSlug: "coincidence-" + uuid.NewString(), Unlinked: true,
 	})
 	evidence := shadowmcp.AccessEvidence{FullURL: serverURL, URLHost: "", ServerIdentity: "coincidence"}
-	detail, denied := ti.service.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID,
-		allowAllTestPolicy(uuid.NewString()), "search", evidence)
+	enforce := func() (string, bool) {
+		return ti.service.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID,
+			allowAllTestPolicy(uuid.NewString()), "search", evidence)
+	}
+
+	detail, denied := enforce()
+	require.True(t, denied, "a server that proxies to the URL is its official version by default")
+	require.Contains(t, detail, `official version "Coincidence", linked automatically`)
+
+	// Keeping the shadow version turns the automatic link off.
+	setOfficialServerChoice(t, ctx, ti.conn, *authCtx.ProjectID, serverURL, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	detail, denied = enforce()
 	require.False(t, denied)
 	require.Empty(t, detail)
 
-	// Linking it makes it official.
-	setOfficialServerChoice(t, ctx, ti.conn, *authCtx.ProjectID, serverURL, uuid.NullUUID{UUID: serverID, Valid: true})
-	detail, denied = ti.service.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID,
-		allowAllTestPolicy(uuid.NewString()), "search", evidence)
+	// Removing that choice brings the automatic link back.
+	removeOfficialServerChoice(t, ctx, ti.conn, *authCtx.ProjectID, serverURL)
+	detail, denied = enforce()
 	require.True(t, denied)
-	require.Contains(t, detail, `official version "Coincidence"`)
+	require.Contains(t, detail, "linked automatically")
+}
+
+func TestEnforceShadowMCPToolAccess_AutomaticLinkPicksOldestServerUntilOneIsChosen(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	// Two project servers proxy to the same upstream.
+	serverURL := "https://shared.example.com/mcp"
+	seedOfficialServer(t, ctx, ti.conn, *authCtx.ProjectID, officialServerSeed{
+		Name: "First", RemoteURL: serverURL, Visibility: "", EndpointSlug: "first-" + uuid.NewString(), Unlinked: true,
+	})
+	secondID := seedOfficialServer(t, ctx, ti.conn, *authCtx.ProjectID, officialServerSeed{
+		Name: "Second", RemoteURL: serverURL + "/", Visibility: "", EndpointSlug: "second-" + uuid.NewString(), Unlinked: true,
+	})
+	evidence := shadowmcp.AccessEvidence{FullURL: serverURL, URLHost: "", ServerIdentity: "shared"}
+	enforce := func() string {
+		detail, denied := ti.service.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID,
+			allowAllTestPolicy(uuid.NewString()), "search", evidence)
+		require.True(t, denied)
+		return detail
+	}
+
+	require.Contains(t, enforce(), `official version "First", linked automatically`)
+
+	// An administrator picks the other one.
+	setOfficialServerChoice(t, ctx, ti.conn, *authCtx.ProjectID, serverURL, uuid.NullUUID{UUID: secondID, Valid: true})
+	require.Contains(t, enforce(), `official version "Second", chosen by an administrator`)
+
+	// The chosen server is deleted: the automatic link takes over again.
+	_, err := mcpserversrepo.New(ti.conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: secondID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.Contains(t, enforce(), `official version "First", linked automatically`)
 }

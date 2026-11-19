@@ -53,7 +53,7 @@ export type SetShadowMCPOfficialServerMutationError =
  * setShadowMCPOfficialServer access
  *
  * @remarks
- * Link one project-scoped Shadow MCP server to its official version, or remove the link. While a link exists, direct connections are blocked wherever a Shadow MCP policy applies and agents are pointed at the linked server. With mcp_server_id the link is added (or restored, when it was removed before) or pointed at that server; omitting mcp_server_id removes the link. Each add, change and removal is recorded in the audit log. Requires an authenticated session authorized for org:admin on the active organization.
+ * Choose the official version of one project-scoped Shadow MCP server. By default a project MCP server that proxies to the Shadow MCP server's URL is linked automatically (the oldest, when several do). While a link exists, direct connections are blocked wherever a Shadow MCP policy applies and agents are pointed at the linked server. With mcp_server_id that server is linked instead; with keep_shadow no server is linked, so direct use follows the ordinary Shadow MCP rules; with neither, the automatic link applies again. Each change is recorded in the audit log. Requires an authenticated session authorized for org:admin on the active organization.
  */
 export function useSetShadowMCPOfficialServerMutation(
   options?: MutationHookOptions<

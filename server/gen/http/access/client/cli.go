@@ -1002,7 +1002,7 @@ func BuildSetShadowMCPOfficialServerPayload(accessSetShadowMCPOfficialServerBody
 	{
 		err = json.Unmarshal([]byte(accessSetShadowMCPOfficialServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"keep_shadow\": false,\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", body.ServerURL, goa.FormatURI))
@@ -1023,6 +1023,7 @@ func BuildSetShadowMCPOfficialServerPayload(accessSetShadowMCPOfficialServerBody
 		ProjectID:   body.ProjectID,
 		ServerURL:   body.ServerURL,
 		McpServerID: body.McpServerID,
+		KeepShadow:  body.KeepShadow,
 	}
 	v.SessionToken = sessionToken
 

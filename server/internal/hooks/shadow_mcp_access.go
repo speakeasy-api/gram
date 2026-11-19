@@ -44,8 +44,9 @@ func (s *Service) enforceShadowMCPToolAccess(
 			attr.SlogProjectID(projectID),
 			attr.SlogRiskPolicyID(policy.ID),
 			attr.SlogValueAny(map[string]any{
-				"official_mcp_server_id": official.MCPServerID.String(),
-				"tool_name":              toolName,
+				"official_mcp_server_id":  official.MCPServerID.String(),
+				"official_link_automatic": official.Automatic,
+				"tool_name":               toolName,
 			}),
 		)
 		return shadowMCPOfficialServerDetail(official, evidence.FullURL), true
@@ -93,9 +94,15 @@ func (s *Service) enforceShadowMCPToolAccess(
 }
 
 // shadowMCPOfficialServerDetail is the audit reason for a direct call blocked
-// because the project serves an official version of the server.
+// because the project serves an official version of the server. It says
+// whether the link was automatic or an administrator's choice, so the audit
+// trail shows why the call was redirected.
 func shadowMCPOfficialServerDetail(official shadowmcp.OfficialServer, fullURL string) string {
-	return fmt.Sprintf("MCP server has an official version %q; direct use is blocked (URL: %s)", official.Name, fullURL)
+	how := "chosen by an administrator"
+	if official.Automatic {
+		how = "linked automatically because it proxies to this URL"
+	}
+	return fmt.Sprintf("MCP server has an official version %q, %s; direct use is blocked (URL: %s)", official.Name, how, fullURL)
 }
 
 func (s *Service) canBypassPolicy(

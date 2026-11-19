@@ -1020,11 +1020,11 @@ export function staticActionPhrase(action: AuditAction): string {
       return "deleted an evaluation review for";
 
     case "shadow_mcp_official_server:create":
-      return "linked an official server to Shadow MCP server";
+      return "chose the official server of Shadow MCP server";
     case "shadow_mcp_official_server:update":
-      return "changed the official server linked to Shadow MCP server";
+      return "changed the official server choice of Shadow MCP server";
     case "shadow_mcp_official_server:delete":
-      return "removed the official server link of Shadow MCP server";
+      return "restored the automatic official server of Shadow MCP server";
     // Entries written before links lost their on/off switch: one action
     // covered every change, so the phrase names the link.
     case "shadow_mcp_official_server:set":

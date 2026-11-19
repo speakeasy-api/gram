@@ -257,8 +257,9 @@ func (s *Service) ReadShadowMCPInventory(ctx context.Context, input ShadowMCPInv
 }
 
 // attachShadowMCPOfficialServers marks the rows linked to an official
-// server, and offers a project server that proxies to the same URL to the
-// rows without a link. Access and AccessSummary stay the policy verdict; the
+// server, automatically or by an administrator's choice, and offers a
+// project server that proxies to the same URL to the rows an administrator
+// keeps in direct use. Access and AccessSummary stay the policy verdict; the
 // dashboard reads OfficialServer to show an active link as onboarded, since
 // the link blocks direct calls whatever the policy allows. A failed lookup
 // leaves the rows unmarked rather than failing the inventory: the page still
@@ -275,7 +276,7 @@ func (s *Service) attachShadowMCPOfficialServers(ctx context.Context, organizati
 		return
 	}
 
-	official, err := shadowmcp.OfficialServers(ctx, s.db, organizationID, projectID, s.serverURL)
+	links, err := shadowmcp.LoadOfficialServerLinks(ctx, s.db, organizationID, projectID, s.serverURL)
 	if err != nil {
 		s.logger.WarnContext(ctx, "resolve official servers for shadow mcp inventory",
 			attr.SlogError(err),
@@ -284,37 +285,36 @@ func (s *Service) attachShadowMCPOfficialServers(ctx context.Context, organizati
 		)
 		return
 	}
-	suggested, err := shadowmcp.SuggestedOfficialServers(ctx, s.db, projectID)
-	if err != nil {
-		s.logger.WarnContext(ctx, "suggest official servers for shadow mcp inventory",
-			attr.SlogError(err),
-			attr.SlogOrganizationID(organizationID),
-			attr.SlogProjectID(projectID.String()),
-		)
-		suggested = nil
-	}
 	for _, server := range servers {
 		if server == nil || conv.PtrValOr(server.TargetKind, shadowMCPTargetKindServerURL) != shadowMCPTargetKindServerURL {
 			continue
 		}
-		match, ok := shadowmcp.OfficialServerFor(official, server.CanonicalServerURL)
-		if !ok {
-			key, keyOK := shadowmcp.OfficialServerKey(server.CanonicalServerURL)
-			if suggestion, found := suggested[key]; keyOK && found {
-				server.SuggestedOfficialServer = &gen.ShadowMCPSuggestedOfficialServer{
-					McpServerID: suggestion.MCPServerID.String(),
-					Name:        suggestion.Name,
-					Slug:        conv.PtrEmpty(suggestion.Slug),
-				}
+		match, ok := shadowmcp.OfficialServerFor(links.Linked, server.CanonicalServerURL)
+		if ok {
+			server.OfficialServer = &gen.ShadowMCPOfficialServer{
+				McpServerID: match.MCPServerID.String(),
+				Name:        match.Name,
+				Slug:        conv.PtrEmpty(match.Slug),
+				URL:         conv.PtrEmpty(match.URL),
+				GatewayName: conv.PtrEmpty(match.GatewayName),
+				Automatic:   &match.Automatic,
 			}
 			continue
 		}
-		server.OfficialServer = &gen.ShadowMCPOfficialServer{
-			McpServerID: match.MCPServerID.String(),
-			Name:        match.Name,
-			Slug:        conv.PtrEmpty(match.Slug),
-			URL:         conv.PtrEmpty(match.URL),
-			GatewayName: conv.PtrEmpty(match.GatewayName),
+		key, keyOK := shadowmcp.OfficialServerKey(server.CanonicalServerURL)
+		if !keyOK {
+			continue
+		}
+		if links.Declined[key] {
+			declined := true
+			server.OfficialServerDeclined = &declined
+		}
+		if suggestion, found := links.Suggested[key]; found {
+			server.SuggestedOfficialServer = &gen.ShadowMCPSuggestedOfficialServer{
+				McpServerID: suggestion.MCPServerID.String(),
+				Name:        suggestion.Name,
+				Slug:        conv.PtrEmpty(suggestion.Slug),
+			}
 		}
 	}
 }
@@ -1731,6 +1731,7 @@ func buildShadowMCPInventoryServer(row telemetryrepo.ShadowMCPInventoryURLRow, u
 		BlockedPolicyIds:        rowState.BlockedPolicyIDs,
 		OfficialServer:          nil,
 		SuggestedOfficialServer: nil,
+		OfficialServerDeclined:  nil,
 	}
 }
 

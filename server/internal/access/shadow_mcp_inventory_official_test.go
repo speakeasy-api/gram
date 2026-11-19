@@ -21,7 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-func TestService_ReadShadowMCPInventoryTarget_SuggestsThenReportsLinkedServer(t *testing.T) {
+func TestService_ReadShadowMCPInventoryTarget_LinksAutomaticallyThenHonorsOverrides(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -48,6 +48,9 @@ func TestService_ReadShadowMCPInventoryTarget_SuggestsThenReportsLinkedServer(t 
 		Slug:            endpointSlug,
 	})
 	require.NoError(t, err)
+	// A newer server proxies to the same URL; the oldest is the default.
+	seedAccessOfficialServer(t, ctx, ti, *authCtx.ProjectID, "Tracker (copy)", "https://github.example.com/mcp", "private")
+	other := seedAccessOfficialServer(t, ctx, ti, *authCtx.ProjectID, "Company Tools", "https://internal.example.com/mcp", "private")
 
 	read := func() *gen.ShadowMCPInventoryServer {
 		server, err := ti.service.ReadShadowMCPInventoryTarget(ctx, ShadowMCPInventoryTargetInput{
@@ -59,25 +62,28 @@ func TestService_ReadShadowMCPInventoryTarget_SuggestsThenReportsLinkedServer(t 
 		require.NoError(t, err)
 		return server
 	}
+	set := func(mcpServerID *string, keepShadow *bool) {
+		t.Helper()
+		require.NoError(t, ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
+			SessionToken: nil,
+			ProjectID:    authCtx.ProjectID.String(),
+			ServerURL:    "https://github.example.com/mcp",
+			McpServerID:  mcpServerID,
+			KeepShadow:   keepShadow,
+		}))
+	}
+	requireAutomatic := func(server *gen.ShadowMCPInventoryServer) {
+		t.Helper()
+		require.NotNil(t, server.OfficialServer)
+		require.Equal(t, official.ID.String(), server.OfficialServer.McpServerID)
+		require.True(t, conv.PtrValOr(server.OfficialServer.Automatic, false))
+		require.Nil(t, server.SuggestedOfficialServer)
+		require.Nil(t, server.OfficialServerDeclined)
+	}
 
-	// A server that proxies to the same URL is only offered until linked.
+	// With no choice, the server that proxies to the URL is linked.
 	server := read()
-	require.Nil(t, server.OfficialServer)
-	require.NotNil(t, server.SuggestedOfficialServer)
-	require.Equal(t, official.ID.String(), server.SuggestedOfficialServer.McpServerID)
-	require.Equal(t, "Tracker (official)", server.SuggestedOfficialServer.Name)
-
-	require.NoError(t, ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
-		SessionToken: nil,
-		ProjectID:    authCtx.ProjectID.String(),
-		ServerURL:    "https://github.example.com/mcp",
-		McpServerID:  new(official.ID.String()),
-	}))
-
-	server = read()
-	require.Nil(t, server.SuggestedOfficialServer)
-	require.NotNil(t, server.OfficialServer)
-	require.Equal(t, official.ID.String(), server.OfficialServer.McpServerID)
+	requireAutomatic(server)
 	require.Equal(t, "Tracker (official)", server.OfficialServer.Name)
 	require.Equal(t, official.Slug.String, conv.PtrValOr(server.OfficialServer.Slug, ""))
 	require.Equal(t, "https://app.example.com/mcp/"+endpointSlug, conv.PtrValOr(server.OfficialServer.URL, ""))
@@ -92,8 +98,61 @@ func TestService_ReadShadowMCPInventoryTarget_SuggestsThenReportsLinkedServer(t 
 	})
 	require.NoError(t, err)
 	require.Len(t, list.Servers, 1)
-	require.NotNil(t, list.Servers[0].OfficialServer)
-	require.Equal(t, official.ID.String(), list.Servers[0].OfficialServer.McpServerID)
+	requireAutomatic(list.Servers[0])
+
+	// Keep the shadow version: nothing is linked, the server is offered.
+	set(nil, new(true))
+	server = read()
+	require.Nil(t, server.OfficialServer)
+	require.True(t, conv.PtrValOr(server.OfficialServerDeclined, false))
+	require.NotNil(t, server.SuggestedOfficialServer)
+	require.Equal(t, official.ID.String(), server.SuggestedOfficialServer.McpServerID)
+	created, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionShadowMCPOfficialServerCreate)
+	require.NoError(t, err)
+	after, err := audittest.DecodeAuditData(created.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, true, after["keep_shadow"])
+	require.Empty(t, after["mcp_server_id"])
+
+	// Choose another server instead.
+	set(new(other.ID.String()), nil)
+	server = read()
+	require.NotNil(t, server.OfficialServer)
+	require.Equal(t, other.ID.String(), server.OfficialServer.McpServerID)
+	require.False(t, conv.PtrValOr(server.OfficialServer.Automatic, true))
+	updated, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionShadowMCPOfficialServerUpdate)
+	require.NoError(t, err)
+	before, err := audittest.DecodeAuditData(updated.BeforeSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, true, before["keep_shadow"])
+	after, err = audittest.DecodeAuditData(updated.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, false, after["keep_shadow"])
+	require.Equal(t, other.ID.String(), after["mcp_server_id"])
+
+	// Neither: the override is removed and the automatic link is back.
+	set(nil, nil)
+	requireAutomatic(read())
+	deleted, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionShadowMCPOfficialServerDelete)
+	require.NoError(t, err)
+	require.Equal(t, created.SubjectID, deleted.SubjectID)
+}
+
+func TestService_SetShadowMCPOfficialServer_KeepShadowRejectsAServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	serverID := seedAccessOfficialServer(t, ctx, ti, *authCtx.ProjectID, "Tracker", "https://github.example.com/mcp", "private").ID
+
+	err := ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
+		SessionToken: nil,
+		ProjectID:    authCtx.ProjectID.String(),
+		ServerURL:    "https://github.example.com/mcp",
+		McpServerID:  new(serverID.String()),
+		KeepShadow:   new(true),
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 func TestService_ReadShadowMCPInventoryTarget_NoOfficialServerByDefault(t *testing.T) {
@@ -178,6 +237,7 @@ func TestService_SetShadowMCPOfficialServer_AddChangeRemoveAndAddBack(t *testing
 			ProjectID:    authCtx.ProjectID.String(),
 			ServerURL:    serverURL,
 			McpServerID:  mcpServerID,
+			KeepShadow:   nil,
 		}))
 	}
 	count := func(action audit.Action) int64 {
@@ -276,6 +336,7 @@ func TestService_SetShadowMCPOfficialServer_ConcurrentFirstLinksAuditReplacedLin
 			ProjectID:    authCtx.ProjectID.String(),
 			ServerURL:    key,
 			McpServerID:  new(second.ID.String()),
+			KeepShadow:   nil,
 		})
 	}()
 	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(holder), 1)
@@ -312,6 +373,7 @@ func TestService_SetShadowMCPOfficialServer_RejectsDisabledOrForeignServer(t *te
 		ProjectID:    authCtx.ProjectID.String(),
 		ServerURL:    "https://github.example.com/mcp",
 		McpServerID:  new(disabledID.String()),
+		KeepShadow:   nil,
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 
@@ -324,6 +386,7 @@ func TestService_SetShadowMCPOfficialServer_RejectsDisabledOrForeignServer(t *te
 		ProjectID:    authCtx.ProjectID.String(),
 		ServerURL:    "https://github.example.com/mcp",
 		McpServerID:  new(foreignID.String()),
+		KeepShadow:   nil,
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
 
@@ -332,6 +395,7 @@ func TestService_SetShadowMCPOfficialServer_RejectsDisabledOrForeignServer(t *te
 		ProjectID:    authCtx.ProjectID.String(),
 		ServerURL:    "https://github.example.com/mcp",
 		McpServerID:  new(uuid.NewString()),
+		KeepShadow:   nil,
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
 }

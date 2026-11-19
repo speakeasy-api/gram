@@ -10666,18 +10666,19 @@ func marshalAccessListRoleGrantToListRoleGrantResponseBody(v *access.ListRoleGra
 // type *access.ShadowMCPInventoryServer.
 func marshalAccessShadowMCPInventoryServerToShadowMCPInventoryServerResponseBody(v *access.ShadowMCPInventoryServer) *ShadowMCPInventoryServerResponseBody {
 	res := &ShadowMCPInventoryServerResponseBody{
-		CanonicalServerURL: v.CanonicalServerURL,
-		ServerSlug:         v.ServerSlug,
-		URLHost:            v.URLHost,
-		TargetKind:         v.TargetKind,
-		ServerName:         v.ServerName,
-		FirstSeen:          v.FirstSeen,
-		LastSeen:           v.LastSeen,
-		LastCalled:         v.LastCalled,
-		ObservedUseCount:   v.ObservedUseCount,
-		UserCount:          v.UserCount,
-		Access:             v.Access,
-		RequestCount:       v.RequestCount,
+		CanonicalServerURL:     v.CanonicalServerURL,
+		ServerSlug:             v.ServerSlug,
+		URLHost:                v.URLHost,
+		TargetKind:             v.TargetKind,
+		ServerName:             v.ServerName,
+		FirstSeen:              v.FirstSeen,
+		LastSeen:               v.LastSeen,
+		LastCalled:             v.LastCalled,
+		ObservedUseCount:       v.ObservedUseCount,
+		UserCount:              v.UserCount,
+		Access:                 v.Access,
+		RequestCount:           v.RequestCount,
+		OfficialServerDeclined: v.OfficialServerDeclined,
 	}
 	if v.TopUsers != nil {
 		res.TopUsers = make([]string, len(v.TopUsers))
@@ -10790,6 +10791,7 @@ func marshalAccessShadowMCPOfficialServerToShadowMCPOfficialServerResponseBody(v
 		Slug:        v.Slug,
 		URL:         v.URL,
 		GatewayName: v.GatewayName,
+		Automatic:   v.Automatic,
 	}
 
 	return res
