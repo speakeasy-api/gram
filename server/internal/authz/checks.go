@@ -112,6 +112,20 @@ func RequiredCheckDimensions(resourceKind string) []string {
 	return slices.Clone(requiredCheckDimensions[resourceKind])
 }
 
+// validateCheckDimensions rejects dimension values no concrete request can
+// carry: an empty string, the wildcard and the represented-user marker.
+func validateCheckDimensions(c Check) error {
+	for key, value := range c.Dimensions {
+		switch value {
+		case "":
+			return invalidCheckReason(c.Scope, c.ResourceID, "dimension "+key+" is empty")
+		case WildcardResource, SelectorValueRepresentedUser:
+			return invalidCheckReason(c.Scope, c.ResourceID, "dimension "+key+" must be concrete")
+		}
+	}
+	return nil
+}
+
 // validateRequiredDimensions rejects a check that omits, or wildcards, a
 // dimension its resource kind requires, so it fails closed instead of matching
 // a grant bounded on that dimension.

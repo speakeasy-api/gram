@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -488,6 +490,9 @@ type grantCheckEvaluation struct {
 }
 
 func evaluateGrantCheck(grants []Grant, check Check) (grantCheckEvaluation, error) {
+	if check.probe {
+		return evaluateProbe(grants, check)
+	}
 	if personalCheckUnbound(check) {
 		return grantCheckEvaluation{Grant: nil, Check: nil, Denied: false}, nil
 	}
@@ -593,4 +598,80 @@ func roleGrantsForScopes(scopes []Scope) []*RoleGrant {
 		})
 	}
 	return grants
+}
+
+// probeValue stands in for a value a probe leaves open where the grant it is
+// tried against is unbounded too. No grant or block names it, so it matches
+// only wildcard and omitted constraints.
+const probeValue = "$probe"
+
+// evaluateProbe answers a probe: could the caller act on some resource
+// matching it. Each allow grant the probe could use names a concrete
+// resource, with the probe's own values where it gives them and the grant's
+// otherwise; the probe is allowed when one of those concrete checks is. So a
+// block hides a probe only when it covers everything such a grant reaches.
+func evaluateProbe(grants []Grant, probe Check) (grantCheckEvaluation, error) {
+	for _, grant := range grants {
+		witness, ok := probeWitness(grant, probe)
+		if !ok {
+			continue
+		}
+		evaluation, err := evaluateGrantCheck(grants, witness)
+		if err != nil {
+			return grantCheckEvaluation{}, err
+		}
+		if evaluation.Grant != nil && !evaluation.Denied {
+			return evaluation, nil
+		}
+	}
+	return grantCheckEvaluation{Grant: nil, Check: nil, Denied: false}, nil
+}
+
+// probeWitness returns the concrete check grant would be tried with, or false
+// when grant cannot satisfy probe: its scope does not imply the probe's, or it
+// names a different value for something the probe names.
+func probeWitness(grant Grant, probe Check) (Check, bool) {
+	if grant.Scope != ScopeRoot && !slices.Contains(ScopeImplicationClosure(grant.Scope), probe.Scope) {
+		return Check{}, false //nolint:exhaustruct // Unused when false.
+	}
+	pick := func(probeValueGiven, grantValue string) (string, bool) {
+		switch {
+		case probeValueGiven != "" && grantValue != "" && grantValue != WildcardResource && grantValue != probeValueGiven:
+			return "", false
+		case probeValueGiven != "":
+			return probeValueGiven, true
+		case grantValue != "" && grantValue != WildcardResource && !strings.HasPrefix(grantValue, "$"):
+			return grantValue, true
+		default:
+			return probeValue, true
+		}
+	}
+	witness := probe
+	witness.probe = false
+	resourceID, ok := pick(probe.ResourceID, grant.Selector.ResourceID())
+	if !ok {
+		return Check{}, false //nolint:exhaustruct // Unused when false.
+	}
+	witness.ResourceID = resourceID
+	dimensions := maps.Clone(probe.Dimensions)
+	if dimensions == nil {
+		dimensions = map[string]string{}
+	}
+	for key, value := range grant.Selector {
+		if key == SelectorKeyResourceKind || key == SelectorKeyResourceID {
+			continue
+		}
+		picked, ok := pick(probe.Dimensions[key], value)
+		if !ok {
+			return Check{}, false //nolint:exhaustruct // Unused when false.
+		}
+		dimensions[key] = picked
+	}
+	for _, key := range requiredCheckDimensions[probe.resourceKind()] {
+		if dimensions[key] == "" {
+			dimensions[key] = probeValue
+		}
+	}
+	witness.Dimensions = dimensions
+	return witness, true
 }
