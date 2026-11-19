@@ -75,7 +75,7 @@ func TestUpsertAiScanTargetUnlinksAProductReference(t *testing.T) {
 	_, isBuiltin := aitargets.DefaultByID(aivendors.NewSnapshot(aivendors.Products()), "claude")
 	require.False(t, isBuiltin)
 	q := repo.New(ti.conn)
-	_, err := q.SetAIScanTargetStatus(ctx, repo.SetAIScanTargetStatusParams{
+	linked, err := q.SetAIScanTargetStatus(ctx, repo.SetAIScanTargetStatusParams{
 		OrganizationID: ti.orgID,
 		ID:             "claude",
 		AiProductID:    conv.ToPGText("claude"),
@@ -83,6 +83,7 @@ func TestUpsertAiScanTargetUnlinksAProductReference(t *testing.T) {
 		Rationale:      conv.ToPGTextEmpty(""),
 	})
 	require.NoError(t, err)
+	require.Equal(t, conv.ToPGText("claude"), linked.AiProductID)
 
 	payload := chatgptDesktopPayload()
 	payload.ID = "claude"

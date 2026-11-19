@@ -40,16 +40,17 @@ Catalog rows must only ever be soft-deleted: the next run reinserts a
 hard-deleted seed row.
 
 Catalog inserts commit in one transaction and the decision backfill runs in a
-second, so a failed backfill never leaves the catalog empty. Each run logs the
-seed version and the counts inserted and linked.
+second, so a failed backfill never leaves the catalog empty. Each successful
+run logs the seed version and the counts inserted and linked; a failed run
+surfaces through the startup seed activity's error.
 
 The seed fills only missing references on decision-only rows for the frozen
-scan library. It preserves definitions, existing references, decisions,
-rationales and timestamps. Historical references may name soft-deleted products;
-linking them preserves decision history without restoring the product or its
-admission rules. Live catalog readers exclude soft-deleted products. Future
-built-in decision writes set the reference directly; before the product exists
-they return a retryable unavailable error.
+scan library, and only to live products. It preserves definitions, existing
+references, decisions, rationales and timestamps. A reference to a product that
+is soft-deleted later stays as decision history; live catalog readers exclude
+soft-deleted products. Future built-in decision writes set the reference
+directly; while the product is missing or soft-deleted they return a retryable
+unavailable error.
 
 After all previous-version API replicas have stopped during the initial rolling
 deployment, run the deployed binary with its configured database URL and site

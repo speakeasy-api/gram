@@ -147,7 +147,7 @@ func (q *Queries) DeviceAgentStateReportExists(ctx context.Context, arg DeviceAg
 
 const getAIScanTargetCatalogState = `-- name: GetAIScanTargetCatalogState :one
 SELECT
-  EXISTS (SELECT 1 FROM ai_products p WHERE p.id = $1) AS product_exists,
+  EXISTS (SELECT 1 FROM ai_products p WHERE p.id = $1 AND p.deleted IS FALSE) AS product_exists,
   EXISTS (
     SELECT 1 FROM ai_scan_targets t
     WHERE t.organization_id = $2 AND t.id = $1

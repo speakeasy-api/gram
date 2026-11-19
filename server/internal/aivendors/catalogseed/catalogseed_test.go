@@ -245,6 +245,35 @@ func TestApplyCommitsCatalogWhenBackfillFails(t *testing.T) {
 	products, err := repo.New(db).ListProducts(ctx)
 	require.NoError(t, err)
 	require.Len(t, products, 53)
+	documents, err := repo.New(db).ListDocuments(ctx)
+	require.NoError(t, err)
+	require.Len(t, documents, 26)
+}
+
+func TestBackfillSkipsDeletedProduct(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	orgID := uuid.NewString()
+	_, err = orgrepo.New(db).CreateOrganizationMetadataWithRequests(ctx, orgrepo.CreateOrganizationMetadataWithRequestsParams{
+		ID: orgID, Name: "Example", Slug: "example",
+	})
+	require.NoError(t, err)
+	_, err = agentrepo.New(db).SetAIScanTargetStatus(ctx, agentrepo.SetAIScanTargetStatusParams{
+		OrganizationID: orgID, ID: "claude-code", Status: "blocked",
+	})
+	require.NoError(t, err)
+	require.NoError(t, EnsureCatalog(ctx, db))
+	require.NoError(t, repo.New(db).EditProductFixture(ctx, repo.EditProductFixtureParams{
+		ID: "claude-code", DisplayName: "Claude Code", Family: conv.ToPGText("claude"),
+		DeletedAt: pgtype.Timestamptz{Time: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), Valid: true},
+	}))
+	require.NoError(t, Apply(ctx, testenv.NewLogger(t), db))
+	rows, err := agentrepo.New(db).ListAIScanTargets(ctx, orgID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.False(t, rows[0].AiProductID.Valid, "a soft-deleted product is no longer in the catalog")
 }
 
 func TestApplyPreservesExistingDocumentURL(t *testing.T) {

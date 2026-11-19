@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
@@ -14,6 +15,7 @@ import (
 	accessserver "github.com/speakeasy-api/gram/server/gen/http/access/server"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
+	catalogrepo "github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -305,6 +307,26 @@ func TestService_SetAIToolDecision_WaitsForCatalog(t *testing.T) {
 	encode := accessserver.EncodeSetAIToolDecisionError(goahttp.ResponseEncoder, nil)
 	require.NoError(t, encode(ctx, response, shareableErr.AsGoa(ctx)))
 	require.Equal(t, http.StatusServiceUnavailable, response.Code)
+	rows, err := agentrepo.New(ti.conn).ListAIScanTargets(ctx, orgID)
+	require.NoError(t, err)
+	require.Empty(t, rows)
+}
+
+func TestService_SetAIToolDecision_WaitsForDeletedProduct(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAccessService(t)
+	ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
+	require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
+	require.NoError(t, catalogrepo.New(ti.conn).EditProductFixture(ctx, catalogrepo.EditProductFixtureParams{
+		ID: "claude-code", DisplayName: "Claude Code", Family: conv.ToPGText("claude"),
+		DeletedAt: pgtype.Timestamptz{Time: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), Valid: true},
+	}))
+	_, err := ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{
+		TargetID: "claude-code", Decision: "blocked",
+	})
+	var shareableErr *oops.ShareableError
+	require.ErrorAs(t, err, &shareableErr)
+	require.Equal(t, oops.CodeUnavailable, shareableErr.Code)
 	rows, err := agentrepo.New(ti.conn).ListAIScanTargets(ctx, orgID)
 	require.NoError(t, err)
 	require.Empty(t, rows)
