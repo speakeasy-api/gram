@@ -110,12 +110,11 @@ func defaultAIToolBlockReads() aiToolBlockReads {
 // it allows. Once that query says a block IS in force, a failure to load the
 // catalog means the answer is unknown rather than absent, and the request is
 // refused as retryable instead of quietly bypassing the control.
-func (s *Service) checkAIToolGatewayBlock(ctx context.Context, logger *slog.Logger, organizationID string, clientID string) error {
+func (s *Service) checkAIToolGatewayBlock(ctx context.Context, logger *slog.Logger, snapshot *aivendors.Snapshot, organizationID string, clientID string) error {
 	if organizationID == "" || clientID == "" {
 		return nil
 	}
 
-	snapshot := s.aiCatalog.Snapshot()
 	queries := agentrepo.New(s.db)
 	blocked, err := s.aiToolBlockReads.blockedTargetIDs(ctx, queries, organizationID)
 	if err != nil {

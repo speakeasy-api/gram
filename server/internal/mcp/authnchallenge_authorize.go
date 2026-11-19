@@ -103,7 +103,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// resource the client named.
 	baseURL := s.resourceBaseURL(r, endpoint)
 
-	// One snapshot drives admission and attribution for the whole request.
+	// One snapshot drives admission, the AI tool block check and attribution here.
 	clientCatalog := s.aiCatalog.Snapshot()
 
 	// A client_id naming this endpoint is a misconfigured client, not a client
@@ -137,7 +137,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			page.Reason = oauthui.ReasonInvalidClient
 			return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, page, "invalid_request", "redirect_uri is not registered for this client")
 		}
-		client, err = s.registerDashboardInspectClient(ctx, logger, endpoint, redirectURIs)
+		client, err = s.registerDashboardInspectClient(ctx, logger, endpoint, clientCatalog, redirectURIs)
 	} else {
 		client, err = s.resolveUserSessionClient(ctx, logger, endpoint, clientCatalog, req.ClientID, resolveClientCIMD)
 	}
@@ -196,7 +196,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// error page instead of telling the person what happened. It runs after
 	// resolution because only a resolved client_id is a credential the server
 	// verified.
-	if err := s.checkAIToolGatewayBlock(ctx, logger, endpoint.OrganizationID, req.ClientID); err != nil {
+	if err := s.checkAIToolGatewayBlock(ctx, logger, clientCatalog, endpoint.OrganizationID, req.ClientID); err != nil {
 		if blockedErr, ok := errors.AsType[*AIToolBlockedError](err); ok {
 			t.Refuse(ctx, mcpconnectionattempts.CodeAIToolBlocked)
 			page.Reason = oauthui.ReasonOrganizationBlocked
