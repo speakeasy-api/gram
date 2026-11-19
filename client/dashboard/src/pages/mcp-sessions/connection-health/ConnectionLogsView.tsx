@@ -359,13 +359,12 @@ export function ConnectionLogsView({
     [isReference, lockedServer, setParam, setSearchParams],
   );
 
-  const viewerScope =
-    (isReference ? reference.data : list.data?.pages[0])?.viewerScope ??
-    counts.data?.viewerScope;
-  const loggingEnabled =
-    (isReference ? reference.data : list.data?.pages[0])?.loggingEnabled ??
-    counts.data?.loggingEnabled ??
-    true;
+  // Counts run whenever the list may be blocked by search, so they answer first.
+  const latest = isReference
+    ? reference.data
+    : (counts.data ?? list.data?.pages[0]);
+  const viewerScope = latest?.viewerScope;
+  const loggingEnabled = latest?.loggingEnabled ?? true;
   const rows: AttemptRow[] = useMemo(() => {
     if (isReference) return referenceHere ? [referenceHere] : [];
     if (searchBlocked) return [];
@@ -374,15 +373,17 @@ export function ConnectionLogsView({
 
   const total = isReference
     ? rows.length
-    : textFilters === "no-match"
-      ? 0
-      : searchBlocked
-        ? undefined
-        : searching
-          ? searchedCounts.isPlaceholderData
-            ? undefined
-            : searchedCounts.data?.totalAttempts
-          : counts.data?.totalAttempts;
+    : beforeRetention
+      ? undefined
+      : textFilters === "no-match"
+        ? 0
+        : searchBlocked
+          ? undefined
+          : searching
+            ? searchedCounts.isPlaceholderData
+              ? undefined
+              : searchedCounts.data?.totalAttempts
+            : counts.data?.totalAttempts;
 
   const countText = !loggingEnabled
     ? null
@@ -646,13 +647,15 @@ export function ConnectionLogsView({
                   values={filters.values}
                   optionsById={optionsById}
                   facets={
-                    searching
-                      ? searchedCounts.isPlaceholderData
-                        ? undefined
-                        : searchedCounts.data?.facets
-                      : textFilters
-                        ? undefined
-                        : filteredFacets
+                    beforeRetention
+                      ? undefined
+                      : searching
+                        ? searchedCounts.isPlaceholderData
+                          ? undefined
+                          : searchedCounts.data?.facets
+                        : textFilters
+                          ? undefined
+                          : filteredFacets
                   }
                   total={beforeRetention || isReference ? undefined : total}
                   onChange={setFilter}

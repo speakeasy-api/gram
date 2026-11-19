@@ -19,7 +19,6 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { Button } from "@/components/ui/Button";
 import { useRoutes } from "@/routes";
-import { useProjectProviders } from "../providers";
 import { ArrowRight, ChevronDown, Globe, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
@@ -147,12 +146,11 @@ function questionFor(attempt: AttemptDetail, who: string, where: string) {
   }
 }
 
-/** The attempt's local day start, kept inside what the log holds. */
-function startOfDay(iso: string): string {
+/** The attempt's local day start, or null when that is older than the log. */
+function startOfDay(iso: string): string | null {
   const date = new Date(iso);
   date.setHours(0, 0, 0, 0);
-  const oldest = Date.now() - RETENTION_MS + 60_000;
-  return new Date(Math.max(date.getTime(), oldest)).toISOString();
+  return date.getTime() > Date.now() - RETENTION_MS ? date.toISOString() : null;
 }
 
 function investigationFor(attempt: AttemptDetail): Investigation {
@@ -200,6 +198,7 @@ function AttemptDetailBody({
   const inLastDay =
     now.getTime() - Date.parse(attempt.startedAt) <
     24 * 60 * 60 * 1000 - 5 * 60 * 1000;
+  const dayStart = inLastDay ? null : startOfDay(attempt.startedAt);
   return (
     <div className="flex min-h-full flex-col">
       <SheetHeader className="gap-2 border-b px-6 py-5 pr-12">
@@ -308,16 +307,16 @@ function AttemptDetailBody({
                 <RelatedLink
                   to={`${routes.mcpSessions.provider.connectionLogs.href(providerId)}${logsSearch(
                     {
-                      ...(inLastDay
-                        ? { range: "1d" as const }
-                        : { from: startOfDay(attempt.startedAt) }),
+                      ...(dayStart
+                        ? { from: dayStart }
+                        : { range: inLastDay ? "1d" : "30d" }),
                       people: [attempt.person.subjectUrn],
                       serverIds: attempt.server ? [attempt.server.id] : [],
                     },
                     now,
                   )}`}
                   title={`All outcomes for ${who}${gateway ? ` on ${gateway}` : ""}`}
-                  detail={`${inLastDay ? "Last 24 hours" : `Since ${formatDayMonth(attempt.startedAt)}`} · Connection Logs`}
+                  detail={`${dayStart ? `Since ${formatDayMonth(attempt.startedAt)}` : inLastDay ? "Last 24 hours" : "Last 30 days"} · Connection Logs`}
                 />
                 <RelatedLink
                   to={`${routes.mcpSessions.provider.connections.href(providerId)}?subjectUrn=${encodeURIComponent(attempt.person.subjectUrn)}`}
@@ -374,10 +373,6 @@ function ContextFacts({
   providerName?: string;
 }): JSX.Element {
   const [open, setOpen] = useState(true);
-  const { providers } = useProjectProviders();
-  const provider =
-    providers.find((p) => p.id === attempt.userSessionIssuerId)?.slug ??
-    providerName;
   const facts: [string, ReactNode][] = [];
   if (attempt.source) {
     facts.push([
@@ -403,7 +398,7 @@ function ContextFacts({
       ? appLabel(attempt.app)
       : `${attempt.app.name}. No version reported at this step.`,
   ]);
-  if (provider) facts.push(["Provider", provider]);
+  if (providerName) facts.push(["Provider", providerName]);
   if (attempt.network) facts.push(["Network", attempt.network.label]);
   if (attempt.context.grantType)
     facts.push(["Grant", attempt.context.grantType]);

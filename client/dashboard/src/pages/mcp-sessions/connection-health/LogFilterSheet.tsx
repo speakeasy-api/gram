@@ -223,7 +223,10 @@ function TimeRanges({
           preset={null}
           customRange={value.customRange}
           customRangeLabel={value.customLabel}
-          onPresetChange={(preset) => onChange(presetValue(preset))}
+          onPresetChange={(preset) => {
+            setCustom(false);
+            onChange(presetValue(preset));
+          }}
           onCalendarRangeChange={(from, to) =>
             onChange(calendarDateRangeValue(from, to))
           }

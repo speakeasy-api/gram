@@ -1,4 +1,5 @@
 import { useProject, useSession } from "@/contexts/Auth";
+import { nextScheduleBoundaryDelay } from "@/components/killswitch/killswitch-view-model";
 import { useKillswitchAccess } from "@/hooks/useKillswitchAccess";
 import { isExpectedAPIError } from "@/lib/errors";
 import { useGramContext } from "@gram/client/react-query/_context.js";
@@ -155,7 +156,6 @@ export function useSignInSummary(
         ...window,
         bucket,
       }),
-    placeholderData: keepPreviousData,
     retry,
     throwOnError: false,
   });
@@ -174,7 +174,6 @@ export function useSessionActivity(
         userSessionIssuerId: providerId,
         ...window,
       }),
-    placeholderData: keepPreviousData,
     enabled: options.enabled ?? true,
     retry,
     throwOnError: false,
@@ -214,7 +213,6 @@ export function useDeniedClients(
         serverId: scope.serverId,
         ...window,
       }),
-    placeholderData: keepPreviousData,
     retry,
     throwOnError: false,
   });
@@ -329,7 +327,15 @@ export function useActiveKillswitches(): {
   const query = useKillswitches(
     { sessionHeaderGramSession: session.session },
     { status: "active", limit: 100, gramSession: session.session },
-    { throwOnError: false, enabled: canAccess },
+    {
+      throwOnError: false,
+      enabled: canAccess,
+      // Refetch when a listed killswitch ends, so none outlives its schedule.
+      refetchInterval: (q) =>
+        nextScheduleBoundaryDelay(
+          q.state.data?.result.items.map((k) => k.schedule) ?? [],
+        ) ?? false,
+    },
   );
   const items = canAccess ? (query.data?.result.items ?? []) : [];
   const killswitches = items.map((k): ActiveKillswitch => ({
