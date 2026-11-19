@@ -10,7 +10,8 @@ import type {
 } from "./useShadowMCPReplacement";
 
 /** The catalog add's question: replace the Shadow MCP version people use
- *  today with the server being added. On by default; one row per match. */
+ *  today with the server being added.
+ *  On by default; one row per Shadow MCP server. */
 export function ShadowMCPReplacementOption({
   state,
   questions,
