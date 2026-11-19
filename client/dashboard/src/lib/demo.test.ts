@@ -19,14 +19,31 @@ describe("demoProjectPageHref", () => {
     );
   });
 
-  it("stays on a prod host so the host-only session is kept", () => {
-    const href = demoProjectPageHref(
-      "/example/logs",
-      undefined,
-      "https://ai.speakeasy.com",
-    );
+  it.each(["https://ai.speakeasy.com", "https://app.getgram.ai"])(
+    "stays on %s, a host of the demo's deployment, so the host-only session is kept",
+    (origin) => {
+      const href = demoProjectPageHref("/example/logs", undefined, origin, {
+        firstPartyHosts: ["app.getgram.ai", "ai.speakeasy.com"],
+      });
+      expect(href).toBe(
+        `/explore-demo?redirect=${encodeURIComponent(DEMO_LANDING_PATH)}`,
+      );
+    },
+  );
+
+  it.each([
+    [
+      "dev",
+      "https://dev.getgram.ai",
+      ["dev.getgram.ai", "dev.ai.speakeasy.com"],
+    ],
+    ["another partition", "https://ai.eu.example.com", ["ai.eu.example.com"]],
+  ])("links %s to the demo's deployment", (_name, origin, hosts) => {
+    const href = demoProjectPageHref("/example/logs", undefined, origin, {
+      firstPartyHosts: hosts as [string, ...string[]],
+    });
     expect(href).toBe(
-      `/explore-demo?redirect=${encodeURIComponent(DEMO_LANDING_PATH)}`,
+      `https://app.getgram.ai/explore-demo?redirect=${encodeURIComponent(DEMO_LANDING_PATH)}`,
     );
   });
 });

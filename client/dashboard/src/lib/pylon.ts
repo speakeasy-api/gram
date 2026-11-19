@@ -13,7 +13,14 @@
  * stays in sync with the widget's own close control.
  */
 
-export const PYLON_APP_ID = "f9cade16-8d3c-4826-9a2a-034fad495102";
+import { getRuntimeConfig, type RuntimeConfig } from "@/lib/runtime-config";
+
+// Used when the deployment does not configure its own Pylon app.
+const DEFAULT_PYLON_APP_ID = "f9cade16-8d3c-4826-9a2a-034fad495102";
+
+export function pylonAppId(config: RuntimeConfig = getRuntimeConfig()): string {
+  return config.pylonAppId ?? DEFAULT_PYLON_APP_ID;
+}
 
 export type PylonChatSettings = {
   app_id: string;
@@ -126,7 +133,7 @@ export function initializePylon(chatSettings: PylonChatSettings): void {
   script.setAttribute("async", "true");
   script.setAttribute(
     "src",
-    `https://widget.usepylon.com/widget/${PYLON_APP_ID}`,
+    `https://widget.usepylon.com/widget/${encodeURIComponent(chatSettings.app_id)}`,
   );
 
   const firstScript = document.getElementsByTagName("script")[0];
