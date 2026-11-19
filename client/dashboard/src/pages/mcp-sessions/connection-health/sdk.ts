@@ -12,10 +12,10 @@ import type { ConnectionAttemptStep } from "@gram/client/models/components/conne
 import type { ConnectionPerson } from "@gram/client/models/components/connectionperson.js";
 import type { ConnectionServer } from "@gram/client/models/components/connectionserver.js";
 import { unwrapAsync } from "@gram/client/types/fp";
+import { RETENTION_MS } from "./filters";
 import type {
   AttemptCountsResponse,
   AttemptDetail,
-  AttemptFilters,
   AttemptRangeRequest,
   AttemptRow,
   AttemptStep,
@@ -39,8 +39,6 @@ import type {
 // times as Dates and leaves enums open; the views read the contract's names.
 
 const iso = (date: Date): string => date.toISOString();
-
-const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 /** A window start no older than retention by the time it is sent. */
 function since(from: string): Date {
@@ -120,17 +118,13 @@ function detail(d: ConnectionAttemptDetail): AttemptDetail {
   };
 }
 
-function filters(f: AttemptFilters | undefined): ConnectionAttemptFilters {
-  return f as ConnectionAttemptFilters;
-}
-
 function range(request: AttemptRangeRequest) {
   return {
     userSessionIssuerId: request.userSessionIssuerId,
     serverId: request.serverId,
     from: since(request.from),
     to: new Date(request.to),
-    filters: filters(request.filters),
+    filters: request.filters as ConnectionAttemptFilters | undefined,
   };
 }
 

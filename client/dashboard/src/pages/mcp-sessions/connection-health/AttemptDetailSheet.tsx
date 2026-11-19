@@ -27,8 +27,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   CONNECTION_HEALTH_QUERY_ROOT,
   connectionHealthNow,
-  useAttempt,
-  useAttemptBelongs,
+  useAttemptHere,
 } from "./api";
 import { AskAiButton, type Investigation } from "./AskAiButton";
 import { OutcomeLabel } from "./AttemptsTable";
@@ -63,14 +62,11 @@ export function AttemptDetailSheet({
   onClose: () => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
-  const query = useAttempt(reference);
-  const found = query.data?.attempt;
-  // The lookup is project-wide; an attempt from elsewhere does not open here.
-  const belongs = useAttemptBelongs(found, providerId, lockedServerId);
-  const elsewhere = !!found && belongs === "no";
-  const failed = query.isError || belongs === "error";
-  const attempt = belongs === "yes" ? found : undefined;
-  const isPending = query.isPending || (!!found && belongs === "pending");
+  const { query, attempt, elsewhere, failed, isPending } = useAttemptHere(
+    reference,
+    providerId,
+    lockedServerId,
+  );
   return (
     <Sheet
       open={!!reference}

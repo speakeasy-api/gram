@@ -10,11 +10,12 @@ import {
   useSuspectedProblems,
 } from "./api";
 import { ConnectionLogsView } from "./ConnectionLogsView";
-import { presetWindow, PROBLEM_PARAM } from "./filters";
+import { presetWindow, PROBLEM_PARAM, useSetSearchParam } from "./filters";
 import { ProblemDetailSheet } from "./ProblemDetailSheet";
 import { SuspectedProblems } from "./SuspectedProblems";
 
 const VIEW_PARAM = "view";
+const SHEET_PARAMS = [PROBLEM_PARAM];
 
 /** A server's suspected problems, then Active Sessions or its locked Connection Logs. */
 export function ServerConnectionHealth({
@@ -28,7 +29,7 @@ export function ServerConnectionHealth({
 }): JSX.Element {
   const routes = useRoutes();
   const { providers } = useProjectProviders();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const [now] = useState(connectionHealthNow);
   // A registration link opens its sheet, which lives in Active Sessions.
   const view =
@@ -46,17 +47,7 @@ export function ServerConnectionHealth({
   const logging = useSignInSummary(scope, window, "hour").data?.loggingEnabled;
   const provider = providers.find((p) => p.id === providerId);
 
-  const setParam = (key: string, value: string | null) => {
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        if (value) next.set(key, value);
-        else next.delete(key);
-        return next;
-      },
-      { replace: key === VIEW_PARAM || !value },
-    );
-  };
+  const setParam = useSetSearchParam(SHEET_PARAMS);
 
   return (
     <div className="space-y-8">

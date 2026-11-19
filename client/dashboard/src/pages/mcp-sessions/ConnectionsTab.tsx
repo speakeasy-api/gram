@@ -248,13 +248,17 @@ export function ConnectionsTab({
         shape. Sitting it directly above the table it restructures — and
         matching where the MCP server tab puts the same control — keeps the
         two surfaces reading alike. */}
-      <div className={health ? "hidden" : "flex justify-end"}>
-        <SegmentedControl
-          value={grouping}
-          onChange={(value: string) => setGrouping(value as ConnectionGrouping)}
-          options={GROUPING_OPTIONS}
-        />
-      </div>
+      {health ? null : (
+        <div className="flex justify-end">
+          <SegmentedControl
+            value={grouping}
+            onChange={(value: string) =>
+              setGrouping(value as ConnectionGrouping)
+            }
+            options={GROUPING_OPTIONS}
+          />
+        </div>
+      )}
 
       {listBody}
 

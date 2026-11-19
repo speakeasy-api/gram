@@ -306,70 +306,56 @@ function Bar({ className }: { className: string }): JSX.Element {
   return <div className={cn("bg-muted h-3 animate-pulse", className)} />;
 }
 
+const SKELETON_COLUMNS: Column<{ id: string }>[] = [
+  {
+    key: "time",
+    header: "Time",
+    width: "130px",
+    render: () => <Bar className="my-1 w-16" />,
+  },
+  {
+    key: "who",
+    header: "Person · app",
+    width: "1.2fr",
+    render: (row) => (
+      <div className="flex items-start gap-2">
+        <div className="bg-muted mt-0.5 size-5 shrink-0 animate-pulse rounded-full" />
+        <div className="w-full space-y-1.5 py-1">
+          <Bar className={Number(row.id) % 2 ? "w-28" : "w-36"} />
+          <Bar className="w-20" />
+        </div>
+      </div>
+    ),
+  },
+  {
+    key: "server",
+    header: "Server",
+    width: "1fr",
+    render: () => <Bar className="my-1 w-24" />,
+  },
+  {
+    key: "outcome",
+    header: "Outcome",
+    width: "140px",
+    render: () => <Bar className="my-1 w-16" />,
+  },
+  {
+    key: "message",
+    header: "Message",
+    width: "1.6fr",
+    render: (row) => (
+      <Bar className={cn("my-1", Number(row.id) % 3 ? "w-3/5" : "w-4/5")} />
+    ),
+  },
+  { key: "actions", header: "", width: "56px", render: () => null },
+];
+
 /** Loading rows in the table's own grid, at a populated row's height. */
-export function AttemptsSkeleton({
-  label,
-  withActions = true,
-}: {
-  label: string;
-  withActions?: boolean;
-}): JSX.Element {
-  const columns = useMemo<Column<{ id: string }>[]>(() => {
-    const base: Column<{ id: string }>[] = [
-      {
-        key: "time",
-        header: "Time",
-        width: "130px",
-        render: () => <Bar className="my-1 w-16" />,
-      },
-      {
-        key: "who",
-        header: "Person · app",
-        width: "1.2fr",
-        render: (row) => (
-          <div className="flex items-start gap-2">
-            <div className="bg-muted mt-0.5 size-5 shrink-0 animate-pulse rounded-full" />
-            <div className="w-full space-y-1.5 py-1">
-              <Bar className={Number(row.id) % 2 ? "w-28" : "w-36"} />
-              <Bar className="w-20" />
-            </div>
-          </div>
-        ),
-      },
-      {
-        key: "server",
-        header: "Server",
-        width: "1fr",
-        render: () => <Bar className="my-1 w-24" />,
-      },
-      {
-        key: "outcome",
-        header: "Outcome",
-        width: "140px",
-        render: () => <Bar className="my-1 w-16" />,
-      },
-      {
-        key: "message",
-        header: "Message",
-        width: "1.6fr",
-        render: (row) => (
-          <Bar className={cn("my-1", Number(row.id) % 3 ? "w-3/5" : "w-4/5")} />
-        ),
-      },
-    ];
-    if (withActions)
-      base.push({
-        key: "actions",
-        header: "",
-        width: "56px",
-        render: () => null,
-      });
-    return base;
-  }, [withActions]);
+export function AttemptsSkeleton({ label }: { label: string }): JSX.Element {
   return (
     <div role="status" aria-label={label}>
       <Table
-        columns={columns}
+        columns={SKELETON_COLUMNS}
         data={SKELETON_ROWS}
         rowKey={(row) => row.id}
         cellPadding="condensed"

@@ -33,6 +33,7 @@ import {
   logsSearch,
   presetWindow,
   PROBLEM_PARAM,
+  useSetSearchParam,
   type TimeRangePreset,
 } from "./filters";
 import {
@@ -60,6 +61,7 @@ const RANGES: { value: TimeRangePreset; label: string; days: number }[] = [
 const DEFAULT_RANGE: TimeRangePreset = "7d";
 const RANGE_PARAM = "range";
 const CHART_PARAM = "chart";
+const SHEET_PARAMS = [ATTEMPT_PARAM, PROBLEM_PARAM];
 
 /** The client-admission refusals the API lists as denied clients. */
 const DENIED_CLIENT_REASONS = [
@@ -79,7 +81,7 @@ export function OverviewTab({
   provider: UserSessionIssuer;
 }): JSX.Element {
   const routes = useRoutes();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const [now] = useState(connectionHealthNow);
   const rangeParam = searchParams.get(RANGE_PARAM);
   const range =
@@ -94,18 +96,7 @@ export function OverviewTab({
   const providerId = provider.id;
   const scope = useMemo(() => ({ providerId }), [providerId]);
 
-  const setParam = (key: string, value: string | null) => {
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        if (value) next.set(key, value);
-        else next.delete(key);
-        return next;
-      },
-      // Opening a sheet is a step Back undoes; closing one is not.
-      { replace: !value || (key !== ATTEMPT_PARAM && key !== PROBLEM_PARAM) },
-    );
-  };
+  const setParam = useSetSearchParam(SHEET_PARAMS);
 
   const problems = useSuspectedProblems(scope);
   const killswitches = useActiveKillswitches();

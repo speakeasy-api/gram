@@ -3,20 +3,12 @@ import { useIsDarkTheme } from "@/lib/theme";
 import type { Chart, ChartOptions, Plugin } from "chart.js";
 import { useMemo, useRef } from "react";
 import { Bar } from "react-chartjs-2";
-import { nowPosition } from "./format";
+import { monoFont, nowPosition } from "./format";
 
 export interface HealthSeries {
   label: string;
   data: number[];
   color: string;
-}
-
-function monoFont(): string {
-  if (typeof document === "undefined") return "monospace";
-  const family = getComputedStyle(document.documentElement)
-    .getPropertyValue("--font-mono")
-    .trim();
-  return family || "monospace";
 }
 
 /** Diagonal stripes in the series colour: a bucket still filling up. */

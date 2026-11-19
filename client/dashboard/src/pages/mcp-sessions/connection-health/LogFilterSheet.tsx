@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/Sheet";
 import { cn } from "@/lib/utils";
 import { Fragment, useEffect, useState, type ReactNode } from "react";
-import { DEFAULT_LOG_RANGE, TIME_RANGE_PRESETS } from "./filters";
+import { DEFAULT_LOG_RANGE, presetValue, TIME_RANGE_PRESETS } from "./filters";
 import { formatCount, plural } from "./format";
 import type { AttemptFacets } from "./types";
 
@@ -216,7 +216,7 @@ function TimeRanges({
         {TIME_RANGE_PRESETS.map((preset) =>
           option(preset, PRESET_LABELS[preset], () => {
             setCustom(false);
-            onChange({ preset, customRange: null, customLabel: null });
+            onChange(presetValue(preset));
           }),
         )}
         {option("custom", "Custom", () => setCustom(true))}
@@ -227,9 +227,7 @@ function TimeRanges({
           preset={null}
           customRange={value.customRange}
           customRangeLabel={value.customLabel}
-          onPresetChange={(preset) =>
-            onChange({ preset, customRange: null, customLabel: null })
-          }
+          onPresetChange={(preset) => onChange(presetValue(preset))}
           onCalendarRangeChange={(from, to) =>
             onChange(calendarDateRangeValue(from, to))
           }
@@ -242,11 +240,7 @@ function TimeRanges({
           }
           onClearCustomRange={() => {
             setCustom(false);
-            onChange({
-              preset: DEFAULT_LOG_RANGE,
-              customRange: null,
-              customLabel: null,
-            });
+            onChange(presetValue(DEFAULT_LOG_RANGE));
           }}
           className="w-full"
         />

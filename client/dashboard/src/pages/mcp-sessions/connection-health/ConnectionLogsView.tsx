@@ -23,9 +23,8 @@ import { toast } from "sonner";
 import {
   CONNECTION_HEALTH_QUERY_ROOT,
   connectionHealthNow,
-  useAttemptBelongs,
-  useAttempt,
   useAttemptCounts,
+  useAttemptHere,
   useConnectionAttempts,
 } from "./api";
 import { useProjectProviders } from "../providers";
@@ -42,6 +41,7 @@ import {
   LOG_FILTERS_WITHOUT_SERVER,
   DEFAULT_LOG_RANGE,
   LOG_PARAMS,
+  presetValue,
   resolveWindow,
   TIME_RANGE_PRESETS,
   UNLISTED_APP,
@@ -49,6 +49,7 @@ import {
   SEARCH_PARAM,
   startsBeforeRetention,
   toAttemptFilters,
+  useSetSearchParam,
   type LogFilterValues,
 } from "./filters";
 import {
@@ -68,6 +69,7 @@ import {
 } from "./types";
 
 const EMPTY_FILTERS: AttemptFilters = {};
+const SHEET_PARAMS = [ATTEMPT_PARAM];
 
 const REFERENCE_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -202,12 +204,7 @@ export function ConnectionLogsView({
     !(TIME_RANGE_PRESETS as readonly string[]).includes(preset);
   const { setValue } = filters;
   useEffect(() => {
-    if (unsupportedPreset)
-      setValue("date", {
-        preset: DEFAULT_LOG_RANGE,
-        customRange: null,
-        customLabel: null,
-      });
+    if (unsupportedPreset) setValue("date", presetValue(DEFAULT_LOG_RANGE));
   }, [unsupportedPreset, setValue]);
   const scope = useMemo(
     () => ({ providerId, serverId: lockedServer?.id }),
@@ -255,30 +252,20 @@ export function ConnectionLogsView({
   const list = useConnectionAttempts(scope, window, listFilters, {
     enabled: !beforeRetention && !isReference && !searchBlocked,
   });
-  const reference = useAttempt(isReference ? search.trim() : null);
-  // A reference is looked up project-wide; keep it only if it belongs here.
-  const referenced = reference.data?.attempt;
-  const belongs = useAttemptBelongs(referenced, providerId, lockedServer?.id);
-  const referenceHere = belongs === "yes" ? referenced : undefined;
-  const referenceFailed = reference.isError || belongs === "error";
+  const {
+    query: reference,
+    attempt: referenceHere,
+    failed: referenceFailed,
+    isPending: referencePending,
+  } = useAttemptHere(
+    isReference ? search.trim() : null,
+    providerId,
+    lockedServer?.id,
+  );
 
   const optionsById = useMemo(() => optionsFrom(facets), [facets]);
 
-  const setParam = useCallback(
-    (key: string, value: string | null) => {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          if (value) next.set(key, value);
-          else next.delete(key);
-          return next;
-        },
-        // Opening an attempt is a step Back undoes; closing one is not.
-        { replace: key === SEARCH_PARAM || !value },
-      );
-    },
-    [setSearchParams],
-  );
+  const setParam = useSetSearchParam(SHEET_PARAMS);
 
   const resetAll = () =>
     setSearchParams(
@@ -357,7 +344,7 @@ export function ConnectionLogsView({
   const countText = !loggingEnabled
     ? null
     : isReference
-      ? reference.isPending || (!!referenced && belongs === "pending")
+      ? referencePending
         ? null
         : rows[0]
           ? rows[0].count > 1
@@ -369,6 +356,8 @@ export function ConnectionLogsView({
         : plural(total, "attempt");
 
   const schema = lockedServer ? LOG_FILTERS_WITHOUT_SERVER : LOG_FILTERS;
+  const setFilter = (id: string, value: FilterValue) =>
+    filters.setValue(id as keyof LogFilterValues, value as never);
   const organization = useOrganization();
   const { fetchNextPage } = list;
   const loadMore = useCallback(async () => {
@@ -418,9 +407,7 @@ export function ConnectionLogsView({
   let body: JSX.Element;
   const countsFailed = textFilters === "pending" && counts.isError;
   const isError = isReference ? referenceFailed : list.isError || countsFailed;
-  const isPending = isReference
-    ? reference.isPending || (!!referenced && belongs === "pending")
-    : list.isPending;
+  const isPending = isReference ? referencePending : list.isPending;
   if (!loggingEnabled) {
     body = (
       <InlineEmptyState
@@ -441,13 +428,7 @@ export function ConnectionLogsView({
         action={
           <Button
             variant="secondary"
-            onClick={() =>
-              filters.setValue("date", {
-                preset: "30d",
-                customRange: null,
-                customLabel: null,
-              })
-            }
+            onClick={() => filters.setValue("date", presetValue("30d"))}
           >
             Last 30 days
           </Button>
@@ -513,12 +494,7 @@ export function ConnectionLogsView({
         heading="No attempts match these filters"
         description={noMatchSentence(filters.values, optionsById, search)}
         action={
-          <Button
-            variant="secondary"
-            onClick={() => {
-              resetAll();
-            }}
-          >
+          <Button variant="secondary" onClick={resetAll}>
             Reset filters
           </Button>
         }
@@ -534,11 +510,12 @@ export function ConnectionLogsView({
             <Button
               variant="secondary"
               onClick={() =>
-                filters.setValue("date", {
-                  preset: filters.values.date.preset === "1d" ? "7d" : "1d",
-                  customRange: null,
-                  customLabel: null,
-                })
+                filters.setValue(
+                  "date",
+                  presetValue(
+                    filters.values.date.preset === "1d" ? "7d" : "1d",
+                  ),
+                )
               }
             >
               {filters.values.date.preset === "1d"
@@ -627,9 +604,7 @@ export function ConnectionLogsView({
               showClearAll={false}
               values={chipValues}
               optionsById={optionsById}
-              onChange={(id, value) =>
-                filters.setValue(id as keyof LogFilterValues, value as never)
-              }
+              onChange={setFilter}
               onClear={(id) => filters.clearValue(id as keyof LogFilterValues)}
               onClearAll={filters.clearAll}
               renderSheet={(sheet) => (
@@ -642,12 +617,7 @@ export function ConnectionLogsView({
                   total={
                     beforeRetention ? undefined : counts.data?.totalAttempts
                   }
-                  onChange={(id, value) =>
-                    filters.setValue(
-                      id as keyof LogFilterValues,
-                      value as never,
-                    )
-                  }
+                  onChange={setFilter}
                   onReset={resetAll}
                 />
               )}

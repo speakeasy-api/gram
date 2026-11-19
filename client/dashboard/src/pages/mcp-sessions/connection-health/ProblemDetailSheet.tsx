@@ -103,9 +103,7 @@ function problemTarget(problem: SuspectedProblemDetail): string | undefined {
     return problem.scope.name.replace(/ service$/, "");
   if (problem.scope.kind === "server") return problem.scope.name;
   const server = problem.servers[0];
-  return server
-    ? serverLabel({ server: server.server, member: server.member })
-    : undefined;
+  return server ? serverLabel(server) : undefined;
 }
 
 /** "on the Linear service", "on Internal Wiki"; nothing for one person. */
@@ -139,7 +137,7 @@ function investigationFor(problem: SuspectedProblemDetail): Investigation {
       `Rule: ${PROBLEM_RULES[problem.rule]}`,
       problem.source ? `Source: ${SOURCE_LABELS[problem.source]}` : null,
       `Messages: ${problem.messages.map((m) => `${m.message} (${m.reason}, ${m.attempts})`).join("; ")}`,
-      `Servers: ${problem.servers.map((s) => `${serverLabel({ server: s.server, member: s.member })} (${s.attempts})`).join("; ")}`,
+      `Servers: ${problem.servers.map((s) => `${serverLabel(s)} (${s.attempts})`).join("; ")}`,
       problem.lastConnectedAt
         ? `Last successful connection: ${problem.lastConnectedAt}`
         : null,
@@ -248,9 +246,7 @@ function ProblemBody({
                     <div className="truncate text-sm">{personLabel(p)}</div>
                     <div className="text-muted-foreground truncate text-xs">
                       {appLabel(p.app)}
-                      {p.server
-                        ? ` · ${serverLabel({ server: p.server, member: p.member })}`
-                        : ""}
+                      {p.server ? ` · ${serverLabel(p)}` : ""}
                     </div>
                   </div>
                 </div>
@@ -272,7 +268,7 @@ function ProblemBody({
                 className="flex items-center justify-between px-4 py-2.5 text-sm"
               >
                 <span className="underline underline-offset-2">
-                  {serverLabel({ server: s.server, member: s.member })}
+                  {serverLabel(s)}
                 </span>
                 <span>{s.attempts}</span>
               </div>
@@ -381,12 +377,6 @@ function Block({
   );
 }
 
-const BUCKET_LABEL = new Intl.DateTimeFormat(undefined, {
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
-
 function FailureBars({
   buckets,
   now,
@@ -396,12 +386,11 @@ function FailureBars({
 }): JSX.Element {
   const chart = useMemo(
     () => ({
-      labels: buckets.map((b) => {
-        const d = new Date(b.start);
-        return d.getMinutes() === 0 ? BUCKET_LABEL.format(d) : "";
-      }),
+      labels: buckets.map((b) =>
+        new Date(b.start).getMinutes() === 0 ? formatClockMinutes(b.start) : "",
+      ),
       timestamps: buckets.map((b) => Date.parse(b.start)),
-      tooltipLabels: buckets.map((b) => BUCKET_LABEL.format(new Date(b.start))),
+      tooltipLabels: buckets.map((b) => formatClockMinutes(b.start)),
       series: [
         {
           label: "Failed",

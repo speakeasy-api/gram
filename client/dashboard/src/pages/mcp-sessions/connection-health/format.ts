@@ -276,3 +276,12 @@ export function nowPosition(
   if (index === -1) return null;
   return { index, fraction: (now - timestamps[index]!) / bucketMs };
 }
+
+/** The page's mono font family, for charts drawn on canvas. */
+export function monoFont(): string {
+  if (typeof document === "undefined") return "monospace";
+  const family = getComputedStyle(document.documentElement)
+    .getPropertyValue("--font-mono")
+    .trim();
+  return family || "monospace";
+}

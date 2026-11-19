@@ -1,4 +1,5 @@
 import { useProject, useSession } from "@/contexts/Auth";
+import { isExpectedAPIError } from "@/lib/errors";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useKillswitches } from "@gram/client/react-query/killswitches.js";
 import {
@@ -10,6 +11,7 @@ import {
   type UseQueryResult,
 } from "@tanstack/react-query";
 import { useState } from "react";
+import { presetWindow } from "./filters";
 import {
   fixtureGetSuspectedProblem,
   fixtureListSuspectedProblems,
@@ -18,8 +20,8 @@ import * as sdk from "./sdk";
 import type {
   ActiveKillswitch,
   AttemptCountsResponse,
+  AttemptDetail,
   AttemptFilters,
-  AttemptRow,
   DeniedClientsResponse,
   GetAttemptResponse,
   GetSuspectedProblemResponse,
@@ -54,15 +56,7 @@ function useClient() {
 
 // A 4xx (flag off, bad range) will not change on retry.
 const retry = (failures: number, error: Error) =>
-  failures < 2 &&
-  !(
-    typeof error === "object" &&
-    error !== null &&
-    "statusCode" in error &&
-    typeof error.statusCode === "number" &&
-    error.statusCode >= 400 &&
-    error.statusCode < 500
-  );
+  failures < 2 && !isExpectedAPIError(error);
 
 export function useConnectionAttempts(
   scope: Scope,
@@ -122,7 +116,7 @@ export function useAttemptCounts(
   });
 }
 
-export function useAttempt(
+function useAttempt(
   reference: string | null,
 ): UseQueryResult<GetAttemptResponse> {
   const { client, gramProject, projectId } = useClient();
@@ -184,11 +178,9 @@ export function useSessionAverage(
   return useQuery({
     queryKey: [ROOT, projectId, "sessionAverage", providerId],
     queryFn: async () => {
-      const now = connectionHealthNow();
       const result = await sdk.getSessionActivity(client, gramProject, {
         userSessionIssuerId: providerId,
-        from: new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(),
-        to: now.toISOString(),
+        ...presetWindow("1d", connectionHealthNow()),
       });
       return result.averageSessionSeconds ?? null;
     },
@@ -222,20 +214,14 @@ export function useDeniedClients(
  * Whether a looked-up attempt belongs to this provider (and locked server).
  * An attempt with no provider of its own belongs to the servers it reached.
  */
-export function useAttemptBelongs(
-  attempt: (AttemptRow & { userSessionIssuerId?: string }) | undefined,
+function useAttemptBelongs(
+  attempt: AttemptDetail | undefined,
   providerId: string,
   lockedServerId?: string,
 ): "yes" | "no" | "pending" | "error" {
   const needsServers =
     !!attempt && !attempt.userSessionIssuerId && !!attempt.server;
-  const [window] = useState(() => {
-    const now = connectionHealthNow();
-    return {
-      from: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-      to: now.toISOString(),
-    };
-  });
+  const [window] = useState(() => presetWindow("30d", connectionHealthNow()));
   const counts = useAttemptCounts({ providerId }, window, NO_FILTERS, {
     enabled: needsServers,
   });
@@ -248,6 +234,30 @@ export function useAttemptBelongs(
   const servers = counts.data?.facets?.servers;
   if (!servers) return "pending";
   return servers.some((s) => s.value === attempt.server?.id) ? "yes" : "no";
+}
+
+/** An attempt looked up project-wide, kept only if it belongs here. */
+export function useAttemptHere(
+  reference: string | null,
+  providerId: string,
+  lockedServerId?: string,
+): {
+  query: UseQueryResult<GetAttemptResponse>;
+  attempt: AttemptDetail | undefined;
+  elsewhere: boolean;
+  failed: boolean;
+  isPending: boolean;
+} {
+  const query = useAttempt(reference);
+  const found = query.data?.attempt;
+  const belongs = useAttemptBelongs(found, providerId, lockedServerId);
+  return {
+    query,
+    attempt: belongs === "yes" ? found : undefined,
+    elsewhere: !!found && belongs === "no",
+    failed: query.isError || belongs === "error",
+    isPending: query.isPending || (!!found && belongs === "pending"),
+  };
 }
 
 const NO_FILTERS: AttemptFilters = {};

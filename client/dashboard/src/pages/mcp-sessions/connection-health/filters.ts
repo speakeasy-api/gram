@@ -5,6 +5,8 @@ import {
 } from "@/components/filters/filter-schema";
 import { DATE_RANGE_PARAMS } from "@/components/filters/useFilterState";
 import { safeBase64Encode } from "@/components/observe/observeFilterUtils";
+import { useCallback } from "react";
+import { useSearchParams } from "react-router";
 import type { Window } from "./api";
 import { formatClockMinutes, formatDayMonth } from "./format";
 import {
@@ -100,6 +102,30 @@ export const PROBLEM_PARAM = "problem";
 
 const isPreset = (value: string | null): value is TimeRangePreset =>
   (TIME_RANGE_PRESETS as readonly (string | null)[]).includes(value);
+
+export const presetValue = (
+  preset: NonNullable<DateRangeValue["preset"]>,
+): DateRangeValue => ({ preset, customRange: null, customLabel: null });
+
+/** Sets or clears one URL parameter; only opening a `pushKeys` sheet adds a history entry. */
+export function useSetSearchParam(
+  pushKeys: readonly string[],
+): (key: string, value: string | null) => void {
+  const [, setSearchParams] = useSearchParams();
+  return useCallback(
+    (key, value) =>
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (value) next.set(key, value);
+          else next.delete(key);
+          return next;
+        },
+        { replace: !value || !pushKeys.includes(key) },
+      ),
+    [setSearchParams, pushKeys],
+  );
+}
 
 /** The window a preset or a picked range covers, against `now`. */
 export function resolveWindow(value: DateRangeValue, now: Date): Window {

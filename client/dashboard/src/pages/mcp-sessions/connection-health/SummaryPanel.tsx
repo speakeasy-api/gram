@@ -10,7 +10,12 @@ import { useMemo, type ReactNode } from "react";
 import { Line } from "react-chartjs-2";
 import { Link } from "react-router";
 import { useSessionActivity, useSignInSummary, type Window } from "./api";
-import { formatDayMonth, formatWeekdayDay } from "./format";
+import {
+  formatClockMinutes,
+  formatDayMonth,
+  formatWeekdayDay,
+  monoFont,
+} from "./format";
 import { HealthBarChart, LegendDot } from "./HealthBarChart";
 import type { SignInSummaryResponse, SummaryBucket } from "./types";
 
@@ -18,11 +23,6 @@ export type SummaryMetric = "sign-ins" | "sessions";
 
 const HOUR = 3_600_000;
 
-const HOUR_LABEL = new Intl.DateTimeFormat(undefined, {
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
 const TOOLTIP_TIME = new Intl.DateTimeFormat(undefined, {
   weekday: "short",
   day: "numeric",
@@ -167,7 +167,9 @@ function barLabels(starts: number[], bucket: SummaryBucket): string[] {
   return starts.map((start) => {
     const date = new Date(start);
     if (bucket === "hour") {
-      return date.getHours() % 4 === 0 ? HOUR_LABEL.format(date) : "";
+      return date.getHours() % 4 === 0
+        ? formatClockMinutes(date.toISOString())
+        : "";
     }
     if (bucket === "day") {
       return date.getDate() % 5 === 0 ? formatDayMonth(date.toISOString()) : "";
@@ -236,12 +238,7 @@ function ActiveSessionsLine({
   const isDark = useIsDarkTheme();
   const colors = chartColors(isDark);
   const line = seriesForTheme(isDark)[0] ?? OUTCOME.ok;
-  const font = useMemo(() => {
-    const family = getComputedStyle(document.documentElement)
-      .getPropertyValue("--font-mono")
-      .trim();
-    return family || "monospace";
-  }, []);
+  const font = useMemo(monoFont, []);
   const data = useMemo(
     () => ({
       labels: points.map((p) =>
