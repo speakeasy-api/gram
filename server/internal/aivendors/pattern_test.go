@@ -245,6 +245,33 @@ func TestPatternRejectsPathInsideQueryOrFragment(t *testing.T) {
 	}
 }
 
+// The query/fragment guard looks only at the authority, before the first slash.
+func TestMatchesPattern_QueryOrFragmentGuardCoversOnlyTheAuthority(t *testing.T) {
+	t.Parallel()
+	const pattern = "https://chatgpt.com/oauth/*/client.json"
+	for _, tc := range []struct {
+		name     string
+		clientID string
+		want     bool
+	}{
+		{name: "long id on an unknown host", clientID: "https://unknown.example.com/" + strings.Repeat("a?#", 1000) + "/client.json", want: false},
+		{name: "query after the first slash", clientID: "https://chatgpt.com/oauth/connector/client.json?x=1", want: false},
+		{name: "fragment after the first slash", clientID: "https://chatgpt.com/oauth/connector/client.json#x", want: false},
+		{name: "query in a segment", clientID: "https://chatgpt.com/oauth/a?b/client.json", want: false},
+		{name: "query in the authority", clientID: "https://chatgpt.com?x=/oauth/connector/client.json", want: false},
+		{name: "plain match", clientID: "https://chatgpt.com/oauth/connector/client.json", want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, matchesPattern(pattern, tc.clientID))
+		})
+	}
+	_, _, ok := splitAuthorityAndPath("https://chatgpt.com/oauth?x=1#y")
+	require.True(t, ok, "a query after the first slash leaves the authority intact")
+	_, _, ok = splitAuthorityAndPath("https://chatgpt.com#x/oauth")
+	require.False(t, ok, "a fragment before the first slash cannot begin a path")
+}
+
 // TestCatalog_PatternsAreValid is the guard that makes the whole design
 // safe: it runs validatePattern over every wildcard actually shipped, so a
 // dangerous catalog entry fails the build rather than silently widening

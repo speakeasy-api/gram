@@ -35,14 +35,15 @@ func TestDefaultsReturnsACopy(t *testing.T) {
 		return nil
 	}
 
-	first := aitargets.Defaults(aivendors.CompiledSnapshot())
+	catalog := aivendors.CompiledSnapshot()
+	first := aitargets.Defaults(catalog)
 	first[0].DisplayName = "mutated"
 	mutable := withBinaries(first)
 	require.NotNil(t, mutable)
 	mutatedID := mutable.ID
 	mutable.Signatures.Binaries[0] = "mutated"
 
-	fresh := aitargets.Defaults(aivendors.CompiledSnapshot())
+	fresh := aitargets.Defaults(catalog)
 	require.NotEqual(t, "mutated", fresh[0].DisplayName)
 	for _, target := range fresh {
 		if target.ID == mutatedID {

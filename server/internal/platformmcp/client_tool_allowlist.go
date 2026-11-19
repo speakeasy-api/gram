@@ -61,7 +61,7 @@ var chatGPTClientIDs = sync.OnceValue(func() []string {
 // list. A dynamically registered client has an opaque client_id that matches
 // no entry, so it keeps the full catalogue.
 func isChatGPTClient(clientID string) bool {
-	preset, ok := compiledAICatalog().CatalogPreset(clientID)
+	preset, ok := aivendors.CompiledSnapshot().CatalogPreset(clientID)
 	return ok && slices.Contains(chatGPTClientIDs(), preset.URL)
 }
 

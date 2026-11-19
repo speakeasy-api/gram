@@ -444,9 +444,10 @@ func FuzzNormalizers(f *testing.F) {
 		f.Add(value)
 		f.Add("https://" + value)
 	}
+	catalog := aivendors.CompiledSnapshot()
 	f.Fuzz(func(t *testing.T, value string) {
 		require.LessOrEqual(t, len(NormalizeProviderHost(value)), maxProviderHostBytes)
-		require.LessOrEqual(t, len(AppOf(aivendors.CompiledSnapshot(), value, ClientIDAdmitted).String()), maxProviderHostBytes)
+		require.LessOrEqual(t, len(AppOf(catalog, value, ClientIDAdmitted).String()), maxProviderHostBytes)
 	})
 }
 

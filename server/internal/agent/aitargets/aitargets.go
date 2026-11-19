@@ -186,12 +186,9 @@ func (t Target) Clone() Target {
 // Defaults projects a catalog snapshot into device scan targets.
 // Products without install signatures remain available to admission only.
 func Defaults(catalog *aivendors.Snapshot) []Target {
-	products := catalog.Products()
+	products := catalog.ScanProducts()
 	targets := make([]Target, 0, len(products))
 	for _, product := range products {
-		if !product.IsScanned() {
-			continue
-		}
 		matchers := catalog.GatewayMatchersFor(product)
 		target := Target{
 			ID:          product.ID,
