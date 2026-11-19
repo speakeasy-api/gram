@@ -48,10 +48,10 @@ const (
 	// processes resume on the current instance.
 	HoldKey = "gram:redis-switch:hold"
 
-	// ClientName is set on every connection a switch-aware process opens, so
-	// the operator's job can tell them apart from clients that would ignore a
-	// hold.
-	ClientName = "gram-redisswitch"
+	// ClientNamePrefix starts the name of every connection a switch-aware
+	// process opens, so the operator's job can tell them apart from clients that
+	// would ignore a hold. The role follows it.
+	ClientNamePrefix = "gram-redisswitch"
 
 	// EnvNextAddr names the environment variable holding the next instance's
 	// address. The switch is inactive when it is empty.
@@ -105,6 +105,11 @@ func StateKey(role string) string {
 	return stateKeyPrefix + role
 }
 
+// ClientName is the name of every connection a role's clients open.
+func ClientName(role string) string {
+	return ClientNamePrefix + ":" + role
+}
+
 type state string
 
 const (
@@ -143,6 +148,7 @@ func NextFromEnv() Target {
 type Switch struct {
 	logger      *slog.Logger
 	stateKey    string
+	name        string
 	current     Target
 	next        Target
 	poller      *redis.Client
@@ -157,9 +163,15 @@ type Switch struct {
 	lastSeen state
 }
 
-// switches maps a current instance's address to its Switch, so a second client
-// built from the first one's options gets the same gate.
+// switches maps a current instance's address and a role's connection name to
+// its Switch, so a second client built from the first one's options gets the
+// same gate. The name travels with copied options, which is what ties a copy to
+// its parent when several roles share one instance.
 var switches sync.Map
+
+func registryKey(addr, name string) string {
+	return addr + "|" + name
+}
 
 // NewClient returns a client for opts. When next names an instance, the client
 // follows the role's switch keys on the instance in opts; otherwise it is an
@@ -174,27 +186,39 @@ func NewClient(ctx context.Context, logger *slog.Logger, opts *redis.Options, ro
 		return nil, errors.New("next redis instance is the current one")
 	}
 
-	sw, err := start(context.WithoutCancel(ctx), logger, StateKey(role), Target{Addr: opts.Addr, Password: opts.Password}, next, opts.DialTimeout)
+	key := registryKey(opts.Addr, ClientName(role))
+	if _, exists := switches.Load(key); exists {
+		return nil, fmt.Errorf("a redis switch already follows role %q on this instance in this process", role)
+	}
+
+	sw, err := start(context.WithoutCancel(ctx), logger, role, Target{Addr: opts.Addr, Password: opts.Password}, next, opts.DialTimeout)
 	if err != nil {
 		return nil, err
 	}
-	switches.Store(opts.Addr, sw)
+	switches.Store(key, sw)
 
 	opts.Dialer = sw.dial
 	opts.CredentialsProvider = sw.credentials
+	opts.OnConnect = sw.onConnect
 
 	return sw.client(opts), nil
 }
 
 // Wrap returns a client for options copied from a client that NewClient built.
 // The copy carries the dialer but not the command gate or the retry setting, so
-// they are applied again here. For any other options it is redis.NewClient.
+// they are applied again here. Options that did not come from such a client
+// (their address and connection name match no switch) get redis.NewClient.
 func Wrap(opts *redis.Options) *redis.Client {
-	sw, ok := switches.Load(opts.Addr)
-	if !ok || opts.Dialer == nil {
+	found, ok := switches.Load(registryKey(opts.Addr, opts.ClientName))
+	if !ok {
 		return redis.NewClient(opts)
 	}
-	return sw.(*Switch).client(opts)
+
+	sw, ok := found.(*Switch)
+	if !ok {
+		return redis.NewClient(opts)
+	}
+	return sw.client(opts)
 }
 
 func (s *Switch) client(opts *redis.Options) *redis.Client {
@@ -202,7 +226,7 @@ func (s *Switch) client(opts *redis.Options) *redis.Client {
 	// a second time on the other instance.
 	opts.MaxRetries = -1
 	opts.DialerRetries = 1
-	opts.ClientName = ClientName
+	opts.ClientName = s.name
 
 	client := redis.NewClient(opts)
 	client.AddHook(hook{sw: s})
@@ -210,10 +234,11 @@ func (s *Switch) client(opts *redis.Options) *redis.Client {
 	return client
 }
 
-func start(ctx context.Context, logger *slog.Logger, stateKey string, current, next Target, dialTimeout time.Duration) (*Switch, error) {
+func start(ctx context.Context, logger *slog.Logger, role string, current, next Target, dialTimeout time.Duration) (*Switch, error) {
 	sw := &Switch{
 		logger:      logger,
-		stateKey:    stateKey,
+		stateKey:    StateKey(role),
+		name:        ClientName(role),
 		current:     current,
 		next:        next,
 		dialTimeout: dialTimeout,
@@ -221,7 +246,7 @@ func start(ctx context.Context, logger *slog.Logger, stateKey string, current, n
 		poller: redis.NewClient(&redis.Options{
 			Addr:            current.Addr,
 			Password:        current.Password,
-			ClientName:      ClientName,
+			ClientName:      ClientName(role),
 			DialTimeout:     pollTimeout,
 			ReadTimeout:     pollTimeout,
 			WriteTimeout:    pollTimeout,
@@ -244,7 +269,7 @@ func start(ctx context.Context, logger *slog.Logger, stateKey string, current, n
 
 	// A wrong address or password for the next instance must fail this
 	// process at startup, not every process at the moment of the switch.
-	if err := checkReachable(ctx, next); err != nil {
+	if err := checkReachable(ctx, next, sw.name); err != nil {
 		_ = sw.poller.Close()
 		return nil, fmt.Errorf("check next redis instance: %w", err)
 	}
@@ -254,14 +279,14 @@ func start(ctx context.Context, logger *slog.Logger, stateKey string, current, n
 	return sw, nil
 }
 
-func checkReachable(ctx context.Context, target Target) error {
+func checkReachable(ctx context.Context, target Target, name string) error {
 	ctx, cancel := context.WithTimeout(ctx, startTimeout)
 	defer cancel()
 
 	client := redis.NewClient(&redis.Options{
 		Addr:            target.Addr,
 		Password:        target.Password,
-		ClientName:      ClientName,
+		ClientName:      name,
 		DialTimeout:     pollTimeout,
 		ReadTimeout:     pollTimeout,
 		WriteTimeout:    pollTimeout,
@@ -363,13 +388,19 @@ func (s *Switch) load() (state, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	current := s.loadLocked()
+	return current, current == stateHold
+}
+
+// loadLocked is load for a caller that holds s.mu.
+func (s *Switch) loadLocked() state {
 	if s.state == stateNext {
-		return stateNext, false
+		return stateNext
 	}
 	if s.now().Sub(s.readAt) > staleAfter {
-		return stateUnknown, false
+		return stateUnknown
 	}
-	return s.state, s.state == stateHold
+	return s.state
 }
 
 func (s *Switch) set(ctx context.Context, next state, readAt time.Time) {
@@ -416,13 +447,16 @@ func (s *Switch) wait(ctx context.Context) error {
 	defer deadline.Stop()
 
 	for {
-		if current, _ := s.load(); current == stateCurrent || current == stateNext {
+		// The state and the channel that signals its next change are read
+		// together. Read apart, a move between the two would leave this waiter
+		// on a channel nothing closes again.
+		s.mu.Lock()
+		current, changed := s.loadLocked(), s.changed
+		s.mu.Unlock()
+
+		if current == stateCurrent || current == stateNext {
 			return nil
 		}
-
-		s.mu.Lock()
-		changed := s.changed
-		s.mu.Unlock()
 
 		select {
 		case <-changed:
@@ -460,16 +494,42 @@ func (s *Switch) dial(ctx context.Context, network, _ string) (net.Conn, error) 
 		return conn, nil
 	}
 
+	// Checked and registered under one lock: a move cannot fall between the
+	// two and leave an unregistered connection to the instance being left.
 	tracked := &trackedConn{Conn: conn, sw: s}
-	if after, _ := s.load(); after != stateCurrent {
+	s.mu.Lock()
+	allowed := s.loadLocked() == stateCurrent
+	if allowed {
+		s.conns[tracked] = struct{}{}
+	}
+	s.mu.Unlock()
+
+	if !allowed {
 		_ = conn.Close()
 		return nil, ErrHolding
 	}
-	s.mu.Lock()
-	s.conns[tracked] = struct{}{}
-	s.mu.Unlock()
-
 	return tracked, nil
+}
+
+// onConnect runs on every new connection after it has authenticated. For a
+// connection to the current instance it reads the switch keys on that same
+// connection and refuses it unless the instance itself says it is current and
+// not held. The cached reading decided where to dial; this confirms it with the
+// instance, so a process whose clock or cache misled it still cannot use the
+// connection.
+func (s *Switch) onConnect(ctx context.Context, conn *redis.Conn) error {
+	if current, _ := s.load(); current == stateNext {
+		return nil
+	}
+
+	values, err := conn.MGet(ctx, s.stateKey, HoldKey).Result()
+	if err != nil {
+		return fmt.Errorf("read switch keys on new connection: %w", err)
+	}
+	if value, _ := values[0].(string); value != valueCurrent || values[1] != nil {
+		return ErrHolding
+	}
+	return nil
 }
 
 // credentials returns the password of the instance the switch points at. A

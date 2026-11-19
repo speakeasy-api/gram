@@ -43,7 +43,7 @@ from pystreams.risk.fingerprint import parse_pepper_keyring
 from pystreams.risk.handler import PresidioHandler
 from pystreams.risk.metering import METER_PUBLISH_TIMEOUT_SECONDS
 from pystreams.risk.presidio_enforce_handler import PresidioEnforceHandler
-from pystreams.risk.redisswitch import CLIENT_NAME, RedisSwitch
+from pystreams.risk.redisswitch import DEFAULT_ROLE, RedisSwitch, client_name
 from pystreams.risk.replywriter import ReplyWriter
 
 from . import (
@@ -124,6 +124,12 @@ async def multi(
         },
     )
     logger: structlog.stdlib.BoundLogger = structlog.get_logger()
+
+    if redis_next_addr and redis_next_addr == redis_addr:
+        raise click.UsageError(
+            "--redis-next-addr is the same instance as --redis-addr: replies "
+            "would be written to the instance being left"
+        )
 
     if role == "enforcement" and (
         not redis_addr or not risk_fingerprint_pepper_keyring
@@ -333,7 +339,7 @@ def _enforce_redis_client(
         password=password or None,
         socket_connect_timeout=1.0,
         socket_timeout=2.0,
-        client_name=CLIENT_NAME,
+        client_name=client_name(DEFAULT_ROLE),
         retry=RedisRetry(NoBackoff(), 0),
     )
 

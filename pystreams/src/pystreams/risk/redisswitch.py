@@ -31,8 +31,8 @@ STATE_KEY_PREFIX: Final = "gram:redis-switch:state:"
 DEFAULT_ROLE: Final = "all"
 HOLD_KEY: Final = "gram:redis-switch:hold"
 # Named connections let the operator's job tell switch-aware clients from ones
-# that would ignore a hold.
-CLIENT_NAME: Final = "gram-redisswitch"
+# that would ignore a hold. The role follows the prefix.
+CLIENT_NAME_PREFIX: Final = "gram-redisswitch"
 
 _VALUE_CURRENT: Final = b"current"
 _MOVED_PREFIX: Final = b"moved:"
@@ -44,6 +44,11 @@ RETRY_INTERVAL_SECONDS: Final = 0.25
 HOLD_TIMEOUT_SECONDS: Final = 60.0
 
 Write = Callable[[redis_asyncio.client.Pipeline], None]
+
+
+def client_name(role: str) -> str:
+    """The name of every connection a role's clients open."""
+    return CLIENT_NAME_PREFIX + ":" + role
 
 
 def _as_bytes(value: bytes | str | None) -> bytes | None:
@@ -120,9 +125,10 @@ class RedisSwitch:
             try:
                 await pipe.watch(self._state_key, HOLD_KEY)
                 values = await pipe.mget(self._state_key, HOLD_KEY)
-            except RedisConnectionError, RedisTimeoutError:
+            except RedisConnectionError, RedisTimeoutError, WatchError:
                 # Nothing has been sent to write yet, so trying again is safe.
-                # The operator's job closes connections during a hold.
+                # The operator's job closes connections during a hold, and the
+                # client reports a watched connection that dropped as WatchError.
                 return False
             state, hold = _as_bytes(values[0]), values[1]
             self._observe(state)
@@ -133,8 +139,11 @@ class RedisSwitch:
                 write(pipe)
                 await pipe.execute()
             except WatchError:
-                # A key changed between the read and the write: the instance
-                # refused the transaction, so nothing was written.
+                # Either a key changed between the read and the write and the
+                # instance refused the transaction, or the connection dropped
+                # and its outcome is unknown. Trying again can therefore deliver
+                # a reply twice. That is allowed: the reply inbox is built for
+                # at-least-once delivery and discards a repeat.
                 return False
             return True
 
