@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 )
 
@@ -51,7 +52,30 @@ func gatewayTargetFromEndpoint(endpoint *ResolvedMcpEndpoint) (gatewayTarget, er
 
 // admits reports only whether the credential may enter this gateway. It does
 // not authorize any member.
-func (t gatewayTarget) admits(caller gatewayCaller) (bool, error) {
-	// Gateway entry remains people-only; member authorization is separate.
-	return caller.kind == gatewayCallerPerson, nil
+func (t gatewayTarget) admits(caller gatewayCaller, projectID uuid.UUID, storedMachineAccess bool) (bool, error) {
+	if caller.kind == gatewayCallerPerson {
+		return true, nil
+	}
+	if !storedMachineAccess || t.kind != gatewayKindStored || projectID == uuid.Nil {
+		return false, nil
+	}
+	if caller.projectScope != nil && *caller.projectScope != projectID {
+		return false, nil
+	}
+
+	switch caller.kind {
+	case gatewayCallerAgent:
+		// An agent's grants are checked against each member. Pointing the agent
+		// at a gateway grants no authority of its own.
+		return true, nil
+	case gatewayCallerWorkload:
+		// The workload credential ceiling must authorize this gateway target.
+		admitted, err := authz.GrantsAuthorize(caller.ceiling, authz.MCPCheck(authz.ScopeMCPConnect, t.id.String(), projectID.String()))
+		if err != nil {
+			return false, fmt.Errorf("authorize workload gateway target: %w", err)
+		}
+		return admitted, nil
+	default:
+		return false, nil
+	}
 }
