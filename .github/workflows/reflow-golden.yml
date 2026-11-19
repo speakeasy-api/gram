@@ -61,8 +61,9 @@ jobs:
       # binary restored, cargo install sees the pinned revision is already
       # installed and skips the build. Use an exact key: a different pinned
       # revision or toolchain must never reuse this binary.
-      - name: Cache pinned Monty installation
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0 # zizmor: ignore[cache-poisoning]
+      - name: Restore pinned Monty installation
+        id: monty-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0 # zizmor: ignore[cache-poisoning]
         with:
           path: agents/code-runner/target/monty
           key: monty-blacksmith-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.mise-tasks/build/monty.sh', 'agents/code-runner/rust-toolchain.toml') }}
@@ -83,6 +84,20 @@ jobs:
         env:
           ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         run: ./zero --agent
+
+      # Save as soon as the build exists, not at the end of the job: a combined
+      # actions/cache step saves only when every step passes, and a failing
+      # golden flow would otherwise leave the next run compiling again.
+      # cargo install writes .crates2.json only after a complete install.
+      - name: Save pinned Monty installation
+        if: >-
+          !cancelled() &&
+          steps.monty-cache.outputs.cache-hit != 'true' &&
+          hashFiles('agents/code-runner/target/monty/.crates2.json') != ''
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: agents/code-runner/target/monty
+          key: ${{ steps.monty-cache.outputs.cache-primary-key }}
 
       - name: Install Reflow
         env:
