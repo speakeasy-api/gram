@@ -2,7 +2,7 @@ package aitargets_test
 
 // This golden was first generated from the registry-backed Defaults before it
 // took a snapshot, which established equivalence. list_version and etag derive
-// from catalog content, so any registry change needs `-args -update`.
+// from the served built-in targets, so a scan list change needs `-args -update`.
 
 import (
 	"encoding/json"

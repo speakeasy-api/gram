@@ -2,6 +2,7 @@ package aitargets_test
 
 import (
 	"math"
+	"slices"
 	"testing"
 	"time"
 
@@ -104,34 +105,81 @@ func TestOverlayKeepsTheBuiltInDefinitionAuthoritative(t *testing.T) {
 	require.Equal(t, "not reviewed", entries[0].Decision.Rationale)
 }
 
-// The served list_version is the catalog's content-derived version. An
-// organization's edits change only the ETag; a catalog change moves both.
-func TestOrganizationListVersionAndETagFollowCatalogContent(t *testing.T) {
-	t.Parallel()
-
-	compiled := aivendors.CompiledSnapshot()
-	served := aitargets.NewOrganizationList(compiled, nil).Snapshot
-	require.Equal(t, compiled.Version(), served.ListVersion)
-	require.GreaterOrEqual(t, served.ListVersion, int32(1), "devices reserve 0 for their embedded list")
-	require.LessOrEqual(t, served.ListVersion, int32(math.MaxInt32))
-
+func compiledProducts() []aivendors.Product {
 	products := aivendors.Products()
 	for i := range products {
 		products[i].Family = ""
 		products[i].Aliases = nil
 	}
-	rebuilt := aitargets.NewOrganizationList(aivendors.NewSnapshot(products), nil).Snapshot
-	require.Equal(t, served.ListVersion, rebuilt.ListVersion, "same catalog, same order")
-	require.Equal(t, served.ETag, rebuilt.ETag)
+	return products
+}
 
-	edited := aitargets.NewOrganizationList(compiled, []aitargets.Entry{organizationRow("an-organization-target")}).Snapshot
-	require.Equal(t, served.ListVersion, edited.ListVersion, "an organization edit does not move the version")
-	require.NotEqual(t, served.ETag, edited.ETag, "an organization edit moves the ETag")
+// firstScanned is the index of the first scanned product.
+func firstScanned(products []aivendors.Product) int {
+	return slices.IndexFunc(products, aivendors.Product.IsScanned)
+}
 
-	products[0].DisplayName += " renamed"
-	changed := aitargets.NewOrganizationList(aivendors.NewSnapshot(products), nil).Snapshot
-	require.NotEqual(t, served.ListVersion, changed.ListVersion, "a catalog change moves the version")
-	require.NotEqual(t, served.ETag, changed.ETag, "a catalog change moves the ETag")
+func servedFor(products []aivendors.Product, entries []aitargets.Entry) *aitargets.Snapshot {
+	return aitargets.NewOrganizationList(aivendors.NewSnapshot(products), entries).Snapshot
+}
+
+// list_version and the etag follow what devices are served and nothing else.
+func TestOrganizationListVersionFollowsTheServedBuiltIns(t *testing.T) {
+	t.Parallel()
+
+	base := aitargets.NewOrganizationList(aivendors.CompiledSnapshot(), nil).Snapshot
+	require.GreaterOrEqual(t, base.ListVersion, int32(1), "devices reserve 0 for their embedded list")
+	require.LessOrEqual(t, base.ListVersion, int32(math.MaxInt32))
+	require.Equal(t, aitargets.ListVersion(aitargets.Defaults(aivendors.CompiledSnapshot())), base.ListVersion)
+	require.NotEqual(t, -1, firstScanned(compiledProducts()), "the mutations below edit a scanned product")
+
+	unchanged := map[string]func(products []aivendors.Product) []aivendors.Product{
+		"document added": func(products []aivendors.Product) []aivendors.Product {
+			i := firstScanned(products)
+			products[i].Documents = append(products[i].Documents, aivendors.Document{URL: "https://example.com/oauth/added.json", DisplayName: "Added", Enabled: true, Pattern: false})
+			return products
+		},
+		"client info name changed": func(products []aivendors.Product) []aivendors.Product {
+			i := firstScanned(products)
+			products[i].ClientInfoNames = append(products[i].ClientInfoNames, "renamed-client")
+			return products
+		},
+		"unscanned product added": func(products []aivendors.Product) []aivendors.Product {
+			return append(products, aivendors.Product{ID: "admission-only", VendorKey: "admission-only", DisplayName: "Admission Only"})
+		},
+		"input order reversed": func(products []aivendors.Product) []aivendors.Product {
+			slices.Reverse(products)
+			for i := range products {
+				slices.Reverse(products[i].Documents)
+			}
+			return products
+		},
+	}
+	for name, mutate := range unchanged {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			got := servedFor(mutate(compiledProducts()), nil)
+			require.Equal(t, base.ListVersion, got.ListVersion)
+			require.Equal(t, base.ETag, got.ETag)
+		})
+	}
+
+	t.Run("scanned signature changed", func(t *testing.T) {
+		t.Parallel()
+		products := compiledProducts()
+		i := firstScanned(products)
+		products[i].Signatures.Binaries = append(products[i].Signatures.Binaries, "added-binary")
+		got := servedFor(products, nil)
+		require.NotEqual(t, base.ListVersion, got.ListVersion)
+		require.NotEqual(t, base.ETag, got.ETag)
+	})
+
+	t.Run("organization edit", func(t *testing.T) {
+		t.Parallel()
+		got := servedFor(compiledProducts(), []aitargets.Entry{organizationRow("an-organization-target")})
+		require.Equal(t, base.ListVersion, got.ListVersion, "an organization edit does not move the version")
+		require.NotEqual(t, base.ETag, got.ETag, "an organization edit moves the etag")
+	})
 }
 
 // ChatGPT ships as two desktop builds that a device tells apart by bundle id

@@ -368,3 +368,20 @@ func sortedMatchers(targets []aitargets.Target) []aitargets.Target {
 	}
 	return targets
 }
+
+// The Postgres cutover must not change what devices are told: the loaded
+// catalog lists in a different order but serves the same built-in targets.
+func TestLoadedSnapshotServesTheCompiledListVersionAndETag(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
+	loaded, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
+	require.NoError(t, err)
+	require.NotEqual(t, aivendors.CompiledSnapshot().Fingerprint(), loaded.Fingerprint(), "the orders differ")
+
+	want := aitargets.NewOrganizationList(aivendors.CompiledSnapshot(), nil).Snapshot
+	got := aitargets.NewOrganizationList(loaded, nil).Snapshot
+	require.Equal(t, want.ListVersion, got.ListVersion)
+	require.Equal(t, want.ETag, got.ETag)
+}

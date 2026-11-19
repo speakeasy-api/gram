@@ -2,4 +2,4 @@
 "server": patch
 ---
 
-Device agents now receive an AI tool scan list version that comes from the catalog contents, so devices pick up the list once more after this update with a new version number.
+The AI tool scan list version that device agents receive now comes from the built-in scan list itself. After this update each device sees one new version and saves its copy of the list again; it does not rescan.

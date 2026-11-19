@@ -224,8 +224,8 @@ func TestGatewayMatchersStayOutOfTheAgentEnvelope(t *testing.T) {
 		ClientInfoNames: []string{"claude-code"},
 	})
 
-	bareSnapshot := aitargets.NewSnapshot(7, []aitargets.Target{bare}, "")
-	linkedSnapshot := aitargets.NewSnapshot(7, []aitargets.Target{linked}, "")
+	bareSnapshot := aitargets.NewSnapshot(7, []aitargets.Target{bare})
+	linkedSnapshot := aitargets.NewSnapshot(7, []aitargets.Target{linked})
 
 	// Matchers are server-side only: agents must not receive them, and a
 	// matcher-only edit must not churn the ETag into a needless re-apply.

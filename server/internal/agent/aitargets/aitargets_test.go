@@ -58,7 +58,7 @@ func TestSnapshotSortsResolvesAndCopies(t *testing.T) {
 	defaults := aitargets.Defaults(aivendors.CompiledSnapshot())
 	reversed := slices.Clone(defaults)
 	slices.Reverse(reversed)
-	snapshot := aitargets.NewSnapshot(7, reversed, "")
+	snapshot := aitargets.NewSnapshot(7, reversed)
 	require.EqualValues(t, 7, snapshot.ListVersion)
 
 	targets := snapshot.Targets()
@@ -84,14 +84,14 @@ func TestSnapshotETagTracksVersionAndContent(t *testing.T) {
 	t.Parallel()
 
 	defaults := aitargets.Defaults(aivendors.CompiledSnapshot())
-	base := aitargets.NewSnapshot(1, defaults, "")
-	require.Equal(t, base.ETag, aitargets.NewSnapshot(1, defaults, "").ETag, "same input must fingerprint identically")
-	require.NotEqual(t, base.ETag, aitargets.NewSnapshot(2, defaults, "").ETag, "a version bump must move the etag")
-	require.NotEqual(t, base.ETag, aitargets.NewSnapshot(1, defaults, "other-catalog").ETag, "a wire-version collision must not hide a catalog change")
+	base := aitargets.NewSnapshot(1, defaults)
+	require.Equal(t, base.ETag, aitargets.NewSnapshot(1, defaults).ETag, "same input must fingerprint identically")
+	require.NotEqual(t, base.ETag, aitargets.NewSnapshot(2, defaults).ETag, "a version bump must move the etag")
+	require.NotEqual(t, base.ETag, aitargets.NewSnapshot(1, defaults[1:]).ETag, "two served lists sharing a list_version still differ in etag")
 
 	renamed := aitargets.Defaults(aivendors.CompiledSnapshot())
 	renamed[0].DisplayName = "Renamed"
-	require.NotEqual(t, base.ETag, aitargets.NewSnapshot(1, renamed, "").ETag, "a content change must move the etag")
+	require.NotEqual(t, base.ETag, aitargets.NewSnapshot(1, renamed).ETag, "a content change must move the etag")
 }
 
 // TestEnvelopeWireShape pins the JSON the device agent decodes.
@@ -109,7 +109,7 @@ func TestEnvelopeWireShape(t *testing.T) {
 			ProcessNames: []string{"Cursor"},
 		},
 		VersionHint: &aitargets.VersionHint{PlistKey: "CFBundleShortVersionString"},
-	}}, "")
+	}})
 
 	data, err := json.Marshal(snapshot.Envelope())
 	require.NoError(t, err)
@@ -138,7 +138,7 @@ func TestEnvelopeWireShape(t *testing.T) {
 func TestEnvelopeOmitsAbsentVersionHint(t *testing.T) {
 	t.Parallel()
 
-	snapshot := aitargets.NewSnapshot(1, aitargets.Defaults(aivendors.CompiledSnapshot())[:1], "")
+	snapshot := aitargets.NewSnapshot(1, aitargets.Defaults(aivendors.CompiledSnapshot())[:1])
 	data, err := json.Marshal(snapshot.Envelope())
 	require.NoError(t, err)
 	require.NotContains(t, string(data), "version_hint")

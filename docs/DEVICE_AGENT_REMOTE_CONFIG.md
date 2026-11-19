@@ -79,11 +79,12 @@ stores them, and rejects any update that tries to set them.
   `list_version` (which agents echo as `target_list_version` on every scan
   receipt; a receipt carries `0` when the agent scanned with the list embedded
   in its binary because it has not received one), `etag`, and `targets`.
-  `list_version` is a positive 32-bit value derived from the AI client
-  catalog's content: the same on every replica and across restarts, but not
-  ordered and not guaranteed unique. Organization edits do not move it.
-  Agents detect a change by comparing `etag`, which covers the catalog
-  fingerprint and the organization's served targets. Organization admins
+  `list_version` is a positive 32-bit value derived from the built-in targets
+  as agents receive them: the same on every replica and across restarts, but
+  not ordered and not guaranteed unique. It moves only when the built-in scan
+  list changes; organization edits and catalog data agents never receive do
+  not move it. Agents detect a change by comparing `etag`, which covers
+  `list_version` and the organization's served targets. Organization admins
   manage the list through
   `agent.listAiScanTargets`, `agent.upsertAiScanTarget`, and
   `agent.deleteAiScanTarget`; every change lands in the organization's audit

@@ -2,6 +2,9 @@ package aitargets
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"slices"
@@ -233,13 +236,40 @@ func LoadOrganizationList(ctx context.Context, queries *repo.Queries, organizati
 }
 
 // NewOrganizationList overlays entries on the catalog defaults. The served
-// list_version is the catalog version; organization edits move only the ETag.
+// list_version identifies the built-in targets; organization edits move only
+// the ETag.
 func NewOrganizationList(catalog *aivendors.Snapshot, entries []Entry) *OrganizationList {
-	overlaid := Overlay(Defaults(catalog), entries)
+	defaults := Defaults(catalog)
+	listVersion := ListVersion(defaults)
+	overlaid := Overlay(defaults, entries)
 	return &OrganizationList{
 		Entries:  overlaid,
-		Snapshot: NewSnapshot(catalog.Version(), Served(overlaid), catalog.Fingerprint()),
+		Snapshot: NewSnapshot(listVersion, Served(overlaid)),
 	}
+}
+
+// ListVersion hashes the built-in targets exactly as devices are served them,
+// ordered by id, so catalog data devices never receive cannot move it.
+func ListVersion(defaults []Target) int32 {
+	sorted := slices.Clone(defaults)
+	slices.SortFunc(sorted, func(a, b Target) int { return strings.Compare(a.ID, b.ID) })
+	hash := sha256.New()
+	data, err := json.Marshal(wireTargets(sorted))
+	if err != nil {
+		_, _ = fmt.Fprintf(hash, "marshal error: %v", err)
+	}
+	_, _ = hash.Write(data)
+	return wireVersion(binary.BigEndian.Uint32(hash.Sum(nil)[:4]))
+}
+
+// wireVersion reduces a hash prefix to 1..MaxInt32: devices reserve 0 for their
+// embedded list and reject negatives. The result is opaque, not ordered.
+func wireVersion(prefix uint32) int32 {
+	const versionMask = uint32(1<<31 - 1)
+	if v := int32(prefix & versionMask); v != 0 {
+		return v
+	}
+	return 1
 }
 
 // EntryFromRow converts an organization's row into an Entry. Overlay settles
