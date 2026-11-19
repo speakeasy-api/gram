@@ -1,13 +1,13 @@
-name: GRW-469 full-suite comparison
+name: GRW-469 worker and CPU diagnostics
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   benchmark:
-    name: Full dashboard suite before and after
+    name: Same revision - three versus four workers
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 25
+    timeout-minutes: 40
     env:
       NODE_OPTIONS: --max-old-space-size=8192
       NODE_DISABLE_COMPILE_CACHE: '1'
@@ -36,23 +36,72 @@ jobs:
           path: ${{ env.AUBE_STORE_PATH }}
       - name: Install identical dependencies once
         run: aube install --frozen-lockfile
-      - name: Full dashboard suite - after
+      - name: Four full runs with CPU pressure sampling
         run: |
-          git checkout --force --detach 6009d6a275a6ea289aa54b62a0e245c59103fa59
-          cd client/dashboard
-          /usr/bin/time -v aube exec vitest -- run --maxWorkers=4 --fsModuleCache=false --cache=false --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/grw469-after.json"
-      - name: Full dashboard suite - before
-        run: |
-          git checkout --force --detach 736b63ade9962f33ceee3bcd7b9fb7102f55d2f2
-          cd client/dashboard
-          /usr/bin/time -v aube exec vitest -- run --maxWorkers=4 --fsModuleCache=false --cache=false --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/grw469-before.json"
-      - name: Upload test reports
+          python3 - <<'PY'
+          import json, os, pathlib, subprocess, threading, time
+          out = pathlib.Path(os.environ['RUNNER_TEMP']) / 'grw469-workers'
+          out.mkdir(exist_ok=True)
+          root = pathlib.Path('/sys/fs/cgroup')
+          paths = {root}
+          for line in pathlib.Path('/proc/self/cgroup').read_text().splitlines():
+              _, controllers, location = line.split(':', 2)
+              if not controllers:
+                  candidate = root / location.lstrip('/')
+                  if candidate.is_dir():
+                      paths.add(candidate)
+                      paths.update(p for p in candidate.parents if p == root or root in p.parents)
+              else:
+                  for controller in controllers.split(','):
+                      candidate = root / controller / location.lstrip('/')
+                      if candidate.is_dir(): paths.add(candidate)
+          files = ['cpu.stat', 'cpu.max', 'cpu.weight', 'cpu.pressure', 'cpuset.cpus.effective', 'memory.current', 'memory.peak', 'memory.max', 'memory.swap.current', 'memory.events', 'memory.pressure', 'io.pressure', 'cpu.cfs_quota_us', 'cpu.cfs_period_us', 'cpuacct.usage']
+          def read(p):
+              try: return p.read_text().strip()
+              except (OSError, PermissionError): return None
+          def sample():
+              return {'monotonic': time.monotonic(), 'utc': time.time(),
+                'proc': {n:read(pathlib.Path('/proc')/n) for n in ['stat','loadavg','meminfo','pressure/cpu','pressure/memory','pressure/io']},
+                'cgroup': {str(p):{n:v for n in files if (v:=read(p/n)) is not None} for p in sorted(paths)},
+                'cpu_frequency': {str(p):read(p) for p in pathlib.Path('/sys/devices/system/cpu').glob('cpu[0-9]*/cpufreq/scaling_cur_freq')}}
+          metadata = {'revision': subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
+           'affinity': sorted(os.sched_getaffinity(0)), 'cpu_count':os.cpu_count(),
+           'node':subprocess.check_output(['node','-e','console.log(JSON.stringify({version:process.version,parallelism:require("node:os").availableParallelism(),cpus:require("node:os").cpus().map(c=>({model:c.model,speed:c.speed}))}))'],text=True),
+           'cgroup_membership':read(pathlib.Path('/proc/self/cgroup')),
+           'cache': {'fsModuleCache':False,'results':False,'NODE_DISABLE_COMPILE_CACHE':os.getenv('NODE_DISABLE_COMPILE_CACHE')},
+           'order':[3,4,4,3]}
+          (out/'metadata.json').write_text(json.dumps(metadata,indent=2))
+          results=[]
+          for index, workers in enumerate(metadata['order'],1):
+              label=f'{index}-{workers}workers'
+              stop=threading.Event()
+              def monitor():
+                  with (out/f'{label}-samples.jsonl').open('w') as f:
+                      while not stop.is_set():
+                          f.write(json.dumps(sample())+'\n');f.flush();stop.wait(1)
+              before=sample();thread=threading.Thread(target=monitor);thread.start()
+              started=time.monotonic()
+              command=['/usr/bin/time','-v','-o',str(out/f'{label}-resource.txt'),'aube','exec','vitest','--','run',f'--maxWorkers={workers}','--fsModuleCache=false','--cache=false','--reporter=default','--reporter=json',f'--outputFile.json={out}/{label}-tests.json']
+              print(f'START {label}',flush=True)
+              try:
+                  with (out/f'{label}-test.log').open('w') as log:
+                      result=subprocess.run(command,cwd='client/dashboard',stdout=log,stderr=subprocess.STDOUT)
+              finally:
+                  stop.set();thread.join()
+              record={'label':label,'workers':workers,'elapsed':time.monotonic()-started,'exit_code':result.returncode,'before':before,'after':sample()}
+              (out/f'{label}-summary.json').write_text(json.dumps(record,indent=2));results.append({k:v for k,v in record.items() if k not in ('before','after')})
+              print(json.dumps(results[-1]),flush=True)
+              if result.returncode:
+                  print((out/f'{label}-test.log').read_text()[-10000:],flush=True)
+                  break
+          (out/'results.json').write_text(json.dumps(results,indent=2))
+          if any(r['exit_code'] for r in results):raise SystemExit(1)
+          PY
+      - name: Upload diagnostic reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: grw469-full-suite-comparison
-          path: |
-            ${{ runner.temp }}/grw469-before.json
-            ${{ runner.temp }}/grw469-after.json
+          name: grw469-worker-diagnostics
+          path: ${{ runner.temp }}/grw469-workers/
           retention-days: 7
-          if-no-files-found: warn
+          if-no-files-found: error
