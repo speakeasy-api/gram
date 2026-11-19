@@ -29,11 +29,12 @@ func TestAICatalogStartupRefusesInvalidDeviceDefinition(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, cleanup()) })
 	db, err := infra.CloneTestDatabase(t, "invalid_ai_catalog")
 	require.NoError(t, err)
-	require.NoError(t, seedrepo.New(db).InsertProduct(t.Context(), seedrepo.InsertProductParams{
+	_, err = seedrepo.New(db).InsertProduct(t.Context(), seedrepo.InsertProductParams{
 		ID: "invalid-fixture", VendorKey: "fixture", DisplayName: "Fixture",
 		BundleIds: []string{}, Binaries: []string{"fixture"}, ConfigDirs: []string{},
 		ProcessNames: []string{}, ClientInfoNames: []string{},
-	}))
+	})
+	require.NoError(t, err)
 	catalog, stop, err := startAICatalog(t.Context(), db, testenv.NewLogger(t))
 	require.ErrorIs(t, err, aitargets.ErrInvalidTarget)
 	require.ErrorContains(t, err, "unknown category")

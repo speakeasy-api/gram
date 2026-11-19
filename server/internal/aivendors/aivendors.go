@@ -64,8 +64,8 @@ type Product struct {
 	// VendorKey groups products by vendor. Not unique; stable.
 	VendorKey string `json:"vendor_key"`
 	// Family groups a vendor's related products, such as Claude Code, Claude and
-	// Cowork. Empty means the product is a family of its own. Omitted when empty
-	// so database snapshots, which do not store it, keep their fingerprint.
+	// Cowork. Empty means the product is a family of its own, stored as NULL.
+	// Omitted when empty so such a product's fingerprint encoding is unchanged.
 	Family      string `json:"family,omitempty"`
 	DisplayName string `json:"display_name"`
 	// Category is required when Signatures are set.
@@ -81,8 +81,9 @@ type Product struct {
 	ClientInfoNames []string `json:"client_info_names"`
 	// Aliases are the other names producers report for the product: hook
 	// sources and the surfaces telemetry dialects state, each with the client
-	// the name implies. Attribution only, like ClientInfoNames. Omitted when
-	// empty so database snapshots, which do not store it, keep their fingerprint.
+	// the name implies. Attribution only, like ClientInfoNames. They live in
+	// the compiled registry by design, so database snapshots leave them empty
+	// and omit them from the fingerprint.
 	Aliases []Alias `json:"aliases,omitempty"`
 	// Documents are the CIMD documents it publishes.
 	Documents []Document `json:"documents"`

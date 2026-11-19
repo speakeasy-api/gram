@@ -128,9 +128,10 @@ func TestLoadOmitsPatternsWithoutRealPath(t *testing.T) {
 		"https://example.com#/oauth/*/client.json",
 	}
 	for _, pattern := range patterns {
-		require.NoError(t, seedrepo.New(db).InsertDocument(t.Context(), seedrepo.InsertDocumentParams{
+		_, err = seedrepo.New(db).InsertDocument(t.Context(), seedrepo.InsertDocumentParams{
 			ID: uuid.New(), AiProductID: "zed", Url: pattern, DisplayName: "Malformed pattern", Enabled: true, IsPattern: true,
-		}))
+		})
+		require.NoError(t, err)
 	}
 	snapshot, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
 	require.NoError(t, err)
@@ -215,11 +216,12 @@ func TestInvalidDeviceDefinitionsDoNotReplaceCatalog(t *testing.T) {
 			initial, err := aivendors.Load(t.Context(), db, logger, aitargets.ValidateCatalog)
 			require.NoError(t, err)
 			store := aivendors.NewStore(initial)
-			require.NoError(t, seedrepo.New(db).InsertProduct(t.Context(), seedrepo.InsertProductParams{
+			_, err = seedrepo.New(db).InsertProduct(t.Context(), seedrepo.InsertProductParams{
 				ID: "invalid-fixture", VendorKey: "fixture", DisplayName: "Fixture", Category: tc.category,
 				BundleIds: []string{}, Binaries: append([]string{}, tc.binaries...), ConfigDirs: []string{},
 				ProcessNames: append([]string{}, tc.processes...), ClientInfoNames: []string{},
-			}))
+			})
+			require.NoError(t, err)
 			err = store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog)
 			require.ErrorIs(t, err, aitargets.ErrInvalidTarget)
 			require.ErrorContains(t, err, tc.want)

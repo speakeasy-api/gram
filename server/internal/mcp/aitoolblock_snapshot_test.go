@@ -86,13 +86,15 @@ func TestAIToolBlockRefusesCatalogMatcherCollisions(t *testing.T) {
 
 	// This valid catalog addition sorts before the existing blocked custom target.
 	seed := seedrepo.New(db)
-	require.NoError(t, seed.InsertProduct(t.Context(), seedrepo.InsertProductParams{
+	_, err = seed.InsertProduct(t.Context(), seedrepo.InsertProductParams{
 		ID: "a-added", VendorKey: "fixture", DisplayName: "Added fixture", Category: pgtype.Text{String: "harness", Valid: true},
 		BundleIds: []string{}, Binaries: []string{"fixture"}, ConfigDirs: []string{}, ProcessNames: []string{}, ClientInfoNames: []string{},
-	}))
-	require.NoError(t, seed.InsertDocument(t.Context(), seedrepo.InsertDocumentParams{
+	})
+	require.NoError(t, err)
+	_, err = seed.InsertDocument(t.Context(), seedrepo.InsertDocumentParams{
 		ID: uuid.New(), AiProductID: "a-added", Url: clientID, DisplayName: "Added fixture", Enabled: true,
-	}))
+	})
+	require.NoError(t, err)
 	require.NoError(t, store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog))
 	err = service.checkAIToolGatewayBlock(t.Context(), logger, organizationID, clientID)
 	require.ErrorIs(t, err, ErrAIToolBlockCheckUnavailable)
