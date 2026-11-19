@@ -5037,7 +5037,10 @@ JOIN user_session_issuers AS source ON source.id = s.user_session_issuer_id
 JOIN projects AS p ON p.id = @project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
 LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
 WHERE link.user_session_issuer_id = @user_session_issuer_id
-  AND s.user_session_issuer_id = link.user_session_issuer_id
+  -- The issuer a connection was made through, such as a team gateway's, is
+  -- provenance only, as at runtime: it must still exist in this tenant, but
+  -- whether it binds the client now does not matter. The binding's own issuer
+  -- must bind the client.
   AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
   AND (usi.project_id = p.id OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
   AND (source.project_id = p.id OR (source.project_id IS NULL AND source.organization_id = p.organization_id))
@@ -5061,7 +5064,10 @@ JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 JOIN user_session_issuers AS source ON source.id = s.user_session_issuer_id
 JOIN projects AS p ON p.id = @project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
 WHERE link.user_session_issuer_id = @user_session_issuer_id
-  AND s.user_session_issuer_id = link.user_session_issuer_id
+  -- The issuer a connection was made through, such as a team gateway's, is
+  -- provenance only, as at runtime: it must still exist in this tenant, but
+  -- whether it binds the client now does not matter. The binding's own issuer
+  -- must bind the client.
   AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
   AND (usi.project_id = p.id OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
   AND (source.project_id = p.id OR (source.project_id IS NULL AND source.organization_id = p.organization_id))

@@ -159,6 +159,69 @@ it("shows a shared server as needing no assignment when editing", () => {
   });
 });
 
+describe("a member server of a team gateway", () => {
+  // The person signed in through the gateway's issuer; the member server's own
+  // issuer binds the same client.
+  const memberSignIn = { id: "client_member", credentialOwner: "subject" };
+  const viaGateway = {
+    id: "session_gateway",
+    remoteSessionClientId: "client_member",
+    userSessionIssuerId: "issuer_gateway",
+    subjectUrn: "user:user_example",
+    accessExpiresAt: new Date(Date.now() + 3_600_000),
+    hasRefreshToken: true,
+    scopes: [],
+  };
+  beforeEach(() => {
+    mocks.clients = [memberSignIn];
+    mocks.sessions = [viaGateway];
+    mocks.auth.set(server.id, {
+      data: {
+        status: "configured",
+        clients: [
+          {
+            clientType: "remote_session",
+            enabled: true,
+            personal: true,
+            remoteSessionClientId: "client_member",
+          },
+        ],
+      },
+    });
+  });
+
+  it("counts the gateway-made connection when upstream auth is enforced", () => {
+    mocks.enforcement = "enforced";
+    const { result } = renderHook(() => useOwnerConnections([server], true));
+    expect(result.current.byServer.get(server.id)).toEqual({
+      status: "ready",
+      sessions: [viaGateway],
+    });
+  });
+
+  it("counts the gateway-made connection when it is not", () => {
+    const { result } = renderHook(() => useOwnerConnections([server], true));
+    expect(result.current.byServer.get(server.id)).toEqual({
+      status: "ready",
+      sessions: [viaGateway],
+    });
+  });
+
+  it("does not count a gateway-made connection for a client the server does not bind", () => {
+    mocks.sessions = [
+      { ...viaGateway, remoteSessionClientId: "client_elsewhere" },
+    ];
+    for (const enforcement of ["enforced", "legacy"]) {
+      mocks.enforcement = enforcement;
+      const { result } = renderHook(() => useOwnerConnections([server], true));
+      expect(result.current.byServer.get(server.id)).toMatchObject({
+        status: "missing",
+        connected: 0,
+      });
+    }
+  });
+});
+
 describe("a server sharing an org-wide issuer with another server", () => {
   // The issuer binds the other server's registration; this server's own
   // auth client signs in through its own.
