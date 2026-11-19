@@ -809,7 +809,7 @@ func seedMigrationAttachments(t *testing.T, ctx context.Context, ti *testInstanc
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	login, err := remotesessionsrepo.New(ti.conn).UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+	login, err := remotesessionsrepo.New(ti.conn).UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            urn.NewUserSubject(person),
 		UserSessionIssuerID:   loginIssuerID,
 		RemoteSessionClientID: clientID,
