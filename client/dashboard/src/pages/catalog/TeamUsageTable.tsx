@@ -83,7 +83,7 @@ export function TeamUsageTable({
     },
     {
       key: "userCount",
-      header: "People",
+      header: "Users",
       width: "0.6fr",
       render: (server) => (
         <Text variant="small">{server.userCount.toLocaleString()}</Text>
@@ -206,7 +206,7 @@ export function TeamUsageTable({
     <div className="space-y-3">
       <Text muted small className="block">
         Remote servers your team&apos;s agents connect to directly, most used
-        first. People and calls count everything Speakeasy has seen.
+        first. Users and calls count everything Speakeasy has seen.
       </Text>
       <Table
         columns={columns}
