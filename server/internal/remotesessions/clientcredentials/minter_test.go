@@ -933,3 +933,18 @@ func TestServedUntil(t *testing.T) {
 		})
 	}
 }
+
+func TestNewCacheKeys_FollowSecretGeneration(t *testing.T) {
+	t.Parallel()
+
+	client := repo.GetClientCredentialsGrantClientRow{ClientID: uuid.New(), ClientSecretEncrypted: pgtype.Text{String: "platform-copy", Valid: true}, ClientSecretGeneration: 3}
+
+	resealed := client
+	resealed.ClientSecretEncrypted = pgtype.Text{}
+	resealed.ClientSecretOrgEncrypted = pgtype.Text{String: "organization-copy", Valid: true}
+	require.Equal(t, newCacheKeys(client, ""), newCacheKeys(resealed, ""), "sealing the same secret again keeps cached credentials")
+
+	replaced := client
+	replaced.ClientSecretGeneration++
+	require.NotEqual(t, newCacheKeys(client, ""), newCacheKeys(replaced, ""), "a replaced secret mints again")
+}

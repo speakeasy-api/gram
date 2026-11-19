@@ -1248,6 +1248,34 @@ WHERE (is_transcript_row OR time_unix_nano >= chat_session_cutoff_unix_nano)
   AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_hook_turn_usage_row OR is_litellm_usage_row OR is_agent_tool_call OR is_transcript_row)
 GROUP BY gram_project_id, time_bucket, chat_id;
 
+-- chat_log_time_bounds records when each chat's logs start and end, so a
+-- read of one chat's logs can bound telemetry_logs by time and prune by the
+-- primary key. chat_id is not in the telemetry_logs sort key, so without
+-- these bounds the gram_chat_id bloom filter is checked on every granule of
+-- the window, which defaults to the project's whole history. Unlike
+-- chat_session_summaries, the view admits every row that carries a chat id:
+-- a bound that missed a row would hide that row from the chat's logs.
+CREATE TABLE IF NOT EXISTS chat_log_time_bounds (
+    gram_project_id UUID COMMENT 'Project the chat belongs to.\n@access: confidential',
+    gram_chat_id String COMMENT 'Chat ID, matching telemetry_logs.gram_chat_id.\n@access: confidential',
+    first_time_unix_nano SimpleAggregateFunction(min, Int64) COMMENT 'Earliest time_unix_nano among the chat logs.\n@access: confidential',
+    last_time_unix_nano SimpleAggregateFunction(max, Int64) COMMENT 'Latest time_unix_nano among the chat logs.\n@access: confidential'
+) ENGINE = AggregatingMergeTree
+ORDER BY (gram_project_id, gram_chat_id)
+TTL fromUnixTimestamp64Nano(last_time_unix_nano) + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Time range of the telemetry logs of each chat, for bounding per-chat log reads. Read with min/max and GROUP BY gram_project_id, gram_chat_id.';
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS chat_log_time_bounds_mv TO chat_log_time_bounds AS
+SELECT
+    gram_project_id,
+    ifNull(gram_chat_id, '') AS gram_chat_id,
+    min(time_unix_nano) AS first_time_unix_nano,
+    max(time_unix_nano) AS last_time_unix_nano
+FROM telemetry_logs
+WHERE ifNull(gram_chat_id, '') != ''
+GROUP BY gram_project_id, gram_chat_id;
+
 CREATE TABLE IF NOT EXISTS attribute_keys (
     gram_project_id UUID COMMENT '@access: confidential',
     attribute_key String COMMENT '@access: opaque-confidential',

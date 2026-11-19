@@ -186,7 +186,7 @@ func seedRefreshableSharedSession(t *testing.T, ctx context.Context, ti *testIns
 	require.NoError(t, err)
 
 	subject := urn.NewUserSubject("subject-" + slug)
-	_, err = repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	_, err = repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   usi,
 		RemoteSessionClientID: clientID,
@@ -331,7 +331,7 @@ func TestSoftDeleteSubjectSessions_SiblingIssuerRevokeDestroysSharedCredential(t
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		ti.conn,
-		testenv.NewEncryptionClient(t), clientsecretstest.New(t, ti.conn, testenv.NewEncryptionClient(t)),
+		testenv.NewEncryptionClient(t), clientsecretstest.New(t, ti.conn, testenv.NewEncryptionClient(t)), nil,
 		policy,
 		nil,
 	)
@@ -362,7 +362,7 @@ func TestSoftDeleteSubjectSessions_UnboundIssuerRevokesNothing(t *testing.T) {
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		ti.conn,
-		testenv.NewEncryptionClient(t), clientsecretstest.New(t, ti.conn, testenv.NewEncryptionClient(t)),
+		testenv.NewEncryptionClient(t), clientsecretstest.New(t, ti.conn, testenv.NewEncryptionClient(t)), nil,
 		policy,
 		nil,
 	)
@@ -396,7 +396,7 @@ func TestRefreshSweep_SiblingIssuerKeepsCredentialEligible(t *testing.T) {
 	require.NoError(t, err)
 
 	subject := urn.NewUserSubject("subject-shared-sweep")
-	session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	session, err := repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   provenance,
 		RemoteSessionClientID: clientUUID,
@@ -452,7 +452,7 @@ func TestRefreshSweep_CrossTenantBindingNotEligible(t *testing.T) {
 	require.NoError(t, err)
 
 	subject := urn.NewUserSubject("subject-shared-sweep-xten")
-	session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	session, err := repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   provenance,
 		RemoteSessionClientID: clientUUID,
@@ -502,7 +502,7 @@ func TestRefreshSweep_NoLiveBoundIssuerSessionNotEligible(t *testing.T) {
 	require.NoError(t, err)
 
 	subject := urn.NewUserSubject("subject-shared-sweep-none")
-	session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	session, err := repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   provenance,
 		RemoteSessionClientID: clientUUID,

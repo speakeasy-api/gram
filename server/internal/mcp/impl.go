@@ -223,12 +223,14 @@ type Service struct {
 	toolsetCache      cache.TypedCacheObject[mv.ToolsetBaseContents]
 	telemLogger       *tm.Logger
 	// toolCallLogger emits tool call records into the OTel pipeline.
-	toolCallLogger         *otelpub.Logger
-	vectorToolStore        *rag.ToolsetVectorStore
-	assistantTokens        *assistanttokens.Manager
-	principalCredentials   *principalcredential.Issuer
-	deviceAgentTokens      *deviceagenttoken.Issuer
-	sessions               *sessions.Manager
+	toolCallLogger       *otelpub.Logger
+	vectorToolStore      *rag.ToolsetVectorStore
+	assistantTokens      *assistanttokens.Manager
+	principalCredentials *principalcredential.Issuer
+	deviceAgentTokens    *deviceagenttoken.Issuer
+	sessions             *sessions.Manager
+	// idpSessions ends identity provider sessions; the sessions manager outside tests.
+	idpSessions            sessions.SessionRevoker
 	consentBindings        ConsentBindingService
 	identityResolver       IdentityResolver
 	identityValidator      *mcpidentity.ValidatorBoundary
@@ -242,6 +244,8 @@ type Service struct {
 	platformFeatureChecker platformtools.FeatureChecker
 	platformToolsets       map[string]platformtools.Toolset
 	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
+	// accountSwitchCache marks consent challenges an account switch spent.
+	accountSwitchCache cache.TypedCacheObject[accountSwitchMarker]
 	// Short-lived install codes. Holds a live agent key, so it is
 	// cache-only and never written to the database.
 	agentInstallCache cache.TypedCacheObject[agentInstallCode]
@@ -262,6 +266,9 @@ type Service struct {
 	// userSessionRefreshReplayCoordination elects the database rotation winner, claims attemptEndMarker and keeps member statuses.
 	userSessionRefreshReplayCoordination cache.Cache
 	sessionPolicyCache                   cache.TypedCacheObject[sessionPolicyEntry]
+	// sessionLiveness memoizes Postgres's answer on whether a bearer's session
+	// row is live, so revocation never depends on a Redis entry surviving.
+	sessionLiveness *expirable.LRU[sessionLivenessKey, bool]
 	// consentToolInventoryCache holds bounded gateway challenge captures and
 	// single-server attempt snapshots captured by the consent MCP transport.
 	consentToolInventoryCache cache.TypedCacheObject[consentToolInventory]
@@ -680,6 +687,7 @@ func NewService(
 		principalCredentials:   principalCredentials,
 		deviceAgentTokens:      deviceagenttoken.New(callerAssertions, db),
 		sessions:               sessions,
+		idpSessions:            sessions,
 		chatSessionsManager:    chatSessionsManager,
 		enc:                    enc,
 		authz:                  authzEngine,
@@ -690,6 +698,11 @@ func NewService(
 		platformToolsets:       platformToolsets,
 		authnChallengeCache: cache.NewTypedObjectCache[AuthnChallengeState](
 			logger.With(attr.SlogCacheNamespace("authn_challenge")),
+			cacheImpl,
+			cache.SuffixNone,
+		),
+		accountSwitchCache: cache.NewTypedObjectCache[accountSwitchMarker](
+			logger.With(attr.SlogCacheNamespace("account_switch")),
 			cacheImpl,
 			cache.SuffixNone,
 		),
@@ -718,6 +731,7 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
+		sessionLiveness: newSessionLivenessMemo(),
 		consentToolInventoryCache: cache.NewTypedObjectCache[consentToolInventory](
 			logger.With(attr.SlogCacheNamespace("consent_tool_inventory")),
 			cacheImpl,

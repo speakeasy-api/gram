@@ -1,5 +1,6 @@
-// Per-card consent actions do not consume challenges. Delegation retry consumes
-// and rotates the challenge; approve/deny remain the only grant-minting actions.
+// Per-card consent actions do not consume challenges. Delegation retry and
+// account switch consume and rotate the challenge; approve/deny remain the
+// only grant-minting actions.
 
 package mcp
 
@@ -15,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
@@ -84,10 +86,15 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger), oauthui.ReasonInvalidLink))
 	}
 
-	// Plain Get: card actions are idempotent within the challenge TTL and
-	// must not consume the state the approve POST needs.
+	// Plain Get: card actions must not consume the state the approve POST needs;
+	// the ones that do take it themselves.
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
+		if errors.Is(err, redisCache.ErrCacheMiss) {
+			if switched := s.switchedConsentError(ctx, logger, endpoint, stateID); switched != nil {
+				return switched
+			}
+		}
 		return consentChallengeCacheError(ctx, logger, err)
 	}
 	if challengeState.FirstParty {
@@ -118,7 +125,9 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return oauthAuthorityError(err).LogError(ctx, logger)
 	}
 	action := r.PostForm.Get("action")
-	if endpoint.MetaMcpServerID.Valid && (action == "identity_chaining_check" || action == "validate") {
+	// Off, the switch action is an unknown action, as before the flag.
+	switchAccount := action == consentActionSwitchAccount && s.accountSwitchEnabled(ctx, endpoint.OrganizationID)
+	if endpoint.MetaMcpServerID.Valid && (action == "identity_chaining_check" || action == "validate" || switchAccount) {
 		lockedDown, err := s.endpointCustomDomainLockdown(ctx, logger, endpoint)
 		if err != nil {
 			return err
@@ -128,6 +137,9 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		}
 	}
 	subject := *challengeState.Subject
+	if switchAccount {
+		return s.switchSignInAccount(w, r, endpoint, challengeState)
+	}
 
 	switch r.PostForm.Get("action") {
 	case "agent_connections", "agent_attach", "agent_detach":

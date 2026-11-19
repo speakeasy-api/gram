@@ -449,6 +449,7 @@ func buildProbeURLResult(result ProbeResult) *gen.ProbeURLResult {
 		ProtectedResourceMetadataURL: result.ProtectedResourceMetadataURL,
 		HTTPStatus:                   result.HTTPStatus,
 		Reason:                       result.Reason,
+		ServerName:                   result.ServerName,
 		SignInSetup:                  nil,
 	}
 }

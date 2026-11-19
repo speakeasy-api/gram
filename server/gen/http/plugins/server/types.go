@@ -25,6 +25,9 @@ type CreatePluginRequestBody struct {
 	// Defaults to true. When false, the plugin stays out of the marketplace until
 	// someone syncs it by hand.
 	AutoSyncEnabled *bool `form:"auto_sync_enabled,omitempty" json:"auto_sync_enabled,omitempty" xml:"auto_sync_enabled,omitempty"`
+	// Whether the plugin's role audiences add and remove its MCP servers
+	// automatically. Defaults to false.
+	AutoAddServersEnabled *bool `form:"auto_add_servers_enabled,omitempty" json:"auto_add_servers_enabled,omitempty" xml:"auto_add_servers_enabled,omitempty"`
 }
 
 // UpdatePluginRequestBody is the type of the "plugins" service "updatePlugin"
@@ -42,6 +45,10 @@ type UpdatePluginRequestBody struct {
 	// has changes that haven't been synced, and the slug can't change while it is
 	// off.
 	AutoSyncEnabled *bool `form:"auto_sync_enabled,omitempty" json:"auto_sync_enabled,omitempty" xml:"auto_sync_enabled,omitempty"`
+	// Whether the plugin's role audiences add and remove its MCP servers
+	// automatically. Omit to keep the current setting. Turning it on adds the MCP
+	// servers its assigned roles can use now, except ones an admin removed before.
+	AutoAddServersEnabled *bool `form:"auto_add_servers_enabled,omitempty" json:"auto_add_servers_enabled,omitempty" xml:"auto_add_servers_enabled,omitempty"`
 }
 
 // AddPluginServerRequestBody is the type of the "plugins" service
@@ -157,6 +164,10 @@ type GetPluginResponseBody struct {
 	// Whether changes to this plugin publish to the marketplace automatically.
 	// When false, they wait until someone syncs the marketplace by hand.
 	AutoSyncEnabled bool `form:"auto_sync_enabled" json:"auto_sync_enabled" xml:"auto_sync_enabled"`
+	// Whether the plugin's role audiences add and remove its MCP servers
+	// automatically, based on the MCP servers those roles can use. When false,
+	// only manual changes alter the plugin's server list.
+	AutoAddServersEnabled bool `form:"auto_add_servers_enabled" json:"auto_add_servers_enabled" xml:"auto_add_servers_enabled"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -193,6 +204,10 @@ type CreatePluginResponseBody struct {
 	// Whether changes to this plugin publish to the marketplace automatically.
 	// When false, they wait until someone syncs the marketplace by hand.
 	AutoSyncEnabled bool `form:"auto_sync_enabled" json:"auto_sync_enabled" xml:"auto_sync_enabled"`
+	// Whether the plugin's role audiences add and remove its MCP servers
+	// automatically, based on the MCP servers those roles can use. When false,
+	// only manual changes alter the plugin's server list.
+	AutoAddServersEnabled bool `form:"auto_add_servers_enabled" json:"auto_add_servers_enabled" xml:"auto_add_servers_enabled"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -229,6 +244,10 @@ type UpdatePluginResponseBody struct {
 	// Whether changes to this plugin publish to the marketplace automatically.
 	// When false, they wait until someone syncs the marketplace by hand.
 	AutoSyncEnabled bool `form:"auto_sync_enabled" json:"auto_sync_enabled" xml:"auto_sync_enabled"`
+	// Whether the plugin's role audiences add and remove its MCP servers
+	// automatically, based on the MCP servers those roles can use. When false,
+	// only manual changes alter the plugin's server list.
+	AutoAddServersEnabled bool `form:"auto_add_servers_enabled" json:"auto_add_servers_enabled" xml:"auto_add_servers_enabled"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -4597,6 +4616,10 @@ type PluginResponseBody struct {
 	// Whether changes to this plugin publish to the marketplace automatically.
 	// When false, they wait until someone syncs the marketplace by hand.
 	AutoSyncEnabled bool `form:"auto_sync_enabled" json:"auto_sync_enabled" xml:"auto_sync_enabled"`
+	// Whether the plugin's role audiences add and remove its MCP servers
+	// automatically, based on the MCP servers those roles can use. When false,
+	// only manual changes alter the plugin's server list.
+	AutoAddServersEnabled bool `form:"auto_add_servers_enabled" json:"auto_add_servers_enabled" xml:"auto_add_servers_enabled"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -4771,6 +4794,7 @@ func NewGetPluginResponseBody(res *plugins.Plugin) *GetPluginResponseBody {
 		IsDefault:                res.IsDefault,
 		AutoCreated:              res.AutoCreated,
 		AutoSyncEnabled:          res.AutoSyncEnabled,
+		AutoAddServersEnabled:    res.AutoAddServersEnabled,
 		ServerCount:              res.ServerCount,
 		SkillCount:               res.SkillCount,
 		AssignmentCount:          res.AssignmentCount,
@@ -4812,6 +4836,7 @@ func NewCreatePluginResponseBody(res *plugins.Plugin) *CreatePluginResponseBody 
 		IsDefault:                res.IsDefault,
 		AutoCreated:              res.AutoCreated,
 		AutoSyncEnabled:          res.AutoSyncEnabled,
+		AutoAddServersEnabled:    res.AutoAddServersEnabled,
 		ServerCount:              res.ServerCount,
 		SkillCount:               res.SkillCount,
 		AssignmentCount:          res.AssignmentCount,
@@ -4853,6 +4878,7 @@ func NewUpdatePluginResponseBody(res *plugins.Plugin) *UpdatePluginResponseBody 
 		IsDefault:                res.IsDefault,
 		AutoCreated:              res.AutoCreated,
 		AutoSyncEnabled:          res.AutoSyncEnabled,
+		AutoAddServersEnabled:    res.AutoAddServersEnabled,
 		ServerCount:              res.ServerCount,
 		SkillCount:               res.SkillCount,
 		AssignmentCount:          res.AssignmentCount,
@@ -8324,10 +8350,11 @@ func NewGetPluginPayload(id string, sessionToken *string, projectSlugInput *stri
 // payload.
 func NewCreatePluginPayload(body *CreatePluginRequestBody, sessionToken *string, projectSlugInput *string) *plugins.CreatePluginPayload {
 	v := &plugins.CreatePluginPayload{
-		Name:            *body.Name,
-		Slug:            body.Slug,
-		Description:     body.Description,
-		AutoSyncEnabled: body.AutoSyncEnabled,
+		Name:                  *body.Name,
+		Slug:                  body.Slug,
+		Description:           body.Description,
+		AutoSyncEnabled:       body.AutoSyncEnabled,
+		AutoAddServersEnabled: body.AutoAddServersEnabled,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -8339,11 +8366,12 @@ func NewCreatePluginPayload(body *CreatePluginRequestBody, sessionToken *string,
 // payload.
 func NewUpdatePluginPayload(body *UpdatePluginRequestBody, sessionToken *string, projectSlugInput *string) *plugins.UpdatePluginPayload {
 	v := &plugins.UpdatePluginPayload{
-		ID:              *body.ID,
-		Name:            *body.Name,
-		Slug:            *body.Slug,
-		Description:     body.Description,
-		AutoSyncEnabled: body.AutoSyncEnabled,
+		ID:                    *body.ID,
+		Name:                  *body.Name,
+		Slug:                  *body.Slug,
+		Description:           body.Description,
+		AutoSyncEnabled:       body.AutoSyncEnabled,
+		AutoAddServersEnabled: body.AutoAddServersEnabled,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

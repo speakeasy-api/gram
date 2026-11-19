@@ -71,17 +71,16 @@ func Lock(ctx context.Context, tx pgx.Tx, organizationID string, projectID, plug
 		return pluginsrepo.Plugin{}, fmt.Errorf("lock plugin assignment target: %w", err)
 	}
 	return pluginsrepo.Plugin{
-		ID:              row.ID,
-		OrganizationID:  row.OrganizationID,
-		ProjectID:       row.ProjectID,
-		Name:            row.Name,
-		Slug:            row.Slug,
-		Description:     row.Description,
-		IsDefault:       row.IsDefault,
-		AutoCreated:     row.AutoCreated,
-		AutoSyncEnabled: pgtype.Bool{Bool: false, Valid: false},
-		// Not selected by the lock query; nothing here reads it yet.
-		AutoAddServersEnabled: false,
+		ID:                    row.ID,
+		OrganizationID:        row.OrganizationID,
+		ProjectID:             row.ProjectID,
+		Name:                  row.Name,
+		Slug:                  row.Slug,
+		Description:           row.Description,
+		IsDefault:             row.IsDefault,
+		AutoCreated:           row.AutoCreated,
+		AutoSyncEnabled:       pgtype.Bool{Bool: false, Valid: false},
+		AutoAddServersEnabled: row.AutoAddServersEnabled,
 		CreatedAt:             row.CreatedAt,
 		UpdatedAt:             row.UpdatedAt,
 		DeletedAt:             row.DeletedAt,
@@ -246,9 +245,14 @@ func Replace(ctx context.Context, tx pgx.Tx, logger *audit.Logger, plugin plugin
 	}); err != nil {
 		return Result{}, fmt.Errorf("audit plugin assignments set: %w", err)
 	}
-	changed, err := roledelivery.AudienceChanged(ctx, tx, input.OrganizationID, input.ProjectID, plugin.ID, current, desired, dependencies.DeliveryGuard)
-	if err != nil {
-		return Result{}, fmt.Errorf("deliver role audience servers: %w", err)
+	// A plugin without automatic server adding keeps its server list exactly
+	// as admins set it, whoever its audience is.
+	changed := false
+	if plugin.AutoAddServersEnabled {
+		changed, err = roledelivery.AudienceChanged(ctx, tx, input.OrganizationID, input.ProjectID, plugin.ID, current, desired, dependencies.DeliveryGuard)
+		if err != nil {
+			return Result{}, fmt.Errorf("deliver role audience servers: %w", err)
+		}
 	}
 	return Result{ContentChanged: changed, Plugin: plugin, Assignments: created, PrincipalURNs: desired, PreviousPrincipals: current, InstallModes: modes, PreviousInstallModes: previousModes}, nil
 }

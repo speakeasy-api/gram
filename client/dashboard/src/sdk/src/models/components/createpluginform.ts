@@ -7,6 +7,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type CreatePluginForm = {
   /**
+   * Whether the plugin's role audiences add and remove its MCP servers automatically. Defaults to false.
+   */
+  autoAddServersEnabled?: boolean | undefined;
+  /**
    * Whether changes to this plugin publish to the marketplace automatically. Defaults to true. When false, the plugin stays out of the marketplace until someone syncs it by hand.
    */
   autoSyncEnabled?: boolean | undefined;
@@ -26,6 +30,7 @@ export type CreatePluginForm = {
 
 /** @internal */
 export type CreatePluginForm$Outbound = {
+  auto_add_servers_enabled?: boolean | undefined;
   auto_sync_enabled?: boolean | undefined;
   description?: string | undefined;
   name: string;
@@ -38,6 +43,7 @@ export const CreatePluginForm$outboundSchema: z.ZodMiniType<
   CreatePluginForm
 > = z.pipe(
   z.object({
+    autoAddServersEnabled: z.optional(z.boolean()),
     autoSyncEnabled: z.optional(z.boolean()),
     description: z.optional(z.string()),
     name: z.string(),
@@ -45,6 +51,7 @@ export const CreatePluginForm$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      autoAddServersEnabled: "auto_add_servers_enabled",
       autoSyncEnabled: "auto_sync_enabled",
     });
   }),
