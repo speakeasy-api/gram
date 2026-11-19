@@ -192,7 +192,8 @@ new Win32 app. Then swap it into app 3's dependencies. The new detection file
 name makes Intune install it again.
 
 New agent versions: download a new bundle and upload its agent package to
-app 3. Then replace the detection script with the new one.
+app 3. Then change the uninstall command to the new msi file name, and
+replace the detection script with the new one.
 `;
 }
 
