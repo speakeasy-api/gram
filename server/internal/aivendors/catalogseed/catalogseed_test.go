@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"flag"
+	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -317,51 +319,72 @@ func TestCatalogMatchesRegistry(t *testing.T) {
 	t.Parallel()
 	var data snapshot
 	require.NoError(t, json.Unmarshal(catalog, &data))
-	raw, err := json.Marshal(aivendors.Products()) //nolint:musttag // The registry's Go field names are the file format.
-	require.NoError(t, err)
-	var products []json.RawMessage
-	require.NoError(t, json.Unmarshal(raw, &products))
 	var actual bytes.Buffer
 	actual.WriteString(`{"Notice":`)
 	notice, err := json.Marshal(data.Notice)
 	require.NoError(t, err)
 	actual.Write(notice)
-	actual.WriteString(`,"Products":[`)
-	for i, p := range products {
-		if i > 0 {
-			actual.WriteByte(',')
-		}
-		actual.Write(withoutKey(t, p, "Aliases"))
-	}
-	actual.WriteString("]}")
+	actual.WriteString(`,"Products":`)
+	writeGoFields(t, &actual, reflect.ValueOf(aivendors.Products()))
+	actual.WriteString("}")
 	if f := flag.Lookup("update"); f == nil || f.Value.String() != "true" {
 		require.JSONEq(t, actual.String(), string(catalog), "catalog.json differs from the aivendors registry; regenerate it as the README describes")
 	}
 	testenv.RequireJSONGolden(t, "catalog.json", actual.Bytes())
 }
 
-// withoutKey drops one key from a JSON object and keeps the others in order.
-func withoutKey(t *testing.T, object json.RawMessage, key string) []byte {
+// registryFieldsNotInFile are the registry fields catalog.json leaves out.
+var registryFieldsNotInFile = map[reflect.Type][]string{
+	// Reported-name aliases live in code, not the database.
+	reflect.TypeFor[aivendors.Product](): {"Aliases"},
+	// The seed derives is_pattern from a "*" in the URL.
+	reflect.TypeFor[aivendors.Document](): {"Pattern"},
+}
+
+// writeGoFields encodes v as JSON keyed by Go field names in declaration
+// order, independent of json tags. Unsupported kinds fail the test.
+func writeGoFields(t *testing.T, out *bytes.Buffer, v reflect.Value) {
 	t.Helper()
-	decoder := json.NewDecoder(bytes.NewReader(object))
-	open, err := decoder.Token()
-	require.NoError(t, err)
-	require.Equal(t, json.Delim('{'), open)
-	out := []byte{'{'}
-	for decoder.More() {
-		name, err := decoder.Token()
-		require.NoError(t, err)
-		var value json.RawMessage
-		require.NoError(t, decoder.Decode(&value))
-		if name == key {
-			continue
+	switch v.Kind() {
+	case reflect.Struct:
+		out.WriteByte('{')
+		first := true
+		for i := range v.NumField() {
+			field := v.Type().Field(i)
+			if slices.Contains(registryFieldsNotInFile[v.Type()], field.Name) {
+				continue
+			}
+			if !first {
+				out.WriteByte(',')
+			}
+			first = false
+			name, err := json.Marshal(field.Name)
+			require.NoError(t, err)
+			out.Write(name)
+			out.WriteByte(':')
+			writeGoFields(t, out, v.Field(i))
 		}
-		if len(out) > 1 {
-			out = append(out, ',')
+		out.WriteByte('}')
+	case reflect.Slice:
+		if v.IsNil() {
+			out.WriteString("null")
+			return
 		}
-		encoded, err := json.Marshal(name)
+		out.WriteByte('[')
+		for i := range v.Len() {
+			if i > 0 {
+				out.WriteByte(',')
+			}
+			writeGoFields(t, out, v.Index(i))
+		}
+		out.WriteByte(']')
+	case reflect.String:
+		encoded, err := json.Marshal(v.String())
 		require.NoError(t, err)
-		out = append(append(append(out, encoded...), ':'), value...)
+		out.Write(encoded)
+	case reflect.Bool:
+		out.WriteString(strconv.FormatBool(v.Bool()))
+	default:
+		require.FailNowf(t, "unsupported registry field kind", "%s", v.Kind())
 	}
-	return append(out, '}')
 }

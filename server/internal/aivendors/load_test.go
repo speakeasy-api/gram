@@ -27,7 +27,7 @@ func TestDatabaseCatalogPreservesShippedAdmissionAndProducts(t *testing.T) {
 	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
 	snapshot, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
 	require.NoError(t, err)
-	require.Len(t, snapshot.Products(), 51)
+	require.Len(t, snapshot.Products(), len(aivendors.Products()))
 	require.Len(t, snapshot.Catalog(), 26)
 	// Frozen expected documents and publishers are independent of the DB reader.
 	for _, entry := range aivendors.CIMDDocuments() {
