@@ -121,7 +121,7 @@ func (a *WorkOSAdapter) AuthenticateWithMagicAuth(ctx context.Context, clientID,
 		AuthenticationMethod: string(resp.AuthenticationMethod),
 		// The server redeems this code itself, so nothing here was proven by
 		// the user and the sign-in never qualifies.
-		Evidence: SignInEvidence{HostedDomain: "", TenantID: "", VerifiedEmail: "", AuthenticatedAt: time.Time{}},
+		Evidence: SignInEvidence{HostedDomain: "", HostedDomainChecked: false, TenantID: "", VerifiedEmail: "", AuthenticatedAt: time.Time{}},
 		User: AuthenticatedUser{
 			ID:                resp.User.ID,
 			FirstName:         resp.User.FirstName,

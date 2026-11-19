@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
@@ -749,13 +750,13 @@ func TestConnectionOutcome_ChainedFirstPartyEnds(t *testing.T) {
 	require.Equal(t, state.FlowID, row.AttemptID.String())
 }
 
-// seedIneligibleChainCheck: a consent attempt whose chained client Speakeasy won't vouch for.
-func seedIneligibleChainCheck(t *testing.T, tag string) (context.Context, consentActionFixture, mcp.AuthnChallengeState) {
+// seedRefusedChainCheck: a consent attempt whose chained client Speakeasy won't vouch for, for reason.
+func seedRefusedChainCheck(t *testing.T, tag string, reason identitychaining.Reason) (context.Context, consentActionFixture, mcp.AuthnChallengeState) {
 	t.Helper()
 	ctx, fx, issuer := seedChainedConsentEndpoint(t, tag+uuid.NewString()[:6])
 	g := setConsentGovernor(t, fx, issuer, consentChainedUpstream)
 	g.acquire = func(context.Context, identitychaining.Request) identitychaining.Outcome {
-		return identitychaining.Outcome{Stage: identitychaining.StageAuthorization, Reason: identitychaining.ReasonIneligibleIdentity, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}
+		return identitychaining.Outcome{Stage: identitychaining.StageAuthorization, Reason: reason, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}
 	}
 	state, err := fx.ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
 	require.NoError(t, err)
@@ -765,21 +766,23 @@ func seedIneligibleChainCheck(t *testing.T, tag string) (context.Context, consen
 	return ctx, fx, state
 }
 
-func requireIneligibleChainCheck(t *testing.T, fx consentActionFixture) {
+func requireRefusedChainCheck(t *testing.T, fx consentActionFixture) string {
 	t.Helper()
 	w, err := postChainCheck(t, fx, nil)
 	require.NoError(t, err)
-	require.Equal(t, "rejected", chainCheckResult(t, w)["status"])
+	body := chainCheckResult(t, w)
+	require.Equal(t, "rejected", body["status"])
+	return body["message"]
 }
 
 // An account Speakeasy won't vouch for is recorded once per attempt on the consent page, naming the admin.
 func TestConnectionOutcome_ChainCheckRecordsIneligibleIdentity(t *testing.T) {
 	t.Parallel()
 
-	ctx, fx, state := seedIneligibleChainCheck(t, "attempt-inelig-")
+	ctx, fx, state := seedRefusedChainCheck(t, "attempt-inelig-", identitychaining.ReasonIneligibleIdentity)
 	rec := recordConnections(t, fx.ti)
 	for range 3 {
-		requireIneligibleChainCheck(t, fx)
+		require.Contains(t, requireRefusedChainCheck(t, fx), "Ask your administrator, or use your own ")
 	}
 
 	require.NoError(t, fx.ti.service.DrainConnectionEndings(ctx))
@@ -787,12 +790,13 @@ func TestConnectionOutcome_ChainCheckRecordsIneligibleIdentity(t *testing.T) {
 	row := rec.RequireStep(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeIneligibleIdentity)
 	require.Equal(t, state.FlowID, row.AttemptID.String())
 	require.Equal(t, fx.clientA.String(), row.RemoteSessionClientID, "the row names the refused server's client")
+	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
 	require.Empty(t, row.UserSessionClientID, "like the other pre-accept consent rows, the MCP client is not named yet")
 	rec.RequireNotEnded()
 
 	state.FlowID = uuid.NewString()
 	require.NoError(t, fx.ti.authnChallengeCache.Store(ctx, state))
-	requireIneligibleChainCheck(t, fx)
+	requireRefusedChainCheck(t, fx)
 	require.Len(t, rec.Rows(), 2, "a new attempt records its own row")
 	require.Equal(t, state.FlowID, rec.Rows()[1].AttemptID.String())
 }
@@ -801,11 +805,11 @@ func TestConnectionOutcome_ChainCheckRecordsIneligibleIdentity(t *testing.T) {
 func TestConnectionOutcome_ChainCheckExportsIneligibleIdentityOnce(t *testing.T) {
 	t.Parallel()
 
-	ctx, fx, _ := seedIneligibleChainCheck(t, "export-inelig-")
+	ctx, fx, _ := seedRefusedChainCheck(t, "export-inelig-", identitychaining.ReasonIneligibleIdentity)
 	recorder, exported := mcp.NewExportingConnectionRecorder(t)
 	fx.ti.service.SetConnectionRecorder(recorder)
 	for range 3 {
-		requireIneligibleChainCheck(t, fx)
+		requireRefusedChainCheck(t, fx)
 	}
 
 	require.NoError(t, fx.ti.service.DrainConnectionEndings(ctx))
@@ -819,6 +823,45 @@ func TestConnectionOutcome_ChainCheckExportsIneligibleIdentityOnce(t *testing.T)
 		return true
 	})
 	require.Equal(t, mcpconnectionattempts.CodeIneligibleIdentity.String(), code)
+}
+
+// An account the company doesn't manage is the person's to fix: the page says why, and each attempt records one row.
+func TestConnectionOutcome_ChainCheckRecordsPersonFixedRefusal(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		reason identitychaining.Reason
+		says   string
+	}{
+		{identitychaining.ReasonUnmanagedAccount, "You're signed in to Speakeasy with a personal account, so Speakeasy can't sign you in to %s. Accounts you created yourself with your work email count as personal."},
+	} {
+		t.Run(string(tc.reason), func(t *testing.T) {
+			t.Parallel()
+			ctx, fx, state := seedRefusedChainCheck(t, "attempt-person-", tc.reason)
+			rec := recordConnections(t, fx.ti)
+			var message string
+			for range 3 {
+				message = requireRefusedChainCheck(t, fx)
+			}
+			before, after, _ := strings.Cut(tc.says, "%s")
+			require.True(t, strings.HasPrefix(message, before), message)
+			require.True(t, strings.HasSuffix(message, after), message)
+			require.NotContains(t, message, string(tc.reason), "codes stay in logs")
+
+			require.NoError(t, fx.ti.service.DrainConnectionEndings(ctx))
+			require.Len(t, rec.Rows(), 1, "reloading the page writes no more rows")
+			row := rec.RequireStep(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeUnmanagedAccount)
+			require.Equal(t, state.FlowID, row.AttemptID.String())
+			require.Equal(t, fx.clientA.String(), row.RemoteSessionClientID)
+			require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
+			rec.RequireNotEnded()
+
+			state.FlowID = uuid.NewString()
+			require.NoError(t, fx.ti.authnChallengeCache.Store(ctx, state))
+			requireRefusedChainCheck(t, fx)
+			require.Len(t, rec.Rows(), 2, "a new attempt records its own row")
+		})
+	}
 }
 
 // A provider callback whose sign-in has gone ends that attempt once, however many callbacks follow.
@@ -1195,4 +1238,105 @@ func TestConnectionOutcome_RowsCarryTheClientFamily(t *testing.T) {
 		rec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeProviderServerError)
 		requireFamily(t, rec)
 	})
+}
+
+// refusingConsentChainer refuses the consent sign-in for its upstream.
+type refusingConsentChainer struct {
+	*singleUpstreamChainer
+	reason identitychaining.Reason
+}
+
+func (c *refusingConsentChainer) CheckConsent(context.Context, identitychaining.Request, uuid.UUID) identitychaining.Outcome {
+	return identitychaining.Outcome{Stage: identitychaining.StageAuthorization, Reason: c.reason, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}
+}
+
+func (c *refusingConsentChainer) AcquireConsent(ctx context.Context, req identitychaining.Request, signInID uuid.UUID) (identitychaining.Token, identitychaining.Outcome) {
+	return identitychaining.Token{}, c.CheckConsent(ctx, req, signInID)
+}
+
+// A gateway's consent page names who fixes a refused sign-in and records it once per attempt, like a direct server's.
+func TestConnectionOutcome_GatewayChainCheckRecordsRefusal(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		reason identitychaining.Reason
+		code   mcpconnectionattempts.Code
+		who    mcpconnectionattempts.WhoFixes
+		says   string
+	}{
+		{identitychaining.ReasonUnmanagedAccount, mcpconnectionattempts.CodeUnmanagedAccount, mcpconnectionattempts.WhoPerson, "count as personal"},
+		{identitychaining.ReasonIneligibleIdentity, mcpconnectionattempts.CodeIneligibleIdentity, mcpconnectionattempts.WhoAdmin, "Ask your administrator"},
+	} {
+		t.Run(string(tc.reason), func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+			auth, _ := contextvalues.GetAuthContext(ctx)
+			_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+			slug := "gateway-refused-" + uuid.NewString()
+			gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
+			upstream := "https://chained.example.test/mcp"
+			memberID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Chained", "chained-"+uuid.NewString()[:8], 1, upstream)
+			upstreamClient := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "chained-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID})
+			_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, McpServerID: memberID, RemoteSessionClientID: upstreamClient})
+			require.NoError(t, err)
+			ti.service.SetIdentityChainer(&refusingConsentChainer{singleUpstreamChainer: &singleUpstreamChainer{issuer: clientRemoteIssuerID(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, upstreamClient), upstream: upstream}, reason: tc.reason})
+			rec := recordConnections(t, ti)
+
+			stateID, csrf := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)
+			state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+			require.NoError(t, err)
+			state.FlowID = uuid.NewString()
+			state.CreatedAt = time.Now()
+			require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
+			endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "mcp")
+			require.NoError(t, err)
+
+			for range 3 {
+				form := url.Values{"state": {stateID}, "csrf_token": {csrf}, "action": {"identity_chaining_check"}, "client_id": {upstreamClient.String()}}
+				req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect/remote-session", strings.NewReader(form.Encode()))
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				w := httptest.NewRecorder()
+				require.NoError(t, ti.service.ServeConsentAction(w, req, endpoint))
+				body := chainCheckResult(t, w)
+				require.Equal(t, "rejected", body["status"])
+				require.Contains(t, body["message"], tc.says)
+			}
+
+			require.NoError(t, ti.service.DrainConnectionEndings(ctx))
+			require.Len(t, rec.Rows(), 1, "reloading the page writes no more rows")
+			row := rec.RequireStep(mcpconnectionattempts.StepInboundConsent, tc.code)
+			require.Equal(t, state.FlowID, row.AttemptID.String())
+			require.Equal(t, upstreamClient.String(), row.RemoteSessionClientID)
+			require.Equal(t, string(tc.who), row.WhoFixes)
+		})
+	}
+}
+
+// A member whose company sign-in was refused doesn't read as an outage beside the card that explains it.
+func TestGatewayConsentRefusedMemberIsNotUnavailable(t *testing.T) {
+	t.Parallel()
+
+	for _, reason := range []identitychaining.Reason{identitychaining.ReasonUnmanagedAccount, identitychaining.ReasonIneligibleIdentity} {
+		t.Run(string(reason), func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+			auth, _ := contextvalues.GetAuthContext(ctx)
+			_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+			slug := "gateway-refused-member-" + uuid.NewString()
+			gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
+			upstream := "https://chained.example.test/mcp"
+			memberSlug := "chained-" + uuid.NewString()[:8]
+			memberID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Chained", memberSlug, 1, upstream)
+			upstreamClient := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "chained-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID})
+			_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, McpServerID: memberID, RemoteSessionClientID: upstreamClient})
+			require.NoError(t, err)
+			ti.service.SetIdentityChainer(&refusingConsentChainer{singleUpstreamChainer: &singleUpstreamChainer{issuer: clientRemoteIssuerID(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, upstreamClient), upstream: upstream}, reason: reason})
+
+			stateID, _ := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)
+			outcomes := gatewayOutcomesFromPage(consentGetPageWithContext(t, ctx, ti, slug, stateID))
+			require.Len(t, outcomes, 1)
+			require.Equal(t, memberSlug, outcomes[0].Slug)
+			require.Equal(t, "chain_pending", outcomes[0].Status)
+		})
+	}
 }

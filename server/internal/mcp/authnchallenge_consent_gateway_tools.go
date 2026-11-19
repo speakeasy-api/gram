@@ -53,6 +53,10 @@ type consentMemberOutcome struct {
 
 // listingFailureStatus is a member's status after its listing failed with lost; configured is what its cards say.
 func listingFailureStatus(lost error, configured gatewayServerStatus) gatewayServerStatus {
+	if refusedSignIn(lost) {
+		// The service's card explains why company sign-in refused this account.
+		return gatewayServerChainPending
+	}
 	if _, credential := errors.AsType[memberCredentialError](lost); credential {
 		switch configured {
 		case gatewayServerConnected, gatewayServerReconnect:
@@ -363,4 +367,10 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		})
 	}
 	return tools, toolMembers, outcomes, nil
+}
+
+// refusedSignIn reports a member whose company sign-in Speakeasy refused to vouch for.
+func refusedSignIn(err error) bool {
+	failure, ok := errors.AsType[memberConnectionError](err)
+	return ok && (failure.code == mcpconnectionattempts.CodeUnmanagedAccount || failure.code == mcpconnectionattempts.CodeIneligibleIdentity)
 }

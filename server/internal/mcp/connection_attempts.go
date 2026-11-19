@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
@@ -414,16 +415,28 @@ func (s *Service) changedMemberStatuses(ctx context.Context, logger *slog.Logger
 	return changed
 }
 
-func ineligibleConsentKey(attempt mcpconnectionattempts.Attempt, clientID uuid.UUID) string {
-	return "connectionAttemptIneligible:" + attempt.ID().String() + ":" + clientID.String()
+func refusedConsentKey(attempt mcpconnectionattempts.Attempt, clientID uuid.UUID, code mcpconnectionattempts.Code) string {
+	return "connectionAttemptIneligible:" + attempt.ID().String() + ":" + clientID.String() + ":" + code.String()
 }
 
-// recordIneligibleConsent writes one row per attempt and client, however often the page reloads; a cache failure writes it anyway.
-func (s *Service) recordIneligibleConsent(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, clientID uuid.UUID, opts ...mcpconnectionattempts.Option) {
+// chainingRefusalCode is the row for a sign-in Speakeasy won't vouch for, naming who fixes it.
+func chainingRefusalCode(reason identitychaining.Reason) (mcpconnectionattempts.Code, bool) {
+	switch reason {
+	case identitychaining.ReasonIneligibleIdentity:
+		return mcpconnectionattempts.CodeIneligibleIdentity, true
+	case identitychaining.ReasonUnmanagedAccount:
+		return mcpconnectionattempts.CodeUnmanagedAccount, true
+	default:
+		return mcpconnectionattempts.Code{}, false
+	}
+}
+
+// recordRefusedConsent writes one row per attempt, client and code, however often the page reloads; a cache failure writes it anyway.
+func (s *Service) recordRefusedConsent(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, clientID uuid.UUID, code mcpconnectionattempts.Code, opts ...mcpconnectionattempts.Option) {
 	if attempt.IsZero() {
 		return
 	}
-	key := ineligibleConsentKey(attempt, clientID)
+	key := refusedConsentKey(attempt, clientID, code)
 	marked := false
 	if s.userSessionRefreshReplayCoordination != nil {
 		cacheCtx, cancel := context.WithTimeout(ctx, memberStatusTimeout)
@@ -438,7 +451,7 @@ func (s *Service) recordIneligibleConsent(ctx context.Context, logger *slog.Logg
 			marked = true
 		}
 	}
-	if s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeIneligibleIdentity, opts...) || !marked {
+	if s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, code, opts...) || !marked {
 		return
 	}
 	// Not accepted, so the next render offers it again.
@@ -882,6 +895,9 @@ func (g *metaGateContext) listingFailureHappened(member metaMember, err error) (
 	}
 	if _, cut := errors.AsType[listingCutError](err); cut {
 		return mcpconnectionattempts.CodeMemberToolsMissing, true
+	}
+	if failure, ok := errors.AsType[memberConnectionError](err); ok && refusedSignIn(err) {
+		return failure.code, true
 	}
 	if address, _ := memberAddressCause(err); address != guardian.AddressFine {
 		return mcpconnectionattempts.AddressCode(address)

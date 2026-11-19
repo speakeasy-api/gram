@@ -22,8 +22,8 @@ import (
 // DefaultGoogleUserInfoURL is Google's OpenID Connect userinfo endpoint.
 const DefaultGoogleUserInfoURL = "https://openidconnect.googleapis.com/v1/userinfo"
 
-// evidenceTimeout bounds the lookups that establish sign-in evidence. A lookup
-// that fails or times out leaves the evidence empty, which never qualifies.
+// evidenceTimeout bounds each lookup that establishes sign-in evidence. A
+// lookup that fails or times out leaves its evidence empty, which never qualifies.
 const evidenceTimeout = 2 * time.Second
 
 // sessionLookupPages bounds the WorkOS session listing that finds when a
@@ -49,6 +49,9 @@ type SignInEvidence struct {
 	// Google's Workspace hosted domain (hd) or a Microsoft work account's UPN
 	// domain.
 	HostedDomain string
+	// HostedDomainChecked is set when the provider lookup answered, so an
+	// empty HostedDomain means the account has none rather than unknown.
+	HostedDomainChecked bool
 	// TenantID is a Microsoft account's Entra tenant.
 	TenantID string
 	// VerifiedEmail is the user's email when WorkOS reports it verified.
@@ -75,6 +78,7 @@ type evidenceCollector struct {
 	logger  *slog.Logger
 	lookups metric.Int64Counter
 	enabled EvidenceGate
+	timeout time.Duration
 }
 
 func newEvidenceCollector(cfg EvidenceConfig) evidenceCollector {
@@ -94,7 +98,7 @@ func newEvidenceCollector(cfg EvidenceConfig) evidenceCollector {
 	if err != nil {
 		logger.ErrorContext(context.Background(), "create sign-in evidence counter", attr.SlogError(err))
 	}
-	return evidenceCollector{logger: logger, lookups: lookups, enabled: cfg.Enabled}
+	return evidenceCollector{logger: logger, lookups: lookups, enabled: cfg.Enabled, timeout: evidenceTimeout}
 }
 
 func (c evidenceCollector) count(ctx context.Context, kind, outcome string) {
@@ -116,13 +120,26 @@ func (a *WorkOSAdapter) signInEvidence(ctx context.Context, resp usermanagement.
 		ev.VerifiedEmail = resp.User.Email
 	}
 	c := a.evidence
-	ctx, cancel := context.WithTimeout(ctx, evidenceTimeout)
-	defer cancel()
-	if c.enabled == nil || resp.OrganizationID == "" || !c.enabled(ctx, resp.OrganizationID) {
+	if c.enabled == nil || resp.OrganizationID == "" || !c.enabledWithin(ctx, resp.OrganizationID) {
 		return ev
 	}
 
-	ev.AuthenticatedAt = a.sessionCreatedAt(ctx, resp.User.ID, extractSessionIDFromJWT(resp.AccessToken))
+	// The two lookups run side by side, each with its own budget, so a slow session listing never hides the hosted domain.
+	sessionCtx, cancelSession := context.WithTimeout(ctx, c.timeout)
+	defer cancelSession()
+	authenticatedAt := make(chan time.Time, 1)
+	go func() {
+		authenticatedAt <- a.sessionCreatedAt(sessionCtx, resp.User.ID, extractSessionIDFromJWT(resp.AccessToken))
+	}()
+	ev = a.providerEvidence(ctx, resp, ev)
+	ev.AuthenticatedAt = <-authenticatedAt
+	return ev
+}
+
+func (a *WorkOSAdapter) providerEvidence(ctx context.Context, resp usermanagement.AuthenticateResponse, ev SignInEvidence) SignInEvidence {
+	c := a.evidence
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
 
 	method := string(resp.AuthenticationMethod)
 	switch resp.AuthenticationMethod {
@@ -138,6 +155,7 @@ func (a *WorkOSAdapter) signInEvidence(ctx context.Context, resp usermanagement.
 		}
 		c.count(ctx, method, evidenceOK)
 		ev.HostedDomain = hd
+		ev.HostedDomainChecked = true
 		return ev
 	case usermanagement.MicrosoftOAuth:
 		if resp.OAuthTokens == nil || resp.OAuthTokens.AccessToken == "" {
@@ -151,6 +169,12 @@ func (a *WorkOSAdapter) signInEvidence(ctx context.Context, resp usermanagement.
 	default:
 		return ev
 	}
+}
+
+func (c evidenceCollector) enabledWithin(ctx context.Context, workosOrganizationID string) bool {
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+	return c.enabled(ctx, workosOrganizationID)
 }
 
 func (c evidenceCollector) missingTokens(ctx context.Context, method string) {
@@ -217,10 +241,15 @@ func (a *WorkOSAdapter) googleHostedDomain(ctx context.Context, accessToken stri
 		return "", fmt.Errorf("google userinfo: status %d", res.StatusCode)
 	}
 	var info struct {
-		HD string `json:"hd"`
+		Sub string `json:"sub"`
+		HD  string `json:"hd"`
 	}
 	if err := json.NewDecoder(io.LimitReader(res.Body, 64<<10)).Decode(&info); err != nil {
 		return "", fmt.Errorf("decode google userinfo: %w", err)
+	}
+	// Without sub (OIDC Core 5.3.2) the answer is not a userinfo response, so a missing hd proves nothing.
+	if info.Sub == "" {
+		return "", errors.New("google userinfo: no sub")
 	}
 	return strings.ToLower(info.HD), nil
 }

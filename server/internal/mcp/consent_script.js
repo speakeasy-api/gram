@@ -641,12 +641,49 @@
 
   // Identity-chained cards render neutral, so they read right without script.
   // Check each exchange in the background and settle the card in place; any
-  // failure keeps the neutral copy and the separate sign-in fallback.
+  // failure keeps the neutral copy and the own-account fallback.
   var connectedSummary = document.querySelector("[data-connected-summary]");
   var chainActionURL = (function () {
     var services = document.querySelector("[data-service-connections]");
     return services ? services.getAttribute("data-action-url") : "";
   })();
+
+  // "your own <service> account", from the card's service name.
+  function ownAccount(card) {
+    var service = card.getAttribute("data-remote-display") || "";
+    return service ? "your own " + service + " account" : "your own account";
+  }
+
+  // Labels a card's own-account button with the service's name when fits
+  // allows it, and "Use your own account" otherwise.
+  function labelOwnAccount(card, button, fits) {
+    button.textContent = "Use " + ownAccount(card);
+    if (card.getAttribute("data-remote-display") && !fits(button)) {
+      button.textContent = "Use your own account";
+    }
+  }
+
+  // Beside the card's text a long service name would crowd it, so the button
+  // keeps it within half the card; under the text, within the card's width.
+  // The card's title already names the service.
+  Array.prototype.forEach.call(
+    document.querySelectorAll("button[data-connect-fallback]"),
+    function (button) {
+      var card = button.closest("[data-remote-client]");
+      if (!card) {
+        return;
+      }
+      var row = card.querySelector("[data-card-row]");
+      var actions = card.querySelector("[data-card-actions]");
+      var besideText =
+        !row || window.getComputedStyle(row).flexDirection === "row";
+      labelOwnAccount(card, button, function (labelled) {
+        return besideText || !actions
+          ? labelled.offsetWidth <= card.offsetWidth / 2
+          : labelled.offsetWidth <= actions.clientWidth;
+      });
+    },
+  );
 
   function settleChainCheck(status, card, result) {
     var state = result ? result.status : "";
@@ -673,14 +710,9 @@
       status.className = "text-xs text-default-warning";
       status.textContent =
         result.message ||
-        "Your identity provider sign-in wasn't accepted. Use a separate sign-in.";
-      var fallback = card.querySelector("button[data-connect-fallback]");
-      if (fallback && fallback.getAttribute("aria-disabled") !== "true") {
-        fallback.className =
-          "bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm";
-        fallback.removeAttribute("data-connect-fallback");
-        fallback.textContent = "Connect";
-      }
+        "Your identity provider sign-in wasn't accepted. Use " +
+          ownAccount(card) +
+          ".";
       signalChainRejected();
       return;
     }
