@@ -48,11 +48,10 @@ func TestService_FindShadowMCPInventoryServers_MatchesSameUpstream(t *testing.T)
 	// the Shadow MCP server is already replaced.
 	official := seedAccessOfficialServer(t, ctx, ti, *authCtx.ProjectID, "Tracker Official", "https://github.example.com/mcp", "private")
 	require.NoError(t, ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
-		SessionToken:      nil,
-		ProjectID:         projectID,
-		ServerURL:         catalogURL,
-		McpServerID:       new(official.ID.String()),
-		AllowDirectAccess: false,
+		SessionToken: nil,
+		ProjectID:    projectID,
+		ServerURL:    catalogURL,
+		McpServerID:  new(official.ID.String()),
 	}))
 	result, err = ti.service.FindShadowMCPInventoryServers(ctx, &gen.FindShadowMCPInventoryServersPayload{
 		SessionToken: nil,
@@ -63,7 +62,6 @@ func TestService_FindShadowMCPInventoryServers_MatchesSameUpstream(t *testing.T)
 	require.Len(t, result.Matches, 1)
 	require.NotNil(t, result.Matches[0].Server.OfficialServer)
 	require.Equal(t, official.ID.String(), result.Matches[0].Server.OfficialServer.McpServerID)
-	require.False(t, result.Matches[0].Server.OfficialServer.DirectAccessAllowed)
 }
 
 func TestService_FindShadowMCPInventoryServers_NoMatchWithoutUse(t *testing.T) {

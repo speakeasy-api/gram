@@ -1281,7 +1281,6 @@ describe("useRemoteMcpInstallWorkflow", () => {
           projectId: "proj-1",
           serverUrl: "https://mcp.example.com/mcp/",
           mcpServerId: "mcp-server-1",
-          allowDirectAccess: false,
         },
       },
       undefined,

@@ -1112,7 +1112,6 @@ export function useRemoteMcpInstallWorkflow({
                 projectId: replacement.projectId,
                 serverUrl: replacement.shadowServerUrl,
                 mcpServerId: added.mcpServerId,
-                allowDirectAccess: false,
               },
             },
             undefined,

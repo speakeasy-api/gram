@@ -85,9 +85,9 @@ export function useShadowMCPReplacement({
   const candidates = useMemo<ShadowMCPReplacement[]>(() => {
     if (!queryEnabled) return [];
     return (query.data?.matches ?? []).flatMap((match) => {
-      // A Shadow MCP server that already has an official version, switched
-      // on or off, is the admin's settled choice: adding another server must
-      // not take it over.
+      // A Shadow MCP server that already has an official version is the
+      // admin's settled choice: adding another server must not take it
+      // over.
       if (match.server.officialServer) return [];
       return [
         {
