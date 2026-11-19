@@ -800,7 +800,7 @@ function UnlinkedPanel({
             disabled={linking}
             onClick={() => void resetToAutomatic()}
           >
-            <Button.Text>Use automatic link</Button.Text>
+            <Button.Text>Choose automatically</Button.Text>
           </Button>
         </div>
       ) : null}

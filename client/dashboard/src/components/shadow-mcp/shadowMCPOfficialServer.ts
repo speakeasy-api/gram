@@ -59,7 +59,7 @@ export function shadowMCPOfficialServerDescription(
   const official = server.officialServer;
   if (!official) return "";
   const linked = official.automatic
-    ? `Linked automatically to “${official.name}”, which proxies this URL`
+    ? `Official server: “${official.name}”, chosen automatically because it proxies this URL`
     : `Linked to “${official.name}”`;
   const served = official.gatewayName
     ? `${linked}, served through the gateway “${official.gatewayName}”.`

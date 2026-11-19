@@ -499,7 +499,7 @@ describe("OfficialServerPanel", () => {
     expect(screen.getByText("Automatic")).toBeTruthy();
     expect(
       screen.getByText(
-        "Linked automatically to “Tracker”, which proxies this URL. Direct connections are blocked and agents are sent there.",
+        "Official server: “Tracker”, chosen automatically because it proxies this URL. Direct connections are blocked and agents are sent there.",
       ),
     ).toBeTruthy();
     // There is no choice of the admin's to remove.
@@ -531,7 +531,9 @@ describe("OfficialServerPanel", () => {
     mocks.probe.mockResolvedValue({ outcome: "mcp_available" });
     renderPanel(server({ officialServerDeclined: true }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Use automatic link" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Choose automatically" }),
+    );
     await vi.waitFor(() =>
       expect(mocks.save).toHaveBeenCalledWith({
         serverUrl: "https://tracker.example.com/mcp",
