@@ -72,7 +72,7 @@ const memberSummaryLimit = 250
 
 // ProgressiveMemberInstructionsHint follows the names on the first line so
 // deferred harnesses can discover the instruction lookup without the full text.
-const ProgressiveMemberInstructionsHint = " Use describe_server for member instructions."
+const ProgressiveMemberInstructionsHint = " Get the slug from list_servers; use describe_server for instructions."
 
 // MemberLabel names one server for the instructions summary.
 type MemberLabel struct {
