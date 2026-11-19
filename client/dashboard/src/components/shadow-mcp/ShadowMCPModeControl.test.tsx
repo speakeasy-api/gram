@@ -197,10 +197,28 @@ describe("ShadowMCPModeControl", () => {
     expect(saving.hasAttribute("disabled")).toBe(true);
     expect(mocks.toastSuccess).not.toHaveBeenCalled();
 
+    // The refetch returns the policy the save created.
+    mocks.policies = [
+      {
+        id: "new-policy",
+        name: "Shadow MCP",
+        enabled: true,
+        sources: ["shadow_mcp"],
+        action: "block",
+        shadowMcpDisposition: "block_all",
+        audienceType: "everyone",
+        audiencePrincipalUrns: [],
+      },
+    ];
     refetched();
     await vi.waitFor(() =>
       expect(screen.queryByText("Block servers by default?")).toBeNull(),
     );
+    expect(
+      screen
+        .getByRole("button", { name: "Blocked by default" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
     expect(mocks.create).toHaveBeenCalledTimes(1);
   });
 
