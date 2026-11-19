@@ -1,0 +1,5 @@
+{
+  "name": "ask-poc",
+  "version": "0.1.0",
+  "description": "Ask POC: a mock external Slack MCP gated by an approvals MCP"
+}

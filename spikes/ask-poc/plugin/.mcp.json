@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "external-slack": {
+      "type": "http",
+      "url": "http://127.0.0.1:4701/mcp"
+    },
+    "approvals": {
+      "type": "http",
+      "url": "http://127.0.0.1:4702/mcp"
+    }
+  }
+}
