@@ -9,6 +9,12 @@ import {
   psQuote,
 } from "./intune-package";
 
+function entry(files: Record<string, Uint8Array>, name: string): Uint8Array {
+  const file = files[name];
+  if (!file) throw new Error(`missing ${name}`);
+  return file;
+}
+
 const config = {
   orgToken: "spk_org_test",
   orgSlug: "example-corp",
@@ -65,10 +71,10 @@ describe("buildIntuneBundle", () => {
       "Detect-SpeakeasyAgent.ps1",
       "README.txt",
     ]);
-    const readme = strFromU8(files["README.txt"]);
+    const readme = strFromU8(entry(files, "README.txt"));
     expect(readme).toContain("managed-20261119184500.installed");
     expect(readme).toContain("Install-SpeakeasyAgent.cmd");
-    expect(files["Detect-SpeakeasyAgent.ps1"].slice(0, 3)).toEqual(
+    expect(entry(files, "Detect-SpeakeasyAgent.ps1").slice(0, 3)).toEqual(
       new Uint8Array([0xef, 0xbb, 0xbf]),
     );
   });

@@ -5,6 +5,11 @@ import { buildIntuneWin } from "./intunewin";
 
 const tag = (xml: string, name: string) =>
   new RegExp(`<${name}>(.*?)</${name}>`).exec(xml)?.[1] ?? "";
+function entry(files: Record<string, Uint8Array>, name: string): Uint8Array {
+  const file = files[name];
+  if (!file) throw new Error(`missing ${name}`);
+  return file;
+}
 const b64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 
 describe("buildIntuneWin", () => {
@@ -23,14 +28,19 @@ describe("buildIntuneWin", () => {
       "IntuneWinPackage/Contents/IntunePackage.intunewin",
       "IntuneWinPackage/Metadata/Detection.xml",
     ]);
-    const xml = strFromU8(outer["IntuneWinPackage/Metadata/Detection.xml"]);
+    const xml = strFromU8(
+      entry(outer, "IntuneWinPackage/Metadata/Detection.xml"),
+    );
     expect(tag(xml, "Name")).toBe("setup.ps1");
     expect(tag(xml, "SetupFile")).toBe("setup.ps1");
     expect(tag(xml, "FileName")).toBe("IntunePackage.intunewin");
     expect(tag(xml, "ProfileIdentifier")).toBe("ProfileVersion1");
     expect(tag(xml, "FileDigestAlgorithm")).toBe("SHA256");
 
-    const blob = outer["IntuneWinPackage/Contents/IntunePackage.intunewin"];
+    const blob = entry(
+      outer,
+      "IntuneWinPackage/Contents/IntunePackage.intunewin",
+    );
     const mac = blob.slice(0, 32);
     const iv = blob.slice(32, 48);
     expect(iv).toEqual(b64(tag(xml, "InitializationVector")));
@@ -64,8 +74,8 @@ describe("buildIntuneWin", () => {
     );
 
     const inner = unzipSync(plain);
-    expect(strFromU8(inner["setup.ps1"])).toBe("Write-Output 'hi'");
-    expect(inner["data.bin"].length).toBe(5000);
+    expect(strFromU8(entry(inner, "setup.ps1"))).toBe("Write-Output 'hi'");
+    expect(entry(inner, "data.bin").length).toBe(5000);
   });
 
   it("rejects a setup file that isn't in the package", async () => {

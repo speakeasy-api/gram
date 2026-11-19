@@ -22,7 +22,8 @@ export async function buildIntuneWin(
     throw new Error(`setup file ${input.setupFile} is not in the package`);
   }
 
-  const plain = zipSync(input.files, { level: 0 });
+  // WebCrypto wants an ArrayBuffer-backed view; zipSync's is typed loosely.
+  const plain = zipSync(input.files, { level: 0 }) as Uint8Array<ArrayBuffer>;
   const encryptionKey = randomBytes(32);
   const macKey = randomBytes(32);
   const iv = randomBytes(16);
@@ -100,11 +101,11 @@ function detectionXml(d: {
 </ApplicationInfo>`;
 }
 
-function randomBytes(n: number): Uint8Array {
+function randomBytes(n: number): Uint8Array<ArrayBuffer> {
   return globalThis.crypto.getRandomValues(new Uint8Array(n));
 }
 
-function concat(...parts: Uint8Array[]): Uint8Array {
+function concat(...parts: Uint8Array[]): Uint8Array<ArrayBuffer> {
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
   let offset = 0;
   for (const p of parts) {
