@@ -27,6 +27,7 @@ import {
   RemoteOrganizationDefaultStep,
   RemoteSetupScriptStep,
 } from "./device-agent-cloud-setup";
+import { IntunePackageDownload } from "./intune-package-download";
 
 // Public, unauthenticated bucket the release pipeline publishes to. The
 // manifest (releases.json) lists the current version + per-platform URLs;
@@ -1299,9 +1300,18 @@ msiexec /i speakeasy-agent.msi`;
       <AgentIntro />
       <div className="flex flex-col gap-3">
         <SubLabel>Deploy the msi with your MDM</SubLabel>
+        <IntunePackageDownload
+          version={version}
+          msiUrl={
+            version
+              ? `${RELEASES_BASE}/v${version}/speakeasy-agent_${version}.msi`
+              : null
+          }
+          autoUpdate={managedAutoUpdate("windows")}
+        />
         <InstallerDownload ext="msi" stablePath={STABLE_MSI_PATH} />
         <Text small muted>
-          Upload the msi to Intune or another MDM as a{" "}
+          For another MDM, upload the msi as a{" "}
           <strong className="font-medium">Win32 / line-of-business app</strong>{" "}
           and assign it per machine. It installs the daemon, the CLI and the
           agent app under <code>C:\Program Files\Speakeasy\</code> and registers

@@ -30,8 +30,8 @@ vi.mock("@/components/code", () => ({
   CodeBlock: ({ children }: { children: string }) => <pre>{children}</pre>,
 }));
 vi.mock("@/hooks/useAgentToken", () => ({
-  useAgentToken: (opts: { buildCopyText: (token: string) => string }) => {
-    agentToken.buildCopyText = opts.buildCopyText;
+  useAgentToken: (opts: { buildCopyText?: (token: string) => string }) => {
+    if (opts.buildCopyText) agentToken.buildCopyText = opts.buildCopyText;
     return agentToken.current;
   },
 }));
@@ -48,6 +48,7 @@ function renderSetup(
     canGenerate: true,
     hasExistingAgentKey: false,
     generate: vi.fn<() => void>(),
+    generateAsync: vi.fn<() => Promise<string>>(),
     ...token,
   };
   // The release lookup retries once; no delay keeps a failed lookup fast.
