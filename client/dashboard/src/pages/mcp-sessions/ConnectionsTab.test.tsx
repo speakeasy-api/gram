@@ -31,6 +31,14 @@ vi.mock("@gram/client/react-query/userSessions.js", () => ({
     return { data: { pages: [] } };
   },
 }));
+vi.mock("@gram/client/react-query/userSessionClients.js", () => ({
+  useUserSessionClientsInfinite: () => ({ data: { pages: [] } }),
+}));
+vi.mock("@/components/sessions/RegisterClientAction", () => ({
+  RegisterClientAction: ({ issuerId }: { issuerId: string }) => (
+    <button type="button">Register agent for {issuerId}</button>
+  ),
+}));
 vi.mock("@/components/connections/ConnectionsList", () => ({
   ConnectionsList: () => null,
 }));
@@ -65,5 +73,16 @@ it("lists only the chosen provider's connections, keeping the query's filters", 
   });
   expect(
     screen.getByRole("textbox", { name: "Search connections" }),
+  ).toBeTruthy();
+});
+
+it("offers registering an agent against the chosen provider", () => {
+  render(
+    <MemoryRouter>
+      <ConnectionsTab providerId="issuer_1" />
+    </MemoryRouter>,
+  );
+  expect(
+    screen.getByRole("button", { name: "Register agent for issuer_1" }),
   ).toBeTruthy();
 });
