@@ -10786,12 +10786,13 @@ func marshalAccessShadowMCPOfficialServerToShadowMCPOfficialServerResponseBody(v
 		return nil
 	}
 	res := &ShadowMCPOfficialServerResponseBody{
-		McpServerID: v.McpServerID,
-		Name:        v.Name,
-		Slug:        v.Slug,
-		URL:         v.URL,
-		GatewayName: v.GatewayName,
-		Automatic:   v.Automatic,
+		McpServerID:         v.McpServerID,
+		Name:                v.Name,
+		Slug:                v.Slug,
+		URL:                 v.URL,
+		GatewayName:         v.GatewayName,
+		Automatic:           v.Automatic,
+		DirectAccessAllowed: v.DirectAccessAllowed,
 	}
 
 	return res

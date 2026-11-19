@@ -17,6 +17,10 @@ export type ShadowMCPOfficialServer = {
    */
   automatic?: boolean | undefined;
   /**
+   * Deprecated: links no longer have an on/off switch, so this is always false. Kept one release so older dashboards, which require it, keep rendering, then removed.
+   */
+  directAccessAllowed?: boolean | undefined;
+  /**
    * The gateway that serves the official server, when url is a gateway's address.
    */
   gatewayName?: string | undefined;
@@ -42,6 +46,7 @@ export const ShadowMCPOfficialServer$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     automatic: z.optional(z.boolean()),
+    direct_access_allowed: z.optional(z.boolean()),
     gateway_name: z.optional(z.string()),
     mcp_server_id: z.string(),
     name: z.string(),
@@ -50,6 +55,7 @@ export const ShadowMCPOfficialServer$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "direct_access_allowed": "directAccessAllowed",
       "gateway_name": "gatewayName",
       "mcp_server_id": "mcpServerId",
     });

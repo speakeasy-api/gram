@@ -1855,6 +1855,9 @@ var ShadowMCPOfficialServerModel = Type("ShadowMCPOfficialServer", func() {
 	Attribute("url", String, "Where agents connect. A gateway's address when the server is a gateway member. Absent while the server has no endpoint.")
 	Attribute("gateway_name", String, "The gateway that serves the official server, when url is a gateway's address.")
 	Attribute("automatic", Boolean, "True when the link was made automatically because the server proxies to the Shadow MCP server's URL; false when an administrator chose it.")
+	Attribute("direct_access_allowed", Boolean, func() {
+		Description("Deprecated: links no longer have an on/off switch, so this is always false. Kept one release so older dashboards, which require it, keep rendering, then removed.")
+	})
 })
 
 var SetShadowMCPOfficialServerForm = Type("SetShadowMCPOfficialServerForm", func() {

@@ -1854,6 +1854,10 @@ type ShadowMCPOfficialServer struct {
 	// True when the link was made automatically because the server proxies to the
 	// Shadow MCP server's URL; false when an administrator chose it.
 	Automatic *bool
+	// Deprecated: links no longer have an on/off switch, so this is always false.
+	// Kept one release so older dashboards, which require it, keep rendering, then
+	// removed.
+	DirectAccessAllowed *bool
 }
 
 // A project MCP server that already serves a Shadow MCP server's upstream URL
