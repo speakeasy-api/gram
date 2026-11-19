@@ -51,7 +51,7 @@ func gatewayTargetFromEndpoint(endpoint *ResolvedMcpEndpoint) (gatewayTarget, er
 }
 
 func (t gatewayTarget) authorizationTarget(projectID uuid.UUID) (*AgentAuthorizationTarget, bool) {
-	if t.kind != gatewayKindStored || t.id == uuid.Nil || projectID == uuid.Nil {
+	if (t.kind != gatewayKindStored && t.kind != gatewayKindProject) || t.id == uuid.Nil || projectID == uuid.Nil {
 		return nil, false
 	}
 	return &AgentAuthorizationTarget{
@@ -65,11 +65,11 @@ func (t gatewayTarget) authorizationTarget(projectID uuid.UUID) (*AgentAuthoriza
 
 // admits reports only whether the credential may enter this gateway. It does
 // not authorize any member.
-func (t gatewayTarget) admits(caller gatewayCaller, projectID uuid.UUID, storedMachineAccess bool) (bool, error) {
+func (t gatewayTarget) admits(caller gatewayCaller, projectID uuid.UUID, machineAccess bool) (bool, error) {
 	if caller.kind == gatewayCallerPerson {
 		return true, nil
 	}
-	if !storedMachineAccess || t.kind != gatewayKindStored || projectID == uuid.Nil {
+	if !machineAccess || (t.kind != gatewayKindStored && t.kind != gatewayKindProject) || projectID == uuid.Nil {
 		return false, nil
 	}
 	if caller.projectScope != nil && *caller.projectScope != projectID {

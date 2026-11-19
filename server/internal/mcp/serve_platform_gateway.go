@@ -114,7 +114,7 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 	skipped := new(remotesessions.SkippedClients)
 	gate := &metaGateContext{
 		agentMembership:     false,
-		caller:              emptyGatewayCaller(),
+		caller:              gatewayCaller{kind: gatewayCallerPerson},
 		fromRequest:         mcpconnectionattempts.FromRequest(nil),
 		skippedUpstreams:    skipped,
 		request:             nil,

@@ -32,12 +32,23 @@ func (s *Service) WorkloadTokenTargetFor(ctx context.Context, mcpURL string) (Wo
 	if err != nil {
 		return none, false, fmt.Errorf("parse MCP server URL: %w", err)
 	}
+	organizationGatewaySlug, isOrganizationGateway := strings.CutPrefix(u.EscapedPath(), "/mcp/gateway/")
 	slug, isSlugPath := strings.CutPrefix(u.EscapedPath(), "/mcp/")
-	if !isSlugPath || slug == "" || strings.Contains(slug, "/") {
+	switch {
+	case isOrganizationGateway:
+		if organizationGatewaySlug, err = url.PathUnescape(organizationGatewaySlug); err != nil {
+			return none, false, fmt.Errorf("unescape gateway slug: %w", err)
+		}
+		organization, project, scoped := strings.Cut(organizationGatewaySlug, "/projects/")
+		if !scoped || organization == "" || project == "" || strings.Contains(organization, "/") || strings.Contains(project, "/") {
+			return none, false, nil
+		}
+	case !isSlugPath || slug == "" || strings.Contains(slug, "/"):
 		return none, false, nil
-	}
-	if slug, err = url.PathUnescape(slug); err != nil {
-		return none, false, fmt.Errorf("unescape MCP server slug: %w", err)
+	default:
+		if slug, err = url.PathUnescape(slug); err != nil {
+			return none, false, fmt.Errorf("unescape MCP server slug: %w", err)
+		}
 	}
 
 	ctx, baseURL, ok, err := s.publicOriginContext(ctx, u.Host)
@@ -45,7 +56,16 @@ func (s *Service) WorkloadTokenTargetFor(ctx context.Context, mcpURL string) (Wo
 		return none, false, err
 	}
 
-	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, s.logger, slug, "mcp")
+	var endpoint *ResolvedMcpEndpoint
+	if isOrganizationGateway {
+		gateway, loadErr := s.loadOrganizationGateway(ctx, organizationGatewaySlug)
+		if loadErr == nil {
+			endpoint = gateway.resolved
+		}
+		err = loadErr
+	} else {
+		endpoint, err = s.LoadResolvedMcpEndpointBySlug(ctx, s.logger, slug, "mcp")
+	}
 	var oopsErr *oops.ShareableError
 	switch {
 	case errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeNotFound:
@@ -58,9 +78,9 @@ func (s *Service) WorkloadTokenTargetFor(ctx context.Context, mcpURL string) (Wo
 	}
 	gateway, gatewayErr := gatewayTargetFromEndpoint(endpoint)
 	if gatewayErr == nil {
-		enabled, rolloutErr := s.storedGatewayMachineAccess(ctx, gateway)
+		enabled, rolloutErr := s.gatewayMachineAccess(ctx, gateway)
 		if rolloutErr != nil {
-			return none, false, fmt.Errorf("check stored gateway machine access rollout: %w", rolloutErr)
+			return none, false, fmt.Errorf("check gateway machine access rollout: %w", rolloutErr)
 		}
 		if !enabled {
 			return none, false, nil

@@ -95,14 +95,14 @@ func (s *Service) admitGatewayCaller(
 	if err != nil {
 		return ctx, nil, err
 	}
-	storedMachineAccess := false
+	machineAccess := false
 	if caller.kind != gatewayCallerPerson {
-		storedMachineAccess, err = s.storedGatewayMachineAccess(ctx, target)
+		machineAccess, err = s.gatewayMachineAccess(ctx, target)
 		if err != nil {
-			return ctx, nil, fmt.Errorf("check stored gateway machine access rollout: %w", err)
+			return ctx, nil, fmt.Errorf("check gateway machine access rollout: %w", err)
 		}
 	}
-	admitted, err := target.admits(caller, endpoint.ProjectID, storedMachineAccess)
+	admitted, err := target.admits(caller, endpoint.ProjectID, machineAccess)
 	if err != nil {
 		return ctx, nil, fmt.Errorf("evaluate gateway target: %w", err)
 	}
@@ -111,6 +111,9 @@ func (s *Service) admitGatewayCaller(
 			return ctx, nil, writeInsufficientScopeChallenge(w, authentication.protectedResourceURL, "access token does not grant access to this gateway")
 		}
 		return ctx, nil, WriteAuthenticateChallenge(w, authentication.protectedResourceURL, "credential cannot enter this gateway")
+	}
+	if caller.kind == gatewayCallerWorkload {
+		authedCtx = authz.WithoutCredentialCeiling(authedCtx)
 	}
 
 	agentID := uuid.Nil
@@ -130,13 +133,22 @@ func (s *Service) admitGatewayCaller(
 	}, nil
 }
 
-func (s *Service) storedGatewayMachineAccess(ctx context.Context, target gatewayTarget) (bool, error) {
-	if target.kind != gatewayKindStored || s.features == nil {
+func (s *Service) gatewayMachineAccess(ctx context.Context, target gatewayTarget) (bool, error) {
+	if s.features == nil {
 		return false, nil
 	}
-	enabled, err := s.features.IsFlagEnabledLocal(ctx, feature.FlagStoredGatewayMachineAccess, target.organizationID, nil, nil)
+	var flag feature.Flag
+	switch target.kind {
+	case gatewayKindStored:
+		flag = feature.FlagStoredGatewayMachineAccess
+	case gatewayKindProject:
+		flag = feature.FlagProjectGatewayMachineAccess
+	default:
+		return false, nil
+	}
+	enabled, err := s.features.IsFlagEnabledLocal(ctx, flag, target.organizationID, nil, nil)
 	if err != nil {
-		return false, fmt.Errorf("evaluate stored gateway machine access rollout: %w", err)
+		return false, fmt.Errorf("evaluate %s rollout: %w", flag, err)
 	}
 	return enabled, nil
 }

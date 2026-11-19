@@ -478,7 +478,7 @@ func (s *Service) handleWorkloadAssertionGrant(
 	if gateway, gatewayErr := gatewayTargetFromEndpoint(endpoint); gatewayErr == nil {
 		target, ok = gateway.authorizationTarget(endpoint.ProjectID)
 		if ok {
-			enabled, rolloutErr := s.storedGatewayMachineAccess(ctx, gateway)
+			enabled, rolloutErr := s.gatewayMachineAccess(ctx, gateway)
 			if rolloutErr != nil {
 				refusal := workloadGrantStageUnavailable("gateway_machine_access_rollout_unavailable", rolloutErr)
 				refuseWorkloadGrantRow(ctx, t, refusal)
@@ -788,7 +788,7 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 		authorizationCtx, err = s.requireWorkloadSessionAuthorization(authorizationCtx, grant.endpoint, workloadSessionReachResource)
 	}
 	if err == nil && grant.endpoint != nil {
-		authorizationCtx, err = s.requireStoredGatewayWorkloadMember(authorizationCtx, logger, grant.endpoint)
+		authorizationCtx, err = s.requireGatewayWorkloadMember(authorizationCtx, logger, grant.endpoint)
 	}
 	if err == nil && grant.session.Audience == InferenceResource {
 		err = s.authz.Require(authorizationCtx, authz.InferenceExecuteCheck(grant.session.ProjectID.String()))
@@ -909,7 +909,7 @@ func (s *Service) writeWorkloadGrantRefusal(ctx context.Context, w http.Response
 // entry and member authorization remain separate decisions: the endpoint grant
 // admits the gateway, while the normal member snapshot applies visibility and
 // each member's own mcp:connect authorization.
-func (s *Service) requireStoredGatewayWorkloadMember(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint) (context.Context, error) {
+func (s *Service) requireGatewayWorkloadMember(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint) (context.Context, error) {
 	gateway, err := gatewayTargetFromEndpoint(endpoint)
 	if err != nil {
 		return ctx, nil
@@ -918,19 +918,18 @@ func (s *Service) requireStoredGatewayWorkloadMember(ctx context.Context, logger
 		return ctx, nil
 	}
 
-	ctx, members, _, err := s.resolveMetaMemberSnapshot(
-		ctx,
-		logger,
-		mandatorySurfaceGatewayMember,
-		endpoint.OrganizationID,
-		gateway.id,
-		endpoint.ProjectID,
-	)
+	ctx = authz.WithoutCredentialCeiling(ctx)
+	var members []metaMember
+	if endpoint.IsProjectGateway() {
+		ctx, members, _, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, endpoint.OrganizationID, false, endpoint.UserSessionIssuerID, endpoint.ProjectID)
+	} else {
+		ctx, members, err = s.resolveEndpointMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, endpoint)
+	}
 	if err != nil {
 		return ctx, workloadGrantStageUnavailable("gateway_member_admission_unavailable", err)
 	}
 	if len(members) == 0 {
-		return ctx, refuseWorkloadGrant("gateway_no_reachable_members", errors.New("workload reaches no stored gateway member"))
+		return ctx, refuseWorkloadGrant("gateway_no_reachable_members", errors.New("workload reaches no gateway member"))
 	}
 	return ctx, nil
 }
@@ -951,7 +950,7 @@ func (s *Service) recheckWorkloadGrantAuthorization(ctx context.Context, grant w
 			if _, ok := gateway.authorizationTarget(grant.endpoint.ProjectID); !ok {
 				return errCredentialRejected
 			}
-			enabled, err := s.storedGatewayMachineAccess(ctx, gateway)
+			enabled, err := s.gatewayMachineAccess(ctx, gateway)
 			if err != nil {
 				return workloadGrantStageUnavailable("gateway_machine_access_rollout_unavailable", err)
 			}

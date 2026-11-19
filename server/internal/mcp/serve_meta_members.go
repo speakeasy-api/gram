@@ -266,10 +266,12 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 		issuer := uuid.Nil
 		scopeProjectID := uuid.Nil
 		if gate.organizationGateway {
-			issuer = gate.userSessionIssuerID
 			scopeProjectID = gate.projectID
+			if gate.caller.kind == gatewayCallerPerson {
+				issuer = gate.userSessionIssuerID
+			}
 		}
-		ctx, members, gate.deniedMembers, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, gate.organizationGateway, issuer, scopeProjectID)
+		ctx, members, gate.deniedMembers, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, gate.organizationGateway && gate.caller.kind == gatewayCallerPerson, issuer, scopeProjectID)
 	}
 	if err == nil && gate.userID != "" && !isAssistantRequest(ctx) {
 		members, gate.hiddenMembers = s.splitHiddenMembers(ctx, logger, gate.organizationID, gate.userID, members)

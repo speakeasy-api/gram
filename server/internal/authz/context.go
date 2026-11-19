@@ -123,6 +123,20 @@ func admittedPoliciesToContext(ctx context.Context, represented RepresentedUserP
 	return context.WithValue(ctx, admittedCeilingContextKey, cloneGrants(sets[0]))
 }
 
+// WithoutCredentialCeiling keeps live admitted policies but removes the
+// credential policy after it has authorized a gateway entry target. Member
+// authorization can then evaluate the live agent and owner policies without
+// treating the gateway identifier as a member-server grant.
+func WithoutCredentialCeiling(ctx context.Context) context.Context {
+	policies, ok := ctx.Value(admittedPoliciesContextKey).(grantAuthorization)
+	if !ok || len(policies.policies) == 0 {
+		return ctx
+	}
+	policies.policies = append([][]Grant{}, policies.policies[1:]...)
+	ctx = context.WithValue(ctx, admittedPoliciesContextKey, policies)
+	return context.WithValue(ctx, admittedCeilingContextKey, []Grant{})
+}
+
 // CredentialCeilingFromContext returns the immutable credential policy loaded
 // by the most recent principal or workload admission. Live agent and owner
 // policies are deliberately excluded.
