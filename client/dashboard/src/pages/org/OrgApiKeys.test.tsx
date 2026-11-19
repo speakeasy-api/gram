@@ -9,8 +9,12 @@ import {
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import OrgApiKeys from "./OrgApiKeys";
 import { createKeyFormToJSON } from "@gram/client/models/components/createkeyform.js";
+
+type ListRequest = { limit?: number; cursor?: string; search?: string };
+type ListPage = { keys: object[]; nextCursor?: string };
 
 const mocks = vi.hoisted(() => ({
   organization: {
@@ -27,6 +31,10 @@ const mocks = vi.hoisted(() => ({
   pending: false,
   onCreated: async (_key: object) => {},
   keys: [] as object[],
+  // The fake keys.list: by default one page holding mocks.keys. Tests that
+  // page or search replace it.
+  listKeys: vi.fn<(request: ListRequest) => Promise<ListPage>>(),
+  revoke: vi.fn(),
   admin: true,
 }));
 vi.mock("@/contexts/Auth", () => ({
@@ -36,17 +44,43 @@ vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) =>
     mocks.admin ? children : null,
 }));
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({ keys: { list: mocks.listKeys } }),
+}));
+// Mirrors the template's loading, empty and toolbar branches. The real search
+// box debounces; this one reports each change at once.
 vi.mock("@/components/page-templates", () => ({
   ResourceListPage: ({
     children,
     primaryAction,
+    search,
+    isLoading,
+    isEmpty,
+    empty,
   }: {
     children: ReactNode;
     primaryAction: ReactNode;
+    search: { value: string; onChange: (value: string) => void };
+    isLoading?: boolean;
+    isEmpty?: boolean;
+    empty: { heading: string };
   }) => (
     <>
       {primaryAction}
-      {children}
+      {isLoading ? (
+        <div>Loading keys</div>
+      ) : isEmpty ? (
+        <div>{empty.heading}</div>
+      ) : (
+        <>
+          <input
+            aria-label="Search API keys"
+            value={search.value}
+            onChange={(e) => search.onChange(e.target.value)}
+          />
+          {children}
+        </>
+      )}
     </>
   ),
 }));
@@ -58,19 +92,44 @@ vi.mock("@gram/client/react-query/createAPIKey", () => ({
     return { mutate: mocks.mutate, isPending: mocks.pending };
   },
 }));
-vi.mock("@gram/client/react-query/listAPIKeys", () => ({
-  useListAPIKeysSuspense: () => ({ data: { keys: mocks.keys } }),
-  invalidateListAPIKeys: vi.fn(),
-}));
 vi.mock("@gram/client/react-query/revokeAPIKey", () => ({
-  useRevokeAPIKeyMutation: () => ({ mutate: vi.fn() }),
-}));
-vi.mock("@tanstack/react-query", () => ({
-  useQueryClient: () => ({ refetchQueries: vi.fn() }),
+  useRevokeAPIKeyMutation: (options: { onSuccess: () => Promise<void> }) => ({
+    mutate: (variables: unknown) => {
+      mocks.revoke(variables);
+      void options.onSuccess();
+    },
+    isPending: false,
+  }),
 }));
 
+let queryClient: QueryClient;
+function Providers({ children }: { children: ReactNode }) {
+  return (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+}
+function renderPage() {
+  return render(<OrgApiKeys />, { wrapper: Providers });
+}
+
+function apiKey(id: string, name: string) {
+  return {
+    id,
+    name,
+    keyPrefix: "test-prefix",
+    scopes: ["consumer"],
+    createdAt: new Date(),
+  };
+}
+
 beforeEach(() => {
+  queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   mocks.mutate.mockClear();
+  mocks.revoke.mockClear();
+  mocks.listKeys.mockReset();
+  mocks.listKeys.mockImplementation(async () => ({ keys: mocks.keys }));
   mocks.pending = false;
   mocks.keys = [];
   mocks.admin = true;
@@ -87,7 +146,10 @@ beforeEach(() => {
   // Radix scrolls the selected option into view in browsers.
   Element.prototype.scrollIntoView = vi.fn<() => void>();
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  queryClient.clear();
+});
 
 async function openForm() {
   const user = userEvent.setup();
@@ -105,7 +167,7 @@ async function selectProject(
 
 describe("API key project binding", () => {
   it("defaults to organization-wide and preserves permission scope", async () => {
-    render(<OrgApiKeys />);
+    renderPage();
     const user = await openForm();
     await user.click(screen.getByRole("radio", { name: "Producer" }));
     await user.click(screen.getByRole("button", { name: "Create" }));
@@ -129,7 +191,7 @@ describe("API key project binding", () => {
   });
 
   it("sends the selected project ID in the body, not a project header", async () => {
-    render(<OrgApiKeys />);
+    renderPage();
     const user = await openForm();
     await selectProject(user, "Test project");
     await user.click(screen.getByRole("button", { name: "Create" }));
@@ -154,7 +216,7 @@ describe("API key project binding", () => {
   });
 
   it("can explicitly switch back to organization-wide", async () => {
-    render(<OrgApiKeys />);
+    renderPage();
     const user = await openForm();
     await selectProject(user, "Test project");
     await selectProject(user, "Organization-wide");
@@ -165,7 +227,7 @@ describe("API key project binding", () => {
   });
 
   it("clears selection on cancel and organization changes", async () => {
-    const view = render(<OrgApiKeys />);
+    const view = renderPage();
     const user = await openForm();
     await selectProject(user, "Test project");
     await user.click(screen.getByRole("button", { name: "Cancel" }));
@@ -196,7 +258,7 @@ describe("API key project binding", () => {
         { id: "p2", name: "middle", slug: "middle" },
       ],
     };
-    render(<OrgApiKeys />);
+    renderPage();
     const user = await openForm();
     await user.click(screen.getByRole("combobox", { name: "Project" }));
     expect(
@@ -205,7 +267,7 @@ describe("API key project binding", () => {
   });
 
   it("does not silently broaden a no-longer-authorized project selection", async () => {
-    const view = render(<OrgApiKeys />);
+    const view = renderPage();
     const user = await openForm();
     await selectProject(user, "Test project");
     mocks.organization = { ...mocks.organization, projects: [] };
@@ -235,7 +297,7 @@ describe("API key project binding", () => {
   });
 
   it("blocks duplicate submissions while creation is pending", async () => {
-    const view = render(<OrgApiKeys />);
+    const view = renderPage();
     await openForm();
     mocks.pending = true;
     view.rerender(<OrgApiKeys />);
@@ -244,7 +306,7 @@ describe("API key project binding", () => {
   });
 
   it("does not show an old organization's delayed creation result", async () => {
-    const view = render(<OrgApiKeys />);
+    const view = renderPage();
     const user = await openForm();
     await selectProject(user, "Test project");
     await user.click(screen.getByRole("button", { name: "Create" }));
@@ -266,7 +328,7 @@ describe("API key project binding", () => {
     );
   });
 
-  it("shows binding separately from permission scopes in the list", () => {
+  it("shows binding separately from permission scopes in the list", async () => {
     mocks.keys = [
       {
         id: "key_test",
@@ -284,14 +346,14 @@ describe("API key project binding", () => {
         createdAt: new Date(),
       },
     ];
-    render(<OrgApiKeys />);
-    expect(screen.getByText("Project binding")).toBeTruthy();
+    renderPage();
+    expect(await screen.findByText("Project binding")).toBeTruthy();
     expect(screen.getByText("Test project")).toBeTruthy();
     expect(screen.getByText("Organization-wide")).toBeTruthy();
   });
 
   it("shows the returned binding with the one-time secret and clears both on close", async () => {
-    render(<OrgApiKeys />);
+    renderPage();
     const user = await openForm();
     await act(() =>
       mocks.onCreated({
@@ -313,14 +375,14 @@ describe("API key project binding", () => {
 
   it("retains the admin gate", () => {
     mocks.admin = false;
-    render(<OrgApiKeys />);
+    renderPage();
     expect(screen.queryByRole("button", { name: "New API Key" })).toBeNull();
   });
 });
 
 describe("API key scope options", () => {
   it("offers every scope, grouped, with the narrowest one preselected", async () => {
-    render(<OrgApiKeys />);
+    renderPage();
     await openForm();
     expect(
       screen
@@ -339,7 +401,7 @@ describe("API key scope options", () => {
   });
 
   it("summarizes each scope in one line, with the access list behind a toggle", async () => {
-    render(<OrgApiKeys />);
+    renderPage();
     await openForm();
     expect(
       screen.getByText(
@@ -362,7 +424,7 @@ describe("API key scope options", () => {
   });
 
   it("reveals grants and exclusions on request without changing the selection", async () => {
-    render(<OrgApiKeys />);
+    renderPage();
     const user = await openForm();
     await user.click(
       screen.getByRole("button", { name: "Access details for Producer" }),
@@ -390,7 +452,7 @@ describe("API key scope options", () => {
   });
 
   it("keeps each scope's access details with its own card", async () => {
-    render(<OrgApiKeys />);
+    renderPage();
     const user = await openForm();
     // Scoped to the owning card: a global text query would also pass if a
     // card rendered a neighbor's access list.
@@ -428,7 +490,7 @@ describe("API key scope options", () => {
   });
 
   it("sends the scope value of the card the user picks", async () => {
-    render(<OrgApiKeys />);
+    renderPage();
     const user = await openForm();
     await user.click(screen.getByRole("radio", { name: /^Hooks/ }));
     await user.click(screen.getByRole("button", { name: "Create" }));
@@ -438,7 +500,7 @@ describe("API key scope options", () => {
   });
 
   it("selects a scope when its card body is clicked, not just the radio", async () => {
-    render(<OrgApiKeys />);
+    renderPage();
     const user = await openForm();
     await user.click(
       screen.getByText(
@@ -449,5 +511,120 @@ describe("API key scope options", () => {
     expect(
       mocks.mutate.mock.calls[0]?.[0].request.createKeyForm.scopes,
     ).toEqual(["agent"]);
+  });
+});
+
+describe("API key list paging and search", () => {
+  it("asks the server for one page of 50, newest first, without a search", async () => {
+    mocks.keys = [apiKey("key_1", "First key")];
+    renderPage();
+    expect(await screen.findByText("First key")).toBeTruthy();
+    expect(mocks.listKeys).toHaveBeenCalledTimes(1);
+    expect(mocks.listKeys.mock.calls[0]?.[0]).toEqual({
+      limit: 50,
+      cursor: undefined,
+      search: undefined,
+    });
+    expect(screen.queryByRole("button", { name: "Load more" })).toBeNull();
+    expect(screen.getByText("1 key shown")).toBeTruthy();
+  });
+
+  it("loads the next page with the returned cursor and appends it", async () => {
+    mocks.listKeys.mockImplementation(async (request) =>
+      request.cursor === "cursor-2"
+        ? { keys: [apiKey("key_3", "Third key")] }
+        : {
+            keys: [apiKey("key_1", "First key"), apiKey("key_2", "Second key")],
+            nextCursor: "cursor-2",
+          },
+    );
+    const user = userEvent.setup();
+    renderPage();
+    expect(await screen.findByText("Second key")).toBeTruthy();
+    expect(screen.queryByText("Third key")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Load more" }));
+    expect(await screen.findByText("Third key")).toBeTruthy();
+    expect(screen.getByText("First key")).toBeTruthy();
+    expect(mocks.listKeys.mock.lastCall?.[0]).toEqual({
+      limit: 50,
+      cursor: "cursor-2",
+      search: undefined,
+    });
+    expect(screen.getByText("3 keys shown")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Load more" })).toBeNull();
+  });
+
+  it("searches on the server instead of filtering loaded rows", async () => {
+    mocks.listKeys.mockImplementation(async (request) =>
+      request.search === "plugins"
+        ? { keys: [apiKey("key_sys", "plugins-hooks-key")] }
+        : { keys: [apiKey("key_1", "Deploy key")] },
+    );
+    const user = userEvent.setup();
+    renderPage();
+    expect(await screen.findByText("Deploy key")).toBeTruthy();
+
+    await user.type(screen.getByLabelText("Search API keys"), " plugins ");
+    // System keys come back from the server and are shown like any other.
+    expect(await screen.findByText("plugins-hooks-key")).toBeTruthy();
+    expect(screen.queryByText("Deploy key")).toBeNull();
+    expect(mocks.listKeys.mock.lastCall?.[0]).toEqual({
+      limit: 50,
+      cursor: undefined,
+      search: "plugins",
+    });
+  });
+
+  it("keeps the search box when a search matches nothing", async () => {
+    mocks.listKeys.mockImplementation(async (request) =>
+      request.search ? { keys: [] } : { keys: [apiKey("key_1", "Deploy key")] },
+    );
+    const user = userEvent.setup();
+    renderPage();
+    expect(await screen.findByText("Deploy key")).toBeTruthy();
+
+    await user.type(screen.getByLabelText("Search API keys"), "zzz");
+    expect(await screen.findByText("No matching API keys")).toBeTruthy();
+    expect(screen.getByLabelText("Search API keys")).toBeTruthy();
+    expect(screen.queryByText("No API keys yet")).toBeNull();
+  });
+
+  it("shows the empty state only when the organization has no keys", async () => {
+    renderPage();
+    expect(await screen.findByText("No API keys yet")).toBeTruthy();
+    expect(screen.queryByLabelText("Search API keys")).toBeNull();
+  });
+
+  it("reloads the list after a key is revoked", async () => {
+    mocks.keys = [apiKey("key_1", "Doomed key")];
+    const user = userEvent.setup();
+    renderPage();
+    expect(await screen.findByText("Doomed key")).toBeTruthy();
+    expect(mocks.listKeys).toHaveBeenCalledTimes(1);
+
+    mocks.keys = [];
+    await user.click(screen.getByRole("button", { name: "Revoke API key" }));
+    await user.click(screen.getByRole("button", { name: "Revoke Key" }));
+    expect(mocks.revoke).toHaveBeenCalledWith({
+      security: { sessionHeaderGramSession: "" },
+      request: { id: "key_1" },
+    });
+    expect(await screen.findByText("No API keys yet")).toBeTruthy();
+    expect(mocks.listKeys).toHaveBeenCalledTimes(2);
+  });
+
+  it("reloads the list after a key is created", async () => {
+    mocks.keys = [apiKey("key_1", "Existing key")];
+    renderPage();
+    expect(await screen.findByText("Existing key")).toBeTruthy();
+    expect(mocks.listKeys).toHaveBeenCalledTimes(1);
+
+    mocks.keys = [apiKey("key_2", "New key"), apiKey("key_1", "Existing key")];
+    await act(() =>
+      mocks.onCreated({ id: "key_2", name: "New key", key: "synthetic-new" }),
+    );
+    expect(await screen.findByRole("cell", { name: "New key" })).toBeTruthy();
+    expect(mocks.listKeys).toHaveBeenCalledTimes(2);
   });
 });

@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -261,15 +262,59 @@ func (s *Service) ListKeys(ctx context.Context, payload *gen.ListKeysPayload) (*
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	if payload.AgentID != nil {
+		if payload.Cursor != nil || payload.Limit != nil || payload.Search != nil {
+			return nil, oops.E(oops.CodeBadRequest, nil, "cursor, limit and search cannot be combined with agent_id")
+		}
 		return s.listAgentKeys(ctx, *payload.AgentID)
 	}
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
-	keys, err := s.repo.ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+	// Without a cursor the walk starts above every real row, so the keyset
+	// comparison stays in the query and the index serves every page.
+	params := repo.ListAPIKeysByOrganizationPageParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		CursorCreatedAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Infinity, Valid: true},
+		CursorID:        uuid.Max,
+		NamePattern:     pgtype.Text{String: "", Valid: false},
+		PageLimit:       pgtype.Int4{Int32: 0, Valid: false},
+	}
+	if payload.Cursor != nil {
+		createdAt, id, err := decodeKeyListCursor(*payload.Cursor)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor")
+		}
+		params.CursorCreatedAt = pgtype.Timestamptz{Time: createdAt, InfinityModifier: pgtype.Finite, Valid: true}
+		params.CursorID = id
+	}
+	if payload.Search != nil {
+		if search := strings.TrimSpace(*payload.Search); search != "" {
+			params.NamePattern = pgtype.Text{String: keyNameContainsPattern(search), Valid: true}
+		}
+	}
+	// No limit keeps the original contract: every matching key, no cursor.
+	pageSize := 0
+	if payload.Limit != nil {
+		pageSize = *payload.Limit
+		if pageSize < 1 || pageSize > maxListKeysPageSize {
+			return nil, oops.E(oops.CodeBadRequest, nil, "limit must be between 1 and %d", maxListKeysPageSize)
+		}
+		// One row past the page says whether another page exists.
+		params.PageLimit = pgtype.Int4{Int32: conv.SafeInt32(pageSize + 1), Valid: true}
+	}
+
+	keys, err := s.repo.ListAPIKeysByOrganizationPage(ctx, params)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing api keys").LogError(ctx, s.logger)
+	}
+
+	var nextCursor *string
+	if pageSize > 0 && len(keys) > pageSize {
+		keys = keys[:pageSize]
+		last := keys[pageSize-1]
+		cursor := encodeKeyListCursor(last.CreatedAt.Time, last.ID)
+		nextCursor = &cursor
 	}
 
 	keyIDs := make([]uuid.UUID, 0, len(keys))
@@ -309,7 +354,7 @@ func (s *Service) ListKeys(ctx context.Context, payload *gen.ListKeysPayload) (*
 		})
 	}
 
-	return &gen.ListKeysResult{Keys: result}, nil
+	return &gen.ListKeysResult{Keys: result, NextCursor: nextCursor}, nil
 }
 
 func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) error {

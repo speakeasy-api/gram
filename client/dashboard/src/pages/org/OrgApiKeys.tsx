@@ -3,23 +3,47 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
 import type { Key } from "@gram/client/models/components/key.js";
-import {
-  invalidateListAPIKeys,
-  useListAPIKeysSuspense,
-} from "@gram/client/react-query/listAPIKeys";
+import { invalidateAllListAPIKeys } from "@gram/client/react-query/listAPIKeys";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { Spinner } from "@/components/ui/Spinner";
 import type { Column } from "@/components/ui/Table";
 import { Table } from "@/components/ui/Table";
-import { useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useOrganization } from "@/contexts/Auth";
+import { useSdkClient } from "@/contexts/Sdk";
+import { cn } from "@/lib/utils";
 import { RequireScope } from "@/components/require-scope";
 import { CreateApiKeySheet } from "./CreateApiKeySheet";
 import { projectBindingLabel } from "./api-key-project-binding";
 import { KeyPolicySheet } from "./KeyPolicySheet";
 import { keyPolicySummary } from "./key-policy";
+
+// Large organizations hold thousands of keys, most of them minted by plugins,
+// so the page reads one page at a time and searches on the server.
+const API_KEYS_PAGE_SIZE = 50;
+const SEARCH_DEBOUNCE_MS = 300;
+
+// Starts with the SDK's keys.list prefix, so every invalidateAllListAPIKeys
+// call (create, revoke, policy edits, plugin rotations) also refreshes this
+// list. "infinite" keeps it apart from the SDK's single-page cache entries,
+// which hold a different data shape. The organization is part of the key so
+// switching organizations never shows the previous one's cached pages.
+function orgApiKeysQueryKey(organizationId: string, search: string) {
+  return [
+    "@gram/client",
+    "keys",
+    "list",
+    "infinite",
+    { organizationId, limit: API_KEYS_PAGE_SIZE, search },
+  ] as const;
+}
 
 export default function OrgApiKeys(): JSX.Element {
   const organization = useOrganization();
@@ -41,24 +65,38 @@ function OrgApiKeysInner() {
   const [keyToRevoke, setKeyToRevoke] = useState<Key | null>(null);
   const [keyForPolicy, setKeyForPolicy] = useState<Key | null>(null);
   const queryClient = useQueryClient();
+  const sdk = useSdkClient();
   const [apiKeySearch, setApiKeySearch] = useState("");
+  const search = apiKeySearch.trim();
 
-  const { data: keysData } = useListAPIKeysSuspense();
+  const keysQuery = useInfiniteQuery({
+    queryKey: orgApiKeysQueryKey(organization.id, search),
+    queryFn: ({ pageParam, signal }) =>
+      sdk.keys.list(
+        {
+          limit: API_KEYS_PAGE_SIZE,
+          cursor: pageParam,
+          search: search === "" ? undefined : search,
+        },
+        undefined,
+        { fetchOptions: { signal } },
+      ),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    // Keep the current rows on screen while a new search loads, so the
+    // toolbar (and the search box being typed in) never unmounts.
+    placeholderData: keepPreviousData,
+  });
 
-  const filteredKeys = useMemo(() => {
-    const keys = keysData?.keys ?? [];
-    const search = apiKeySearch.trim().toLowerCase();
-    if (!search) return keys;
-    return keys.filter((key) => key.name.toLowerCase().includes(search));
-  }, [keysData?.keys, apiKeySearch]);
+  const keys = useMemo(
+    () => keysQuery.data?.pages.flatMap((page) => page.keys) ?? [],
+    [keysQuery.data],
+  );
 
   const revokeKeyMutation = useRevokeAPIKeyMutation({
     onSuccess: async () => {
       setKeyToRevoke(null);
-      await invalidateListAPIKeys(queryClient, [{ gramSession: "" }]);
-      await queryClient.refetchQueries({
-        queryKey: ["@gram/client", "keys", "list"],
-      });
+      await invalidateAllListAPIKeys(queryClient);
     },
   });
 
@@ -180,7 +218,9 @@ function OrgApiKeysInner() {
     </RequireScope>
   );
 
-  const hasNoKeys = (keysData?.keys ?? []).length === 0;
+  // Only an unfiltered empty list means the organization has no keys. An
+  // empty search result keeps the toolbar so the search can be changed.
+  const hasNoKeys = !keysQuery.isPending && search === "" && keys.length === 0;
 
   return (
     <>
@@ -192,7 +232,9 @@ function OrgApiKeysInner() {
           value: apiKeySearch,
           onChange: setApiKeySearch,
           placeholder: "Search by key name",
+          debounceMs: SEARCH_DEBOUNCE_MS,
         }}
+        isLoading={keysQuery.isPending}
         isEmpty={hasNoKeys}
         empty={{
           icon: "key-round",
@@ -200,13 +242,29 @@ function OrgApiKeysInner() {
           action: createKeyButton,
         }}
       >
-        {filteredKeys.length > 0 ? (
-          <Table
-            columns={apiKeyColumns}
-            data={filteredKeys}
-            rowKey={(row) => row.id}
-            className="max-h-[500px] overflow-y-auto"
-          />
+        {keys.length > 0 ? (
+          <div
+            className={cn(
+              "transition-opacity",
+              keysQuery.isPlaceholderData && "opacity-60",
+            )}
+            aria-busy={keysQuery.isPlaceholderData}
+          >
+            <Table
+              columns={apiKeyColumns}
+              data={keys}
+              rowKey={(row) => row.id}
+              className="max-h-[500px] overflow-y-auto"
+            />
+            <ApiKeysFooter
+              count={keys.length}
+              hasNextPage={keysQuery.hasNextPage}
+              isFetchingNextPage={keysQuery.isFetchingNextPage}
+              onLoadMore={() => {
+                void keysQuery.fetchNextPage();
+              }}
+            />
+          </div>
         ) : (
           <div
             role="status"
@@ -264,5 +322,42 @@ function OrgApiKeysInner() {
         </Dialog.Content>
       </Dialog>
     </>
+  );
+}
+
+function ApiKeysFooter({
+  count,
+  hasNextPage,
+  isFetchingNextPage,
+  onLoadMore,
+}: {
+  count: number;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  onLoadMore: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between border-x border-b px-4 py-3">
+      <Text muted small>
+        {count.toLocaleString()} {count === 1 ? "key" : "keys"} shown
+      </Text>
+      {hasNextPage ? (
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onLoadMore}
+          disabled={isFetchingNextPage}
+        >
+          {isFetchingNextPage ? (
+            <>
+              <Spinner className="mr-0 size-4" />
+              Loading...
+            </>
+          ) : (
+            "Load more"
+          )}
+        </Button>
+      ) : null}
+    </div>
   );
 }

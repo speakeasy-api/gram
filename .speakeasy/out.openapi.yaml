@@ -33519,16 +33519,42 @@ paths:
         name: ExtendAgentAPIKeys
   /rpc/keys.list:
     get:
-      description: List all api keys for an organization
+      description: List an organization's api keys, newest first. Send limit to get one page at a time and follow next_cursor for the rest. Without limit, every matching key is returned in one response.
       operationId: listAPIKeys
       parameters:
         - allowEmptyValue: true
-          description: When set, list keys for this first-class agent
+          description: When set, list keys for this first-class agent. Cannot be combined with cursor, limit or search.
           in: query
           name: agent_id
           schema:
-            description: When set, list keys for this first-class agent
+            description: When set, list keys for this first-class agent. Cannot be combined with cursor, limit or search.
             format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Opaque cursor from a previous response's next_cursor. Returns the keys after that page.
+          in: query
+          name: cursor
+          schema:
+            description: Opaque cursor from a previous response's next_cursor. Returns the keys after that page.
+            maxLength: 512
+            type: string
+        - allowEmptyValue: true
+          description: Page size. When omitted, every matching key is returned and next_cursor is never set.
+          in: query
+          name: limit
+          schema:
+            description: Page size. When omitted, every matching key is returned and next_cursor is never set.
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Only return keys whose name contains this text, ignoring case.
+          in: query
+          name: search
+          schema:
+            description: Only return keys whose name contains this text, ignoring case.
+            maxLength: 255
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -104844,6 +104870,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Key'
+        next_cursor:
+          type: string
+          description: Cursor for the next page of keys.list. Absent on the last page and when no limit was sent.
       required:
         - keys
     ListMCPPlatformToolsetsResult:
