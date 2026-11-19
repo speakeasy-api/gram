@@ -288,7 +288,10 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		} else if member.authClient != nil && member.authClient.reason == authClientReasonAmbiguous {
 			status = gatewayServerNotSetUp
 		} else if failure := failures[member.slug]; failure != nil {
-			if _, credential := errors.AsType[memberCredentialError](failure); credential {
+			if refusedSignIn(failure) {
+				// The service's card explains why company sign-in refused this account.
+				status = gatewayServerChainPending
+			} else if _, credential := errors.AsType[memberCredentialError](failure); credential {
 				switch configuredStatus[member.slug] {
 				case gatewayServerConnected, gatewayServerReconnect:
 					status = gatewayServerReconnect
@@ -343,4 +346,10 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		})
 	}
 	return tools, toolMembers, outcomes, nil
+}
+
+// refusedSignIn reports a member whose company sign-in Speakeasy refused to vouch for.
+func refusedSignIn(err error) bool {
+	failure, ok := errors.AsType[memberConnectionError](err)
+	return ok && (failure.code == mcpconnectionattempts.CodeUnmanagedAccount || failure.code == mcpconnectionattempts.CodeIneligibleIdentity)
 }

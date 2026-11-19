@@ -42,9 +42,10 @@ func eligibleRow(now time.Time) repo.GetSignInEligibilityRow {
 	}
 }
 
+// google records a Google sign-in whose hosted-domain lookup answered hd.
 func google(r *repo.GetSignInEligibilityRow, hd string) {
 	r.AuthenticationMethod.String = MethodGoogleOAuth
-	r.IdpHostedDomain = pgtype.Text{String: hd, Valid: hd != ""}
+	r.IdpHostedDomain = pgtype.Text{String: hd, Valid: true}
 }
 
 func microsoft(r *repo.GetSignInEligibilityRow, tenant, domain string) {
@@ -78,7 +79,16 @@ func TestJudge(t *testing.T) {
 		{name: "sso too old", mutate: func(r *repo.GetSignInEligibilityRow) { r.IdpAuthenticatedAt.Time = now.Add(-MaxAge - time.Minute) }, want: ReasonExpired},
 		{name: "google workspace account", mutate: func(r *repo.GetSignInEligibilityRow) { google(r, "Example.com") }, want: ReasonEligible},
 		{name: "personal google account on the company email", mutate: func(r *repo.GetSignInEligibilityRow) { google(r, "") }, want: ReasonUnmanagedAccount},
-		{name: "google workspace of another domain", mutate: func(r *repo.GetSignInEligibilityRow) { google(r, "other.test") }, want: ReasonUnmanagedAccount},
+		{name: "google workspace of an unverified domain", mutate: func(r *repo.GetSignInEligibilityRow) { google(r, "other.test") }, want: ReasonAccountDomainNotVerified},
+		{name: "google evidence missing", mutate: func(r *repo.GetSignInEligibilityRow) {
+			r.AuthenticationMethod.String = MethodGoogleOAuth
+			r.IdpHostedDomain = pgtype.Text{String: "", Valid: false}
+		}, want: ReasonAccountEvidenceUnavailable},
+		{name: "google not allowed reads as the method, whatever the account", mutate: func(r *repo.GetSignInEligibilityRow) {
+			google(r, "")
+			r.AllSignInMethodsAllowed = false
+			r.AllowedSignInMethods = []string{TierSSO}
+		}, want: ReasonMethodNotAllowed},
 		{name: "google older than a day", mutate: func(r *repo.GetSignInEligibilityRow) {
 			google(r, "example.com")
 			r.IdpAuthenticatedAt.Time = now.Add(-25 * time.Hour)
@@ -101,8 +111,14 @@ func TestJudge(t *testing.T) {
 			r.AllowedMicrosoftTenantIds = []string{"tenant-1"}
 		}, want: ReasonTenantNotAllowed},
 		{name: "personal microsoft account", mutate: func(r *repo.GetSignInEligibilityRow) { microsoft(r, MicrosoftConsumerTenantID, "example.com") }, want: ReasonUnmanagedAccount},
-		{name: "microsoft without a tenant", mutate: func(r *repo.GetSignInEligibilityRow) { microsoft(r, "", "example.com") }, want: ReasonUnmanagedAccount},
-		{name: "microsoft account of another domain", mutate: func(r *repo.GetSignInEligibilityRow) { microsoft(r, workTenant, "other.test") }, want: ReasonUnmanagedAccount},
+		{name: "microsoft without a tenant", mutate: func(r *repo.GetSignInEligibilityRow) { microsoft(r, "", "example.com") }, want: ReasonAccountEvidenceUnavailable},
+		{name: "microsoft account of an unverified domain", mutate: func(r *repo.GetSignInEligibilityRow) { microsoft(r, workTenant, "other.test") }, want: ReasonAccountDomainNotVerified},
+		{name: "microsoft evidence missing", mutate: func(r *repo.GetSignInEligibilityRow) { microsoft(r, "", "") }, want: ReasonAccountEvidenceUnavailable},
+		{name: "microsoft tenant without a domain", mutate: func(r *repo.GetSignInEligibilityRow) { microsoft(r, workTenant, "") }, want: ReasonAccountEvidenceUnavailable},
+		{name: "microsoft empty domain is never proof of a personal account", mutate: func(r *repo.GetSignInEligibilityRow) {
+			microsoft(r, workTenant, "")
+			r.IdpHostedDomain.Valid = true
+		}, want: ReasonAccountEvidenceUnavailable},
 		{name: "magic link", mutate: func(r *repo.GetSignInEligibilityRow) { r.AuthenticationMethod.String = MethodMagicAuth }, want: ReasonEligible},
 		{name: "magic link older than four hours", mutate: func(r *repo.GetSignInEligibilityRow) {
 			r.AuthenticationMethod.String = MethodMagicAuth
@@ -185,4 +201,65 @@ func TestJudge_ReportsTheTier(t *testing.T) {
 	row := eligibleRow(now)
 	google(&row, "example.com")
 	require.Equal(t, TierGoogle, judge(row, now, MaxAge).Identity.Tier)
+}
+
+// beforeReorderEligible is the account and method check as it was before the
+// method's tier was checked first, kept to prove eligibility didn't change.
+func beforeReorderEligible(row repo.GetSignInEligibilityRow) bool {
+	var tier string
+	switch row.AuthenticationMethod.String {
+	case MethodSSO:
+		tier = TierSSO
+	case MethodGoogleOAuth:
+		if !onVerifiedDomain(row.IdpHostedDomain.String, row.VerifiedDomains) {
+			return false
+		}
+		tier = TierGoogle
+	case MethodMicrosoftOAuth:
+		tenant := row.IdpTenantID.String
+		if tenant == "" || strings.EqualFold(tenant, MicrosoftConsumerTenantID) || !onVerifiedDomain(row.IdpHostedDomain.String, row.VerifiedDomains) {
+			return false
+		}
+		if !tenantAllowed(tenant, row.AllowedMicrosoftTenantIds) {
+			return false
+		}
+		tier = TierMicrosoft
+	case MethodMagicAuth:
+		tier = TierMagicLink
+	case MethodPassword:
+		tier = TierPassword
+	default:
+		return false
+	}
+	return tierAllowed(tier, row)
+}
+
+// Checking the method's tier first changes only the reason, never who is eligible.
+func TestJudge_ReorderKeepsTheEligibleSet(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now()
+	domains := []pgtype.Text{{String: "", Valid: false}, {String: "", Valid: true}, {String: "example.com", Valid: true}, {String: "other.test", Valid: true}}
+	tenants := []string{"", MicrosoftConsumerTenantID, workTenant, "00000000-0000-4000-8000-0000000000bb"}
+	allowed := [][]string{nil, {}, {TierSSO}, {TierGoogle}, {TierMicrosoft}, {TierGoogle, TierMicrosoft, TierMagicLink, TierPassword}}
+	methods := []string{MethodSSO, MethodGoogleOAuth, MethodMicrosoftOAuth, MethodMagicAuth, MethodPassword, "GitHubOAuth"}
+	checked := 0
+	for _, method := range methods {
+		for _, domain := range domains {
+			for _, tenant := range tenants {
+				for _, tiers := range allowed {
+					row := eligibleRow(now)
+					row.AuthenticationMethod.String = method
+					row.IdpHostedDomain = domain
+					row.IdpTenantID = pgtype.Text{String: tenant, Valid: tenant != ""}
+					row.AllSignInMethodsAllowed = tiers == nil
+					row.AllowedSignInMethods = tiers
+					got := judge(row, now, MaxAge)
+					require.Equal(t, beforeReorderEligible(row), got.Eligible(), "%s domain=%+v tenant=%q tiers=%v reason=%s", method, domain, tenant, tiers, got.Reason)
+					checked++
+				}
+			}
+		}
+	}
+	require.Equal(t, len(methods)*len(domains)*len(tenants)*len(allowed), checked)
 }

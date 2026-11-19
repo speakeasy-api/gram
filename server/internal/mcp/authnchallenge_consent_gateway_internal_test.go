@@ -3,6 +3,7 @@ package mcp
 import (
 	"bytes"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -445,4 +446,29 @@ func TestConsentTemplateGatewayAuthPickerAndVisibility(t *testing.T) {
 	require.Contains(t, page, `aria-label="Sign in to Source as"`)
 	require.Contains(t, page, `value="hide_server"`)
 	require.Contains(t, page, `name="server_id" value="`+member.serverID.String()+`"`)
+}
+
+// Each service card stacks its buttons under its text on narrow screens and centres them beside it on wider ones.
+func TestConsentTemplate_ServiceCardStacksOnNarrowScreens(t *testing.T) {
+	t.Parallel()
+
+	cards := []remoteSessionCard{
+		{ClientID: "connected", IssuerDisplay: "GitHub", Connected: true, CanRefresh: true},
+		{ClientID: "not-connected", IssuerDisplay: "Linear"},
+		{ClientID: "refused", IssuerDisplay: "Google", Chained: true, ChainCheck: chainCheckRejected, ChainMessage: "A long refusal that wraps onto several lines of the card."},
+	}
+	page := renderGatewayConsent(t, gatewayTemplateData(nil, cards))
+
+	for _, card := range cards {
+		// Only this card's markup, up to the next card or the end of the list.
+		start := strings.Index(page, `data-remote-client="`+card.ClientID+`"`)
+		require.GreaterOrEqual(t, start, 0, card.ClientID)
+		segment := page[start:]
+		if end := strings.Index(segment[1:], "data-remote-client="); end >= 0 {
+			segment = segment[:end+1]
+		}
+		require.Regexp(t, `^data-remote-client="`+card.ClientID+`"[^>]*> <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:has-\[details\[open\]\]:items-start" data-card-row>`, segment, card.ClientID)
+		require.Regexp(t, `<form method="POST" action="[^"]*/remote-session" class="flex shrink-0 flex-wrap items-center justify-start gap-1.5 sm:justify-end"`, segment, card.ClientID)
+		require.Contains(t, segment, `name="client_id" value="`+card.ClientID+`"`, card.ClientID)
+	}
 }
