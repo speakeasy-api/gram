@@ -2,6 +2,7 @@ package mcpconnectionhealth
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -147,7 +148,10 @@ func (n names) facetLabel(facet attemptlog.Facet, value string) *string {
 	case attemptlog.FacetServers, attemptlog.FacetMembers:
 		return n.serverName(value)
 	case attemptlog.FacetPeople:
-		return n.personName(value)
+		if p := n.person(value, false); p != nil {
+			return p.Name
+		}
+		return nil
 	case attemptlog.FacetNetworks:
 		return new(attemptlog.NetworkLabel(value))
 	case attemptlog.FacetApps:
@@ -165,12 +169,11 @@ func (n names) facetLabel(facet attemptlog.Facet, value string) *string {
 }
 
 func splitAppVersion(value string) (string, string) {
-	for i := len(value) - 1; i >= 0; i-- {
-		if value[i] == '@' {
-			return value[:i], value[i+1:]
-		}
+	i := strings.LastIndexByte(value, '@')
+	if i < 0 {
+		return "", value
 	}
-	return "", value
+	return value[:i], value[i+1:]
 }
 
 func (s *Service) GetAttempt(ctx context.Context, payload *gen.GetAttemptPayload) (*gen.GetConnectionAttemptResult, error) {

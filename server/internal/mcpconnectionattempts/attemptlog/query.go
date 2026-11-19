@@ -406,7 +406,7 @@ func List(ctx context.Context, ch driver.Conn, s Scope, f Filters, after *Cursor
 	ORDER BY r_time DESC, r_id DESC
 	LIMIT ?` + readSettings
 
-	rows, err := scanRows(ctx, ch, query, args)
+	rows, err := queryAll[Row](ctx, ch, "connection attempts", query, args...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -436,7 +436,7 @@ func Get(ctx context.Context, ch driver.Conn, s Scope, now time.Time) (*Row, []S
 		d_grant AS r_grant, a_started AS r_started, a_issuers AS r_issuers
 	FROM (` + attempts + `)
 	LIMIT 1` + readSettings
-	rows, err := scanRows(ctx, ch, query, args)
+	rows, err := queryAll[Row](ctx, ch, "connection attempts", query, args...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -450,25 +450,25 @@ func Get(ctx context.Context, ch driver.Conn, s Scope, now time.Time) (*Row, []S
 	return &rows[0], steps, nil
 }
 
-func scanRows(ctx context.Context, ch driver.Conn, query string, args []any) ([]Row, error) {
+func queryAll[T any](ctx context.Context, ch driver.Conn, what, query string, args ...any) ([]T, error) {
 	result, err := ch.Query(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query connection attempts: %w", err)
+		return nil, fmt.Errorf("query %s: %w", what, err)
 	}
 	defer o11y.NoLogDefer(func() error { return result.Close() })
 
-	var rows []Row
+	var out []T
 	for result.Next() {
-		var row Row
-		if err := result.ScanStruct(&row); err != nil {
-			return nil, fmt.Errorf("scan connection attempt: %w", err)
+		var item T
+		if err := result.ScanStruct(&item); err != nil {
+			return nil, fmt.Errorf("scan %s: %w", what, err)
 		}
-		rows = append(rows, row)
+		out = append(out, item)
 	}
 	if err := result.Err(); err != nil {
-		return nil, fmt.Errorf("read connection attempts: %w", err)
+		return nil, fmt.Errorf("read %s: %w", what, err)
 	}
-	return rows, nil
+	return out, nil
 }
 
 // Step is one stored step of an attempt.
@@ -505,7 +505,7 @@ type Step struct {
 }
 
 func readSteps(ctx context.Context, ch driver.Conn, s Scope) ([]Step, error) {
-	result, err := ch.Query(ctx, `
+	return queryAll[Step](ctx, ch, "attempt steps", `
 	SELECT event_time AS s_at, toString(step) AS s_step, toString(step_result) AS s_result, is_final AS s_final,
 		toString(reason) AS s_reason, toString(sub_reason) AS s_sub_reason, member_id AS s_member,
 		provider_host AS s_service, toString(grant_type) AS s_grant, retries AS s_retries
@@ -515,23 +515,6 @@ func readSteps(ctx context.Context, ch driver.Conn, s Scope) ([]Step, error) {
 		AND attempt_id = ?
 	ORDER BY event_time, step
 	LIMIT ?`+readSettings, s.OrganizationID, s.ProjectID, s.From.UnixNano(), s.To.UnixNano(), s.AttemptID, maxAttemptSteps)
-	if err != nil {
-		return nil, fmt.Errorf("query attempt steps: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return result.Close() })
-
-	var steps []Step
-	for result.Next() {
-		var step Step
-		if err := result.ScanStruct(&step); err != nil {
-			return nil, fmt.Errorf("scan attempt step: %w", err)
-		}
-		steps = append(steps, step)
-	}
-	if err := result.Err(); err != nil {
-		return nil, fmt.Errorf("read attempt steps: %w", err)
-	}
-	return steps, nil
 }
 
 func nonNil(values []string) []string {

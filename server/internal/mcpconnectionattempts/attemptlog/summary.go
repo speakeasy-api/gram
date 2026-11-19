@@ -6,8 +6,6 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
-
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 // Bucket is a bucket size for the sign-in summary.
@@ -83,22 +81,13 @@ func SignIns(ctx context.Context, ch driver.Conn, s Scope, bucket Bucket, now ti
 	WHERE d_outcome != ? AND (has(?, d_step) OR has(?, d_step))
 	GROUP BY b_start
 	ORDER BY b_start` + readSettings
-	result, err := ch.Query(ctx, query, args...)
+	rows, err := queryAll[SignInBucket](ctx, ch, "sign-in summary", query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query sign-in summary: %w", err)
+		return nil, err
 	}
-	defer o11y.NoLogDefer(func() error { return result.Close() })
-
-	found := map[int64]SignInBucket{}
-	for result.Next() {
-		var b SignInBucket
-		if err := result.ScanStruct(&b); err != nil {
-			return nil, fmt.Errorf("scan sign-in summary: %w", err)
-		}
+	found := make(map[int64]SignInBucket, len(rows))
+	for _, b := range rows {
 		found[b.Start.UTC().Unix()] = b
-	}
-	if err := result.Err(); err != nil {
-		return nil, fmt.Errorf("read sign-in summary: %w", err)
 	}
 
 	first := s.From.UTC().Truncate(width)
@@ -155,24 +144,7 @@ func Denied(ctx context.Context, ch driver.Conn, s Scope, now time.Time) ([]Deni
 	GROUP BY x_app, x_app_key, x_reason
 	ORDER BY x_last DESC
 	LIMIT ?` + readSettings
-	result, err := ch.Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("query denied clients: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return result.Close() })
-
-	var clients []DeniedClient
-	for result.Next() {
-		var client DeniedClient
-		if err := result.ScanStruct(&client); err != nil {
-			return nil, fmt.Errorf("scan denied client: %w", err)
-		}
-		clients = append(clients, client)
-	}
-	if err := result.Err(); err != nil {
-		return nil, fmt.Errorf("read denied clients: %w", err)
-	}
-	return clients, nil
+	return queryAll[DeniedClient](ctx, ch, "denied clients", query, args...)
 }
 
 func groupStrings(groups []StepGroup) []string {

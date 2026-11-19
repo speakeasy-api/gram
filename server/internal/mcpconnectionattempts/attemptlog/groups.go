@@ -5,6 +5,7 @@
 package attemptlog
 
 import (
+	"maps"
 	"slices"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -260,12 +261,7 @@ func AppName(family string) string {
 
 // listedFamilies are the families with a name, for the SQL that maps others to empty.
 func listedFamilies() []string {
-	families := make([]string, 0, len(appNames))
-	for family := range appNames {
-		families = append(families, family)
-	}
-	slices.Sort(families)
-	return families
+	return slices.Sorted(maps.Keys(appNames))
 }
 
 // NetworkLabel is the short form of a network key shown on the pages.
