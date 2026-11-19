@@ -139,23 +139,3 @@ export function teamServerExistingServer(
 ): { mcpServerId: string; slug?: string; name: string } | null {
   return server.officialServer ?? server.suggestedOfficialServer ?? null;
 }
-
-/** Query params the remote MCP create page reads to start prefilled. */
-export const PREFILL_URL_PARAM = "url";
-export const PREFILL_NAME_PARAM = "name";
-
-/** The remote MCP create page, with this server's URL and name filled in. */
-export function remoteMcpPrefillHref(
-  createHref: string,
-  server: Pick<
-    ShadowMCPInventoryServer,
-    "canonicalServerUrl" | "serverName" | "urlHost"
-  >,
-): string {
-  const params = new URLSearchParams({
-    [PREFILL_URL_PARAM]: server.canonicalServerUrl,
-  });
-  const name = server.serverName || server.urlHost;
-  if (name) params.set(PREFILL_NAME_PARAM, name);
-  return `${createHref}?${params.toString()}`;
-}

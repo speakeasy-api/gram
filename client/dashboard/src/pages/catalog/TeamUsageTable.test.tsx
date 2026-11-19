@@ -85,6 +85,18 @@ describe("TeamUsageTable", () => {
     expect(href.startsWith("/mcp/add/remote?")).toBe(true);
     expect(params.get("url")).toBe("https://mcp.example.com/mcp");
     expect(params.get("name")).toBe("Internal tools");
+    expect(params.get("shadow-mcp")).toBe("mcp-example-com");
+  });
+
+  it("names a server with no name after its host", () => {
+    renderTable([server({})]);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add mcp.example.com" }),
+    );
+    const href = mocks.navigate.mock.calls[0]?.[0] as string;
+    expect(new URL(href, "https://app.test").searchParams.get("name")).toBe(
+      "mcp.example.com",
+    );
   });
 
   it("uses the catalog entry when one serves the URL", () => {

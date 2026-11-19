@@ -6,17 +6,16 @@ import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { mcpServerRouteParam } from "@/lib/sources";
 import type { CatalogServer } from "@/pages/catalog/hooks";
-import { shadowMCPCatalogMatch } from "@/components/shadow-mcp/shadowMCPOfficialServer";
+import {
+  shadowMCPCatalogMatch,
+  shadowMCPSetUpHref,
+} from "@/components/shadow-mcp/shadowMCPOfficialServer";
 import { useRoutes } from "@/routes";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { Plus } from "lucide-react";
 import { useMemo } from "react";
 import { Link, useNavigate } from "react-router";
-import {
-  remoteMcpPrefillHref,
-  teamServerExistingServer,
-  teamServerLabel,
-} from "./team-usage";
+import { teamServerExistingServer, teamServerLabel } from "./team-usage";
 
 /** The URL without its scheme, which is what people recognize a server by. */
 function displayUrl(raw: string): string {
@@ -157,8 +156,14 @@ export function TeamUsageTable({
                   onAddFromCatalog(catalogEntry);
                   return;
                 }
+                // The same filled-in form as the Shadow MCP page's "Set it up
+                // myself": saving returns there so the new server can be
+                // linked. A server with no name is named after its host.
                 void navigate(
-                  remoteMcpPrefillHref(routes.mcp.add.remote.href(), server),
+                  shadowMCPSetUpHref(routes.mcp.add.remote.href(), {
+                    ...server,
+                    serverName: teamServerLabel(server),
+                  }),
                 );
               }}
             >

@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   isHostableShadowServer,
   isLocalServerUrl,
-  remoteMcpPrefillHref,
   teamUsedServers,
 } from "./team-usage";
 
@@ -119,27 +118,5 @@ describe("teamUsedServers", () => {
       "https://c.example.com/mcp",
       "https://b.example.com/mcp",
     ]);
-  });
-});
-
-describe("remoteMcpPrefillHref", () => {
-  it("carries the URL and the name", () => {
-    const href = remoteMcpPrefillHref(
-      "/org/proj/mcp/add/remote",
-      server({
-        serverName: "Linear",
-        canonicalServerUrl: "https://mcp.linear.app/mcp",
-      }),
-    );
-    const params = new URL(href, "https://app.test").searchParams;
-    expect(params.get("url")).toBe("https://mcp.linear.app/mcp");
-    expect(params.get("name")).toBe("Linear");
-  });
-
-  it("falls back to the host when the server has no name", () => {
-    const href = remoteMcpPrefillHref("/add", server({}));
-    expect(new URL(href, "https://app.test").searchParams.get("name")).toBe(
-      "mcp.example.com",
-    );
   });
 });
