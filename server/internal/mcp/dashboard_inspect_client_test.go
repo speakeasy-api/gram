@@ -67,49 +67,65 @@ func TestDashboardInspectOAuthClient(t *testing.T) {
 	_, err := queries.GetUserSessionClientByClientID(ctx, params)
 	require.ErrorIs(t, err, pgx.ErrNoRows, "invalid redirects must not provision a client")
 
-	w := authorize(redirectURI)
-	require.Equal(t, http.StatusFound, w.Code)
-	loc, err := url.Parse(w.Header().Get("Location"))
-	require.NoError(t, err)
-	require.Equal(t, "/mcp/"+mcpSlug+"/connect", loc.Path)
-	stateID := loc.Query().Get("state")
-	require.NotEmpty(t, stateID)
+	approve := func() string {
+		t.Helper()
+		w := authorize(redirectURI)
+		require.Equal(t, http.StatusFound, w.Code)
+		loc, err := url.Parse(w.Header().Get("Location"))
+		require.NoError(t, err)
+		require.Equal(t, "/mcp/"+mcpSlug+"/connect", loc.Path)
+		stateID := loc.Query().Get("state")
+		require.NotEmpty(t, stateID)
+
+		w = httptest.NewRecorder()
+		require.NoError(t, ti.service.HandleConsent(w, route(http.MethodGet, "/connect?state="+stateID, "")))
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Contains(t, w.Body.String(), "Speakeasy Dashboard Inspect")
+
+		stored, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+		require.NoError(t, err)
+		require.False(t, stored.FirstParty, "the dashboard client uses OAuth consent, not the first-party connect shortcut")
+		form := url.Values{"state": {stateID}, "csrf_token": {stored.CSRFToken}, "action": {"approve"}}
+		w = httptest.NewRecorder()
+		require.NoError(t, ti.service.HandleConsent(w, route(http.MethodPost, "/connect", form.Encode())))
+		require.Equal(t, http.StatusSeeOther, w.Code)
+		loc, err = url.Parse(w.Header().Get("Location"))
+		require.NoError(t, err)
+		code := loc.Query().Get("code")
+		require.NotEmpty(t, code)
+		require.Equal(t, "dashboard-state", loc.Query().Get("state"))
+		loc.RawQuery = ""
+		require.Equal(t, redirectURI, loc.String())
+		return code
+	}
+	exchange := func(code string) *httptest.ResponseRecorder {
+		t.Helper()
+		form := url.Values{
+			"grant_type": {"authorization_code"}, "code": {code}, "redirect_uri": {redirectURI},
+			"client_id": {clientID}, "code_verifier": {verifier},
+		}
+		w := httptest.NewRecorder()
+		require.NoError(t, ti.service.HandleToken(w, route(http.MethodPost, "/token", form.Encode())))
+		return w
+	}
+
+	code := approve()
 	client, err := queries.GetUserSessionClientByClientID(ctx, params)
 	require.NoError(t, err)
 	require.Contains(t, client.RedirectUris, redirectURI)
 	require.Equal(t, oauthwire.AuthMethodNone, client.TokenEndpointAuthMethod.String)
 	require.False(t, client.ClientSecretHash.Valid)
-
-	w = httptest.NewRecorder()
-	require.NoError(t, ti.service.HandleConsent(w, route(http.MethodGet, "/connect?state="+stateID, "")))
-	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Body.String(), "Speakeasy Dashboard Inspect")
-
-	stored, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
-	require.NoError(t, err)
-	require.False(t, stored.FirstParty, "the dashboard client uses OAuth consent, not the first-party connect shortcut")
-	form := url.Values{"state": {stateID}, "csrf_token": {stored.CSRFToken}, "action": {"approve"}}
-	w = httptest.NewRecorder()
-	require.NoError(t, ti.service.HandleConsent(w, route(http.MethodPost, "/connect", form.Encode())))
-	require.Equal(t, http.StatusSeeOther, w.Code)
-	loc, err = url.Parse(w.Header().Get("Location"))
-	require.NoError(t, err)
-	code := loc.Query().Get("code")
-	require.NotEmpty(t, code)
-	require.Equal(t, "dashboard-state", loc.Query().Get("state"))
-	loc.RawQuery = ""
-	require.Equal(t, redirectURI, loc.String())
-
-	form = url.Values{
-		"grant_type": {"authorization_code"}, "code": {code}, "redirect_uri": {redirectURI},
-		"client_id": {clientID}, "code_verifier": {verifier},
-	}
-	w = httptest.NewRecorder()
-	require.NoError(t, ti.service.HandleToken(w, route(http.MethodPost, "/token", form.Encode())))
+	w := exchange(code)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	var tokenBody struct {
 		AccessToken string `json:"access_token"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &tokenBody))
 	require.NotEmpty(t, tokenBody.AccessToken)
+
+	code = approve()
+	ti.service.SetPlatformHosts(nil)
+	w = exchange(code)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.JSONEq(t, `{"error":"invalid_grant","error_description":"redirect_uri is no longer registered for this client"}`, w.Body.String())
 }

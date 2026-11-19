@@ -31,7 +31,7 @@ func (s *Service) dashboardInspectRedirectURIs() []string {
 		if base == nil || base.Hostname() == "" || base.User != nil {
 			return
 		}
-		if base.Scheme != "https" && !(base.Scheme == "http" && isLoopbackDashboardHost(base.Hostname())) {
+		if base.Scheme != "https" && (base.Scheme != "http" || !isLoopbackDashboardHost(base.Hostname())) {
 			return
 		}
 		callback := (&url.URL{Scheme: base.Scheme, Host: base.Host, Path: dashboardInspectCallbackPath}).String()
@@ -73,16 +73,18 @@ func (s *Service) registerDashboardInspectClient(ctx context.Context, logger *sl
 		return nil, err
 	}
 
+	var noText pgtype.Text
+	var noExpiry pgtype.Timestamptz
 	row, err := usersessions_repo.New(s.db).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
 		UserSessionIssuerID:     endpoint.UserSessionIssuerID,
 		ClientID:                dashboardInspectClientID,
 		ClientName:              "Speakeasy Dashboard Inspect",
 		RedirectUris:            redirectURIs,
 		TokenEndpointAuthMethod: oauthwire.AuthMethodNone,
-		ClientSecretHash:        pgtype.Text{},
-		ClientSecretExpiresAt:   pgtype.Timestamptz{},
+		ClientSecretHash:        noText,
+		ClientSecretExpiresAt:   noExpiry,
 		ClientJwks:              nil,
-		ClientJwksUri:           pgtype.Text{},
+		ClientJwksUri:           noText,
 	})
 	if isUniqueViolation(err) {
 		// Another request already registered the client for this issuer.

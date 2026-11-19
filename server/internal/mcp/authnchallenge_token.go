@@ -925,10 +925,16 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return rejectGrant(mcpconnectionattempts.CodeClientAuthFailed, "code was issued to a different client", mcpconnectionattempts.Detail("code_client_mismatch"))
 	}
-	if grant.RedirectURI != req.RedirectURI || (clientRow.ClientID == dashboardInspectClientID && !slices.Contains(s.dashboardInspectRedirectURIs(), req.RedirectURI)) {
+	if grant.RedirectURI != req.RedirectURI {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "redirect_uri_mismatch")
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return rejectGrant(mcpconnectionattempts.CodeRedirectURIMismatch, "redirect_uri does not match the original request")
+	}
+	if clientRow.ClientID == dashboardInspectClientID && !slices.Contains(s.dashboardInspectRedirectURIs(), req.RedirectURI) {
+		const reason = "redirect_uri_no_longer_registered"
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", reason)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
+		return rejectGrant(mcpconnectionattempts.CodeRedirectURIMismatch, "redirect_uri is no longer registered for this client", mcpconnectionattempts.Detail(reason))
 	}
 	if !verifyPKCES256(req.CodeVerifier, grant.CodeChallenge) {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "pkce_mismatch")

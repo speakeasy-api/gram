@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   accessToken: undefined as string | undefined,
   oauthError: false,
+  oauthConnecting: false,
   tools: undefined as
     | undefined
     | Record<string, { unavailable: boolean; unavailableReason?: string }>,
@@ -61,13 +62,11 @@ vi.mock("@/pages/mcp/inspect-chat/InspectChat", () => ({
 }));
 
 vi.mock("@/hooks/useInspectOAuth", () => ({
-  useInspectOAuth: ({ platformSlug }: { platformSlug?: string }) => ({
+  useInspectOAuth: ({ serverUrl }: { serverUrl?: string }) => ({
     accessToken: mocks.accessToken,
-    serverUrl: platformSlug
-      ? `https://gram.example/mcp/${platformSlug}`
-      : undefined,
-    connect: platformSlug ? () => mocks.startOAuth(platformSlug) : undefined,
-    isConnecting: false,
+    serverUrl,
+    connect: serverUrl ? () => mocks.startOAuth(serverUrl) : undefined,
+    isConnecting: mocks.oauthConnecting,
     error: mocks.oauthError,
   }),
 }));
@@ -103,8 +102,8 @@ vi.mock("@/lib/utils", async () => {
 
 function renderSection(
   props: Partial<ComponentProps<typeof RemoteMcpToolsSection>> = {},
-): void {
-  render(
+): ReturnType<typeof render> {
+  return render(
     <QueryClientProvider client={new QueryClient()}>
       <MemoryRouter>
         <TooltipProvider>
@@ -133,6 +132,7 @@ afterEach(() => {
   mocks.list.mockReset();
   mocks.accessToken = undefined;
   mocks.oauthError = false;
+  mocks.oauthConnecting = false;
   mocks.tools = undefined;
   mocks.stored = {};
   mocks.canWrite = true;
@@ -330,7 +330,9 @@ describe("RemoteMcpToolsSection connect prompt", () => {
       expect.objectContaining({ enabled: false }),
     );
     fireEvent.click(screen.getByRole("button", connectButton));
-    expect(mocks.startOAuth).toHaveBeenCalledWith("server");
+    expect(mocks.startOAuth).toHaveBeenCalledWith(
+      "https://gram.example/mcp/server",
+    );
   });
 
   it("lists tools using the exchanged token on the same resource", () => {
@@ -351,7 +353,9 @@ describe("RemoteMcpToolsSection connect prompt", () => {
     mocks.oauthError = true;
     renderSection({ userSessionIssuerId: "issuer-1" });
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(mocks.startOAuth).toHaveBeenCalledWith("server");
+    expect(mocks.startOAuth).toHaveBeenCalledWith(
+      "https://gram.example/mcp/server",
+    );
   });
 
   it("lists on public tunnels anonymously even if an issuer is configured", () => {
@@ -369,10 +373,43 @@ describe("RemoteMcpToolsSection connect prompt", () => {
     );
   });
 
-  it("does not offer connect when only a custom-domain address exists", () => {
+  it("keeps tool listing off and hides the prompt while sign-in starts", () => {
+    mocks.needsAuth = false;
+    mocks.oauthConnecting = true;
+    renderSection({ userSessionIssuerId: "issuer-1" });
+
+    expect(screen.queryByRole("button", connectButton)).toBeNull();
+    expect(mocks.list).toHaveBeenLastCalledWith(
+      "https://gram.example/mcp/server",
+      expect.objectContaining({ enabled: false }),
+    );
+  });
+
+  it("uses the custom-domain OAuth and MCP routes when there is no platform address", () => {
+    mocks.needsAuth = false;
+    const props = { userSessionIssuerId: "issuer-1", platformSlug: undefined };
+    const customUrl = "https://mcp.example/mcp/custom-slug";
+    const beforeConsent = renderSection(props);
+    fireEvent.click(screen.getByRole("button", connectButton));
+    expect(mocks.startOAuth).toHaveBeenCalledWith(customUrl);
+    beforeConsent.unmount();
+
+    mocks.accessToken = "custom-oauth-token";
+    renderSection(props);
+    expect(mocks.list).toHaveBeenLastCalledWith(
+      customUrl,
+      expect.objectContaining({
+        enabled: true,
+        headers: { Authorization: "Bearer custom-oauth-token" },
+      }),
+    );
+  });
+
+  it("does not offer connect when there is no resolved MCP address", () => {
     renderSection({
       userSessionIssuerId: "issuer-1",
       platformSlug: undefined,
+      mcpUrl: undefined,
     });
 
     expect(screen.queryByRole("button", connectButton)).toBeNull();

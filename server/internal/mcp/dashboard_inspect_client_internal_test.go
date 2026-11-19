@@ -18,6 +18,11 @@ func TestDashboardInspectRedirectURIs(t *testing.T) {
 			"dashboard.example.test": "https://dashboard.example.test",
 			"insecure.example.test":  "http://insecure.example.test",
 			"127.0.0.1":              "http://127.0.0.1:6161",
+			"duplicate":              "https://localhost:5342/unused?ignored=yes#fragment",
+			"userinfo":               "https://viewer@userinfo.example.test",
+			"non-http":               "ftp://unsupported.example.test",
+			"no-host":                "https:///missing-host",
+			"invalid":                "https://[bad-address",
 		},
 	}
 	require.Equal(t, []string{
@@ -26,4 +31,6 @@ func TestDashboardInspectRedirectURIs(t *testing.T) {
 		"https://localhost:5342/inspect/oauth/callback",
 		"https://server.example.test/inspect/oauth/callback",
 	}, service.dashboardInspectRedirectURIs())
+
+	require.Empty(t, (&Service{}).dashboardInspectRedirectURIs())
 }

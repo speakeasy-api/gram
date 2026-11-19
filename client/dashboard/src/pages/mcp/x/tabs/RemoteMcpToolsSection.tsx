@@ -258,7 +258,7 @@ function RemoteMcpToolsSectionInner({
   // The chat prefers the Speakeasy origin. A server reachable only on a
   // custom domain chats at the address Inspect resolved for it.
   const chatUrl = platformSlug
-    ? `${getServerURL()}/mcp/${platformSlug}`
+    ? `${getServerURL()}/mcp/${encodeURIComponent(platformSlug)}`
     : mcpUrl;
 
   return (
@@ -283,8 +283,7 @@ function RemoteMcpToolsSectionInner({
       }
       chat={
         canChat && chatUrl ? (
-          // Reuses this tab's connection: the same Speakeasy-origin URL and
-          // the same session token, so chatting never asks to connect again.
+          // Reuses this tab's endpoint and access token.
           <InspectChat
             mcpUrl={chatUrl}
             gatewayToken={headers?.Authorization?.replace(/^Bearer /, "")}

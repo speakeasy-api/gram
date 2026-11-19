@@ -156,8 +156,10 @@ export function acceptInspectCallback(
         .parse(JSON.parse(atob(payload)));
       if (claims.sub !== `user:${userId}`)
         return "Sign in with the same account you use in the dashboard.";
-      // The tab stores only the short-lived access token, not the refresh
-      // token, so it can return to Inspect and survive a dashboard reload.
+      // Browser Inspect must attach a bearer token directly to MCP requests.
+      // Keep only the expiring access token, not the refresh token, in this
+      // tab rather than localStorage. This lets the full-page callback return
+      // to Inspect and survive reloads without sharing credentials across tabs.
       sessionStorage.setItem(
         grantKey,
         JSON.stringify({

@@ -3,7 +3,7 @@ import {
   prepareInspectAuthorization,
   readInspectGrant,
 } from "@/lib/inspect-oauth";
-import { getServerURL, mcpConnectionUrl } from "@/lib/utils";
+import { mcpConnectionUrl } from "@/lib/utils";
 import { useEffect, useState } from "react";
 
 type InspectOAuthConnection = {
@@ -15,19 +15,17 @@ type InspectOAuthConnection = {
 };
 
 export function useInspectOAuth({
-  platformSlug,
+  serverUrl,
   issuerId,
   serverId,
 }: {
-  platformSlug: string | undefined;
+  /** Address resolved from a registered MCP endpoint. */
+  serverUrl: string | undefined;
   issuerId: string | undefined;
   serverId: string | undefined;
 }): InspectOAuthConnection {
   const session = useSession();
   const userId = session.user.id;
-  const serverUrl = platformSlug
-    ? `${getServerURL()}/mcp/${encodeURIComponent(platformSlug)}`
-    : undefined;
   const grantKey =
     serverUrl && issuerId && serverId && userId
       ? `inspect-oauth:${JSON.stringify([session.organization.id, userId, issuerId, serverId, serverUrl])}`

@@ -104,10 +104,14 @@ export function useRemoteMcpToolConnection({
     tunneledMcpServerId,
   });
 
+  // Prefer the platform endpoint when it exists. A custom-domain-only server
+  // uses its own OAuth and MCP routes; the grant must stay on that same address.
   const oauth = useInspectOAuth({
-    platformSlug:
-      enabled && inspectOAuth && canFirstPartyConnect
+    serverUrl:
+      enabled && inspectOAuth && isIssuerGated
         ? platformSlug
+          ? `${getServerURL()}/mcp/${encodeURIComponent(platformSlug)}`
+          : mcpUrl
         : undefined,
     issuerId: userSessionIssuerId,
     serverId: mcpServerId,
