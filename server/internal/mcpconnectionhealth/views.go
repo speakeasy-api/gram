@@ -11,6 +11,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_connection_health"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/attemptlog"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionhealth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -191,6 +192,7 @@ func formatTime(t time.Time) string {
 }
 
 func (n names) row(r attemptlog.Row) *gen.ConnectionAttemptRow {
+	meaning, _ := mcpconnectionattempts.MeaningOf(r.Reason)
 	return &gen.ConnectionAttemptRow{
 		ID:               r.ID.String(),
 		Time:             formatTime(r.Time),
@@ -199,8 +201,8 @@ func (n names) row(r attemptlog.Row) *gen.ConnectionAttemptRow {
 		Outcome:          gen.ConnectionOutcome(r.Outcome),
 		Step:             gen.ConnectionStepGroup(r.Step),
 		Reason:           conv.PtrEmpty(r.Reason),
-		Message:          conv.PtrEmpty(attemptlog.MessageOf(r.Reason)),
-		TechnicalMessage: conv.PtrEmpty(attemptlog.TechnicalOf(r.Reason)),
+		Message:          conv.PtrEmpty(meaning.WhatHappenedForAdmin),
+		TechnicalMessage: conv.PtrEmpty(meaning.Technical),
 		Source:           conv.PtrEmpty(gen.ConnectionFailureSource(attemptlog.SourceOf(r.Reason, attemptlog.Outcome(r.Outcome)))),
 		Person:           n.person(r.Subject, false),
 		Network:          networkView(r.Network),

@@ -39,7 +39,7 @@ var adminMeanings = map[Code]adminMeaning{
 	CodeSubjectNotProvisioned:            {"The account is not set up in the organization's directory.", ""},
 	CodeInvalidRequest:                   {"The app sent a request that was missing information or was not formed correctly.", ""},
 	CodeResourceNotAvailable:             {"None of this gateway's servers were available to this account.", ""},
-	CodeAssertionInvalid:                 {"The signed identity proof that was presented was not accepted.", "The presented assertion was refused; the detail carries the assertion_* reason."},
+	CodeAssertionInvalid:                 {"A required signed identity proof was missing or was not accepted.", "The assertion was missing or refused; the detail carries the assertion_* reason."},
 	CodeAssertionOther:                   {"Speakeasy refused the presented identity proof for a reason that has no specific code yet.", ""},
 	CodeUpstreamCredentialChoice:         {"The request asked to use a sign-in for the service that this server does not accept.", ""},
 	CodeUpstreamSignInNotSetUp:           {"This server's sign-in with the service is not set up, or is not ready to use.", ""},
