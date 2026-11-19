@@ -63,12 +63,12 @@ type tally struct {
 	// unknown counts values outside the known steps, outcomes, reasons and fixes, by column.
 	unknown map[string]int
 
-	// catalog names the client metadata document hosts kept as app labels.
-	catalog *aivendors.Snapshot
+	// appHosts are the client metadata document hosts kept as app labels.
+	appHosts mcpconnectionattempts.AppHosts
 }
 
 func newTally(catalog *aivendors.Snapshot) *tally {
-	return &tally{attempts: map[rowKey]map[string]uint64{}, unknown: map[string]int{}, catalog: catalog}
+	return &tally{attempts: map[rowKey]map[string]uint64{}, unknown: map[string]int{}, appHosts: mcpconnectionattempts.CatalogAppHosts(catalog)}
 }
 
 // known returns label, counting it when it replaced a value outside the known set.
@@ -82,7 +82,7 @@ func (t *tally) known(column, value, label string) string {
 func (t *tally) add(a mcpconnectionattempts.AttemptSummary, e mcpconnectionattempts.Ending, fix mcpconnectionattempts.FixedBy) {
 	key := rowKey{
 		provider:     mcpconnectionattempts.ProviderLabel(a.ProviderHost),
-		app:          mcpconnectionattempts.AppLabel(t.catalog, a.AppKey),
+		app:          mcpconnectionattempts.AppLabel(t.appHosts, a.AppKey),
 		clientFamily: mcpconnectionattempts.ClientFamilyLabel(a.ClientFamily),
 		step:         t.known("step", e.Step, mcpconnectionattempts.StepLabel(e.Step)),
 		outcome:      t.known("outcome", string(e.Outcome), mcpconnectionattempts.OutcomeLabel(string(e.Outcome))),

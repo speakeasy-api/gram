@@ -6,7 +6,8 @@ same `Snapshot` type. The API and MCP gateway services read an injected `Store`
 built from it, and Platform MCP reads it directly, so every reader sees exactly
 the registry until the database becomes the source.
 
-A `Store` refreshes on a minute timer. Each refresh reads live products and
+`Store.Run` can refresh a store on a minute timer, but nothing in production
+runs it yet. Each refresh reads live products and
 documents in a read-only, repeatable-read transaction. A full content
 fingerprint detects changes, including edits that do not update timestamps. The
 catalog is small, so the reader fetches its contents instead of relying on a

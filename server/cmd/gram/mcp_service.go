@@ -107,7 +107,7 @@ func newDataExportRouteTests(logger *slog.Logger, meterProvider metric.MeterProv
 
 type mcpServiceDependencies struct {
 	Connections *mcpconnectionattempts.Recorder
-	// AICatalog is the process-wide database catalog store.
+	// AICatalog is the process-wide AI client catalog store.
 	AICatalog      *aivendors.Store
 	TunnelMetrics  *metrics.Collector
 	Logger         *slog.Logger

@@ -53,8 +53,7 @@ var (
 // ErrInvalidTarget is wrapped by every validation failure.
 var ErrInvalidTarget = errors.New("invalid ai scan target")
 
-// ValidateCatalog verifies the complete device-facing projection before a
-// database snapshot becomes visible to any catalog reader.
+// ValidateCatalog checks the device-facing projection of a catalog snapshot.
 func ValidateCatalog(catalog *aivendors.Snapshot) error {
 	return ValidateServed(catalog, Defaults(catalog))
 }

@@ -1,47 +1,47 @@
 package aitargets_test
 
+// This golden was first generated from the registry-backed Defaults before it
+// took a snapshot, which established equivalence. A registry change needs
+// `-args -update`.
+
 import (
 	"encoding/json"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-// compiledDefaultsGolden is the registry-backed scan list recorded before
-// Defaults took a snapshot.
+// compiledDefaultsGolden is the default scan list and what an organization
+// with no rows is served.
 type compiledDefaultsGolden struct {
 	// Defaults are the default targets in order.
-	Defaults json.RawMessage `json:"defaults"`
+	Defaults []aitargets.Target `json:"defaults"`
 
 	// ListVersion is the served list_version.
 	ListVersion int32 `json:"list_version"`
 
-	// ETag is the served ETag for an organization with no rows.
+	// ETag is the served ETag.
 	ETag string `json:"etag"`
 
-	// Envelope is the ai_scan envelope for an organization with no rows.
+	// Envelope is the ai_scan envelope agents receive.
 	Envelope map[string]any `json:"envelope"`
 }
 
 func TestCompiledSnapshotServesTheRegistryScanList(t *testing.T) {
 	t.Parallel()
 
-	data, err := os.ReadFile("testdata/defaults_golden.json")
-	require.NoError(t, err)
-	var golden compiledDefaultsGolden
-	require.NoError(t, json.Unmarshal(data, &golden))
-
 	defaults := aitargets.Defaults(aivendors.CompiledSnapshot())
-	encoded, err := json.Marshal(defaults)
-	require.NoError(t, err)
-	require.JSONEq(t, string(golden.Defaults), string(encoded))
-
-	require.Equal(t, golden.ListVersion, aitargets.ListVersion())
 	snapshot := aitargets.NewSnapshot(aitargets.ListVersion(), aitargets.Served(aitargets.Overlay(defaults, nil)))
-	require.Equal(t, golden.ETag, snapshot.ETag)
-	require.Equal(t, golden.Envelope, snapshot.EnvelopeValue())
+	data, err := json.Marshal(compiledDefaultsGolden{
+		Defaults:    defaults,
+		ListVersion: aitargets.ListVersion(),
+		ETag:        snapshot.ETag,
+		Envelope:    snapshot.EnvelopeValue(),
+	})
+	require.NoError(t, err)
+	testenv.RequireJSONGolden(t, "testdata/defaults_golden.json", data)
 }

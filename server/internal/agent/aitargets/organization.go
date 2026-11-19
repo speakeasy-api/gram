@@ -44,7 +44,7 @@ const DefaultsVersion int32 = 9
 type Source string
 
 const (
-	// SourceDefault marks a target provided by the global catalog.
+	// SourceDefault marks a target provided by the AI client catalog.
 	SourceDefault Source = "default"
 
 	// SourceOrganization marks a target the organization added.

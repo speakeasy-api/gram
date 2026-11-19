@@ -104,7 +104,7 @@ func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiS
 	}
 	// Built-in targets are system-supplied, the same contract Detection Rules
 	// holds its built-ins to. There is nothing left for an organization to
-	// write about one: the definition comes from the global catalog, and being in the
+	// write about one: the definition comes from the AI client catalog, and being in the
 	// inventory is what makes it probed for, so there is no per-organization
 	// switch either. The access decision is recorded through the AI tool
 	// decision endpoint, not here.
@@ -279,7 +279,7 @@ func (s *Service) DeleteAiScanTarget(ctx context.Context, payload *gen.DeleteAiS
 // customizes; else nothing.
 //
 // A built-in's row carries only the organization's choice about it, so the row
-// is resolved back against the current global catalog definition. Both callers read the
+// is resolved back against the catalog snapshot's definition. Both callers read the
 // definition off this: the omitted-gateway_client carry-over above, which
 // would otherwise unlink a built-in from the caller it blocks and then fail
 // the read-only check, and the update audit's before-snapshot.

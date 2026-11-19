@@ -600,6 +600,8 @@
       }
     }
   ],
+  "list_version": 9,
+  "etag": "c8282035af97e983ca33112ab17ffad010f03a95319f64b6c0e36d65abcd5faa",
   "envelope": {
     "etag": "c8282035af97e983ca33112ab17ffad010f03a95319f64b6c0e36d65abcd5faa",
     "list_version": 9,
@@ -1081,7 +1083,5 @@
         }
       }
     ]
-  },
-  "etag": "c8282035af97e983ca33112ab17ffad010f03a95319f64b6c0e36d65abcd5faa",
-  "list_version": 9
+  }
 }

@@ -71,7 +71,6 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 	if err := catalogseed.EnsureCatalog(ctx, db); err != nil {
 		return fmt.Errorf("ensure AI catalog before demo seed: %w", err)
 	}
-	catalog := aivendors.CompiledSnapshot()
 
 	return withSeedLock(ctx, logger, db, func(conn *pgxpool.Conn) error {
 		s, err := seedPostgres(ctx, logger, conn, blob, enc, assistantIssuerURL, serverURL, spec)
@@ -85,7 +84,7 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 		}
 		logger.InfoContext(ctx, "demo seed upstream auth migrated")
 
-		if err := s.runClickHouse(ctx, ch, catalog); err != nil {
+		if err := s.runClickHouse(ctx, ch); err != nil {
 			return fmt.Errorf("apply demo seed to clickhouse: %w", err)
 		}
 		logger.InfoContext(ctx, "demo seed applied to clickhouse")
@@ -163,7 +162,7 @@ func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob 
 	if err != nil {
 		return nil, err
 	}
-	s := &seeder{spec: spec, catalog: nil, enc: enc, assistantIssuer: assistantIssuer, serverURL: server, q: nil, logger: logger, now: time.Time{}, signalSequences: nil}
+	s := &seeder{spec: spec, catalog: aivendors.CompiledSnapshot(), enc: enc, assistantIssuer: assistantIssuer, serverURL: server, q: nil, logger: logger, now: time.Time{}, signalSequences: nil}
 	if err := pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
 		s.q = repo.New(tx)
 		if err := s.runPostgres(ctx); err != nil {

@@ -70,26 +70,30 @@ func ProviderLabel(host string) string {
 	return LabelOther
 }
 
-// AppLabel keeps an app_key only when it is a kind of app or the host of a
-// client metadata document in catalog, disabled ones included, since a
-// disabled entry still names a vendor.
-func AppLabel(catalog *aivendors.Snapshot, appKey string) string {
+// AppHosts are the client metadata document hosts an app_key label keeps.
+type AppHosts map[string]struct{}
+
+// CatalogAppHosts collects the host of every client metadata document in catalog,
+// disabled ones included, since a disabled entry still names a vendor.
+func CatalogAppHosts(catalog *aivendors.Snapshot) AppHosts {
+	hosts := AppHosts{}
+	for _, preset := range catalog.Catalog() {
+		if host := NormalizeProviderHost(preset.URL); host != "" {
+			hosts[host] = struct{}{}
+		}
+	}
+	return hosts
+}
+
+// AppLabel keeps an app_key only when it is a kind of app or one of hosts.
+func AppLabel(hosts AppHosts, appKey string) string {
 	if appKey == "" {
 		return ""
 	}
-	if IsAppKind(appKey) || isCatalogAppHost(catalog, appKey) {
+	if _, ok := hosts[appKey]; ok || IsAppKind(appKey) {
 		return appKey
 	}
 	return LabelOther
-}
-
-func isCatalogAppHost(catalog *aivendors.Snapshot, host string) bool {
-	for _, preset := range catalog.Catalog() {
-		if NormalizeProviderHost(preset.URL) == host {
-			return true
-		}
-	}
-	return false
 }
 
 // ClientFamilyLabel keeps a client family only when the writer can produce it.

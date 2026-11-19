@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 	"github.com/stretchr/testify/require"
 
@@ -121,7 +120,7 @@ func TestDemoSeedSafety(t *testing.T) {
 	require.Equal(t, pgBeforeNoServer, pgAfterNoServer,
 		"MCP dependent fixture created orphan rows without a target server")
 
-	require.NoError(t, otherSeed.runClickHouse(ctx, ch, aivendors.CompiledSnapshot()))
+	require.NoError(t, otherSeed.runClickHouse(ctx, ch))
 
 	demoProjects := []string{DefaultSpec().ProjectID()}
 

@@ -1,16 +1,21 @@
 package admission
 
+// These goldens were first generated from the registry-backed admission code
+// before it took a snapshot, which established equivalence. A registry change
+// needs `-args -update`.
+
 import (
 	"encoding/json"
-	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-// goldenPreset is a preset as the registry-backed admission catalog listed it.
+// goldenPreset is a preset as the admission catalog lists it.
 type goldenPreset struct {
 	URL         string `json:"url"`
 	VendorKey   string `json:"vendor_key"`
@@ -19,60 +24,105 @@ type goldenPreset struct {
 	Pattern     bool   `json:"pattern"`
 }
 
-// goldenCase is one client_id and what the registry-backed admission decided.
+// goldenDecision is a Decision under the field names the golden was recorded with.
+type goldenDecision struct {
+	Outcome Outcome      `json:"Outcome"`
+	Admit   AdmitReason  `json:"Admit"`
+	Denial  DenialReason `json:"Denial"`
+}
+
+func toGoldenDecision(d Decision) goldenDecision {
+	return goldenDecision(d)
+}
+
+// goldenCase is one client_id and what admission decides about it.
 type goldenCase struct {
-	ClientID    string            `json:"client_id"`
-	MatchReason AdmitReason       `json:"match_reason"`
-	Matched     bool              `json:"matched"`
-	Preset      *goldenPreset     `json:"preset"`
-	Shadow      Decision          `json:"shadow"`
-	Evaluate    map[Mode]Decision `json:"evaluate"`
+	ClientID    string                  `json:"client_id"`
+	MatchReason AdmitReason             `json:"match_reason"`
+	Matched     bool                    `json:"matched"`
+	Preset      *goldenPreset           `json:"preset"`
+	Shadow      goldenDecision          `json:"shadow"`
+	Evaluate    map[Mode]goldenDecision `json:"evaluate"`
 }
 
-func readGolden(t *testing.T, path string, v any) {
-	t.Helper()
-	data, err := os.ReadFile(path)
-	require.NoError(t, err)
-	require.NoError(t, json.Unmarshal(data, v))
+func toGoldenPreset(preset Preset) goldenPreset {
+	return goldenPreset{URL: preset.URL, VendorKey: preset.VendorKey, DisplayName: preset.DisplayName, Enabled: preset.Enabled, Pattern: preset.IsPattern()}
 }
 
-// The goldens were recorded from the registry-backed admission functions
-// before they took a snapshot, so the compiled snapshot must reproduce them.
+// goldenClientIDs are every catalog document URL, variants of each, wildcard
+// segment probes, and inputs admission must refuse.
+func goldenClientIDs(catalog *aivendors.Snapshot) []string {
+	var ids []string
+	seen := map[string]struct{}{}
+	add := func(id string) {
+		if _, ok := seen[id]; !ok {
+			seen[id] = struct{}{}
+			ids = append(ids, id)
+		}
+	}
+	segments := []string{"a", "abc-123_XYZ", "AbC0", "", "a/b", "a%2Fb", "..", ".", "a.b", "a?b", "a#b", "a b", strings.Repeat("z", 64), strings.Repeat("y", 300), "codex"}
+	for _, preset := range catalog.Catalog() {
+		u := preset.URL
+		add(u)
+		add(u + "/")
+		add(u + "?x=1")
+		add(u + "#frag")
+		add(strings.ToUpper(u))
+		add(strings.Replace(u, "https://", "http://", 1))
+		add(strings.Replace(u, "https://", "https://www.", 1))
+		add(strings.TrimSuffix(u, "/") + "x")
+		add(u[:len(u)-1])
+		if i := strings.Index(u[len("https://"):], "/"); i >= 0 {
+			cut := len("https://") + i
+			add(u[:cut] + "/" + u[cut:])
+			add(u[:cut] + ":443" + u[cut:])
+			add(strings.ToUpper(u[:cut]) + u[cut:])
+			add(u[:cut] + strings.ToUpper(u[cut:]))
+		}
+		if strings.Contains(u, "*") {
+			for _, segment := range segments {
+				add(strings.Replace(u, "*", segment, 1))
+			}
+		}
+	}
+	add("")
+	add("not-a-url")
+	add("my-client")
+	add("https://unknown.example.com/client.json")
+	add("https://client.example.com/" + strings.Repeat("a", MaxClientIDLength))
+	add("https://chatgpt.com/" + strings.Repeat("a", MaxClientIDLength))
+	add("https://chatgpt.com/oauth/" + strings.Repeat("a", 3000) + "/client.json")
+	return ids
+}
+
 func TestCompiledSnapshotAdmitsAsTheRegistryDid(t *testing.T) {
 	t.Parallel()
 
-	var cases []goldenCase
-	readGolden(t, "testdata/admission_golden.json", &cases)
-	require.NotEmpty(t, cases)
-
 	catalog := aivendors.CompiledSnapshot()
-	probed := make(map[string]struct{}, len(cases))
-	for _, tc := range cases {
-		probed[tc.ClientID] = struct{}{}
-
-		reason, ok := CatalogMatch(catalog, tc.ClientID)
-		require.Equalf(t, tc.Matched, ok, "match %q", tc.ClientID)
-		require.Equalf(t, tc.MatchReason, reason, "match reason %q", tc.ClientID)
-
-		preset, ok := catalog.CatalogPreset(tc.ClientID)
-		if tc.Preset == nil {
-			require.Falsef(t, ok, "preset %q", tc.ClientID)
-		} else {
-			require.Truef(t, ok, "preset %q", tc.ClientID)
-			got := goldenPreset{URL: preset.URL, VendorKey: preset.VendorKey, DisplayName: preset.DisplayName, Enabled: preset.Enabled, Pattern: preset.IsPattern()}
-			require.Equalf(t, tc.Preset, &got, "preset %q", tc.ClientID)
+	ids := goldenClientIDs(catalog)
+	cases := make([]goldenCase, 0, len(ids))
+	for _, id := range ids {
+		reason, matched := CatalogMatch(catalog, id)
+		tc := goldenCase{
+			ClientID:    id,
+			MatchReason: reason,
+			Matched:     matched,
+			Preset:      nil,
+			Shadow:      toGoldenDecision(EvaluateShadow(catalog, id)),
+			Evaluate:    make(map[Mode]goldenDecision, 2),
 		}
-
-		require.Equalf(t, tc.Shadow, EvaluateShadow(catalog, tc.ClientID), "shadow %q", tc.ClientID)
-		require.Lenf(t, tc.Evaluate, 2, "evaluate %q", tc.ClientID)
-		for mode, want := range tc.Evaluate {
-			require.Equalf(t, want, Evaluate(catalog, mode, tc.ClientID), "evaluate %s %q", mode, tc.ClientID)
+		// The other modes never consult the catalog.
+		for _, mode := range []Mode{ModePresets, ModeReporting} {
+			tc.Evaluate[mode] = toGoldenDecision(Evaluate(catalog, mode, id))
 		}
+		if preset, ok := catalog.CatalogPreset(id); ok {
+			tc.Preset = new(toGoldenPreset(preset))
+		}
+		cases = append(cases, tc)
 	}
-
-	for _, preset := range catalog.Catalog() {
-		require.Containsf(t, probed, preset.URL, "the golden must probe every catalog document")
-	}
+	data, err := json.Marshal(cases)
+	require.NoError(t, err)
+	testenv.RequireJSONGolden(t, "testdata/admission_golden.json", data)
 }
 
 // The presets listing, and the inbound EMA list built from it, keep the
@@ -80,13 +130,12 @@ func TestCompiledSnapshotAdmitsAsTheRegistryDid(t *testing.T) {
 func TestCompiledSnapshotListsPresetsAsTheRegistryDid(t *testing.T) {
 	t.Parallel()
 
-	var want []goldenPreset
-	readGolden(t, "testdata/presets_golden.json", &want)
-
 	presets := aivendors.CompiledSnapshot().Catalog()
-	got := make([]goldenPreset, 0, len(presets))
+	listing := make([]goldenPreset, 0, len(presets))
 	for _, preset := range presets {
-		got = append(got, goldenPreset{URL: preset.URL, VendorKey: preset.VendorKey, DisplayName: preset.DisplayName, Enabled: preset.Enabled, Pattern: preset.IsPattern()})
+		listing = append(listing, toGoldenPreset(preset))
 	}
-	require.Equal(t, want, got)
+	data, err := json.Marshal(listing)
+	require.NoError(t, err)
+	testenv.RequireJSONGolden(t, "testdata/presets_golden.json", data)
 }

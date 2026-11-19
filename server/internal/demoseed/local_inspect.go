@@ -8,6 +8,7 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/mocktasks"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 )
@@ -70,7 +71,7 @@ type localInspectServer struct {
 // An empty mockURL leaves the mock-backed servers out.
 func runLocalInspectFixtures(ctx context.Context, logger *slog.Logger, q *repo.Queries, now time.Time, mockURL string) (*seeder, error) {
 	// These fixtures mint no assistant identities, so they need no issuer.
-	s := &seeder{spec: LocalSpec(), catalog: nil, enc: nil, assistantIssuer: "", serverURL: nil, q: q, logger: logger, now: now, signalSequences: nil}
+	s := &seeder{spec: LocalSpec(), catalog: aivendors.CompiledSnapshot(), enc: nil, assistantIssuer: "", serverURL: nil, q: q, logger: logger, now: now, signalSequences: nil}
 	proj := s.projectID()
 
 	servers := []localInspectServer{

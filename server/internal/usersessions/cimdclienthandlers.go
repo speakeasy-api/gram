@@ -39,9 +39,8 @@ const (
 	verifyRateBurst  = 5
 )
 
-// Lists Speakeasy's curated CIMD preset catalog. The catalog is a periodically
-// refreshed database snapshot with no tenant data, but the endpoint still carries the standard
-// project auth: it is only meaningful next to the issuer configuration it
+// Lists Speakeasy's curated CIMD preset catalog. The AI client catalog has no
+// tenant data, but the endpoint still carries the standard project auth: it is only meaningful next to the issuer configuration it
 // accompanies, and an unauthenticated surface would be a needless addition
 // to the public attack area.
 func (s *Service) ListPresets(ctx context.Context, payload *gen.ListPresetsPayload) (*gen.ListCimdClientPresetsResult, error) {

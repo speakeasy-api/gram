@@ -333,11 +333,11 @@ func TestLabelsSendUnknownValuesToOther(t *testing.T) {
 	}
 
 	catalogApp := mcpconnectionattempts.AppOf(aivendors.CompiledSnapshot(), "https://claude.ai/oauth/claude-code-client-metadata", mcpconnectionattempts.ClientIDAdmitted).String()
-	require.Equal(t, "claude.ai", mcpconnectionattempts.AppLabel(aivendors.CompiledSnapshot(), catalogApp))
-	require.Equal(t, "dcr", mcpconnectionattempts.AppLabel(aivendors.CompiledSnapshot(), mcpconnectionattempts.AppDCR.String()))
+	require.Equal(t, "claude.ai", mcpconnectionattempts.AppLabel(mcpconnectionattempts.CatalogAppHosts(aivendors.CompiledSnapshot()), catalogApp))
+	require.Equal(t, "dcr", mcpconnectionattempts.AppLabel(mcpconnectionattempts.CatalogAppHosts(aivendors.CompiledSnapshot()), mcpconnectionattempts.AppDCR.String()))
 	customerApp := mcpconnectionattempts.AppOf(aivendors.CompiledSnapshot(), "https://agents.acme.example/oauth/client.json", mcpconnectionattempts.ClientIDAdmitted).String()
-	require.Equal(t, mcpconnectionattempts.AppOtherMetadataURL.String(), mcpconnectionattempts.AppLabel(aivendors.CompiledSnapshot(), customerApp), "a customer-run metadata URL keeps no host")
-	require.Equal(t, mcpconnectionattempts.LabelOther, mcpconnectionattempts.AppLabel(aivendors.CompiledSnapshot(), "agents.acme.example"), "a host that is not in the catalog")
+	require.Equal(t, mcpconnectionattempts.AppOtherMetadataURL.String(), mcpconnectionattempts.AppLabel(mcpconnectionattempts.CatalogAppHosts(aivendors.CompiledSnapshot()), customerApp), "a customer-run metadata URL keeps no host")
+	require.Equal(t, mcpconnectionattempts.LabelOther, mcpconnectionattempts.AppLabel(mcpconnectionattempts.CatalogAppHosts(aivendors.CompiledSnapshot()), "agents.acme.example"), "a host that is not in the catalog")
 
 	require.Equal(t, mcpconnectionattempts.FamilyCursor, mcpconnectionattempts.ClientFamilyLabel(mcpconnectionattempts.FamilyCursor))
 	require.Equal(t, mcpconnectionattempts.LabelOther, mcpconnectionattempts.ClientFamilyLabel("acme-agent"))
@@ -365,7 +365,7 @@ func TestLabelsKeepEveryValueTheWriterProduces(t *testing.T) {
 		mcpconnectionattempts.AppWorkload, mcpconnectionattempts.AppCodeMode, mcpconnectionattempts.AppRecoveryLink,
 		mcpconnectionattempts.AppBackground, mcpconnectionattempts.AppOtherMetadataURL,
 	} {
-		require.Equal(t, app.String(), mcpconnectionattempts.AppLabel(aivendors.CompiledSnapshot(), app.String()))
+		require.Equal(t, app.String(), mcpconnectionattempts.AppLabel(mcpconnectionattempts.CatalogAppHosts(aivendors.CompiledSnapshot()), app.String()))
 		require.True(t, mcpconnectionattempts.IsAppKind(app.String()))
 	}
 	for _, step := range []mcpconnectionattempts.Step{

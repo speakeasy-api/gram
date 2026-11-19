@@ -183,7 +183,7 @@ func (t Target) Clone() Target {
 	return out
 }
 
-// Defaults projects the captured database catalog into device scan targets.
+// Defaults projects a catalog snapshot into device scan targets.
 // Products without install signatures remain available to admission only.
 func Defaults(catalog *aivendors.Snapshot) []Target {
 	products := catalog.Products()

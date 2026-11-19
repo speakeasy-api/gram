@@ -11,8 +11,10 @@ import (
 // TestCatalogMatchesTheCatalogAsShipped pins the admission catalog against the
 // list it carried before it was derived from the aivendors registry.
 //
-// Document identity and attribution are pinned; database ordering is not part
-// of admission. Pattern specificity is tested independently.
+// Order is part of the contract, not decoration: wildcard entries are matched
+// in order, so a reordering can change which entry a client_id is attributed
+// to. A change here should be a deliberate catalog edit — adding a vendor, or
+// pulling one — never a side effect of restructuring the registry.
 func TestCatalogMatchesTheCatalogAsShipped(t *testing.T) {
 	t.Parallel()
 
@@ -45,5 +47,5 @@ func TestCatalogMatchesTheCatalogAsShipped(t *testing.T) {
 		{ProductID: "pi", Pattern: true, VendorKey: "pi", URL: "https://pi.dev/oauth/*/client.json", DisplayName: "Pi (per-server document)", Enabled: true},
 	}
 
-	require.ElementsMatch(t, expected, aivendors.CompiledSnapshot().Catalog())
+	require.Equal(t, expected, aivendors.CompiledSnapshot().Catalog())
 }

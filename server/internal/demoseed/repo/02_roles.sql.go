@@ -235,8 +235,8 @@ VALUES
    || 'the extension policy lands.')
 `
 
-// The decided built-ins reference global database products and carry only
-// decision overlays, so refreshed catalog definitions still reach this org.
+// The decided built-ins carry only a decision and a catalog product link, so the
+// catalog definition stays authoritative for this org.
 func (q *Queries) RolesInsertAIScanTargets(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, rolesInsertAIScanTargets, organizationID)
 	return err
