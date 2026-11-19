@@ -11,6 +11,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -137,7 +138,7 @@ func TestReportedClientReadsNothingUntilAsked(t *testing.T) {
 	t.Parallel()
 
 	store := &countingClientInfoStore{fakeClientInfoStore: newFakeClientInfoStore(), loads: 0, err: nil}
-	service := &Service{logger: testenv.NewLogger(t), tunnelClientFamilies: newTunnelClientFamilies(store)}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), logger: testenv.NewLogger(t), tunnelClientFamilies: newTunnelClientFamilies(store)}
 	req := httptest.NewRequest(http.MethodPost, "/mcp/x", nil)
 	req.Header.Set(proxy.McpSessionIDHeader, "session")
 	_ = service.reportedClient(t.Context(), req, uuid.New(), "scope")

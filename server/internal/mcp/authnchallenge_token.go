@@ -28,6 +28,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -256,6 +257,7 @@ type tokenGrantAuthenticatedHandler func(
 	w http.ResponseWriter,
 	r *http.Request,
 	endpoint *ResolvedMcpEndpoint,
+	clientCatalog *aivendors.Snapshot,
 	clientRow *usersessions_repo.UserSessionClient,
 	baseURL string,
 	presentedAuthMethod string,
@@ -392,16 +394,19 @@ func (s *Service) serveTokenGrant(
 	// derived from it.
 	baseURL := s.resourceBaseURL(r, endpoint)
 
+	// One snapshot drives admission and attribution for the whole exchange.
+	clientCatalog := s.aiCatalog.Snapshot()
+
 	var grantErr error
 	clientID := creds.clientID
 	switch {
 	case grant.clientAuth == tokenClientAuthRequired && grant.authenticated != nil:
-		clientRow, err := s.authenticateTokenClient(ctx, w, r, endpoint, logger, grantType, creds, grant.resolveMode, baseURL)
+		clientRow, err := s.authenticateTokenClient(ctx, w, r, endpoint, clientCatalog, logger, grantType, creds, grant.resolveMode, baseURL)
 		if clientRow == nil {
 			return err
 		}
 		clientID = clientRow.ClientID
-		grantErr = grant.authenticated(ctx, w, r, endpoint, clientRow, baseURL, creds.method, logger)
+		grantErr = grant.authenticated(ctx, w, r, endpoint, clientCatalog, clientRow, baseURL, creds.method, logger)
 	case grant.clientAuth == tokenClientAuthNone && grant.clientless != nil:
 		grantErr = grant.clientless(ctx, w, r, endpoint, creds, baseURL, logger)
 	default:
@@ -437,6 +442,7 @@ func (s *Service) authenticateTokenClient(
 	w http.ResponseWriter,
 	r *http.Request,
 	endpoint *ResolvedMcpEndpoint,
+	clientCatalog *aivendors.Snapshot,
 	logger *slog.Logger,
 	grantType string,
 	creds presentedClientCredentials,
@@ -461,7 +467,7 @@ func (s *Service) authenticateTokenClient(
 			return nil, writeInvalidClientError(ctx, w, r, logger, clientIDNamesEndpointDescription)
 		}
 	}
-	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientID, resolveMode)
+	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientCatalog, clientID, resolveMode)
 	if err != nil {
 		if admissionErr, ok := errors.AsType[*admission.DenialError](err); ok {
 			s.rejectTokenClient(ctx, logger, r, endpoint, grantType, clientID, presentedAuthMethod, "cimd_admission_denied", mcpmetrics.IDJAGRejectionClientNotAdmitted)
@@ -568,6 +574,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 	w http.ResponseWriter,
 	r *http.Request,
 	endpoint *ResolvedMcpEndpoint,
+	clientCatalog *aivendors.Snapshot,
 	clientRow *usersessions_repo.UserSessionClient,
 	baseURL string,
 	presentedAuthMethod string,
@@ -575,7 +582,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 ) (retErr error) {
 	exchange, logger := s.startIDJAGExchange(endpoint, logger)
 	defer exchange.record(ctx)
-	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientRow.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundToken,
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientCatalog, clientRow.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundToken,
 		mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(oauthwire.GrantTypeJWTBearer),
 		mcpconnectionattempts.UserSessionClient(clientRow.ID), mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID))
 	defer t.Finish(ctx)
@@ -794,6 +801,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	w http.ResponseWriter,
 	r *http.Request,
 	endpoint *ResolvedMcpEndpoint,
+	clientCatalog *aivendors.Snapshot,
 	clientRow *usersessions_repo.UserSessionClient,
 	baseURL string,
 	presentedAuthMethod string,
@@ -806,7 +814,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	// deliberately records neither: refresh is not part of an initial flow.
 	issuerID := endpoint.UserSessionIssuerID.String()
 	mcpSlug := endpoint.Slug
-	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientRow.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundToken,
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientCatalog, clientRow.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundToken,
 		mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(oauthwire.GrantTypeAuthorizationCode), mcpconnectionattempts.UserSessionClient(clientRow.ID))
 	defer t.Finish(ctx)
 
@@ -1016,7 +1024,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		}
 		// Attachments may be revoked between consent and code exchange.
 		// Recheck before persisting an agent session or issuing its tokens.
-		if cerr := s.remoteChallengeMgr.CheckAccessTokens(authorizationCtx, remotesessions.RefreshIn(connectionScope(endpoint, mcpconnectionattempts.AppOf(grant.ClientID, mcpconnectionattempts.ClientIDAdmitted))).InAttempt(grant.Attempt).FromRequest(r), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, endpoint.proxiedServerID()); cerr != nil {
+		if cerr := s.remoteChallengeMgr.CheckAccessTokens(authorizationCtx, remotesessions.RefreshIn(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientCatalog, grant.ClientID, mcpconnectionattempts.ClientIDAdmitted))).InAttempt(grant.Attempt).FromRequest(r), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, endpoint.proxiedServerID()); cerr != nil {
 			if errors.Is(cerr, remotesessions.ErrRemoteSessionUnavailable) {
 				s.refuseRemoteSessionUnavailable(ctx, t, cerr)
 				return remoteSessionUnavailableError(w, cerr).LogWarn(ctx, logger)
@@ -1185,6 +1193,7 @@ func (s *Service) handleTokenRefreshTokenGrant(
 	w http.ResponseWriter,
 	r *http.Request,
 	endpoint *ResolvedMcpEndpoint,
+	clientCatalog *aivendors.Snapshot,
 	clientRow *usersessions_repo.UserSessionClient,
 	baseURL string,
 	presentedAuthMethod string,
@@ -1192,7 +1201,7 @@ func (s *Service) handleTokenRefreshTokenGrant(
 ) error {
 	req := usersessions.RefreshTokenRequestFromForm(r.PostForm)
 	req.SetDefaults()
-	tracker := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientRow.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundToken,
+	tracker := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientCatalog, clientRow.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundToken,
 		mcpconnectionattempts.Grant(oauthwire.GrantTypeRefreshToken), mcpconnectionattempts.UserSessionClient(clientRow.ID), mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID))
 	defer tracker.Finish(ctx)
 

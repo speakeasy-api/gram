@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
@@ -34,7 +35,7 @@ func newTokenDispatchTestService(t *testing.T) (*Service, *ResolvedMcpEndpoint, 
 	serverURL, err := url.Parse("https://gram.example")
 	require.NoError(t, err)
 	logs := &bytes.Buffer{}
-	service := new(Service)
+	service := (&Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products()))})
 	service.logger = slog.New(slog.NewJSONHandler(logs, nil))
 	service.serverURL = serverURL
 	endpoint := &ResolvedMcpEndpoint{
@@ -150,7 +151,7 @@ func TestServeTokenGrantFailsClosedWithoutDeclaredClientAuthentication(t *testin
 
 	service, endpoint, _ := newTokenDispatchTestService(t)
 	var called []string
-	authenticated := func(context.Context, http.ResponseWriter, *http.Request, *ResolvedMcpEndpoint, *usersessions_repo.UserSessionClient, string, string, *slog.Logger) error {
+	authenticated := func(context.Context, http.ResponseWriter, *http.Request, *ResolvedMcpEndpoint, *aivendors.Snapshot, *usersessions_repo.UserSessionClient, string, string, *slog.Logger) error {
 		called = append(called, "authenticated")
 		return nil
 	}

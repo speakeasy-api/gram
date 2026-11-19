@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -49,7 +50,7 @@ func TestConnectionPopupGrantRetriesChallengeCAS(t *testing.T) {
 		t.Run(fmt.Sprint(alwaysLose), func(t *testing.T) {
 			t.Parallel()
 			adapter := &popupGrantCASCache{Cache: testenv.NewMemoryCache(), alwaysLose: alwaysLose}
-			s := &Service{authnChallengeCache: cache.NewTypedObjectCache[AuthnChallengeState](testenv.NewLogger(t), adapter, cache.SuffixNone)}
+			s := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), authnChallengeCache: cache.NewTypedObjectCache[AuthnChallengeState](testenv.NewLogger(t), adapter, cache.SuffixNone)}
 			subject := urn.NewUserSubject("example-user")
 			parent := AuthnChallengeState{ID: uuid.NewString(), FirstParty: true, Subject: &subject, UserSessionIssuerID: uuid.New(), ReauthenticateClientID: uuid.New(), CreatedAt: time.Now()}
 			require.NoError(t, s.authnChallengeCache.Store(t.Context(), parent))

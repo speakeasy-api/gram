@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
@@ -58,7 +59,7 @@ func TestSharedOrganizationGatewayResource(t *testing.T) {
 
 	base, err := url.Parse("https://platform.example")
 	require.NoError(t, err)
-	s := &Service{db: pool, orgsRepo: organizationsrepo.New(pool), serverURL: base, logger: testenv.NewLogger(t)}
+	s := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), db: pool, orgsRepo: organizationsrepo.New(pool), serverURL: base, logger: testenv.NewLogger(t)}
 	issuerFor := func(id uuid.UUID) *sharedIssuer {
 		return &sharedIssuer{authorizationServer: &sharedAuthorizationServer{issuerID: id}, organizationID: org, logger: s.logger}
 	}

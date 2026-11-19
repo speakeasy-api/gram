@@ -163,6 +163,12 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		return fmt.Errorf("connect to database: %w", err)
 	}
 	shutdown.dbClose = db.Close
+	aiCatalog, stopAICatalog, err := startAICatalog(ctx, db, logger)
+	if err != nil {
+		return err
+	}
+	defer stopAICatalog()
+
 	if err := o11y.StartObservers(meterProvider, db); err != nil {
 		return fmt.Errorf("start database observers: %w", err)
 	}
@@ -386,6 +392,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	}
 	mcpService, err := newMCPService(c, mcpServiceDependencies{
 		Connections:      connectionRecorder,
+		AICatalog:        aiCatalog,
 		CallerAssertions: callerAssertions,
 		IssuerGate:       issuerGate, IssuerSigner: issuerSigner,
 		Logger: logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
