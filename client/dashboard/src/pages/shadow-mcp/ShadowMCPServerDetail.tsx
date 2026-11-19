@@ -24,6 +24,11 @@ import {
   POLICIES_UNAVAILABLE_REASON,
 } from "@/components/mcp-approvals/DecideAccessSheet";
 import {
+  applicableDecision,
+  decisionActionLabel,
+  standingDecisionOf,
+} from "@/components/shadow-mcp/shadowMCPPolicyChange";
+import {
   MoreToggle,
   useCollapsedPreview,
 } from "@/components/ui/collapsible-preview";
@@ -353,12 +358,15 @@ function TopUsersTable({
 }
 
 function DetailActionButtons({
+  actionLabel,
   disabled,
   onOpenDecide,
   policiesUnavailable,
   server,
   projectSlug,
 }: {
+  /** The action the policy makes applicable to this server. */
+  actionLabel: string;
   disabled: boolean;
   onOpenDecide: () => void;
   /**
@@ -389,7 +397,7 @@ function DetailActionButtons({
         title={policiesUnavailable ? POLICIES_UNAVAILABLE_REASON : undefined}
       >
         <Button.Text>
-          {pendingReview ? "Review Request" : "Decide Access"}
+          {pendingReview ? "Review Request" : actionLabel}
         </Button.Text>
       </Button>
     </div>
@@ -698,6 +706,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
       // A pending legacy bypass request rides along so the sheet promotes it
       // into the review and the decision drains it too.
       pendingBypassRequestId: server.latestRequest?.id,
+      currentDecision: standingDecisionOf(server),
     });
   };
 
@@ -733,6 +742,9 @@ export default function ShadowMCPServerDetail(): JSX.Element {
             <Page.Section.CTA>
               {server && (
                 <DetailActionButtons
+                  actionLabel={decisionActionLabel(
+                    applicableDecision(disposition, standingDecisionOf(server)),
+                  )}
                   disabled={decideTarget !== null}
                   onOpenDecide={openDecide}
                   policiesUnavailable={policiesQuery.isError}

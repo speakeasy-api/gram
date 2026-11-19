@@ -138,3 +138,23 @@ export function ShadowMCPInventoryUsageCell({
     </div>
   );
 }
+
+/** Calls a Speakeasy hook stopped. Zero stays quiet so the blocked rows stand out. */
+export function ShadowMCPInventoryBlockedCell({
+  server,
+}: {
+  server: ShadowMCPInventoryServer;
+}): JSX.Element {
+  if (server.blockedCallCount === 0) {
+    return (
+      <Text muted small>
+        —
+      </Text>
+    );
+  }
+  return (
+    <Text variant="small" className="text-default-destructive tabular-nums">
+      {countLabel(server.blockedCallCount, "call", "calls")}
+    </Text>
+  );
+}

@@ -31,6 +31,12 @@ import {
   POLICIES_UNAVAILABLE_REASON,
 } from "@/components/mcp-approvals/DecideAccessSheet";
 import {
+  applicableDecision,
+  decisionActionLabel,
+  standingDecisionOf,
+} from "./shadowMCPPolicyChange";
+import {
+  ShadowMCPInventoryBlockedCell,
   ShadowMCPInventoryReviewCell,
   ShadowMCPInventoryServerCell,
   ShadowMCPInventoryUsageCell,
@@ -292,6 +298,7 @@ export function ShadowMCPInventoryTable({
       // A pending legacy bypass request rides along so the sheet promotes it
       // into the review and the decision drains it too.
       pendingBypassRequestId: server.latestRequest?.id,
+      currentDecision: standingDecisionOf(server),
     });
   };
 
@@ -403,6 +410,14 @@ export function ShadowMCPInventoryTable({
       sortValue: (server) => server.observedUseCount,
       width: "0.5fr",
       render: (server) => <ShadowMCPInventoryUsageCell server={server} />,
+    },
+    {
+      key: "blocked",
+      header: "Blocked",
+      sortable: true,
+      sortValue: (server) => server.blockedCallCount,
+      width: "0.5fr",
+      render: (server) => <ShadowMCPInventoryBlockedCell server={server} />,
     },
   ];
 
@@ -560,7 +575,11 @@ export function ShadowMCPInventoryTable({
               key={row.canonicalServerUrl}
               actions={[
                 {
-                  label: "Decide access",
+                  // The action the policy makes applicable: block under
+                  // allow by default, approve under block by default.
+                  label: decisionActionLabel(
+                    applicableDecision(disposition, standingDecisionOf(row)),
+                  ),
                   onClick: () => openDecide(row),
                   disabled: policiesUnavailable,
                   description: decideDisabledReason,

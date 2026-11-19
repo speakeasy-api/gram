@@ -80,11 +80,11 @@ export function shadowMCPAudienceSummary(
   }
   const urns = policy.audiencePrincipalUrns;
   if (urns.length === 0) return "Applies to nobody";
-  return `Applies only to ${chosenAudience(urns, groups)}. Everyone else is allowed by default.`;
+  return `Applies only to ${shadowMCPChosenAudience(urns, groups)}. Everyone else is allowed by default.`;
 }
 
 /** The people and roles a narrowed rule names: one by name, more counted. */
-function chosenAudience(
+export function shadowMCPChosenAudience(
   urns: readonly string[],
   groups: ReadonlyArray<{
     options: ReadonlyArray<{ label: string; value: string }>;

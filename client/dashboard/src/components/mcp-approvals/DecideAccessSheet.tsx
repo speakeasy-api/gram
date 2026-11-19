@@ -23,6 +23,10 @@ import { TextArea } from "@/components/ui/Textarea";
 import { useProject } from "@/contexts/Auth";
 import { cn } from "@/lib/utils";
 import type { ShadowMCPPolicyDisposition } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
+import {
+  applicableDecision,
+  decisionActionLabel,
+} from "@/components/shadow-mcp/shadowMCPPolicyChange";
 import { invalidateShadowMCPPolicyInventory } from "@/components/shadow-mcp/useShadowMCPPolicyInventory";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
@@ -59,6 +63,8 @@ export type DecideAccessTarget = {
   displayName: string;
   approvalRequestId?: string;
   pendingBypassRequestId?: string;
+  /** The decision already recorded on the server, if any. */
+  currentDecision?: AccessDecision;
 };
 
 export type AccessDecision = "approved" | "denied";
@@ -74,7 +80,7 @@ export const POLICIES_UNAVAILABLE_REASON =
 
 const RATIONALE_PREFILL: Record<AccessDecision, string> = {
   approved: "Approved for use in this project.",
-  denied: "Denied for use in this project.",
+  denied: "Blocked for use in this project.",
 };
 
 function approveSublabel(stdio: boolean, narrowed: boolean): string {
@@ -130,7 +136,11 @@ export function DecideAccessSheet({
   const createRequest = useCreateMcpApprovalRequestMutation();
   const promoteRequest = usePromoteMcpApprovalRequestMutation();
   const decide = useRecordMcpApprovalDecisionMutation();
-  const [decision, setDecision] = useState<AccessDecision>("approved");
+  const initialDecision = applicableDecision(
+    disposition,
+    target?.currentDecision,
+  );
+  const [decision, setDecision] = useState<AccessDecision>(initialDecision);
   const [audience, setAudience] = useState<string[]>([]);
   const [denyAudience, setDenyAudience] = useState<string[]>([]);
   const [rationale, setRationale] = useState(RATIONALE_PREFILL.approved);
@@ -147,16 +157,18 @@ export function DecideAccessSheet({
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!open) {
-      setDecision("approved");
-      setAudience([]);
-      setDenyAudience([]);
-      setRationale(RATIONALE_PREFILL.approved);
-      setRationaleEdited(false);
-      setOpenedRequestId(undefined);
-      setSubmitting(false);
-    }
-  }, [open]);
+    if (!open) return;
+    // Every opening starts on the action the policy makes applicable to
+    // this server, with a clean form.
+    setDecision(initialDecision);
+    setAudience([]);
+    setDenyAudience([]);
+    setRationale(RATIONALE_PREFILL[initialDecision]);
+    setRationaleEdited(false);
+    setOpenedRequestId(undefined);
+    setSubmitting(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, target?.canonicalServerUrl]);
 
   if (!target) return null;
 
@@ -274,7 +286,7 @@ export function DecideAccessSheet({
     toast.success(
       decision === "approved"
         ? `Approved: ${target.displayName}`
-        : `Denied: ${target.displayName}`,
+        : `Blocked: ${target.displayName}`,
     );
     onDecided?.(decision);
     onOpenChange(false);
@@ -284,7 +296,7 @@ export function DecideAccessSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="sm:max-w-xl">
         <SheetHeader>
-          <SheetTitle>Decide access</SheetTitle>
+          <SheetTitle>{decisionActionLabel(decision)}</SheetTitle>
           <SheetDescription>
             The decision is recorded with its rationale and enforced in this
             project, whether servers are allowed or blocked by default.
@@ -304,74 +316,84 @@ export function DecideAccessSheet({
               )}
             </section>
 
-            <RadioGroup
-              value={decision}
-              onValueChange={(value) => selectDecision(value as AccessDecision)}
-              className="border-border grid grid-cols-2 gap-4 border p-3"
-            >
-              <label
-                className={cn(
-                  "flex cursor-pointer items-start gap-3 border border-transparent px-3 py-2.5 transition-colors",
-                  decision === "approved" && "border-border bg-card",
-                )}
-              >
-                <RadioGroupItem value="approved" className="mt-1.5" />
-                <span>
-                  <Badge variant="success">
-                    <Badge.Text>Approve</Badge.Text>
-                  </Badge>
-                  <Text muted small>
-                    {approveSublabel(
-                      stdio,
-                      audienceSelectable && audience.length > 0,
-                    )}
-                  </Text>
-                </span>
-              </label>
-              <label
-                className={cn(
-                  "flex cursor-pointer items-start gap-3 border border-transparent px-3 py-2.5 transition-colors",
-                  decision === "denied" && "border-border bg-card",
-                )}
-              >
-                <RadioGroupItem value="denied" className="mt-1.5" />
-                <span>
-                  <Badge variant="destructive">
-                    <Badge.Text>Deny</Badge.Text>
-                  </Badge>
-                  <Text muted small>
-                    {denySublabel(
-                      stdio,
-                      denyAudienceSelectable && denyAudience.length > 0,
-                    )}
-                  </Text>
-                </span>
-              </label>
-            </RadioGroup>
+            <Text small>
+              {decision === "approved"
+                ? approveSublabel(
+                    stdio,
+                    audienceSelectable && audience.length > 0,
+                  )
+                : denySublabel(
+                    stdio,
+                    denyAudienceSelectable && denyAudience.length > 0,
+                  )}
+            </Text>
 
-            {pickerShown && (
-              // Keyed by decision and open whenever that decision already
-              // names people or roles, so a narrowed audience that will be
-              // sent is never hidden behind a collapsed section.
-              <Collapsible
-                key={decision}
-                defaultOpen={
-                  (decision === "approved" ? audience : denyAudience).length > 0
-                }
-              >
-                <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm transition-colors [&[data-state=open]>svg]:rotate-90">
-                  <Icon name="chevron-right" className="size-3.5" aria-hidden />
-                  Advanced
-                </CollapsibleTrigger>
-                <CollapsibleContent className="mt-3">
-                  <section className="border-border space-y-2 border p-3">
+            <Collapsible>
+              <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm transition-colors [&[data-state=open]>svg]:rotate-90">
+                <Icon name="chevron-right" className="size-3.5" aria-hidden />
+                Advanced
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-3 space-y-4">
+                <RadioGroup
+                  value={decision}
+                  onValueChange={(value) =>
+                    selectDecision(value as AccessDecision)
+                  }
+                  className="border-border grid grid-cols-2 gap-4 border p-3"
+                >
+                  <label
+                    className={cn(
+                      "flex cursor-pointer items-start gap-3 border border-transparent px-3 py-2.5 transition-colors",
+                      decision === "approved" && "border-border bg-card",
+                    )}
+                  >
+                    <RadioGroupItem value="approved" className="mt-1.5" />
+                    <span>
+                      <Badge variant="success">
+                        <Badge.Text>Approve</Badge.Text>
+                      </Badge>
+                      <Text muted small>
+                        {approveSublabel(
+                          stdio,
+                          audienceSelectable && audience.length > 0,
+                        )}
+                      </Text>
+                    </span>
+                  </label>
+                  <label
+                    className={cn(
+                      "flex cursor-pointer items-start gap-3 border border-transparent px-3 py-2.5 transition-colors",
+                      decision === "denied" && "border-border bg-card",
+                    )}
+                  >
+                    <RadioGroupItem value="denied" className="mt-1.5" />
+                    <span>
+                      <Badge variant="destructive">
+                        <Badge.Text>Block</Badge.Text>
+                      </Badge>
+                      <Text muted small>
+                        {denySublabel(
+                          stdio,
+                          denyAudienceSelectable && denyAudience.length > 0,
+                        )}
+                      </Text>
+                    </span>
+                  </label>
+                </RadioGroup>
+
+                {pickerShown && (
+                  // Keyed by decision so each decision keeps its own
+                  // audience while the admin switches between them.
+                  <section
+                    key={decision}
+                    className="border-border space-y-2 border p-3"
+                  >
                     <Text variant="small" className="font-medium">
                       {decision === "approved"
                         ? "Who the approval covers"
-                        : "Who the denial covers"}
+                        : "Who the block covers"}
                     </Text>
                     <MultiSelect
-                      key={decision}
                       options={audienceGroups(members, roles)}
                       defaultValue={
                         decision === "approved" ? audience : denyAudience
@@ -384,12 +406,30 @@ export function DecideAccessSheet({
                     <Text muted small>
                       {decision === "approved"
                         ? "Pick people or roles to allow the server only for them; everyone else is blocked. Leave empty to approve for everyone."
-                        : "Pick people or roles to block the server only for them. Leave empty to deny for everyone."}
+                        : "Pick people or roles to block the server only for them. Leave empty to block for everyone."}
                     </Text>
                   </section>
-                </CollapsibleContent>
-              </Collapsible>
-            )}
+                )}
+
+                <section className="border-border space-y-2 border p-3">
+                  <Text variant="small" className="font-medium">
+                    Rationale
+                  </Text>
+                  <TextArea
+                    value={rationale}
+                    onChange={(value) => {
+                      setRationale(value);
+                      setRationaleEdited(true);
+                    }}
+                    rows={3}
+                    className="resize-none text-sm"
+                  />
+                  <Text muted small>
+                    Shared with anyone who asks for this server.
+                  </Text>
+                </section>
+              </CollapsibleContent>
+            </Collapsible>
 
             {stdio && (
               <Text muted small>
@@ -398,24 +438,6 @@ export function DecideAccessSheet({
                 against automatically.
               </Text>
             )}
-
-            <section className="border-border space-y-2 border p-3">
-              <Text variant="small" className="font-medium">
-                Rationale
-              </Text>
-              <TextArea
-                value={rationale}
-                onChange={(value) => {
-                  setRationale(value);
-                  setRationaleEdited(true);
-                }}
-                rows={3}
-                className="resize-none text-sm"
-              />
-              <Text muted small>
-                Shared with anyone who asks for this server.
-              </Text>
-            </section>
           </div>
 
           <SheetFooter>
@@ -431,7 +453,7 @@ export function DecideAccessSheet({
                 {isSubmitting && <Spinner className="mr-0" />}
               </Button.LeftIcon>
               <Button.Text>
-                {decision === "approved" ? "Approve Server" : "Deny Server"}
+                {decision === "approved" ? "Approve Server" : "Block Server"}
               </Button.Text>
             </Button>
           </SheetFooter>
