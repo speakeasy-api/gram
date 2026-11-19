@@ -2341,6 +2341,11 @@ func newStartCommand() *cli.Command {
 			group := pool.New()
 
 			if c.Bool("dev-single-process") {
+				orgEncryptionMigrator, err := orgEncryption.Migrator(logger, db, encryptionClient, meterProvider)
+				if err != nil {
+					return err
+				}
+
 				workerInterruptCh := make(chan any)
 				group.Go(func() {
 					<-sigctx.Done()
@@ -2405,6 +2410,7 @@ func newStartCommand() *cli.Command {
 						RemoteSessionAssertionSigner:   clientAssertionSigner,
 						IssuerKeySweeper:               issuerKeySweeper(identityProviderProvisioner),
 						OrganizationEncryptionSweeper:  orgEncryptionSweeper(orgEncryption.Provisioner),
+						OrganizationEncryptionMigrator: orgEncryptionMigrator,
 						StartupSeeds:                   startupSeeds(logger, db, siteURL),
 						EmailService:                   emailService,
 						AssistantsCore:                 assistantsCore,
