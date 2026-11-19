@@ -50,69 +50,6 @@ func (q *Queries) BackdateRetiredJsonWebKeys(ctx context.Context, arg BackdateRe
 	return err
 }
 
-const clearManagedClientSecret = `-- name: ClearManagedClientSecret :one
-UPDATE remote_session_clients
-SET client_secret_encrypted = NULL,
-    upstream_rejected_at = NULL,
-    updated_at = clock_timestamp()
-WHERE id = $1
-  AND organization_id = $2
-  AND project_id IS NULL
-  AND identity_provider_connection_id = $3
-  AND token_endpoint_auth_method = 'client_secret_basic'
-  AND deleted IS FALSE
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
-`
-
-type ClearManagedClientSecretParams struct {
-	ID                           uuid.UUID
-	OrganizationID               pgtype.Text
-	IdentityProviderConnectionID uuid.NullUUID
-}
-
-// Revocation withdraws a client-secret client's credential.
-func (q *Queries) ClearManagedClientSecret(ctx context.Context, arg ClearManagedClientSecretParams) (RemoteSessionClient, error) {
-	row := q.db.QueryRow(ctx, clearManagedClientSecret, arg.ID, arg.OrganizationID, arg.IdentityProviderConnectionID)
-	var i RemoteSessionClient
-	err := row.Scan(
-		&i.ID,
-		&i.ProjectID,
-		&i.OrganizationID,
-		&i.AttachmentScope,
-		&i.RemoteSessionIssuerID,
-		&i.ClientID,
-		&i.ClientSecretEncrypted,
-		&i.ClientSecretOrgEncrypted,
-		&i.ClientSecretGeneration,
-		&i.ClientIDIssuedAt,
-		&i.ClientSecretExpiresAt,
-		&i.TokenEndpointAuthMethod,
-		&i.JsonWebKeySetID,
-		&i.Scope,
-		&i.GrantTypes,
-		&i.Audience,
-		&i.TokenEndpointAuthAudienceFormat,
-		&i.ClientIDMetadataUri,
-		&i.LegacyCallbackUrl,
-		&i.CallbackBaseUrl,
-		&i.ResourceIdentifier,
-		&i.ResourceName,
-		&i.ResourceDocumentation,
-		&i.ResourcePolicyUri,
-		&i.ResourceTosUri,
-		&i.UpstreamRejectedAt,
-		&i.IdentityProviderConnectionID,
-		&i.CredentialOwner,
-		&i.DisplayName,
-		&i.ForwardClientName,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
-}
-
 const countIdentityProviderConnectionsCreatedSince = `-- name: CountIdentityProviderConnectionsCreatedSince :one
 SELECT COUNT(*)
 FROM identity_provider_connections
@@ -1032,6 +969,67 @@ func (q *Queries) LockIdentityProviderConnectionForProvisioning(ctx context.Cont
 	return i, err
 }
 
+const lockManagedSecretClient = `-- name: LockManagedSecretClient :one
+SELECT id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted FROM remote_session_clients
+WHERE id = $1
+  AND organization_id = $2
+  AND project_id IS NULL
+  AND identity_provider_connection_id = $3
+  AND token_endpoint_auth_method = 'client_secret_basic'
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockManagedSecretClientParams struct {
+	ID                           uuid.UUID
+	OrganizationID               pgtype.Text
+	IdentityProviderConnectionID uuid.NullUUID
+}
+
+// Locks a managed client-secret client before its secret is replaced or
+// revoked through clientsecrets.Secrets in the same transaction.
+func (q *Queries) LockManagedSecretClient(ctx context.Context, arg LockManagedSecretClientParams) (RemoteSessionClient, error) {
+	row := q.db.QueryRow(ctx, lockManagedSecretClient, arg.ID, arg.OrganizationID, arg.IdentityProviderConnectionID)
+	var i RemoteSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.RemoteSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.ClientSecretOrgEncrypted,
+		&i.ClientSecretGeneration,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
+		&i.JsonWebKeySetID,
+		&i.Scope,
+		&i.GrantTypes,
+		&i.Audience,
+		&i.TokenEndpointAuthAudienceFormat,
+		&i.ClientIDMetadataUri,
+		&i.LegacyCallbackUrl,
+		&i.CallbackBaseUrl,
+		&i.ResourceIdentifier,
+		&i.ResourceName,
+		&i.ResourceDocumentation,
+		&i.ResourcePolicyUri,
+		&i.ResourceTosUri,
+		&i.UpstreamRejectedAt,
+		&i.IdentityProviderConnectionID,
+		&i.CredentialOwner,
+		&i.DisplayName,
+		&i.ForwardClientName,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const lockOktaIdentityProviderConnection = `-- name: LockOktaIdentityProviderConnection :one
 SELECT c.id, c.organization_id, c.provider, c.status, c.last_verified_at, c.last_error, c.created_at, c.updated_at, c.deleted_at, c.deleted, o.identity_provider_connection_id, o.identity_provider_connections_provider, o.organization_id, o.attachment_scope, o.org_url, o.issuer_url, o.ownership_claimed, o.remote_session_issuer_id, o.remote_session_client_id, o.dpop_required, o.granted_scopes, o.observed_admin_roles, o.listing_mode, o.agent_id, o.agent_app_id, o.applications_synced_at, o.applications_sync_requested_at, o.created_at, o.updated_at, o.deleted_at, o.deleted
 FROM identity_provider_connections AS c
@@ -1097,7 +1095,7 @@ func (q *Queries) LockOktaIdentityProviderConnection(ctx context.Context, arg Lo
 }
 
 const lockOktaTokenCredential = `-- name: LockOktaTokenCredential :one
-SELECT client_secret_encrypted, client_id
+SELECT client_secret_encrypted, client_secret_org_encrypted, client_id
 FROM remote_session_clients
 WHERE id = $1 AND organization_id = $2
   AND identity_provider_connection_id = $3
@@ -1112,8 +1110,9 @@ type LockOktaTokenCredentialParams struct {
 }
 
 type LockOktaTokenCredentialRow struct {
-	ClientSecretEncrypted pgtype.Text
-	ClientID              string
+	ClientSecretEncrypted    pgtype.Text
+	ClientSecretOrgEncrypted pgtype.Text
+	ClientID                 string
 }
 
 // Token acquisition holds the connection lock before this lock; revoking a
@@ -1121,7 +1120,7 @@ type LockOktaTokenCredentialRow struct {
 func (q *Queries) LockOktaTokenCredential(ctx context.Context, arg LockOktaTokenCredentialParams) (LockOktaTokenCredentialRow, error) {
 	row := q.db.QueryRow(ctx, lockOktaTokenCredential, arg.ID, arg.OrganizationID, arg.IdentityProviderConnectionID)
 	var i LockOktaTokenCredentialRow
-	err := row.Scan(&i.ClientSecretEncrypted, &i.ClientID)
+	err := row.Scan(&i.ClientSecretEncrypted, &i.ClientSecretOrgEncrypted, &i.ClientID)
 	return i, err
 }
 
@@ -1403,21 +1402,19 @@ func (q *Queries) RotationPublicationReady(ctx context.Context, arg RotationPubl
 const setManagedClientID = `-- name: SetManagedClientID :one
 UPDATE remote_session_clients
 SET client_id = $1,
-    client_secret_encrypted = $2,
     upstream_rejected_at = NULL,
     updated_at = clock_timestamp()
-WHERE id = $3
-  AND organization_id = $4
+WHERE id = $2
+  AND organization_id = $3
   AND project_id IS NULL
-  AND identity_provider_connection_id = $5
-  AND client_id = $6
+  AND identity_provider_connection_id = $4
+  AND client_id = $5
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
 `
 
 type SetManagedClientIDParams struct {
 	ClientID                     string
-	ClientSecretEncrypted        pgtype.Text
 	ID                           uuid.UUID
 	OrganizationID               pgtype.Text
 	IdentityProviderConnectionID uuid.NullUUID
@@ -1426,83 +1423,14 @@ type SetManagedClientIDParams struct {
 
 // Only the provisioner writes a managed client's client_id, and only while the
 // provisioning placeholder is still in place. A client-secret client receives
-// its secret in the same write.
+// its secret through clientsecrets.Secrets in the same transaction.
 func (q *Queries) SetManagedClientID(ctx context.Context, arg SetManagedClientIDParams) (RemoteSessionClient, error) {
 	row := q.db.QueryRow(ctx, setManagedClientID,
 		arg.ClientID,
-		arg.ClientSecretEncrypted,
 		arg.ID,
 		arg.OrganizationID,
 		arg.IdentityProviderConnectionID,
 		arg.PlaceholderClientID,
-	)
-	var i RemoteSessionClient
-	err := row.Scan(
-		&i.ID,
-		&i.ProjectID,
-		&i.OrganizationID,
-		&i.AttachmentScope,
-		&i.RemoteSessionIssuerID,
-		&i.ClientID,
-		&i.ClientSecretEncrypted,
-		&i.ClientSecretOrgEncrypted,
-		&i.ClientSecretGeneration,
-		&i.ClientIDIssuedAt,
-		&i.ClientSecretExpiresAt,
-		&i.TokenEndpointAuthMethod,
-		&i.JsonWebKeySetID,
-		&i.Scope,
-		&i.GrantTypes,
-		&i.Audience,
-		&i.TokenEndpointAuthAudienceFormat,
-		&i.ClientIDMetadataUri,
-		&i.LegacyCallbackUrl,
-		&i.CallbackBaseUrl,
-		&i.ResourceIdentifier,
-		&i.ResourceName,
-		&i.ResourceDocumentation,
-		&i.ResourcePolicyUri,
-		&i.ResourceTosUri,
-		&i.UpstreamRejectedAt,
-		&i.IdentityProviderConnectionID,
-		&i.CredentialOwner,
-		&i.DisplayName,
-		&i.ForwardClientName,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
-}
-
-const setManagedClientSecret = `-- name: SetManagedClientSecret :one
-UPDATE remote_session_clients
-SET client_secret_encrypted = $1,
-    upstream_rejected_at = NULL,
-    updated_at = clock_timestamp()
-WHERE id = $2
-  AND organization_id = $3
-  AND project_id IS NULL
-  AND identity_provider_connection_id = $4
-  AND token_endpoint_auth_method = 'client_secret_basic'
-  AND deleted IS FALSE
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
-`
-
-type SetManagedClientSecretParams struct {
-	ClientSecretEncrypted        pgtype.Text
-	ID                           uuid.UUID
-	OrganizationID               pgtype.Text
-	IdentityProviderConnectionID uuid.NullUUID
-}
-
-func (q *Queries) SetManagedClientSecret(ctx context.Context, arg SetManagedClientSecretParams) (RemoteSessionClient, error) {
-	row := q.db.QueryRow(ctx, setManagedClientSecret,
-		arg.ClientSecretEncrypted,
-		arg.ID,
-		arg.OrganizationID,
-		arg.IdentityProviderConnectionID,
 	)
 	var i RemoteSessionClient
 	err := row.Scan(
@@ -1670,7 +1598,6 @@ const switchManagedClientToKeySet = `-- name: SwitchManagedClientToKeySet :one
 UPDATE remote_session_clients
 SET token_endpoint_auth_method = 'private_key_jwt',
     json_web_key_set_id = $1,
-    client_secret_encrypted = NULL,
     updated_at = clock_timestamp()
 WHERE id = $2
   AND organization_id = $3
@@ -1743,7 +1670,6 @@ const switchManagedClientToSecret = `-- name: SwitchManagedClientToSecret :one
 UPDATE remote_session_clients
 SET token_endpoint_auth_method = 'client_secret_basic',
     json_web_key_set_id = NULL,
-    client_secret_encrypted = NULL,
     updated_at = clock_timestamp()
 WHERE id = $1
   AND organization_id = $2
@@ -1762,7 +1688,9 @@ type SwitchManagedClientToSecretParams struct {
 	PlaceholderClientID          string
 }
 
-// Switching methods is allowed only while the client id is still the placeholder.
+// Switching methods is allowed only while the client id is still the
+// placeholder. The caller clears any stored secret through
+// clientsecrets.Secrets in the same transaction.
 func (q *Queries) SwitchManagedClientToSecret(ctx context.Context, arg SwitchManagedClientToSecretParams) (RemoteSessionClient, error) {
 	row := q.db.QueryRow(ctx, switchManagedClientToSecret,
 		arg.ID,

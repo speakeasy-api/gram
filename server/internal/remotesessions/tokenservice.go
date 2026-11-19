@@ -48,11 +48,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urls"
@@ -1065,7 +1067,7 @@ func OutageProviderHost(err error) string {
 // setup, also reads as busy here, though ConnectionOutageHappened records them differently.
 func RefreshBusy(err error) bool {
 	refreshErr, ok := errors.AsType[*RefreshError](err)
-	return ok && refreshErr.Outcome == remotesessionmetrics.RefreshOutcomeDeferred && refreshErr.visibleOutage == RefreshOutageNone
+	return ok && refreshErr.Outcome == remotesessionmetrics.RefreshOutcomeDeferred && refreshErr.visibleOutage == RefreshOutageNone && OutageAddress(err) == guardian.AddressFine
 }
 
 // HeldWithoutToken reports a subject's connection kept without a token so routing never calls its server without it.
@@ -1383,10 +1385,15 @@ func (s *RefreshService) refreshSessionTokens(
 	}
 
 	var clientSecret string
-	if client.ClientSecretEncrypted.Valid && client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
-		clientSecret, err = s.enc.Decrypt(client.ClientSecretEncrypted.String)
-		if err != nil {
+	if stored := clientsecrets.Stored(client.ClientSecretEncrypted, client.ClientSecretOrgEncrypted); clientsecrets.Has(stored) && client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
+		clientSecret, err = s.secrets.Open(ctx, nil, clientsecrets.OwnerOf(client.ClientOrganizationID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}), stored)
+		switch {
+		case clientsecrets.IsUnreadable(err):
 			return zero, noToken, newTokenRefreshError("the client secret could not be read; check the issuer's configuration", err, refreshRemedyAdministrator)
+		case err != nil:
+			// The grant is intact; the client secret only could not be opened
+			// right now, so the user is never asked to sign in again.
+			return zero, noToken, newTokenRefreshError("the client secret could not be opened right now; try again shortly", err, refreshRemedyRetry)
 		}
 	}
 
@@ -1594,7 +1601,7 @@ func (s *RefreshService) restateIdentity(
 	needsIdentity := identity == nil && (!sess.IdentitySource.Valid || slices.Contains(overwritableIdentitySources(IdentitySourceJWTAccessToken), sess.IdentitySource.String))
 	needsScope := !tok.ScopeReported()
 	if s.enricher != nil && !idTokenRejected && (needsIdentity || needsScope) {
-		target := enrichmentTargetFromClient(client, "")
+		target := enrichmentTargetFromClient(client, "", s.secrets)
 		target.resource = conv.FromPGTextOrEmpty[string](sess.Resource)
 		access = s.enricher.jwtAccessToken(ctx, target, tok.AccessToken)
 		s.enricher.rejectJWTForOtherSubject(ctx, target, &access, previousSubject)

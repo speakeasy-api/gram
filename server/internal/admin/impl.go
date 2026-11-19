@@ -28,6 +28,7 @@ import (
 	usagegen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -74,6 +75,7 @@ type Service struct {
 	registry         *mcpregistry.Service
 	remoteSessions   *remotesessions.Service
 	assets           *assets.Service
+	mcpSourceStorage blobio.Reader
 
 	// gcpIdentity screens and verifies platform external credentials. Nil
 	// leaves those methods unavailable.
@@ -276,7 +278,7 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{catalogPromotion: nil, providerHealth: nil, projectRedeployer: nil, assistantIdentities: nil, remoteSessions: nil, assets: nil, gcpIdentity: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
+	return &Service{mcpSourceStorage: nil, catalogPromotion: nil, providerHealth: nil, projectRedeployer: nil, assistantIdentities: nil, remoteSessions: nil, assets: nil, gcpIdentity: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
 		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:                     logger,
@@ -341,6 +343,9 @@ func productFeaturesResult(snapshot productfeatures.ProductFeaturesSnapshot) *ge
 		NetworkIngressEnabled:                   snapshot.NetworkIngressEnabled, SessionPortabilityEnabled: snapshot.SessionPortabilityEnabled,
 		SignalsIntelligenceEnabled: snapshot.SignalsIntelligenceEnabled, OrganizationGatewayDisabled: snapshot.OrganizationGatewayDisabled,
 		CodeModeEnabled: snapshot.CodeModeEnabled, DeviceAgent: snapshot.DeviceAgent,
+		// Deployment-wide settings, not part of an organization's features.
+		AssistantsAvailable: nil,
+		FunctionsAvailable:  nil,
 		// Staff read enforcement through the upstream auth enforcement status.
 		UpstreamAuthEnforced: nil,
 	}
@@ -568,6 +573,8 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.MigrateOrganizationAssistantIdentities = service.strictAdminJSON(server.MigrateOrganizationAssistantIdentities, func() any { return new(adminserver.MigrateOrganizationAssistantIdentitiesRequestBody) })
 	server.MigrateOrganizationAssistantsToKit = service.strictAdminJSON(server.MigrateOrganizationAssistantsToKit, func() any { return new(adminserver.MigrateOrganizationAssistantsToKitRequestBody) })
 	adminserver.Mount(mux, server)
+	mux.Handle(http.MethodGet, "/admin/mcpServerSources", service.mcpServerSourcesHandler(false).ServeHTTP)
+	mux.Handle(http.MethodGet, "/admin/mcpServerSourceDownload", service.mcpServerSourcesHandler(true).ServeHTTP)
 
 }
 
@@ -584,11 +591,11 @@ type adminCallbackWriter struct{ http.ResponseWriter }
 
 func (w *adminCallbackWriter) WriteHeader(status int) {
 	if status == http.StatusTemporaryRedirect {
-		for _, cookie := range (&http.Response{Header: w.Header()}).Cookies() { //nolint:exhaustruct // Only response headers are needed to parse cookies.
+		for _, cookie := range (&http.Response{Header: w.Header()}).Cookies() { //nolint:exhaustruct_v5 // Only response headers are needed to parse cookies.
 			if cookie.Name != constants.AdminSessionCookie || cookie.Value == "" {
 				continue
 			}
-			mcpCookie := &http.Cookie{ //nolint:exhaustruct // No Domain so middleware controls cookie sharing.
+			mcpCookie := &http.Cookie{ //nolint:exhaustruct_v5 // No Domain so middleware controls cookie sharing.
 				Name:     constants.AdminSessionCookie,
 				Path:     "/admin-mcp",
 				Secure:   true,

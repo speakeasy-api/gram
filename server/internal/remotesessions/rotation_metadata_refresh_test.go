@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -82,8 +83,8 @@ func TestRotationSnapshot_AllowsMetadataRefreshDuringHTTP(t *testing.T) {
 			enc := testenv.NewEncryptionClient(t)
 			base, err := url.Parse(testServerURL)
 			require.NoError(t, err)
-			revoker := remotesessions.NewUpstreamRevoker(logger, tracer, meter, ti.conn, enc, policy, nil)
-			rotator := remotesessions.NewClientRotator(logger, ti.conn, enc, policy, nil, ti.redisCache, base, revoker, audit.NewLogger(), nil)
+			revoker := remotesessions.NewUpstreamRevoker(logger, tracer, meter, ti.conn, enc, clientsecretstest.New(t, ti.conn, enc), policy, nil)
+			rotator := remotesessions.NewClientRotator(logger, ti.conn, enc, clientsecretstest.New(t, ti.conn, enc), policy, nil, ti.redisCache, base, revoker, audit.NewLogger(), nil)
 			done := make(chan error, 1)
 			go func() {
 				if stage == "registration" {

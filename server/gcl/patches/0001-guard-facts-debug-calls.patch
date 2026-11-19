@@ -1,0 +1,136 @@
+golangci-lint patch carried by Speakeasy until upstream ships an equivalent fix.
+
+Upstream: https://github.com/golangci/golangci-lint/issues/6822
+Applies to: golangci-lint v2.15.0 (server/gcl/version).
+
+Guards the facts debug calls in pkg/goanalysis behind their debug tags. The
+calls are no-ops unless GL_DEBUG names the tag, but their variadic arguments
+were still boxed into a fresh slice on every call, and inheritFacts makes one
+call per inherited fact.
+
+Remove when: the golangci-lint version in server/gcl/version no longer makes
+these unconditional calls, or this patch stops applying after an upgrade.
+0003-shared-facts.patch is written against the tree with this patch applied,
+so regenerate it if you remove this one while keeping it.
+
+diff --git a/pkg/goanalysis/runner.go b/pkg/goanalysis/runner.go
+index 2e7d30c..849866d 100644
+--- a/pkg/goanalysis/runner.go
++++ b/pkg/goanalysis/runner.go
+@@ -31,11 +31,14 @@ var (
+ 	isMemoryDebug     = logutils.HaveDebugTag(logutils.DebugKeyGoAnalysisMemory)
+ 	issuesCacheDebugf = logutils.Debug(logutils.DebugKeyGoAnalysisIssuesCache)
+ 
+-	factsDebugf        = logutils.Debug(logutils.DebugKeyGoAnalysisFacts)
+-	factsCacheDebugf   = logutils.Debug(logutils.DebugKeyGoAnalysisFactsCache)
+-	factsInheritDebugf = logutils.Debug(logutils.DebugKeyGoAnalysisFactsInherit)
+-	factsExportDebugf  = logutils.Debug(logutils.DebugKeyGoAnalysisFacts)
+-	isFactsExportDebug = logutils.HaveDebugTag(logutils.DebugKeyGoAnalysisFactsExport)
++	factsDebugf         = logutils.Debug(logutils.DebugKeyGoAnalysisFacts)
++	isFactsDebug        = logutils.HaveDebugTag(logutils.DebugKeyGoAnalysisFacts)
++	factsCacheDebugf    = logutils.Debug(logutils.DebugKeyGoAnalysisFactsCache)
++	isFactsCacheDebug   = logutils.HaveDebugTag(logutils.DebugKeyGoAnalysisFactsCache)
++	factsInheritDebugf  = logutils.Debug(logutils.DebugKeyGoAnalysisFactsInherit)
++	isFactsInheritDebug = logutils.HaveDebugTag(logutils.DebugKeyGoAnalysisFactsInherit)
++	factsExportDebugf   = logutils.Debug(logutils.DebugKeyGoAnalysisFacts)
++	isFactsExportDebug  = logutils.HaveDebugTag(logutils.DebugKeyGoAnalysisFactsExport)
+ )
+ 
+ type Diagnostic struct {
+diff --git a/pkg/goanalysis/runner_action_cache.go b/pkg/goanalysis/runner_action_cache.go
+index 233db8c..ddac520 100644
+--- a/pkg/goanalysis/runner_action_cache.go
++++ b/pkg/goanalysis/runner_action_cache.go
+@@ -122,7 +122,9 @@ func (act *action) persistFactsToCache() error {
+ 		})
+ 	}
+ 
+-	factsCacheDebugf("Caching %d facts for package %q and analyzer %s", len(facts), act.Package.Name, act.Analyzer.Name)
++	if isFactsCacheDebug {
++		factsCacheDebugf("Caching %d facts for package %q and analyzer %s", len(facts), act.Package.Name, act.Analyzer.Name)
++	}
+ 
+ 	return act.runner.pkgCache.Put(act.Package, cache.HashModeNeedAllDeps, factCacheKey(analyzer), facts)
+ }
+@@ -136,12 +138,16 @@ func (act *action) loadPersistedFacts() bool {
+ 			act.runner.log.Warnf("Failed to get persisted facts: %s", err)
+ 		}
+ 
+-		factsCacheDebugf("No cached facts for package %q and analyzer %s", act.Package.Name, act.Analyzer.Name)
++		if isFactsCacheDebug {
++			factsCacheDebugf("No cached facts for package %q and analyzer %s", act.Package.Name, act.Analyzer.Name)
++		}
+ 
+ 		return false
+ 	}
+ 
+-	factsCacheDebugf("Loaded %d cached facts for package %q and analyzer %s", len(facts), act.Package.Name, act.Analyzer.Name)
++	if isFactsCacheDebug {
++		factsCacheDebugf("Loaded %d cached facts for package %q and analyzer %s", len(facts), act.Package.Name, act.Analyzer.Name)
++	}
+ 
+ 	for _, f := range facts {
+ 		if f.Path == "" { // this is a package fact
+diff --git a/pkg/goanalysis/runner_checker.go b/pkg/goanalysis/runner_checker.go
+index 284aed2..1bad6b3 100644
+--- a/pkg/goanalysis/runner_checker.go
++++ b/pkg/goanalysis/runner_checker.go
+@@ -129,7 +129,9 @@ func (act *action) analyze() {
+ 	// 	}
+ 	// }
+ 
+-	factsDebugf("%s: Inherited facts in %s", act, time.Since(t0))
++	if isFactsDebug {
++		factsDebugf("%s: Inherited facts in %s", act, time.Since(t0))
++	}
+ 
+ 	module := &analysis.Module{} // possibly empty (non nil) in go/analysis drivers.
+ 	if mod := act.Package.Module; mod != nil {
+@@ -226,7 +228,9 @@ func inheritFacts(act, dep *action) {
+ 		// that are irrelevant downstream
+ 		// (equivalently: not in the compiler export data).
+ 		if !exportedFrom(key.obj, dep.Package.Types) {
+-			factsInheritDebugf("%v: discarding %T fact from %s for %s: %s", act, fact, dep, key.obj, fact)
++			if isFactsInheritDebug {
++				factsInheritDebugf("%v: discarding %T fact from %s for %s: %s", act, fact, dep, key.obj, fact)
++			}
+ 			continue
+ 		}
+ 
+@@ -240,7 +244,11 @@ func inheritFacts(act, dep *action) {
+ 			fact = encodedFact
+ 		}
+ 
+-		factsInheritDebugf("%v: inherited %T fact for %s: %s", act, fact, key.obj, fact)
++		// The debug calls are guarded because their variadic arguments
++		// are heap-allocated for every fact even when debugging is off.
++		if isFactsInheritDebug {
++			factsInheritDebugf("%v: inherited %T fact for %s: %s", act, fact, key.obj, fact)
++		}
+ 
+ 		act.objectFacts[key] = fact
+ 	}
+@@ -273,7 +281,9 @@ func inheritFacts(act, dep *action) {
+ 			fact = encodedFact
+ 		}
+ 
+-		factsInheritDebugf("%v: inherited %T fact for %s: %s", act, fact, key.pkg.Path(), fact)
++		if isFactsInheritDebug {
++			factsInheritDebugf("%v: inherited %T fact for %s: %s", act, fact, key.pkg.Path(), fact)
++		}
+ 
+ 		act.packageFacts[key] = fact
+ 	}
+@@ -417,8 +427,10 @@ func (act *action) exportPackageFact(fact analysis.Fact) {
+ 	key := packageFactKey{act.pass.Pkg, act.factType(fact)}
+ 	act.packageFacts[key] = fact // clobber any existing entry
+ 
+-	factsDebugf("%s: package %s has fact %s\n",
+-		act.Package.Fset.Position(act.pass.Files[0].Pos()), act.pass.Pkg.Path(), fact)
++	if isFactsDebug {
++		factsDebugf("%s: package %s has fact %s\n",
++			act.Package.Fset.Position(act.pass.Files[0].Pos()), act.pass.Pkg.Path(), fact)
++	}
+ }
+ 
+ // NOTE(ldez) altered: add receiver to handle logs.

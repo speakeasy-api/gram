@@ -34,12 +34,12 @@ func (m *ChallengeManager) LoadIdentityProviderEndpoint(ctx context.Context, key
 	if err := m.validateFederatedMetadataHosts(ctx, p.issuer, p.metadata); err != nil {
 		return nil, err
 	}
-	doer, auth, err := m.federatedTokenClient(p)
+	doer, auth, err := m.federatedTokenClient(ctx, p)
 	if err != nil {
 		return nil, err
 	}
 	return &IdentityProviderEndpoint{
-		TokenEndpoint: &TokenEndpoint{endpoint: p.metadata.TokenEndpoint, issuer: p.issuer.Issuer, issuerID: p.issuer.ID, doer: doer, auth: auth},
+		TokenEndpoint: &TokenEndpoint{endpoint: p.metadata.TokenEndpoint, issuer: p.issuer.Issuer, issuerID: p.issuer.ID, doer: doer, auth: auth, tunneled: p.issuer.TunneledMcpServerID.Valid},
 		keys:          keys,
 		jwksURI:       p.metadata.JwksURI,
 		fetchScope:    p.issuer.ID.String(),

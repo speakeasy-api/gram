@@ -59,12 +59,13 @@
       if (s.status === "verified_at_consent") {
         consented = true;
         ready++;
-        state.textContent = "Verified at consent · " + (s.detail || "Current sign-in has not been checked");
+        state.className = "ok";
+        state.textContent = "Connected";
         li.append(state);
       } else if (s.status === "needs_consent") {
         needsConsent = true;
         state.className = "warn";
-        state.textContent = s.detail || "Reconnect this gateway in your AI app to review access";
+        state.textContent = "Needs Sign-In";
         li.append(state);
       } else if (s.status === "action_required") {
         state.className = "warn";
@@ -85,14 +86,14 @@
       } else if (s.status === "connected" || s.status === "not_required") {
         ready++;
         state.className = "ok";
-        state.textContent = s.status === "connected" ? "Signed in" : "No sign-in needed";
+        state.textContent = "Connected";
         li.append(state);
       } else if (s.status === "unavailable") {
-        unavailable++;
-        state.className = "warn";
-        state.textContent = "Temporarily unavailable";
-        li.append(state);
         const outage = s.outage || {};
+        if (!outage.needsAdmin) unavailable++;
+        state.className = "warn";
+        state.textContent = outage.needsAdmin ? "Can't connect" : "Temporarily unavailable";
+        li.append(state);
         const note = document.createElement("div");
         note.className = "detail note";
         note.textContent = outage.message || "Try again shortly.";
@@ -108,9 +109,9 @@
       } else {
         needs++;
         state.className = "warn";
-        state.textContent = s.status === "not_connected"
-          ? (s.detail ? "Not signed in · " + s.detail : "Not signed in")
-          : (s.detail || "Needs attention");
+        // An agent's row names who fixes it, which its hint points to.
+        state.textContent = s.status !== "not_connected" ? (s.detail || "Needs attention")
+          : agent && s.detail ? s.detail : "Needs Sign-In";
         li.append(state);
         // An agent cannot sign in itself: someone who can edit it reconnects on the agent's
         // page, which fixes only the rows the server marks.

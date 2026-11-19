@@ -379,3 +379,10 @@
 - id: skill-negative-calendar-reminder
   prompt: Put a recurring Monday 9am event in my Google Calendar to review skill suggestions.
   expect: []
+
+# Vibe observability plugin: availability check and install guidance.
+- id: plugin-vibe-observability-install
+  prompt: Can my team install Speakeasy's observability hooks in Mistral Vibe, and how do I install it?
+  expect: [get_my_vibe_observability_install]
+  args:
+    project_slug: default

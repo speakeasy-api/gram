@@ -52,7 +52,6 @@ import (
 	hooksservernamesc "github.com/speakeasy-api/gram/server/gen/http/hooks_server_names/client"
 	identityc "github.com/speakeasy-api/gram/server/gen/http/identity/client"
 	identityproviderconnectionsc "github.com/speakeasy-api/gram/server/gen/http/identity_provider_connections/client"
-	instancesc "github.com/speakeasy-api/gram/server/gen/http/instances/client"
 	integrationsc "github.com/speakeasy-api/gram/server/gen/http/integrations/client"
 	internalsessionissuersc "github.com/speakeasy-api/gram/server/gen/http/internal_session_issuers/client"
 	jsonwebkeysetsc "github.com/speakeasy-api/gram/server/gen/http/json_web_key_sets/client"
@@ -154,7 +153,6 @@ func UsageCommands() []string {
 		"hooks (claude|cursor|codex|ingest|upload-skill-content|skill-feedback|logs|metrics|get-status)",
 		"identity resolve",
 		"identity-provider-connections (create|submit-client-id|replace-client-secret|set-setup-method|verify|get|record-agent|revoke|sync-applications|list-applications)",
-		"instances get-instance",
 		"integrations (get|list)",
 		"internal-session-issuers (get|set-enabled|rotate)",
 		"json-web-key-sets (create-set|update-set|list-sets|get-set|get-set-delete-preflight|delete-set|list-keys|publish-key|activate-key|retire-key|revoke-key)",
@@ -217,7 +215,7 @@ func UsageCommands() []string {
 		"widgets (list-widgets|get-widget|create-widget|update-widget|duplicate-widget|delete-widget)",
 		"workload-identities (list|list-platforms|get-custom-flows|list-token-endpoints|register-issuer|update-issuer|withdraw-issuer|admit-subject|update-subject|withdraw-subject|create-device-join-token|register-device)",
 		"variations (upsert-global|delete-global|list-global|list-groups|create-global)",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|list-directory-people|sync-directory-groups|set-directory-role-mapping|set-directory-role-mappings|delete-directory-role-mapping|preview-directory-role-setup|apply-directory-role-setup|list-directory-review-items|resolve-directory-review-item|get-directory-review-settings|update-directory-review-settings|list-scopes|list-agent-policy-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access|create-temporary-grant|list-temporary-grants|renew-temporary-grant|revoke-temporary-grant)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|list-directory-people|sync-directory-groups|set-directory-role-mapping|set-directory-role-mappings|delete-directory-role-mapping|preview-directory-role-setup|apply-directory-role-setup|list-directory-review-items|resolve-directory-review-item|get-directory-review-settings|update-directory-review-settings|list-scopes|list-agent-policy-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|set-shadow-mcp-official-server|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access|create-temporary-grant|list-temporary-grants|renew-temporary-grant|revoke-temporary-grant)",
 	}
 }
 
@@ -1673,15 +1671,6 @@ func ParseEndpoint(
 		identityProviderConnectionsListApplicationsIDFlag             = identityProviderConnectionsListApplicationsFlags.String("id", "REQUIRED", "")
 		identityProviderConnectionsListApplicationsIncludeRemovedFlag = identityProviderConnectionsListApplicationsFlags.String("include-removed", "", "")
 		identityProviderConnectionsListApplicationsSessionTokenFlag   = identityProviderConnectionsListApplicationsFlags.String("session-token", "", "")
-
-		instancesFlags = flag.NewFlagSet("instances", flag.ContinueOnError)
-
-		instancesGetInstanceFlags                 = flag.NewFlagSet("get-instance", flag.ExitOnError)
-		instancesGetInstanceToolsetSlugFlag       = instancesGetInstanceFlags.String("toolset-slug", "REQUIRED", "")
-		instancesGetInstanceSessionTokenFlag      = instancesGetInstanceFlags.String("session-token", "", "")
-		instancesGetInstanceProjectSlugInputFlag  = instancesGetInstanceFlags.String("project-slug-input", "", "")
-		instancesGetInstanceApikeyTokenFlag       = instancesGetInstanceFlags.String("apikey-token", "", "")
-		instancesGetInstanceChatSessionsTokenFlag = instancesGetInstanceFlags.String("chat-sessions-token", "", "")
 
 		integrationsFlags = flag.NewFlagSet("integrations", flag.ContinueOnError)
 
@@ -5558,6 +5547,10 @@ func ParseEndpoint(
 		accessUpdateShadowMCPInventoryServerNameBodyFlag         = accessUpdateShadowMCPInventoryServerNameFlags.String("body", "REQUIRED", "")
 		accessUpdateShadowMCPInventoryServerNameSessionTokenFlag = accessUpdateShadowMCPInventoryServerNameFlags.String("session-token", "", "")
 
+		accessSetShadowMCPOfficialServerFlags            = flag.NewFlagSet("set-shadow-mcp-official-server", flag.ExitOnError)
+		accessSetShadowMCPOfficialServerBodyFlag         = accessSetShadowMCPOfficialServerFlags.String("body", "REQUIRED", "")
+		accessSetShadowMCPOfficialServerSessionTokenFlag = accessSetShadowMCPOfficialServerFlags.String("session-token", "", "")
+
 		accessListShadowMCPInventoryUsersFlags            = flag.NewFlagSet("list-shadow-mcp-inventory-users", flag.ExitOnError)
 		accessListShadowMCPInventoryUsersProjectIDFlag    = accessListShadowMCPInventoryUsersFlags.String("project-id", "REQUIRED", "")
 		accessListShadowMCPInventoryUsersServerURLFlag    = accessListShadowMCPInventoryUsersFlags.String("server-url", "REQUIRED", "")
@@ -6003,9 +5996,6 @@ func ParseEndpoint(
 	identityProviderConnectionsRevokeFlags.Usage = identityProviderConnectionsRevokeUsage
 	identityProviderConnectionsSyncApplicationsFlags.Usage = identityProviderConnectionsSyncApplicationsUsage
 	identityProviderConnectionsListApplicationsFlags.Usage = identityProviderConnectionsListApplicationsUsage
-
-	instancesFlags.Usage = instancesUsage
-	instancesGetInstanceFlags.Usage = instancesGetInstanceUsage
 
 	integrationsFlags.Usage = integrationsUsage
 	integrationsGetFlags.Usage = integrationsGetUsage
@@ -6850,6 +6840,7 @@ func ParseEndpoint(
 	accessListShadowMCPInventoryFlags.Usage = accessListShadowMCPInventoryUsage
 	accessGetShadowMCPInventoryServerFlags.Usage = accessGetShadowMCPInventoryServerUsage
 	accessUpdateShadowMCPInventoryServerNameFlags.Usage = accessUpdateShadowMCPInventoryServerNameUsage
+	accessSetShadowMCPOfficialServerFlags.Usage = accessSetShadowMCPOfficialServerUsage
 	accessListShadowMCPInventoryUsersFlags.Usage = accessListShadowMCPInventoryUsersUsage
 	accessListShadowMCPInventoryServersForUserFlags.Usage = accessListShadowMCPInventoryServersForUserUsage
 	accessResolveShadowMCPInventoryRequestFlags.Usage = accessResolveShadowMCPInventoryRequestUsage
@@ -6954,8 +6945,6 @@ func ParseEndpoint(
 			svcf = identityFlags
 		case "identity-provider-connections":
 			svcf = identityProviderConnectionsFlags
-		case "instances":
-			svcf = instancesFlags
 		case "integrations":
 			svcf = integrationsFlags
 		case "internal-session-issuers":
@@ -8019,13 +8008,6 @@ func ParseEndpoint(
 
 			case "list-applications":
 				epf = identityProviderConnectionsListApplicationsFlags
-
-			}
-
-		case "instances":
-			switch epn {
-			case "get-instance":
-				epf = instancesGetInstanceFlags
 
 			}
 
@@ -10433,6 +10415,9 @@ func ParseEndpoint(
 			case "update-shadow-mcp-inventory-server-name":
 				epf = accessUpdateShadowMCPInventoryServerNameFlags
 
+			case "set-shadow-mcp-official-server":
+				epf = accessSetShadowMCPOfficialServerFlags
+
 			case "list-shadow-mcp-inventory-users":
 				epf = accessListShadowMCPInventoryUsersFlags
 
@@ -11456,13 +11441,6 @@ func ParseEndpoint(
 			case "list-applications":
 				endpoint = c.ListApplications()
 				data, err = identityproviderconnectionsc.BuildListApplicationsPayload(*identityProviderConnectionsListApplicationsIDFlag, *identityProviderConnectionsListApplicationsIncludeRemovedFlag, *identityProviderConnectionsListApplicationsSessionTokenFlag)
-			}
-		case "instances":
-			c := instancesc.NewClient(scheme, host, doer, enc, dec, restore)
-			switch epn {
-			case "get-instance":
-				endpoint = c.GetInstance()
-				data, err = instancesc.BuildGetInstancePayload(*instancesGetInstanceToolsetSlugFlag, *instancesGetInstanceSessionTokenFlag, *instancesGetInstanceProjectSlugInputFlag, *instancesGetInstanceApikeyTokenFlag, *instancesGetInstanceChatSessionsTokenFlag)
 			}
 		case "integrations":
 			c := integrationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -13883,6 +13861,9 @@ func ParseEndpoint(
 			case "update-shadow-mcp-inventory-server-name":
 				endpoint = c.UpdateShadowMCPInventoryServerName()
 				data, err = accessc.BuildUpdateShadowMCPInventoryServerNamePayload(*accessUpdateShadowMCPInventoryServerNameBodyFlag, *accessUpdateShadowMCPInventoryServerNameSessionTokenFlag)
+			case "set-shadow-mcp-official-server":
+				endpoint = c.SetShadowMCPOfficialServer()
+				data, err = accessc.BuildSetShadowMCPOfficialServerPayload(*accessSetShadowMCPOfficialServerBodyFlag, *accessSetShadowMCPOfficialServerSessionTokenFlag)
 			case "list-shadow-mcp-inventory-users":
 				endpoint = c.ListShadowMCPInventoryUsers()
 				data, err = accessc.BuildListShadowMCPInventoryUsersPayload(*accessListShadowMCPInventoryUsersProjectIDFlag, *accessListShadowMCPInventoryUsersServerURLFlag, *accessListShadowMCPInventoryUsersLimitFlag, *accessListShadowMCPInventoryUsersCursorFlag, *accessListShadowMCPInventoryUsersSessionTokenFlag)
@@ -20064,7 +20045,7 @@ func hooksIngestUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks ingest --body '{\n      \"data\": {\n         \"delivery_failure\": {\n            \"arch\": \"aaa\",\n            \"attempted_at\": \"1970-01-01T00:00:01Z\",\n            \"attempts\": 1,\n            \"binary_version\": \"aaa\",\n            \"cause\": \"tls\",\n            \"delivery_phase\": \"drain\",\n            \"elapsed_ms\": 1,\n            \"failed_event_type\": \"session.updated\",\n            \"failed_idempotency_key\": \"aaa\",\n            \"gating\": false,\n            \"harness\": \"aaa\",\n            \"harness_variant\": \"aaa\",\n            \"harness_version\": \"aaa\",\n            \"os\": \"aaa\",\n            \"session_id\": \"aaa\",\n            \"spool_depth\": 1,\n            \"status_code\": 1\n         },\n         \"mcp\": {\n            \"command\": \"abc123\",\n            \"result_json\": \"abc123\",\n            \"server_identity\": \"abc123\",\n            \"server_name\": \"abc123\",\n            \"url\": \"abc123\"\n         },\n         \"mcp_attribution\": [\n            {\n               \"mcp_server\": \"abc123\",\n               \"mcp_tool\": \"abc123\",\n               \"request_id\": \"abc123\"\n            }\n         ],\n         \"mcp_inventory\": [\n            {\n               \"command\": \"abc123\",\n               \"result_json\": \"abc123\",\n               \"server_identity\": \"abc123\",\n               \"server_name\": \"abc123\",\n               \"url\": \"abc123\"\n            }\n         ],\n         \"mcp_inventory_collected\": false,\n         \"message\": {\n            \"duration_ms\": 1,\n            \"role\": \"abc123\",\n            \"text\": \"abc123\"\n         },\n         \"notification\": {\n            \"message\": \"abc123\",\n            \"title\": \"abc123\",\n            \"type\": \"abc123\"\n         },\n         \"prompt\": {\n            \"text\": \"abc123\"\n         },\n         \"prompt_attachments\": [\n            {\n               \"attachment_kind\": \"abc123\",\n               \"content\": \"abc123\",\n               \"display_path\": \"abc123\",\n               \"entry_uuid\": \"abc123\",\n               \"file_path\": \"abc123\",\n               \"num_lines\": 1,\n               \"prompt_id\": \"abc123\",\n               \"prompt_sha256\": \"abc123\",\n               \"start_line\": 1,\n               \"timestamp\": \"abc123\",\n               \"total_lines\": 1\n            }\n         ],\n         \"skill\": {\n            \"name\": \"aaa\",\n            \"raw_sha256\": \"aaa\",\n            \"source\": \"aaa\",\n            \"source_level\": \"aaa\",\n            \"source_path\": \"aaa\"\n         },\n         \"tool_call\": {\n            \"duration_ms\": 1,\n            \"error\": \"abc123\",\n            \"id\": \"abc123\",\n            \"input\": \"abc123\",\n            \"is_interrupt\": false,\n            \"name\": \"abc123\",\n            \"output\": \"abc123\",\n            \"permission_type\": \"abc123\",\n            \"status\": \"abc123\"\n         },\n         \"usage\": {\n            \"cache_read_tokens\": 1,\n            \"cache_write_tokens\": 1,\n            \"cost\": 1,\n            \"input_tokens\": 1,\n            \"loop_count\": 1,\n            \"output_tokens\": 1,\n            \"status\": \"abc123\"\n         }\n      },\n      \"event\": {\n         \"occurred_at\": \"1970-01-01T00:00:01Z\",\n         \"type\": \"session.updated\"\n      },\n      \"raw\": \"abc123\",\n      \"schema_version\": \"abc123\",\n      \"session\": {\n         \"cwd\": \"abc123\",\n         \"id\": \"abc123\",\n         \"model\": \"abc123\",\n         \"surface\": \"abc123\",\n         \"turn_id\": \"abc123\"\n      },\n      \"source\": {\n         \"adapter\": \"abc123\",\n         \"adapter_version\": \"abc123\",\n         \"hostname\": \"abc123\",\n         \"raw_event_name\": \"abc123\",\n         \"user_email\": \"abc123\"\n      }\n   }' --device-agent-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\" --idempotency-key \"abc123\" --replayed false")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks ingest --body '{\n      \"data\": {\n         \"delivery_failure\": {\n            \"arch\": \"aaa\",\n            \"attempted_at\": \"1970-01-01T00:00:01Z\",\n            \"attempts\": 1,\n            \"binary_version\": \"aaa\",\n            \"cause\": \"tls\",\n            \"delivery_phase\": \"drain\",\n            \"elapsed_ms\": 1,\n            \"failed_event_type\": \"session.updated\",\n            \"failed_idempotency_key\": \"aaa\",\n            \"gating\": false,\n            \"harness\": \"aaa\",\n            \"harness_variant\": \"aaa\",\n            \"harness_version\": \"aaa\",\n            \"os\": \"aaa\",\n            \"session_id\": \"aaa\",\n            \"spool_depth\": 1,\n            \"status_code\": 1\n         },\n         \"install_failure\": {\n            \"arch\": \"aaa\",\n            \"attempted_at\": \"1970-01-01T00:00:01Z\",\n            \"cause\": \"checksum_mismatch\",\n            \"harness\": \"aaa\",\n            \"os\": \"aaa\",\n            \"version\": \"aaa\"\n         },\n         \"mcp\": {\n            \"command\": \"abc123\",\n            \"result_json\": \"abc123\",\n            \"server_identity\": \"abc123\",\n            \"server_name\": \"abc123\",\n            \"url\": \"abc123\"\n         },\n         \"mcp_attribution\": [\n            {\n               \"mcp_server\": \"abc123\",\n               \"mcp_tool\": \"abc123\",\n               \"request_id\": \"abc123\"\n            }\n         ],\n         \"mcp_inventory\": [\n            {\n               \"command\": \"abc123\",\n               \"result_json\": \"abc123\",\n               \"server_identity\": \"abc123\",\n               \"server_name\": \"abc123\",\n               \"url\": \"abc123\"\n            }\n         ],\n         \"mcp_inventory_collected\": false,\n         \"message\": {\n            \"duration_ms\": 1,\n            \"role\": \"abc123\",\n            \"text\": \"abc123\"\n         },\n         \"notification\": {\n            \"message\": \"abc123\",\n            \"title\": \"abc123\",\n            \"type\": \"abc123\"\n         },\n         \"prompt\": {\n            \"text\": \"abc123\"\n         },\n         \"prompt_attachments\": [\n            {\n               \"attachment_kind\": \"abc123\",\n               \"content\": \"abc123\",\n               \"display_path\": \"abc123\",\n               \"entry_uuid\": \"abc123\",\n               \"file_path\": \"abc123\",\n               \"num_lines\": 1,\n               \"prompt_id\": \"abc123\",\n               \"prompt_sha256\": \"abc123\",\n               \"start_line\": 1,\n               \"timestamp\": \"abc123\",\n               \"total_lines\": 1\n            }\n         ],\n         \"skill\": {\n            \"name\": \"aaa\",\n            \"raw_sha256\": \"aaa\",\n            \"source\": \"aaa\",\n            \"source_level\": \"aaa\",\n            \"source_path\": \"aaa\"\n         },\n         \"tool_call\": {\n            \"duration_ms\": 1,\n            \"error\": \"abc123\",\n            \"id\": \"abc123\",\n            \"input\": \"abc123\",\n            \"is_interrupt\": false,\n            \"name\": \"abc123\",\n            \"output\": \"abc123\",\n            \"permission_type\": \"abc123\",\n            \"status\": \"abc123\"\n         },\n         \"usage\": {\n            \"cache_read_tokens\": 1,\n            \"cache_write_tokens\": 1,\n            \"cost\": 1,\n            \"input_tokens\": 1,\n            \"loop_count\": 1,\n            \"output_tokens\": 1,\n            \"status\": \"abc123\"\n         }\n      },\n      \"event\": {\n         \"occurred_at\": \"1970-01-01T00:00:01Z\",\n         \"type\": \"session.updated\"\n      },\n      \"raw\": \"abc123\",\n      \"schema_version\": \"abc123\",\n      \"session\": {\n         \"cwd\": \"abc123\",\n         \"id\": \"abc123\",\n         \"model\": \"abc123\",\n         \"surface\": \"abc123\",\n         \"turn_id\": \"abc123\"\n      },\n      \"source\": {\n         \"adapter\": \"abc123\",\n         \"adapter_version\": \"abc123\",\n         \"hostname\": \"abc123\",\n         \"raw_event_name\": \"abc123\",\n         \"user_email\": \"abc123\"\n      }\n   }' --device-agent-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\" --idempotency-key \"abc123\" --replayed false")
 }
 
 func hooksUploadSkillContentUsage() {
@@ -20433,43 +20414,6 @@ func identityProviderConnectionsListApplicationsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections list-applications --id \"550e8400-e29b-41d4-a716-446655440000\" --include-removed false --session-token \"abc123\"")
-}
-
-// instancesUsage displays the usage of the instances command and its
-// subcommands.
-func instancesUsage() {
-	fmt.Fprintln(os.Stderr, `Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.`)
-	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] instances COMMAND [flags]\n\n", os.Args[0])
-	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    get-instance: Load all relevant data for an instance of a toolset and environment`)
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Additional help:")
-	fmt.Fprintf(os.Stderr, "    %s instances COMMAND --help\n", os.Args[0])
-}
-func instancesGetInstanceUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] instances get-instance", os.Args[0])
-	fmt.Fprint(os.Stderr, " -toolset-slug STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -chat-sessions-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Load all relevant data for an instance of a toolset and environment`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -toolset-slug STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -chat-sessions-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "instances get-instance --toolset-slug \"aaa\" --session-token \"abc123\" --project-slug-input \"abc123\" --apikey-token \"abc123\" --chat-sessions-token \"abc123\"")
 }
 
 // integrationsUsage displays the usage of the integrations command and its
@@ -24353,7 +24297,7 @@ func pluginsCreatePluginUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins create-plugin --body '{\n      \"auto_sync_enabled\": false,\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins create-plugin --body '{\n      \"auto_add_servers_enabled\": false,\n      \"auto_sync_enabled\": false,\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func pluginsUpdatePluginUsage() {
@@ -24375,7 +24319,7 @@ func pluginsUpdatePluginUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins update-plugin --body '{\n      \"auto_sync_enabled\": false,\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins update-plugin --body '{\n      \"auto_add_servers_enabled\": false,\n      \"auto_sync_enabled\": false,\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func pluginsDeletePluginUsage() {
@@ -37432,6 +37376,7 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory: List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.`)
 	fmt.Fprintln(os.Stderr, `    get-shadow-mcp-inventory-server: Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.`)
 	fmt.Fprintln(os.Stderr, `    update-shadow-mcp-inventory-server-name: Update or clear the administrator-defined display name for one project-scoped Shadow MCP inventory server URL.`)
+	fmt.Fprintln(os.Stderr, `    set-shadow-mcp-official-server: Link one project-scoped Shadow MCP server to its official version, switch the link off or on, or remove it. A link with allow_direct_access false blocks direct connections wherever a Shadow MCP policy applies and points agents at the linked server; true keeps the link but lets direct connections follow the ordinary rules. Omitting mcp_server_id (with allow_direct_access false) removes the link. Requires an authenticated session authorized for org:admin on the active organization.`)
 	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory-users: List users with observed telemetry usage for one project-scoped Shadow MCP server URL.`)
 	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory-servers-for-user: List the Shadow MCP servers one person reached, with each server's access state. The inverse of listShadowMCPInventoryUsers, which expands a single server into its users.`)
 	fmt.Fprintln(os.Stderr, `    resolve-shadow-mcp-inventory-request: Review the latest pending Shadow MCP URL request and resolve all pending requests for that URL.`)
@@ -37982,6 +37927,26 @@ func accessUpdateShadowMCPInventoryServerNameUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-shadow-mcp-inventory-server-name --body '{\n      \"name\": \"aaa\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\"")
+}
+
+func accessSetShadowMCPOfficialServerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access set-shadow-mcp-official-server", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Link one project-scoped Shadow MCP server to its official version, switch the link off or on, or remove it. A link with allow_direct_access false blocks direct connections wherever a Shadow MCP policy applies and points agents at the linked server; true keeps the link but lets direct connections follow the ordinary rules. Omitting mcp_server_id (with allow_direct_access false) removes the link. Requires an authenticated session authorized for org:admin on the active organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access set-shadow-mcp-official-server --body '{\n      \"allow_direct_access\": false,\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\"")
 }
 
 func accessListShadowMCPInventoryUsersUsage() {

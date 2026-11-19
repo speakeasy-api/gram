@@ -326,13 +326,14 @@ func (s *PluginsService) createPlugin(ctx context.Context, principal Principal, 
 		Name: input.Name, Slug: input.Slug, Description: input.Description, AutoSyncEnabled: autoSyncOff,
 	}
 	mutation := plugindelivery.CreatePluginMutation{
-		OrganizationID:  principal.OrganizationID,
-		ProjectID:       project.ID,
-		Name:            input.Name,
-		Slug:            optionalString(input.Slug),
-		Description:     optionalString(input.Description),
-		AutoSyncEnabled: input.AutoSyncEnabled,
-		Actor:           plugindelivery.PluginMetadataActor{UserID: principal.UserID, DisplayName: nil},
+		OrganizationID:        principal.OrganizationID,
+		ProjectID:             project.ID,
+		Name:                  input.Name,
+		Slug:                  optionalString(input.Slug),
+		Description:           optionalString(input.Description),
+		AutoSyncEnabled:       input.AutoSyncEnabled,
+		AutoAddServersEnabled: nil,
+		Actor:                 plugindelivery.PluginMetadataActor{UserID: principal.UserID, DisplayName: nil},
 	}
 	return s.executePluginMetadataMutation(ctx, principal, project, operationCreatePlugin, key, normalized, nil, func(ctx context.Context, tx pgx.Tx) (PluginMetadataReceiptResult, error) {
 		created, err := s.metadataCore.CreateInTransaction(ctx, tx, mutation)
@@ -375,15 +376,17 @@ func (s *PluginsService) renamePlugin(ctx context.Context, principal Principal, 
 			return PluginMetadataReceiptResult{}, err
 		}
 		renamed, err := s.metadataCore.UpdateInTransaction(ctx, tx, plugindelivery.UpdatePluginMutation{
-			OrganizationID:  principal.OrganizationID,
-			ProjectID:       project.ID,
-			PluginID:        ref.ID,
-			Name:            &input.Name,
-			Slug:            nil,
-			Description:     nil,
-			KeepDescription: true,
-			AutoSyncEnabled: nil,
-			Actor:           plugindelivery.PluginMetadataActor{UserID: principal.UserID, DisplayName: nil},
+			OrganizationID:        principal.OrganizationID,
+			ProjectID:             project.ID,
+			PluginID:              ref.ID,
+			Name:                  &input.Name,
+			Slug:                  nil,
+			Description:           nil,
+			KeepDescription:       true,
+			AutoSyncEnabled:       nil,
+			AutoAddServersEnabled: nil,
+			DeliveryGuard:         nil,
+			Actor:                 plugindelivery.PluginMetadataActor{UserID: principal.UserID, DisplayName: nil},
 		})
 		if err != nil {
 			return PluginMetadataReceiptResult{}, pluginMetadataCoreError(err)
@@ -460,15 +463,17 @@ func (s *PluginsService) setPluginAutoSync(ctx context.Context, principal Princi
 			}
 		}
 		updated, err := s.metadataCore.UpdateInTransaction(ctx, tx, plugindelivery.UpdatePluginMutation{
-			OrganizationID:  principal.OrganizationID,
-			ProjectID:       project.ID,
-			PluginID:        ref.ID,
-			Name:            nil,
-			Slug:            nil,
-			Description:     nil,
-			KeepDescription: true,
-			AutoSyncEnabled: &input.AutoSyncEnabled,
-			Actor:           plugindelivery.PluginMetadataActor{UserID: principal.UserID, DisplayName: nil},
+			OrganizationID:        principal.OrganizationID,
+			ProjectID:             project.ID,
+			PluginID:              ref.ID,
+			Name:                  nil,
+			Slug:                  nil,
+			Description:           nil,
+			KeepDescription:       true,
+			AutoSyncEnabled:       &input.AutoSyncEnabled,
+			AutoAddServersEnabled: nil,
+			DeliveryGuard:         nil,
+			Actor:                 plugindelivery.PluginMetadataActor{UserID: principal.UserID, DisplayName: nil},
 		})
 		if err != nil {
 			return PluginMetadataReceiptResult{}, pluginMetadataCoreError(err)

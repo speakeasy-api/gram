@@ -305,7 +305,7 @@ func (s *Service) connectionRecoveryTypedLogin(ctx context.Context, recovery con
 		RemoteSessionClientID: recovery.RegistrationID,
 		Subject:               subject,
 	}
-	//nolint:exhaustruct // Validate only authorization before minting the full OAuth state.
+	//nolint:exhaustruct_v5 // Validate only authorization before minting the full OAuth state.
 	state := remotesessions.RemoteLoginState{
 		TypedAuthorization:    authorization,
 		ParentChallengeID:     loginID,
@@ -439,7 +439,7 @@ func (s *Service) verifyConnectionRecoveryCompletion(r *http.Request, remote rem
 	authed, err := s.connectionRecoverySession(ctx, r, login)
 	switch {
 	case errors.Is(err, errRecoveryNotSignedIn):
-		authed = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{ActiveOrganizationID: login.OrganizationID, UserID: login.UserID}) //nolint:exhaustruct // the person the server-held login names, for their own permission check
+		authed = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{ActiveOrganizationID: login.OrganizationID, UserID: login.UserID}) //nolint:exhaustruct_v5 // the person the server-held login names, for their own permission check
 	case err != nil:
 		return true, err
 	}

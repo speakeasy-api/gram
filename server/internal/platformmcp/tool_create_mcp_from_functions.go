@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP SDK manifests intentionally rely on documented zero-value optional fields.
+//nolint:exhaustruct_v5 // MCP SDK manifests intentionally rely on documented zero-value optional fields.
 package platformmcp
 
 import (
@@ -14,10 +14,11 @@ const (
 
 // registerCreateMCPFromFunctionsTool registers the live and unavailable paths
 // with one manifest, so the tool never appears on and disappears from the
-// catalogue as a deployment composes or fails to compose the service.
-func registerCreateMCPFromFunctionsTool(reg *Registrar, service *MCPToolExposureService) {
+// catalogue as a deployment composes or fails to compose the service, or runs
+// with Functions disabled.
+func registerCreateMCPFromFunctionsTool(reg *Registrar, service *MCPToolExposureService, functionsAvailable bool) {
 	handler := unavailableToolExposureHandler[CreateMCPFromFunctionsInput, CreateMCPFromFunctionsOutput](unavailableCreateMCPFromFunctionsMessage)
-	if service.valid() {
+	if functionsAvailable && service.valid() {
 		handler = func(ctx context.Context, _ *mcp.CallToolRequest, input CreateMCPFromFunctionsInput) (*mcp.CallToolResult, CreateMCPFromFunctionsOutput, error) {
 			return principalToolCall(ctx, toolExposureToolResult, func(principal Principal) (CreateMCPFromFunctionsOutput, error) {
 				return service.CreateMCPFromFunctions(ctx, principal, input)

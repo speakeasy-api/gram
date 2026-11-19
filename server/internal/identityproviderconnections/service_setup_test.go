@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/okta"
@@ -193,8 +194,9 @@ func newTestServiceWithClientFactory(t *testing.T, maxConns int32, wrap func(okt
 		clients = wrap(clients)
 	}
 	syncTrigger := &fakeSyncTrigger{}
-	enc, err := encryption.NewWithBytes(make([]byte, 32))
-	require.NoError(t, err)
+	// The provisioner seals secrets with the shared test key, so the service
+	// opens them with the same one.
+	enc := testenv.NewEncryptionClient(t)
 
 	authzEngine := authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	build := func(provisioner *identityproviderconnections.Provisioner) *identityproviderconnections.Service {
@@ -208,7 +210,7 @@ func newTestServiceWithClientFactory(t *testing.T, maxConns int32, wrap func(okt
 			audit.NewLogger(),
 			provisioner,
 			clients,
-			enc,
+			clientsecretstest.New(t, ti.conn, enc),
 			discovery.discover,
 			ratelimit.NewRedisStore(redisClient),
 			syncTrigger,

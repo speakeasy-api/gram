@@ -1,6 +1,7 @@
 package mcpservers_test
 
 import (
+	"github.com/jackc/pgx/v5/pgtype"
 	"testing"
 	"time"
 
@@ -51,7 +52,7 @@ func TestUpdateMcpServer_EnableRoleDistributionRequiresApproval(t *testing.T) {
 	})
 	require.NoError(t, err)
 	plugin, err := pluginsrepo.New(ti.conn).CreatePlugin(ctx, pluginsrepo.CreatePluginParams{
-		OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, Name: "Approval role", Slug: "approval-role", Description: conv.ToPGTextEmpty(""),
+		OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, Name: "Approval role", Slug: "approval-role", Description: conv.ToPGTextEmpty(""), AutoAddServersEnabled: pgtype.Bool{Bool: true, Valid: true},
 	})
 	require.NoError(t, err)
 	_, err = pluginsrepo.New(ti.conn).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{

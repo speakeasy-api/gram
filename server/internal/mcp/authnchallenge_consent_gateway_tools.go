@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -29,12 +30,21 @@ import (
 type consentMemberOutcome struct {
 	// Slug identifies the source independently of its display name.
 	Slug string `json:"slug"`
+	// ServerID identifies the source across slug changes. Empty in captures
+	// made before it was recorded.
+	ServerID uuid.UUID `json:"server_id,omitzero"`
 	// Name is the source's display name.
 	Name string `json:"name"`
 	// Status distinguishes verified access, sign-in issues, and outages.
 	Status gatewayServerStatus `json:"status"`
 	// Label is shared by the server list and the tool picker.
 	Label string `json:"label"`
+
+	// address is an address Speakeasy did not dial that stopped the source.
+	address guardian.AddressFailure
+
+	// signInAddress says that address is its sign-in provider's.
+	signInAddress bool
 }
 
 // captureGatewayConsentInventory captures one complete attempt before rendering
@@ -295,7 +305,12 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 				status = gatewayServerNoAccess
 			}
 		}
-		outcomes = append(outcomes, consentMemberOutcome{Slug: member.slug, Name: conv.Default(member.name, member.slug), Status: status, Label: (gatewayServer{Slug: member.slug, Name: member.name, Status: status, ConnectClientID: "", ServerID: "", Hidden: false, cardIDs: nil, providerOutage: false, connectionDown: false, Auth: nil}).StatusLabel()})
+		address, signInAddress := guardian.AddressFine, false
+		if status == gatewayServerUnavailable {
+			address, signInAddress = memberAddressCause(failures[member.slug])
+		}
+		label := (gatewayServer{Slug: member.slug, Name: member.name, Status: status, ConnectClientID: "", ServerID: "", Hidden: false, cardIDs: nil, providerOutage: false, connectionDown: false, address: address, signInAddress: signInAddress, Auth: nil}).StatusLabel()
+		outcomes = append(outcomes, consentMemberOutcome{Slug: member.slug, ServerID: member.serverID, Name: conv.Default(member.name, member.slug), Status: status, Label: label, address: address, signInAddress: signInAddress})
 	}
 	tools := make([]consentInventoryTool, 0, len(inventory))
 	toolMembers := map[string]connectionCatalogMember{}

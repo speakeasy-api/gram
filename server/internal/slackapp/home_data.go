@@ -73,7 +73,7 @@ func (s *HomeSource) WithServerURL(serverURL *url.URL) *HomeSource {
 // organizationID the caller has already resolved from a linked Slack user.
 func (s *HomeSource) Load(ctx context.Context, organizationID, userID, dashboardURL string) HomeData {
 	logger := s.logger.With(attr.SlogOrganizationID(organizationID), attr.SlogUserID(userID))
-	data := HomeData{DashboardURL: dashboardURL, Linked: true} //nolint:exhaustruct // sections are filled below
+	data := HomeData{DashboardURL: dashboardURL, Linked: true} //nolint:exhaustruct_v5 // sections are filled below
 	queries := repo.New(s.db)
 
 	org, err := queries.GetHomeOrganization(ctx, organizationID)

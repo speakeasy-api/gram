@@ -106,7 +106,7 @@ func (wc *Client) GetOrganizationDomainPolicy(ctx context.Context, orgID string)
 // CreateOrganization creates a WorkOS organization with the given name and
 // sets its external_id to the Speakeasy org ID. Returns the WorkOS org ID.
 func (wc *Client) CreateOrganization(ctx context.Context, name, gramOrgID string) (string, error) {
-	o, err := wc.orgs.CreateOrganization(ctx, organizations.CreateOrganizationOpts{ //nolint:exhaustruct // deprecated WorkOS fields are intentionally omitted.
+	o, err := wc.orgs.CreateOrganization(ctx, organizations.CreateOrganizationOpts{ //nolint:exhaustruct_v5 // deprecated WorkOS fields are intentionally omitted.
 		Name:           name,
 		Domains:        nil,
 		DomainData:     nil,
@@ -128,7 +128,7 @@ var ErrOrganizationCreationRejected = errors.New("WorkOS rejected organization c
 // CreateOrganizationWithVerifiedDomain asserts prior administrator verification
 // of hostname. It does not retry because creation has no idempotency key.
 func (wc *Client) CreateOrganizationWithVerifiedDomain(ctx context.Context, name, hostname string) (string, error) {
-	o, err := wc.orgsNoRetry.CreateOrganization(ctx, organizations.CreateOrganizationOpts{ //nolint:exhaustruct // deprecated WorkOS fields are intentionally omitted.
+	o, err := wc.orgsNoRetry.CreateOrganization(ctx, organizations.CreateOrganizationOpts{ //nolint:exhaustruct_v5 // deprecated WorkOS fields are intentionally omitted.
 		Name:           name,
 		Domains:        nil,
 		DomainData:     []organizations.OrganizationDomainData{{Domain: hostname, State: organizations.Verified}},
@@ -225,7 +225,7 @@ func (wc *Client) UpdateOrganizationExternalIDWithoutRetry(ctx context.Context, 
 }
 
 func updateOrganizationExternalID(ctx context.Context, client *organizations.Client, workosOrgID, externalID string) error {
-	_, err := client.UpdateOrganization(ctx, organizations.UpdateOrganizationOpts{ //nolint:exhaustruct // deprecated WorkOS fields are intentionally omitted.
+	_, err := client.UpdateOrganization(ctx, organizations.UpdateOrganizationOpts{ //nolint:exhaustruct_v5 // deprecated WorkOS fields are intentionally omitted.
 		Organization:     workosOrgID,
 		Name:             "",
 		Domains:          nil,

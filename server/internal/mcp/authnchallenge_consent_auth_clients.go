@@ -392,7 +392,7 @@ var errConsentNoUsableConnection = errors.New("no connection can serve this appr
 // consentCardsApprovable is the rule for approving through service cards.
 func consentCardsApprovable(cards []remoteSessionCard) bool {
 	return len(cards) == 0 || slices.ContainsFunc(cards, func(card remoteSessionCard) bool {
-		return (card.Connected && !card.Unavailable) || card.Chained
+		return (card.Connected && !card.connectionDown()) || card.Chained
 	})
 }
 
@@ -507,7 +507,7 @@ func (s *Service) gatewayConsentServiceChoices(ctx context.Context, r *http.Requ
 				name += " (" + card.ConnectedAs + ")"
 			}
 			options = append(options, consentAuthClientOption{ID: id, Name: name, Type: clientType, State: consentClientReady, ConnectClientID: "", Selected: false, registrationID: uuid.NullUUID{UUID: id, Valid: true}})
-			if card.Unavailable {
+			if card.connectionDown() {
 				outages[id] = true
 			}
 		}

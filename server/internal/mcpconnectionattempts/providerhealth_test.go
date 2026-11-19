@@ -308,6 +308,31 @@ func TestProviderHealth_BlockedStopIsNotAFailure(t *testing.T) {
 	require.Empty(t, report.Abandoned)
 }
 
+// Address rows keep the configured host, and still never count as the provider's failures.
+func TestProviderHealth_AddressRowsWithAHostAreNotCounted(t *testing.T) {
+	t.Parallel()
+
+	f := newProviderFixture(t, "account.box.com")
+	orgs := []string{"org-" + uuid.NewString(), "org-" + uuid.NewString(), "org-" + uuid.NewString()}
+	for i := range 6 {
+		code := CodeAddressNotAllowed
+		if i%2 == 1 {
+			code = CodeAddressNotFound
+		}
+		attempt := f.attempt(orgs[i%len(orgs)], 10*time.Minute)
+		f.write(attempt, f.step(StepProviderRefresh, code, true))
+		row, err := RowAt(attempt, StepProviderRefresh, code, true, attempt.StartedAt(), Provider("https://account.box.com/oauth"))
+		require.NoError(t, err)
+		require.Equal(t, "account.box.com", row.ProviderHost)
+	}
+
+	report := f.read(time.Hour, 0)
+	require.Equal(t, ProviderNormal, report.Status)
+	require.Equal(t, uint64(6), report.Counts.Attempts, "the host is kept, so the attempts are the provider's")
+	require.Zero(t, report.Counts.Failures)
+	require.Zero(t, report.Counts.Organizations)
+}
+
 func TestProviderHealth_RelabelsStoredDailyProviders(t *testing.T) {
 	t.Parallel()
 

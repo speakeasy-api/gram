@@ -1,4 +1,4 @@
-//nolint:exhaustruct // SDK optional defaults.
+//nolint:exhaustruct_v5 // SDK optional defaults.
 package adminmcp
 
 import (

@@ -14,6 +14,15 @@ package plugins
 // installs.
 const hooksBinaryVersion = "0.3.52"
 
+// hooksReleaseProviders lists the hook providers the pinned release's relay
+// supports (the Provider* constants in hooks/relay at the release commit).
+// Gates — e.g. a new provider's plugin package — check membership here instead
+// of comparing version numbers, so they open exactly when a release carrying
+// the provider is pinned.
+var hooksReleaseProviders = []string{
+	"pi",
+}
+
 // hooksBinarySHA256s pins the archive digests for hooksBinaryVersion. Bootstrap
 // scripts verify the same digests client-side after downloading.
 var hooksBinarySHA256s = map[string]string{

@@ -14763,6 +14763,9 @@ components:
         ai_platform_push_integrations_enabled:
           type: boolean
           description: Whether the organization can provision push integrations for AI platforms
+        assistants_available:
+          type: boolean
+          description: 'Whether this deployment can run assistants. A deployment-wide setting, not an organization entitlement: false when the deployment runs with the disabled assistant runtime provider. Absent from staff admin responses.'
         authz_challenge_logging_enabled:
           type: boolean
           description: Whether authz challenge logging to ClickHouse is enabled
@@ -14778,6 +14781,9 @@ components:
         device_agent:
           type: boolean
           description: Whether the organization uses the device agent (any device has polled agent.getPlugins). Derived from device-agent syncs, not an admin-settable feature.
+        functions_available:
+          type: boolean
+          description: 'Whether this deployment can run Speakeasy Functions. A deployment-wide setting, not an organization entitlement: false when the deployment runs with the disabled Functions provider. Absent from staff admin responses.'
         hooks_browser_login_enabled:
           type: boolean
           description: Whether generated hook plugins may mint per-user keys via the interactive browser login

@@ -65,7 +65,7 @@ func toolsListResponseFromRemoteMessage(request *ToolsListRequest, msg *RemoteMe
 		return resp, true
 	}
 
-	result := &mcp.ListToolsResult{
+	result := &mcp.ListToolsResult{ //nolint:exhaustruct_v5 // ResultType is promoted from an unexported SDK struct, so no literal can set it.
 		Meta:       nil,
 		Cacheable:  mcp.Cacheable{TTLMs: 0, CacheScope: ""},
 		NextCursor: "",
