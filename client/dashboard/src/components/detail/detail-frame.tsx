@@ -13,6 +13,13 @@ import { Link } from "react-router";
 export const DETAIL_HEADER_CONTROL_BUTTON =
   "text-foreground hover:bg-muted border-border bg-card flex h-8 w-full items-center gap-2 border px-3 text-sm font-medium whitespace-nowrap transition-colors hover:no-underline disabled:cursor-not-allowed disabled:opacity-50";
 
+/**
+ * The sticky tab strip's height: its `h-12` row plus the `border-b`. The
+ * scroll container publishes it as `--detail-strip`, which sticky content
+ * and in-page scrolls offset by; change it with the strip's classes.
+ */
+const TAB_STRIP_HEIGHT = "calc(3rem + 1px)";
+
 /** One tab in the strip under the header. */
 export type DetailFrameTab = {
   key: string;
@@ -125,9 +132,13 @@ export function DetailFrame({
           data-page-bound=""
           className={cn(
             "min-h-0 w-full flex-1 overflow-y-auto",
-            !fill &&
-              "[scroll-padding-top:var(--detail-strip)] [--detail-strip:49px]",
+            !fill && "[scroll-padding-top:var(--detail-strip)]",
           )}
+          style={
+            fill
+              ? undefined
+              : ({ "--detail-strip": TAB_STRIP_HEIGHT } as React.CSSProperties)
+          }
         >
           {fill ? null : headerBand}
           {fill ? null : tabStrip}
@@ -138,7 +149,7 @@ export function DetailFrame({
                 "mx-auto flex w-full max-w-[1270px] flex-col",
                 // A filling tab is a workspace: on a short screen it keeps the
                 // margins thin so the space goes to the tab itself.
-                fill ? "short:py-4 h-full pt-8 pb-12" : "min-h-full pt-8 pb-32",
+                fill ? "short:py-4 h-full pt-8 pb-12" : "pt-8 pb-32",
               )}
             >
               {children}
