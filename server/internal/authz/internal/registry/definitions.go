@@ -381,7 +381,7 @@ var Definitions = Registry{
 			Parent:     "project",
 			Category:   ScopeCategoryEnvironment,
 			Match:      MatchLoose,
-			Dimensions: []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: false}},
+			Dimensions: []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: true}},
 			Permissions: []Permission{
 				{
 					Action:        ActionRead,
@@ -455,7 +455,7 @@ var Definitions = Registry{
 			Parent:     "project",
 			Category:   ScopeCategoryAssistant,
 			Match:      MatchLoose,
-			Dimensions: []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: false}},
+			Dimensions: []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: true}},
 			Permissions: []Permission{
 				{
 					Action:        ActionRead,
@@ -548,7 +548,7 @@ var Definitions = Registry{
 			Parent:     "project",
 			Category:   ScopeCategoryInference,
 			Match:      MatchLoose,
-			Dimensions: []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: false}},
+			Dimensions: []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: true}},
 			Permissions: []Permission{
 				{
 					Action:        ActionExecute,
