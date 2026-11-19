@@ -7,6 +7,8 @@ import type { InventoryServer } from "./useServerInventory";
  * assigned one, unless it no longer works and the editor has a usable one,
  * which a save assigns in its place. Until the editor's own connection is
  * known, its checking or error state stands rather than a premature verdict.
+ * An assignment the viewer may not see stands too: they could not save their
+ * own in its place, so offering it would mislead.
  */
 export function displayedConnections(
   connections: OwnerConnections,
@@ -16,6 +18,7 @@ export function displayedConnections(
     const own = connections.byServer.get(serverId)?.status;
     const keepOwn =
       assigned.status !== "ready" &&
+      assigned.status !== "forbidden" &&
       assigned.status !== "not-required" &&
       (own === "ready" || own === "checking" || own === "error");
     if (!keepOwn) displayed.set(serverId, assigned);
@@ -26,7 +29,8 @@ export function displayedConnections(
 /**
  * The servers someone has to sign in to before the agent can call them: one
  * that signs each caller in, with no connection, an expired one, or one that
- * could not be checked.
+ * could not be checked. One whose connection the viewer may not see is not
+ * counted: nothing on it is theirs to fix.
  */
 export function serversNeedingConnection(
   servers: InventoryServer[],
