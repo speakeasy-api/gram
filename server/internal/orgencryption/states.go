@@ -109,6 +109,14 @@ var (
 	// provider.
 	ErrFenced = errors.New("orgencryption: transition state changed since the decision, decide again")
 
+	// ErrBackfillRunning means another backfill run holds the claim for the
+	// organization and use case. Nothing changed; try again once it ends.
+	ErrBackfillRunning = errors.New("orgencryption: a backfill run is already in progress for this organization and use case")
+
+	// ErrNoCopyStores means a Migrator has no copy stores for the use case,
+	// so it cannot reach the use case's values.
+	ErrNoCopyStores = errors.New("orgencryption: no copy stores for this use case")
+
 	// ErrDecisionExpired means a Decision was held longer than MaxDecisionHold
 	// before sealing. The writer decides again and seals the same plaintext.
 	ErrDecisionExpired = errors.New("orgencryption: transition decision expired, decide again")

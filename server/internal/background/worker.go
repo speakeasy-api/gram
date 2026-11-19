@@ -182,6 +182,11 @@ type WorkerOptions struct {
 	// disables unused managed ones; nil sweeps nothing.
 	OrganizationEncryptionSweeper OrganizationEncryptionSweeper
 
+	// OrganizationEncryptionMigrator backfills, verifies and sweeps the use
+	// cases moving to organization keys; nil does nothing hourly and rejects
+	// on-demand runs.
+	OrganizationEncryptionMigrator OrganizationEncryptionMigrator
+
 	// StartupSeeds is the reference data this worker keeps applied. The
 	// worker kicks one run per seed version when it starts.
 	StartupSeeds []activitiespkg.StartupSeed
@@ -256,6 +261,7 @@ func ForDeploymentProcessing(
 		Connections:                    nil,
 		IssuerKeySweeper:               nil,
 		OrganizationEncryptionSweeper:  nil,
+		OrganizationEncryptionMigrator: nil,
 		StartupSeeds:                   nil,
 		SlackClient:                    nil,
 		SlackDirectoryTokenRefresher:   nil,
@@ -388,6 +394,7 @@ func NewTemporalWorker(
 		Connections:                    nil,
 		IssuerKeySweeper:               nil,
 		OrganizationEncryptionSweeper:  nil,
+		OrganizationEncryptionMigrator: nil,
 		StartupSeeds:                   nil,
 		EmailService:                   nil,
 		AssistantsCore:                 nil,
@@ -454,6 +461,7 @@ func NewTemporalWorker(
 			Connections:                    conv.Default(o.Connections, opts.Connections),
 			IssuerKeySweeper:               conv.Default(o.IssuerKeySweeper, opts.IssuerKeySweeper),
 			OrganizationEncryptionSweeper:  conv.Default(o.OrganizationEncryptionSweeper, opts.OrganizationEncryptionSweeper),
+			OrganizationEncryptionMigrator: conv.Default(o.OrganizationEncryptionMigrator, opts.OrganizationEncryptionMigrator),
 			StartupSeeds:                   conv.DefaultSlice(o.StartupSeeds, opts.StartupSeeds),
 			EmailService:                   conv.Default(o.EmailService, opts.EmailService),
 			AssistantsCore:                 conv.Default(o.AssistantsCore, opts.AssistantsCore),
@@ -620,6 +628,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivityWithOptions(issuerKeySweep.Sweep, activity.RegisterOptions{Name: InternalSessionIssuerKeySweepActivityName})
 	organizationEncryptionSweep := NewOrganizationEncryptionSweepActivities(logger, opts.OrganizationEncryptionSweeper)
 	temporalWorker.RegisterActivityWithOptions(organizationEncryptionSweep.Sweep, activity.RegisterOptions{Name: OrganizationEncryptionSweepActivityName})
+	organizationEncryptionBackfill := NewOrganizationEncryptionBackfillActivities(logger, opts.OrganizationEncryptionMigrator)
+	temporalWorker.RegisterActivityWithOptions(organizationEncryptionBackfill.Backfill, activity.RegisterOptions{Name: OrganizationEncryptionBackfillActivityName})
+	temporalWorker.RegisterActivityWithOptions(organizationEncryptionBackfill.BackfillOrganization, activity.RegisterOptions{Name: OrganizationEncryptionBackfillOrganizationActivityName})
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomainV2)
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
@@ -806,6 +817,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncWorkflow)
 	temporalWorker.RegisterWorkflow(InternalSessionIssuerKeySweepWorkflow)
 	temporalWorker.RegisterWorkflow(OrganizationEncryptionSweepWorkflow)
+	temporalWorker.RegisterWorkflow(OrganizationEncryptionBackfillWorkflow)
+	temporalWorker.RegisterWorkflow(OrganizationEncryptionBackfillOrganizationWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerWorkflow)
 	temporalWorker.RegisterWorkflow(WeeklyUsageSummaryWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
@@ -1001,6 +1014,14 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 	// Preview databases clone dev's keys, so only the shared queue may run it.
 	if err := AddOrganizationEncryptionSweepSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add organization encryption sweep schedule", attr.SlogError(err))
+	}
+
+	// The backfill seals values under organization keys and destroys
+	// platform-key copies. Preview databases clone dev's keys, so only the
+	// shared queue may run it hourly; previews can still start one
+	// organization's run on demand.
+	if err := AddOrganizationEncryptionBackfillSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add organization encryption backfill schedule", attr.SlogError(err))
 	}
 
 	if err := AddPlatformUsageMetricsSchedule(ctx, env); err != nil {

@@ -9,6 +9,12 @@
 -- organization_id. A row without one (a session under a global client) finds
 -- no transition row and reads generation 0, the only generation such a row is
 -- sealed under.
+--
+-- A platform-key copy of '' stores no value: rows written before
+-- remote_sessions.access_token_encrypted became nullable can hold it. The
+-- waiting, sealed and count queries compare platform-key copies with <> '',
+-- which also excludes NULL, so such a copy is never waiting, unreadable,
+-- unattributed or counted. Clearing platform-key copies still removes it.
 
 -- name: SetRemoteSessionTokens :one
 -- Stores the access token, and the refresh token when replace_refresh_token
@@ -45,7 +51,7 @@ RETURNING *;
 SELECT s.id, s.access_token_encrypted::text AS platform_copy
 FROM remote_sessions AS s
 WHERE s.organization_id = @organization_id::text
-  AND s.access_token_encrypted IS NOT NULL
+  AND s.access_token_encrypted <> ''
   AND s.access_token_org_encrypted IS NULL
   AND (sqlc.narg('after')::uuid IS NULL OR s.id > sqlc.narg('after')::uuid)
 ORDER BY s.id
@@ -74,7 +80,7 @@ WHERE s.id = @id
 SELECT s.id, s.access_token_encrypted::text AS platform_copy, s.access_token_org_encrypted::text AS org_copy
 FROM remote_sessions AS s
 WHERE s.organization_id = @organization_id::text
-  AND s.access_token_encrypted IS NOT NULL
+  AND s.access_token_encrypted <> ''
   AND s.access_token_org_encrypted IS NOT NULL
   AND (sqlc.narg('after')::uuid IS NULL OR s.id > sqlc.narg('after')::uuid)
 ORDER BY s.id
@@ -90,23 +96,23 @@ LIMIT @limit_value;
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.access_token_encrypted IS NOT NULL
+          AND s.access_token_encrypted <> ''
           AND s.access_token_org_encrypted IS NULL
           AND u.id IS NULL
     )::bigint AS waiting,
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.access_token_encrypted IS NOT NULL
+          AND s.access_token_encrypted <> ''
           AND s.access_token_org_encrypted IS NULL
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
     COUNT(*) FILTER (
         WHERE s.organization_id IS NULL
-          AND (s.access_token_encrypted IS NOT NULL OR s.access_token_org_encrypted IS NOT NULL)
+          AND (s.access_token_encrypted <> '' OR s.access_token_org_encrypted IS NOT NULL)
     )::bigint AS unattributed,
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.access_token_encrypted IS NOT NULL
+          AND s.access_token_encrypted <> ''
     )::bigint AS platform_copies
 FROM remote_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
@@ -145,7 +151,7 @@ WHERE s.id IN (
 SELECT s.id, s.refresh_token_encrypted::text AS platform_copy
 FROM remote_sessions AS s
 WHERE s.organization_id = @organization_id::text
-  AND s.refresh_token_encrypted IS NOT NULL
+  AND s.refresh_token_encrypted <> ''
   AND s.refresh_token_org_encrypted IS NULL
   AND (sqlc.narg('after')::uuid IS NULL OR s.id > sqlc.narg('after')::uuid)
 ORDER BY s.id
@@ -172,7 +178,7 @@ WHERE s.id = @id
 SELECT s.id, s.refresh_token_encrypted::text AS platform_copy, s.refresh_token_org_encrypted::text AS org_copy
 FROM remote_sessions AS s
 WHERE s.organization_id = @organization_id::text
-  AND s.refresh_token_encrypted IS NOT NULL
+  AND s.refresh_token_encrypted <> ''
   AND s.refresh_token_org_encrypted IS NOT NULL
   AND (sqlc.narg('after')::uuid IS NULL OR s.id > sqlc.narg('after')::uuid)
 ORDER BY s.id
@@ -184,23 +190,23 @@ LIMIT @limit_value;
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.refresh_token_encrypted IS NOT NULL
+          AND s.refresh_token_encrypted <> ''
           AND s.refresh_token_org_encrypted IS NULL
           AND u.id IS NULL
     )::bigint AS waiting,
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.refresh_token_encrypted IS NOT NULL
+          AND s.refresh_token_encrypted <> ''
           AND s.refresh_token_org_encrypted IS NULL
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
     COUNT(*) FILTER (
         WHERE s.organization_id IS NULL
-          AND (s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL)
+          AND (s.refresh_token_encrypted <> '' OR s.refresh_token_org_encrypted IS NOT NULL)
     )::bigint AS unattributed,
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.refresh_token_encrypted IS NOT NULL
+          AND s.refresh_token_encrypted <> ''
     )::bigint AS platform_copies
 FROM remote_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
@@ -260,7 +266,7 @@ RETURNING c.id, c.organization_id, c.updated_at, c.access_token_encrypted, c.acc
 SELECT c.id, c.access_token_encrypted::text AS platform_copy
 FROM remote_session_ema_credentials AS c
 WHERE c.organization_id = @organization_id::text
-  AND c.access_token_encrypted IS NOT NULL
+  AND c.access_token_encrypted <> ''
   AND c.access_token_org_encrypted IS NULL
   AND (sqlc.narg('after')::uuid IS NULL OR c.id > sqlc.narg('after')::uuid)
 ORDER BY c.id
@@ -288,7 +294,7 @@ WHERE c.id = @id
 SELECT c.id, c.access_token_encrypted::text AS platform_copy, c.access_token_org_encrypted::text AS org_copy
 FROM remote_session_ema_credentials AS c
 WHERE c.organization_id = @organization_id::text
-  AND c.access_token_encrypted IS NOT NULL
+  AND c.access_token_encrypted <> ''
   AND c.access_token_org_encrypted IS NOT NULL
   AND (sqlc.narg('after')::uuid IS NULL OR c.id > sqlc.narg('after')::uuid)
 ORDER BY c.id
@@ -301,17 +307,17 @@ LIMIT @limit_value;
 -- unattributed: it stays on the platform key.
 SELECT
     COUNT(*) FILTER (
-        WHERE c.access_token_encrypted IS NOT NULL
+        WHERE c.access_token_encrypted <> ''
           AND c.access_token_org_encrypted IS NULL
           AND u.id IS NULL
     )::bigint AS waiting,
     COUNT(*) FILTER (
-        WHERE c.access_token_encrypted IS NOT NULL
+        WHERE c.access_token_encrypted <> ''
           AND c.access_token_org_encrypted IS NULL
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
     0::bigint AS unattributed,
-    COUNT(*) FILTER (WHERE c.access_token_encrypted IS NOT NULL)::bigint AS platform_copies
+    COUNT(*) FILTER (WHERE c.access_token_encrypted <> '')::bigint AS platform_copies
 FROM remote_session_ema_credentials AS c
 LEFT JOIN organization_encryption_unreadable_values AS u
   ON u.organization_id = c.organization_id
@@ -390,7 +396,7 @@ RETURNING *;
 SELECT s.id, s.identity_assertion_encrypted::text AS platform_copy
 FROM trusted_issuer_sessions AS s
 WHERE s.organization_id = @organization_id::text
-  AND s.identity_assertion_encrypted IS NOT NULL
+  AND s.identity_assertion_encrypted <> ''
   AND s.identity_assertion_org_encrypted IS NULL
   AND (sqlc.narg('after')::uuid IS NULL OR s.id > sqlc.narg('after')::uuid)
 ORDER BY s.id
@@ -418,7 +424,7 @@ WHERE s.id = @id
 SELECT s.id, s.identity_assertion_encrypted::text AS platform_copy, s.identity_assertion_org_encrypted::text AS org_copy
 FROM trusted_issuer_sessions AS s
 WHERE s.organization_id = @organization_id::text
-  AND s.identity_assertion_encrypted IS NOT NULL
+  AND s.identity_assertion_encrypted <> ''
   AND s.identity_assertion_org_encrypted IS NOT NULL
   AND (sqlc.narg('after')::uuid IS NULL OR s.id > sqlc.narg('after')::uuid)
 ORDER BY s.id
@@ -431,23 +437,23 @@ LIMIT @limit_value;
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.identity_assertion_encrypted IS NOT NULL
+          AND s.identity_assertion_encrypted <> ''
           AND s.identity_assertion_org_encrypted IS NULL
           AND u.id IS NULL
     )::bigint AS waiting,
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.identity_assertion_encrypted IS NOT NULL
+          AND s.identity_assertion_encrypted <> ''
           AND s.identity_assertion_org_encrypted IS NULL
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
     COUNT(*) FILTER (
         WHERE s.organization_id IS NULL
-          AND (s.identity_assertion_encrypted IS NOT NULL OR s.identity_assertion_org_encrypted IS NOT NULL)
+          AND (s.identity_assertion_encrypted <> '' OR s.identity_assertion_org_encrypted IS NOT NULL)
     )::bigint AS unattributed,
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.identity_assertion_encrypted IS NOT NULL
+          AND s.identity_assertion_encrypted <> ''
     )::bigint AS platform_copies
 FROM trusted_issuer_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
@@ -485,7 +491,7 @@ WHERE s.id IN (
 SELECT s.id, s.refresh_token_encrypted::text AS platform_copy
 FROM trusted_issuer_sessions AS s
 WHERE s.organization_id = @organization_id::text
-  AND s.refresh_token_encrypted IS NOT NULL
+  AND s.refresh_token_encrypted <> ''
   AND s.refresh_token_org_encrypted IS NULL
   AND (sqlc.narg('after')::uuid IS NULL OR s.id > sqlc.narg('after')::uuid)
 ORDER BY s.id
@@ -513,7 +519,7 @@ WHERE s.id = @id
 SELECT s.id, s.refresh_token_encrypted::text AS platform_copy, s.refresh_token_org_encrypted::text AS org_copy
 FROM trusted_issuer_sessions AS s
 WHERE s.organization_id = @organization_id::text
-  AND s.refresh_token_encrypted IS NOT NULL
+  AND s.refresh_token_encrypted <> ''
   AND s.refresh_token_org_encrypted IS NOT NULL
   AND (sqlc.narg('after')::uuid IS NULL OR s.id > sqlc.narg('after')::uuid)
 ORDER BY s.id
@@ -526,23 +532,23 @@ LIMIT @limit_value;
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.refresh_token_encrypted IS NOT NULL
+          AND s.refresh_token_encrypted <> ''
           AND s.refresh_token_org_encrypted IS NULL
           AND u.id IS NULL
     )::bigint AS waiting,
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.refresh_token_encrypted IS NOT NULL
+          AND s.refresh_token_encrypted <> ''
           AND s.refresh_token_org_encrypted IS NULL
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
     COUNT(*) FILTER (
         WHERE s.organization_id IS NULL
-          AND (s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL)
+          AND (s.refresh_token_encrypted <> '' OR s.refresh_token_org_encrypted IS NOT NULL)
     )::bigint AS unattributed,
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.refresh_token_encrypted IS NOT NULL
+          AND s.refresh_token_encrypted <> ''
     )::bigint AS platform_copies
 FROM trusted_issuer_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
@@ -580,7 +586,7 @@ WHERE s.id IN (
 SELECT s.id, s.upstream_subject_encrypted::text AS platform_copy
 FROM trusted_issuer_sessions AS s
 WHERE s.organization_id = @organization_id::text
-  AND s.upstream_subject_encrypted IS NOT NULL
+  AND s.upstream_subject_encrypted <> ''
   AND s.upstream_subject_org_encrypted IS NULL
   AND (sqlc.narg('after')::uuid IS NULL OR s.id > sqlc.narg('after')::uuid)
 ORDER BY s.id
@@ -608,7 +614,7 @@ WHERE s.id = @id
 SELECT s.id, s.upstream_subject_encrypted::text AS platform_copy, s.upstream_subject_org_encrypted::text AS org_copy
 FROM trusted_issuer_sessions AS s
 WHERE s.organization_id = @organization_id::text
-  AND s.upstream_subject_encrypted IS NOT NULL
+  AND s.upstream_subject_encrypted <> ''
   AND s.upstream_subject_org_encrypted IS NOT NULL
   AND (sqlc.narg('after')::uuid IS NULL OR s.id > sqlc.narg('after')::uuid)
 ORDER BY s.id
@@ -621,23 +627,23 @@ LIMIT @limit_value;
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.upstream_subject_encrypted IS NOT NULL
+          AND s.upstream_subject_encrypted <> ''
           AND s.upstream_subject_org_encrypted IS NULL
           AND u.id IS NULL
     )::bigint AS waiting,
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.upstream_subject_encrypted IS NOT NULL
+          AND s.upstream_subject_encrypted <> ''
           AND s.upstream_subject_org_encrypted IS NULL
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
     COUNT(*) FILTER (
         WHERE s.organization_id IS NULL
-          AND (s.upstream_subject_encrypted IS NOT NULL OR s.upstream_subject_org_encrypted IS NOT NULL)
+          AND (s.upstream_subject_encrypted <> '' OR s.upstream_subject_org_encrypted IS NOT NULL)
     )::bigint AS unattributed,
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.upstream_subject_encrypted IS NOT NULL
+          AND s.upstream_subject_encrypted <> ''
     )::bigint AS platform_copies
 FROM trusted_issuer_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
@@ -675,7 +681,7 @@ WHERE s.id IN (
 SELECT s.id, s.nonce_encrypted::text AS platform_copy
 FROM trusted_issuer_sessions AS s
 WHERE s.organization_id = @organization_id::text
-  AND s.nonce_encrypted IS NOT NULL
+  AND s.nonce_encrypted <> ''
   AND s.nonce_org_encrypted IS NULL
   AND (sqlc.narg('after')::uuid IS NULL OR s.id > sqlc.narg('after')::uuid)
 ORDER BY s.id
@@ -703,7 +709,7 @@ WHERE s.id = @id
 SELECT s.id, s.nonce_encrypted::text AS platform_copy, s.nonce_org_encrypted::text AS org_copy
 FROM trusted_issuer_sessions AS s
 WHERE s.organization_id = @organization_id::text
-  AND s.nonce_encrypted IS NOT NULL
+  AND s.nonce_encrypted <> ''
   AND s.nonce_org_encrypted IS NOT NULL
   AND (sqlc.narg('after')::uuid IS NULL OR s.id > sqlc.narg('after')::uuid)
 ORDER BY s.id
@@ -716,23 +722,23 @@ LIMIT @limit_value;
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.nonce_encrypted IS NOT NULL
+          AND s.nonce_encrypted <> ''
           AND s.nonce_org_encrypted IS NULL
           AND u.id IS NULL
     )::bigint AS waiting,
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.nonce_encrypted IS NOT NULL
+          AND s.nonce_encrypted <> ''
           AND s.nonce_org_encrypted IS NULL
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
     COUNT(*) FILTER (
         WHERE s.organization_id IS NULL
-          AND (s.nonce_encrypted IS NOT NULL OR s.nonce_org_encrypted IS NOT NULL)
+          AND (s.nonce_encrypted <> '' OR s.nonce_org_encrypted IS NOT NULL)
     )::bigint AS unattributed,
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.nonce_encrypted IS NOT NULL
+          AND s.nonce_encrypted <> ''
     )::bigint AS platform_copies
 FROM trusted_issuer_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
