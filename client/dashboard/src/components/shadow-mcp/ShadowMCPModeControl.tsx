@@ -90,12 +90,16 @@ export function ShadowMCPModeControl(): JSX.Element | null {
   const [pending, setPending] = useState<PendingChange | null>(null);
   const [principals, setPrincipals] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // Covers the whole save, including the policy refetch after the mutation,
+  // so the confirm button cannot fire a second write in between.
+  const [submitting, setSubmitting] = useState(false);
 
   // An unread policy list is not proof of either mode, so nothing is shown
   // rather than a mode the project may not be in.
   if (!policiesQuery.data) return null;
   const state = shadowMCPModeOf(policiesQuery.data.policies);
-  const saving = create.isPending || update.isPending || remove.isPending;
+  const saving =
+    submitting || create.isPending || update.isPending || remove.isPending;
   const groups = audienceGroups(
     membersQuery.data?.members ?? [],
     rolesQuery.data?.roles ?? [],
@@ -118,6 +122,7 @@ export function ShadowMCPModeControl(): JSX.Element | null {
 
   const apply = async (change: PendingChange) => {
     setError(null);
+    setSubmitting(true);
     try {
       if (change === "blocked") {
         await create.mutateAsync({
@@ -148,16 +153,21 @@ export function ShadowMCPModeControl(): JSX.Element | null {
       if (change === "allowed" && state.policy) {
         await remove.mutateAsync({ request: { id: state.policy.id } });
       }
-      await Promise.all([
-        invalidateAllRiskListPolicies(queryClient),
-        invalidateAllShadowMCPInventory(queryClient),
-        invalidateAllShadowMCPInventoryServer(queryClient),
-      ]);
-      setPending(null);
-      toast.success(COPY[change].done);
     } catch {
+      setSubmitting(false);
       setError("The setting could not be changed. Try again.");
+      return;
     }
+    // The inventory refetch reads usage from analytics and takes seconds on a
+    // large project, so the dialog never waits for it: the rows update in the
+    // background. The policy list is fast and decides the mode shown, so the
+    // dialog closes once it has the new mode.
+    void invalidateAllShadowMCPInventory(queryClient);
+    void invalidateAllShadowMCPInventoryServer(queryClient);
+    await invalidateAllRiskListPolicies(queryClient).catch(() => {});
+    setSubmitting(false);
+    setPending(null);
+    toast.success(COPY[change].done);
   };
 
   const copy = pending ? COPY[pending] : null;

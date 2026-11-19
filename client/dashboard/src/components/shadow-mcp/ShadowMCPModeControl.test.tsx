@@ -7,11 +7,15 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   update: vi.fn(),
   remove: vi.fn(),
+  invalidatePolicies: vi.fn(),
+  invalidateInventory: vi.fn(),
+  invalidateInventoryServer: vi.fn(),
+  toastSuccess: vi.fn(),
 }));
 
 vi.mock("@gram/client/react-query/riskListPolicies.js", () => ({
   useRiskListPolicies: () => ({ data: { policies: mocks.policies } }),
-  invalidateAllRiskListPolicies: async () => {},
+  invalidateAllRiskListPolicies: mocks.invalidatePolicies,
 }));
 vi.mock("@gram/client/react-query/riskCreatePolicy.js", () => ({
   useRiskCreatePolicyMutation: () => ({
@@ -91,13 +95,15 @@ vi.mock("@gram/client/react-query/riskPoliciesDelete.js", () => ({
   }),
 }));
 vi.mock("@gram/client/react-query/shadowMCPInventory.js", () => ({
-  invalidateAllShadowMCPInventory: async () => {},
+  invalidateAllShadowMCPInventory: mocks.invalidateInventory,
 }));
 vi.mock("@gram/client/react-query/shadowMCPInventoryServer.js", () => ({
-  invalidateAllShadowMCPInventoryServer: async () => {},
+  invalidateAllShadowMCPInventoryServer: mocks.invalidateInventoryServer,
 }));
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }));
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("sonner", () => ({
+  toast: { success: mocks.toastSuccess, error: vi.fn() },
+}));
 
 import { ShadowMCPModeControl } from "./ShadowMCPModeControl";
 
@@ -118,6 +124,13 @@ describe("ShadowMCPModeControl", () => {
     mocks.remove.mockResolvedValue(undefined);
     mocks.update.mockReset();
     mocks.update.mockResolvedValue(undefined);
+    mocks.invalidatePolicies.mockReset();
+    mocks.invalidatePolicies.mockResolvedValue(undefined);
+    mocks.invalidateInventory.mockReset();
+    mocks.invalidateInventory.mockResolvedValue(undefined);
+    mocks.invalidateInventoryServer.mockReset();
+    mocks.invalidateInventoryServer.mockResolvedValue(undefined);
+    mocks.toastSuccess.mockReset();
   });
   afterEach(cleanup);
 
@@ -146,6 +159,49 @@ describe("ShadowMCPModeControl", () => {
         },
       }),
     );
+  });
+
+  // In production the inventory refetch reads usage from analytics and takes
+  // seconds, so a dialog that waited for it stayed open after the save.
+  it("closes the dialog once saved without waiting for the inventory refetch", async () => {
+    mocks.invalidateInventory.mockReturnValue(new Promise(() => {}));
+    mocks.invalidateInventoryServer.mockReturnValue(new Promise(() => {}));
+    renderControl();
+
+    fireEvent.click(screen.getByRole("button", { name: "Blocked by default" }));
+    fireEvent.click(screen.getByRole("button", { name: "Block by default" }));
+
+    await vi.waitFor(() =>
+      expect(screen.queryByText("Block servers by default?")).toBeNull(),
+    );
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(
+      "MCP servers are now blocked by default.",
+    );
+    expect(mocks.invalidateInventory).toHaveBeenCalled();
+    expect(mocks.invalidateInventoryServer).toHaveBeenCalled();
+  });
+
+  it("keeps the dialog saving until the policy list has the new mode", async () => {
+    let refetched: () => void = () => {};
+    mocks.invalidatePolicies.mockReturnValue(
+      new Promise<void>((resolve) => {
+        refetched = resolve;
+      }),
+    );
+    renderControl();
+
+    fireEvent.click(screen.getByRole("button", { name: "Blocked by default" }));
+    fireEvent.click(screen.getByRole("button", { name: "Block by default" }));
+
+    const saving = await screen.findByRole("button", { name: "Saving…" });
+    expect(saving.hasAttribute("disabled")).toBe(true);
+    expect(mocks.toastSuccess).not.toHaveBeenCalled();
+
+    refetched();
+    await vi.waitFor(() =>
+      expect(screen.queryByText("Block servers by default?")).toBeNull(),
+    );
+    expect(mocks.create).toHaveBeenCalledTimes(1);
   });
 
   it("removes the policy to allow by default again", async () => {
