@@ -14,8 +14,13 @@ from pystreams.cmd.flags_service import service_options
 
 
 @pytest.fixture
-def parse():
-    """Parse argv/env through a command carrying only the service options."""
+def parse(monkeypatch: pytest.MonkeyPatch):
+    """Parse argv/env through a command carrying only the service options.
+
+    Clears any ambient GRAM_PARTITION so a value exported in the shell cannot
+    change the outcome; tests pass the environment they need explicitly.
+    """
+    monkeypatch.delenv("GRAM_PARTITION", raising=False)
 
     def _parse(args: list[str], env: dict[str, str] | None = None) -> dict:
         captured: dict = {}
@@ -52,6 +57,12 @@ def test_empty_partition_environment_variable_is_rejected(parse):
     # Matches the Go server, which rejects a set-but-empty GRAM_PARTITION.
     with pytest.raises(click.BadParameter, match="set but empty"):
         parse([], env={"GRAM_PARTITION": ""})
+
+
+def test_explicit_partition_wins_over_empty_environment_variable(parse):
+    # Matches the Go server, where a --partition flag takes precedence over
+    # the environment variable.
+    assert parse(["--partition", "eu"], env={"GRAM_PARTITION": ""})["partition"] == "eu"
 
 
 @pytest.mark.parametrize("bad", ["apac", "US", ""])

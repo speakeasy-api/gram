@@ -45,9 +45,18 @@ func TestParsePartitionAcceptsKnownPartitions(t *testing.T) {
 }
 
 func TestParsePartitionRejectsEmptyOrUnknown(t *testing.T) {
-	_, err := parsePartition("", true)
-	require.ErrorContains(t, err, `unknown partition ""`)
-
-	_, err = parsePartition("apac", true)
-	require.ErrorContains(t, err, `unknown partition "apac"`)
+	tests := []struct {
+		name    string
+		raw     string
+		wantErr string
+	}{
+		{name: "empty", raw: "", wantErr: `unknown partition ""`},
+		{name: "unknown", raw: "apac", wantErr: `unknown partition "apac"`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := parsePartition(tc.raw, true)
+			require.ErrorContains(t, err, tc.wantErr)
+		})
+	}
 }

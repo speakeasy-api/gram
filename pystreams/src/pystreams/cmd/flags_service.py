@@ -7,16 +7,22 @@ from pystreams import partition
 
 
 def _reject_empty_partition_env(
-    _ctx: click.Context, _param: click.Parameter, value: str
+    ctx: click.Context, param: click.Parameter, value: str
 ) -> str:
     """Fail on a GRAM_PARTITION that is set but empty.
 
     Click treats an empty environment variable as unset and falls back to the
     default, while the Go server rejects it. Rejecting it here too keeps a
     misrendered deployment from running pystreams as ``us`` while the Go
-    processes refuse to start.
+    processes refuse to start. An explicit ``--partition`` wins over the
+    environment, as it does in Go, so the check only applies when the value
+    came from the default.
     """
-    if os.environ.get("GRAM_PARTITION") == "":
+    source = ctx.get_parameter_source(param.name) if param.name else None
+    if (
+        source is click.core.ParameterSource.DEFAULT
+        and os.environ.get("GRAM_PARTITION") == ""
+    ):
         raise click.BadParameter(
             "GRAM_PARTITION is set but empty; set it to one of: "
             + ", ".join(partition.PARTITIONS)

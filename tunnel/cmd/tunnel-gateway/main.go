@@ -28,9 +28,14 @@ import (
 // puts on its logs, so the gateway's logs filter the same way.
 const partitionAttrKey = "gram.partition"
 
-// knownPartitions mirrors the closed set in server/internal/partition, which
-// this module cannot import. Its first entry is the default.
+// knownPartitions mirrors the closed set in server/internal/partition. Go's
+// internal visibility rule keeps this package from importing it, so the list
+// is repeated here and the tests pin it.
 var knownPartitions = []string{"us", "eu"}
+
+// defaultPartition is the partition the gateway runs in when GRAM_PARTITION is
+// unset, matching partition.Default in the server.
+const defaultPartition = "us"
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -221,7 +226,7 @@ func parseMaxSessions(raw string) (int, error) {
 // the default (us); set but empty or unknown is an error, as in the server.
 func parsePartition(raw string, set bool) (string, error) {
 	if !set {
-		return knownPartitions[0], nil
+		return defaultPartition, nil
 	}
 	if !slices.Contains(knownPartitions, raw) {
 		return "", fmt.Errorf("unknown partition %q: must be one of %s", raw, strings.Join(knownPartitions, ", "))
