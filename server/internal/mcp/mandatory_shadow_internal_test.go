@@ -17,7 +17,7 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -53,7 +53,7 @@ func newShadowHarness(t *testing.T, enabled bool) shadowHarness {
 	var logs bytes.Buffer
 	return shadowHarness{
 		service: &Service{
-			aiCatalog:          aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+			aiCatalog:          aivendorstest.NewStore(),
 			logger:             slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 			metrics:            mcpmetrics.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"), testenv.NewLogger(t)),
 			features:           flags,

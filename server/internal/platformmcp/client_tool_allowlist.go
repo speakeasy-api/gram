@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
 
 // chatGPTToolAllowlist is the whole catalogue a ChatGPT connection sees: the
@@ -62,7 +61,7 @@ var chatGPTClientIDs = sync.OnceValue(func() []string {
 // list. A dynamically registered client has an opaque client_id that matches
 // no entry, so it keeps the full catalogue.
 func isChatGPTClient(clientID string) bool {
-	preset, ok := admission.CatalogPreset(clientID)
+	preset, ok := compiledAICatalog().CatalogPreset(clientID)
 	return ok && slices.Contains(chatGPTClientIDs(), preset.URL)
 }
 

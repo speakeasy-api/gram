@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -65,7 +65,7 @@ func consentChainingFixture(t *testing.T, g *funcGovernor) (*Service, *ResolvedM
 	}
 	subject := urn.NewUserSubject("user-1")
 	return &Service{
-		aiCatalog:       aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		aiCatalog:       aivendorstest.NewStore(),
 		identityChainer: g, logger: testenv.NewLogger(t)}, endpoint, AuthnChallengeState{Subject: &subject}
 }
 

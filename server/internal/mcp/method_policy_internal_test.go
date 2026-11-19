@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
@@ -31,7 +31,7 @@ func TestMethodDispatchByRevision(t *testing.T) {
 						Params: json.RawMessage(`{"protocolVersion":"` + version + `"}`)}
 					logger := testenv.NewLogger(t)
 					service := &Service{
-						aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+						aiCatalog: aivendorstest.NewStore(),
 						logger:    logger, sessionClientInfo: sessionclientinfo.NewStore(nil, 1),
 						toolsetsRepo: toolsets_repo.New(failingDBTX{}), mcpMetadataRepo: metadata_repo.New(failingDBTX{})}
 					if method == mcpversions.MethodServerDiscover {
@@ -133,7 +133,7 @@ func TestUnavailableMethodNotificationHasNoResponse(t *testing.T) {
 	for _, method := range []string{mcpversions.MethodNotificationsInitialized, mcpversions.MethodPing, "unknown/method"} {
 		req := &rawRequest{Method: method}
 		body, err := (&Service{
-			aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+			aiCatalog: aivendorstest.NewStore(),
 		}).handlePlatformToolsetRequest(t.Context(), nil, platformtools.Toolset{}, req, "",
 			&mcpversions.Resolution{Declared: mcpversions.Version20260728, InEffect: mcpversions.Version20260728})
 		require.NoError(t, err)
@@ -190,7 +190,7 @@ func TestInitializeDeclaring20260728CannotStartHandshake(t *testing.T) {
 	resolution := mcpversions.Resolve(mcpversions.Version20251125, mcpversions.SupportedHostedToolset())
 	require.False(t, initializeNegotiable(req, resolution))
 	body, err := (&Service{
-		aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		aiCatalog: aivendorstest.NewStore(),
 	}).handlePlatformToolsetRequest(t.Context(), nil, platformtools.Toolset{}, req, "", &resolution)
 	require.Error(t, err)
 	require.Empty(t, body)

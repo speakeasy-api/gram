@@ -106,7 +106,7 @@ func ValidateServed(catalog *aivendors.Snapshot, targets []Target) error {
 	if err := Validate(catalog, targets); err != nil {
 		return err
 	}
-	data, err := json.Marshal(NewSnapshot(math.MaxInt32, targets, "").Envelope())
+	data, err := json.Marshal(NewSnapshot(math.MaxInt32, targets).Envelope())
 	if err != nil {
 		return fmt.Errorf("encode served list: %w", err)
 	}

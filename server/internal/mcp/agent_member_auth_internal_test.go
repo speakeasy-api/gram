@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -46,7 +46,7 @@ func TestAgentMemberSelectedResolution(t *testing.T) {
 				flags := new(feature.InMemory)
 				flags.SetFlag(feature.FlagAuthClientResolver, "test-org", mode == feature.AuthClientResolverEnforced)
 				flags.SetFlag(feature.FlagAuthClientResolverShadow, "test-org", mode == feature.AuthClientResolverShadow)
-				s := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), features: flags}
+				s := &Service{aiCatalog: aivendorstest.NewStore(), features: flags}
 				member := metaMember{serverID: uuid.New(), projectID: uuid.New(), slug: "selected-member", backend: metaMemberBackendProxied,
 					chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, upstreamUnavailable: tc.unavailable}
 				calls := 0
@@ -91,7 +91,7 @@ func TestAgentMemberSelectedHeaderAndNoAuth(t *testing.T) {
 	for _, clientType := range []string{"", authClientTypeStaticCredential, authClientTypePassThrough} {
 		t.Run("no-oauth/"+clientType, func(t *testing.T) {
 			t.Parallel()
-			s := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products()))}
+			s := &Service{aiCatalog: aivendorstest.NewStore()}
 			member := metaMember{serverID: uuid.New(), backend: metaMemberBackendProxied}
 			resolution := authClientResolution{outcome: authClientNoAuth}
 			if clientType != "" {
@@ -128,7 +128,7 @@ func TestAgentMemberSelectedAttachmentPin(t *testing.T) {
 				t.Parallel()
 				checked := uuid.New()
 				source := &fakeUpstreamTokens{issuerID: uuid.New(), bound: checked}
-				s := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), upstreamTokens: source}
+				s := &Service{aiCatalog: aivendorstest.NewStore(), upstreamTokens: source}
 				endpoint := &ResolvedMcpEndpoint{ProjectID: uuid.New(), OrganizationID: "test-org", UserSessionIssuerID: uuid.New()}
 				agent := uuid.New()
 				member := metaMember{serverID: uuid.New(), projectID: endpoint.ProjectID, slug: "pinned-member", backend: metaMemberBackendProxied,
@@ -281,7 +281,7 @@ func TestAgentKeyHandbackReadsTheAuthorizersConnection(t *testing.T) {
 					want = urn.NewUserSubject(owner)
 				}
 				source := &fakeUpstreamTokens{issuerID: uuid.New(), bound: uuid.New()}
-				s := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), upstreamTokens: source}
+				s := &Service{aiCatalog: aivendorstest.NewStore(), upstreamTokens: source}
 				endpoint := &ResolvedMcpEndpoint{ProjectID: uuid.New(), OrganizationID: "test-org", UserSessionIssuerID: uuid.New()}
 				member := metaMember{serverID: uuid.New(), projectID: endpoint.ProjectID, slug: "member", backend: metaMemberBackendProxied,
 					chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, typedAuthClient: typed,

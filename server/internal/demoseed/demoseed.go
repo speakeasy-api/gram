@@ -22,7 +22,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
 	"github.com/speakeasy-api/gram/server/internal/assets"
@@ -72,10 +71,7 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 	if err := catalogseed.EnsureCatalog(ctx, db); err != nil {
 		return fmt.Errorf("ensure AI catalog before demo seed: %w", err)
 	}
-	catalog, err := aivendors.Load(ctx, db, logger, aitargets.ValidateCatalog)
-	if err != nil {
-		return fmt.Errorf("load AI catalog before demo seed: %w", err)
-	}
+	catalog := aivendors.CompiledSnapshot()
 
 	return withSeedLock(ctx, logger, db, func(conn *pgxpool.Conn) error {
 		s, err := seedPostgres(ctx, logger, conn, blob, enc, assistantIssuerURL, serverURL, spec)

@@ -14,7 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -44,7 +44,7 @@ func inventoryFixtureWithTools(tools []consentInventoryTool) *consentToolInvento
 func inventoryServiceForTest(t *testing.T) *Service {
 	t.Helper()
 	return &Service{
-		aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		aiCatalog: aivendorstest.NewStore(),
 
 		logger: testenv.NewLogger(t),
 		consentToolInventoryCache: cache.NewTypedObjectCache[consentToolInventory](

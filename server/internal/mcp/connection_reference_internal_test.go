@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
+
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
@@ -25,7 +27,7 @@ func recordRefusal(t *testing.T, recorder *mcpconnectionattempts.Recorder) conte
 	t.Helper()
 	ctx := contextvalues.WithConnectionReferenceSlot(t.Context())
 	scope := mcpconnectionattempts.ServerScope("org", uuid.New(), uuid.New(), mcpconnectionattempts.AppDCR)
-	(&Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connections: recorder}).recordRequestOutcome(ctx, scope, mcpconnectionattempts.CodeInvalidRemoteSession, httptest.NewRequest(http.MethodPost, "/", nil))
+	(&Service{aiCatalog: aivendorstest.NewStore(), connections: recorder}).recordRequestOutcome(ctx, scope, mcpconnectionattempts.CodeInvalidRemoteSession, httptest.NewRequest(http.MethodPost, "/", nil))
 	return ctx
 }
 
@@ -100,7 +102,7 @@ func TestConnectionReference_NotShownToSomeoneElsesLink(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequestWithContext(ctx, http.MethodGet, "/", nil)
 
-	require.NoError(t, (&Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products()))}).answerConnectionRecoveryRefusal(w, r, connectionRecovery{}, errRecoveryOtherUser))
+	require.NoError(t, (&Service{aiCatalog: aivendorstest.NewStore()}).answerConnectionRecoveryRefusal(w, r, connectionRecovery{}, errRecoveryOtherUser))
 	require.NotContains(t, w.Body.String(), "Reference")
 }
 
@@ -111,7 +113,7 @@ func TestConnectionReference_MemberDispatchDoesNotInheritAnEarlierRow(t *testing
 	ctx := contextvalues.WithConnectionReferenceSlot(t.Context())
 	contextvalues.SetConnectionReference(ctx, "ref-member-a")
 
-	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), logger: testenv.NewLogger(t)}
+	service := &Service{aiCatalog: aivendorstest.NewStore(), logger: testenv.NewLogger(t)}
 	req := &rawRequest{JSONRPC: "2.0", ID: mcpjsonrpc.StringID("1"), Method: "tools/call", Params: nil}
 	_, err := service.executeMetaMemberTool(ctx, service.logger, &metaGateContext{}, nil, req, "member-b--tool", nil, nil)
 	require.Error(t, err, "the unknown server is answered with no row of its own")
@@ -143,14 +145,14 @@ func TestConnectionReference_StatusDoesNotClaimAnUnrelatedRefresh(t *testing.T) 
 
 func endingService(t *testing.T, recorder *mcpconnectionattempts.Recorder, coordination cache.Cache) *Service {
 	t.Helper()
-	return &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connections: recorder, userSessionRefreshReplayCoordination: coordination, attemptEndings: newAttemptEndings()}
+	return &Service{aiCatalog: aivendorstest.NewStore(), connections: recorder, userSessionRefreshReplayCoordination: coordination, attemptEndings: newAttemptEndings()}
 }
 
 func TestConnectionReference_AnAcceptedEndingLeavesItsID(t *testing.T) {
 	t.Parallel()
 
 	rec := mcpconnectionattemptstest.New(t)
-	attempt := openState().connectionAttempt(aivendors.NewSnapshot(aivendors.Products()), directEndpoint())
+	attempt := openState().connectionAttempt(aivendors.CompiledSnapshot(), directEndpoint())
 	ctx := contextvalues.WithConnectionReferenceSlot(t.Context())
 
 	endingService(t, rec.Recorder, &addOnlyCache{}).endAttemptOnce(ctx, testenv.NewLogger(t), attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeExpired)
@@ -161,7 +163,7 @@ func TestConnectionReference_ARejectedEndingLeavesNone(t *testing.T) {
 	t.Parallel()
 
 	rec := mcpconnectionattemptstest.NewLogsOff(t)
-	attempt := openState().connectionAttempt(aivendors.NewSnapshot(aivendors.Products()), directEndpoint())
+	attempt := openState().connectionAttempt(aivendors.CompiledSnapshot(), directEndpoint())
 	ctx := contextvalues.WithConnectionReferenceSlot(t.Context())
 
 	endingService(t, rec.Recorder, &addOnlyCache{}).endAttemptOnce(ctx, testenv.NewLogger(t), attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeExpired)
@@ -171,7 +173,7 @@ func TestConnectionReference_ARejectedEndingLeavesNone(t *testing.T) {
 func TestConnectionReference_ALostOrStalledClaimLeavesNone(t *testing.T) {
 	t.Parallel()
 
-	attempt := openState().connectionAttempt(aivendors.NewSnapshot(aivendors.Products()), directEndpoint())
+	attempt := openState().connectionAttempt(aivendors.CompiledSnapshot(), directEndpoint())
 	lost := &addOnlyCache{seen: map[string]bool{attemptEndMarker(attempt): true}}
 	ctx := contextvalues.WithConnectionReferenceSlot(t.Context())
 	endingService(t, mcpconnectionattemptstest.New(t).Recorder, lost).endAttemptOnce(ctx, testenv.NewLogger(t), attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeExpired)

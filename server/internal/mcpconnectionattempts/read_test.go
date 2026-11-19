@@ -31,7 +31,7 @@ func TestSQLAgreesWithSummarize(t *testing.T) {
 	server, member := uuid.New(), uuid.New()
 	subject := urn.NewUserSubject("user-" + uuid.NewString())
 	person := Subject(&subject)
-	app := AppOf(aivendors.NewSnapshot(aivendors.Products()), "https://claude.ai/oauth/claude-code-client-metadata", ClientIDAdmitted)
+	app := AppOf(aivendors.CompiledSnapshot(), "https://claude.ai/oauth/claude-code-client-metadata", ClientIDAdmitted)
 
 	var rows []Row
 	add := func(r Row) { rows = append(rows, r) }

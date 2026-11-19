@@ -1,9 +1,10 @@
 # AI client catalog snapshots
 
 `Load` reads one database snapshot of the AI client catalog. Nothing in
-production reads these snapshots yet: every reader still uses the compiled
-registry. `CompiledSnapshot` wraps that registry in the same `Snapshot` type so
-readers can move to an injected `Store` before the database becomes the source.
+production loads one yet. `CompiledSnapshot` wraps the compiled registry in the
+same `Snapshot` type. The API and MCP gateway services read an injected `Store`
+built from it, and Platform MCP reads it directly, so every reader sees exactly
+the registry until the database becomes the source.
 
 A `Store` refreshes on a minute timer. Each refresh reads live products and
 documents in a read-only, repeatable-read transaction. A full content

@@ -121,7 +121,7 @@ func TestDemoSeedSafety(t *testing.T) {
 	require.Equal(t, pgBeforeNoServer, pgAfterNoServer,
 		"MCP dependent fixture created orphan rows without a target server")
 
-	require.NoError(t, otherSeed.runClickHouse(ctx, ch, aivendors.NewSnapshot(aivendors.Products())))
+	require.NoError(t, otherSeed.runClickHouse(ctx, ch, aivendors.CompiledSnapshot()))
 
 	demoProjects := []string{DefaultSpec().ProjectID()}
 

@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -33,7 +33,7 @@ func newInternalTestService(t *testing.T) (context.Context, *Service, *pgxpool.P
 	require.NoError(t, err)
 
 	return ctx, &Service{
-		aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		aiCatalog: aivendorstest.NewStore(),
 		tracer:    nil, logger: logger, db: conn, chConn: nil, auth: nil, authz: nil, roleMgr: nil, audit: nil}, conn
 }
 

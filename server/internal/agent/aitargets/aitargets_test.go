@@ -15,9 +15,9 @@ import (
 func TestDefaultsAreValid(t *testing.T) {
 	t.Parallel()
 
-	defaults := aitargets.Defaults(aivendors.NewSnapshot(aivendors.Products()))
+	defaults := aitargets.Defaults(aivendors.CompiledSnapshot())
 	require.Len(t, defaults, 41)
-	require.NoError(t, aitargets.Validate(aivendors.NewSnapshot(aivendors.Products()), defaults))
+	require.NoError(t, aitargets.Validate(aivendors.CompiledSnapshot(), defaults))
 }
 
 func TestDefaultsReturnsACopy(t *testing.T) {
@@ -35,14 +35,14 @@ func TestDefaultsReturnsACopy(t *testing.T) {
 		return nil
 	}
 
-	first := aitargets.Defaults(aivendors.NewSnapshot(aivendors.Products()))
+	first := aitargets.Defaults(aivendors.CompiledSnapshot())
 	first[0].DisplayName = "mutated"
 	mutable := withBinaries(first)
 	require.NotNil(t, mutable)
 	mutatedID := mutable.ID
 	mutable.Signatures.Binaries[0] = "mutated"
 
-	fresh := aitargets.Defaults(aivendors.NewSnapshot(aivendors.Products()))
+	fresh := aitargets.Defaults(aivendors.CompiledSnapshot())
 	require.NotEqual(t, "mutated", fresh[0].DisplayName)
 	for _, target := range fresh {
 		if target.ID == mutatedID {
@@ -54,10 +54,10 @@ func TestDefaultsReturnsACopy(t *testing.T) {
 func TestSnapshotSortsResolvesAndCopies(t *testing.T) {
 	t.Parallel()
 
-	defaults := aitargets.Defaults(aivendors.NewSnapshot(aivendors.Products()))
+	defaults := aitargets.Defaults(aivendors.CompiledSnapshot())
 	reversed := slices.Clone(defaults)
 	slices.Reverse(reversed)
-	snapshot := aitargets.NewSnapshot(7, reversed, "")
+	snapshot := aitargets.NewSnapshot(7, reversed)
 	require.EqualValues(t, 7, snapshot.ListVersion)
 
 	targets := snapshot.Targets()
@@ -82,15 +82,14 @@ func TestSnapshotSortsResolvesAndCopies(t *testing.T) {
 func TestSnapshotETagTracksVersionAndContent(t *testing.T) {
 	t.Parallel()
 
-	defaults := aitargets.Defaults(aivendors.NewSnapshot(aivendors.Products()))
-	base := aitargets.NewSnapshot(1, defaults, "")
-	require.NotEqual(t, base.ETag, aitargets.NewSnapshot(1, defaults, "different-full-catalog-fingerprint").ETag, "a wire-version collision must not hide a catalog change")
-	require.Equal(t, base.ETag, aitargets.NewSnapshot(1, defaults, "").ETag, "same input must fingerprint identically")
-	require.NotEqual(t, base.ETag, aitargets.NewSnapshot(2, defaults, "").ETag, "a version bump must move the etag")
+	defaults := aitargets.Defaults(aivendors.CompiledSnapshot())
+	base := aitargets.NewSnapshot(1, defaults)
+	require.Equal(t, base.ETag, aitargets.NewSnapshot(1, defaults).ETag, "same input must fingerprint identically")
+	require.NotEqual(t, base.ETag, aitargets.NewSnapshot(2, defaults).ETag, "a version bump must move the etag")
 
-	renamed := aitargets.Defaults(aivendors.NewSnapshot(aivendors.Products()))
+	renamed := aitargets.Defaults(aivendors.CompiledSnapshot())
 	renamed[0].DisplayName = "Renamed"
-	require.NotEqual(t, base.ETag, aitargets.NewSnapshot(1, renamed, "").ETag, "a content change must move the etag")
+	require.NotEqual(t, base.ETag, aitargets.NewSnapshot(1, renamed).ETag, "a content change must move the etag")
 }
 
 // TestEnvelopeWireShape pins the JSON the device agent decodes.
@@ -108,7 +107,7 @@ func TestEnvelopeWireShape(t *testing.T) {
 			ProcessNames: []string{"Cursor"},
 		},
 		VersionHint: &aitargets.VersionHint{PlistKey: "CFBundleShortVersionString"},
-	}}, "")
+	}})
 
 	data, err := json.Marshal(snapshot.Envelope())
 	require.NoError(t, err)
@@ -137,7 +136,7 @@ func TestEnvelopeWireShape(t *testing.T) {
 func TestEnvelopeOmitsAbsentVersionHint(t *testing.T) {
 	t.Parallel()
 
-	snapshot := aitargets.NewSnapshot(1, aitargets.Defaults(aivendors.NewSnapshot(aivendors.Products()))[:1], "")
+	snapshot := aitargets.NewSnapshot(1, aitargets.Defaults(aivendors.CompiledSnapshot())[:1])
 	data, err := json.Marshal(snapshot.Envelope())
 	require.NoError(t, err)
 	require.NotContains(t, string(data), "version_hint")

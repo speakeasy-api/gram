@@ -25,6 +25,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
@@ -163,11 +164,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		return fmt.Errorf("connect to database: %w", err)
 	}
 	shutdown.dbClose = db.Close
-	aiCatalog, stopAICatalog, err := startAICatalog(ctx, db, logger)
-	if err != nil {
-		return err
-	}
-	defer stopAICatalog()
+	aiCatalog := aivendors.NewStore(aivendors.CompiledSnapshot())
 
 	if err := o11y.StartObservers(meterProvider, db); err != nil {
 		return fmt.Errorf("start database observers: %w", err)

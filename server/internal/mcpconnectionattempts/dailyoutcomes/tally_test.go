@@ -95,7 +95,7 @@ func TestTallyRowsFoldsNamesSharedByTooFewOrganizations(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			counts := newTally(aivendors.NewSnapshot(aivendors.Products()))
+			counts := newTally(aivendors.CompiledSnapshot())
 			ended := mcpconnectionattempts.Ending{Step: "inbound_token", Outcome: mcpconnectionattempts.OutcomeConnected, Reason: "", At: BackfillStart}
 			for _, a := range tt.attempts {
 				summary := mcpconnectionattempts.AttemptSummary{OrganizationID: a.org, ProviderHost: a.provider, AppKey: a.app, ClientFamily: a.client, Weight: 1}

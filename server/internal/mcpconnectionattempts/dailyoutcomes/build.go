@@ -15,7 +15,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 
-	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -109,8 +108,8 @@ func NewBuilder(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgx
 	if err != nil {
 		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterUnknownLabels), attr.SlogError(err))
 	}
-	return &Builder{logger: logger, db: db, ch: ch, skippedDays: skipped, unknownLabels: unknown, backfillStart: BackfillStart, clock: time.Now, catalog: func(ctx context.Context) (*aivendors.Snapshot, error) {
-		return aivendors.Load(ctx, db, logger, aitargets.ValidateCatalog)
+	return &Builder{logger: logger, db: db, ch: ch, skippedDays: skipped, unknownLabels: unknown, backfillStart: BackfillStart, clock: time.Now, catalog: func(context.Context) (*aivendors.Snapshot, error) {
+		return aivendors.CompiledSnapshot(), nil
 	}}
 }
 

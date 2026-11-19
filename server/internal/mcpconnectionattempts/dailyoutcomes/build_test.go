@@ -149,7 +149,7 @@ func TestBuildDayDecidesHowAttemptsEnded(t *testing.T) {
 	f := newFixture(t)
 	day := f.day(daysAgoOutcomes)
 	server := uuid.New()
-	app := mcpconnectionattempts.AppOf(aivendors.NewSnapshot(aivendors.Products()), catalogApp, mcpconnectionattempts.ClientIDAdmitted)
+	app := mcpconnectionattempts.AppOf(aivendors.CompiledSnapshot(), catalogApp, mcpconnectionattempts.ClientIDAdmitted)
 
 	connected := f.attempt(server, app, day.Add(time.Hour))
 	connectedRow := f.row(connected, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, time.Minute)
@@ -410,7 +410,7 @@ func TestBuildDayKeepsVendorNamesOnlyWhenSeveralOrganizationsUseThem(t *testing.
 	f := newFixture(t)
 	day := f.day(daysAgoPrivacy)
 	write := func(org, provider, appURL string) {
-		a := mcpconnectionattempts.AttemptAt(uuid.New(), day.Add(time.Hour), mcpconnectionattempts.ServerScope(org, uuid.New(), uuid.New(), mcpconnectionattempts.AppOf(aivendors.NewSnapshot(aivendors.Products()), appURL, mcpconnectionattempts.ClientIDAdmitted)))
+		a := mcpconnectionattempts.AttemptAt(uuid.New(), day.Add(time.Hour), mcpconnectionattempts.ServerScope(org, uuid.New(), uuid.New(), mcpconnectionattempts.AppOf(aivendors.CompiledSnapshot(), appURL, mcpconnectionattempts.ClientIDAdmitted)))
 		f.write(f.row(a, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, time.Minute, mcpconnectionattempts.Provider(provider)))
 	}
 	newOrg := func() string { return "org-" + uuid.NewString() }

@@ -16,7 +16,7 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -57,7 +57,7 @@ func TestStaleNoAuthClassification(t *testing.T) {
 
 func TestStaleChoiceErrorChain(t *testing.T) {
 	t.Parallel()
-	s := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products()))}
+	s := &Service{aiCatalog: aivendorstest.NewStore()}
 	member := metaMember{slug: "db"}
 	s.applyMemberAuthClient(t.Context(), &member, gapWithChoice(authClientReasonNoAuthForbidden), nil)
 	stale, ok := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable)
@@ -96,7 +96,7 @@ func TestStaleChoiceWarnsAtTheCallWithTheSubject(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	s := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), staleNoAuthLog: newOnceLog()}
+	s := &Service{aiCatalog: aivendorstest.NewStore(), staleNoAuthLog: newOnceLog()}
 	member := metaMember{serverID: uuid.New(), slug: "db"}
 	gate := func(subject urn.SessionSubject) *metaGateContext {
 		return &metaGateContext{organizationID: "org", authentication: &issuerGateAuthentication{subject: subject}}
@@ -116,7 +116,7 @@ func TestStaleChoiceWarnsAtTheCallWithTheSubject(t *testing.T) {
 
 func TestStaleChoiceEveryNonPersonGetsOwnerCopy(t *testing.T) {
 	t.Parallel()
-	s := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), logger: testenv.NewLogger(t)}
+	s := &Service{aiCatalog: aivendorstest.NewStore(), logger: testenv.NewLogger(t)}
 	member := metaMember{slug: "db", upstreamUnavailable: staleMemberError(authClientReasonNoAuthForbidden)}
 	gates := map[string]*metaGateContext{"no sign-in": {memberChoices: &memberChoices{}}}
 	for name, tc := range map[string]struct {
@@ -290,7 +290,7 @@ func TestStaleChoiceFailedLookupOffersOnlyARetry(t *testing.T) {
 func TestUnreadableChoiceSaysItCouldNotBeChecked(t *testing.T) {
 	t.Parallel()
 	member := metaMember{slug: "db"}
-	(&Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products()))}).applyMemberAuthClient(t.Context(), &member, gapResolution(authClientReasonMissingChoice), errors.New("read failed"))
+	(&Service{aiCatalog: aivendorstest.NewStore()}).applyMemberAuthClient(t.Context(), &member, gapResolution(authClientReasonMissingChoice), errors.New("read failed"))
 	require.Equal(t, `This server's connection could not be checked. Try again in a few minutes.`, memberErrorMessage(member.upstreamUnavailable))
 }
 
@@ -298,7 +298,7 @@ func TestStaleChoiceCountsEveryAttemptPastLogDedupe(t *testing.T) {
 	t.Parallel()
 	reader := sdkmetric.NewManualReader()
 	logger := testenv.NewLogger(t)
-	s := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), staleNoAuthLog: newOnceLog(), metrics: mcpmetrics.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"), logger)}
+	s := &Service{aiCatalog: aivendorstest.NewStore(), staleNoAuthLog: newOnceLog(), metrics: mcpmetrics.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"), logger)}
 	gate := &metaGateContext{authentication: &issuerGateAuthentication{subject: urn.NewUserSubject("user_1")}}
 	member := metaMember{serverID: uuid.New()}
 	for range 3 {
@@ -324,7 +324,7 @@ func TestStaleChoiceCountsEveryAttemptPastLogDedupe(t *testing.T) {
 
 func TestConnectOffersNoLinkWhenConsentCannotReplaceTheChoice(t *testing.T) {
 	t.Parallel()
-	backend := &metaCodeBackend{service: &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), logger: testenv.NewLogger(t)}}
+	backend := &metaCodeBackend{service: &Service{aiCatalog: aivendorstest.NewStore(), logger: testenv.NewLogger(t)}}
 	gate := &metaGateContext{authentication: &issuerGateAuthentication{subject: urn.NewAgentSubject(uuid.New())}}
 	_, err := backend.connectRefusal(t.Context(), gate, metaMember{slug: "db"})
 	require.NoError(t, err, "only a stale choice is refused")
@@ -336,7 +336,7 @@ func TestConnectOffersNoLinkWhenConsentCannotReplaceTheChoice(t *testing.T) {
 
 func TestCodeModeHelperFailureNonPersonGetsOwnerCopy(t *testing.T) {
 	t.Parallel()
-	backend := &metaCodeBackend{service: &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), logger: testenv.NewLogger(t)}}
+	backend := &metaCodeBackend{service: &Service{aiCatalog: aivendorstest.NewStore(), logger: testenv.NewLogger(t)}}
 	gate := &metaGateContext{authentication: &issuerGateAuthentication{refreshableUserSession: true, subject: urn.NewAgentSubject(uuid.New())}, memberChoices: &memberChoices{}}
 	err := backend.helperFailure(t.Context(), gate, metaMember{slug: "db"}, staleMemberError(authClientReasonNoAuthForbidden))
 	refused, ok := errors.AsType[*codemode.MemberRefusalError](err)
@@ -432,7 +432,7 @@ func TestStaleChoiceCallRecordsTheMessageRemedy(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			rec := mcpconnectionattemptstest.New(t)
-			s := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connections: rec.Recorder, logger: testenv.NewLogger(t), staleNoAuthLog: newOnceLog(), telemLogger: noTelemetryLogs(t)}
+			s := &Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder, logger: testenv.NewLogger(t), staleNoAuthLog: newOnceLog(), telemLogger: noTelemetryLogs(t)}
 			gate := tc.gate(s)
 			body := callApprovedMember(t, s, gate, metaMember{slug: "db", serverID: tc.member, upstreamUnavailable: stale})
 			require.Contains(t, body, tc.text)
@@ -476,7 +476,7 @@ func TestStaleChoiceSavedOnlyFromTheCredential(t *testing.T) {
 	saved := gapWithChoice(authClientReasonNoAuthForbidden)
 	saved.saved = true
 	member := metaMember{serverID: uuid.New(), slug: "linear"}
-	(&Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products()))}).applyMemberAuthClient(t.Context(), &member, saved, nil)
+	(&Service{aiCatalog: aivendorstest.NewStore()}).applyMemberAuthClient(t.Context(), &member, saved, nil)
 	stale, ok := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable)
 	require.True(t, ok)
 	require.True(t, stale.saved)
@@ -485,7 +485,7 @@ func TestStaleChoiceSavedOnlyFromTheCredential(t *testing.T) {
 // A person told to reconnect first is told consent is needed, not that signing in won't help.
 func TestStaleChoiceStatusFollowsTheMessage(t *testing.T) {
 	t.Parallel()
-	s := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), logger: testenv.NewLogger(t)}
+	s := &Service{aiCatalog: aivendorstest.NewStore(), logger: testenv.NewLogger(t)}
 	member := metaMember{slug: "db", serverID: uuid.New(), upstreamUnavailable: staleMemberError(authClientReasonNoAuthForbidden)}
 	unrefreshable := staleChoiceRemedyGate(s, nil)
 	unrefreshable.authentication.refreshableUserSession = false

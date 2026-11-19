@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
@@ -52,7 +52,7 @@ func TestRemoteLoginConsentURL(t *testing.T) {
 			parsed, err := url.Parse(serverURL)
 			require.NoError(t, err)
 			service := &Service{
-				aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+				aiCatalog: aivendorstest.NewStore(),
 				serverURL: parsed, authenticationHostBaseURL: tc.authenticationHost}
 			endpoint := &ResolvedMcpEndpoint{RouteBase: mcproute.MCP, Slug: "billing", useAuthenticationHost: tc.useAuthenticationHost, CustomDomainID: uuid.NullUUID{UUID: uuid.New(), Valid: tc.customDomain}}
 			if tc.shared {
@@ -95,7 +95,7 @@ func TestRedirectToAuthorizationServer(t *testing.T) {
 			parsed, err := url.Parse(serverURL)
 			require.NoError(t, err)
 			service := &Service{
-				aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+				aiCatalog: aivendorstest.NewStore(),
 				serverURL: parsed, authenticationHostBaseURL: authenticationHost}
 			endpoint := &ResolvedMcpEndpoint{RouteBase: mcproute.MCP, Slug: "billing", useAuthenticationHost: true}
 

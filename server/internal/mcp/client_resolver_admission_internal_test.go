@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -64,7 +64,7 @@ func TestAdmitCIMDClient_PlatformAssistant(t *testing.T) {
 	serverURL, err := url.Parse("https://gram.example.test")
 	require.NoError(t, err)
 	svc := &Service{
-		aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		aiCatalog: aivendorstest.NewStore(),
 
 		logger:               testenv.NewLogger(t),
 		db:                   conn,
@@ -156,7 +156,7 @@ func TestAdmitCIMDClient_PlatformAssistantOnPinnedOrigin(t *testing.T) {
 	outbound, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
 	svc := &Service{
-		aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		aiCatalog: aivendorstest.NewStore(),
 		logger:    testenv.NewLogger(t), db: conn, serverURL: serverURL, cimdAdmissionMetrics: nil}
 	svc.SetCallbackOrigins(remotesessions.CallbackOrigins{Outbound: outbound, Registration: nil})
 	endpoint := &ResolvedMcpEndpoint{

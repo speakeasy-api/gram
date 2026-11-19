@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -50,7 +50,7 @@ func TestPrepareProxyBackendContextUsesCurrentBillingTier(t *testing.T) {
 
 	repo := &proxyTierBillingRepo{tier: billing.TierPro}
 	s := &Service{
-		aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		aiCatalog: aivendorstest.NewStore(),
 		db:        db, billingRepository: repo}
 	endpoint := &mcpendpointsrepo.McpEndpoint{ProjectID: project.ID}
 	server := &mcpserversrepo.McpServer{Visibility: mcpservers.VisibilityPublic}

@@ -50,9 +50,6 @@ func (s *Service) ListAiScanTargets(ctx context.Context, _ *gen.ListAiScanTarget
 	}
 	list, err := aitargets.LoadOrganizationList(ctx, s.repo, authCtx.ActiveOrganizationID, catalog)
 	if err != nil {
-		if errors.Is(err, aitargets.ErrInvalidTarget) {
-			return nil, oops.E(oops.CodeBadRequest, err, "%v", err).LogWarn(ctx, s.logger)
-		}
 		return nil, oops.E(oops.CodeUnexpected, err, "list ai scan targets").LogError(ctx, s.logger)
 	}
 	return mv.BuildAiScanTargetListView(list), nil
@@ -128,10 +125,12 @@ func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiS
 	}
 	list, err := aitargets.LoadOrganizationList(ctx, queries, organizationID, catalog)
 	if err != nil {
-		if errors.Is(err, aitargets.ErrInvalidTarget) {
-			return nil, oops.E(oops.CodeBadRequest, err, "%v", err)
-		}
 		return nil, oops.E(oops.CodeUnexpected, err, "read updated ai scan targets").LogError(ctx, s.logger)
+	}
+	// The served set is bounded by what agents accept; the check runs under
+	// the organization's lock so concurrent writers cannot slip past it.
+	if err := aitargets.ValidateServed(catalog, list.Snapshot.Targets()); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "%v", err)
 	}
 	entry, ok := list.Entry(target.ID)
 	if !ok {
@@ -211,7 +210,7 @@ func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiS
 	}
 
 	return &gen.AiScanTargetMutationResult{
-		ListVersion: int(catalog.Version()),
+		ListVersion: int(aitargets.ListVersion()),
 		Target:      mv.BuildAiScanTargetView(entry),
 	}, nil
 }
@@ -246,10 +245,15 @@ func (s *Service) DeleteAiScanTarget(ctx context.Context, payload *gen.DeleteAiS
 	if _, err := queries.DeleteAIScanTarget(ctx, repo.DeleteAIScanTargetParams{OrganizationID: organizationID, ID: id}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "delete ai scan target").LogError(ctx, s.logger)
 	}
-	// Removing an organization row can only shrink the served set or leave a
-	// built-in's authoritative definition unchanged. Allow incremental cleanup
-	// when a catalog refresh has invalidated several custom targets; validating
-	// the remaining list here would prevent deleting any of them.
+	// Dropping a customization serves the default again, which can grow the
+	// served set, so it is checked like any other write.
+	list, err := aitargets.LoadOrganizationList(ctx, queries, organizationID, catalog)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read updated ai scan targets").LogError(ctx, s.logger)
+	}
+	if err := aitargets.ValidateServed(catalog, list.Snapshot.Targets()); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "%v", err)
+	}
 
 	before := aitargets.ResolveBuiltinDefinition(catalog, aitargets.EntryFromRow(row).Target)
 	if err := s.audit.LogAiScanTargetDelete(ctx, dbtx, audit.LogAiScanTargetDeleteEvent{
@@ -267,7 +271,7 @@ func (s *Service) DeleteAiScanTarget(ctx context.Context, payload *gen.DeleteAiS
 		return nil, oops.E(oops.CodeUnexpected, err, "commit ai scan target delete").LogError(ctx, s.logger)
 	}
 
-	return &gen.DeleteAiScanTargetResult{ListVersion: int(catalog.Version())}, nil
+	return &gen.DeleteAiScanTargetResult{ListVersion: int(aitargets.ListVersion())}, nil
 }
 
 // aiScanTargetBefore is what the organization's list held for id ahead of a

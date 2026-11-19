@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -21,7 +21,7 @@ func newRetiredProxyMux(t *testing.T) goahttp.Muxer {
 
 	mux := goahttp.NewMuxer()
 	attachRetiredProxy(mux, &Service{
-		aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		aiCatalog: aivendorstest.NewStore(),
 		logger:    testenv.NewLogger(t)})
 	return mux
 }

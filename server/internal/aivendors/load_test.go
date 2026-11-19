@@ -2,7 +2,9 @@ package aivendors_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -45,7 +47,8 @@ func TestDatabaseCatalogPreservesShippedAdmissionAndProducts(t *testing.T) {
 	actual, ok := snapshot.CatalogPreset("https://chatgpt.com/oauth/codex/client.json")
 	require.True(t, ok)
 	require.Equal(t, "codex", actual.ProductID)
-	require.ElementsMatch(t, aitargets.Defaults(aivendors.NewSnapshot(aivendors.Products())), aitargets.Defaults(snapshot))
+	// Documents load in URL order, so matcher lists may differ in order only.
+	require.ElementsMatch(t, sortedMatchers(aitargets.Defaults(aivendors.CompiledSnapshot())), sortedMatchers(aitargets.Defaults(snapshot)))
 	require.NoError(t, aitargets.Validate(snapshot, aitargets.Defaults(snapshot)))
 }
 
@@ -126,6 +129,7 @@ func TestLoadOmitsPatternsWithoutRealPath(t *testing.T) {
 	patterns := []string{
 		"https://example.com?redirect=/oauth/*/client.json",
 		"https://example.com#/oauth/*/client.json",
+		"https://:443/*/client.json",
 	}
 	for _, pattern := range patterns {
 		_, err = seedrepo.New(db).InsertDocument(t.Context(), seedrepo.InsertDocumentParams{
@@ -274,9 +278,89 @@ func TestOrganizationOverlayRejectsCombinedLimits(t *testing.T) {
 			_, err = queries.UpsertAIScanTarget(t.Context(), aitargets.UpsertParams(organizationID, custom))
 			require.NoError(t, err)
 			list, err := aitargets.LoadOrganizationList(t.Context(), queries, organizationID, catalog)
+			require.NoError(t, err)
+			err = aitargets.ValidateServed(catalog, list.Snapshot.Targets())
 			require.ErrorIs(t, err, aitargets.ErrInvalidTarget)
 			require.ErrorContains(t, err, want)
-			require.Nil(t, list)
 		})
 	}
+}
+
+func TestLoadedSnapshotMatchesCompiledSnapshot(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
+	loaded, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
+	require.NoError(t, err)
+	compiled := aivendors.CompiledSnapshot()
+	ids := func(s *aivendors.Snapshot) []string {
+		var out []string
+		for _, p := range s.Products() {
+			out = append(out, p.ID)
+		}
+		return out
+	}
+	require.ElementsMatch(t, ids(compiled), ids(loaded))
+	var probes []string
+	for _, entry := range aivendors.CIMDDocuments() {
+		probes = append(probes, entry.Document.URL)
+		if entry.Document.Pattern {
+			for _, segment := range []string{"probe", "codex", "probe/extra"} {
+				probes = append(probes, strings.ReplaceAll(entry.Document.URL, "*", segment))
+			}
+		}
+	}
+	for _, probe := range probes {
+		want, wantOK := compiled.CatalogPreset(probe)
+		got, gotOK := loaded.CatalogPreset(probe)
+		require.Equal(t, wantOK, gotOK, probe)
+		require.Equal(t, want, got, probe)
+	}
+	// Fingerprints differ only by order: the database lists products by id and
+	// documents by URL in byte order, the registry by declaration.
+	require.NotEqual(t, compiled.Fingerprint(), loaded.Fingerprint())
+	reordered := compiled.Products()
+	slices.SortFunc(reordered, func(a, b aivendors.Product) int { return strings.Compare(a.ID, b.ID) })
+	for i := range reordered {
+		slices.SortFunc(reordered[i].Documents, func(a, b aivendors.Document) int { return strings.Compare(a.URL, b.URL) })
+	}
+	require.Equal(t, loaded.Fingerprint(), aivendors.NewSnapshot(reordered).Fingerprint())
+}
+
+func TestLoadRequiresValidator(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	snapshot, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), nil)
+	require.Error(t, err)
+	require.Nil(t, snapshot)
+}
+
+func TestRejectedCatalogIsNotPublished(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
+	logger := testenv.NewLogger(t)
+	errRejected := errors.New("rejected")
+	reject := func(*aivendors.Snapshot) error { return errRejected }
+	snapshot, err := aivendors.Load(t.Context(), db, logger, reject)
+	require.ErrorIs(t, err, errRejected)
+	require.Nil(t, snapshot)
+	initial, err := aivendors.Load(t.Context(), db, logger, aitargets.ValidateCatalog)
+	require.NoError(t, err)
+	store := aivendors.NewStore(initial)
+	require.NoError(t, testrepo.New(db).EditProductFixture(t.Context(), testrepo.EditProductFixtureParams{ID: "zed", DisplayName: "Zed Updated", DeletedAt: pgtype.Timestamptz{}}))
+	require.ErrorIs(t, store.Refresh(t.Context(), db, logger, reject), errRejected)
+	require.Same(t, initial, store.Snapshot())
+}
+
+func sortedMatchers(targets []aitargets.Target) []aitargets.Target {
+	for i := range targets {
+		slices.Sort(targets[i].GatewayClient.CIMDVendorKeys)
+		slices.Sort(targets[i].GatewayClient.OAuthClientIDs)
+		slices.Sort(targets[i].GatewayClient.ClientInfoNames)
+	}
+	return targets
 }

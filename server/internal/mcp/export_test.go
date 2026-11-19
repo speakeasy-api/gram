@@ -77,7 +77,7 @@ func (s *Service) SetConnectionRecorder(recorder *mcpconnectionattempts.Recorder
 
 // ConnectionAttempt exposes the state's connection attempt.
 func (a AuthnChallengeState) ConnectionAttempt(endpoint *ResolvedMcpEndpoint) mcpconnectionattempts.Attempt {
-	return a.connectionAttempt(aivendors.NewSnapshot(aivendors.Products()), endpoint)
+	return a.connectionAttempt(aivendors.CompiledSnapshot(), endpoint)
 }
 
 // SetEnvironmentLoader replaces the environment loader.

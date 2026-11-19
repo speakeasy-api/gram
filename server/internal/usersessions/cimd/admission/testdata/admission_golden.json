@@ -1,0 +1,5737 @@
+[
+  {
+    "client_id": "https://claude.ai/oauth/claude-code-client-metadata",
+    "match_reason": "admitted_catalog_exact",
+    "matched": true,
+    "preset": {
+      "url": "https://claude.ai/oauth/claude-code-client-metadata",
+      "vendor_key": "anthropic",
+      "display_name": "Anthropic (Claude Code)",
+      "enabled": true,
+      "pattern": false
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_exact",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://claude.ai/oauth/claude-code-client-metadata/",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://claude.ai/oauth/claude-code-client-metadata?x=1",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://claude.ai/oauth/claude-code-client-metadata#frag",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://CLAUDE.AI/OAUTH/CLAUDE-CODE-CLIENT-METADATA",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "http://claude.ai/oauth/claude-code-client-metadata",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.claude.ai/oauth/claude-code-client-metadata",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://claude.ai/oauth/claude-code-client-metadatax",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://claude.ai/oauth/claude-code-client-metadat",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://claude.ai//oauth/claude-code-client-metadata",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://claude.ai:443/oauth/claude-code-client-metadata",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://CLAUDE.AI/oauth/claude-code-client-metadata",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://claude.ai/OAUTH/CLAUDE-CODE-CLIENT-METADATA",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://claude.ai/oauth/mcp-oauth-client-metadata",
+    "match_reason": "admitted_catalog_exact",
+    "matched": true,
+    "preset": {
+      "url": "https://claude.ai/oauth/mcp-oauth-client-metadata",
+      "vendor_key": "anthropic",
+      "display_name": "Anthropic (Claude)",
+      "enabled": true,
+      "pattern": false
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_exact",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://claude.ai/oauth/mcp-oauth-client-metadata/",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://claude.ai/oauth/mcp-oauth-client-metadata?x=1",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://claude.ai/oauth/mcp-oauth-client-metadata#frag",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://CLAUDE.AI/OAUTH/MCP-OAUTH-CLIENT-METADATA",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "http://claude.ai/oauth/mcp-oauth-client-metadata",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.claude.ai/oauth/mcp-oauth-client-metadata",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://claude.ai/oauth/mcp-oauth-client-metadatax",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://claude.ai/oauth/mcp-oauth-client-metadat",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://claude.ai//oauth/mcp-oauth-client-metadata",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://claude.ai:443/oauth/mcp-oauth-client-metadata",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://CLAUDE.AI/oauth/mcp-oauth-client-metadata",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://claude.ai/OAUTH/MCP-OAUTH-CLIENT-METADATA",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://vscode.dev/oauth/client-metadata.json",
+    "match_reason": "admitted_catalog_exact",
+    "matched": true,
+    "preset": {
+      "url": "https://vscode.dev/oauth/client-metadata.json",
+      "vendor_key": "microsoft",
+      "display_name": "Visual Studio Code",
+      "enabled": true,
+      "pattern": false
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_exact",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://vscode.dev/oauth/client-metadata.json/",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://vscode.dev/oauth/client-metadata.json?x=1",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://vscode.dev/oauth/client-metadata.json#frag",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://VSCODE.DEV/OAUTH/CLIENT-METADATA.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "http://vscode.dev/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.vscode.dev/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://vscode.dev/oauth/client-metadata.jsonx",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://vscode.dev/oauth/client-metadata.jso",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://vscode.dev//oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://vscode.dev:443/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://VSCODE.DEV/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://vscode.dev/OAUTH/CLIENT-METADATA.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://insiders.vscode.dev/oauth/client-metadata.json",
+    "match_reason": "admitted_catalog_exact",
+    "matched": true,
+    "preset": {
+      "url": "https://insiders.vscode.dev/oauth/client-metadata.json",
+      "vendor_key": "microsoft",
+      "display_name": "Visual Studio Code (Insiders)",
+      "enabled": true,
+      "pattern": false
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_exact",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://insiders.vscode.dev/oauth/client-metadata.json/",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://insiders.vscode.dev/oauth/client-metadata.json?x=1",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://insiders.vscode.dev/oauth/client-metadata.json#frag",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://INSIDERS.VSCODE.DEV/OAUTH/CLIENT-METADATA.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "http://insiders.vscode.dev/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.insiders.vscode.dev/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://insiders.vscode.dev/oauth/client-metadata.jsonx",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://insiders.vscode.dev/oauth/client-metadata.jso",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://insiders.vscode.dev//oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://insiders.vscode.dev:443/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://INSIDERS.VSCODE.DEV/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://insiders.vscode.dev/OAUTH/CLIENT-METADATA.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://zed.dev/oauth/client-metadata.json",
+    "match_reason": "admitted_catalog_exact",
+    "matched": true,
+    "preset": {
+      "url": "https://zed.dev/oauth/client-metadata.json",
+      "vendor_key": "zed",
+      "display_name": "Zed",
+      "enabled": true,
+      "pattern": false
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_exact",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://zed.dev/oauth/client-metadata.json/",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://zed.dev/oauth/client-metadata.json?x=1",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://zed.dev/oauth/client-metadata.json#frag",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://ZED.DEV/OAUTH/CLIENT-METADATA.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "http://zed.dev/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.zed.dev/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://zed.dev/oauth/client-metadata.jsonx",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://zed.dev/oauth/client-metadata.jso",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://zed.dev//oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://zed.dev:443/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://ZED.DEV/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://zed.dev/OAUTH/CLIENT-METADATA.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://goose-docs.ai/oauth/client-metadata.json",
+    "match_reason": "admitted_catalog_exact",
+    "matched": true,
+    "preset": {
+      "url": "https://goose-docs.ai/oauth/client-metadata.json",
+      "vendor_key": "block",
+      "display_name": "Goose",
+      "enabled": true,
+      "pattern": false
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_exact",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://goose-docs.ai/oauth/client-metadata.json/",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://goose-docs.ai/oauth/client-metadata.json?x=1",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://goose-docs.ai/oauth/client-metadata.json#frag",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://GOOSE-DOCS.AI/OAUTH/CLIENT-METADATA.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "http://goose-docs.ai/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.goose-docs.ai/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://goose-docs.ai/oauth/client-metadata.jsonx",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://goose-docs.ai/oauth/client-metadata.jso",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://goose-docs.ai//oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://goose-docs.ai:443/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://GOOSE-DOCS.AI/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://goose-docs.ai/OAUTH/CLIENT-METADATA.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/*/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://chatgpt.com/oauth/*/client.json",
+      "vendor_key": "openai",
+      "display_name": "ChatGPT (connectors)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/*/client.json/",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/*/client.json?x=1",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/*/client.json#frag",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://CHATGPT.COM/OAUTH/*/CLIENT.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "http://chatgpt.com/oauth/*/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.chatgpt.com/oauth/*/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/*/client.jsonx",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/*/client.jso",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com//oauth/*/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com:443/oauth/*/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://CHATGPT.COM/oauth/*/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/OAUTH/*/CLIENT.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/a/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://chatgpt.com/oauth/*/client.json",
+      "vendor_key": "openai",
+      "display_name": "ChatGPT (connectors)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/abc-123_XYZ/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://chatgpt.com/oauth/*/client.json",
+      "vendor_key": "openai",
+      "display_name": "ChatGPT (connectors)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/AbC0/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://chatgpt.com/oauth/*/client.json",
+      "vendor_key": "openai",
+      "display_name": "ChatGPT (connectors)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth//client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/a/b/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/a%2Fb/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://chatgpt.com/oauth/*/client.json",
+      "vendor_key": "openai",
+      "display_name": "ChatGPT (connectors)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/../client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://chatgpt.com/oauth/*/client.json",
+      "vendor_key": "openai",
+      "display_name": "ChatGPT (connectors)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/./client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://chatgpt.com/oauth/*/client.json",
+      "vendor_key": "openai",
+      "display_name": "ChatGPT (connectors)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/a.b/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://chatgpt.com/oauth/*/client.json",
+      "vendor_key": "openai",
+      "display_name": "ChatGPT (connectors)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/a?b/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/a#b/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/a b/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://chatgpt.com/oauth/*/client.json",
+      "vendor_key": "openai",
+      "display_name": "ChatGPT (connectors)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://chatgpt.com/oauth/*/client.json",
+      "vendor_key": "openai",
+      "display_name": "ChatGPT (connectors)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://chatgpt.com/oauth/*/client.json",
+      "vendor_key": "openai",
+      "display_name": "ChatGPT (connectors)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/client.json",
+    "match_reason": "admitted_catalog_exact",
+    "matched": true,
+    "preset": {
+      "url": "https://chatgpt.com/oauth/codex/client.json",
+      "vendor_key": "openai",
+      "display_name": "Codex CLI (stable document)",
+      "enabled": true,
+      "pattern": false
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_exact",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/client.json",
+    "match_reason": "admitted_catalog_exact",
+    "matched": true,
+    "preset": {
+      "url": "https://chatgpt.com/oauth/client.json",
+      "vendor_key": "openai",
+      "display_name": "ChatGPT",
+      "enabled": true,
+      "pattern": false
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_exact",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/client.json/",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/client.json?x=1",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/client.json#frag",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://CHATGPT.COM/OAUTH/CLIENT.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "http://chatgpt.com/oauth/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.chatgpt.com/oauth/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/client.jsonx",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/client.jso",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com//oauth/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com:443/oauth/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://CHATGPT.COM/oauth/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/OAUTH/CLIENT.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/*/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://chatgpt.com/oauth/codex/*/client.json",
+      "vendor_key": "openai",
+      "display_name": "Codex CLI",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/*/client.json/",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/*/client.json?x=1",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/*/client.json#frag",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://CHATGPT.COM/OAUTH/CODEX/*/CLIENT.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "http://chatgpt.com/oauth/codex/*/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.chatgpt.com/oauth/codex/*/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/*/client.jsonx",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/*/client.jso",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com//oauth/codex/*/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com:443/oauth/codex/*/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://CHATGPT.COM/oauth/codex/*/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/OAUTH/CODEX/*/CLIENT.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/a/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://chatgpt.com/oauth/codex/*/client.json",
+      "vendor_key": "openai",
+      "display_name": "Codex CLI",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/abc-123_XYZ/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://chatgpt.com/oauth/codex/*/client.json",
+      "vendor_key": "openai",
+      "display_name": "Codex CLI",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/AbC0/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://chatgpt.com/oauth/codex/*/client.json",
+      "vendor_key": "openai",
+      "display_name": "Codex CLI",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex//client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/a/b/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/a%2Fb/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://chatgpt.com/oauth/codex/*/client.json",
+      "vendor_key": "openai",
+      "display_name": "Codex CLI",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/../client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://chatgpt.com/oauth/codex/*/client.json",
+      "vendor_key": "openai",
+      "display_name": "Codex CLI",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/./client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://chatgpt.com/oauth/codex/*/client.json",
+      "vendor_key": "openai",
+      "display_name": "Codex CLI",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/a.b/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://chatgpt.com/oauth/codex/*/client.json",
+      "vendor_key": "openai",
+      "display_name": "Codex CLI",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/a?b/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/a#b/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/a b/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://chatgpt.com/oauth/codex/*/client.json",
+      "vendor_key": "openai",
+      "display_name": "Codex CLI",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://chatgpt.com/oauth/codex/*/client.json",
+      "vendor_key": "openai",
+      "display_name": "Codex CLI",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://chatgpt.com/oauth/codex/*/client.json",
+      "vendor_key": "openai",
+      "display_name": "Codex CLI",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/codex/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://chatgpt.com/oauth/codex/*/client.json",
+      "vendor_key": "openai",
+      "display_name": "Codex CLI",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/client.json/",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/client.json?x=1",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/client.json#frag",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://CHATGPT.COM/OAUTH/CODEX/CLIENT.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "http://chatgpt.com/oauth/codex/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.chatgpt.com/oauth/codex/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/client.jsonx",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/client.jso",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com//oauth/codex/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com:443/oauth/codex/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://CHATGPT.COM/oauth/codex/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/OAUTH/CODEX/CLIENT.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.notion.so/oauth/mcp-client-metadata.json",
+    "match_reason": "admitted_catalog_exact",
+    "matched": true,
+    "preset": {
+      "url": "https://www.notion.so/oauth/mcp-client-metadata.json",
+      "vendor_key": "notion",
+      "display_name": "Notion",
+      "enabled": true,
+      "pattern": false
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_exact",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://www.notion.so/oauth/mcp-client-metadata.json/",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.notion.so/oauth/mcp-client-metadata.json?x=1",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.notion.so/oauth/mcp-client-metadata.json#frag",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://WWW.NOTION.SO/OAUTH/MCP-CLIENT-METADATA.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "http://www.notion.so/oauth/mcp-client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.www.notion.so/oauth/mcp-client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.notion.so/oauth/mcp-client-metadata.jsonx",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.notion.so/oauth/mcp-client-metadata.jso",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.notion.so//oauth/mcp-client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.notion.so:443/oauth/mcp-client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://WWW.NOTION.SO/oauth/mcp-client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.notion.so/OAUTH/MCP-CLIENT-METADATA.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://app.notion.com/oauth/mcp-client-metadata.json",
+    "match_reason": "admitted_catalog_exact",
+    "matched": true,
+    "preset": {
+      "url": "https://app.notion.com/oauth/mcp-client-metadata.json",
+      "vendor_key": "notion",
+      "display_name": "Notion (app.notion.com)",
+      "enabled": true,
+      "pattern": false
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_exact",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://app.notion.com/oauth/mcp-client-metadata.json/",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://app.notion.com/oauth/mcp-client-metadata.json?x=1",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://app.notion.com/oauth/mcp-client-metadata.json#frag",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://APP.NOTION.COM/OAUTH/MCP-CLIENT-METADATA.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "http://app.notion.com/oauth/mcp-client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.app.notion.com/oauth/mcp-client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://app.notion.com/oauth/mcp-client-metadata.jsonx",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://app.notion.com/oauth/mcp-client-metadata.jso",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://app.notion.com//oauth/mcp-client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://app.notion.com:443/oauth/mcp-client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://APP.NOTION.COM/oauth/mcp-client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://app.notion.com/OAUTH/MCP-CLIENT-METADATA.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.mcpjam.com/.well-known/oauth/client-metadata.json",
+    "match_reason": "admitted_catalog_exact",
+    "matched": true,
+    "preset": {
+      "url": "https://www.mcpjam.com/.well-known/oauth/client-metadata.json",
+      "vendor_key": "mcpjam",
+      "display_name": "MCPJam Inspector",
+      "enabled": true,
+      "pattern": false
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_exact",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://www.mcpjam.com/.well-known/oauth/client-metadata.json/",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.mcpjam.com/.well-known/oauth/client-metadata.json?x=1",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.mcpjam.com/.well-known/oauth/client-metadata.json#frag",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://WWW.MCPJAM.COM/.WELL-KNOWN/OAUTH/CLIENT-METADATA.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "http://www.mcpjam.com/.well-known/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.www.mcpjam.com/.well-known/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.mcpjam.com/.well-known/oauth/client-metadata.jsonx",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.mcpjam.com/.well-known/oauth/client-metadata.jso",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.mcpjam.com//.well-known/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.mcpjam.com:443/.well-known/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://WWW.MCPJAM.COM/.well-known/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.mcpjam.com/.WELL-KNOWN/OAUTH/CLIENT-METADATA.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://api.factory.ai/mcp/oauth-client",
+    "match_reason": "admitted_catalog_exact",
+    "matched": true,
+    "preset": {
+      "url": "https://api.factory.ai/mcp/oauth-client",
+      "vendor_key": "factory",
+      "display_name": "Factory Droid",
+      "enabled": true,
+      "pattern": false
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_exact",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://api.factory.ai/mcp/oauth-client/",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://api.factory.ai/mcp/oauth-client?x=1",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://api.factory.ai/mcp/oauth-client#frag",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://API.FACTORY.AI/MCP/OAUTH-CLIENT",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "http://api.factory.ai/mcp/oauth-client",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.api.factory.ai/mcp/oauth-client",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://api.factory.ai/mcp/oauth-clientx",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://api.factory.ai/mcp/oauth-clien",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://api.factory.ai//mcp/oauth-client",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://api.factory.ai:443/mcp/oauth-client",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://API.FACTORY.AI/mcp/oauth-client",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://api.factory.ai/MCP/OAUTH-CLIENT",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://toolhive.dev/oauth/client-metadata.json",
+    "match_reason": "admitted_catalog_exact",
+    "matched": true,
+    "preset": {
+      "url": "https://toolhive.dev/oauth/client-metadata.json",
+      "vendor_key": "stacklok",
+      "display_name": "ToolHive",
+      "enabled": true,
+      "pattern": false
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_exact",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://toolhive.dev/oauth/client-metadata.json/",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://toolhive.dev/oauth/client-metadata.json?x=1",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://toolhive.dev/oauth/client-metadata.json#frag",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://TOOLHIVE.DEV/OAUTH/CLIENT-METADATA.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "http://toolhive.dev/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.toolhive.dev/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://toolhive.dev/oauth/client-metadata.jsonx",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://toolhive.dev/oauth/client-metadata.jso",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://toolhive.dev//oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://toolhive.dev:443/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://TOOLHIVE.DEV/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://toolhive.dev/OAUTH/CLIENT-METADATA.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json",
+    "match_reason": "admitted_catalog_exact",
+    "matched": true,
+    "preset": {
+      "url": "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json",
+      "vendor_key": "nousresearch",
+      "display_name": "Hermes Agent",
+      "enabled": true,
+      "pattern": false
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_exact",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json/",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json?x=1",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json#frag",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://NOUSRESEARCH.GITHUB.IO/HERMES-AGENT/DOCS/OAUTH/CLIENT-METADATA.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "http://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.jsonx",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.jso",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://nousresearch.github.io//hermes-agent/docs/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://nousresearch.github.io:443/hermes-agent/docs/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://NOUSRESEARCH.GITHUB.IO/hermes-agent/docs/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://nousresearch.github.io/HERMES-AGENT/DOCS/OAUTH/CLIENT-METADATA.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.skydive.com/api/v1/external-oauth/client-metadata",
+    "match_reason": "admitted_catalog_exact",
+    "matched": true,
+    "preset": {
+      "url": "https://www.skydive.com/api/v1/external-oauth/client-metadata",
+      "vendor_key": "skydive",
+      "display_name": "Skydive",
+      "enabled": true,
+      "pattern": false
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_exact",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://www.skydive.com/api/v1/external-oauth/client-metadata/",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.skydive.com/api/v1/external-oauth/client-metadata?x=1",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.skydive.com/api/v1/external-oauth/client-metadata#frag",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://WWW.SKYDIVE.COM/API/V1/EXTERNAL-OAUTH/CLIENT-METADATA",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "http://www.skydive.com/api/v1/external-oauth/client-metadata",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.www.skydive.com/api/v1/external-oauth/client-metadata",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.skydive.com/api/v1/external-oauth/client-metadatax",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.skydive.com/api/v1/external-oauth/client-metadat",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.skydive.com//api/v1/external-oauth/client-metadata",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.skydive.com:443/api/v1/external-oauth/client-metadata",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://WWW.SKYDIVE.COM/api/v1/external-oauth/client-metadata",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.skydive.com/API/V1/EXTERNAL-OAUTH/CLIENT-METADATA",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://opencode.ai/oauth/opencode/client.json",
+    "match_reason": "admitted_catalog_exact",
+    "matched": true,
+    "preset": {
+      "url": "https://opencode.ai/oauth/opencode/client.json",
+      "vendor_key": "opencode",
+      "display_name": "opencode",
+      "enabled": true,
+      "pattern": false
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_exact",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://opencode.ai/oauth/opencode/client.json/",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://opencode.ai/oauth/opencode/client.json?x=1",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://opencode.ai/oauth/opencode/client.json#frag",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://OPENCODE.AI/OAUTH/OPENCODE/CLIENT.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "http://opencode.ai/oauth/opencode/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.opencode.ai/oauth/opencode/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://opencode.ai/oauth/opencode/client.jsonx",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://opencode.ai/oauth/opencode/client.jso",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://opencode.ai//oauth/opencode/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://opencode.ai:443/oauth/opencode/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://OPENCODE.AI/oauth/opencode/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://opencode.ai/OAUTH/OPENCODE/CLIENT.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://github.com/copilot/cli/client-metadata.json",
+    "match_reason": "admitted_catalog_exact",
+    "matched": true,
+    "preset": {
+      "url": "https://github.com/copilot/cli/client-metadata.json",
+      "vendor_key": "github",
+      "display_name": "GitHub Copilot CLI",
+      "enabled": true,
+      "pattern": false
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_exact",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://github.com/copilot/cli/client-metadata.json/",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://github.com/copilot/cli/client-metadata.json?x=1",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://github.com/copilot/cli/client-metadata.json#frag",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://GITHUB.COM/COPILOT/CLI/CLIENT-METADATA.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "http://github.com/copilot/cli/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.github.com/copilot/cli/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://github.com/copilot/cli/client-metadata.jsonx",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://github.com/copilot/cli/client-metadata.jso",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://github.com//copilot/cli/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://github.com:443/copilot/cli/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://GITHUB.COM/copilot/cli/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://github.com/COPILOT/CLI/CLIENT-METADATA.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://api.conductor.build/oauth/client-metadata.json",
+    "match_reason": "admitted_catalog_exact",
+    "matched": true,
+    "preset": {
+      "url": "https://api.conductor.build/oauth/client-metadata.json",
+      "vendor_key": "conductor",
+      "display_name": "Conductor",
+      "enabled": true,
+      "pattern": false
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_exact",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://api.conductor.build/oauth/client-metadata.json/",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://api.conductor.build/oauth/client-metadata.json?x=1",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://api.conductor.build/oauth/client-metadata.json#frag",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://API.CONDUCTOR.BUILD/OAUTH/CLIENT-METADATA.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "http://api.conductor.build/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.api.conductor.build/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://api.conductor.build/oauth/client-metadata.jsonx",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://api.conductor.build/oauth/client-metadata.jso",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://api.conductor.build//oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://api.conductor.build:443/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://API.CONDUCTOR.BUILD/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://api.conductor.build/OAUTH/CLIENT-METADATA.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/*",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://connect.vercel.com/connectors/*",
+      "vendor_key": "vercel",
+      "display_name": "Vercel Connect (connectors)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/*/",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/*?x=1",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/*#frag",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://CONNECT.VERCEL.COM/CONNECTORS/*",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "http://connect.vercel.com/connectors/*",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.connect.vercel.com/connectors/*",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/*x",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://connect.vercel.com/connectors/*",
+      "vendor_key": "vercel",
+      "display_name": "Vercel Connect (connectors)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://connect.vercel.com//connectors/*",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://connect.vercel.com:443/connectors/*",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://CONNECT.VERCEL.COM/connectors/*",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://connect.vercel.com/CONNECTORS/*",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/a",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://connect.vercel.com/connectors/*",
+      "vendor_key": "vercel",
+      "display_name": "Vercel Connect (connectors)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/abc-123_XYZ",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://connect.vercel.com/connectors/*",
+      "vendor_key": "vercel",
+      "display_name": "Vercel Connect (connectors)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/AbC0",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://connect.vercel.com/connectors/*",
+      "vendor_key": "vercel",
+      "display_name": "Vercel Connect (connectors)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/a/b",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/a%2Fb",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://connect.vercel.com/connectors/*",
+      "vendor_key": "vercel",
+      "display_name": "Vercel Connect (connectors)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/..",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://connect.vercel.com/connectors/*",
+      "vendor_key": "vercel",
+      "display_name": "Vercel Connect (connectors)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/.",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://connect.vercel.com/connectors/*",
+      "vendor_key": "vercel",
+      "display_name": "Vercel Connect (connectors)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/a.b",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://connect.vercel.com/connectors/*",
+      "vendor_key": "vercel",
+      "display_name": "Vercel Connect (connectors)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/a?b",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/a#b",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/a b",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://connect.vercel.com/connectors/*",
+      "vendor_key": "vercel",
+      "display_name": "Vercel Connect (connectors)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://connect.vercel.com/connectors/*",
+      "vendor_key": "vercel",
+      "display_name": "Vercel Connect (connectors)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://connect.vercel.com/connectors/*",
+      "vendor_key": "vercel",
+      "display_name": "Vercel Connect (connectors)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/codex",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://connect.vercel.com/connectors/*",
+      "vendor_key": "vercel",
+      "display_name": "Vercel Connect (connectors)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://linear.app/.well-known/oauth-client-metadata/mcp.json",
+    "match_reason": "admitted_catalog_exact",
+    "matched": true,
+    "preset": {
+      "url": "https://linear.app/.well-known/oauth-client-metadata/mcp.json",
+      "vendor_key": "linear",
+      "display_name": "Linear",
+      "enabled": true,
+      "pattern": false
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_exact",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://linear.app/.well-known/oauth-client-metadata/mcp.json/",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://linear.app/.well-known/oauth-client-metadata/mcp.json?x=1",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://linear.app/.well-known/oauth-client-metadata/mcp.json#frag",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://LINEAR.APP/.WELL-KNOWN/OAUTH-CLIENT-METADATA/MCP.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "http://linear.app/.well-known/oauth-client-metadata/mcp.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.linear.app/.well-known/oauth-client-metadata/mcp.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://linear.app/.well-known/oauth-client-metadata/mcp.jsonx",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://linear.app/.well-known/oauth-client-metadata/mcp.jso",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://linear.app//.well-known/oauth-client-metadata/mcp.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://linear.app:443/.well-known/oauth-client-metadata/mcp.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://LINEAR.APP/.well-known/oauth-client-metadata/mcp.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://linear.app/.WELL-KNOWN/OAUTH-CLIENT-METADATA/MCP.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://api.lovable.dev/.well-known/oauth-client",
+    "match_reason": "admitted_catalog_exact",
+    "matched": true,
+    "preset": {
+      "url": "https://api.lovable.dev/.well-known/oauth-client",
+      "vendor_key": "lovable",
+      "display_name": "Lovable",
+      "enabled": true,
+      "pattern": false
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_exact",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://api.lovable.dev/.well-known/oauth-client/",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://api.lovable.dev/.well-known/oauth-client?x=1",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://api.lovable.dev/.well-known/oauth-client#frag",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://API.LOVABLE.DEV/.WELL-KNOWN/OAUTH-CLIENT",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "http://api.lovable.dev/.well-known/oauth-client",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.api.lovable.dev/.well-known/oauth-client",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://api.lovable.dev/.well-known/oauth-clientx",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://api.lovable.dev/.well-known/oauth-clien",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://api.lovable.dev//.well-known/oauth-client",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://api.lovable.dev:443/.well-known/oauth-client",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://API.LOVABLE.DEV/.well-known/oauth-client",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://api.lovable.dev/.WELL-KNOWN/OAUTH-CLIENT",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://antigravity.google/oauth/client-metadata.json",
+    "match_reason": "admitted_catalog_exact",
+    "matched": true,
+    "preset": {
+      "url": "https://antigravity.google/oauth/client-metadata.json",
+      "vendor_key": "google",
+      "display_name": "Google Antigravity",
+      "enabled": true,
+      "pattern": false
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_exact",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://antigravity.google/oauth/client-metadata.json/",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://antigravity.google/oauth/client-metadata.json?x=1",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://antigravity.google/oauth/client-metadata.json#frag",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://ANTIGRAVITY.GOOGLE/OAUTH/CLIENT-METADATA.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "http://antigravity.google/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.antigravity.google/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://antigravity.google/oauth/client-metadata.jsonx",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://antigravity.google/oauth/client-metadata.jso",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://antigravity.google//oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://antigravity.google:443/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://ANTIGRAVITY.GOOGLE/oauth/client-metadata.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://antigravity.google/OAUTH/CLIENT-METADATA.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/oauth/client.json",
+    "match_reason": "admitted_catalog_exact",
+    "matched": true,
+    "preset": {
+      "url": "https://pi.dev/oauth/client.json",
+      "vendor_key": "pi",
+      "display_name": "Pi",
+      "enabled": true,
+      "pattern": false
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_exact",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_exact",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/oauth/client.json/",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/oauth/client.json?x=1",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/oauth/client.json#frag",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://PI.DEV/OAUTH/CLIENT.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "http://pi.dev/oauth/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.pi.dev/oauth/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/oauth/client.jsonx",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/oauth/client.jso",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://pi.dev//oauth/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://pi.dev:443/oauth/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://PI.DEV/oauth/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/OAUTH/CLIENT.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/oauth/*/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://pi.dev/oauth/*/client.json",
+      "vendor_key": "pi",
+      "display_name": "Pi (per-server document)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/oauth/*/client.json/",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/oauth/*/client.json?x=1",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/oauth/*/client.json#frag",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://PI.DEV/OAUTH/*/CLIENT.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "http://pi.dev/oauth/*/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://www.pi.dev/oauth/*/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/oauth/*/client.jsonx",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/oauth/*/client.jso",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://pi.dev//oauth/*/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://pi.dev:443/oauth/*/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "HTTPS://PI.DEV/oauth/*/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/OAUTH/*/CLIENT.JSON",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/oauth/a/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://pi.dev/oauth/*/client.json",
+      "vendor_key": "pi",
+      "display_name": "Pi (per-server document)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/oauth/abc-123_XYZ/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://pi.dev/oauth/*/client.json",
+      "vendor_key": "pi",
+      "display_name": "Pi (per-server document)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/oauth/AbC0/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://pi.dev/oauth/*/client.json",
+      "vendor_key": "pi",
+      "display_name": "Pi (per-server document)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/oauth//client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/oauth/a/b/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/oauth/a%2Fb/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://pi.dev/oauth/*/client.json",
+      "vendor_key": "pi",
+      "display_name": "Pi (per-server document)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/oauth/../client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://pi.dev/oauth/*/client.json",
+      "vendor_key": "pi",
+      "display_name": "Pi (per-server document)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/oauth/./client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://pi.dev/oauth/*/client.json",
+      "vendor_key": "pi",
+      "display_name": "Pi (per-server document)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/oauth/a.b/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://pi.dev/oauth/*/client.json",
+      "vendor_key": "pi",
+      "display_name": "Pi (per-server document)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/oauth/a?b/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/oauth/a#b/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/oauth/a b/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://pi.dev/oauth/*/client.json",
+      "vendor_key": "pi",
+      "display_name": "Pi (per-server document)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/oauth/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://pi.dev/oauth/*/client.json",
+      "vendor_key": "pi",
+      "display_name": "Pi (per-server document)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/oauth/yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://pi.dev/oauth/*/client.json",
+      "vendor_key": "pi",
+      "display_name": "Pi (per-server document)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "https://pi.dev/oauth/codex/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://pi.dev/oauth/*/client.json",
+      "vendor_key": "pi",
+      "display_name": "Pi (per-server document)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  },
+  {
+    "client_id": "",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "not-a-url",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "my-client",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://unknown.example.com/client.json",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+    "evaluate": {
+      "presets": { "Outcome": "check_custom", "Admit": "", "Denial": "" },
+      "reporting": { "Outcome": "check_custom", "Admit": "", "Denial": "" }
+    }
+  },
+  {
+    "client_id": "https://client.example.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": {
+      "Outcome": "denied",
+      "Admit": "",
+      "Denial": "denied_oversized"
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "denied",
+        "Admit": "",
+        "Denial": "denied_oversized"
+      },
+      "reporting": {
+        "Outcome": "denied",
+        "Admit": "",
+        "Denial": "denied_oversized"
+      }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "match_reason": "",
+    "matched": false,
+    "preset": null,
+    "shadow": {
+      "Outcome": "denied",
+      "Admit": "",
+      "Denial": "denied_oversized"
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "denied",
+        "Admit": "",
+        "Denial": "denied_oversized"
+      },
+      "reporting": {
+        "Outcome": "denied",
+        "Admit": "",
+        "Denial": "denied_oversized"
+      }
+    }
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/client.json",
+    "match_reason": "admitted_catalog_pattern",
+    "matched": true,
+    "preset": {
+      "url": "https://chatgpt.com/oauth/*/client.json",
+      "vendor_key": "openai",
+      "display_name": "ChatGPT (connectors)",
+      "enabled": true,
+      "pattern": true
+    },
+    "shadow": {
+      "Outcome": "admitted",
+      "Admit": "admitted_catalog_pattern",
+      "Denial": ""
+    },
+    "evaluate": {
+      "presets": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      },
+      "reporting": {
+        "Outcome": "admitted",
+        "Admit": "admitted_catalog_pattern",
+        "Denial": ""
+      }
+    }
+  }
+]

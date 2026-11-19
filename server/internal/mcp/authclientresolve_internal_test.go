@@ -19,7 +19,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authenforcement"
@@ -200,7 +200,7 @@ func TestWithoutDeniedSources(t *testing.T) {
 func TestRefreshIsUndecidedBeforeEnforcement(t *testing.T) {
 	t.Parallel()
 
-	reconnect, chain, decided, err := (&Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products()))}).refreshNeedsAuthClientReconnect(t.Context(), &ResolvedMcpEndpoint{McpServerID: validUUID(uuid.New()), OrganizationID: "org_a"}, urn.NewUserSubject("user_a"), "jti")
+	reconnect, chain, decided, err := (&Service{aiCatalog: aivendorstest.NewStore()}).refreshNeedsAuthClientReconnect(t.Context(), &ResolvedMcpEndpoint{McpServerID: validUUID(uuid.New()), OrganizationID: "org_a"}, urn.NewUserSubject("user_a"), "jti")
 	require.NoError(t, err)
 	require.False(t, reconnect)
 	require.False(t, chain.clientID.Valid)
@@ -228,7 +228,7 @@ func newAuthClientFixture(t *testing.T, pool *pgxpool.Pool) *authClientFixture {
 	enc, err := encryption.NewWithBytes(make([]byte, 32))
 	require.NoError(t, err)
 	f := &authClientFixture{t: t, q: q, service: &Service{
-		aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		aiCatalog: aivendorstest.NewStore(),
 		db:        pool, enc: enc, logger: testenv.NewLogger(t), authClientPermitter: connectPermitter{}}, orgID: "org_" + uuid.NewString(), projectID: uuid.New(), registration: uuid.New(), issuerID: uuid.New()}
 	require.NoError(t, q.SeedOrganizationFixture(ctx, f.orgID))
 	require.NoError(t, q.SeedProjectFixture(ctx, authclientbackfill.SeedProjectFixtureParams{ID: f.projectID, Slug: "p-" + f.projectID.String()[:8], OrganizationID: f.orgID}))
@@ -914,7 +914,7 @@ func TestReportAuthClientParity(t *testing.T) {
 			reader := sdkmetric.NewManualReader()
 			metrics := mcpmetrics.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"), testenv.NewLogger(t))
 			s := &Service{
-				aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+				aiCatalog: aivendorstest.NewStore(),
 				logger:    slog.New(slog.NewJSONHandler(&buf, nil)), metrics: metrics}
 			s.reportAuthClientParity(t.Context(), "org_1", uuid.New(), tc.res, tc.choice, tc.choiceErr)
 			if tc.warn {
@@ -938,7 +938,7 @@ func TestReportAuthClientParityAnnotatesTheSpan(t *testing.T) {
 	recorder := tracetest.NewSpanRecorder()
 	ctx, span := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder)).Tracer("test").Start(t.Context(), "request")
 	s := &Service{
-		aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		aiCatalog: aivendorstest.NewStore(),
 		logger:    testenv.NewLogger(t)}
 	s.reportAuthClientParity(ctx, "org_1", uuid.New(), gapResolution(authClientReasonClientDisabled), upstreamChoice{}, nil)
 	span.End()
@@ -977,11 +977,11 @@ func TestAuthClientModeIsOffWithoutFlags(t *testing.T) {
 		require.NoError(t, err)
 		return m
 	}
-	require.Equal(t, feature.AuthClientResolverOff, mode(&Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products()))}, "org_a"), "no flag provider keeps the upstream client choice")
+	require.Equal(t, feature.AuthClientResolverOff, mode(&Service{aiCatalog: aivendorstest.NewStore()}, "org_a"), "no flag provider keeps the upstream client choice")
 	flags := new(feature.InMemory)
 	flags.SetFlag(feature.FlagAuthClientResolverShadow, "org_a", true)
-	require.Equal(t, feature.AuthClientResolverShadow, mode(&Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), features: flags}, "org_a"))
-	require.Equal(t, feature.AuthClientResolverOff, mode(&Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), features: flags}, "org_b"))
+	require.Equal(t, feature.AuthClientResolverShadow, mode(&Service{aiCatalog: aivendorstest.NewStore(), features: flags}, "org_a"))
+	require.Equal(t, feature.AuthClientResolverOff, mode(&Service{aiCatalog: aivendorstest.NewStore(), features: flags}, "org_b"))
 }
 
 func TestUpstreamClientChoiceServesMappedHeadersOnlyClients(t *testing.T) {
@@ -1383,7 +1383,7 @@ func TestAuthClientModeRefusesWhenEnforcementCannotBeRead(t *testing.T) {
 	require.NoError(t, err)
 	gate := authenforcement.NewGate(pool)
 	pool.Close()
-	_, err = (&Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), authEnforcement: gate}).authClientMode(t.Context(), "org_a")
+	_, err = (&Service{aiCatalog: aivendorstest.NewStore(), authEnforcement: gate}).authClientMode(t.Context(), "org_a")
 	require.Error(t, err, "an unreadable enforcement state is never served as shadow")
 }
 
@@ -1392,7 +1392,7 @@ func TestProfileSelectorReadsOnlyATurnCredentialsOwnProfile(t *testing.T) {
 
 	projectID, version := uuid.New(), uuid.New()
 	endpoint := &ResolvedMcpEndpoint{ProjectID: projectID, OrganizationID: "org_a"}
-	s := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products()))}
+	s := &Service{aiCatalog: aivendorstest.NewStore()}
 	credential := func(org string, project uuid.UUID, profile uuid.NullUUID) principalcredential.Credential {
 		return principalcredential.Credential{
 			OrganizationID:            org,

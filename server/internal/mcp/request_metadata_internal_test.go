@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
@@ -347,7 +347,7 @@ func prepareTestRequest(t *testing.T, body string, header http.Header, supported
 	maps.Copy(r.Header, header)
 	w := httptest.NewRecorder()
 	s := &Service{
-		aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		aiCatalog: aivendorstest.NewStore(),
 		metrics:   mcpmetrics.NewMetrics(testenv.NewMeterProvider(t).Meter("test"), testenv.NewLogger(t))}
 
 	_, handled, err := s.prepareTerminatedMCPRequest(w, r, testenv.NewLogger(t), 1<<20, supported, mcpmetrics.SurfaceHosting)

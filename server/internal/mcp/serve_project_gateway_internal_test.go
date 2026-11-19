@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
@@ -17,7 +17,7 @@ import (
 func TestProjectGatewayClientTokenProjectIDs(t *testing.T) {
 	t.Parallel()
 	project, other := uuid.New(), uuid.New()
-	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products()))}
+	service := &Service{aiCatalog: aivendorstest.NewStore()}
 	endpoint := &ResolvedMcpEndpoint{RouteBase: mcproute.OrganizationGateway, ProjectID: project}
 	client := remotesessions.Client{ProjectID: uuid.NullUUID{UUID: other, Valid: true}}
 	projects, err := service.clientTokenProjectIDs(t.Context(), endpoint, client)

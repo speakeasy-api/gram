@@ -870,7 +870,7 @@ func inboundEMATrustNextStep(issuer InboundEMAIssuer, directory InboundEMADirect
 }
 
 func inboundEMAPresetClients() []InboundEMAClient {
-	presets := admission.Catalog()
+	presets := compiledAICatalog().Catalog()
 	clients := make([]InboundEMAClient, 0, len(presets))
 	for _, preset := range presets {
 		if preset.Enabled {

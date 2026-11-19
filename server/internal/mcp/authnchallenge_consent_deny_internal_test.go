@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -30,7 +30,7 @@ func TestRetireDeniedConsentCredentials(t *testing.T) {
 	signInID := uuid.New()
 	r := &retireRecorder{}
 	s := &Service{
-		aiCatalog:       aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		aiCatalog:       aivendorstest.NewStore(),
 		identityChainer: r, logger: testenv.NewLogger(t)}
 
 	s.retireDeniedConsentCredentials(t.Context(), s.logger, endpoint, AuthnChallengeState{Subject: &subject, SignInID: nil})

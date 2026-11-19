@@ -28,7 +28,7 @@ func validTarget() aitargets.Target {
 
 func TestValidateTargetAcceptsAValidTarget(t *testing.T) {
 	t.Parallel()
-	require.NoError(t, aitargets.ValidateTarget(aivendors.NewSnapshot(aivendors.Products()), validTarget()))
+	require.NoError(t, aitargets.ValidateTarget(aivendors.CompiledSnapshot(), validTarget()))
 }
 
 func TestValidateTargetAcceptsEveryInstallSignatureKind(t *testing.T) {
@@ -36,23 +36,23 @@ func TestValidateTargetAcceptsEveryInstallSignatureKind(t *testing.T) {
 
 	byBinary := validTarget()
 	byBinary.Signatures = aitargets.Signatures{BundleIDs: []string{}, Binaries: []string{"claude"}, ConfigDirs: []string{}, ProcessNames: []string{"claude"}}
-	require.NoError(t, aitargets.ValidateTarget(aivendors.NewSnapshot(aivendors.Products()), byBinary))
+	require.NoError(t, aitargets.ValidateTarget(aivendors.CompiledSnapshot(), byBinary))
 
 	byConfigDir := validTarget()
 	byConfigDir.Signatures = aitargets.Signatures{BundleIDs: []string{}, Binaries: []string{}, ConfigDirs: []string{"~/.config/opencode"}, ProcessNames: []string{}}
-	require.NoError(t, aitargets.ValidateTarget(aivendors.NewSnapshot(aivendors.Products()), byConfigDir))
+	require.NoError(t, aitargets.ValidateTarget(aivendors.CompiledSnapshot(), byConfigDir))
 
 	byAbsoluteDir := validTarget()
 	byAbsoluteDir.Signatures = aitargets.Signatures{BundleIDs: []string{}, Binaries: []string{}, ConfigDirs: []string{"/opt/homebrew/etc/opencode"}, ProcessNames: []string{}}
-	require.NoError(t, aitargets.ValidateTarget(aivendors.NewSnapshot(aivendors.Products()), byAbsoluteDir))
+	require.NoError(t, aitargets.ValidateTarget(aivendors.CompiledSnapshot(), byAbsoluteDir))
 
 	withHint := validTarget()
 	withHint.VersionHint = &aitargets.VersionHint{PlistKey: "CFBundleVersion"}
-	require.NoError(t, aitargets.ValidateTarget(aivendors.NewSnapshot(aivendors.Products()), withHint))
+	require.NoError(t, aitargets.ValidateTarget(aivendors.CompiledSnapshot(), withHint))
 
 	spacedProcess := validTarget()
 	spacedProcess.Signatures.ProcessNames = []string{"LM Studio"}
-	require.NoError(t, aitargets.ValidateTarget(aivendors.NewSnapshot(aivendors.Products()), spacedProcess))
+	require.NoError(t, aitargets.ValidateTarget(aivendors.CompiledSnapshot(), spacedProcess))
 }
 
 func TestValidateTargetRejectsEachRule(t *testing.T) {
@@ -85,7 +85,7 @@ func TestValidateTargetRejectsEachRule(t *testing.T) {
 	for name, mutate := range cases {
 		target := validTarget()
 		mutate(&target)
-		err := aitargets.ValidateTarget(aivendors.NewSnapshot(aivendors.Products()), target)
+		err := aitargets.ValidateTarget(aivendors.CompiledSnapshot(), target)
 		require.Error(t, err, "case %q must be rejected", name)
 		require.ErrorIs(t, err, aitargets.ErrInvalidTarget, "case %q must wrap ErrInvalidTarget", name)
 	}
@@ -107,14 +107,14 @@ func TestValidateTargetAcceptsAnyConfigDirShape(t *testing.T) {
 	} {
 		target := validTarget()
 		target.Signatures.ConfigDirs = []string{dir}
-		require.NoError(t, aitargets.ValidateTarget(aivendors.NewSnapshot(aivendors.Products()), target), "config dir %q", dir)
+		require.NoError(t, aitargets.ValidateTarget(aivendors.CompiledSnapshot(), target), "config dir %q", dir)
 	}
 }
 
 func TestValidateRejectsDuplicateIDsAndOversizedLists(t *testing.T) {
 	t.Parallel()
 
-	require.ErrorIs(t, aitargets.Validate(aivendors.NewSnapshot(aivendors.Products()), []aitargets.Target{validTarget(), validTarget()}), aitargets.ErrInvalidTarget)
+	require.ErrorIs(t, aitargets.Validate(aivendors.CompiledSnapshot(), []aitargets.Target{validTarget(), validTarget()}), aitargets.ErrInvalidTarget)
 
 	oversized := make([]aitargets.Target, 0, aitargets.MaxTargets+1)
 	for i := range aitargets.MaxTargets + 1 {
@@ -122,7 +122,7 @@ func TestValidateRejectsDuplicateIDsAndOversizedLists(t *testing.T) {
 		target.ID = "target-" + strings.Repeat("a", i%10) + "-" + strings.Repeat("b", i/10)
 		oversized = append(oversized, target)
 	}
-	require.ErrorIs(t, aitargets.Validate(aivendors.NewSnapshot(aivendors.Products()), oversized), aitargets.ErrInvalidTarget)
+	require.ErrorIs(t, aitargets.Validate(aivendors.CompiledSnapshot(), oversized), aitargets.ErrInvalidTarget)
 }
 
 func repeat(value string, n int) []string {
@@ -163,7 +163,7 @@ func TestValidateTargetRejectsMatchersTheGatewayCannotResolve(t *testing.T) {
 				OAuthClientIDs:  []string{clientID},
 				ClientInfoNames: nil,
 			}
-			require.ErrorIsf(t, aitargets.ValidateTarget(aivendors.NewSnapshot(aivendors.Products()), target), aitargets.ErrInvalidTarget,
+			require.ErrorIsf(t, aitargets.ValidateTarget(aivendors.CompiledSnapshot(), target), aitargets.ErrInvalidTarget,
 				"%q must not be storable as a gateway matcher", clientID)
 
 			_, err := cimd.ValidateClientIDURL(clientID)
@@ -186,7 +186,7 @@ func TestValidateTargetAcceptsALegallyEscapedMatcher(t *testing.T) {
 		OAuthClientIDs:  []string{clientID},
 		ClientInfoNames: nil,
 	}
-	require.NoError(t, aitargets.ValidateTarget(aivendors.NewSnapshot(aivendors.Products()), target))
+	require.NoError(t, aitargets.ValidateTarget(aivendors.CompiledSnapshot(), target))
 
 	_, err := cimd.ValidateClientIDURL(clientID)
 	require.NoError(t, err, "the authorization-time gate must accept it too")

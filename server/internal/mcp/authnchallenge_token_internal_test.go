@@ -20,7 +20,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
@@ -235,7 +235,7 @@ func newRefreshTokenReplayTestFixture(
 	ciphertext, err := enc.Encrypt(plaintext)
 	require.NoError(t, err)
 
-	service := (&Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products()))})
+	service := (&Service{aiCatalog: aivendorstest.NewStore()})
 	service.enc = enc
 	service.metrics = &mcpmetrics.Metrics{}
 	service.userSessionSigner = sessiontokens.NewSigner("test-jwt-secret")

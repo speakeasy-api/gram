@@ -10,7 +10,7 @@ import (
 	orgusersgen "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	usergen "github.com/speakeasy-api/gram/server/gen/user_session_issuers"
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -98,7 +98,7 @@ func TestIssuerLifecycle_ProjectUserIssuerMutationHidesSiblingBindings(t *testin
 	tracer := testenv.NewTracerProvider(t)
 	policy, err := guardian.NewUnsafePolicy(tracer, []string{})
 	require.NoError(t, err)
-	service := usersessions.NewService(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), logger, tracer, testenv.NewMeterProvider(t), ti.conn, ti.sessionManager, nil,
+	service := usersessions.NewService(aivendorstest.NewStore(), logger, tracer, testenv.NewMeterProvider(t), ti.conn, ti.sessionManager, nil,
 		authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
 		audit.NewLogger(), policy, nil, testenv.NewEncryptionClient(t), clientsecretstest.New(t, ti.conn, testenv.NewEncryptionClient(t)), nil, nil, "", authserver.Hosts{}, nil, nil)
 	auth, ok := contextvalues.GetAuthContext(ctx)

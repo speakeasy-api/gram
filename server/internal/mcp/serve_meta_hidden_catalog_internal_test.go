@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -56,7 +56,7 @@ func TestListServersReportsUnapprovedMembers(t *testing.T) {
 
 func listServersForGate(t *testing.T, gate *metaGateContext) metamcp.ListServersResult {
 	t.Helper()
-	body, err := (&Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products()))}).handleMetaListServersCall(t.Context(), testenv.NewLogger(t), gate, nil, &rawRequest{})
+	body, err := (&Service{aiCatalog: aivendorstest.NewStore()}).handleMetaListServersCall(t.Context(), testenv.NewLogger(t), gate, nil, &rawRequest{})
 	require.NoError(t, err)
 
 	var rpc struct {

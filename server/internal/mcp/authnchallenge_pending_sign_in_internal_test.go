@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -59,7 +59,7 @@ func TestConnectPendingSignInRunsOnlyForACardConnect(t *testing.T) {
 			t.Parallel()
 
 			connector := &recordingPendingSignIn{}
-			service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), pendingSignIn: connector}
+			service := &Service{aiCatalog: aivendorstest.NewStore(), pendingSignIn: connector}
 			require.NoError(t, service.connectPendingSignIn(t.Context(), logger, tc.endpoint, tc.state))
 			require.Len(t, connector.calls, tc.calls)
 			if tc.calls == 1 {
@@ -70,7 +70,7 @@ func TestConnectPendingSignInRunsOnlyForACardConnect(t *testing.T) {
 
 	t.Run("no connector", func(t *testing.T) {
 		t.Parallel()
-		require.NoError(t, (&Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products()))}).connectPendingSignIn(t.Context(), logger, endpoint, cardConnect))
+		require.NoError(t, (&Service{aiCatalog: aivendorstest.NewStore()}).connectPendingSignIn(t.Context(), logger, endpoint, cardConnect))
 	})
 }
 
@@ -81,7 +81,7 @@ func TestConnectPendingSignInFailureStopsTheConsentPage(t *testing.T) {
 
 	logger := testenv.NewLogger(t)
 	user := urn.NewUserSubject("user_test")
-	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), pendingSignIn: &recordingPendingSignIn{err: errors.New("provider refused registration")}}
+	service := &Service{aiCatalog: aivendorstest.NewStore(), pendingSignIn: &recordingPendingSignIn{err: errors.New("provider refused registration")}}
 	err := service.connectPendingSignIn(t.Context(), logger, &ResolvedMcpEndpoint{
 		McpServerID:    uuid.NullUUID{UUID: uuid.New(), Valid: true},
 		OrganizationID: "org_test",

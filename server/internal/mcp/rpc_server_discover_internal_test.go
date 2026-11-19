@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 
 	"github.com/google/uuid"
@@ -31,7 +31,7 @@ func TestServerDiscoverNotificationHasNoResponse(t *testing.T) {
 			t.Parallel()
 			logger := testenv.NewLogger(t)
 			service := &Service{
-				aiCatalog:    aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+				aiCatalog:    aivendorstest.NewStore(),
 				logger:       logger,
 				toolsetsRepo: toolsetsrepo.New(failingDBTX{}), mcpMetadataRepo: metadatarepo.New(failingDBTX{})}
 			resolution := mcpversions.Resolution{Declared: mcpversions.Version20260728, InEffect: mcpversions.Version20260728}
@@ -82,7 +82,7 @@ func TestPlatformServerDiscoverIsCallerVarying(t *testing.T) {
 	t.Parallel()
 	resolution := mcpversions.Resolution{Declared: mcpversions.Version20260728, InEffect: mcpversions.Version20260728}
 	body, err := (&Service{
-		aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		aiCatalog: aivendorstest.NewStore(),
 		logger:    testenv.NewLogger(t)}).handlePlatformToolsetRequest(t.Context(), nil, platformtools.Toolset{},
 		&rawRequest{JSONRPC: "2.0", ID: mcpjsonrpc.NumberID(1), Method: mcpversions.MethodServerDiscover}, "", &resolution)
 	require.NoError(t, err)
@@ -144,7 +144,7 @@ func TestHostedServerDiscoverStoredInstructionsAndCachePrivacy(t *testing.T) {
 			// The request builder already loaded the toolset, so describing the
 			// server must not look it up again by slug.
 			service := &Service{
-				aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+				aiCatalog: aivendorstest.NewStore(),
 				logger:    testenv.NewLogger(t), toolsetsRepo: toolsetsrepo.New(failingDBTX{}), mcpMetadataRepo: metadata}
 			body, err := service.handleRequest(ctx, &mcpInputs{
 				projectID: project.ID, toolset: toolset.Slug,

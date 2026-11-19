@@ -19,7 +19,7 @@ func TestGenericConnectionEndingsMatchSeededApp(t *testing.T) {
 
 func TestStoppedConnectionAttemptRowsKeepBrowserIdentity(t *testing.T) {
 	t.Parallel()
-	s := &seeder{spec: DefaultSpec(), catalog: aivendors.NewSnapshot(aivendors.Products())}
+	s := &seeder{spec: DefaultSpec(), catalog: aivendors.CompiledSnapshot()}
 	scope := mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-linear"), mcpconnectionattempts.AppDCR)
 	attempt := mcpconnectionattempts.AttemptAt(s.det("stopped-attempt"), time.Now(), scope)
 	rows, err := s.connectionAttemptRows(attempt, "stopped-attempt", connectionEndings[0], true)
@@ -34,7 +34,7 @@ func TestStoppedConnectionAttemptRowsKeepBrowserIdentity(t *testing.T) {
 
 func TestStoppedConnectionAttemptMembersBelongToGateway(t *testing.T) {
 	t.Parallel()
-	s := &seeder{spec: DefaultSpec(), catalog: aivendors.NewSnapshot(aivendors.Products())}
+	s := &seeder{spec: DefaultSpec(), catalog: aivendors.CompiledSnapshot()}
 	for name, tc := range map[string]struct {
 		scope  mcpconnectionattempts.Scope
 		rows   int

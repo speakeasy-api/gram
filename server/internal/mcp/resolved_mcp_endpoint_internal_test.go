@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
@@ -220,7 +220,7 @@ func TestBuildResolvedMcpEndpointByRef_RetiredRouteBaseFailsClosed(t *testing.T)
 	require.Equal(t, mcproute.Base("x/mcp"), state.Endpoint.RouteBase)
 
 	_, err := (&Service{
-		aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		aiCatalog: aivendorstest.NewStore(),
 	}).buildResolvedMcpEndpointByRef(t.Context(), state.Endpoint)
 	require.ErrorIs(t, err, errToolsetEndpointMismatch)
 }

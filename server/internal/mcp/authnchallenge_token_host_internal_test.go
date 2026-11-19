@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -100,7 +100,7 @@ func TestCheckPerEndpointTokenHost(t *testing.T) {
 			t.Parallel()
 
 			service := &Service{
-				aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+				aiCatalog: aivendorstest.NewStore(),
 				serverURL: serverURL}
 			caseEndpoint := *endpoint
 			if tc.authHost {
