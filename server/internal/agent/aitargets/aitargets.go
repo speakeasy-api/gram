@@ -217,11 +217,11 @@ func Defaults(catalog *aivendors.Snapshot) []Target {
 
 // Snapshot is an immutable view of the served catalog at one list version.
 type Snapshot struct {
-	// ListVersion is the catalog revision, echoed by agents on receipts.
+	// ListVersion identifies the catalog content, echoed by agents on receipts.
 	ListVersion int32
 
-	// ETag fingerprints the schema version, ListVersion, and the served
-	// targets.
+	// ETag fingerprints the catalog, the schema version, ListVersion, and the
+	// served targets.
 	ETag string
 
 	targets  []Target
@@ -230,7 +230,7 @@ type Snapshot struct {
 }
 
 // NewSnapshot builds a snapshot over a copy of targets, sorted by id.
-func NewSnapshot(listVersion int32, targets []Target) *Snapshot {
+func NewSnapshot(listVersion int32, targets []Target, catalogFingerprint string) *Snapshot {
 	owned := make([]Target, 0, len(targets))
 	byID := make(map[string]Target, len(targets))
 	for _, target := range targets {
@@ -243,7 +243,7 @@ func NewSnapshot(listVersion int32, targets []Target) *Snapshot {
 	})
 	snapshot := &Snapshot{
 		ListVersion: listVersion,
-		ETag:        fingerprint(listVersion, owned),
+		ETag:        fingerprint(listVersion, owned, catalogFingerprint),
 		targets:     owned,
 		byID:        byID,
 		envelope:    nil,
@@ -329,8 +329,9 @@ func encodeEnvelope(envelope Envelope) map[string]any {
 	return value
 }
 
-func fingerprint(listVersion int32, sorted []Target) string {
+func fingerprint(listVersion int32, sorted []Target, catalogFingerprint string) string {
 	hash := sha256.New()
+	_, _ = fmt.Fprintf(hash, "catalog=%s\n", catalogFingerprint)
 	_, _ = fmt.Fprintf(hash, "schema_version=%d\nlist_version=%d\n", SchemaVersion, listVersion)
 	data, err := json.Marshal(wireTargets(sorted))
 	if err != nil {

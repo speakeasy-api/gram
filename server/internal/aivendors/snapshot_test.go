@@ -1,6 +1,7 @@
 package aivendors
 
 import (
+	"math"
 	"slices"
 	"strings"
 	"testing"
@@ -207,4 +208,48 @@ func TestSnapshotOwnsAllMutableData(t *testing.T) {
 	require.Equal(t, expectedCatalog, snapshot.Catalog())
 	require.Equal(t, fingerprint, NewSnapshot(snapshot.Products()).Fingerprint())
 	require.Equal(t, fingerprint, snapshot.Fingerprint())
+}
+
+func TestWireVersionStaysInDeviceRange(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		prefix uint32
+		want   int32
+	}{
+		{name: "zero", prefix: 0, want: 1},
+		{name: "sign bit only", prefix: 1 << 31, want: 1},
+		{name: "one", prefix: 1, want: 1},
+		{name: "sign bit and one", prefix: 1<<31 | 1, want: 1},
+		{name: "max int32", prefix: math.MaxInt32, want: math.MaxInt32},
+		{name: "all ones", prefix: math.MaxUint32, want: math.MaxInt32},
+		{name: "ordinary", prefix: 0x1234_5678, want: 0x1234_5678},
+		{name: "ordinary with sign bit", prefix: 0x9234_5678, want: 0x1234_5678},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, wireVersion(tc.prefix))
+		})
+	}
+}
+
+func TestCompiledSnapshotVersionIsDerivedFromContent(t *testing.T) {
+	t.Parallel()
+	compiled := CompiledSnapshot()
+	require.GreaterOrEqual(t, compiled.Version(), int32(1))
+	require.LessOrEqual(t, compiled.Version(), int32(math.MaxInt32))
+
+	rebuilt := Products()
+	for i := range rebuilt {
+		rebuilt[i].Family = ""
+		rebuilt[i].Aliases = nil
+	}
+	independent := NewSnapshot(rebuilt)
+	require.Equal(t, compiled.Version(), independent.Version(), "same content in the same order")
+	require.Equal(t, compiled.Fingerprint(), independent.Fingerprint())
+
+	rebuilt[0].DisplayName += " renamed"
+	changed := NewSnapshot(rebuilt)
+	require.NotEqual(t, compiled.Version(), changed.Version())
+	require.NotEqual(t, compiled.Fingerprint(), changed.Fingerprint())
 }

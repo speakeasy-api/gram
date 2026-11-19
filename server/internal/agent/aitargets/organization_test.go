@@ -1,6 +1,7 @@
 package aitargets_test
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -103,12 +104,34 @@ func TestOverlayKeepsTheBuiltInDefinitionAuthoritative(t *testing.T) {
 	require.Equal(t, "not reviewed", entries[0].Decision.Rationale)
 }
 
-// The served version names the compiled-in defaults revision and nothing
-// else. An organization's edits change the served targets, which the
-// snapshot ETag hashes; that is what makes an agent re-apply the list.
-func TestListVersionIsTheDefaultsRevision(t *testing.T) {
+// The served list_version is the catalog's content-derived version. An
+// organization's edits change only the ETag; a catalog change moves both.
+func TestOrganizationListVersionAndETagFollowCatalogContent(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, aitargets.DefaultsVersion, aitargets.ListVersion())
+
+	compiled := aivendors.CompiledSnapshot()
+	served := aitargets.NewOrganizationList(compiled, nil).Snapshot
+	require.Equal(t, compiled.Version(), served.ListVersion)
+	require.GreaterOrEqual(t, served.ListVersion, int32(1), "devices reserve 0 for their embedded list")
+	require.LessOrEqual(t, served.ListVersion, int32(math.MaxInt32))
+
+	products := aivendors.Products()
+	for i := range products {
+		products[i].Family = ""
+		products[i].Aliases = nil
+	}
+	rebuilt := aitargets.NewOrganizationList(aivendors.NewSnapshot(products), nil).Snapshot
+	require.Equal(t, served.ListVersion, rebuilt.ListVersion, "same catalog, same order")
+	require.Equal(t, served.ETag, rebuilt.ETag)
+
+	edited := aitargets.NewOrganizationList(compiled, []aitargets.Entry{organizationRow("an-organization-target")}).Snapshot
+	require.Equal(t, served.ListVersion, edited.ListVersion, "an organization edit does not move the version")
+	require.NotEqual(t, served.ETag, edited.ETag, "an organization edit moves the ETag")
+
+	products[0].DisplayName += " renamed"
+	changed := aitargets.NewOrganizationList(aivendors.NewSnapshot(products), nil).Snapshot
+	require.NotEqual(t, served.ListVersion, changed.ListVersion, "a catalog change moves the version")
+	require.NotEqual(t, served.ETag, changed.ETag, "a catalog change moves the ETag")
 }
 
 // ChatGPT ships as two desktop builds that a device tells apart by bundle id

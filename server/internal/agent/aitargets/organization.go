@@ -15,31 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
-// DefaultsVersion counts revisions of Defaults. Bump it whenever the
-// compiled-in list changes, so agents can tell which defaults they hold.
-//
-// 2: the registry grew past the original harnesses to cover assistants and
-// open model runners, and gained the gateway-client matchers.
-//
-// 3: ChatGPT moved from harness to assistant, and Cline gained the versioned
-// VS Code extension config dirs that detect an install without the npm CLI.
-//
-// 4: ChatGPT Classic gained its process name, so an agent reports it as
-// running and not merely installed.
-//
-// 5: Pi joined the catalog, so a device running it no longer scans clean.
-//
-// 6: the current ChatGPT app became its own target under the bundle id it
-// moved to, and the ChatGPT gateway documents moved onto it, leaving Classic
-// a scan target the gateway cannot single out.
-//
-// 7: Conductor joined the catalog (both admission and detection).
-//
-// 8: Google Antigravity joined the catalog (both admission and detection).
-//
-// 9: Pi gained stable and per-server gateway client metadata matchers.
-const DefaultsVersion int32 = 9
-
 // Source says where a target in an organization's list comes from.
 type Source string
 
@@ -216,13 +191,6 @@ func normalizeForComparison(t Target) Target {
 	return out
 }
 
-// ListVersion is the served list_version: the compiled-in defaults revision.
-// Organization edits do not move it — they change the served targets, which
-// the snapshot ETag hashes, and that is what makes an agent re-apply.
-func ListVersion() int32 {
-	return DefaultsVersion
-}
-
 // OrganizationList is an organization's full target list and the snapshot
 // its agents are served.
 type OrganizationList struct {
@@ -261,11 +229,17 @@ func LoadOrganizationList(ctx context.Context, queries *repo.Queries, organizati
 	for _, row := range rows {
 		entries = append(entries, EntryFromRow(row))
 	}
+	return NewOrganizationList(catalog, entries), nil
+}
+
+// NewOrganizationList overlays entries on the catalog defaults. The served
+// list_version is the catalog version; organization edits move only the ETag.
+func NewOrganizationList(catalog *aivendors.Snapshot, entries []Entry) *OrganizationList {
 	overlaid := Overlay(Defaults(catalog), entries)
 	return &OrganizationList{
 		Entries:  overlaid,
-		Snapshot: NewSnapshot(ListVersion(), Served(overlaid)),
-	}, nil
+		Snapshot: NewSnapshot(catalog.Version(), Served(overlaid), catalog.Fingerprint()),
+	}
 }
 
 // EntryFromRow converts an organization's row into an Entry. Overlay settles

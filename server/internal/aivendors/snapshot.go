@@ -100,14 +100,18 @@ func NewSnapshot(products []Product) *Snapshot {
 	data, _ := json.Marshal(canonical)
 	hash := sha256.Sum256(data)
 	s.fingerprint = hex.EncodeToString(hash[:])
-	// The wire contract is a positive int32; zero denotes device fallback.
-	// This is an opaque identifier, not an ordered or collision-free revision.
-	const versionMask = uint32(1<<31 - 1)
-	s.version = int32(binary.BigEndian.Uint32(hash[:4]) & versionMask)
-	if s.version == 0 {
-		s.version = 1
-	}
+	s.version = wireVersion(binary.BigEndian.Uint32(hash[:4]))
 	return s
+}
+
+// wireVersion reduces a hash prefix to 1..MaxInt32: devices reserve 0 for their
+// embedded list and reject negatives. The result is opaque, not ordered.
+func wireVersion(prefix uint32) int32 {
+	const versionMask = uint32(1<<31 - 1)
+	if v := int32(prefix & versionMask); v != 0 {
+		return v
+	}
+	return 1
 }
 
 // patternSpecificity counts a pattern's literal path segments.
