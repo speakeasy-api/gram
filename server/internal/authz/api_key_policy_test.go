@@ -356,7 +356,7 @@ func TestLegacyKeysNeverUseTheirCreatorsConnection(t *testing.T) {
 	f := newAPIKeyFixture(t)
 	f.grant(t, ScopeMCPAuth, Selector{SelectorKeyResourceKind: ResourceKindMCPAuthClient, SelectorKeyResourceID: "client_a"})
 	personal := MCPAuthClientCheck("client_a", MCPAuthClientDimensions{ClientType: AuthClientTypeRemoteSession, ProjectID: f.projectID, ConnectionOwner: f.creatorID, UpstreamClient: "upstream_a"})
-	requireMandatory(t, f.engine, f.keyContext(t), MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonNotGranted}, personal)
+	requireMandatory(t, f.engine, f.keyContext(t), MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonOwnerOnly}, personal)
 }
 
 func TestPrepareMandatoryAdmitsOnceAndDecidesPerServer(t *testing.T) {

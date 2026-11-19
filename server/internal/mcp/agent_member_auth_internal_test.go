@@ -255,6 +255,60 @@ func TestAgentMemberLegacyClientUsesTheAgentKeysAuthorizer(t *testing.T) {
 	}
 }
 
+// An agent called for one member, with another member's personal connection
+// attached, is refused as owner-only: neither the agent's grants nor the
+// caller's change that, so the refusal says so instead of asking for a
+// permissions review. A refusal a grant can fix keeps asking for one.
+func TestAgentMemberRefusesAnotherMembersAttachedConnectionAsOwnerOnly(t *testing.T) {
+	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "agent_member_owner_only")
+	require.NoError(t, err)
+	personal := personalAuthGrant()
+	wildcard := authz.NewGrant(authz.ScopeMCPAuth, authz.WildcardResource)
+	connectOnly := authz.NewGrant(authz.ScopeMCPConnect, authz.WildcardResource)
+	cases := []struct {
+		name      string
+		agent     []authz.Grant
+		owner     string
+		ownerOnly bool
+	}{
+		{"another member's attached connection", []authz.Grant{personal, wildcard}, "user_owner", true},
+		{"the caller's own attached connection without mcp:auth", []authz.Grant{connectOnly}, "user_caller", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newAuthClientFixture(t, pool)
+			f.oauthClient(authClientTypeRemoteSession)
+			f.enforce()
+			f.service.authz = authz.NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient(), authz.EngineOpts{
+				AdmitPrincipalCredential: func(context.Context, *pgxpool.Pool) (authz.PrincipalCredentialAdmission, error) {
+					return authz.PrincipalCredentialAdmission{
+						OwnerUserID: "user_owner", Credential: tc.agent, Agent: tc.agent, Owner: []authz.Grant{personal, wildcard},
+						Authorizer: authz.RepresentedUserPolicy{UserID: "user_caller", Policy: []authz.Grant{personal, wildcard}}, LegacyAuthCeiling: false,
+					}, nil
+				},
+			})
+			f.service.authClientPermitter = mandatoryPermitter{engine: f.service.authz}
+			f.service.attachedConnections = &fakeAttachedConnections{conn: remotesessions.AttachedConnection{RemoteSessionID: uuid.New(), OwnerUserID: tc.owner}, attached: true, err: nil, asked: nil}
+			source := &agentMemberOutageTokens{fakeUpstreamTokens: &fakeUpstreamTokens{issuerID: uuid.New()}}
+			f.service.upstreamTokens = source
+			agentID := uuid.New()
+			ctx := admittedAgentContext(t, f.orgID, agentID)
+			gate := &metaGateContext{agentID: agentID, organizationID: f.orgID, servedCredentials: map[uuid.UUID]contextvalues.UpstreamCredential{}}
+			member := metaMember{serverID: f.serverID, projectID: f.projectID, slug: "member", backend: metaMemberBackendProxied}
+
+			_, err := f.service.agentMemberClientTokens(ctx, gate, member, f.issuerID, f.registration, "")
+			require.Error(t, err)
+			require.Empty(t, source.subjects, "a refused member reads no credential")
+			access, ok := errors.AsType[agentAccessError](err)
+			require.True(t, ok, "a refused use, never a missing connection: %v", err)
+			require.Equal(t, tc.ownerOnly, access.ownerOnly)
+			require.NotContains(t, err.Error(), "user_owner", "the refusal never names the owner")
+		})
+	}
+}
+
 // agentMemberOutageTokens injects outages into both token lookup paths.
 // Enforced members use the typed lookup rather than the legacy sign-in lookup.
 type agentMemberOutageTokens struct {

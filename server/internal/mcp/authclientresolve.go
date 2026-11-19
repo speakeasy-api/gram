@@ -100,6 +100,10 @@ const (
 	authClientReasonNoAuthForbidden = "no_auth_forbidden"
 	authClientReasonNoAuthStale     = "no_auth_server_has_clients"
 	authClientReasonNotPermitted    = "not_permitted"
+	// authClientReasonOwnerOnly is a refusal to use a personal connection
+	// that belongs to a member other than the one the request represents. It
+	// serves only its owner's calls, so no grant changes it.
+	authClientReasonOwnerOnly       = "connection_owner_only"
 	authClientReasonSetup           = "setup"
 	authClientReasonHeadersStale    = "client_headers_stale"
 	authClientReasonLegacyMayChain  = "legacy_may_chain"
@@ -221,7 +225,21 @@ func (r authClientPermitRequest) connectionOwner() string {
 
 // authClientPermitter decides whether the caller may use a resolved client.
 type authClientPermitter interface {
-	Permitted(ctx context.Context, req authClientPermitRequest) (bool, error)
+	Permitted(ctx context.Context, req authClientPermitRequest) (authClientPermit, error)
+}
+
+// authClientPermit is a permitter's decision on one use of a client.
+type authClientPermit struct {
+	allowed bool
+	// ownerOnly marks a refusal to use a personal connection that belongs to
+	// a member other than the one the request represents. No grant changes
+	// it, so the refusal never asks for one.
+	ownerOnly bool
+}
+
+// plainPermit is a decision that says nothing beyond whether it allows.
+func plainPermit(allowed bool) authClientPermit {
+	return authClientPermit{allowed: allowed, ownerOnly: false}
 }
 
 // connectPermitter keeps today's rule until per-client grants exist
@@ -230,8 +248,8 @@ type authClientPermitter interface {
 // backend is prepared, and still applies.
 type connectPermitter struct{}
 
-func (connectPermitter) Permitted(context.Context, authClientPermitRequest) (bool, error) {
-	return true, nil
+func (connectPermitter) Permitted(context.Context, authClientPermitRequest) (authClientPermit, error) {
+	return plainPermit(true), nil
 }
 
 // mandatoryPermitter decides use of a resolved client with the mandatory
@@ -246,16 +264,16 @@ type mandatoryPermitter struct {
 	visibility serverVisibilityLookup
 }
 
-func (p mandatoryPermitter) Permitted(ctx context.Context, req authClientPermitRequest) (bool, error) {
+func (p mandatoryPermitter) Permitted(ctx context.Context, req authClientPermitRequest) (authClientPermit, error) {
 	authorization, err := p.engine.PrepareMandatory(ctx)
 	if err != nil {
-		return false, fmt.Errorf("admit caller for auth client: %w", err)
+		return plainPermit(false), fmt.Errorf("admit caller for auth client: %w", err)
 	}
 	decision, err := decideAuthClientUse(ctx, authorization, req, p.visibility)
 	if err != nil {
-		return false, fmt.Errorf("evaluate auth client check: %w", err)
+		return plainPermit(false), fmt.Errorf("evaluate auth client check: %w", err)
 	}
-	return decision.Allowed, nil
+	return authClientPermit{allowed: decision.Allowed, ownerOnly: !decision.Allowed && decision.Reason == authz.MandatoryDenyReasonOwnerOnly}, nil
 }
 
 // serverVisibilityLookup reads the visibility a server in an organization is
@@ -485,8 +503,8 @@ func (s *Service) resolveAuthClientForServing(ctx context.Context, selector *ups
 			// The shadow compares the mandatory check with the
 			// connect-equivalent rule served before it, whichever of the two
 			// decided here.
-			legacyPermitted, _ := connectPermitter{}.Permitted(ctx, permit)
-			s.shadowAuthClientUse(ctx, legacyPermitted, permit)
+			legacy, _ := connectPermitter{}.Permitted(ctx, permit)
+			s.shadowAuthClientUse(ctx, legacy.allowed, permit)
 		}
 	})
 }
@@ -595,16 +613,19 @@ func (s *Service) checkAuthClientPermission(ctx context.Context, permit authClie
 		if connection.authorizer {
 			res.authorizerOwner = connection.owner
 		}
-		permitted, err := permitter.Permitted(ctx, permit)
+		decision, err := permitter.Permitted(ctx, permit)
 		if err != nil {
 			return res, fmt.Errorf("check auth client permission: %w", err)
 		}
 		if observe != nil {
-			observe(permit, permitted)
+			observe(permit, decision.allowed)
 		}
-		if !permitted {
+		if !decision.allowed {
 			res.outcome = authClientNoAccess
 			res.reason = authClientReasonNotPermitted
+			if decision.ownerOnly {
+				res.reason = authClientReasonOwnerOnly
+			}
 		}
 	}
 	return res, nil
@@ -901,9 +922,19 @@ func (s *Service) serveAuthClient(ctx context.Context, w http.ResponseWriter, au
 	return res.choice, nil
 }
 
-// authClientNoAccessError refuses a caller the chosen client, with a link to
-// request access to the server.
+// ownerOnlyConnectionMessage refuses a personal connection that belongs to a
+// member other than the one the request represents. No grant changes that, so
+// it offers no request-access link. It never names the owner or their
+// upstream account.
+const ownerOnlyConnectionMessage = "this MCP server uses a personal connection that belongs to another member of your organization, and that connection only serves that member's own calls. " +
+	"To use this server, connect your own account on the agent's MCP sign-in tab in Speakeasy, or ask an organization administrator to set up a shared credential for it."
+
+// authClientNoAccessError refuses a caller the chosen client. A refusal a
+// grant can fix links to request access to the server.
 func (s *Service) authClientNoAccessError(ctx context.Context, serverID uuid.UUID, res authClientResolution) error {
+	if res.reason == authClientReasonOwnerOnly {
+		return oops.E(oops.CodeForbidden, errAuthClientNoAccess, "%s", ownerOnlyConnectionMessage).LogWarn(ctx, s.logger, attr.SlogAuthClientID(res.clientID.String()), attr.SlogAuthClientReason(res.reason))
+	}
 	message := "you don't have access to the connection this MCP server uses. Ask an organization administrator to grant access."
 	if link := strings.TrimSpace(s.requestAccessURL(ctx, serverID.String(), res.serverName)); link != "" {
 		message += "\n\nRequest access:\n" + link

@@ -189,6 +189,43 @@ func TestMCPAuthPersonalConnectionsBindRepresentedUser(t *testing.T) {
 	}
 }
 
+// A mandatory decision tells a personal connection used for anyone but its
+// owner apart from a missing grant: no grant changes the first, so callers
+// explain it instead of asking for access. Every other refusal keeps its
+// reason.
+func TestEvaluateMandatoryNamesOwnerOnlyRefusals(t *testing.T) {
+	t.Parallel()
+
+	wildcard := []Grant{NewGrant(ScopeMCPAuth, WildcardResource)}
+	connectOnly := []Grant{NewGrant(ScopeMCPConnect, WildcardResource)}
+	acting := func(representedUser string, policies ...[]Grant) grantAuthorization {
+		return grantAuthorization{policies: policies, representedUser: representedUser, representedPolicies: nil, legacyAuthCeiling: false}
+	}
+	allow := MandatoryDecision{Allowed: true, Source: MandatoryPolicySourceRequest, Reason: MandatoryDenyReasonNone}
+	ownerOnly := MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceRequest, Reason: MandatoryDenyReasonOwnerOnly}
+	notGranted := MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceRequest, Reason: MandatoryDenyReasonNotGranted}
+	noPolicy := MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceRequest, Reason: MandatoryDenyReasonNoPolicy}
+
+	cases := map[string]struct {
+		authorization grantAuthorization
+		check         Check
+		want          MandatoryDecision
+	}{
+		"own connection":                       {acting(sessionUserID, wildcard), personalClientCheck(sessionUserID), allow},
+		"another member's under a wildcard":    {acting(sessionUserID, wildcard), personalClientCheck("user_456"), ownerOnly},
+		"another member's with no policy":      {acting(sessionUserID), personalClientCheck("user_456"), ownerOnly},
+		"a personal connection, nobody served": {acting("", wildcard), personalClientCheck(sessionUserID), ownerOnly},
+		"own connection not granted":           {acting(sessionUserID, connectOnly), personalClientCheck(sessionUserID), notGranted},
+		"shared client not granted":            {acting(sessionUserID, connectOnly), sharedClientCheck(authProjectP), notGranted},
+		"own connection with no policy":        {acting(sessionUserID), personalClientCheck(sessionUserID), noPolicy},
+	}
+	for name, tc := range cases {
+		got, err := evaluateMandatory(tc.authorization, MandatoryPolicySourceRequest, []Check{tc.check})
+		require.NoError(t, err, name)
+		require.Equal(t, tc.want, got, name)
+	}
+}
+
 func TestMCPBlockedAuthAppliesToSharedClientEverywhere(t *testing.T) {
 	t.Parallel()
 

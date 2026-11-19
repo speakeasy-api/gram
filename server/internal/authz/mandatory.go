@@ -44,6 +44,10 @@ const (
 	MandatoryDenyReasonNotGranted         MandatoryDenyReason = "not_granted"
 	MandatoryDenyReasonBlocked            MandatoryDenyReason = "blocked"
 	MandatoryDenyReasonUnauthenticated    MandatoryDenyReason = "unauthenticated"
+	// MandatoryDenyReasonOwnerOnly is a personal connection used for anyone
+	// other than its owner, the user the request represents. Ownership filters
+	// permission and never grants it, so no grant changes this refusal.
+	MandatoryDenyReasonOwnerOnly MandatoryDenyReason = "owner_only"
 )
 
 // MandatoryDecision is the outcome of a mandatory check. Allowed is true when
@@ -372,6 +376,13 @@ func mandatoryCaller(ctx context.Context, authCtx *contextvalues.AuthContext) (M
 }
 
 func evaluateMandatory(authorization grantAuthorization, source MandatoryPolicySource, checks []Check) (MandatoryDecision, error) {
+	// A personal connection that is not the represented user's own is refused
+	// whatever the policy holds, so it says so before any grant is read.
+	for _, check := range checks {
+		if personalCheckUnbound(authorization.bind(check)) {
+			return denyMandatory(source, MandatoryDenyReasonOwnerOnly), nil
+		}
+	}
 	if authorization.grantCount() == 0 {
 		return denyMandatory(source, MandatoryDenyReasonNoPolicy), nil
 	}

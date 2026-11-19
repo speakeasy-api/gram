@@ -35,7 +35,7 @@ func TestSeedPersonalAuthClientDefaultIsIdempotent(t *testing.T) {
 	shared := MCPAuthClientCheck("client_1", MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: "p", ConnectionOwner: "", UpstreamClient: ""})
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	requireMandatory(t, engine, user, MandatoryDecision{Allowed: true, Source: MandatoryPolicySourceRequest, Reason: MandatoryDenyReasonNone}, own)
-	requireMandatory(t, engine, user, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceRequest, Reason: MandatoryDenyReasonNotGranted}, foreign)
+	requireMandatory(t, engine, user, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceRequest, Reason: MandatoryDenyReasonOwnerOnly}, foreign)
 	requireMandatory(t, engine, user, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceRequest, Reason: MandatoryDenyReasonNotGranted}, shared)
 
 	require.NoError(t, SeedPersonalAuthClientDefaultTx(ctx, conn, organizationID))

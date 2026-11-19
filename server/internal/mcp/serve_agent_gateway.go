@@ -363,21 +363,30 @@ func (e agentCredentialError) Unwrap() error { return e.metaMemberError }
 // agentServerAccessError refuses an agent the use of a connection to a server
 // that policy does not permit. Reconnecting does not change it.
 func agentServerAccessError(slug string) error {
-	return agentAccessError{agentServerRefusal(slug), false}
+	return agentAccessError{agentServerRefusal(slug), false, false}
+}
+
+// agentServerOwnerOnlyError refuses an agent a personal connection that
+// belongs to a member other than the one the call represents. Neither its
+// permissions nor a reconnect change that.
+func agentServerOwnerOnlyError(slug string) error {
+	return agentAccessError{agentServerRefusal(slug), false, true}
 }
 
 // agentServerGapError refuses an agent a server that no single auth client
 // serves. The server's auth clients fix it, not the agent's permissions.
 func agentServerGapError(slug string) error {
-	return agentAccessError{agentServerRefusal(slug), true}
+	return agentAccessError{agentServerRefusal(slug), true, false}
 }
 
 // agentAccessError is an agent refused the use of a connection to a server,
 // which a person fixes in the agent's permissions or, when server is set,
-// in the server's auth clients, not by reconnecting.
+// in the server's auth clients, not by reconnecting. When ownerOnly is set
+// the connection is another member's, which only that member's calls use.
 type agentAccessError struct {
 	*metaMemberError
-	server bool
+	server    bool
+	ownerOnly bool
 }
 
 func (e agentAccessError) Unwrap() error { return e.metaMemberError }
@@ -515,11 +524,14 @@ func (s *Service) authorizeAgentServerClient(ctx context.Context, target agentSe
 		if err != nil {
 			return none, noCredential, err
 		}
-		allowed, err := permitter.Permitted(ctx, permit)
+		decision, err := permitter.Permitted(ctx, permit)
 		if err != nil {
 			return none, noCredential, fmt.Errorf("authorize agent member client: %w", err)
 		}
-		if !allowed {
+		if decision.ownerOnly {
+			return none, noCredential, agentServerOwnerOnlyError(target.slug)
+		}
+		if !decision.allowed {
 			return none, noCredential, agentServerAccessError(target.slug)
 		}
 	}

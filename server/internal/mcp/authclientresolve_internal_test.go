@@ -333,16 +333,16 @@ func text(v string) pgtype.Text { return pgtype.Text{String: v, Valid: true} }
 
 type denyPermitter struct{}
 
-func (denyPermitter) Permitted(context.Context, authClientPermitRequest) (bool, error) {
-	return false, nil
+func (denyPermitter) Permitted(context.Context, authClientPermitRequest) (authClientPermit, error) {
+	return plainPermit(false), nil
 }
 
 // recordingPermitter records what it was asked.
 type recordingPermitter struct{ asked []authClientPermitRequest }
 
-func (p *recordingPermitter) Permitted(_ context.Context, req authClientPermitRequest) (bool, error) {
+func (p *recordingPermitter) Permitted(_ context.Context, req authClientPermitRequest) (authClientPermit, error) {
 	p.asked = append(p.asked, req)
-	return true, nil
+	return plainPermit(true), nil
 }
 
 func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {

@@ -243,8 +243,8 @@ func (s *Service) SetBrowserSession(authenticate func(context.Context, string) (
 
 type fixedPermitter bool
 
-func (p fixedPermitter) Permitted(context.Context, authClientPermitRequest) (bool, error) {
-	return bool(p), nil
+func (p fixedPermitter) Permitted(context.Context, authClientPermitRequest) (authClientPermit, error) {
+	return plainPermit(bool(p)), nil
 }
 
 // SetAuthClientPermitted answers every auth client permission check with allowed.
@@ -339,7 +339,7 @@ type callerRecordingPermitter struct {
 	users []string
 }
 
-func (p *callerRecordingPermitter) Permitted(ctx context.Context, _ authClientPermitRequest) (bool, error) {
+func (p *callerRecordingPermitter) Permitted(ctx context.Context, _ authClientPermitRequest) (authClientPermit, error) {
 	user := ""
 	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
 		user = authCtx.UserID
@@ -347,7 +347,7 @@ func (p *callerRecordingPermitter) Permitted(ctx context.Context, _ authClientPe
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.users = append(p.users, user)
-	return true, nil
+	return plainPermit(true), nil
 }
 
 // RecordAuthClientPermitCallers allows every auth client and returns the
@@ -376,8 +376,8 @@ func (s *Service) SetAuthClientPermission(allowed func() bool) {
 
 type testAuthClientPermission func() bool
 
-func (f testAuthClientPermission) Permitted(context.Context, authClientPermitRequest) (bool, error) {
-	return f(), nil
+func (f testAuthClientPermission) Permitted(context.Context, authClientPermitRequest) (authClientPermit, error) {
+	return plainPermit(f()), nil
 }
 
 // RecordConnectionPopupGrant exercises the callback's parent-state correlation.

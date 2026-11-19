@@ -531,9 +531,13 @@ func (s *Service) resolveAgentKeyClientTokens(ctx context.Context, authenticatio
 // directAgentKeyError answers a refused agent key on a server's own endpoint.
 func (s *Service) directAgentKeyError(ctx context.Context, authentication *issuerGateAuthentication, err error) error {
 	var refused *metaMemberError
+	access, _ := errors.AsType[agentAccessError](err)
 	switch {
 	case err == nil:
 		return nil
+	case access.ownerOnly:
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: agent may not use another member's personal connection", authClientReasonOwnerOnly, mcpconnectionattempts.CodeNoServerAccess)
+		return oops.E(oops.CodeForbidden, err, "%s", ownerOnlyConnectionMessage)
 	case errors.As(err, &refused):
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: agent may not use the server's connection", issuerGateReasonUpstreamSelectionUnavailable, mcpconnectionattempts.CodeNoServerAccess)
 		return oops.E(oops.CodeForbidden, err, "this agent may not use this server's connection")

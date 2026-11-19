@@ -154,8 +154,8 @@ func TestAttachedAgentAuthClientChecksTheAttachedConnectionOwner(t *testing.T) {
 		res, err := f.service.resolveAuthClientForServing(sessionContext(t, f.orgID, personalAuthGrant(), authz.NewGrant(authz.ScopeMCPAuth, authz.WildcardResource)), selector, f.serverID, f.projectID, agent)
 		require.NoError(t, err)
 		require.Equal(t, authClientNoAccess, res.outcome, "ownership filters grants and never grants, even against a wildcard")
-		require.Equal(t, authClientReasonNotPermitted, res.reason)
-		require.Equal(t, map[string]int64{"deny/not_granted": 1}, authClientShadowOutcomes(t, reader))
+		require.Equal(t, authClientReasonOwnerOnly, res.reason, "the refusal says the connection is another member's")
+		require.Equal(t, map[string]int64{"deny/owner_only": 1}, authClientShadowOutcomes(t, reader))
 	})
 
 	t.Run("a refused direct caller writes one row", func(t *testing.T) {
@@ -168,8 +168,42 @@ func TestAttachedAgentAuthClientChecksTheAttachedConnectionOwner(t *testing.T) {
 		endpoint := &ResolvedMcpEndpoint{ProjectID: f.projectID, OrganizationID: f.orgID, UserSessionIssuerID: selector.userSessionIssuerID, McpServerID: validUUID(f.serverID)}
 		_, err := f.service.enforceAuthClient(sessionContext(t, f.orgID, personalAuthGrant()), httptest.NewRecorder(), &issuerGateAuthentication{endpoint: endpoint, subject: agent}, selector)
 		require.Error(t, err)
-		rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess)
+		row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess)
+		require.Equal(t, authClientReasonOwnerOnly, row.SubReason, "the row tells an owner-only refusal apart")
 		require.Len(t, rec.Rows(), 1)
+	})
+
+	t.Run("another member's connection explains itself and names no one", func(t *testing.T) {
+		t.Parallel()
+		lookup := &fakeAttachedConnections{conn: remotesessions.AttachedConnection{RemoteSessionID: uuid.New(), OwnerUserID: "user_2"}, attached: true, err: nil}
+		f, selector, _, agent := setup(t, lookup)
+		f.service.connections = mcpconnectionattemptstest.New(t).Recorder
+		f.service.siteURL = &url.URL{Scheme: "https", Host: "app.example.com"}
+		endpoint := &ResolvedMcpEndpoint{ProjectID: f.projectID, OrganizationID: f.orgID, UserSessionIssuerID: selector.userSessionIssuerID, McpServerID: validUUID(f.serverID)}
+		_, err := f.service.enforceAuthClient(sessionContext(t, f.orgID, personalAuthGrant()), httptest.NewRecorder(), &issuerGateAuthentication{endpoint: endpoint, subject: agent}, selector)
+		require.ErrorIs(t, err, errAuthClientNoAccess)
+		require.ErrorContains(t, err, "personal connection that belongs to another member")
+		require.ErrorContains(t, err, "connect your own account on the agent's MCP sign-in tab")
+		require.ErrorContains(t, err, "shared credential")
+		require.NotContains(t, err.Error(), "user_2", "the refusal never names the owner")
+		require.NotContains(t, err.Error(), "grant access", "no grant can fix it")
+		require.NotContains(t, err.Error(), "Request access", "no grant can fix it")
+	})
+
+	t.Run("a refusal a grant can fix keeps asking for access", func(t *testing.T) {
+		t.Parallel()
+		lookup := &fakeAttachedConnections{conn: remotesessions.AttachedConnection{RemoteSessionID: uuid.New(), OwnerUserID: "user_1"}, attached: true, err: nil}
+		f, selector, _, agent := setup(t, lookup)
+		rec := mcpconnectionattemptstest.New(t)
+		f.service.connections = rec.Recorder
+		f.service.siteURL = &url.URL{Scheme: "https", Host: "app.example.com"}
+		endpoint := &ResolvedMcpEndpoint{ProjectID: f.projectID, OrganizationID: f.orgID, UserSessionIssuerID: selector.userSessionIssuerID, McpServerID: validUUID(f.serverID)}
+		_, err := f.service.enforceAuthClient(sessionContext(t, f.orgID), httptest.NewRecorder(), &issuerGateAuthentication{endpoint: endpoint, subject: agent}, selector)
+		require.ErrorIs(t, err, errAuthClientNoAccess)
+		require.ErrorContains(t, err, "you don't have access to the connection this MCP server uses. Ask an organization administrator to grant access.")
+		require.NotContains(t, err.Error(), "another member")
+		row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess)
+		require.Equal(t, authClientReasonNotPermitted, row.SubReason)
 	})
 
 	t.Run("a removed grant refuses the owner's attached connection", func(t *testing.T) {
@@ -316,20 +350,20 @@ func TestMandatoryPermitterKeepsAUsersOwnConnectionWhenUnresolved(t *testing.T) 
 		OrganizationID: shadowOrg, ProjectID: uuid.New(), ServerID: uuid.New(), ClientID: uuid.New(), ClientType: authClientTypeRemoteSession,
 		RegistrationID: validUUID(uuid.New()), CredentialKind: "", CredentialID: uuid.Nil, Subject: urn.NewUserSubject("user_1"), UserSessionIssuerID: uuid.Nil, ConnectionOwner: "",
 	}
-	allowed, err := permitter.Permitted(ctx, req)
+	decision, err := permitter.Permitted(ctx, req)
 	require.NoError(t, err)
-	require.True(t, allowed, "a user's own connection is theirs")
+	require.True(t, decision.allowed, "a user's own connection is theirs")
 
 	req.Subject = urn.NewAgentSubject(uuid.New())
-	allowed, err = permitter.Permitted(ctx, req)
+	decision, err = permitter.Permitted(ctx, req)
 	require.NoError(t, err)
-	require.False(t, allowed, "an agent's owner is never assumed")
+	require.False(t, decision.allowed, "an agent's owner is never assumed")
 
 	req.ConnectionOwner = "user_2"
 	req.Subject = urn.NewUserSubject("user_1")
-	allowed, err = permitter.Permitted(ctx, req)
+	decision, err = permitter.Permitted(ctx, req)
 	require.NoError(t, err)
-	require.False(t, allowed, "a resolved owner wins over the subject")
+	require.False(t, decision.allowed, "a resolved owner wins over the subject")
 }
 
 // admittedAgentContext is an agent API key caller as authentication admits it:

@@ -323,6 +323,36 @@ func TestWithAgentMemberFix_SeparatesBrokenConnectionsFromRefusedAccess(t *testi
 	require.NotContains(t, unserved.Error(), testAgentSignIn)
 }
 
+// An agent refused another member's personal connection says why and what
+// the caller can do. Neither the agent's permissions nor a grant fix it, so
+// it never sends the caller there, and it names no one.
+func TestWithAgentMemberFix_ExplainsAnotherMembersConnection(t *testing.T) {
+	t.Parallel()
+
+	member := gatewayTestMember("linear", "Linear", uuid.New(), uuid.New())
+	ownerOnly := agentServerOwnerOnlyError(member.slug)
+	require.False(t, agentConnectionMissing(ownerOnly), "a refused use refuses the server, never skipped like a missing connection")
+
+	none := metaGateContext{}
+	require.Equal(t, ownerOnly, none.withAgentMemberFix(member, ownerOnly), "only an agent gateway rewrites it")
+
+	agent := testAgentGate(t, nil)
+	explained := agent.withAgentMemberFix(member, ownerOnly)
+	require.ErrorContains(t, explained, `server "linear" refused this call: the agent uses a personal connection to it that belongs to another member, and that connection only serves that member's own calls`)
+	require.ErrorContains(t, explained, "connect your own account on the agent's MCP sign-in tab at "+testAgentSignIn)
+	require.ErrorContains(t, explained, "ask an organization administrator to set up a shared credential for it")
+	require.NotContains(t, explained.Error(), testAgentAccess, "the agent's permissions cannot fix it")
+	require.NotContains(t, explained.Error(), "review its permissions")
+
+	noLink := testAgentGate(t, nil)
+	noLink.agentFix.link = func(string) memberFix { return memberFix{agent: true, url: "", accessURL: ""} }
+	unlinked := noLink.withAgentMemberFix(member, ownerOnly)
+	require.ErrorContains(t, unlinked, "connect your own account on the agent's MCP sign-in tab in Speakeasy")
+
+	refused := agent.withAgentMemberFix(member, agentServerAccessError(member.slug))
+	require.NotContains(t, refused.Error(), "another member", "other refusals keep their message")
+}
+
 // connection_status marks a row the agent's sign-in step fixes by the error
 // that failed it, not by its text, and gives it a short detail since the hint
 // carries the link. A refused use, any other failure and every row off an

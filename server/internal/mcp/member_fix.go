@@ -185,6 +185,9 @@ func (g metaGateContext) withAgentMemberFix(member metaMember, err error) error 
 	if !ok {
 		return err
 	}
+	if access.ownerOnly {
+		return agentOwnerOnlyError(member.slug, g.memberFix(member).url)
+	}
 	const refused = "server %q refused this agent: it is not allowed to use a connection to this server, and reconnecting does not change that. "
 	if access.server {
 		return &metaMemberError{message: fmt.Sprintf(refused+"No auth client of the server serves this agent. Ask an admin of the server's project to check the server's auth clients, then retry", member.slug)}
@@ -194,6 +197,19 @@ func (g metaGateContext) withAgentMemberFix(member metaMember, err error) error 
 		return &metaMemberError{message: fmt.Sprintf(refused+"Ask %s to review its permissions in Speakeasy, then retry", member.slug, agentEditors)}
 	}
 	return &metaMemberError{message: fmt.Sprintf(refused+"Ask %s to review its permissions at %s, then retry", member.slug, agentEditors, fix.accessURL)}
+}
+
+// agentOwnerOnlyError explains an agent refused another member's personal
+// connection. It names no one: not the owner, their email or their upstream
+// account. signInURL is the agent's MCP sign-in tab, empty when it could not
+// be built.
+func agentOwnerOnlyError(slug, signInURL string) error {
+	where := "on the agent's MCP sign-in tab in Speakeasy"
+	if signInURL != "" {
+		where = "on the agent's MCP sign-in tab at " + signInURL
+	}
+	return &metaMemberError{message: fmt.Sprintf("server %q refused this call: the agent uses a personal connection to it that belongs to another member, and that connection only serves that member's own calls. "+
+		"The agent's permissions and reconnecting do not change that. To use this server, connect your own account %s, or ask an organization administrator to set up a shared credential for it, then retry", slug, where)}
 }
 
 // agentFixLinks builds an agent gateway's fix links. It reads the agent
