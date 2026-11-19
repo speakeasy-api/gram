@@ -7036,8 +7036,6 @@ type ShadowMcpOfficialServer struct {
 	// @access: confidential
 	McpServerID uuid.NullUUID
 	// @access: confidential
-	AllowDirectAccess bool
-	// @access: confidential
 	CreatedByUserID pgtype.Text
 	// @access: confidential
 	UpdatedByUserID pgtype.Text

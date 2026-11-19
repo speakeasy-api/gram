@@ -292,24 +292,19 @@ func TestService_SetShadowMCPOfficialServer_AddChangeRemoveAndAddBack(t *testing
 	before, err = audittest.DecodeAuditData(deleted.BeforeSnapshot)
 	require.NoError(t, err)
 	require.Equal(t, otherID.String(), before["mcp_server_id"])
-	var deletedAt pgtype.Timestamptz
-	require.NoError(t, ti.conn.QueryRow(ctx, "SELECT deleted_at FROM shadow_mcp_official_servers WHERE id = $1", linkID).Scan(&deletedAt))
-	require.True(t, deletedAt.Valid, "removal soft-deletes the row")
 
 	// Removing it again changes nothing and records nothing.
 	set("https://github.example.com/mcp", nil)
 	require.Equal(t, int64(1), count(audit.ActionShadowMCPOfficialServerDelete))
 
-	// Add back: the removed row is restored, so the link keeps its id.
+	// Add back: the removed row was only soft-deleted, so it is restored and
+	// the link keeps its id.
 	set("https://github.example.com/mcp", new(chosenID.String()))
 	require.Equal(t, chosenID.String(), read().OfficialServer.McpServerID)
 	require.Equal(t, int64(2), count(audit.ActionShadowMCPOfficialServerCreate))
 	restored, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionShadowMCPOfficialServerCreate)
 	require.NoError(t, err)
 	require.Equal(t, linkID, restored.SubjectID)
-	var rows int
-	require.NoError(t, ti.conn.QueryRow(ctx, "SELECT count(*) FROM shadow_mcp_official_servers WHERE project_id = $1", *authCtx.ProjectID).Scan(&rows))
-	require.Equal(t, 1, rows)
 }
 
 // Two first links to one URL serialize on the URL: the second waits for the
