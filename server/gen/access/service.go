@@ -107,13 +107,13 @@ type Service interface {
 	// Update or clear the administrator-defined display name for one
 	// project-scoped Shadow MCP inventory server URL.
 	UpdateShadowMCPInventoryServerName(context.Context, *UpdateShadowMCPInventoryServerNamePayload) (err error)
-	// Link one project-scoped Shadow MCP server to its official version, switch
-	// the link off or on, or remove it. A link with allow_direct_access false
-	// blocks direct connections wherever a Shadow MCP policy applies and points
-	// agents at the linked server; true keeps the link but lets direct connections
-	// follow the ordinary rules. Omitting mcp_server_id (with allow_direct_access
-	// false) removes the link. Requires an authenticated session authorized for
-	// org:admin on the active organization.
+	// Link one project-scoped Shadow MCP server to its official version, or remove
+	// the link. While a link exists, direct connections are blocked wherever a
+	// Shadow MCP policy applies and agents are pointed at the linked server. With
+	// mcp_server_id the link is added (or restored, when it was removed before) or
+	// pointed at that server; omitting mcp_server_id removes the link. Each add,
+	// change and removal is recorded in the audit log. Requires an authenticated
+	// session authorized for org:admin on the active organization.
 	SetShadowMCPOfficialServer(context.Context, *SetShadowMCPOfficialServerPayload) (err error)
 	// List users with observed telemetry usage for one project-scoped Shadow MCP
 	// server URL.
@@ -840,6 +840,10 @@ type ExplainResourceAccessResult struct {
 	Visibility string
 	// The decision for use, view and manage, in that order.
 	Levels []*ExplainedAccessLevel
+	// For each upstream credential the server offers, whether the member may use
+	// it. A caller needs both use access to the server and one usable credential
+	// to reach an upstream that requires sign-in.
+	Credentials []*ExplainedCredentialAccess
 }
 
 type ExplainedAccessDirectorySource struct {
@@ -899,6 +903,45 @@ type ExplainedAccessRule struct {
 	// also hold it directly. Returned only to organization administrators, because
 	// attribute values can carry personal data.
 	DirectorySources []*ExplainedAccessDirectorySource
+}
+
+type ExplainedCredentialAccess struct {
+	// The credential's auth client ID.
+	AuthClientID string
+	// The credential's name.
+	Name string
+	// The kind of credential.
+	ClientType string
+	// Whether the credential is turned on. A turned-off credential is unusable
+	// whatever the rules say.
+	Enabled bool
+	// Whether the member's rules let them use it, with their own connection for a
+	// personal credential.
+	Allowed bool
+	// Every rule matching this use, deciding rules first.
+	Rules []*ExplainedCredentialRule
+}
+
+type ExplainedCredentialRule struct {
+	// Canonical principal URN holding the rule.
+	PrincipalUrn string
+	// What the principal identifies.
+	Kind string
+	// Human-readable name for the principal.
+	DisplayName string
+	// Whether the rule names this credential (credential), every credential of its
+	// kind (credential_type), or every credential (all_credentials).
+	AppliesTo string
+	// Whether the rule applies only on servers in this server's project.
+	ProjectBound *bool
+	// How the rule shaped the decision: allows, overrides, overridden, blocks or
+	// blocked, with the same meanings as an access rule's effect.
+	Effect string
+	// Why a blocked rule made directly to the member did not override the block:
+	// wildcard_direct_grant, narrower_direct_grant or own_exclusion.
+	Reason *string
+	// Whether the member holds this role only through a directory role mapping.
+	ViaDirectoryMapping bool
 }
 
 // GetDirectoryReviewSettingsPayload is the payload type of the access service
@@ -1676,10 +1719,6 @@ type SetShadowMCPOfficialServerPayload struct {
 	ServerURL string
 	// The MCP server to link as the official version. Omit it to remove the link.
 	McpServerID *string
-	// Switch the link off: keep direct connections to the Shadow MCP server
-	// working under the ordinary Shadow MCP rules instead of blocking them.
-	// Requires mcp_server_id.
-	AllowDirectAccess bool
 }
 
 // The enforcement verdict for a shadow MCP server, computed server-side from
@@ -1787,9 +1826,9 @@ type ShadowMCPInventoryServer struct {
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string
-	// The MCP server linked as this Shadow MCP server's official version. While
-	// the link is on, direct use is blocked wherever a Shadow MCP policy applies,
-	// and the block points agents here.
+	// The MCP server linked as this Shadow MCP server's official version. While it
+	// is linked, direct use is blocked wherever a Shadow MCP policy applies, and
+	// the block points agents here.
 	OfficialServer *ShadowMCPOfficialServer
 	// A project MCP server that proxies to the same upstream URL, offered as the
 	// server to link. Present only while no official server is linked.
@@ -1846,9 +1885,10 @@ type ShadowMCPOfficialServer struct {
 	URL *string
 	// The gateway that serves the official server, when url is a gateway's address.
 	GatewayName *string
-	// True while the link is switched off: direct connections to the Shadow MCP
-	// server follow the ordinary Shadow MCP rules instead of being blocked.
-	DirectAccessAllowed bool
+	// Deprecated: links no longer have an on/off switch, so this is always false.
+	// Kept one release so older dashboards, which require it, keep rendering, then
+	// removed.
+	DirectAccessAllowed *bool
 }
 
 // A project MCP server that already serves a Shadow MCP server's upstream URL

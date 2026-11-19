@@ -1,4 +1,4 @@
-package authz
+package registry
 
 import (
 	"errors"
@@ -6,12 +6,6 @@ import (
 	"slices"
 	"strings"
 )
-
-func init() {
-	if err := Model.Validate(); err != nil {
-		panic(fmt.Sprintf("authz model is invalid: %v", err))
-	}
-}
 
 // ScopeFor returns the stored scope of permission p on resource type t.
 func (t ResourceType) ScopeFor(p Permission) Scope {
@@ -24,8 +18,8 @@ func (t ResourceType) ScopeFor(p Permission) Scope {
 // BlockScopeFor returns the generated block scope paired with permission p on
 // resource type t: the stored scope's prefix, then blocked_ and its action.
 func (t ResourceType) BlockScopeFor(p Permission) Scope {
-	parts := t.ScopeFor(p).Parts()
-	return Scope(parts.Resource + ":blocked_" + parts.Action)
+	prefix, action := t.ScopeFor(p).split()
+	return Scope(prefix + ":blocked_" + action)
 }
 
 // Permission returns the permission for action, if declared.
@@ -96,12 +90,16 @@ func (r Registry) Validate() error {
 			}
 			dimKeys[d.Key] = true
 		}
+		validateParentDimension(fail, t)
 
-		actions := map[Action]Permission{}
+		actions := make(map[Action]Permission)
 		for _, p := range t.Permissions {
 			if p.Action == "" {
 				fail("%s: a permission has no action", t.Kind)
 				continue
+			}
+			if !slices.Contains(Actions, p.Action) && !slices.Contains(LegacyActions[t.Kind], p.Action) {
+				fail("%s: action %q is not in registry.Actions; add it to scopes.go", t.Kind, p.Action)
 			}
 			if _, dup := actions[p.Action]; dup {
 				fail("%s: action %q is declared twice", t.Kind, p.Action)
@@ -112,13 +110,20 @@ func (r Registry) Validate() error {
 			actions[p.Action] = p
 		}
 
+		// Ref methods share one namespace per kind: an action's method and
+		// every dimension set's.
+		methods := map[string]bool{}
+		for _, p := range t.Permissions {
+			methods[camelAction(p.Action)] = true
+		}
 		for _, p := range t.Permissions {
 			owner := fmt.Sprintf("%s.%s", t.Kind, p.Action)
 			scope := t.ScopeFor(p)
-			if parts := scope.Parts(); parts.Resource == "" || parts.Action == "" || strings.Count(string(scope), ":") != 1 {
+			prefix, action := scope.split()
+			if prefix == "" || action == "" || strings.Count(string(scope), ":") != 1 {
 				fail("%s: scope %q is not resource:action", owner, scope)
 			}
-			if strings.HasPrefix(scope.Parts().Action, "blocked_") {
+			if strings.HasPrefix(action, "blocked_") {
 				fail("%s: blocked_ actions are generated, not declared", owner)
 			}
 			claim(scope, owner)
@@ -141,6 +146,27 @@ func (r Registry) Validate() error {
 					fail("%s: dimension %q is already declared on %s", owner, d.Key, t.Kind)
 				}
 				permissionDimKeys[d.Key] = true
+			}
+
+			for _, set := range p.DimensionSets {
+				if set.Method == "" || len(set.Keys) == 0 {
+					fail("%s: a dimension set needs a method name and at least one key", owner)
+					continue
+				}
+				if methods[set.Method] {
+					fail("%s: dimension set method %q clashes with another method on %s", owner, set.Method, t.Kind)
+				}
+				methods[set.Method] = true
+				seen := map[string]bool{}
+				for _, key := range set.Keys {
+					if !dimKeys[key] && !permissionDimKeys[key] {
+						fail("%s: dimension set %s uses %q, which is not a dimension of %s", owner, set.Method, key, t.Kind)
+					}
+					if seen[key] {
+						fail("%s: dimension set %s lists %q twice", owner, set.Method, key)
+					}
+					seen[key] = true
+				}
 			}
 
 			for _, implied := range p.Implies {
@@ -243,8 +269,8 @@ func impliesCycle(t ResourceType) string {
 		visiting
 		done
 	)
-	state := map[Action]int{}
-	edges := map[Action][]Action{}
+	state := make(map[Action]int)
+	edges := make(map[Action][]Action)
 	for _, p := range t.Permissions {
 		edges[p.Action] = p.Implies
 	}
@@ -271,4 +297,33 @@ func impliesCycle(t ResourceType) string {
 		}
 	}
 	return ""
+}
+
+// camelAction is the ref method name of an action (plugin_write is
+// PluginWrite), for spotting a dimension set that would reuse it.
+func camelAction(action Action) string {
+	var b strings.Builder
+	for _, word := range strings.Split(string(action), "_") {
+		if word != "" {
+			b.WriteString(strings.ToUpper(word[:1]) + word[1:])
+		}
+	}
+	return b.String()
+}
+
+// validateParentDimension requires a loosely matched type that can be bounded
+// to its parent (mcp grants by project_id) to mark that dimension Required.
+// Loose matching skips grant keys a check omits, so a check that left the
+// parent out would pass a grant bounded to any parent. Strictly matched types
+// fail closed on a missing key already.
+func validateParentDimension(fail func(string, ...any), t ResourceType) {
+	if t.Parent == "" || t.Match != MatchLoose {
+		return
+	}
+	key := string(t.Parent) + "_id"
+	for _, d := range t.Dimensions {
+		if d.Key == key && !d.Required {
+			fail("%s: dimension %q names the parent %s, so it must be Required", t.Kind, key, t.Parent)
+		}
+	}
 }

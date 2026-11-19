@@ -3,7 +3,6 @@ import { Text } from "@/components/ui/Text";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { Badge } from "@/components/ui/Badge";
 import { Icon } from "@/components/ui/Icon";
-import { cn } from "@/lib/utils";
 
 function countLabel(count: number, singular: string, plural: string): string {
   return `${count} ${count === 1 ? singular : plural}`;
@@ -120,15 +119,10 @@ export function ShadowMCPInventoryUsageCell({
   server: ShadowMCPInventoryServer;
 }): JSX.Element {
   // No per-row trend series is available on ShadowMCPInventoryServer (only
-  // aggregate counts), so there is no sparkline here. The 2px destructive left
-  // edge flags servers with pending access requests (signal-row idiom).
+  // aggregate counts), so there is no sparkline here. Pending requests are
+  // flagged once, on the server and review cells, not again on usage.
   return (
-    <div
-      className={cn(
-        "space-y-1",
-        server.requestCount > 0 && "border-destructive-default border-l-2 pl-2",
-      )}
-    >
+    <div className="space-y-1">
       <Text variant="small">
         {countLabel(server.observedUseCount, "call", "calls")}
       </Text>

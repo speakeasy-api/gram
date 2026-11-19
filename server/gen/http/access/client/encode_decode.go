@@ -11657,7 +11657,7 @@ func unmarshalShadowMCPOfficialServerResponseBodyToAccessShadowMCPOfficialServer
 		Slug:                v.Slug,
 		URL:                 v.URL,
 		GatewayName:         v.GatewayName,
-		DirectAccessAllowed: *v.DirectAccessAllowed,
+		DirectAccessAllowed: v.DirectAccessAllowed,
 	}
 
 	return res
@@ -11978,6 +11978,47 @@ func unmarshalExplainedAccessDirectorySourceResponseBodyToAccessExplainedAccessD
 		DirectoryGroupName: v.DirectoryGroupName,
 		AttributeKey:       v.AttributeKey,
 		AttributeValue:     v.AttributeValue,
+	}
+
+	return res
+}
+
+// unmarshalExplainedCredentialAccessResponseBodyToAccessExplainedCredentialAccess
+// builds a value of type *access.ExplainedCredentialAccess from a value of
+// type *ExplainedCredentialAccessResponseBody.
+func unmarshalExplainedCredentialAccessResponseBodyToAccessExplainedCredentialAccess(v *ExplainedCredentialAccessResponseBody) *access.ExplainedCredentialAccess {
+	res := &access.ExplainedCredentialAccess{
+		AuthClientID: *v.AuthClientID,
+		Name:         *v.Name,
+		ClientType:   *v.ClientType,
+		Enabled:      *v.Enabled,
+		Allowed:      *v.Allowed,
+	}
+	res.Rules = make([]*access.ExplainedCredentialRule, len(v.Rules))
+	for i, val := range v.Rules {
+		if val == nil {
+			res.Rules[i] = nil
+			continue
+		}
+		res.Rules[i] = unmarshalExplainedCredentialRuleResponseBodyToAccessExplainedCredentialRule(val)
+	}
+
+	return res
+}
+
+// unmarshalExplainedCredentialRuleResponseBodyToAccessExplainedCredentialRule
+// builds a value of type *access.ExplainedCredentialRule from a value of type
+// *ExplainedCredentialRuleResponseBody.
+func unmarshalExplainedCredentialRuleResponseBodyToAccessExplainedCredentialRule(v *ExplainedCredentialRuleResponseBody) *access.ExplainedCredentialRule {
+	res := &access.ExplainedCredentialRule{
+		PrincipalUrn:        *v.PrincipalUrn,
+		Kind:                *v.Kind,
+		DisplayName:         *v.DisplayName,
+		AppliesTo:           *v.AppliesTo,
+		ProjectBound:        v.ProjectBound,
+		Effect:              *v.Effect,
+		Reason:              v.Reason,
+		ViaDirectoryMapping: *v.ViaDirectoryMapping,
 	}
 
 	return res

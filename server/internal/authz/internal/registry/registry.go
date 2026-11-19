@@ -1,10 +1,48 @@
-package authz
+// Package registry declares the authorization model: every resource type, its
+// permissions, blocks and dimensions, and the built-in roles. It is build-time
+// input only. authzgen reads Definitions and writes the scope constants, the
+// typed refs and every derived table into package authz, which never imports
+// this package, and this package imports nothing from authz: the generated Go
+// is the only thing that passes between them. The names both sides use are
+// declared once, in the vocabulary files (see VocabularyFiles).
+package registry
+
+import (
+	"embed"
+	"strings"
+)
+
+// VocabularyFile is one registry source file that authzgen copies into
+// package authz.
+type VocabularyFile struct {
+	// Name is the file's name in this package, for example "selectors.go".
+	Name string
+	// Source is the file as written.
+	Source string
+}
+
+//go:embed scopes.go selectors.go sensitivity.go grant_source.go roles.go match_mode.go
+var vocabularyFS embed.FS
+
+// VocabularyFiles returns the files that declare the names shared with
+// package authz, in a fixed order. Each holds one subject, so a new selector
+// key goes in selectors.go and a new action in scopes.go.
+func VocabularyFiles() []VocabularyFile {
+	names := []string{"scopes.go", "selectors.go", "sensitivity.go", "grant_source.go", "roles.go", "match_mode.go"}
+	files := make([]VocabularyFile, 0, len(names))
+	for _, name := range names {
+		source, err := vocabularyFS.ReadFile(name)
+		if err != nil {
+			panic("registry: embedded vocabulary file " + name + ": " + err.Error())
+		}
+		files = append(files, VocabularyFile{Name: name, Source: string(source)})
+	}
+	return files
+}
 
 // This file holds the types of the authorization model. The model itself, one
-// Go literal describing every resource type and its permissions, is Model in
-// registry_resources.go. Every hand-kept table elsewhere in this package is meant
-// to be derived from it. Later changes add parity tests that hold each table
-// equal to the model until it is derived.
+// Go literal describing every resource type and its permissions, is
+// Definitions in definitions.go.
 //
 // Vocabulary:
 //
@@ -21,23 +59,16 @@ package authz
 //     permission; an Exemption (risk_policy:bypass) exempts its holder from a
 //     policy and names another declared permission.
 
-// Kind names a resource type, for example "mcp".
-type Kind string
+// Scope is the stored string a grant carries, as the model writes it. Package
+// authz has its own hand-written Scope type for the evaluator; the generator
+// writes these values into authz as Scope constants and table entries.
+type Scope string
 
-// Action names what a permission allows on its resource type, for example
-// "write".
-type Action string
-
-// MatchMode is how an allow grant's selector is compared with a check.
-type MatchMode int
-
-const (
-	// MatchLoose skips grant keys the check does not carry. It is today's
-	// default for every resource type except auth clients.
-	MatchLoose MatchMode = iota
-	// MatchStrict requires every grant key to be present in the check.
-	MatchStrict
-)
+// split cuts a scope into its prefix and action at the first colon.
+func (s Scope) split() (prefix, action string) {
+	prefix, action, _ = strings.Cut(string(s), ":")
+	return prefix, action
+}
 
 // ExclusionKind distinguishes exclusions that take access away from ones that
 // exempt a holder from a policy.
@@ -63,7 +94,7 @@ type AgentEligibility struct {
 // Policies stored at an older version keep reading it as unsafe.
 func SafeSince(version int) AgentEligibility {
 	if version < 1 {
-		panic("authz.SafeSince: version must be at least 1; use AgentUnsafe for a scope that is never agent-safe")
+		panic("registry.SafeSince: version must be at least 1; use AgentUnsafe for a scope that is never agent-safe")
 	}
 	return AgentEligibility{safeSince: version}
 }
@@ -112,6 +143,17 @@ type Dimension struct {
 	Required bool
 }
 
+// DimensionSet names a request method that carries dimensions describing one
+// use of the resource rather than the resource itself: connect's ToolCall
+// takes the tool and its disposition. A value left empty is sent as unknown,
+// so a grant limited on that key never allows it and a block on it applies.
+type DimensionSet struct {
+	Method string
+	// Keys are dimensions declared on the resource type or the permission,
+	// in the order the method takes them.
+	Keys []string
+}
+
 // legacyScopes are the only stored strings a permission may keep through
 // LegacyScope. They predate the registry and are stored in grants, API key
 // and agent policies, and the public scope enum. They go, with the field,
@@ -138,6 +180,12 @@ type Permission struct {
 	// Dimensions are selector keys allowed on this permission only, beyond
 	// its resource type's.
 	Dimensions []Dimension
+	// DimensionSets are extra request methods on this permission's ref, each
+	// carrying a fixed set of dimensions declared on the type or on this
+	// permission as arguments, beside the plain method named after the action.
+	// Dimensions the ref fills in from its constructor, such as project_id,
+	// cannot be in a set.
+	DimensionSets []DimensionSet
 	// Source says where grants of this permission's scopes are set: through
 	// roles or through risk policies. Every permission sets it explicitly.
 	Source GrantSource

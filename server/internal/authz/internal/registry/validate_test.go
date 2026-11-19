@@ -1,4 +1,4 @@
-package authz
+package registry
 
 import (
 	"testing"
@@ -6,24 +6,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestModel_IsValid(t *testing.T) {
+func TestDefinitions_IsValid(t *testing.T) {
 	t.Parallel()
-	require.NoError(t, Model.Validate())
+	require.NoError(t, Definitions.Validate())
 }
 
 func validTestPermission(action Action) Permission {
 	return Permission{
-		Action:      action,
-		LegacyScope: "",
-		Implies:     nil,
-		Exclusions:  nil,
-		Dimensions:  nil,
-		Source:      GrantSourceRoles,
-		Category:    "",
-		Label:       "Label",
-		Description: "Description.",
-		Sensitivity: SensitivityNone,
-		Agent:       AgentUnsafe(),
+		Action:        action,
+		LegacyScope:   "",
+		Implies:       nil,
+		Exclusions:    nil,
+		Dimensions:    nil,
+		Source:        GrantSourceRoles,
+		DimensionSets: nil,
+		Category:      "",
+		Label:         "Label",
+		Description:   "Description.",
+		Sensitivity:   SensitivityNone,
+		Agent:         AgentUnsafe(),
 	}
 }
 
@@ -40,7 +41,7 @@ func validTestType(kind Kind, permissions ...Permission) ResourceType {
 
 func validTestRegistry(types ...ResourceType) Registry {
 	return Registry{
-		Root:        RootPermission{Scope: ScopeRoot, Agent: AgentUnsafe()},
+		Root:        RootPermission{Scope: Scope("root"), Agent: AgentUnsafe()},
 		Types:       types,
 		SystemRoles: nil,
 		Retired:     nil,
@@ -54,6 +55,16 @@ func TestRegistryValidate_RejectsBrokenModels(t *testing.T) {
 	withAgent := func(p Permission, a AgentEligibility) Permission { p.Agent = a; return p }
 	withScope := func(p Permission, s Scope) Permission { p.LegacyScope = s; return p }
 	withExclusions := func(p Permission, x ...Exclusion) Permission { p.Exclusions = x; return p }
+	withSet := func(p Permission, method string, keys ...string) Permission {
+		p.DimensionSets = append(p.DimensionSets, DimensionSet{Method: method, Keys: keys})
+		return p
+	}
+	withDims := func(t ResourceType, keys ...string) ResourceType {
+		for _, key := range keys {
+			t.Dimensions = append(t.Dimensions, Dimension{Key: key, Values: nil, Required: false})
+		}
+		return t
+	}
 
 	cases := []struct {
 		name  string
@@ -61,9 +72,34 @@ func TestRegistryValidate_RejectsBrokenModels(t *testing.T) {
 		want  string
 	}{
 		{
+			name:  "dimension set with an undeclared key",
+			model: validTestRegistry(validTestType("thing", withSet(validTestPermission("read"), "ReadPart", "part"))),
+			want:  `thing.read: dimension set ReadPart uses "part", which is not a dimension of thing`,
+		},
+		{
+			name:  "dimension set reusing an action's method",
+			model: validTestRegistry(withDims(validTestType("thing", validTestPermission("write"), withSet(validTestPermission("read"), "Write", "part")), "part")),
+			want:  `thing.read: dimension set method "Write" clashes with another method on thing`,
+		},
+		{
+			name:  "dimension set without keys",
+			model: validTestRegistry(validTestType("thing", withSet(validTestPermission("read"), "ReadPart"))),
+			want:  `thing.read: a dimension set needs a method name and at least one key`,
+		},
+		{
 			name:  "duplicate action",
 			model: validTestRegistry(validTestType("thing", validTestPermission("read"), validTestPermission("read"))),
 			want:  `thing: action "read" is declared twice`,
+		},
+		{
+			name:  "action outside the closed list",
+			model: validTestRegistry(validTestType("thing", validTestPermission("delete"))),
+			want:  `thing: action "delete" is not in registry.Actions; add it to scopes.go`,
+		},
+		{
+			name:  "legacy action on a type that never had it",
+			model: validTestRegistry(validTestType("thing", validTestPermission(ActionPluginWrite))),
+			want:  `thing: action "plugin_write" is not in registry.Actions; add it to scopes.go`,
 		},
 		{
 			name: "duplicate scope across types",
@@ -277,12 +313,48 @@ func TestResourceType_Scopes(t *testing.T) {
 	require.Equal(t, Scope("project:blocked_write"), project.BlockScopeFor(validTestPermission("write")))
 
 	// A historical scope keeps its own prefix for the block too.
-	plugin := withTestScope(validTestPermission("plugin_write"), ScopePluginWrite)
-	require.Equal(t, ScopePluginWrite, project.ScopeFor(plugin))
-	require.Equal(t, ScopePluginBlockedWrite, project.BlockScopeFor(plugin))
+	plugin := withTestScope(validTestPermission("plugin_write"), Scope("plugin:write"))
+	require.Equal(t, Scope("plugin:write"), project.ScopeFor(plugin))
+	require.Equal(t, Scope("plugin:blocked_write"), project.BlockScopeFor(plugin))
 }
 
 func withTestScope(p Permission, s Scope) Permission {
 	p.LegacyScope = s
 	return p
+}
+
+// A loosely matched type inside a project must require project_id, so a check
+// cannot leave the project out and pass a grant bounded to another project.
+// Strictly matched types fail closed on a missing key and may leave it optional.
+func TestRegistryValidate_RequiresParentDimension(t *testing.T) {
+	t.Parallel()
+
+	inProject := func(match MatchMode, required bool) ResourceType {
+		thing := validTestType("thing", validTestPermission("read"))
+		thing.Parent = "project"
+		thing.Match = match
+		thing.Dimensions = []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: required}}
+		return thing
+	}
+	project := validTestType("project", validTestPermission("read"))
+
+	err := validTestRegistry(project, inProject(MatchLoose, false)).Validate()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `thing: dimension "project_id" names the parent project, so it must be Required`)
+
+	require.NoError(t, validTestRegistry(project, inProject(MatchLoose, true)).Validate())
+	require.NoError(t, validTestRegistry(project, inProject(MatchStrict, false)).Validate())
+}
+
+// The member role is seeded with a subset of the admin role.
+func TestDefinitions_MemberIsASubsetOfAdmin(t *testing.T) {
+	t.Parallel()
+
+	admin := Definitions.SystemRoles[SystemRoleAdmin]
+	member := Definitions.SystemRoles[SystemRoleMember]
+	require.NotEmpty(t, admin, "the admin role is seeded with nothing")
+	require.NotEmpty(t, member, "the member role is seeded with nothing")
+	for _, scope := range member {
+		require.Contains(t, admin, scope, "member is seeded with %s, which admin is not", scope)
+	}
 }

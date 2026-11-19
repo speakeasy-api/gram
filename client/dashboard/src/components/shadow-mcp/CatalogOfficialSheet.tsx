@@ -227,7 +227,6 @@ export function CatalogOfficialSheet({
       await link.save({
         serverUrl: server.canonicalServerUrl,
         mcpServerId,
-        allowDirectAccess: false,
       });
     } catch {
       linkFailed = true;

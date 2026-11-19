@@ -91,23 +91,22 @@ func TestRefs_CoverEveryPermission(t *testing.T) {
 		reached[check.Scope] = true
 	}
 	handWritten := map[string]bool{ResourceKindMCPAuthClient: true, ResourceKindRiskPolicy: true, ResourceKindInference: true}
-	for _, typ := range Model.Types {
-		if handWritten[string(typ.Kind)] {
+	for _, entry := range scopeCatalog {
+		if handWritten[entry.ResourceType] || scopeVisibilityByScope[entry.Scope] != scopeVisibilityUserVisible {
 			continue
 		}
-		for _, p := range typ.Permissions {
-			require.True(t, reached[typ.ScopeFor(p)], "%s has no ref method in this test; add it", typ.ScopeFor(p))
-		}
+		require.True(t, reached[entry.Scope], "%s has no ref method in this test; add it", entry.Scope)
 	}
 }
 
-// An MCP ref built without its project is refused at evaluation instead of
-// matching project-bounded grants by omission. The other kinds follow when
-// their project becomes a required dimension.
+// A ref built without its project is refused at evaluation instead of
+// matching project-bounded grants by omission.
 func TestRefs_MissingProjectIsInvalid(t *testing.T) {
 	t.Parallel()
 
 	require.Error(t, validateInput(MCPServer("server-1", "").Write()))
+	require.Error(t, validateInput(Environment("env-1", "").Read()))
+	require.Error(t, validateInput(Assistant("assistant-1", "").Read()))
 }
 
 // A ref built from uuids builds the same check as one built from their

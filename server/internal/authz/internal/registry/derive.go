@@ -1,4 +1,4 @@
-package authz
+package registry
 
 import (
 	"cmp"
@@ -8,9 +8,40 @@ import (
 	"unicode/utf8"
 )
 
-// The functions in this file derive, from Model, every table the evaluator
-// and the catalogue read. They hold no policy of their own: a question about
-// what a scope means is answered in registry_resources.go.
+// The functions in this file derive, from Definitions, every table the
+// evaluator and the catalogue read; authzgen writes their results into
+// package authz. They hold no policy of their own: a question about what a
+// scope means is answered in definitions.go.
+
+// Visibility says whether a scope is shown to people as a permission or only
+// used for storage and evaluation.
+type Visibility int
+
+const (
+	VisibilityUserVisible Visibility = iota + 1
+	VisibilityInternal
+)
+
+// CatalogEntry is the presentation of one grantable scope. The generator
+// writes each as an authz.ScopeEntry, field for field.
+type CatalogEntry struct {
+	Scope        Scope
+	Label        string
+	Category     ScopeCategory
+	ResourceType string
+	Description  string
+	Sensitivity  Sensitivity
+}
+
+// ScopeAgentEligibility is one scope's agent eligibility. The generator
+// writes each as an authz.DerivedAgentEligibility, field for field.
+type ScopeAgentEligibility struct {
+	// SafeSince is the agent runtime scope registry version the scope became
+	// agent-safe in, or 0 if it never did.
+	SafeSince int
+	// Retired marks a tombstone: the scope no longer exists.
+	Retired bool
+}
 
 // ModelScope is one stored scope and where it comes from.
 type ModelScope struct {
@@ -52,10 +83,11 @@ func (p Permission) Block() (Exclusion, bool) {
 	return p.Exclusions[i], true
 }
 
-// impliedClosure returns every action on t that a grant of action satisfies,
-// action itself excluded.
-func impliedClosure(t ResourceType, action Action) []Action {
-	seen := map[Action]bool{action: true}
+// Implied returns every action on t that a grant of action satisfies, action
+// itself excluded.
+func (t ResourceType) Implied(action Action) []Action {
+	seen := make(map[Action]bool)
+	seen[action] = true
 	queue := []Action{action}
 	var out []Action
 	for len(queue) > 0 {
@@ -77,12 +109,12 @@ func impliedClosure(t ResourceType, action Action) []Action {
 	return out
 }
 
-// deriveScopeExpansions maps each checked scope to the other scopes whose
+// DeriveScopeExpansions maps each checked scope to the other scopes whose
 // grants also satisfy it. An allow is satisfied by every permission that
 // implies it. A block on an implied action also covers the implying one: a
 // project:blocked_read grant blocks project:write, so the check for
 // project:blocked_write is satisfied by it.
-func (r Registry) deriveScopeExpansions() map[Scope][]Scope {
+func (r Registry) DeriveScopeExpansions() map[Scope][]Scope {
 	out := make(map[Scope][]Scope)
 	out[r.Root.Scope] = nil
 	for _, s := range r.Scopes() {
@@ -90,7 +122,7 @@ func (r Registry) deriveScopeExpansions() map[Scope][]Scope {
 	}
 	for _, t := range r.Types {
 		for _, higher := range t.Permissions {
-			for _, implied := range impliedClosure(t, higher.Action) {
+			for _, implied := range t.Implied(higher.Action) {
 				lower, _ := t.Permission(implied)
 				lowerScope := t.ScopeFor(lower)
 				out[lowerScope] = append(out[lowerScope], t.ScopeFor(higher))
@@ -114,10 +146,10 @@ func (r Registry) deriveScopeExpansions() map[Scope][]Scope {
 	return out
 }
 
-// deriveScopeExclusions maps each permission's scope to the scope that stores
+// DeriveScopeExclusions maps each permission's scope to the scope that stores
 // exclusions for it: its generated block, or the exemption it names. Every
 // other scope maps to "".
-func (r Registry) deriveScopeExclusions() map[Scope]Scope {
+func (r Registry) DeriveScopeExclusions() map[Scope]Scope {
 	out := make(map[Scope]Scope)
 	out[r.Root.Scope] = ""
 	for _, s := range r.Scopes() {
@@ -139,24 +171,24 @@ func (r Registry) deriveScopeExclusions() map[Scope]Scope {
 	return out
 }
 
-// deriveScopeVisibility marks every declared permission user-visible, and
+// DeriveScopeVisibility marks every declared permission user-visible, and
 // generated blocks and root internal.
-func (r Registry) deriveScopeVisibility() map[Scope]scopeVisibility {
-	out := make(map[Scope]scopeVisibility)
-	out[r.Root.Scope] = scopeVisibilityInternal
+func (r Registry) DeriveScopeVisibility() map[Scope]Visibility {
+	out := make(map[Scope]Visibility)
+	out[r.Root.Scope] = VisibilityInternal
 	for _, s := range r.Scopes() {
 		if s.Block {
-			out[s.Scope] = scopeVisibilityInternal
+			out[s.Scope] = VisibilityInternal
 			continue
 		}
-		out[s.Scope] = scopeVisibilityUserVisible
+		out[s.Scope] = VisibilityUserVisible
 	}
 	return out
 }
 
-// deriveGrantSource maps every scope to where its grants are set.
+// DeriveGrantSource maps every scope to where its grants are set.
 // A block is written where its permission is.
-func (r Registry) deriveGrantSource() map[Scope]GrantSource {
+func (r Registry) DeriveGrantSource() map[Scope]GrantSource {
 	out := make(map[Scope]GrantSource)
 	out[r.Root.Scope] = GrantSourceRoles
 	for _, s := range r.Scopes() {
@@ -165,21 +197,21 @@ func (r Registry) deriveGrantSource() map[Scope]GrantSource {
 	return out
 }
 
-// deriveResourceKinds maps every scope to the resource kind its checks and
+// DeriveResourceKinds maps every scope to the resource kind its checks and
 // grant selectors name. Root's is the wildcard.
-func (r Registry) deriveResourceKinds() map[Scope]string {
+func (r Registry) DeriveResourceKinds() map[Scope]string {
 	out := make(map[Scope]string)
-	out[r.Root.Scope] = ResourceKindWildcard
+	out[r.Root.Scope] = WildcardResource
 	for _, s := range r.Scopes() {
 		out[s.Scope] = string(s.Type.Kind)
 	}
 	return out
 }
 
-// deriveAllowedSelectorKeys maps each resource kind that declares dimensions
+// DeriveAllowedSelectorKeys maps each resource kind that declares dimensions
 // to the keys its grant selectors may carry beyond resource_kind and
 // resource_id.
-func (r Registry) deriveAllowedSelectorKeys() map[string]map[string]bool {
+func (r Registry) DeriveAllowedSelectorKeys() map[string]map[string]bool {
 	out := make(map[string]map[string]bool)
 	for _, t := range r.Types {
 		if len(t.Dimensions) == 0 {
@@ -194,9 +226,9 @@ func (r Registry) deriveAllowedSelectorKeys() map[string]map[string]bool {
 	return out
 }
 
-// deriveScopeSelectorKeys maps each scope that declares its own dimensions
+// DeriveScopeSelectorKeys maps each scope that declares its own dimensions
 // to those keys. Blocks share their permission's.
-func (r Registry) deriveScopeSelectorKeys() map[Scope]map[string]bool {
+func (r Registry) DeriveScopeSelectorKeys() map[Scope]map[string]bool {
 	out := make(map[Scope]map[string]bool)
 	for _, s := range r.Scopes() {
 		if len(s.Permission.Dimensions) == 0 {
@@ -211,9 +243,9 @@ func (r Registry) deriveScopeSelectorKeys() map[Scope]map[string]bool {
 	return out
 }
 
-// deriveRequiredCheckDimensions maps each resource kind to the dimensions
+// DeriveRequiredCheckDimensions maps each resource kind to the dimensions
 // every one of its checks must carry.
-func (r Registry) deriveRequiredCheckDimensions() map[string][]string {
+func (r Registry) DeriveRequiredCheckDimensions() map[string][]string {
 	out := make(map[string][]string)
 	for _, t := range r.Types {
 		for _, d := range t.Dimensions {
@@ -225,9 +257,9 @@ func (r Registry) deriveRequiredCheckDimensions() map[string][]string {
 	return out
 }
 
-// deriveDimensionValues returns the closed value set of the dimension key on
+// DeriveDimensionValues returns the closed value set of the dimension key on
 // kind, as a lookup.
-func (r Registry) deriveDimensionValues(kind Kind, key string) map[string]bool {
+func (r Registry) DeriveDimensionValues(kind Kind, key string) map[string]bool {
 	out := make(map[string]bool)
 	for _, t := range r.Types {
 		if t.Kind != kind {
@@ -245,17 +277,12 @@ func (r Registry) deriveDimensionValues(kind Kind, key string) map[string]bool {
 	return out
 }
 
-// deriveSystemRoleScopes returns a copy of a system role's seeded scopes.
-func (r Registry) deriveSystemRoleScopes(role string) []Scope {
-	return slices.Clone(r.SystemRoles[role])
-}
-
-// deriveCatalog lists every grantable scope with its presentation, ordered by
+// DeriveCatalog lists every grantable scope with its presentation, ordered by
 // category and then by declaration, each block right after its permission.
-func (r Registry) deriveCatalog() []ScopeEntry {
-	entries := make([]ScopeEntry, 0)
+func (r Registry) DeriveCatalog() []CatalogEntry {
+	entries := make([]CatalogEntry, 0)
 	for _, s := range r.Scopes() {
-		entry := ScopeEntry{
+		entry := CatalogEntry{
 			Scope:        s.Scope,
 			Label:        s.Permission.Label,
 			Category:     s.Type.CategoryFor(s.Permission),
@@ -271,47 +298,30 @@ func (r Registry) deriveCatalog() []ScopeEntry {
 		}
 		entries = append(entries, entry)
 	}
-	slices.SortStableFunc(entries, func(a, b ScopeEntry) int {
+	slices.SortStableFunc(entries, func(a, b CatalogEntry) int {
 		return cmp.Compare(slices.Index(ScopeCategories, a.Category), slices.Index(ScopeCategories, b.Category))
 	})
 	return entries
 }
 
-// deriveAgentEligibility maps every scope, root and retired ones included, to
+// DeriveAgentEligibility maps every scope, root and retired ones included, to
 // the registry version it became agent-safe in (0 for never), and whether it
 // is retired.
-func (r Registry) deriveAgentEligibility() map[Scope]DerivedAgentEligibility {
-	out := make(map[Scope]DerivedAgentEligibility)
-	out[r.Root.Scope] = DerivedAgentEligibility{SafeSince: r.Root.Agent.safeSince, Retired: false}
+func (r Registry) DeriveAgentEligibility() map[Scope]ScopeAgentEligibility {
+	out := make(map[Scope]ScopeAgentEligibility)
+	out[r.Root.Scope] = ScopeAgentEligibility{SafeSince: r.Root.Agent.safeSince, Retired: false}
 	for _, s := range r.Scopes() {
 		agent := s.Permission.Agent
 		if s.Block {
 			block, _ := s.Permission.Block()
 			agent = block.Agent
 		}
-		out[s.Scope] = DerivedAgentEligibility{SafeSince: agent.safeSince, Retired: false}
+		out[s.Scope] = ScopeAgentEligibility{SafeSince: agent.safeSince, Retired: false}
 	}
 	for _, retired := range r.Retired {
-		out[retired] = DerivedAgentEligibility{SafeSince: 0, Retired: true}
+		out[retired] = ScopeAgentEligibility{SafeSince: 0, Retired: true}
 	}
 	return out
-}
-
-// DerivedAgentEligibility is one scope's agent eligibility as the model
-// declares it.
-type DerivedAgentEligibility struct {
-	// SafeSince is the agent runtime scope registry version the scope became
-	// agent-safe in, or 0 if it never did.
-	SafeSince int
-	// Retired marks a tombstone: the scope no longer exists.
-	Retired bool
-}
-
-// AgentEligibilityByScope returns the agent eligibility of every scope the
-// model knows, retired tombstones included. The agent runtime scope registry
-// reads it.
-func AgentEligibilityByScope() map[Scope]DerivedAgentEligibility {
-	return Model.deriveAgentEligibility()
 }
 
 func lowerFirst(s string) string {
