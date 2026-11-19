@@ -567,11 +567,19 @@ type GetIssuerMigratePreflightResponseBody struct {
 	// Remote-session credentials whose issuer provenance would move.
 	RemoteSessionCount int `form:"remote_session_count" json:"remote_session_count" xml:"remote_session_count"`
 	// Active OAuth client ids present on both issuers that cannot be merged.
-	// Non-empty blocks migration. A client resolved from the same Client ID
-	// Metadata Document on both issuers is not listed: it merges onto the target's
-	// client, keeping its sessions and consents, unless an issuance selection
-	// profile pins the source client to the source issuer.
+	// Non-empty blocks migration. Client ids listed in merged_client_ids are not
+	// listed here.
 	ConflictingClientIds []string `form:"conflicting_client_ids" json:"conflicting_client_ids" xml:"conflicting_client_ids"`
+	// Active OAuth client ids present on both issuers whose source client would
+	// merge onto the target's client for the same id. A client resolved from the
+	// same Client ID Metadata Document on both issuers merges, keeping its
+	// sessions and consents. A client registered through dynamic client
+	// registration on both issuers merges only when nothing uses the source copy:
+	// no session that has not been revoked (even an expired one), no consent, and
+	// no assistant binding on either copy. Neither merges when an issuance
+	// selection profile pins the source client to the source issuer; it is listed
+	// in conflicting_client_ids instead.
+	MergedClientIds []string `form:"merged_client_ids" json:"merged_client_ids" xml:"merged_client_ids"`
 	// Active principal bindings that would violate target uniqueness. Non-zero
 	// blocks migration.
 	PrincipalBindingConflictCount int `form:"principal_binding_conflict_count" json:"principal_binding_conflict_count" xml:"principal_binding_conflict_count"`
@@ -4416,6 +4424,14 @@ func NewGetIssuerMigratePreflightResponseBody(res *organizationusersessionissuer
 		}
 	} else {
 		body.ConflictingClientIds = []string{}
+	}
+	if res.MergedClientIds != nil {
+		body.MergedClientIds = make([]string, len(res.MergedClientIds))
+		for i, val := range res.MergedClientIds {
+			body.MergedClientIds[i] = val
+		}
+	} else {
+		body.MergedClientIds = []string{}
 	}
 	if res.Warnings != nil {
 		body.Warnings = make([]*UserSessionIssuerFieldMismatchResponseBody, len(res.Warnings))

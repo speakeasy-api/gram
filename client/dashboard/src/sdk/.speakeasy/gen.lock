@@ -8401,7 +8401,7 @@ examples:
         application/json: {"source_id": "8bd44363-c387-4f86-ab14-6621930e2721", "target_id": "6dcbb5e1-5161-4baf-ac8d-f4611f29834a"}
       responses:
         "200":
-          application/json: {"can_migrate": true, "cimd_client_count": 501939, "client_count": 28777, "conflicting_client_ids": [], "consent_count": 553825, "dropped_client_links": [], "ema_binding_conflict_count": 650417, "impact_previewed": false, "newly_reachable_server_count": 28777, "platform_owned": false, "principal_binding_conflict_count": 90292, "remote_session_count": 748407, "server_impacts": [], "session_count": 154481, "unscoped_session_count": 553825, "warnings": [], "warnings_fingerprint": "<value>"}
+          application/json: {"can_migrate": true, "cimd_client_count": 501939, "client_count": 28777, "conflicting_client_ids": [], "consent_count": 553825, "dropped_client_links": [], "ema_binding_conflict_count": 650417, "impact_previewed": false, "merged_client_ids": ["<value 1>", "<value 2>"], "newly_reachable_server_count": 28777, "platform_owned": false, "principal_binding_conflict_count": 90292, "remote_session_count": 748407, "server_impacts": [], "session_count": 154481, "unscoped_session_count": 553825, "warnings": [], "warnings_fingerprint": "<value>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
