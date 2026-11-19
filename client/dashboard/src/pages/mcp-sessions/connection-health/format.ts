@@ -230,6 +230,25 @@ export const PROBLEM_RULES: Record<ProblemRule, string> = {
     "One person got the same kind of failure for 24 hours and has not connected since.",
 };
 
+/** Rules for problems signing in to Speakeasy, where success is signing in. */
+const SIGN_IN_PROBLEM_RULES: Record<ProblemRule, string> = {
+  three_people_same_service:
+    "3 or more people got the same kind of failure from one service and have not signed in since.",
+  three_people_same_server:
+    "3 or more people got the same kind of failure on one server and have not signed in since.",
+  three_people_same_app_version:
+    "3 or more people on one app version got the same kind of failure and have not signed in since.",
+  one_person_24_hours:
+    "One person got the same kind of failure for 24 hours and has not signed in since.",
+};
+
+/** The rule a problem was listed by, in the words of its part. */
+export function problemRule(problem: SuspectedProblem): string {
+  return (problem.part === "speakeasy" ? SIGN_IN_PROBLEM_RULES : PROBLEM_RULES)[
+    problem.rule
+  ];
+}
+
 /** The headline with when it started, as the panel lists it. */
 export function problemHeadline(problem: SuspectedProblem, now: Date): string {
   const since =

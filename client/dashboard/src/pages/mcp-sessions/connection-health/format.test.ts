@@ -4,6 +4,7 @@ import {
   formatSessionLength,
   formatWeekdayDay,
   nowPosition,
+  problemRule,
   stepResultLabel,
 } from "./format";
 
@@ -56,5 +57,18 @@ describe("formatWeekdayDay", () => {
       date,
     );
     expect(formatWeekdayDay(date.getTime()).endsWith(` ${day}`)).toBe(true);
+  });
+});
+
+describe("problemRule", () => {
+  it("says signed in for problems signing in to Speakeasy", () => {
+    expect(
+      problemRule({ rule: "one_person_24_hours", part: "speakeasy" } as never),
+    ).toBe(
+      "One person got the same kind of failure for 24 hours and has not signed in since.",
+    );
+    expect(
+      problemRule({ rule: "one_person_24_hours", part: "service" } as never),
+    ).toContain("has not connected since");
   });
 });

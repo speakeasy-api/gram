@@ -27,7 +27,7 @@ import {
   formatDuration,
   formatSince,
   personLabel,
-  PROBLEM_RULES,
+  problemRule,
   serverLabel,
   SOURCE_LABELS,
 } from "./format";
@@ -138,12 +138,12 @@ function investigationFor(problem: SuspectedProblemDetail): Investigation {
         : null,
       `Since ${problem.since}`,
       problem.fact,
-      `Rule: ${PROBLEM_RULES[problem.rule]}`,
+      `Rule: ${problemRule(problem)}`,
       problem.source ? `Source: ${SOURCE_LABELS[problem.source]}` : null,
       `Messages: ${problem.messages.map((m) => `${m.message} (${m.reason}, ${m.attempts})`).join("; ")}`,
       `Servers: ${problem.servers.map((s) => `${serverLabel(s)} (${s.attempts})`).join("; ")}`,
       problem.lastConnectedAt
-        ? `Last successful connection: ${problem.lastConnectedAt}`
+        ? `${problem.part === "speakeasy" ? "Last successful sign-in" : "Last successful connection"}: ${problem.lastConnectedAt}`
         : null,
     ]
       .filter(Boolean)
@@ -207,9 +207,7 @@ function ProblemBody({
                 : ` No one has ${succeeded}${problem.part === "speakeasy" ? "" : " to it"} since ${formatSince(problem.lastConnectedAt, now)}.`
               : ""}
           </p>
-          <p className="text-muted-foreground">
-            Rule: {PROBLEM_RULES[problem.rule]}
-          </p>
+          <p className="text-muted-foreground">Rule: {problemRule(problem)}</p>
           {problem.source ? (
             <p className="text-muted-foreground">
               Source: {SOURCE_LABELS[problem.source].toLowerCase()}
