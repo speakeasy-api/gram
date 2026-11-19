@@ -30,10 +30,6 @@ type Service interface {
 	GetSession(context.Context, *GetSessionPayload) (res *AdminSession, err error)
 	// GetOrganizationFeatures implements getOrganizationFeatures.
 	GetOrganizationFeatures(context.Context, *GetOrganizationFeaturesPayload) (res *ProductFeatures, err error)
-	// Enable or disable the temporary provider setup rollout for one organization.
-	// Staff only; disabled by default. Existing credential storage and OAuth flows
-	// are unaffected.
-	SetOrganizationProviderSetup(context.Context, *SetOrganizationProviderSetupPayload) (res *ProductFeatures, err error)
 	// SetOrganizationFeature implements setOrganizationFeature.
 	SetOrganizationFeature(context.Context, *SetOrganizationFeaturePayload) (res *ProductFeatures, err error)
 	// GetOrganizationChatAnalysisSettings implements
@@ -473,7 +469,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [124]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationProviderSetup", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "getOrganizationHookFleet", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "listPlatformMcpFeedback", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getProjectRedeployPreview", "redeployProject", "listCustomDomains", "listPlatformExternalCredentials", "getGcpIamPlatformCredential", "createGcpIamPlatformCredential", "updateGcpIamPlatformCredential", "verifyGcpIamPlatformCredential", "deleteGcpIamPlatformCredential", "getMemoryEvalOptions", "listMemoryEvalRuns", "getMemoryEvalRun", "startMemoryEvalRun", "listAssistantOrganizations", "repairOrganizationAssistantAgentNames", "listOrganizationAssistants", "migrateOrganizationAssistantIdentities", "migrateOrganizationAssistantsToKit"}
+var MethodNames = [123]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "getOrganizationHookFleet", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "listPlatformMcpFeedback", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getProjectRedeployPreview", "redeployProject", "listCustomDomains", "listPlatformExternalCredentials", "getGcpIamPlatformCredential", "createGcpIamPlatformCredential", "updateGcpIamPlatformCredential", "verifyGcpIamPlatformCredential", "deleteGcpIamPlatformCredential", "getMemoryEvalOptions", "listMemoryEvalRuns", "getMemoryEvalRun", "startMemoryEvalRun", "listAssistantOrganizations", "repairOrganizationAssistantAgentNames", "listOrganizationAssistants", "migrateOrganizationAssistantIdentities", "migrateOrganizationAssistantsToKit"}
 
 type AdminAssistantAgentNameRepairResult struct {
 	AssistantID string
@@ -3627,9 +3623,6 @@ type ProductFeatureName string
 // ProductFeatures is the result type of the admin service
 // getOrganizationFeatures method.
 type ProductFeatures struct {
-	// Whether the staff-managed provider setup rollout is enabled. Defaults to
-	// false when absent.
-	ProviderSetupEnabled *bool
 	// Whether logging is enabled
 	LogsEnabled bool
 	// Whether tool I/O logging is enabled
@@ -3892,14 +3885,6 @@ type SetOrganizationOnboardingStackPayload struct {
 	MdmVendor string
 	// Required when mdm_vendor is other, ignored otherwise.
 	MdmVendorName *string
-}
-
-// SetOrganizationProviderSetupPayload is the payload type of the admin service
-// setOrganizationProviderSetup method.
-type SetOrganizationProviderSetupPayload struct {
-	AdminSessionToken *string
-	OrganizationID    string
-	Enabled           bool
 }
 
 // SetRegistryEntryPublishedPayload is the payload type of the admin service
@@ -4356,7 +4341,6 @@ func NewViewedProductFeatures(res *ProductFeatures, view string) *adminviews.Pro
 // ProductFeatures.
 func newProductFeatures(vres *adminviews.ProductFeaturesView) *ProductFeatures {
 	res := &ProductFeatures{
-		ProviderSetupEnabled: vres.ProviderSetupEnabled,
 		AssistantsAvailable:  vres.AssistantsAvailable,
 		FunctionsAvailable:   vres.FunctionsAvailable,
 		UpstreamAuthEnforced: vres.UpstreamAuthEnforced,
@@ -4434,7 +4418,6 @@ func newProductFeatures(vres *adminviews.ProductFeaturesView) *ProductFeatures {
 // type ProductFeaturesView using the "default" view.
 func newProductFeaturesView(res *ProductFeatures) *adminviews.ProductFeaturesView {
 	vres := &adminviews.ProductFeaturesView{
-		ProviderSetupEnabled:                    res.ProviderSetupEnabled,
 		LogsEnabled:                             &res.LogsEnabled,
 		ToolIoLogsEnabled:                       &res.ToolIoLogsEnabled,
 		SessionCaptureEnabled:                   &res.SessionCaptureEnabled,

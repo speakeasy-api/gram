@@ -607,6 +607,19 @@
                 </button>
                 {{end}} {{if or (not .Connected) (and .Unavailable (not .UnavailableTunnel)) .IdentityReconnect .AttachmentReconnect .Rejected .Inactive}}
                 {{if .Chained}}
+                {{if $.AccountSwitch}}
+                {{/* Shown by the page script only when the check offers it. */}}
+                <button
+                  type="submit"
+                  name="action"
+                  value="switch_account"
+                  class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 shrink-0 items-center justify-center whitespace-nowrap px-3 text-sm"
+                  data-switch-account
+                  hidden
+                >
+                  Sign in with your company account
+                </button>
+                {{end}}
                 {{/* Every company sign-in card offers the same outlined action in every
                 state. The short label never overflows a narrow card; the page script
                 names the service when it fits. */}}
@@ -1024,7 +1037,7 @@
       {{if ne .Name .Slug}}<span class="text-muted-foreground truncate font-mono text-xs">{{.Slug}}</span>{{end}}
     </span>
     <span
-      class="text-xs {{if .NeedsAttention}}text-default-warning{{else if .Ready}}text-default-success{{else}}text-muted-foreground{{end}}"
+      class="text-xs {{if .StatusWarns}}text-default-warning{{else if .Ready}}text-default-success{{else}}text-muted-foreground{{end}}"
       data-gateway-server-status="{{.Status}}"
       {{if .Hidden}}hidden{{end}}
       >{{.StatusLabel}}</span

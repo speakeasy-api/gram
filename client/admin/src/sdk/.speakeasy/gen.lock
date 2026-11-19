@@ -137,7 +137,6 @@ trackedFiles:
   src/funcs/adminSetOrganizationChatAnalysisSettings.ts: {}
   src/funcs/adminSetOrganizationFeature.ts: {}
   src/funcs/adminSetOrganizationOnboardingStack.ts: {}
-  src/funcs/adminSetOrganizationProviderSetup.ts: {}
   src/funcs/adminSetRegistryEntryPublished.ts: {}
   src/funcs/adminSetStripeCustomer.ts: {}
   src/funcs/adminSetStripeSubscription.ts: {}
@@ -363,7 +362,6 @@ trackedFiles:
   src/models/components/setorganizationchatanalysissettingsrequestbody.ts: {}
   src/models/components/setorganizationfeaturerequestbody.ts: {}
   src/models/components/setorganizationonboardingstackrequestbody.ts: {}
-  src/models/components/setorganizationprovidersetuprequestbody.ts: {}
   src/models/components/setregistryentrypublishedrequestbody.ts: {}
   src/models/components/setstripecustomerrequestbody.ts: {}
   src/models/components/setstripesubscriptionrequestbody.ts: {}
@@ -623,7 +621,6 @@ trackedFiles:
   src/react-query/index.ts: {}
   src/react-query/setAdminOrganizationFeature.ts: {}
   src/react-query/setAdminOrganizationOnboardingStack.ts: {}
-  src/react-query/setAdminOrganizationProviderSetup.ts: {}
   src/react-query/updateAdminOnboardingPlaybook.ts: {}
   src/react-query/updateAdminOnboardingUseCase.ts: {}
   src/sdk/admin.ts: {}

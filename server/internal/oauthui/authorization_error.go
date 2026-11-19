@@ -154,6 +154,11 @@ const (
 	ReasonSignInUnavailable Reason = "sign-in-unavailable"
 	// ReasonCheckNeedsAdmin identifies a server connection check that an administrator's setup stopped.
 	ReasonCheckNeedsAdmin Reason = "check-needs-admin"
+	// ReasonSignInRestarted identifies a consent link the person left to sign in again.
+	ReasonSignInRestarted Reason = "sign-in-restarted"
+	// ReasonSignInNotStarted identifies a new sign-in that couldn't start; the
+	// description is a fixed, user-safe sentence saying what to do.
+	ReasonSignInNotStarted Reason = "sign-in-not-started"
 	// ReasonSignInAddress identifies a sign-in address that is private or internal; an administrator fixes it.
 	ReasonSignInAddress Reason = "sign-in-address"
 	// ReasonSignInAddressMissing identifies a sign-in address that doesn't exist; an administrator fixes it.
@@ -165,7 +170,7 @@ func (r Reason) check() bool {
 	switch r {
 	case ReasonCheckFailed, ReasonCheckUnavailable, ReasonCheckNeedsAdmin, ReasonCheckNotAllowed:
 		return true
-	case ReasonDefault, ReasonCanceled, ReasonOrganizationBlocked, ReasonExpired, ReasonSessionChanged, ReasonInvalidClient, ReasonInvalidLink, ReasonUnavailable, ReasonInternal, ReasonProviderUnavailable, ReasonSignInRequired, ReasonSignInUnavailable, ReasonSignInFailed, ReasonSignInAddress, ReasonSignInAddressMissing:
+	case ReasonDefault, ReasonCanceled, ReasonOrganizationBlocked, ReasonExpired, ReasonSessionChanged, ReasonInvalidClient, ReasonInvalidLink, ReasonUnavailable, ReasonInternal, ReasonProviderUnavailable, ReasonSignInRequired, ReasonSignInUnavailable, ReasonSignInFailed, ReasonSignInRestarted, ReasonSignInNotStarted, ReasonSignInAddress, ReasonSignInAddressMissing:
 		return false
 	default:
 		return false

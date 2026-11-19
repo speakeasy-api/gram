@@ -332,8 +332,7 @@ func (s *Service) GetSession(ctx context.Context, _ *gen.GetSessionPayload) (*ge
 
 func productFeaturesResult(snapshot productfeatures.ProductFeaturesSnapshot) *gen.ProductFeatures {
 	return &gen.ProductFeatures{
-		ProviderSetupEnabled: new(snapshot.ProviderSetupEnabled),
-		LogsEnabled:          snapshot.LogsEnabled, ToolIoLogsEnabled: snapshot.ToolIoLogsEnabled, SessionCaptureEnabled: snapshot.SessionCaptureEnabled,
+		LogsEnabled: snapshot.LogsEnabled, ToolIoLogsEnabled: snapshot.ToolIoLogsEnabled, SessionCaptureEnabled: snapshot.SessionCaptureEnabled,
 		AuthzChallengeLoggingEnabled: snapshot.AuthzChallengeLoggingEnabled, SsoEnabled: snapshot.SsoEnabled, ScimEnabled: snapshot.ScimEnabled,
 		HooksBrowserLoginEnabled: snapshot.HooksBrowserLoginEnabled, HooksFailOpenEnabled: snapshot.HooksFailOpenEnabled,
 		CustomModelKeysEnabled: snapshot.CustomModelKeysEnabled, SkillsEnabled: snapshot.SkillsEnabled, SkillCaptureMetadataOnly: snapshot.SkillCaptureMetadataOnly,
@@ -371,22 +370,6 @@ func (s *Service) GetOrganizationFeaturesStrict(ctx context.Context, organizatio
 		return nil, fmt.Errorf("read organization features: %w", err)
 	}
 	return productFeaturesResult(snapshot), nil
-}
-
-func (s *Service) SetOrganizationProviderSetup(ctx context.Context, payload *gen.SetOrganizationProviderSetupPayload) (*gen.ProductFeatures, error) {
-	if _, ok := contextvalues.GetAdminAuthContext(ctx); !ok {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, payload.OrganizationID)
-	if err != nil {
-		return nil, err
-	}
-	actor, displayName, _ := adminActor(ctx)
-	err = productfeatures.NewMutator(s.productFeatures, s.audit).SetFeature(ctx, organizationID, productfeatures.FeatureProviderSetup, payload.Enabled, productfeatures.MutationActor{Principal: actor, DisplayName: displayName, Slug: nil})
-	if err != nil {
-		return nil, fmt.Errorf("set provider setup rollout: %w", err)
-	}
-	return productFeaturesResult(s.productFeatures.Snapshot(ctx, organizationID)), nil
 }
 
 func (s *Service) SetOrganizationFeature(ctx context.Context, payload *gen.SetOrganizationFeaturePayload) (*gen.ProductFeatures, error) {
@@ -517,7 +500,6 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.GetSpendBreakdown = service.preauthorizeAdmin(server.GetSpendBreakdown)
 	server.ListCustomerUsage = service.preauthorizeAdmin(server.ListCustomerUsage)
 	server.OpenOrganizationInDashboard = service.preauthorizeAdmin(server.OpenOrganizationInDashboard)
-	server.SetOrganizationProviderSetup = service.strictAdminJSON(server.SetOrganizationProviderSetup, func() any { return new(adminserver.SetOrganizationProviderSetupRequestBody) })
 	server.GetMemoryEvalOptions = service.preauthorizeAdmin(server.GetMemoryEvalOptions)
 	server.ListMemoryEvalRuns = service.preauthorizeAdmin(server.ListMemoryEvalRuns)
 	server.GetMemoryEvalRun = service.preauthorizeAdmin(server.GetMemoryEvalRun)

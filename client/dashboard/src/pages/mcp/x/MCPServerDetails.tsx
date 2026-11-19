@@ -1,7 +1,7 @@
+import { SETTINGS_GROUPS } from "@/components/detail/settings-groups";
 import { DetailBody } from "@/components/detail-body";
 import { useMcpServerDetailChrome } from "@/components/mcp/useMcpServerDetailChrome";
 import { McpDetailFrame, McpSetupFrame } from "@/components/mcp/McpDetailFrame";
-import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
 import { ProviderSetupPage } from "./setup/ProviderSetupPage";
 import { isKnownEnumValue } from "@/lib/enum";
 import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
@@ -77,7 +77,6 @@ export default function MCPServerDetails(): JSX.Element | null {
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
   const location = useLocation();
   const routes = useRoutes();
-  const providerSetupRollout = useProviderSetupRollout();
   const mcpScopedFlag = useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies);
   const mcpScoped = mcpScopedFlag.status === "enabled";
   const idOrSlug = mcpServerSlug ?? "";
@@ -140,15 +139,6 @@ export default function MCPServerDetails(): JSX.Element | null {
   }
   // Which tabs exist depends on the server's kind, so route only once it loads.
   if (!mcpServer) return <SplashScreen />;
-  // Setup waits for the rollout: a disabled one sends the viewer to Overview.
-  if (activeTab === "setup" && providerSetupRollout === "disabled") {
-    return (
-      <Navigate
-        to={routes.mcp.details.overview.href(mcpServerRouteParam(mcpServer))}
-        replace
-      />
-    );
-  }
   // Retired tab segments (`authentication`, the toolset page's `performance`).
   if (tabSegment !== undefined && !activeTab) {
     const target = serverTabForToolsetTab(tabSegment, location.hash);
@@ -214,17 +204,9 @@ export default function MCPServerDetails(): JSX.Element | null {
           ),
         }}
       >
-        {providerSetupRollout === "loading" ? (
-          <SplashScreen />
-        ) : (
-          <RequireScope
-            scope="mcp:write"
-            resourceId={mcpServer.id}
-            level="page"
-          >
-            <ProviderSetupPage key={mcpServer.id} mcpServer={mcpServer} />
-          </RequireScope>
-        )}
+        <RequireScope scope="mcp:write" resourceId={mcpServer.id} level="page">
+          <ProviderSetupPage key={mcpServer.id} mcpServer={mcpServer} />
+        </RequireScope>
       </McpSetupFrame>
     );
   }
@@ -291,6 +273,7 @@ export default function MCPServerDetails(): JSX.Element | null {
               mcpServer={mcpServer}
               hostedToolset={hostedToolset}
               agentSetupHref={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AGENT_SETUP_SECTION_ID}`}
+              pluginSettingsHref={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${SETTINGS_GROUPS.publishing.id}`}
             />
           )
         );

@@ -60,6 +60,8 @@ import {
   UpstreamCredentialsSection,
 } from "./sections/authentication/UpstreamCredentialsSection";
 import { DangerZoneSection } from "./sections/DangerZoneSection";
+import { RestartSetupSection } from "./sections/RestartSetupSection";
+import { guidedSetupStatus } from "@/pages/mcp/x/setup/provider-setup";
 import { NetworkAccessSection } from "./sections/NetworkAccessSection";
 import { MCP_PUBLIC_ACCESS_SECTION_ID } from "./sections/PublicAccessSection";
 import { PublicRateLimitsSection } from "./sections/PublicRateLimitsSection";
@@ -180,15 +182,12 @@ export function SettingsTab({
   }
 
   const G = SETTINGS_GROUPS;
-  // The same plugin picker as the header's plugin card, as a settings
-  // section; only people who can edit plugins get it.
+  // The plugin picker, as a settings section; only people who can edit
+  // plugins get it.
   const publishing = canWritePlugins && {
     ...G.publishing,
     content: (
-      <PluginStatusBanner
-        variant="settings"
-        server={pluginServerRef(mcpServer, hostedToolset)}
-      />
+      <PluginStatusBanner server={pluginServerRef(mcpServer, hostedToolset)} />
     ),
   };
   const danger = (
@@ -434,6 +433,12 @@ export function SettingsTab({
             ...G.tools,
             content: <ToolFilteringSection mcpServer={mcpServer} />,
           },
+          // Finished guided setup moves here from the Setup tab.
+          guidedSetupStatus(mcpServer, remoteMcpServer?.url) === "done" &&
+            hasScope("mcp:write", mcpServer.id) && {
+              ...G.setup,
+              content: <RestartSetupSection mcpServer={mcpServer} />,
+            },
           { ...G.danger, content: danger },
         ]}
       />
