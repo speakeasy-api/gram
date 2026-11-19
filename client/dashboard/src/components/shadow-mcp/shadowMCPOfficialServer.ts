@@ -12,6 +12,35 @@ export function shadowMCPMakeOfficialHref(serverPageHref: string): string {
   return `${serverPageHref}?${SHADOW_MCP_MAKE_OFFICIAL_PARAM}=1`;
 }
 
+/**
+ * The query parameters that open the remote MCP creation page for a Shadow
+ * MCP server: its URL and name fill the form, and the server's slug sends
+ * the admin back to its Shadow MCP page to link the new server.
+ */
+export const SHADOW_MCP_SETUP_PARAMS = {
+  url: "url",
+  name: "name",
+  shadowServer: "shadow-mcp",
+} as const;
+
+/** The remote MCP creation page, filled in for a Shadow MCP server. */
+export function shadowMCPSetUpHref(
+  createRemoteHref: string,
+  server: Pick<
+    ShadowMCPInventoryServer,
+    "canonicalServerUrl" | "serverName" | "serverSlug"
+  >,
+): string {
+  const params = new URLSearchParams({
+    [SHADOW_MCP_SETUP_PARAMS.url]: server.canonicalServerUrl,
+    [SHADOW_MCP_SETUP_PARAMS.shadowServer]: server.serverSlug,
+  });
+  if (server.serverName) {
+    params.set(SHADOW_MCP_SETUP_PARAMS.name, server.serverName);
+  }
+  return `${createRemoteHref}?${params.toString()}`;
+}
+
 /** Whether a row can be made official at all: only a server with a URL can. */
 export function canMakeShadowMCPServerOfficial(
   server: Pick<ShadowMCPInventoryServer, "targetKind" | "officialServer">,

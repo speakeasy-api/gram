@@ -264,10 +264,21 @@ describe("OfficialServerPanel", () => {
       ),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Make official" })).toBeNull();
-    // The admin can still try the form with a credential of their own.
+    // The admin can still set it up by hand: the usual Add MCP server form,
+    // filled in, which comes back here to link the new server.
+    const setUp = screen.getByRole("link", { name: "Set it up myself" });
+    const href = new URL(setUp.getAttribute("href") ?? "", "http://x");
+    expect(href.pathname).toBe("/acme/projects/default/mcp/add/remote");
+    expect(href.searchParams.get("url")).toBe(
+      "https://tracker.example.com/mcp",
+    );
+    expect(href.searchParams.get("name")).toBe("Tracker");
+    expect(href.searchParams.get("shadow-mcp")).toBe(
+      "tracker-example-com-mcp-12345678",
+    );
     expect(
-      screen.getByRole("button", { name: "Set it up myself" }),
-    ).toBeTruthy();
+      screen.queryByRole("dialog", { name: "Make official sheet" }),
+    ).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Request help" }));
 
@@ -611,6 +622,21 @@ describe("OfficialServerPanel", () => {
     expect(
       screen.queryByRole("dialog", { name: "Make official sheet" }),
     ).toBeNull();
+  });
+
+  it("keeps Set it up myself off without permission to add servers", async () => {
+    mocks.canWriteMcp = false;
+    mocks.probe.mockResolvedValue({
+      outcome: "unreachable",
+      reason: "guardian_rejected",
+    });
+    renderPanel(server());
+
+    const setUp = await screen.findByRole("button", {
+      name: "Set it up myself",
+    });
+    expect((setUp as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("link", { name: "Set it up myself" })).toBeNull();
   });
 
   it("starts over when the page moves to another server", async () => {

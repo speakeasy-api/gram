@@ -18,9 +18,10 @@ import { useIsSpeakeasyStaff, useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { AlertCircle, Plug } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useCreateRemoteMcpSource } from "./hooks";
+import { SHADOW_MCP_SETUP_PARAMS } from "@/components/shadow-mcp/shadowMCPOfficialServer";
 import { useCreateUnproxiedMcpSource } from "../unproxied-mcp/hooks";
 import { useVerifyRemoteMcpUrl } from "./useVerifyRemoteMcpUrl";
 import { VerifyRemoteMcpUrlAlert } from "./VerifyRemoteMcpUrlButton";
@@ -64,9 +65,20 @@ function CreateRemoteMcpForm() {
   const createUnproxied = useCreateUnproxiedMcpSource();
   const issuerQuery = useEffectiveUserSessionIssuers();
   const newGuardrail = useNewServerGuardrail();
+  // Opened from a Shadow MCP server's "Set it up myself": its URL and name
+  // fill the form, and saving goes back to its page to link the new server.
+  const [searchParams] = useSearchParams();
+  const shadowServerSlug =
+    searchParams.get(SHADOW_MCP_SETUP_PARAMS.shadowServer) || null;
+  const shadowServerName =
+    searchParams.get(SHADOW_MCP_SETUP_PARAMS.name) || "this Shadow MCP server";
 
-  const [name, setName] = useState("");
-  const [url, setUrl] = useState("");
+  const [name, setName] = useState(
+    () => searchParams.get(SHADOW_MCP_SETUP_PARAMS.name) ?? "",
+  );
+  const [url, setUrl] = useState(
+    () => searchParams.get(SHADOW_MCP_SETUP_PARAMS.url) ?? "",
+  );
   const [mode, setMode] = useState<ProxyMode>("proxied");
   const [issuerSelection, setIssuerSelection] = useState<string | null>(null);
   const [identityMode, setIdentityMode] =
@@ -198,7 +210,9 @@ function CreateRemoteMcpForm() {
       }
       if (identityConfiguration.status === "setup-required") {
         toast.warning(
-          `MCP server added but kept disabled. ${identityConfiguration.message}`,
+          shadowServerSlug
+            ? `MCP server added but kept disabled. ${identityConfiguration.message} Turn it on, then link it from its Shadow MCP page.`
+            : `MCP server added but kept disabled. ${identityConfiguration.message}`,
         );
         void navigate(
           `${routes.mcp.details.settings.href(mcpServerRouteParam(mcpServer))}#${MCP_AUTHENTICATION_SECTION_ID}`,
@@ -214,6 +228,8 @@ function CreateRemoteMcpForm() {
         await flow.complete(mcpServer.id);
       } else if (guardrailFailed) {
         routes.mcp.details.guardrails.goTo(mcpServerRouteParam(mcpServer));
+      } else if (shadowServerSlug) {
+        routes.shadowAI.mcps.detail.goTo(shadowServerSlug);
       } else {
         routes.mcp.details.overview.goTo(mcpServerRouteParam(mcpServer));
       }
@@ -239,6 +255,12 @@ function CreateRemoteMcpForm() {
         noValidate
       >
         <Stack gap={4}>
+          {shadowServerSlug ? (
+            <Alert variant="info" dismissible={false}>
+              This server becomes the official version of {shadowServerName}.
+              After you save it, you go back to its Shadow MCP page to link it.
+            </Alert>
+          ) : null}
           <fieldset disabled={creationLocked} className="contents">
             <Stack gap={1}>
               <label
@@ -459,7 +481,12 @@ function CreateRemoteMcpForm() {
               variant="secondary"
               disabled={isPending || flow.isAttaching}
               onClick={() => {
-                if (!flow.cancel()) routes.mcp.add.goTo();
+                if (flow.cancel()) return;
+                if (shadowServerSlug) {
+                  routes.shadowAI.mcps.detail.goTo(shadowServerSlug);
+                  return;
+                }
+                routes.mcp.add.goTo();
               }}
             >
               <Button.Text>Cancel</Button.Text>
