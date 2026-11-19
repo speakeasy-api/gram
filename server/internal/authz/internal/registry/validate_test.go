@@ -1,4 +1,4 @@
-package authz
+package registry
 
 import (
 	"testing"
@@ -6,9 +6,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestModel_IsValid(t *testing.T) {
+func TestDefinitions_IsValid(t *testing.T) {
 	t.Parallel()
-	require.NoError(t, Model.Validate())
+	require.NoError(t, Definitions.Validate())
 }
 
 func validTestPermission(action Action) Permission {
@@ -40,7 +40,7 @@ func validTestType(kind Kind, permissions ...Permission) ResourceType {
 
 func validTestRegistry(types ...ResourceType) Registry {
 	return Registry{
-		Root:        RootPermission{Scope: ScopeRoot, Agent: AgentUnsafe()},
+		Root:        RootPermission{Scope: Scope("root"), Agent: AgentUnsafe()},
 		Types:       types,
 		SystemRoles: nil,
 		Retired:     nil,
@@ -64,6 +64,16 @@ func TestRegistryValidate_RejectsBrokenModels(t *testing.T) {
 			name:  "duplicate action",
 			model: validTestRegistry(validTestType("thing", validTestPermission("read"), validTestPermission("read"))),
 			want:  `thing: action "read" is declared twice`,
+		},
+		{
+			name:  "action outside the closed list",
+			model: validTestRegistry(validTestType("thing", validTestPermission("delete"))),
+			want:  `thing: action "delete" is not in registry.Actions; add it to scopes.go`,
+		},
+		{
+			name:  "legacy action on a type that never had it",
+			model: validTestRegistry(validTestType("thing", validTestPermission(ActionPluginWrite))),
+			want:  `thing: action "plugin_write" is not in registry.Actions; add it to scopes.go`,
 		},
 		{
 			name: "duplicate scope across types",
@@ -277,12 +287,25 @@ func TestResourceType_Scopes(t *testing.T) {
 	require.Equal(t, Scope("project:blocked_write"), project.BlockScopeFor(validTestPermission("write")))
 
 	// A historical scope keeps its own prefix for the block too.
-	plugin := withTestScope(validTestPermission("plugin_write"), ScopePluginWrite)
-	require.Equal(t, ScopePluginWrite, project.ScopeFor(plugin))
-	require.Equal(t, ScopePluginBlockedWrite, project.BlockScopeFor(plugin))
+	plugin := withTestScope(validTestPermission("plugin_write"), Scope("plugin:write"))
+	require.Equal(t, Scope("plugin:write"), project.ScopeFor(plugin))
+	require.Equal(t, Scope("plugin:blocked_write"), project.BlockScopeFor(plugin))
 }
 
 func withTestScope(p Permission, s Scope) Permission {
 	p.LegacyScope = s
 	return p
+}
+
+// The member role is seeded with a subset of the admin role.
+func TestDefinitions_MemberIsASubsetOfAdmin(t *testing.T) {
+	t.Parallel()
+
+	admin := Definitions.SystemRoles[SystemRoleAdmin]
+	member := Definitions.SystemRoles[SystemRoleMember]
+	require.NotEmpty(t, admin, "the admin role is seeded with nothing")
+	require.NotEmpty(t, member, "the member role is seeded with nothing")
+	for _, scope := range member {
+		require.Contains(t, admin, scope, "member is seeded with %s, which admin is not", scope)
+	}
 }
