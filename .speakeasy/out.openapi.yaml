@@ -101944,6 +101944,21 @@ components:
           type: string
           description: Limit to one server, gateway or toolset.
           format: uuid
+        steps:
+          type: array
+          items:
+            type: string
+            enum:
+              - connect
+              - sign_in
+              - service_sign_in
+              - sign_in_renewal
+              - service_renewal
+              - listing_tools
+              - request
+              - other
+          description: 'Count only attempts that ended at these steps, as the Connection Logs step filter does. Absent: sign_in, service_sign_in, sign_in_renewal and service_renewal.'
+          maxItems: 50
         to:
           type: string
           description: Exclusive end of attempt start times.

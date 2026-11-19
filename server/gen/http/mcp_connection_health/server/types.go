@@ -57,6 +57,10 @@ type GetAttemptRequestBody struct {
 type GetSignInSummaryRequestBody struct {
 	// Bucket size. Defaults to hour for ranges up to 48 hours, otherwise day.
 	Bucket *string `form:"bucket,omitempty" json:"bucket,omitempty" xml:"bucket,omitempty"`
+	// Count only attempts that ended at these steps, as the Connection Logs step
+	// filter does. Absent: sign_in, service_sign_in, sign_in_renewal and
+	// service_renewal.
+	Steps []string `form:"steps,omitempty" json:"steps,omitempty" xml:"steps,omitempty"`
 	// The MCP authentication provider.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// Limit to one server, gateway or toolset.
@@ -2559,6 +2563,12 @@ func NewGetSignInSummaryPayload(body *GetSignInSummaryRequestBody, sessionToken 
 		From:                *body.From,
 		To:                  *body.To,
 	}
+	if body.Steps != nil {
+		v.Steps = make([]mcpconnectionhealth.ConnectionStepGroup, len(body.Steps))
+		for i, val := range body.Steps {
+			v.Steps[i] = mcpconnectionhealth.ConnectionStepGroup(val)
+		}
+	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -2695,6 +2705,14 @@ func ValidateGetSignInSummaryRequestBody(body *GetSignInSummaryRequestBody) (err
 	if body.Bucket != nil {
 		if !(*body.Bucket == "hour" || *body.Bucket == "six_hours" || *body.Bucket == "day") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.bucket", *body.Bucket, []any{"hour", "six_hours", "day"}))
+		}
+	}
+	if len(body.Steps) > 50 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.steps", body.Steps, len(body.Steps), 50, false))
+	}
+	for _, e := range body.Steps {
+		if !(e == "connect" || e == "sign_in" || e == "service_sign_in" || e == "sign_in_renewal" || e == "service_renewal" || e == "listing_tools" || e == "request" || e == "other") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.steps[*]", e, []any{"connect", "sign_in", "service_sign_in", "sign_in_renewal", "service_renewal", "listing_tools", "request", "other"}))
 		}
 	}
 	if body.UserSessionIssuerID != nil {

@@ -40,6 +40,28 @@ func TestGetSignInSummary_SplitsSucceededAndDidNot(t *testing.T) {
 	require.Equal(t, int64(1), renewalsDidNot)
 }
 
+func TestGetSignInSummary_StepsLeaveOutTheService(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+	ti.insert(t, ti.org, ti.project, ti.now.Add(-2*time.Hour), mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenExpired, mcpconnectionattempts.Grant(oauthwire.GrantTypeRefreshToken))
+	ti.insert(t, ti.org, ti.project, ti.now.Add(-2*time.Hour), mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeInvalidGrant)
+
+	payload := &gen.GetSignInSummaryPayload{UserSessionIssuerID: ti.issuer.String(), From: ti.rangeFrom(), To: ti.rangeTo()}
+	renewalsDidNot := func() int64 {
+		res, err := ti.service.GetSignInSummary(ctx, payload)
+		require.NoError(t, err)
+		var n int64
+		for _, b := range res.Buckets {
+			n += b.Renewals.DidNot
+		}
+		return n
+	}
+	require.Equal(t, int64(2), renewalsDidNot())
+	payload.Steps = []gen.ConnectionStepGroup{"sign_in", "sign_in_renewal"}
+	require.Equal(t, int64(1), renewalsDidNot())
+}
+
 func TestListDeniedClients_ListsBlockedSignIns(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)

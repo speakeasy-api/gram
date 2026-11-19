@@ -192,11 +192,19 @@ func BuildGetSignInSummaryPayload(mcpConnectionHealthGetSignInSummaryBody string
 	{
 		err = json.Unmarshal([]byte(mcpConnectionHealthGetSignInSummaryBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"bucket\": \"six_hours\",\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"1970-01-01T00:00:01Z\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"bucket\": \"six_hours\",\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"steps\": [\n         \"sign_in\",\n         \"sign_in\",\n         \"sign_in\"\n      ],\n      \"to\": \"1970-01-01T00:00:01Z\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		if body.Bucket != nil {
 			if !(*body.Bucket == "hour" || *body.Bucket == "six_hours" || *body.Bucket == "day") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.bucket", *body.Bucket, []any{"hour", "six_hours", "day"}))
+			}
+		}
+		if len(body.Steps) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.steps", body.Steps, len(body.Steps), 50, false))
+		}
+		for _, e := range body.Steps {
+			if !(e == "connect" || e == "sign_in" || e == "service_sign_in" || e == "sign_in_renewal" || e == "service_renewal" || e == "listing_tools" || e == "request" || e == "other") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.steps[*]", e, []any{"connect", "sign_in", "service_sign_in", "sign_in_renewal", "service_renewal", "listing_tools", "request", "other"}))
 			}
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
@@ -233,6 +241,12 @@ func BuildGetSignInSummaryPayload(mcpConnectionHealthGetSignInSummaryBody string
 		ServerID:            body.ServerID,
 		From:                body.From,
 		To:                  body.To,
+	}
+	if body.Steps != nil {
+		v.Steps = make([]mcpconnectionhealth.ConnectionStepGroup, len(body.Steps))
+		for i, val := range body.Steps {
+			v.Steps[i] = mcpconnectionhealth.ConnectionStepGroup(val)
+		}
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

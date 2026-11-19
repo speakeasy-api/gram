@@ -3,6 +3,7 @@ package attemptlog
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
@@ -61,7 +62,8 @@ type SignInBucket struct {
 }
 
 // SignIns counts sign-ins and renewals per bucket, every bucket in the range included.
-func SignIns(ctx context.Context, ch driver.Conn, s Scope, bucket Bucket, now time.Time) ([]SignInBucket, error) {
+// Non-empty steps keep only attempts that ended at those steps, as the Connection Logs step filter does.
+func SignIns(ctx context.Context, ch driver.Conn, s Scope, bucket Bucket, steps []string, now time.Time) ([]SignInBucket, error) {
 	attempts, args, err := attemptsSQL(s, now)
 	if err != nil {
 		return nil, err
@@ -69,7 +71,12 @@ func SignIns(ctx context.Context, ch driver.Conn, s Scope, bucket Bucket, now ti
 	width := bucket.width()
 	startOf := fmt.Sprintf("toStartOfInterval(a_started, INTERVAL %d SECOND, 'UTC')", int64(width/time.Second))
 	// Placeholders bind in text order: the WITH list comes before the subquery.
-	args = append(append([]any{groupStrings(signInGroups), groupStrings(renewalGroups)}, args...), string(OutcomeInProgress))
+	signIns, renewals := groupStrings(signInGroups), groupStrings(renewalGroups)
+	if len(steps) > 0 {
+		keep := func(g string) bool { return !slices.Contains(steps, g) }
+		signIns, renewals = slices.DeleteFunc(signIns, keep), slices.DeleteFunc(renewals, keep)
+	}
+	args = append(append([]any{signIns, renewals}, args...), string(OutcomeInProgress))
 	query := `
 	WITH has(?, d_step) AS is_sign_in, has(?, d_step) AS is_renewal
 	SELECT ` + startOf + ` AS b_start,

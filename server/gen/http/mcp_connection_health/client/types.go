@@ -57,6 +57,10 @@ type GetAttemptRequestBody struct {
 type GetSignInSummaryRequestBody struct {
 	// Bucket size. Defaults to hour for ranges up to 48 hours, otherwise day.
 	Bucket *string `form:"bucket,omitempty" json:"bucket,omitempty" xml:"bucket,omitempty"`
+	// Count only attempts that ended at these steps, as the Connection Logs step
+	// filter does. Absent: sign_in, service_sign_in, sign_in_renewal and
+	// service_renewal.
+	Steps []string `form:"steps,omitempty" json:"steps,omitempty" xml:"steps,omitempty"`
 	// The MCP authentication provider.
 	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
 	// Limit to one server, gateway or toolset.
@@ -1541,6 +1545,12 @@ func NewGetSignInSummaryRequestBody(p *mcpconnectionhealth.GetSignInSummaryPaylo
 		ServerID:            p.ServerID,
 		From:                p.From,
 		To:                  p.To,
+	}
+	if p.Steps != nil {
+		body.Steps = make([]string, len(p.Steps))
+		for i, val := range p.Steps {
+			body.Steps[i] = string(val)
+		}
 	}
 	return body
 }
