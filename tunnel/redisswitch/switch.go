@@ -189,35 +189,78 @@ func NewClient(ctx context.Context, logger *slog.Logger, opts *redis.Options, ro
 	// Reserved before starting, so two callers cannot both build a switch for
 	// the same role and instance.
 	key := registryKey(opts.Addr, ClientName(role))
-	if _, taken := switches.LoadOrStore(key, (*Switch)(nil)); taken {
-		return nil, fmt.Errorf("a redis switch already follows role %q on this instance in this process", role)
+	reserved := &entry{ready: make(chan struct{}), sw: nil}
+	if found, taken := switches.LoadOrStore(key, reserved); taken {
+		// Only a switch that failed to start may be replaced. Its entry stays in
+		// the registry until then, so Wrap keeps refusing its name.
+		previous, ok := found.(*entry)
+		if !ok || !previous.failed() || !switches.CompareAndSwap(key, found, reserved) {
+			return nil, fmt.Errorf("a redis switch already follows role %q on this instance in this process", role)
+		}
 	}
 
 	sw, err := start(context.WithoutCancel(ctx), logger, role, Target{Addr: opts.Addr, Password: opts.Password}, next, opts.DialTimeout)
 	if err != nil {
-		switches.Delete(key)
+		close(reserved.ready)
 		return nil, err
 	}
-	switches.Store(key, sw)
+	reserved.sw = sw
+	close(reserved.ready)
 
 	return sw.client(opts), nil
 }
+
+// entry is a role's place in the registry. It is stored before its switch has
+// started, so sw may only be read once ready is closed, and is nil if the
+// switch failed to start.
+type entry struct {
+	// ready is closed when the switch has started or failed to.
+	ready chan struct{}
+
+	// sw is the started switch, or nil if starting it failed.
+	sw *Switch
+}
+
+// failed reports whether the switch finished starting and did not succeed.
+func (e *entry) failed() bool {
+	select {
+	case <-e.ready:
+		return e.sw == nil
+	default:
+		return false
+	}
+}
+
+// ErrNotStarted is returned by a client that Wrap built for a switch that
+// failed to start.
+var ErrNotStarted = errors.New("redis switch for this client failed to start")
 
 // Wrap returns a client for options copied from a client that NewClient built.
 // A copy does not carry the command gate or the retry setting, so the whole
 // binding is applied again here. Options that did not come from such a client
 // (their address and connection name match no switch) get redis.NewClient.
+//
+// If the matching switch is still starting, Wrap waits for it. If it failed to
+// start, the returned client cannot connect: an ordinary client carrying the
+// switch's name would be trusted by the copy job and would not follow a move.
 func Wrap(opts *redis.Options) *redis.Client {
 	found, ok := switches.Load(registryKey(opts.Addr, opts.ClientName))
 	if !ok {
 		return redis.NewClient(opts)
 	}
 
-	sw, ok := found.(*Switch)
-	if !ok || sw == nil {
+	reserved, ok := found.(*entry)
+	if !ok {
 		return redis.NewClient(opts)
 	}
-	return sw.client(opts)
+	<-reserved.ready
+	if reserved.sw == nil {
+		opts.Dialer = func(context.Context, string, string) (net.Conn, error) { return nil, ErrNotStarted }
+		opts.MaxRetries = -1
+		opts.DialerRetries = 1
+		return redis.NewClient(opts)
+	}
+	return reserved.sw.client(opts)
 }
 
 // client builds a client bound to this switch. The gate, the dialer and the
@@ -537,8 +580,11 @@ func (s *Switch) verifyCurrent(ctx context.Context, conn net.Conn) error {
 	// A throwaway client speaks the protocol over the socket. Closing it must
 	// leave the socket open for the caller.
 	probe := redis.NewClient(&redis.Options{
-		Dialer:          func(context.Context, string, string) (net.Conn, error) { return keepOpen{Conn: conn}, nil },
-		Password:        s.current.Password,
+		Dialer:   func(context.Context, string, string) (net.Conn, error) { return keepOpen{Conn: conn}, nil },
+		Password: s.current.Password,
+		// Named from its first command, so the copy job never sees this socket
+		// as one that does not follow the switch.
+		ClientName:      s.name,
 		Protocol:        2,
 		ReadTimeout:     pollTimeout,
 		WriteTimeout:    pollTimeout,

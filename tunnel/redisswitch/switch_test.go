@@ -462,6 +462,66 @@ func TestWrapBindsTheDialerEvenForOptionsThatOnlyShareTheName(t *testing.T) {
 	require.False(t, current.Exists("k"))
 }
 
+func TestWrapWaitsForASwitchThatIsStillStarting(t *testing.T) {
+	t.Parallel()
+
+	current := miniredis.RunT(t)
+	require.NoError(t, current.Set(stateKey, movedPrefix+"run-1"))
+	next := miniredis.RunT(t)
+
+	// The registry as NewClient leaves it between reserving and starting.
+	key := registryKey(current.Addr(), ClientName(DefaultRole))
+	reserved := &entry{ready: make(chan struct{}), sw: nil}
+	switches.Store(key, reserved)
+	t.Cleanup(func() { switches.Delete(key) })
+
+	wrapped := make(chan *redis.Client)
+	go func() {
+		wrapped <- Wrap(&redis.Options{Addr: current.Addr(), ClientName: ClientName(DefaultRole)})
+	}()
+
+	select {
+	case <-wrapped:
+		require.Fail(t, "Wrap returned a client before the switch had started")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	sw, err := start(t.Context(), slog.New(slog.DiscardHandler), DefaultRole, Target{Addr: current.Addr(), Password: ""}, Target{Addr: next.Addr(), Password: ""}, 0)
+	require.NoError(t, err)
+	reserved.sw = sw
+	close(reserved.ready)
+
+	client := <-wrapped
+	t.Cleanup(func() { _ = client.Close() })
+	require.NoError(t, client.Set(t.Context(), "k", "v", 0).Err())
+	require.True(t, next.Exists("k"), "the client built during startup must follow the switch")
+	require.False(t, current.Exists("k"))
+}
+
+func TestWrapRefusesToConnectForASwitchThatFailedToStart(t *testing.T) {
+	t.Parallel()
+
+	// No state key: the switch cannot start.
+	current := miniredis.RunT(t)
+	next := miniredis.RunT(t)
+
+	_, err := NewClient(t.Context(), slog.New(slog.DiscardHandler), &redis.Options{Addr: current.Addr()}, DefaultRole, Target{Addr: next.Addr(), Password: ""})
+	require.ErrorIs(t, err, ErrNotArmed)
+
+	client := Wrap(&redis.Options{Addr: current.Addr(), ClientName: ClientName(DefaultRole)})
+	t.Cleanup(func() { _ = client.Close() })
+	require.ErrorIs(t, client.Set(t.Context(), "k", "v", 0).Err(), ErrNotStarted)
+	require.False(t, current.Exists("k"), "an ordinary client must not carry the switch's name")
+
+	// Starting again once the instance is armed replaces the failed entry.
+	require.NoError(t, current.Set(stateKey, valueCurrent))
+	retried, err := NewClient(t.Context(), slog.New(slog.DiscardHandler), &redis.Options{Addr: current.Addr()}, DefaultRole, Target{Addr: next.Addr(), Password: ""})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = retried.Close() })
+	require.NoError(t, retried.Set(t.Context(), "k", "v", 0).Err())
+	require.True(t, current.Exists("k"))
+}
+
 func TestMoveLeavesNoConnectionToTheInstanceBeingLeft(t *testing.T) {
 	t.Parallel()
 
