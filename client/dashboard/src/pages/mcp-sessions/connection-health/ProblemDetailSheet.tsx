@@ -403,6 +403,7 @@ function FailureBars({
   );
   return (
     <HealthBarChart
+      label="Failed attempts in 10-minute intervals"
       labels={chart.labels}
       timestamps={chart.timestamps}
       bucketMs={10 * 60_000}

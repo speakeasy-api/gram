@@ -1,6 +1,6 @@
 // @vitest-environment node
 import type { GramCore } from "@gram/client/core.js";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { listAttempts } from "./sdk";
 
 const call = vi.hoisted(() => ({ request: undefined as unknown }));
@@ -34,6 +34,14 @@ vi.mock("@gram/client/funcs/mcpConnectionHealthListAttempts.js", () => ({
 }));
 
 describe("listAttempts", () => {
+  // Inside the 30-day log, so the range is sent as given.
+  beforeEach(() => {
+    vi.useFakeTimers({ now: new Date("2026-11-17T12:00:00.000Z") });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("sends Dates and reads the SDK's enum field names back as the contract's", async () => {
     const result = await listAttempts({} as GramCore, "proj", {
       userSessionIssuerId: "issuer",

@@ -23,12 +23,7 @@ import { useProjectProviders } from "../providers";
 import { ArrowRight, ChevronDown, Globe, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { useQueryClient } from "@tanstack/react-query";
-import {
-  CONNECTION_HEALTH_QUERY_ROOT,
-  connectionHealthNow,
-  useAttemptHere,
-} from "./api";
+import { connectionHealthNow, useAttemptHere } from "./api";
 import { AskAiButton, type Investigation } from "./AskAiButton";
 import { OutcomeLabel } from "./AttemptsTable";
 import { logsSearch, RETENTION_MS } from "./filters";
@@ -39,6 +34,7 @@ import {
   formatFull,
   outcomeLabel,
   personLabel,
+  plural,
   serverLabel,
   SOURCE_LABELS,
   STEP_LABELS,
@@ -61,12 +57,8 @@ export function AttemptDetailSheet({
   lockedServerId?: string;
   onClose: () => void;
 }): JSX.Element {
-  const queryClient = useQueryClient();
-  const { query, attempt, elsewhere, failed, isPending } = useAttemptHere(
-    reference,
-    providerId,
-    lockedServerId,
-  );
+  const { query, attempt, elsewhere, failed, isPending, retry } =
+    useAttemptHere(reference, providerId, lockedServerId);
   return (
     <Sheet
       open={!!reference}
@@ -124,15 +116,7 @@ export function AttemptDetailSheet({
                   }
                   action={
                     failed ? (
-                      <Button
-                        variant="secondary"
-                        onClick={() =>
-                          void queryClient.refetchQueries({
-                            queryKey: [CONNECTION_HEALTH_QUERY_ROOT],
-                            type: "active",
-                          })
-                        }
-                      >
+                      <Button variant="secondary" onClick={retry}>
                         Try again
                       </Button>
                     ) : undefined
@@ -187,7 +171,9 @@ function investigationFor(attempt: AttemptDetail): Investigation {
         : null,
       attempt.reason ? `Reason code: ${attempt.reason}` : null,
       attempt.source ? `Source: ${SOURCE_LABELS[attempt.source]}` : null,
-      attempt.count > 1 ? `Repeated ${attempt.count} times` : null,
+      attempt.count > 1
+        ? `Stands for ${attempt.count} attempts: this one and ${plural(attempt.count - 1, "repeat")}`
+        : null,
     ]
       .filter(Boolean)
       .join("\n"),

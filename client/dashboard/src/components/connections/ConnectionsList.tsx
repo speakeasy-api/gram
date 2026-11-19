@@ -996,12 +996,14 @@ function InactiveSplit({
   bordered: boolean;
   rows: (groups: ConnectionGroup[]) => JSX.Element;
 }): JSX.Element {
-  const needsReauth = inactive.filter((group) =>
-    group.sessions.some(
-      (session) => connectionState(session, now) === "needs_reauth",
-    ),
-  );
-  const rest = inactive.filter((group) => !needsReauth.includes(group));
+  const needsReauth: ConnectionGroup[] = [];
+  const rest: ConnectionGroup[] = [];
+  for (const group of inactive) {
+    (groupAttentionState(group, now) === "needs_reauth"
+      ? needsReauth
+      : rest
+    ).push(group);
+  }
   const anyRevoked = rest.some((group) =>
     group.sessions.some(
       (session) => connectionState(session, now) === "revoked",

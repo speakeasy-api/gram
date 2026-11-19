@@ -26,9 +26,9 @@ export function ConnectionsViews({
   const navigate = useNavigate();
   const [window] = useState(() => presetWindow("1d", connectionHealthNow()));
   // Signed in, not expired, not revoked: the count the Overview charts.
-  const activeNow = useSessionActivity(providerId, window, {
+  const activity = useSessionActivity(providerId, window, {
     enabled: view === "sessions",
-  }).data?.activeNow;
+  });
   return (
     <div className="space-y-4">
       <SegmentedControl
@@ -36,18 +36,25 @@ export function ConnectionsViews({
         variant="view"
         value={view}
         options={VIEW_OPTIONS}
-        onChange={(next) =>
+        onChange={(next) => {
+          if (next === view) return;
           void navigate(
             next === "logs"
               ? routes.mcpSessions.provider.connectionLogs.href(providerId)
               : routes.mcpSessions.provider.connections.href(providerId),
-          )
-        }
+          );
+        }}
       />
       {view === "logs" ? (
         <ConnectionLogsView providerId={providerId} />
       ) : (
-        <ConnectionsTab providerId={providerId} health={{ activeNow }} />
+        <ConnectionsTab
+          providerId={providerId}
+          health={{
+            activeNow: activity.data?.activeNow,
+            refetch: () => void activity.refetch(),
+          }}
+        />
       )}
     </div>
   );

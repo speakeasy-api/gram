@@ -19,7 +19,7 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { cn } from "@/lib/utils";
-import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { DEFAULT_LOG_RANGE, presetValue, TIME_RANGE_PRESETS } from "./filters";
 import { formatCount, plural } from "./format";
 import type { AttemptFacets } from "./types";
@@ -144,23 +144,21 @@ export function LogFilterSheet({
             const pair = next && PAIRED.has(next.id) ? next : undefined;
             const notes = [dim.description, pair?.description].filter(Boolean);
             return (
-              <Fragment key={dim.id}>
-                <div className="flex flex-col gap-2">
-                  {pair ? (
-                    <div className="grid grid-cols-2 gap-4">
-                      {field(dim)}
-                      {field(pair)}
-                    </div>
-                  ) : (
-                    field(dim)
-                  )}
-                  {notes.map((note) => (
-                    <p key={note} className="text-muted-foreground text-sm">
-                      {note}
-                    </p>
-                  ))}
-                </div>
-              </Fragment>
+              <div key={dim.id} className="flex flex-col gap-2">
+                {pair ? (
+                  <div className="grid grid-cols-2 gap-4">
+                    {field(dim)}
+                    {field(pair)}
+                  </div>
+                ) : (
+                  field(dim)
+                )}
+                {notes.map((note) => (
+                  <p key={note} className="text-muted-foreground text-sm">
+                    {note}
+                  </p>
+                ))}
+              </div>
             );
           })}
         </div>
@@ -289,7 +287,7 @@ function CheckList({
               />
               <span className="flex-1">{option.label}</span>
               <span className="text-muted-foreground font-mono text-xs">
-                {formatCount(count ?? 0)}
+                {counts ? formatCount(count ?? 0) : null}
               </span>
             </label>
           </li>

@@ -16,13 +16,13 @@ import { useMembers } from "@gram/client/react-query/members.js";
 import { clientAccessLabel } from "../providers";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { ArrowRight, Pencil } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
 import {
-  connectionHealthNow,
   useActiveKillswitches,
   useConnectionAttempts,
   useDeniedClients,
+  useRangeClock,
   useSuspectedProblems,
 } from "./api";
 import { AttemptDetailSheet } from "./AttemptDetailSheet";
@@ -82,11 +82,11 @@ export function OverviewTab({
 }): JSX.Element {
   const routes = useRoutes();
   const [searchParams] = useSearchParams();
-  const [now] = useState(connectionHealthNow);
   const rangeParam = searchParams.get(RANGE_PARAM);
   const range =
     RANGES.find((r) => r.value === rangeParam) ??
     RANGES.find((r) => r.value === DEFAULT_RANGE)!;
+  const [now] = useRangeClock(range.value);
   const metric: SummaryMetric =
     searchParams.get(CHART_PARAM) === "sessions" ? "sessions" : "sign-ins";
   const window = useMemo(

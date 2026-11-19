@@ -217,6 +217,7 @@ function SignInBars({
   }
   return (
     <HealthBarChart
+      label="Sign-in attempts over time"
       labels={chart.labels}
       timestamps={chart.timestamps}
       bucketMs={BUCKET_MS[bucket]}
@@ -308,6 +309,8 @@ function ActiveSessionsLine({
   return (
     <Line
       key={`${isDark}-${activeNow}`}
+      role="img"
+      aria-label="Active sessions per day"
       data={data}
       options={options}
       plugins={[lastLabel]}

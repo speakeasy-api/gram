@@ -17,15 +17,15 @@ import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { Link, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
   CONNECTION_HEALTH_QUERY_ROOT,
-  connectionHealthNow,
   useAttemptCounts,
   useAttemptHere,
   useConnectionAttempts,
+  useRangeClock,
 } from "./api";
 import { useProjectProviders } from "../providers";
 import { AttemptDetailSheet } from "./AttemptDetailSheet";
@@ -87,6 +87,23 @@ function facetOptions(values: FacetValue[] | undefined, unnamed?: string) {
     value: v.value,
     label: v.label ?? unnamed ?? v.value,
   }));
+}
+
+/** Facets cap at 100 values, so add the filtered ones the unfiltered list missed. */
+function withMissing(
+  base: AttemptFacets | undefined,
+  extra: AttemptFacets | undefined,
+): AttemptFacets | undefined {
+  if (!base || !extra) return base ?? extra;
+  const merged = { ...base };
+  for (const key of Object.keys(base) as (keyof AttemptFacets)[]) {
+    const seen = new Set(base[key].map((v) => v.value));
+    merged[key] = [
+      ...base[key],
+      ...extra[key].filter((v) => !seen.has(v.value)),
+    ];
+  }
+  return merged;
 }
 
 function optionsFrom(facets: AttemptFacets | undefined): OptionsById {
@@ -189,15 +206,15 @@ export function ConnectionLogsView({
   const [searchParams, setSearchParams] = useSearchParams();
   const search = searchParams.get(SEARCH_PARAM) ?? "";
   const openReference = searchParams.get(ATTEMPT_PARAM);
-  // Presets resolve against a clock that moves only on Refresh.
-  const [now, setNow] = useState(connectionHealthNow);
+  const { preset, customRange } = filters.values.date;
+  // Presets resolve against a clock that moves on a new range or Refresh.
+  const [now, tick] = useRangeClock(preset ?? "custom");
   const window = useMemo(
     () => resolveWindow(filters.values.date, now),
     [filters.values.date, now],
   );
   const beforeRetention = startsBeforeRetention(window, now);
   // A preset these logs don't offer would label a range that is not queried.
-  const { preset, customRange } = filters.values.date;
   const unsupportedPreset =
     !customRange &&
     preset !== null &&
@@ -224,7 +241,8 @@ export function ConnectionLogsView({
   const optionCounts = useAttemptCounts(scope, window, EMPTY_FILTERS, {
     enabled: !beforeRetention,
   });
-  const facets = optionCounts.data?.facets ?? counts.data?.facets;
+  const optionFacets = optionCounts.data?.facets;
+  const filteredFacets = counts.data?.facets;
   // Search matches against the filtered counts, so a narrow filter finds rarer names.
   const searchFacets = counts.data?.facets;
   const textFilters: SearchResult | "pending" =
@@ -237,6 +255,7 @@ export function ConnectionLogsView({
     textFilters === "no-match" ||
     textFilters === "too-broad" ||
     textFilters === "pending";
+  const searching = typeof textFilters === "object" && !!textFilters;
   const listFilters = useMemo<AttemptFilters>(
     () =>
       textFilters && typeof textFilters === "object"
@@ -245,8 +264,7 @@ export function ConnectionLogsView({
     [baseFilters, textFilters],
   );
   const searchedCounts = useAttemptCounts(scope, window, listFilters, {
-    enabled:
-      !beforeRetention && typeof textFilters === "object" && !!textFilters,
+    enabled: !beforeRetention && searching,
   });
 
   const list = useConnectionAttempts(scope, window, listFilters, {
@@ -257,13 +275,17 @@ export function ConnectionLogsView({
     attempt: referenceHere,
     failed: referenceFailed,
     isPending: referencePending,
+    retry: retryReference,
   } = useAttemptHere(
     isReference ? search.trim() : null,
     providerId,
     lockedServer?.id,
   );
 
-  const optionsById = useMemo(() => optionsFrom(facets), [facets]);
+  const optionsById = useMemo(
+    () => optionsFrom(withMissing(optionFacets, filteredFacets)),
+    [optionFacets, filteredFacets],
+  );
 
   const setParam = useSetSearchParam(SHEET_PARAMS);
 
@@ -295,13 +317,24 @@ export function ConnectionLogsView({
           },
         },
       ];
+      // One URL update: a reference search would otherwise hide the filtered list.
+      const showOnly = (key: "person" | "server", value: string) =>
+        setSearchParams(
+          (prev) => {
+            const next = new URLSearchParams(prev);
+            next.set(key, value);
+            if (isReference) next.delete(SEARCH_PARAM);
+            return next;
+          },
+          { replace: true },
+        );
       if (row.person) {
         const urn = row.person.subjectUrn;
         actions.push({
           icon: "user",
           label: "Show only this person",
           separatorBefore: true,
-          onClick: () => filters.setValues({ person: urn }),
+          onClick: () => showOnly("person", urn),
         });
       }
       if (row.server && !lockedServer) {
@@ -310,12 +343,12 @@ export function ConnectionLogsView({
           icon: "server",
           label: "Show only this server",
           separatorBefore: !row.person,
-          onClick: () => filters.setValues({ server: id }),
+          onClick: () => showOnly("server", id),
         });
       }
       return actions;
     },
-    [filters, lockedServer, setParam],
+    [isReference, lockedServer, setParam, setSearchParams],
   );
 
   const viewerScope =
@@ -337,7 +370,7 @@ export function ConnectionLogsView({
       ? 0
       : searchBlocked
         ? undefined
-        : textFilters
+        : searching
           ? searchedCounts.data?.totalAttempts
           : counts.data?.totalAttempts;
 
@@ -389,15 +422,14 @@ export function ConnectionLogsView({
   );
 
   const refresh = () => {
-    setNow(connectionHealthNow());
+    tick();
     // A reference or a picked range keeps its key, so it refetches instead.
     if (isReference) void reference.refetch();
     else if (filters.values.date.customRange) {
       void counts.refetch();
       void optionCounts.refetch();
       void list.refetch();
-      if (typeof textFilters === "object" && textFilters)
-        void searchedCounts.refetch();
+      if (searching) void searchedCounts.refetch();
     }
   };
   const isFetching = isReference
@@ -446,11 +478,9 @@ export function ConnectionLogsView({
           <Button
             variant="secondary"
             onClick={() =>
-              void (isReference
-                ? reference.refetch()
-                : countsFailed
-                  ? counts.refetch()
-                  : list.refetch())
+              isReference
+                ? retryReference()
+                : void (countsFailed ? counts.refetch() : list.refetch())
             }
           >
             <Button.LeftIcon>
@@ -613,10 +643,10 @@ export function ConnectionLogsView({
                   schema={schema}
                   values={filters.values}
                   optionsById={optionsById}
-                  facets={counts.data?.facets}
-                  total={
-                    beforeRetention ? undefined : counts.data?.totalAttempts
+                  facets={
+                    searching ? searchedCounts.data?.facets : filteredFacets
                   }
+                  total={beforeRetention || isReference ? undefined : total}
                   onChange={setFilter}
                   onReset={resetAll}
                 />

@@ -1,4 +1,5 @@
 import { useProject, useSession } from "@/contexts/Auth";
+import { useKillswitchAccess } from "@/hooks/useKillswitchAccess";
 import { isExpectedAPIError } from "@/lib/errors";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useKillswitches } from "@gram/client/react-query/killswitches.js";
@@ -33,6 +34,16 @@ import type {
 } from "./types";
 
 export const connectionHealthNow = (): Date => new Date();
+
+/** A clock read again when `key` (the chosen range) changes or on `refresh`. */
+export function useRangeClock(key: string): [Date, () => void] {
+  const [clock, setClock] = useState(() => ({
+    key,
+    now: connectionHealthNow(),
+  }));
+  if (clock.key !== key) setClock({ key, now: connectionHealthNow() });
+  return [clock.now, () => setClock({ key, now: connectionHealthNow() })];
+}
 
 /** A resolved window, as every range read takes it. */
 export interface Window {
@@ -218,22 +229,29 @@ function useAttemptBelongs(
   attempt: AttemptDetail | undefined,
   providerId: string,
   lockedServerId?: string,
-): "yes" | "no" | "pending" | "error" {
-  const needsServers =
-    !!attempt && !attempt.userSessionIssuerId && !!attempt.server;
+): { belongs: "yes" | "no" | "pending" | "error"; retry: () => void } {
+  const serverId =
+    attempt && !attempt.userSessionIssuerId ? attempt.server?.id : undefined;
   const [window] = useState(() => presetWindow("30d", connectionHealthNow()));
-  const counts = useAttemptCounts({ providerId }, window, NO_FILTERS, {
-    enabled: needsServers,
-  });
-  if (!attempt) return "pending";
-  if (lockedServerId && attempt.server?.id !== lockedServerId) return "no";
-  if (attempt.userSessionIssuerId)
-    return attempt.userSessionIssuerId === providerId ? "yes" : "no";
-  if (!attempt.server) return "yes";
-  if (counts.isError) return "error";
-  const servers = counts.data?.facets?.servers;
-  if (!servers) return "pending";
-  return servers.some((s) => s.value === attempt.server?.id) ? "yes" : "no";
+  // The server is this provider's when the provider has attempts on it.
+  const counts = useAttemptCounts(
+    { providerId },
+    window,
+    { serverIds: serverId ? [serverId] : undefined },
+    { enabled: !!serverId },
+  );
+  const retry = () => void counts.refetch();
+  const belongs = ((): "yes" | "no" | "pending" | "error" => {
+    if (!attempt) return "pending";
+    if (lockedServerId && attempt.server?.id !== lockedServerId) return "no";
+    if (attempt.userSessionIssuerId)
+      return attempt.userSessionIssuerId === providerId ? "yes" : "no";
+    if (!serverId) return "yes";
+    if (counts.isError) return "error";
+    if (!counts.data || counts.isPlaceholderData) return "pending";
+    return (counts.data.totalAttempts ?? 0) > 0 ? "yes" : "no";
+  })();
+  return { belongs, retry };
 }
 
 /** An attempt looked up project-wide, kept only if it belongs here. */
@@ -247,20 +265,25 @@ export function useAttemptHere(
   elsewhere: boolean;
   failed: boolean;
   isPending: boolean;
+  /** Refetches whichever lookup failed. */
+  retry: () => void;
 } {
   const query = useAttempt(reference);
   const found = query.data?.attempt;
-  const belongs = useAttemptBelongs(found, providerId, lockedServerId);
+  const { belongs, retry } = useAttemptBelongs(
+    found,
+    providerId,
+    lockedServerId,
+  );
   return {
     query,
     attempt: belongs === "yes" ? found : undefined,
     elsewhere: !!found && belongs === "no",
     failed: query.isError || belongs === "error",
     isPending: query.isPending || (!!found && belongs === "pending"),
+    retry: query.isError ? () => void query.refetch() : retry,
   };
 }
-
-const NO_FILTERS: AttemptFilters = {};
 
 /** Suspected problems are made-up sample data until their API ships. */
 export const SUSPECTED_PROBLEMS_ARE_SAMPLE = true;
@@ -294,7 +317,7 @@ export function useSuspectedProblem(
   });
 }
 
-/** The organization's killswitches in force now (first page of 100). */
+/** Killswitches in force now (first 100), for people who can open Killswitches. */
 export function useActiveKillswitches(): {
   killswitches: ActiveKillswitch[];
   hasMore: boolean;
@@ -302,23 +325,23 @@ export function useActiveKillswitches(): {
   isError: boolean;
 } {
   const session = useSession();
+  const { canAccess } = useKillswitchAccess();
   const query = useKillswitches(
     { sessionHeaderGramSession: session.session },
     { status: "active", limit: 100, gramSession: session.session },
-    { throwOnError: false },
+    { throwOnError: false, enabled: canAccess },
   );
-  const killswitches = (query.data?.result.items ?? []).map(
-    (k): ActiveKillswitch => ({
-      id: k.id,
-      userId: k.userId,
-      scope:
-        k.scope.type === "all_servers"
-          ? { type: "all_servers" }
-          : { type: "selected_servers", serverIds: k.scope.serverIds },
-      until:
-        k.schedule.end === "bounded" ? k.schedule.endsAt.toISOString() : null,
-    }),
-  );
+  const items = canAccess ? (query.data?.result.items ?? []) : [];
+  const killswitches = items.map((k): ActiveKillswitch => ({
+    id: k.id,
+    userId: k.userId,
+    scope:
+      k.scope.type === "all_servers"
+        ? { type: "all_servers" }
+        : { type: "selected_servers", serverIds: k.scope.serverIds },
+    until:
+      k.schedule.end === "bounded" ? k.schedule.endsAt.toISOString() : null,
+  }));
   // A member who may not read killswitches sees none rather than an error.
   const forbidden =
     typeof query.error === "object" &&
@@ -327,8 +350,8 @@ export function useActiveKillswitches(): {
     (query.error.statusCode === 401 || query.error.statusCode === 403);
   return {
     killswitches,
-    hasMore: !!query.data?.result.nextCursor,
-    isPending: query.isPending,
-    isError: query.isError && !forbidden,
+    hasMore: canAccess && !!query.data?.result.nextCursor,
+    isPending: canAccess && query.isPending,
+    isError: canAccess && query.isError && !forbidden,
   };
 }

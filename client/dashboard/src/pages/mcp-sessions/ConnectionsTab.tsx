@@ -72,7 +72,7 @@ export function ConnectionsTab({
 }: {
   providerId: string;
   /** Connection health's Active Sessions: its count, toolbar and groups. */
-  health?: { activeNow: number | undefined };
+  health?: { activeNow: number | undefined; refetch: () => void };
 }): JSX.Element {
   const project = useProject();
   const { hasScope } = useRBAC();
@@ -117,6 +117,10 @@ export function ConnectionsTab({
     subjectUrn: filters.values.subjectUrn ?? undefined,
     userSessionIssuerId: providerId,
   });
+  const reload = () => {
+    void refetch();
+    health?.refetch();
+  };
   const unresolvedSessions = useMemo(
     () => data?.pages.flatMap((p) => p.result.items) ?? [],
     [data],
@@ -157,7 +161,7 @@ export function ConnectionsTab({
         <p className="text-destructive text-sm">
           Couldn&apos;t load connections.
         </p>
-        <Button variant="tertiary" size="sm" onClick={() => void refetch()}>
+        <Button variant="tertiary" size="sm" onClick={reload}>
           Retry
         </Button>
       </div>
@@ -185,7 +189,7 @@ export function ConnectionsTab({
         sessions={filteredSessions}
         grouping={grouping}
         canRevoke={canRevoke}
-        onRevoked={() => void refetch()}
+        onRevoked={reload}
         killswitchContext={{ capabilityKey: "mcp_tool_calls" }}
         project={project}
         splitNeedsReauth={!!health}
@@ -237,10 +241,7 @@ export function ConnectionsTab({
             </span>
           </Page.Toolbar.Actions>
         ) : null}
-        <Page.Toolbar.Refresh
-          onRefresh={() => void refetch()}
-          isRefreshing={isFetching}
-        />
+        <Page.Toolbar.Refresh onRefresh={reload} isRefreshing={isFetching} />
       </Page.Toolbar>
 
       {/* Outside the bar: the toolbar narrows which connections are listed,

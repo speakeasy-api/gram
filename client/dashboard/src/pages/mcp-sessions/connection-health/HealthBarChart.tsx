@@ -87,7 +87,10 @@ export function HealthBarChart({
   series,
   now,
   height,
+  label,
 }: {
+  /** The chart's accessible name. */
+  label: string;
   labels: string[];
   tooltipLabels: string[];
   timestamps: number[];
@@ -178,6 +181,8 @@ export function HealthBarChart({
     <div style={{ height }}>
       <Bar
         key={isDark ? "dark" : "light"}
+        role="img"
+        aria-label={label}
         data={data}
         options={options}
         plugins={plugins}
