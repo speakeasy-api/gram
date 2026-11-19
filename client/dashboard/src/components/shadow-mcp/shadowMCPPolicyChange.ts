@@ -16,10 +16,12 @@ export function standingDecisionOf(
 
 /**
  * The servers whose behaviour a policy change flips. A server someone
- * approved or denied keeps that decision whatever the default is, a linked
- * server keeps sending agents to its official version, and a local command
- * has no URL a policy can enforce against. Everything else follows the
- * default, so it changes when the default does.
+ * approved or denied for everyone keeps that decision whatever the default
+ * is, a linked server keeps sending agents to its official version, and a
+ * local command has no URL a policy can enforce against (its decision is
+ * recorded, never enforced). Everything else follows the default, so it
+ * changes when the default does, including a server whose decision covers
+ * only some people: the default still decides for everyone else.
  */
 export function serversChangedByPolicy(
   servers: readonly ShadowMCPInventoryServer[],
@@ -30,13 +32,39 @@ export function serversChangedByPolicy(
   return sortForPolicyChange(
     servers.filter((server) => {
       if (server.targetKind === "stdio_command") return false;
-      if (standingDecisionOf(server)) return false;
+      if (standingDecisionOf(server) && !isScopedDecision(server)) {
+        return false;
+      }
       if (server.officialServer && !server.officialServer.directAccessAllowed) {
         return false;
       }
       return true;
     }),
   );
+}
+
+/**
+ * A decision that covers only some people: an approval whose grants free
+ * only part of the audience, or a block rule for some people. The default
+ * still decides for everyone else, so a policy change reaches them.
+ */
+export function isScopedDecision(
+  server: Pick<ShadowMCPInventoryServer, "accessSummary" | "approvalRequest">,
+): boolean {
+  const decision = standingDecisionOf(server);
+  if (decision === "approved") {
+    return server.accessSummary?.allowedFor === "selected";
+  }
+  if (decision === "denied") {
+    // Under allow by default a narrowed denial is a block rule for some
+    // people. Under a block-by-default policy "some" can also mean the
+    // policy's own audience, which says nothing about the decision.
+    return (
+      server.accessSummary?.blockedFor === "some" &&
+      server.accessSummary.blockingDefault === "none"
+    );
+  }
+  return false;
 }
 
 /** Most blocked calls first, then most used: the servers people notice. */

@@ -48,6 +48,7 @@ import {
   type ShadowMCPModeState,
 } from "./shadowMCPMode";
 import {
+  isScopedDecision,
   keepAsTodayDecision,
   serversChangedByPolicy,
   shadowMCPServerLabel,
@@ -175,22 +176,36 @@ export function EditShadowMCPPolicyDialog({
   }, [open]);
 
   const flips = target !== state.mode;
-  const inventory = useWholeInventory(project.id, open && flips);
+  const audienceChanged =
+    target === "blocked" && !flips && !sameSet(principals, currentPrincipals);
+  // A new audience moves the block between people, so it is reviewed too.
+  const reviewing = flips || audienceChanged;
+  const inventory = useWholeInventory(project.id, open && reviewing);
   const changed = useMemo(
     () =>
-      serversChangedByPolicy(inventory.data?.servers ?? [], state.mode, target),
-    [inventory.data?.servers, state.mode, target],
+      // Under a new audience the undecided servers change for the people
+      // added or removed, which is the same set a flip would list.
+      serversChangedByPolicy(
+        inventory.data?.servers ?? [],
+        flips ? state.mode : "allowed",
+        flips ? target : "blocked",
+      ),
+    [inventory.data?.servers, flips, state.mode, target],
   );
   const groups = audienceGroups(
     membersQuery.data?.members ?? [],
     rolesQuery.data?.roles ?? [],
   );
-  const audienceChanged =
-    target === "blocked" && !flips && !sameSet(principals, currentPrincipals);
   const keepDecision = keepAsTodayDecision(target);
-  const keptServers = changed.filter((server) =>
-    keep.has(server.canonicalServerUrl),
-  );
+  const keptServers = flips
+    ? changed.filter((server) => keep.has(server.canonicalServerUrl))
+    : [];
+  // A block-by-default rule narrowed to some people blocks a server only for
+  // them today, so keeping it blocked names the same people.
+  const keepPrincipals =
+    keepDecision === "denied" && currentPrincipals.length > 0
+      ? [...currentPrincipals]
+      : undefined;
 
   const chooseTarget = (next: ShadowMCPMode) => {
     setTarget(next);
@@ -234,7 +249,12 @@ export function EditShadowMCPPolicyDialog({
     await decide.mutateAsync({
       request: {
         gramProject: project.slug,
-        recordDecisionRequestBody: { id: requestId, decision, rationale: note },
+        recordDecisionRequestBody: {
+          id: requestId,
+          decision,
+          rationale: note,
+          grantedPrincipalUrns: keepPrincipals,
+        },
       },
     });
   };
@@ -328,7 +348,7 @@ export function EditShadowMCPPolicyDialog({
     onOpenChange(false);
   };
 
-  const canContinue = flips || audienceChanged;
+  const canContinue = reviewing;
   const confirmLabel = keptServers.length
     ? `${MODE_COPY[target].confirm} and ${keepDecision === "approved" ? "approve" : "block"} ${keptServers.length}`
     : MODE_COPY[target].confirm;
@@ -351,11 +371,14 @@ export function EditShadowMCPPolicyDialog({
           <Dialog.Description>
             {step === "choose"
               ? "Choose what happens to an MCP server nobody has approved or blocked yet."
-              : reviewDescription(
+              : reviewDescription({
                   target,
-                  principals.length > 0,
-                  changed.length,
-                )}
+                  audienceOnly: !flips,
+                  narrowed: principals.length > 0,
+                  count: changed.length,
+                  loading: inventory.isLoading,
+                  failed: inventory.isError,
+                })}
           </Dialog.Description>
         </Dialog.Header>
 
@@ -379,6 +402,7 @@ export function EditShadowMCPPolicyDialog({
             keep={keep}
             onKeep={setKeep}
             keepDecision={keepDecision}
+            audienceOnly={!flips}
             rationale={rationale}
             onRationale={setRationale}
             disabled={saving}
@@ -412,7 +436,7 @@ export function EditShadowMCPPolicyDialog({
               <Button.Text>Cancel</Button.Text>
             </Button>
           )}
-          {step === "choose" && flips ? (
+          {step === "choose" && reviewing ? (
             <Button disabled={!canContinue} onClick={() => setStep("review")}>
               <Button.Text>Review changes</Button.Text>
             </Button>
@@ -444,13 +468,29 @@ export function EditShadowMCPPolicyDialog({
   );
 }
 
-function reviewDescription(
-  target: ShadowMCPMode,
-  narrowed: boolean,
-  count: number,
-): string {
+function reviewDescription({
+  target,
+  audienceOnly,
+  narrowed,
+  count,
+  loading,
+  failed,
+}: {
+  target: ShadowMCPMode;
+  audienceOnly: boolean;
+  narrowed: boolean;
+  count: number;
+  loading: boolean;
+  failed: boolean;
+}): string {
+  if (loading) return "Finding the servers this change affects…";
+  if (failed) return "The servers this change affects could not be loaded.";
   if (count === 0) {
     return "No servers change under this policy.";
+  }
+  if (audienceOnly) {
+    const servers = count === 1 ? "1 server has" : `${count} servers have`;
+    return `${servers} no decision for everyone yet, so who they are blocked for changes with the new audience.`;
   }
   const servers = count === 1 ? "1 server has" : `${count} servers have`;
   if (target === "blocked") {
@@ -520,7 +560,9 @@ function ChooseStep({
               ) : undefined
             }
           >
-            {MODE_COPY[mode].detail}
+            {mode === "blocked" && principals.length > 0
+              ? "Servers nobody approved are blocked for the people and roles you chose. Everyone else is allowed by default."
+              : MODE_COPY[mode].detail}
           </RadioCard>
         ))}
       </RadioCardGroup>
@@ -561,6 +603,7 @@ function ReviewStep({
   keep,
   onKeep,
   keepDecision,
+  audienceOnly,
   rationale,
   onRationale,
   disabled,
@@ -574,6 +617,8 @@ function ReviewStep({
   keep: Set<string>;
   onKeep: (next: Set<string>) => void;
   keepDecision: StandingDecision;
+  /** The audience changed but the default did not: nothing to keep. */
+  audienceOnly: boolean;
   rationale: string;
   onRationale: (next: string) => void;
   disabled: boolean;
@@ -605,9 +650,12 @@ function ReviewStep({
   }
   if (servers.length === 0) return null;
 
-  const allKept = servers.every((server) =>
-    keep.has(server.canonicalServerUrl),
-  );
+  // A decision that covers only some people is the admin's to widen in the
+  // Decide access sheet; a decision for everyone here would overwrite it.
+  const keepable = servers.filter((server) => !isScopedDecision(server));
+  const allKept =
+    keepable.length > 0 &&
+    keepable.every((server) => keep.has(server.canonicalServerUrl));
   const toggle = (url: string, checked: boolean) => {
     const next = new Set(keep);
     if (checked) next.add(url);
@@ -622,11 +670,11 @@ function ReviewStep({
       <Checkbox
         aria-label="Keep every server as it is today"
         checked={allKept}
-        disabled={disabled}
+        disabled={disabled || keepable.length === 0}
         onCheckedChange={(checked) =>
           onKeep(
             checked === true
-              ? new Set(servers.map((server) => server.canonicalServerUrl))
+              ? new Set(keepable.map((server) => server.canonicalServerUrl))
               : new Set(),
           )
         }
@@ -637,7 +685,7 @@ function ReviewStep({
       <Checkbox
         aria-label={`Keep ${shadowMCPServerLabel(server)} as it is today`}
         checked={keep.has(server.canonicalServerUrl)}
-        disabled={disabled}
+        disabled={disabled || isScopedDecision(server)}
         onCheckedChange={(checked) =>
           toggle(server.canonicalServerUrl, checked === true)
         }
@@ -694,16 +742,26 @@ function ReviewStep({
       key: "change",
       header: "Change",
       width: "1fr",
-      render: (server) =>
-        keep.has(server.canonicalServerUrl) ? (
-          <Text muted small>
-            Stays {before.toLowerCase()}
-          </Text>
-        ) : (
+      render: (server) => {
+        if (audienceOnly) {
+          return <Text small>Who it is blocked for changes</Text>;
+        }
+        if (isScopedDecision(server)) {
+          return <Text small>Changes outside its decision</Text>;
+        }
+        if (keep.has(server.canonicalServerUrl)) {
+          return (
+            <Text muted small>
+              Stays {before.toLowerCase()}
+            </Text>
+          );
+        }
+        return (
           <Text small>
             {before} → {after}
           </Text>
-        ),
+        );
+      },
     },
   ];
 
@@ -721,28 +779,30 @@ function ReviewStep({
           Showing the first {servers.length.toLocaleString()} servers.
         </Text>
       ) : null}
-      <Collapsible open={advanced} onOpenChange={setAdvanced}>
-        <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm transition-colors [&[data-state=open]>svg]:rotate-90">
-          <Icon name="chevron-right" className="size-3.5" aria-hidden />
-          Advanced
-        </CollapsibleTrigger>
-        <CollapsibleContent className="mt-3 space-y-2">
-          <Text muted small>
-            {keepDecision === "approved"
-              ? "Tick servers to approve them for everyone first, so they keep working."
-              : "Tick servers to block them for everyone first, so they stay blocked."}{" "}
-            Each one gets a standing decision with this rationale.
-          </Text>
-          <TextArea
-            aria-label="Rationale"
-            value={rationale}
-            onChange={onRationale}
-            rows={2}
-            disabled={disabled}
-            className="resize-none text-sm"
-          />
-        </CollapsibleContent>
-      </Collapsible>
+      {audienceOnly ? null : (
+        <Collapsible open={advanced} onOpenChange={setAdvanced}>
+          <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm transition-colors [&[data-state=open]>svg]:rotate-90">
+            <Icon name="chevron-right" className="size-3.5" aria-hidden />
+            Advanced
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-3 space-y-2">
+            <Text muted small>
+              {keepDecision === "approved"
+                ? "Tick servers to approve them for everyone first, so they keep working."
+                : "Tick servers to block them first, for the same people as today, so they stay blocked."}{" "}
+              Each one gets a standing decision with this rationale.
+            </Text>
+            <TextArea
+              aria-label="Rationale"
+              value={rationale}
+              onChange={onRationale}
+              rows={2}
+              disabled={disabled}
+              className="resize-none text-sm"
+            />
+          </CollapsibleContent>
+        </Collapsible>
+      )}
     </div>
   );
 }

@@ -241,6 +241,7 @@ describe("EditShadowMCPPolicyDialog", () => {
           decision: "approved",
           rationale:
             "Approved so it keeps working when servers are blocked by default.",
+          grantedPrincipalUrns: undefined,
         },
       },
     });
@@ -292,6 +293,53 @@ describe("EditShadowMCPPolicyDialog", () => {
 
     await screen.findByText(/standing denials scoped to specific people/);
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
+  it("keeps servers blocked for the same people a narrowed policy blocks", async () => {
+    const onOpenChange = renderDialog({
+      mode: "blocked",
+      policy: {
+        id: "policy-1",
+        name: "Shadow MCP",
+        sources: ["shadow_mcp"],
+        audienceType: "targeted",
+        audiencePrincipalUrns: ["role:organization:contractors"],
+      } as unknown as ShadowMCPModeState["policy"],
+      heldBy: null,
+    });
+    fireEvent.click(screen.getByRole("radio", { name: /Allow by default/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Review changes" }));
+    await screen.findByText("busy");
+
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Keep busy as it is today" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Allow by default and block 1" }),
+    );
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    expect(mocks.decide).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          recordDecisionRequestBody: expect.objectContaining({
+            decision: "denied",
+            grantedPrincipalUrns: ["role:organization:contractors"],
+          }),
+        }),
+      }),
+    );
+    expect(mocks.calls).toEqual(["createRequest", "decide", "removePolicy"]);
+  });
+
+  it("says it is finding servers while the list loads", async () => {
+    renderDialog();
+    chooseBlockAndReview();
+    expect(
+      screen.getByText("Finding the servers this change affects…"),
+    ).toBeTruthy();
+    await screen.findByText("busy");
   });
 
   it("removes the policy to allow by default", async () => {

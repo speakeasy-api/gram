@@ -167,8 +167,10 @@ export function DecideAccessSheet({
     setRationaleEdited(false);
     setOpenedRequestId(undefined);
     setSubmitting(false);
+    // The applicable action also moves when the policy list loads after the
+    // sheet opened, so the form follows it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, target?.canonicalServerUrl]);
+  }, [open, target?.canonicalServerUrl, initialDecision]);
 
   if (!target) return null;
 

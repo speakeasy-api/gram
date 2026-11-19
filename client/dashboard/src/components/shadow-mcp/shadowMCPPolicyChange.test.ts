@@ -1,6 +1,7 @@
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { describe, expect, it } from "vitest";
 import {
+  isScopedDecision,
   keepAsTodayDecision,
   serversChangedByPolicy,
   shadowMCPPolicySentence,
@@ -75,6 +76,22 @@ describe("serversChangedByPolicy", () => {
       "blocked",
     );
     expect(changed.map((s) => s.serverName)).toEqual(["link-off", "undecided"]);
+  });
+
+  it("keeps a server whose decision covers only some people", () => {
+    const summary = testAccessSummary("allowed");
+    const scoped = server("scoped", {
+      accessSummary: summary
+        ? { ...summary, decision: "approved", allowedFor: "selected" }
+        : undefined,
+    });
+    const changed = serversChangedByPolicy(
+      [scoped, decided("everyone", "approved")],
+      "allowed",
+      "blocked",
+    );
+    expect(changed.map((s) => s.serverName)).toEqual(["scoped"]);
+    expect(isScopedDecision(scoped)).toBe(true);
   });
 
   it("puts the most blocked, then the most used, servers first", () => {
