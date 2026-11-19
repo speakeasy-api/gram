@@ -150,8 +150,6 @@ func buildRouteStore(logger *slog.Logger) (route.Store, error) {
 	if addr == "" {
 		return nil, errors.New("TUNNEL_REDIS_ADDR is required")
 	}
-	// With GRAM_REDIS_NEXT_ADDR set, the client follows the switch key to the
-	// next instance without a restart; without it this is an ordinary client.
 	client, err := redisswitch.NewClient(context.Background(), logger, &redis.Options{
 		Addr:     addr,
 		Password: os.Getenv("TUNNEL_REDIS_PASSWORD"),

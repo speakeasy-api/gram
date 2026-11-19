@@ -55,8 +55,6 @@ class ReplyWriter:
         self, client: redis_asyncio.Redis, switch: RedisSwitch | None = None
     ) -> None:
         self._client = client
-        # When set, the switch runs each write on whichever instance is
-        # authoritative and makes it wait while the data is being copied.
         self._switch = switch
 
     async def write(

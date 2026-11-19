@@ -211,9 +211,6 @@ async def multi(
                 # reply store would ACK requests while losing their replies.
                 await enforce_redis.ping()
                 if redis_next_addr:
-                    # Replies must follow the server to the next instance, or
-                    # its waiters would never see them. Checking it at startup
-                    # finds a bad address or password before the switch does.
                     next_redis = _enforce_redis_client(
                         redis_next_addr, redis_next_password, armed=True
                     )

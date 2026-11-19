@@ -223,9 +223,6 @@ func New[R any](
 	redisOptions := cfg.RedisOptions
 	redisOptions.PoolSize = defaultPoolSize
 	redisOptions.DisableIdentity = true
-	// Options copied from a client that follows the Redis instance switch keep
-	// its dialer but lose its command gate; Wrap restores it, so this pool
-	// stops popping replies while the instances are being copied.
 	client := redisswitch.Wrap(&redisOptions)
 	if err := client.Ping(ctx).Err(); err != nil {
 		_ = client.Close()

@@ -472,8 +472,6 @@ type redisClientOptions struct {
 
 func newRedisClient(ctx context.Context, opts redisClientOptions) (*redis.Client, error) {
 	db := 0
-	// With GRAM_REDIS_NEXT_ADDR set, the client follows the switch key to the
-	// next instance without a restart; without it this is an ordinary client.
 	redisClient, err := redisswitch.NewClient(ctx, slog.Default(), &redis.Options{
 		Addr:            opts.redisAddr,
 		Password:        opts.redisPassword,
