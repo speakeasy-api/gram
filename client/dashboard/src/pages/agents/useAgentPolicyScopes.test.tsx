@@ -1,5 +1,6 @@
+import { waitForHookState as waitFor } from "@/test/waitForHookState";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, renderHook, waitFor } from "@testing-library/react";
+import { cleanup, renderHook } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useAgentPolicyScopes } from "./useAgentPolicyScopes";

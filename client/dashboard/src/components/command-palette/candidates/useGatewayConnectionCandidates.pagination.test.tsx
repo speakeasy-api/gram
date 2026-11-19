@@ -1,4 +1,5 @@
-import { cleanup, renderHook, waitFor, act } from "@testing-library/react";
+import { waitForHookState as waitFor } from "@/test/waitForHookState";
+import { cleanup, renderHook, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { GramCore } from "@gram/client/core.js";
 import { HTTPClient } from "@gram/client/lib/http.js";
