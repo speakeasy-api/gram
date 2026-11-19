@@ -379,7 +379,7 @@ func TestOrganizationUserSessionIssuerMigrateLeavesTombstonesOnSource(t *testing
 		ClientID: "tombstone-migrate-remote-client", ClientIDIssuedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	})
 	require.NoError(t, err)
-	remoteSession, err := remoteRepo.UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+	remoteSession, err := remoteRepo.UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn: subject, UserSessionIssuerID: sourceID, RemoteSessionClientID: remoteClient.ID,
 		AccessTokenEncrypted: "test-ciphertext", Scopes: []string{"openid"},
 	})
@@ -533,7 +533,7 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 	require.Equal(t, int64(1), stamped)
 
 	subject := urn.NewUserSubject("remote-migrate-user")
-	remoteSession, err := remoteRepo.UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+	remoteSession, err := remoteRepo.UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   sourceID,
 		RemoteSessionClientID: remoteClient.ID,
@@ -578,7 +578,7 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 	// merge moves only live connections, so this attachment stays behind and
 	// leaves with the source's client bindings instead of aborting the merge.
 	staleSubject := urn.NewUserSubject("remote-migrate-stale-user")
-	staleSession, err := remoteRepo.UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+	staleSession, err := remoteRepo.UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            staleSubject,
 		UserSessionIssuerID:   sourceID,
 		RemoteSessionClientID: remoteClient.ID,
@@ -708,7 +708,7 @@ func TestOrganizationUserSessionIssuerMigrateRefusesAttachmentsOnDifferentLogins
 	fixtures := testrepo.New(ti.conn)
 	bindingIDs := map[uuid.UUID]uuid.UUID{}
 	for issuerID, person := range map[uuid.UUID]string{sourceID: "different-logins-first", targetID: "different-logins-second"} {
-		login, err := remoteRepo.UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+		login, err := remoteRepo.UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
 			SubjectUrn:            urn.NewUserSubject(person),
 			UserSessionIssuerID:   issuerID,
 			RemoteSessionClientID: clientID,
@@ -809,7 +809,7 @@ func seedMigrationAttachments(t *testing.T, ctx context.Context, ti *testInstanc
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	login, err := remotesessionsrepo.New(ti.conn).UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+	login, err := remotesessionsrepo.New(ti.conn).UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            urn.NewUserSubject(person),
 		UserSessionIssuerID:   loginIssuerID,
 		RemoteSessionClientID: clientID,

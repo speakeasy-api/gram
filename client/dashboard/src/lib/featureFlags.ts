@@ -9,6 +9,9 @@ export const FEATURE_FLAGS = {
   emaProviders: "ema-providers",
   explore: "gram-explore",
   headlessModeSwitcher: "headless-mode-switcher",
+  // UI-only rollout gate for the Intune package download on the Windows
+  // device agent setup step.
+  intunePackageDownload: "intune-package-download",
   killswitches: "gram-killswitches",
   // UI-only rollout gate for the MCP scope picker in the risk policy editor;
   // not enforced server-side.

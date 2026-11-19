@@ -1144,7 +1144,7 @@ func TestServeConsentAction_ValidatePersistsVerdictAfterRefresh(t *testing.T) {
 			require.NoError(t, err)
 			refreshEncrypted, err := fx.ti.enc.Encrypt([]byte("refresh-validation-token"))
 			require.NoError(t, err)
-			configured, err := remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+			configured, err := remotesessions_repo.New(fx.ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 				SubjectUrn:            fx.subject,
 				UserSessionIssuerID:   fx.endpoint.UserSessionIssuerID,
 				RemoteSessionClientID: fx.clientID,
@@ -1243,7 +1243,7 @@ func TestServeConsentAction_ValidateReconnectMidProbeLeavesNewGrantUnvalidated(t
 		if err != nil {
 			return fmt.Errorf("encrypt: %w", err)
 		}
-		_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+		_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 			SubjectUrn:            fx.subject,
 			UserSessionIssuerID:   fx.endpoint.UserSessionIssuerID,
 			RemoteSessionClientID: fx.clientID,
@@ -1419,7 +1419,7 @@ func TestServeConsentAction_ValidateWithNoRecordedOutageShowsNotice(t *testing.T
 	require.NoError(t, err)
 	access, err := fx.ti.enc.Encrypt([]byte("expired"))
 	require.NoError(t, err)
-	_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn: sess.SubjectUrn, UserSessionIssuerID: sess.UserSessionIssuerID, RemoteSessionClientID: sess.RemoteSessionClientID,
 		AccessTokenEncrypted: access, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true, InfinityModifier: pgtype.Finite},
 		RefreshTokenEncrypted: conv.ToPGText(refresh), Scopes: []string{}, Resource: sess.Resource,
@@ -1469,7 +1469,7 @@ func TestServeConsentAction_ValidateWhileRefreshIsBusySaysWait(t *testing.T) {
 	require.NoError(t, err)
 	access, err := fx.ti.enc.Encrypt([]byte("expired"))
 	require.NoError(t, err)
-	_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn: sess.SubjectUrn, UserSessionIssuerID: sess.UserSessionIssuerID, RemoteSessionClientID: sess.RemoteSessionClientID,
 		AccessTokenEncrypted: access, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true, InfinityModifier: pgtype.Finite},
 		RefreshTokenEncrypted: conv.ToPGText(refresh), Scopes: []string{}, Resource: sess.Resource,
@@ -1507,7 +1507,7 @@ func TestServeConsentAction_ValidateDuringProviderOutageSaysRetry(t *testing.T) 
 	require.NoError(t, err)
 	access, err := fx.ti.enc.Encrypt([]byte("expired"))
 	require.NoError(t, err)
-	_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn: sess.SubjectUrn, UserSessionIssuerID: sess.UserSessionIssuerID, RemoteSessionClientID: sess.RemoteSessionClientID,
 		AccessTokenEncrypted: access, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true, InfinityModifier: pgtype.Finite},
 		RefreshTokenEncrypted: conv.ToPGText(refresh), Scopes: []string{}, Resource: sess.Resource,

@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -193,8 +194,9 @@ func (s *Service) RevokeRemoteSession(ctx context.Context, payload *gen.RevokeRe
 	// revoke into a failed request. See upstreamrevoke.go.
 	s.revoker.RevokeDetached(ctx, RevokedCredentials{
 		RemoteSessionClientID: revoked.RemoteSessionClientID,
-		AccessTokenEncrypted:  revoked.AccessTokenEncrypted.String,
-		RefreshTokenEncrypted: revoked.RefreshTokenEncrypted,
+		OrganizationID:        revoked.OrganizationID,
+		AccessToken:           upstreamtokens.Stored(revoked.AccessTokenEncrypted, revoked.AccessTokenOrgEncrypted),
+		RefreshToken:          upstreamtokens.Stored(revoked.RefreshTokenEncrypted, revoked.RefreshTokenOrgEncrypted),
 	})
 
 	return nil
