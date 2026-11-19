@@ -36,16 +36,16 @@ jobs:
           path: ${{ env.AUBE_STORE_PATH }}
       - name: Install identical dependencies once
         run: aube install --frozen-lockfile
-      - name: Full dashboard suite - before
-        run: |
-          git checkout --force --detach 736b63ade9962f33ceee3bcd7b9fb7102f55d2f2
-          cd client/dashboard
-          /usr/bin/time -p aube exec vitest -- run --maxWorkers=4 --fsModuleCache=false --cache=false --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/grw469-before.json"
       - name: Full dashboard suite - after
         run: |
           git checkout --force --detach 6009d6a275a6ea289aa54b62a0e245c59103fa59
           cd client/dashboard
-          /usr/bin/time -p aube exec vitest -- run --maxWorkers=4 --fsModuleCache=false --cache=false --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/grw469-after.json"
+          /usr/bin/time -v aube exec vitest -- run --maxWorkers=4 --fsModuleCache=false --cache=false --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/grw469-after.json"
+      - name: Full dashboard suite - before
+        run: |
+          git checkout --force --detach 736b63ade9962f33ceee3bcd7b9fb7102f55d2f2
+          cd client/dashboard
+          /usr/bin/time -v aube exec vitest -- run --maxWorkers=4 --fsModuleCache=false --cache=false --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/grw469-before.json"
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
