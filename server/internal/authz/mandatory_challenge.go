@@ -13,15 +13,21 @@ const ChallengeKeyMCPServerID = "mcp_server_id"
 
 // LogMandatoryDenial records a refused mandatory check as a denied
 // authorization challenge, so the caller's failed checks list it beside the
-// checks Require records. An allowed decision records nothing.
+// checks Require records, and reports whether it recorded one. An allowed
+// decision records nothing, and neither does a refusal of the caller's
+// credential rather than of this use, which no grant could change.
 //
 // The recorded check keeps the client, its type and project, and adds the
 // server it was used for. It leaves out the connection owner and the upstream
 // OAuth client: anyone who can read the organization's challenges sees the
 // row, and a personal connection's owner and upstream account are its owner's.
-func (e *Engine) LogMandatoryDenial(ctx context.Context, authorization MandatoryAuthorization, decision MandatoryDecision, check Check, serverID string) {
+func (e *Engine) LogMandatoryDenial(ctx context.Context, authorization MandatoryAuthorization, decision MandatoryDecision, check Check, serverID string) bool {
 	if decision.Allowed {
-		return
+		return false
+	}
+	reason, recordable := mandatoryChallengeReason(authorization, decision, check)
+	if !recordable {
+		return false
 	}
 
 	recorded := check
@@ -36,10 +42,10 @@ func (e *Engine) LogMandatoryDenial(ctx context.Context, authorization Mandatory
 		recorded.Dimensions[ChallengeKeyMCPServerID] = serverID
 	}
 
-	challengeLogger{
+	return challengeLogger{
 		Operation:            authzrepo.OperationRequire,
 		Outcome:              authzrepo.OutcomeDeny,
-		Reason:               mandatoryChallengeReason(authorization, decision, check),
+		Reason:               reason,
 		Checks:               []Check{recorded},
 		Focus:                &recorded,
 		Matches:              nil,
@@ -49,24 +55,27 @@ func (e *Engine) LogMandatoryDenial(ctx context.Context, authorization Mandatory
 	}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 }
 
-// mandatoryChallengeReason names a refusal in the terms challenges use. A
-// personal connection used by anyone other than its owner is refused for that
-// reason, whatever grants the caller holds, unless a grant explicitly blocks
-// it.
-func mandatoryChallengeReason(authorization MandatoryAuthorization, decision MandatoryDecision, check Check) authzrepo.Reason {
+// mandatoryChallengeReason names a refusal in the terms challenges use, and
+// reports whether it is recorded at all. Only refusals the caller's grants
+// decided are: a personal connection used by anyone other than its owner is
+// refused for that reason, whatever grants the caller holds, unless a grant
+// explicitly blocks it. A refusal of the credential itself (inactive, outside
+// its key's limits, from another organization) is the credential's problem,
+// and recording it as a missing permission would point at the wrong fix.
+func mandatoryChallengeReason(authorization MandatoryAuthorization, decision MandatoryDecision, check Check) (authzrepo.Reason, bool) {
 	switch decision.Reason {
 	case MandatoryDenyReasonBlocked:
-		return authzrepo.ReasonDenyGrant
+		return authzrepo.ReasonDenyGrant, true
 	case MandatoryDenyReasonNoPolicy, MandatoryDenyReasonNotGranted:
 		owner := check.Dimensions[SelectorKeyConnectionOwner]
 		if check.isAuthClientCheck() && owner != "" && owner != authorization.RepresentedUserID() {
-			return authzrepo.ReasonConnectionOwnerMismatch
+			return authzrepo.ReasonConnectionOwnerMismatch, true
 		}
 		if decision.Reason == MandatoryDenyReasonNoPolicy {
-			return authzrepo.ReasonNoGrants
+			return authzrepo.ReasonNoGrants, true
 		}
-		return authzrepo.ReasonScopeUnsatisfied
+		return authzrepo.ReasonScopeUnsatisfied, true
 	default:
-		return authzrepo.ReasonScopeUnsatisfied
+		return "", false
 	}
 }

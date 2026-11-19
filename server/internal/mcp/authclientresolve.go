@@ -264,11 +264,19 @@ func (p mandatoryPermitter) Permitted(ctx context.Context, req authClientPermitR
 	if err != nil {
 		return false, fmt.Errorf("evaluate auth client check: %w", err)
 	}
-	if !decision.Allowed && p.refusals.first(authClientRefusalKey(req, authorization, decision)) {
-		check := mandatoryAuthClientCheck(req.ProjectID, req.ClientID, req.RegistrationID, req.ClientType, req.connectionOwner())
-		p.engine.LogMandatoryDenial(ctx, authorization, decision, check, req.ServerID.String())
+	if decision.Allowed {
+		return true, nil
 	}
-	return decision.Allowed, nil
+	// Only a refusal that was recorded is remembered, so one skipped (a
+	// preview, logging off, a failed write) is recorded the next time.
+	key := authClientRefusalKey(req, authorization, decision)
+	if p.refusals.first(key) {
+		check := mandatoryAuthClientCheck(req.ProjectID, req.ClientID, req.RegistrationID, req.ClientType, req.connectionOwner())
+		if !p.engine.LogMandatoryDenial(ctx, authorization, decision, check, req.ServerID.String()) {
+			p.refusals.forget(key)
+		}
+	}
+	return false, nil
 }
 
 // serverVisibilityLookup reads the visibility a server in an organization is

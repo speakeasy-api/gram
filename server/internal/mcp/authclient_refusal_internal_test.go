@@ -131,8 +131,14 @@ func TestMandatoryPermitterRecordsNothingForAPreview(t *testing.T) {
 
 	ctx, f := newRefusalFixture(t)
 
-	permitted, err := f.permitter.Permitted(authz.WithoutChallenges(ctx), f.personalUse("user_a", uuid.New()))
+	use := f.personalUse("user_a", uuid.New())
+	permitted, err := f.permitter.Permitted(authz.WithoutChallenges(ctx), use)
 	require.NoError(t, err)
 	require.False(t, permitted)
 	require.Empty(t, f.read(), "a consent or catalog preview is not a use")
+
+	permitted, err = f.permitter.Permitted(ctx, use)
+	require.NoError(t, err)
+	require.False(t, permitted)
+	require.Len(t, f.read(), 1, "a preview does not hold back the next real refusal")
 }

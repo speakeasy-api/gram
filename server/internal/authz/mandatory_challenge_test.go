@@ -30,7 +30,7 @@ func TestLogMandatoryDenialRecordsARefusedPersonalConnection(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, decision.Allowed)
 
-	engine.LogMandatoryDenial(ctx, authorization, decision, check, "server_s")
+	require.True(t, engine.LogMandatoryDenial(ctx, authorization, decision, check, "server_s"))
 
 	rows := listChallengeOutboxRows(t, conn)
 	require.Len(t, rows, 1)
@@ -78,7 +78,7 @@ func TestLogMandatoryDenialRecordsNothingForAnAllowedUse(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, decision.Allowed)
 
-	engine.LogMandatoryDenial(ctx, authorization, decision, check, "server_s")
+	require.False(t, engine.LogMandatoryDenial(ctx, authorization, decision, check, "server_s"))
 
 	require.Empty(t, listChallengeOutboxRows(t, conn))
 }
@@ -88,24 +88,52 @@ func TestMandatoryChallengeReason(t *testing.T) {
 
 	user := MandatoryAuthorization{authorization: grantAuthorization{representedUser: sessionUserID}}
 	cases := []struct {
-		name     string
-		reason   MandatoryDenyReason
-		check    Check
-		expected authzrepo.Reason
+		name       string
+		reason     MandatoryDenyReason
+		check      Check
+		expected   authzrepo.Reason
+		recordable bool
 	}{
-		{"another member's connection", MandatoryDenyReasonNotGranted, personalClientCheck("user_456"), authzrepo.ReasonConnectionOwnerMismatch},
-		{"another member's connection without grants", MandatoryDenyReasonNoPolicy, personalClientCheck("user_456"), authzrepo.ReasonConnectionOwnerMismatch},
-		{"own connection not granted", MandatoryDenyReasonNotGranted, personalClientCheck(sessionUserID), authzrepo.ReasonScopeUnsatisfied},
-		{"shared client not granted", MandatoryDenyReasonNotGranted, sharedClientCheck(authProjectP), authzrepo.ReasonScopeUnsatisfied},
-		{"shared client without grants", MandatoryDenyReasonNoPolicy, sharedClientCheck(authProjectP), authzrepo.ReasonNoGrants},
-		{"blocked connection", MandatoryDenyReasonBlocked, personalClientCheck("user_456"), authzrepo.ReasonDenyGrant},
-		{"key limits", MandatoryDenyReasonOutsideKey, sharedClientCheck(authProjectP), authzrepo.ReasonScopeUnsatisfied},
+		{"another member's connection", MandatoryDenyReasonNotGranted, personalClientCheck("user_456"), authzrepo.ReasonConnectionOwnerMismatch, true},
+		{"another member's connection without grants", MandatoryDenyReasonNoPolicy, personalClientCheck("user_456"), authzrepo.ReasonConnectionOwnerMismatch, true},
+		{"own connection not granted", MandatoryDenyReasonNotGranted, personalClientCheck(sessionUserID), authzrepo.ReasonScopeUnsatisfied, true},
+		{"shared client not granted", MandatoryDenyReasonNotGranted, sharedClientCheck(authProjectP), authzrepo.ReasonScopeUnsatisfied, true},
+		{"shared client without grants", MandatoryDenyReasonNoPolicy, sharedClientCheck(authProjectP), authzrepo.ReasonNoGrants, true},
+		{"blocked connection", MandatoryDenyReasonBlocked, personalClientCheck("user_456"), authzrepo.ReasonDenyGrant, true},
+		{"outside key limits", MandatoryDenyReasonOutsideKey, sharedClientCheck(authProjectP), "", false},
+		{"inactive api key", MandatoryDenyReasonAPIKeyInactive, sharedClientCheck(authProjectP), "", false},
+		{"inactive credential", MandatoryDenyReasonInactiveCredential, personalClientCheck("user_456"), "", false},
+		{"another organization", MandatoryDenyReasonOrganizationMismatch, sharedClientCheck(authProjectP), "", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			decision := MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceRequest, Reason: tc.reason}
-			require.Equal(t, tc.expected, mandatoryChallengeReason(user, decision, tc.check))
+			reason, recordable := mandatoryChallengeReason(user, decision, tc.check)
+			require.Equal(t, tc.recordable, recordable)
+			require.Equal(t, tc.expected, reason)
 		})
 	}
+}
+
+func TestLogMandatoryDenialRecordsEachServerOnceInARequest(t *testing.T) {
+	t.Parallel()
+
+	orgID := "org_" + uuid.NewString()
+	conn := newTestDB(t)
+	markerGrant := NewGrantWithSelector(ScopeMCPAuth, authSelector("*", map[string]string{SelectorKeyConnectionOwner: SelectorValueRepresentedUser}))
+	ctx := WithOneChallengePerResource(GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{markerGrant}))
+	seedOrganization(t, ctx, conn, orgID)
+	engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
+
+	authorization, err := engine.PrepareMandatory(ctx)
+	require.NoError(t, err)
+	check := personalClientCheck("user_456")
+	decision, err := authorization.Decide(orgID, check)
+	require.NoError(t, err)
+
+	require.True(t, engine.LogMandatoryDenial(ctx, authorization, decision, check, "server_s"))
+	require.False(t, engine.LogMandatoryDenial(ctx, authorization, decision, check, "server_s"), "the same refusal twice in a request is one check")
+	require.True(t, engine.LogMandatoryDenial(ctx, authorization, decision, check, "server_t"), "the same client refused on another server is its own check")
+	require.Len(t, listChallengeOutboxRows(t, conn), 2)
 }
