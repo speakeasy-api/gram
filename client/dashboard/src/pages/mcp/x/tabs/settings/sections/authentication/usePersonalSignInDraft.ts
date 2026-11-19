@@ -12,6 +12,17 @@ import {
 import type { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import { useRemoteSessionIssuer } from "@gram/client/react-query/remoteSessionIssuer.js";
+import {
+  deriveRemoteSessionIssuerNameFromUrl,
+  readableServiceNameFromUrl,
+} from "@/lib/sources";
+import {
+  detectAuthorizationServer,
+  issuerFormFromDraft,
+} from "@/pages/sources/remote-mcp/detectAuthorizationServer";
+import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { useMemo, useState } from "react";
 import {
   availableClientTypes,
@@ -23,6 +34,23 @@ import {
 import { useSignInChoices } from "./useSignInChoices";
 
 export type PersonalSignInSource = "scratch" | "existing";
+
+/**
+ * The authorization server the MCP server advertises, as the sign-in form
+ * uses it: preselected when the project has it, added on save when it does
+ * not.
+ */
+export type DetectedSignIn =
+  | { state: "checking" }
+  | { state: "none" }
+  | {
+      state: "existing";
+      issuerId: string;
+      name: string;
+      serviceName: string;
+      inUse: boolean;
+    }
+  | { state: "new"; issuer: string; serviceName: string; inUse: boolean };
 type AuthMethod = CreateRemoteSessionClientFormTokenEndpointAuthMethod | "";
 
 /**
@@ -56,6 +84,10 @@ type PersonalSignInFieldsState = {
   selectIssuer: (id: string) => void;
   issuer: ReturnType<typeof useRemoteSessionIssuer>["data"];
   issuerFailed: boolean;
+  /** What the server itself says people sign in with. */
+  detected: DetectedSignIn;
+  /** Go back to the detected authorization server after picking another. */
+  useDetected: () => void;
   clientTypes: ClientType[];
   clientType: ClientType;
   setClientType: (type: ClientType) => void;
@@ -87,6 +119,9 @@ export function usePersonalSignInDraft({
   const [source, setSourceState] = useState<PersonalSignInSource>("scratch");
   const [templateId, setTemplateId] = useState("");
   const [issuerId, setIssuerId] = useState("");
+  // The authorization server this form added from the detected metadata, so
+  // a retry after it was added reads as the same sign-in.
+  const [addedIssuerId, setAddedIssuerId] = useState("");
   const [clientTypePick, setClientTypePick] = useState<ClientType | null>(null);
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
@@ -115,23 +150,56 @@ export function usePersonalSignInDraft({
       : undefined;
   const startsFromDocument = !!starting?.clientIdMetadataUri;
 
-  const issuerQuery = useRemoteSessionIssuer({ id: issuerId }, undefined, {
-    enabled: enabled && source === "scratch" && !!issuerId,
+  // Until someone picks one, the authorization server is the one the MCP
+  // server advertises: preselected when the project has it, and added on
+  // save when it does not, as setting up a new server does.
+  const queryClient = useQueryClient();
+  const detection = useQuery({
+    queryKey: ["detect-authorization-server", remoteMcpServerId],
+    queryFn: ({ signal }) =>
+      detectAuthorizationServer(sdk, remoteMcpServerId!, { signal }),
+    enabled: enabled && source === "scratch" && !!remoteMcpServerId,
+    retry: false,
     throwOnError: false,
   });
+  const detectedIssuerId =
+    detection.data?.kind === "existing" ? detection.data.issuer.id : "";
+  const effectiveIssuerId = issuerId || detectedIssuerId;
+  // Never from a result being refreshed: another sheet may have added that
+  // authorization server since it was read.
+  const pendingIssuer: RemoteSessionIssuerDraft | undefined =
+    source === "scratch" &&
+    !issuerId &&
+    !detection.isFetching &&
+    detection.data?.kind === "new"
+      ? detection.data.draft
+      : undefined;
+
+  const issuerQuery = useRemoteSessionIssuer(
+    { id: effectiveIssuerId },
+    undefined,
+    {
+      enabled: enabled && source === "scratch" && !!effectiveIssuerId,
+      throwOnError: false,
+    },
+  );
   const issuer =
-    source === "scratch" && issuerQuery.data?.id === issuerId
+    source === "scratch" && issuerQuery.data?.id === effectiveIssuerId
       ? issuerQuery.data
       : undefined;
   const {
     available: dcrAvailable,
     permissionRestricted: tunneledDcrRestricted,
   } = dynamicClientRegistrationAvailability({
-    registrationEndpoint: issuer?.registrationEndpoint,
+    registrationEndpoint:
+      issuer?.registrationEndpoint ?? pendingIssuer?.registrationEndpoint,
     tunneled: !!issuer?.tunneledMcpServerId,
     isPlatformAdmin,
   });
-  const cimdAvailable = !!issuer?.clientIdMetadataDocumentSupported;
+  const cimdAvailable = !!(
+    issuer?.clientIdMetadataDocumentSupported ??
+    pendingIssuer?.clientIdMetadataDocumentSupported
+  );
   const clientTypes = useMemo(
     () => availableClientTypes({ dcrAvailable, cimdAvailable }),
     [dcrAvailable, cimdAvailable],
@@ -174,8 +242,11 @@ export function usePersonalSignInDraft({
     if (!starting) problem = "Choose the sign-in to start from.";
     else if (!startsFromDocument && !clientId.trim())
       problem = "Enter the client ID.";
-  } else if (!issuer) {
-    problem = "Choose the authorization server people sign in with.";
+  } else if (!issuer && !pendingIssuer) {
+    problem =
+      !issuerId && detection.isFetching
+        ? "Checking which authorization server this server uses."
+        : "Choose the authorization server people sign in with.";
   } else if (clientType === "manual" && !clientId.trim()) {
     problem = "Enter the client ID.";
   }
@@ -199,7 +270,11 @@ export function usePersonalSignInDraft({
   const signature = JSON.stringify([
     source,
     starting?.id ?? "",
-    issuer?.id ?? "",
+    // The server this form added still reads as the detected one, so a
+    // retry after adding it does not read as a change.
+    pendingIssuer || (issuer && issuer.id === addedIssuerId)
+      ? `detected:${pendingIssuer?.issuer ?? issuer?.issuer}`
+      : (issuer?.id ?? ""),
     source === "scratch" ? clientType : "",
     clientId.trim(),
     clientSecret,
@@ -238,26 +313,46 @@ export function usePersonalSignInDraft({
       });
     }
 
-    if (!issuer) {
+    let target = issuer;
+    if (!target && pendingIssuer) {
+      target = await sdk.remoteSessionIssuers.create({
+        createRemoteSessionIssuerForm: issuerFormFromDraft(
+          pendingIssuer,
+          readableServiceNameFromUrl(pendingIssuer.issuer) ??
+            (deriveRemoteSessionIssuerNameFromUrl(pendingIssuer.issuer) ||
+              "mcp"),
+        ),
+      });
+      // A retry after a later step fails uses the server just added. It
+      // stays if a later step fails: it is reusable, and the next attempt
+      // preselects it.
+      setAddedIssuerId(target.id);
+      setIssuerId(target.id);
+      void invalidateAllRemoteSessionIssuers(queryClient);
+      void queryClient.invalidateQueries({
+        queryKey: ["detect-authorization-server"],
+      });
+    }
+    if (!target) {
       throw new Error("Choose the authorization server people sign in with.");
     }
     if (clientType === "cimd") {
       return sdk.remoteSessionClients.createCimd({
-        createCimdForm: { remoteSessionIssuerId: issuer.id, ...overrides },
+        createCimdForm: { remoteSessionIssuerId: target.id, ...overrides },
       });
     }
     if (clientType === "dcr") {
       const registered = await proxyRegisterUpstreamClient(authedFetch, {
-        registrationEndpoint: issuer.registrationEndpoint ?? "",
+        registrationEndpoint: target.registrationEndpoint ?? "",
         // RFC 7591 §2: scope is a space-separated string at registration.
         scope: parsedScopes.length > 0 ? parsedScopes.join(" ") : undefined,
         tokenEndpointAuthMethod: authMethod || undefined,
-        tunneledMcpServerId: issuer.tunneledMcpServerId,
+        tunneledMcpServerId: target.tunneledMcpServerId,
         projectSlug,
       });
       return sdk.remoteSessionClients.create({
         createRemoteSessionClientForm: {
-          remoteSessionIssuerId: issuer.id,
+          remoteSessionIssuerId: target.id,
           clientId: registered.clientId,
           clientSecret: registered.clientSecret || undefined,
           tokenEndpointAuthMethod:
@@ -270,7 +365,7 @@ export function usePersonalSignInDraft({
     }
     return sdk.remoteSessionClients.create({
       createRemoteSessionClientForm: {
-        remoteSessionIssuerId: issuer.id,
+        remoteSessionIssuerId: target.id,
         clientId: clientId.trim(),
         clientSecret: clientSecret.trim() || undefined,
         tokenEndpointAuthMethod: authMethod || undefined,
@@ -310,15 +405,50 @@ export function usePersonalSignInDraft({
         signIns.setShowAll(!signIns.showAll);
       },
       starting,
-      issuerId,
+      issuerId: effectiveIssuerId,
       selectIssuer: (id) => {
-        if (id === issuerId) return;
+        if (id === effectiveIssuerId) return;
         setIssuerId(id);
         setClientTypePick(null);
         clearForm();
       },
       issuer,
       issuerFailed: issuerQuery.isError,
+      useDetected: () => {
+        setIssuerId("");
+        setClientTypePick(null);
+        clearForm();
+      },
+      detected:
+        source !== "scratch" || !remoteMcpServerId
+          ? { state: "none" }
+          : detection.isPending && detection.fetchStatus !== "idle"
+            ? { state: "checking" }
+            : detection.data?.kind === "existing"
+              ? {
+                  state: "existing",
+                  issuerId: detection.data.issuer.id,
+                  name:
+                    detection.data.issuer.name?.trim() ||
+                    detection.data.issuer.issuer,
+                  serviceName:
+                    detection.data.issuer.name?.trim() ||
+                    readableServiceNameFromUrl(detection.data.issuer.issuer) ||
+                    detection.data.issuer.issuer,
+                  inUse: effectiveIssuerId === detection.data.issuer.id,
+                }
+              : detection.data?.kind === "new"
+                ? {
+                    state: "new",
+                    issuer: detection.data.draft.issuer,
+                    serviceName:
+                      readableServiceNameFromUrl(detection.data.draft.issuer) ??
+                      detection.data.draft.issuer,
+                    // In use until someone picks another: still so once this
+                    // form has added it, and while detection is refreshed.
+                    inUse: !issuerId || issuerId === addedIssuerId,
+                  }
+                : { state: "none" },
       clientTypes,
       clientType,
       setClientType: setClientTypePick,
