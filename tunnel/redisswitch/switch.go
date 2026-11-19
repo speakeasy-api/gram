@@ -87,6 +87,11 @@ const (
 
 	// keepAlive matches the go-redis default dialer.
 	keepAlive = 5 * time.Minute
+
+	// defaultDialTimeout applies when the caller's options leave the dial
+	// timeout at zero. It is the go-redis default; without it a dial to an
+	// unreachable instance would wait for the operating system to give up.
+	defaultDialTimeout = 5 * time.Second
 )
 
 // ErrHolding is returned when a command cannot run because the switch is
@@ -255,10 +260,11 @@ func Wrap(opts *redis.Options) *redis.Client {
 	}
 	<-reserved.ready
 	if reserved.sw == nil {
-		opts.Dialer = func(context.Context, string, string) (net.Conn, error) { return nil, ErrNotStarted }
-		opts.MaxRetries = -1
-		opts.DialerRetries = 1
-		return redis.NewClient(opts)
+		refused := *opts
+		refused.Dialer = func(context.Context, string, string) (net.Conn, error) { return nil, ErrNotStarted }
+		refused.MaxRetries = -1
+		refused.DialerRetries = 1
+		return redis.NewClient(&refused)
 	}
 	return reserved.sw.client(opts)
 }
@@ -266,16 +272,19 @@ func Wrap(opts *redis.Options) *redis.Client {
 // client builds a client bound to this switch. The gate, the dialer and the
 // credentials are always set together: a client with the gate but an ordinary
 // dialer would wait through a hold and then write to the instance being left.
+// The caller's options are copied, not changed, so the caller is not left
+// holding options that carry the switch's name without its gate.
 func (s *Switch) client(opts *redis.Options) *redis.Client {
-	opts.Dialer = s.dial
-	opts.CredentialsProvider = s.credentials
+	bound := *opts
+	bound.Dialer = s.dial
+	bound.CredentialsProvider = s.credentials
 	// A command interrupted by the move must fail once. Replayed, it could run
 	// a second time on the other instance.
-	opts.MaxRetries = -1
-	opts.DialerRetries = 1
-	opts.ClientName = s.name
+	bound.MaxRetries = -1
+	bound.DialerRetries = 1
+	bound.ClientName = s.name
 
-	client := redis.NewClient(opts)
+	client := redis.NewClient(&bound)
 	client.AddHook(hook{sw: s})
 
 	return client
@@ -415,7 +424,8 @@ func (s *Switch) read(ctx context.Context) (state, bool, error) {
 	switch {
 	case !present:
 		return stateUnknown, true, nil
-	case strings.HasPrefix(value, movedPrefix):
+	// A move always names the run that made it; a bare prefix is not one.
+	case strings.HasPrefix(value, movedPrefix) && len(value) > len(movedPrefix):
 		return stateNext, false, nil
 	case values[1] != nil:
 		return stateHold, false, nil
@@ -541,7 +551,11 @@ func (s *Switch) dial(ctx context.Context, network, _ string) (net.Conn, error) 
 		return nil, ErrHolding
 	}
 
-	dialer := &net.Dialer{Timeout: s.dialTimeout, KeepAlive: keepAlive}
+	timeout := s.dialTimeout
+	if timeout <= 0 {
+		timeout = defaultDialTimeout
+	}
+	dialer := &net.Dialer{Timeout: timeout, KeepAlive: keepAlive}
 	conn, err := dialer.DialContext(ctx, network, addr)
 	if err != nil {
 		return nil, fmt.Errorf("dial redis: %w", err)

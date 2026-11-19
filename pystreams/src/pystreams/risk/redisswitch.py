@@ -147,14 +147,16 @@ class RedisSwitch:
                     await pipe.execute()
                     written = True
         except RedisConnectionError, RedisTimeoutError, WatchError:
-            # Also reached when releasing the watch fails as the pipeline
-            # closes. A write that completed before that still counts.
+            # Also reached when releasing the watch fails after the write
+            # landed. That is retried like any unknown outcome, and the reply
+            # inbox discards the repeat.
             pass
         return written
 
     def _observe(self, state: bytes | None) -> None:
         if self._moved or state is None:
             return
-        if state.startswith(_MOVED_PREFIX):
+        # A move always names the run that made it; a bare prefix is not one.
+        if state.startswith(_MOVED_PREFIX) and len(state) > len(_MOVED_PREFIX):
             self._moved = True
             self._logger.info("redis switch moved to the next instance")
