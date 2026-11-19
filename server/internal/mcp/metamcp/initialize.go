@@ -17,8 +17,8 @@ const Instructions = `This endpoint fronts a set of MCP servers as one, exposing
 
 Work from the outside in:
 
-1. list_servers — what is reachable, what each system is for, and each member's status: "available", "unavailable" when the member's tunnel is down, or "unknown" when it was not checked (this list does not contact remote servers; call connection_status to check sign-in).
-2. describe_server — that server's tools, as qualified names (server--tool) with descriptions but no input schemas.
+1. list_servers — available member names and slugs, and each member's status: "available", "unavailable" when the member's tunnel is down, or "unknown" when it was not checked (this list does not contact remote servers; call connection_status to check sign-in).
+2. describe_server — before using a member for the first time on a task, pass its slug to read its instructions, when available, and find its tools. Tool names are qualified (server--tool) and include descriptions but no input schemas.
 3. describe_tools — input schemas for the specific tools you intend to call.
 4. execute_tool — run one: the qualified name goes in "name", its JSON payload in "arguments".
 
@@ -60,12 +60,19 @@ func ResolveDiscoveryInstructions(custom *string, mode DiscoveryMode, members []
 	if len(members) == 0 {
 		return instructions
 	}
+	if mode == DiscoveryModeProgressive {
+		return memberSummary(members, memberSummaryLimit-utf8.RuneCountInString(ProgressiveMemberInstructionsHint)) + ProgressiveMemberInstructionsHint + "\n\n" + instructions
+	}
 	return MemberSummary(members) + "\n\n" + instructions
 }
 
 // memberSummaryLimit fits the summary in the one line Codex keeps for a
 // deferred MCP server: the first line, cut at 250 characters.
 const memberSummaryLimit = 250
+
+// ProgressiveMemberInstructionsHint follows the names on the first line so
+// deferred harnesses can discover the instruction lookup without the full text.
+const ProgressiveMemberInstructionsHint = " Use describe_server for member instructions."
 
 // MemberLabel names one server for the instructions summary.
 type MemberLabel struct {
@@ -76,13 +83,17 @@ type MemberLabel struct {
 // MemberSummary lists server names in at most memberSummaryLimit characters,
 // counting the ones that do not fit.
 func MemberSummary(members []MemberLabel) string {
+	return memberSummary(members, memberSummaryLimit)
+}
+
+func memberSummary(members []MemberLabel, limit int) string {
 	// Quoting keeps operator labels from injecting new instruction lines.
 	quoted := make([]string, len(members))
 	for i, member := range members {
 		quoted[i] = strconv.Quote(conv.Default(member.Name, member.Slug))
 	}
 	const prefix = "Tools from these servers: "
-	if full := prefix + strings.Join(quoted, ", ") + "."; utf8.RuneCountInString(full) <= memberSummaryLimit {
+	if full := prefix + strings.Join(quoted, ", ") + "."; utf8.RuneCountInString(full) <= limit {
 		return full
 	}
 	summary := prefix
@@ -96,7 +107,7 @@ func MemberSummary(members []MemberLabel) string {
 		if left := len(members) - i - 1; left > 0 {
 			rest = fmt.Sprintf(" and %d more", left)
 		}
-		if utf8.RuneCountInString(next+rest+".") > memberSummaryLimit {
+		if utf8.RuneCountInString(next+rest+".") > limit {
 			if i == 0 && len(members) == 1 {
 				return "Tools from 1 server."
 			}
