@@ -33,6 +33,9 @@ const issuerGateReasonIdentityChainingReauthentication = "identity_chaining_reau
 // human's account, which only an administrator or another account changes.
 const issuerGateReasonIdentityChainingIneligible = "identity_chaining_ineligible"
 
+// issuerGateReasonIdentityChainingUnmanaged: the human signed in with an account the organization doesn't manage, which they fix.
+const issuerGateReasonIdentityChainingUnmanaged = "identity_chaining_unmanaged"
+
 // identityChainer acquires downstream tokens by identity chaining when a human
 // has no usable interactive token for an upstream.
 type identityChainer interface {
@@ -188,6 +191,9 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 	case outcome.Reason == identitychaining.ReasonIneligibleIdentity:
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: identity chaining refused an ineligible account",
 			issuerGateReasonIdentityChainingIneligible, mcpconnectionattempts.CodeIneligibleIdentity)
+	case outcome.Reason == identitychaining.ReasonUnmanagedAccount:
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: identity chaining refused an unmanaged account",
+			issuerGateReasonIdentityChainingUnmanaged, mcpconnectionattempts.CodeUnmanagedAccount)
 	}
 	return none, identityChainingError(outcome)
 }
@@ -269,6 +275,9 @@ func identityChainingError(outcome identitychaining.Outcome) error {
 	if outcome.Retryable {
 		return oops.E(oops.CodeUnavailable, nil, "Company sign-in for this server is temporarily unavailable. Try again in a moment.")
 	}
+	if outcome.Reason == identitychaining.ReasonUnmanagedAccount {
+		return oops.E(oops.CodeForbidden, nil, "Company sign-in for this server can't use your account, because your company doesn't manage it.")
+	}
 	if exchangeRejectedSignIn(outcome) {
 		return oops.E(oops.CodeForbidden, nil, "Company sign-in for this server isn't working. Reconnect this server in your AI client. If that doesn't help, contact your administrator.")
 	}
@@ -313,6 +322,9 @@ func (s *Service) metaMemberChainer(gate *metaGateContext, member metaMember, ki
 			return "", memberConnectionError{memberCredentialError{&metaMemberError{message: fmt.Sprintf("Server %q needs a new company sign-in. Reconnect this gateway in your AI client.", member.slug)}}, mcpconnectionattempts.CodeReauthenticationRequired}
 		case outcome.Retryable:
 			return "", memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("Company sign-in for server %q is temporarily unavailable. Try again in a moment.", member.slug)}, status: 0, retryable: outcome.SafeToRepeat() && ctx.Err() == nil, retryAfter: 0}
+		}
+		if outcome.Reason == identitychaining.ReasonUnmanagedAccount {
+			return "", memberConnectionError{&metaMemberError{message: fmt.Sprintf("Company sign-in for server %q can't use your account, because your company doesn't manage it.", member.slug)}, mcpconnectionattempts.CodeUnmanagedAccount}
 		}
 		if exchangeRejectedSignIn(outcome) {
 			return "", &metaMemberError{message: fmt.Sprintf("Company sign-in for server %q isn't working. Reconnect this gateway in your AI client. If that doesn't help, contact your administrator.", member.slug)}
