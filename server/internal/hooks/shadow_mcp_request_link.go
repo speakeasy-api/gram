@@ -53,9 +53,7 @@ func (s *Service) renderShadowMCPUserBlockReason(ctx context.Context, params sha
 	// A server linked to an official version is not something to ask access
 	// to: the answer is to use the official one. No request link is minted and
 	// no block effect is set, so nothing downstream offers "request access".
-	// A switched-off link leaves the ordinary rules in charge, so a block then
-	// reads like any other and offers the request link.
-	if official, ok := s.shadowMCPOfficialServer(ctx, params.OrganizationID, params.ProjectID, params.Evidence.FullURL); ok && !official.DirectAccessAllowed {
+	if official, ok := s.shadowMCPOfficialServer(ctx, params.OrganizationID, params.ProjectID, params.Evidence.FullURL); ok {
 		return strings.TrimSpace(message) + "\n\n" + shadowMCPOfficialServerRedirect(official)
 	}
 	// The built-in blocklist has no policy to request a bypass of: its
@@ -93,7 +91,7 @@ func (s *Service) renderShadowMCPUserBlockReason(ctx context.Context, params sha
 // the direct one yet. A failed lookup reads as "none", which keeps the guard
 // on its ordinary rules rather than blocking on an infrastructure blip.
 func (s *Service) shadowMCPOfficialServer(ctx context.Context, organizationID string, projectID string, fullURL string) (shadowmcp.OfficialServer, bool) {
-	none := shadowmcp.OfficialServer{MCPServerID: uuid.Nil, Name: "", Slug: "", URL: "", GatewayName: "", DirectAccessAllowed: false}
+	none := shadowmcp.OfficialServer{MCPServerID: uuid.Nil, Name: "", Slug: "", URL: "", GatewayName: ""}
 	if s.shadowMCPClient == nil || strings.TrimSpace(fullURL) == "" {
 		return none, false
 	}

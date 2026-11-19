@@ -91,7 +91,7 @@ func seedOfficialServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, p
 		require.NoError(t, err)
 	}
 	if !seed.Unlinked {
-		setOfficialServerChoice(t, ctx, conn, projectID, seed.RemoteURL, uuid.NullUUID{UUID: server.ID, Valid: true}, false)
+		setOfficialServerChoice(t, ctx, conn, projectID, seed.RemoteURL, uuid.NullUUID{UUID: server.ID, Valid: true})
 	}
 	return server.ID
 }
@@ -342,21 +342,33 @@ func TestRenderShadowMCPUserBlockReason_SkipsGatewayThatDoesNotServeOfficialServ
 	require.NotContains(t, reason, "Team Gateway")
 }
 
-func setOfficialServerChoice(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, serverURL string, chosen uuid.NullUUID, allowDirectAccess bool) {
+func setOfficialServerChoice(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, serverURL string, chosen uuid.NullUUID) {
 	t.Helper()
 	key, ok := shadowmcp.OfficialServerKey(serverURL)
 	require.True(t, ok)
 	_, err := shadowmcprepo.New(conn).UpsertShadowMCPOfficialServerChoice(ctx, shadowmcprepo.UpsertShadowMCPOfficialServerChoiceParams{
-		ProjectID:         projectID,
-		ServerUrl:         key,
-		McpServerID:       chosen,
-		AllowDirectAccess: allowDirectAccess,
-		UserID:            pgtype.Text{String: "", Valid: false},
+		ProjectID:   projectID,
+		ServerUrl:   key,
+		McpServerID: chosen,
+		UserID:      pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 }
 
-func TestEnforceShadowMCPToolAccess_KeptDirectAccessFollowsOrdinaryRules(t *testing.T) {
+func removeOfficialServerChoice(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, serverURL string) {
+	t.Helper()
+	key, ok := shadowmcp.OfficialServerKey(serverURL)
+	require.True(t, ok)
+	removed, err := shadowmcprepo.New(conn).DeleteShadowMCPOfficialServerChoice(ctx, shadowmcprepo.DeleteShadowMCPOfficialServerChoiceParams{
+		UserID:    pgtype.Text{String: "", Valid: false},
+		ProjectID: projectID,
+		ServerUrl: key,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), removed)
+}
+
+func TestEnforceShadowMCPToolAccess_RemovedLinkFollowsOrdinaryRules(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
@@ -368,11 +380,11 @@ func TestEnforceShadowMCPToolAccess_KeptDirectAccessFollowsOrdinaryRules(t *test
 	testingID := seedOfficialServer(t, ctx, ti.conn, *authCtx.ProjectID, officialServerSeed{
 		Name: "Testing", RemoteURL: serverURL, Visibility: "", EndpointSlug: "testing-" + uuid.NewString(), Unlinked: false,
 	})
-	// The link is switched off while the official server is tested.
-	setOfficialServerChoice(t, ctx, ti.conn, *authCtx.ProjectID, serverURL, uuid.NullUUID{UUID: testingID, Valid: true}, true)
+	// The link is added, then removed: removal soft-deletes it.
+	setOfficialServerChoice(t, ctx, ti.conn, *authCtx.ProjectID, serverURL, uuid.NullUUID{UUID: testingID, Valid: true})
+	removeOfficialServerChoice(t, ctx, ti.conn, *authCtx.ProjectID, serverURL)
 
-	// Allow-by-default: the direct connection keeps working while the
-	// official server is tested.
+	// Allow-by-default: the direct connection works again.
 	detail, denied := ti.service.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID,
 		allowAllTestPolicy(uuid.NewString()), "search",
 		shadowmcp.AccessEvidence{FullURL: serverURL, URLHost: "", ServerIdentity: "testing"})
@@ -388,7 +400,7 @@ func TestEnforceShadowMCPToolAccess_KeptDirectAccessFollowsOrdinaryRules(t *test
 	require.NotContains(t, detail, "official version")
 
 	// The message an agent reads does not send it to the official server
-	// either: with the link off, that server is not the answer yet.
+	// either: without the link, that server is not the answer.
 	reason := ti.service.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
 		OrganizationID:  authCtx.ActiveOrganizationID,
 		ProjectID:       authCtx.ProjectID.String(),
@@ -419,7 +431,7 @@ func TestRenderShadowMCPUserBlockReason_SendsAgentToChosenServer(t *testing.T) {
 	chosenID := seedOfficialServer(t, ctx, ti.conn, *authCtx.ProjectID, officialServerSeed{
 		Name: "Company Tools", RemoteURL: "https://internal.example.com/mcp", Visibility: "", EndpointSlug: chosenSlug, Unlinked: false,
 	})
-	setOfficialServerChoice(t, ctx, ti.conn, *authCtx.ProjectID, directURL, uuid.NullUUID{UUID: chosenID, Valid: true}, false)
+	setOfficialServerChoice(t, ctx, ti.conn, *authCtx.ProjectID, directURL, uuid.NullUUID{UUID: chosenID, Valid: true})
 
 	detail, denied := ti.service.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID,
 		allowAllTestPolicy(uuid.NewString()), "search",
@@ -486,7 +498,7 @@ func TestEnforceShadowMCPToolAccess_ServerAtSameURLIsNotOfficialUntilLinked(t *t
 	require.Empty(t, detail)
 
 	// Linking it makes it official.
-	setOfficialServerChoice(t, ctx, ti.conn, *authCtx.ProjectID, serverURL, uuid.NullUUID{UUID: serverID, Valid: true}, false)
+	setOfficialServerChoice(t, ctx, ti.conn, *authCtx.ProjectID, serverURL, uuid.NullUUID{UUID: serverID, Valid: true})
 	detail, denied = ti.service.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID,
 		allowAllTestPolicy(uuid.NewString()), "search", evidence)
 	require.True(t, denied)
