@@ -958,7 +958,7 @@ func TestConnectionOutcome_DirectListingWritesOnlyFailures(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 
-	row := rec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeMemberToolsMissing)
+	row := rec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeProviderServerError)
 	require.Equal(t, down.ID.String(), row.MemberID)
 	require.Len(t, rec.Rows(), 1, "no Connected listing and no row for a healthy member")
 }
@@ -1235,7 +1235,7 @@ func TestConnectionOutcome_RowsCarryTheClientFamily(t *testing.T) {
 		setGatewayMode(t, ctx, ti, gateway.ID, "direct")
 		_, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", map[string]string{"User-Agent": userAgent})
 		require.NoError(t, err)
-		rec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeMemberToolsMissing)
+		rec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeProviderServerError)
 		requireFamily(t, rec)
 	})
 }

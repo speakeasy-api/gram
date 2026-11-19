@@ -1024,7 +1024,7 @@
       {{if ne .Name .Slug}}<span class="text-muted-foreground truncate font-mono text-xs">{{.Slug}}</span>{{end}}
     </span>
     <span
-      class="text-xs {{if .NeedsAttention}}text-default-warning{{else if .Ready}}text-default-success{{else}}text-muted-foreground{{end}}"
+      class="text-xs {{if .StatusWarns}}text-default-warning{{else if .Ready}}text-default-success{{else}}text-muted-foreground{{end}}"
       data-gateway-server-status="{{.Status}}"
       {{if .Hidden}}hidden{{end}}
       >{{.StatusLabel}}</span

@@ -37,7 +37,7 @@ type consentMemberOutcome struct {
 	Name string `json:"name"`
 	// Status distinguishes verified access, sign-in issues, and outages.
 	Status gatewayServerStatus `json:"status"`
-	// Label is shared by the server list and the tool picker.
+	// Label is the stored status text, generic for a listing failure; the live server list names the cause.
 	Label string `json:"label"`
 
 	// address is an address Speakeasy did not dial that stopped the source.
@@ -45,6 +45,36 @@ type consentMemberOutcome struct {
 
 	// signInAddress says that address is its sign-in provider's.
 	signInAddress bool
+
+	// cause is the listing failure's code; host names the upstream only when it failed.
+	cause mcpconnectionattempts.Code
+	host  string
+}
+
+// listingFailureStatus is a member's status after its listing failed with lost; configured is what its cards say.
+func listingFailureStatus(lost error, configured gatewayServerStatus) gatewayServerStatus {
+	if refusedSignIn(lost) {
+		// The service's card explains why company sign-in refused this account.
+		return gatewayServerChainPending
+	}
+	if _, credential := errors.AsType[memberCredentialError](lost); credential {
+		switch configured {
+		case gatewayServerConnected, gatewayServerReconnect:
+			return gatewayServerReconnect
+		case gatewayServerNoSignIn, gatewayServerNotSetUp:
+			return gatewayServerNotSetUp
+		case gatewayServerNotConnected:
+			return gatewayServerNotConnected
+		case gatewayServerChained, gatewayServerChainPending:
+			return gatewayServerChainPending
+		case gatewayServerUnavailable, gatewayServerNoAccess:
+		}
+		return gatewayServerUnavailable
+	}
+	if denied, ok := errors.AsType[*oops.ShareableError](lost); ok && (denied.Code == oops.CodeForbidden || denied.Code == oops.CodeNotFound) {
+		return gatewayServerNoAccess
+	}
+	return gatewayServerUnavailable
 }
 
 // captureGatewayConsentInventory captures one complete attempt before rendering
@@ -287,33 +317,24 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 			}
 		} else if member.authClient != nil && member.authClient.reason == authClientReasonAmbiguous {
 			status = gatewayServerNotSetUp
-		} else if failure := failures[member.slug]; failure != nil {
-			if refusedSignIn(failure) {
-				// The service's card explains why company sign-in refused this account.
-				status = gatewayServerChainPending
-			} else if _, credential := errors.AsType[memberCredentialError](failure); credential {
-				switch configuredStatus[member.slug] {
-				case gatewayServerConnected, gatewayServerReconnect:
-					status = gatewayServerReconnect
-				case gatewayServerNoSignIn, gatewayServerNotSetUp:
-					status = gatewayServerNotSetUp
-				case gatewayServerNotConnected:
-					status = gatewayServerNotConnected
-				case gatewayServerChained, gatewayServerChainPending:
-					status = gatewayServerChainPending
-				default:
-					status = gatewayServerUnavailable
-				}
-			} else if denied, ok := errors.AsType[*oops.ShareableError](failure); ok && (denied.Code == oops.CodeForbidden || denied.Code == oops.CodeNotFound) {
-				status = gatewayServerNoAccess
-			}
+		} else if lost := failures[member.slug]; lost != nil {
+			status = listingFailureStatus(lost, configuredStatus[member.slug])
 		}
 		address, signInAddress := guardian.AddressFine, false
-		if status == gatewayServerUnavailable {
-			address, signInAddress = memberAddressCause(failures[member.slug])
+		cause, host := mcpconnectionattempts.Code{}, ""
+		if lost := failures[member.slug]; status == gatewayServerUnavailable {
+			address, signInAddress = memberAddressCause(lost)
+			listed, recorded := gate.listingFailureHappened(member, lost)
+			if code, rejected := adminCredentialRejected(lost); rejected {
+				listed, recorded = code, true
+			}
+			if lost != nil && recorded {
+				cause, host = listed, memberUpstreamHost(lost)
+			}
 		}
-		label := (gatewayServer{Slug: member.slug, Name: member.name, Status: status, ConnectClientID: "", ServerID: "", Hidden: false, cardIDs: nil, providerOutage: false, connectionDown: false, address: address, signInAddress: signInAddress, Auth: nil}).StatusLabel()
-		outcomes = append(outcomes, consentMemberOutcome{Slug: member.slug, ServerID: member.serverID, Name: conv.Default(member.name, member.slug), Status: status, Label: label, address: address, signInAddress: signInAddress})
+		// Stored for later readers, so it names no cause that may have passed.
+		label := (gatewayServer{Slug: member.slug, Name: member.name, Status: status, ConnectClientID: "", ServerID: "", Hidden: false, cardIDs: nil, providerOutage: false, connectionDown: false, address: address, signInAddress: signInAddress, cause: mcpconnectionattempts.Code{}, upstreamHost: "", Auth: nil}).StatusLabel()
+		outcomes = append(outcomes, consentMemberOutcome{Slug: member.slug, ServerID: member.serverID, Name: conv.Default(member.name, member.slug), Status: status, Label: label, address: address, signInAddress: signInAddress, cause: cause, host: host})
 	}
 	tools := make([]consentInventoryTool, 0, len(inventory))
 	toolMembers := map[string]connectionCatalogMember{}
