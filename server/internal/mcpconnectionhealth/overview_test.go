@@ -46,20 +46,24 @@ func TestGetSignInSummary_StepsLeaveOutTheService(t *testing.T) {
 	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
 	ti.insert(t, ti.org, ti.project, ti.now.Add(-2*time.Hour), mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenExpired, mcpconnectionattempts.Grant(oauthwire.GrantTypeRefreshToken))
 	ti.insert(t, ti.org, ti.project, ti.now.Add(-2*time.Hour), mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeInvalidGrant)
+	ti.insert(t, ti.org, ti.project, ti.now.Add(-2*time.Hour), mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeNotOrgMember)
+	ti.insert(t, ti.org, ti.project, ti.now.Add(-2*time.Hour), mcpconnectionattempts.StepProviderToken, mcpconnectionattempts.CodeProviderOAuthInvalidGrant)
 
 	payload := &gen.GetSignInSummaryPayload{UserSessionIssuerID: ti.issuer.String(), From: ti.rangeFrom(), To: ti.rangeTo()}
-	renewalsDidNot := func() int64 {
+	didNot := func() (signIns, renewals int64) {
 		res, err := ti.service.GetSignInSummary(ctx, payload)
 		require.NoError(t, err)
-		var n int64
 		for _, b := range res.Buckets {
-			n += b.Renewals.DidNot
+			signIns += b.SignIns.DidNot
+			renewals += b.Renewals.DidNot
 		}
-		return n
+		return signIns, renewals
 	}
-	require.Equal(t, int64(2), renewalsDidNot())
+	signIns, renewals := didNot()
+	require.Equal(t, [2]int64{2, 2}, [2]int64{signIns, renewals})
 	payload.Steps = []gen.ConnectionStepGroup{"sign_in", "sign_in_renewal"}
-	require.Equal(t, int64(1), renewalsDidNot())
+	signIns, renewals = didNot()
+	require.Equal(t, [2]int64{1, 1}, [2]int64{signIns, renewals})
 }
 
 func TestListDeniedClients_ListsBlockedSignIns(t *testing.T) {

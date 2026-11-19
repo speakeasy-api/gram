@@ -59,7 +59,8 @@ type GetSignInSummaryRequestBody struct {
 	Bucket *string `form:"bucket,omitempty" json:"bucket,omitempty" xml:"bucket,omitempty"`
 	// Count only attempts that ended at these steps, as the Connection Logs step
 	// filter does. Absent: sign_in, service_sign_in, sign_in_renewal and
-	// service_renewal.
+	// service_renewal. Steps outside these four count nothing. In-progress
+	// attempts are never counted.
 	Steps []string `form:"steps,omitempty" json:"steps,omitempty" xml:"steps,omitempty"`
 	// The MCP authentication provider.
 	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`

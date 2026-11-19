@@ -363,6 +363,9 @@ func TestSignIns_StepsKeepOnlyAttemptsThatEndedThereLikeTheLogs(t *testing.T) {
 	f.row(service, mcpconnectionattempts.StepProviderToken, mcpconnectionattempts.CodeProviderOAuthInvalidGrant, true, 2*time.Second)
 	renewal := f.attempt(f.org, f.project, f.server, hour.Add(8*time.Minute))
 	f.row(renewal, mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeInvalidGrant, true, time.Second)
+	// Still signing in: the logs list it, the summary waits for its end.
+	live := f.attempt(f.org, f.project, f.server, f.now.Add(-10*time.Minute))
+	f.row(live, mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.ResultSignedIn, false, time.Second)
 	f.insert()
 
 	s := f.scope()
@@ -373,9 +376,18 @@ func TestSignIns_StepsKeepOnlyAttemptsThatEndedThereLikeTheLogs(t *testing.T) {
 	require.Len(t, buckets, 1)
 	require.Equal(t, attemptlog.SignInBucket{Start: hour, SignInsSucceeded: 1, SignInsDidNot: 1}, buckets[0])
 
-	counts, err := attemptlog.Count(t.Context(), f.ch, s, attemptlog.Filters{Steps: steps}, f.now)
+	counts, err := attemptlog.Count(t.Context(), f.ch, s, attemptlog.Filters{Steps: steps, Outcomes: []string{"connected", "failed", "blocked", "declined", "didnt_finish"}}, f.now)
 	require.NoError(t, err)
 	require.Equal(t, buckets[0].SignInsSucceeded+buckets[0].SignInsDidNot+buckets[0].RenewalsSucceeded+buckets[0].RenewalsDidNot, counts.Total)
+	withLive := s
+	withLive.To = f.now.Add(time.Minute)
+	logs, err := attemptlog.Count(t.Context(), f.ch, withLive, attemptlog.Filters{Steps: steps}, f.now)
+	require.NoError(t, err)
+	require.Equal(t, counts.Total+1, logs.Total)
+
+	none, err := attemptlog.SignIns(t.Context(), f.ch, s, attemptlog.BucketHour, []string{string(attemptlog.StepConnect)}, f.now)
+	require.NoError(t, err)
+	require.Equal(t, attemptlog.SignInBucket{Start: hour}, none[0])
 
 	all, err := attemptlog.SignIns(t.Context(), f.ch, s, attemptlog.BucketHour, nil, f.now)
 	require.NoError(t, err)

@@ -45,7 +45,7 @@ export type GetSignInSummaryRequestBody = {
    */
   serverId?: string | undefined;
   /**
-   * Count only attempts that ended at these steps, as the Connection Logs step filter does. Absent: sign_in, service_sign_in, sign_in_renewal and service_renewal.
+   * Count only attempts that ended at these steps, as the Connection Logs step filter does. Absent: sign_in, service_sign_in, sign_in_renewal and service_renewal. Steps outside these four count nothing. In-progress attempts are never counted.
    */
   steps?: Array<Steps> | undefined;
   /**

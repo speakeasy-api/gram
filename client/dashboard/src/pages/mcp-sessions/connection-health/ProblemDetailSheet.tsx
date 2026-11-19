@@ -204,7 +204,7 @@ function ProblemBody({
             {problem.lastConnectedAt
               ? problem.scope.kind === "person"
                 ? ` ${problem.scope.name} has not ${succeeded} since ${formatSince(problem.lastConnectedAt, now)}.`
-                : ` No one has ${succeeded}${problem.part === "speakeasy" ? " there" : " to it"} since ${formatSince(problem.lastConnectedAt, now)}.`
+                : ` No one has ${succeeded}${problem.part === "speakeasy" ? "" : " to it"} since ${formatSince(problem.lastConnectedAt, now)}.`
               : ""}
           </p>
           <p className="text-muted-foreground">
