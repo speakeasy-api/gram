@@ -27,15 +27,18 @@ export function catalogTeamUsage(
   for (const server of inventory) {
     if (server.targetKind === "stdio_command") continue;
     if (server.observedUseCount <= 0 && server.userCount <= 0) continue;
-    const entry = shadowMCPCatalogMatch(catalog, server.canonicalServerUrl);
-    if (!entry) continue;
-    const seen = usage.get(entry.registrySpecifier);
-    // One person can call several of an entry's URLs, so people are not
-    // added up across URLs; calls are.
-    usage.set(entry.registrySpecifier, {
-      userCount: Math.max(seen?.userCount ?? 0, server.userCount),
-      callCount: (seen?.callCount ?? 0) + server.observedUseCount,
-    });
+    // Several entries can serve the same URL (a vendor listed twice); each
+    // of them gets the usage.
+    for (const entry of catalog) {
+      if (!shadowMCPCatalogMatch([entry], server.canonicalServerUrl)) continue;
+      const seen = usage.get(entry.registrySpecifier);
+      // One person can call several of an entry's URLs, so people are not
+      // added up across URLs; calls are.
+      usage.set(entry.registrySpecifier, {
+        userCount: Math.max(seen?.userCount ?? 0, server.userCount),
+        callCount: (seen?.callCount ?? 0) + server.observedUseCount,
+      });
+    }
   }
   return usage;
 }

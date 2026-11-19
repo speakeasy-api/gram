@@ -86,8 +86,14 @@ export function ServerTableRow({
 
       {/* The team's own use of the server; fills in after the rows load. */}
       {showTeamUsage && (
-        <td className="relative z-20 px-3 py-3">
-          {teamUsage && <TeamUsageNote usage={teamUsage} />}
+        <td className="px-3 py-3">
+          {/* Only the note sits above the row's link, for its tooltip; the
+              rest of the cell still opens the server. */}
+          {teamUsage && (
+            <span className="relative z-20 inline-flex max-w-full">
+              <TeamUsageNote usage={teamUsage} />
+            </span>
+          )}
         </td>
       )}
 

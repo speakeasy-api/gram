@@ -107,3 +107,29 @@ describe("teamUsageLabel", () => {
     );
   });
 });
+
+describe("catalogTeamUsage shared URLs", () => {
+  it("credits every catalog entry that serves the URL", () => {
+    const usage = catalogTeamUsage(
+      [
+        entry("io.github/github", ["https://api.githubcopilot.com/mcp"]),
+        entry("com.github/copilot", ["https://api.githubcopilot.com/mcp"]),
+      ],
+      [
+        shadow({
+          canonicalServerUrl: "https://api.githubcopilot.com/mcp",
+          observedUseCount: 51,
+          userCount: 5,
+        }),
+      ],
+    );
+    expect(usage.get("io.github/github")).toEqual({
+      userCount: 5,
+      callCount: 51,
+    });
+    expect(usage.get("com.github/copilot")).toEqual({
+      userCount: 5,
+      callCount: 51,
+    });
+  });
+});

@@ -181,7 +181,10 @@ export function TeamUsageNote({
 }): JSX.Element {
   return (
     <SimpleTooltip tooltip={TEAM_USAGE_TOOLTIP}>
-      <span className="text-muted-foreground flex min-w-0 items-center gap-1.5 text-xs">
+      <span
+        tabIndex={0}
+        className="text-muted-foreground flex min-w-0 items-center gap-1.5 text-xs"
+      >
         <Users className="h-3.5 w-3.5 shrink-0" aria-hidden />
         <span className="truncate">{teamUsageLabel(usage)}</span>
       </span>

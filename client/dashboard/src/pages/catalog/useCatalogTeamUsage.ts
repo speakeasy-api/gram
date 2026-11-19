@@ -1,7 +1,7 @@
 import { useShadowMCPPolicyInventory } from "@/components/shadow-mcp/useShadowMCPPolicyInventory";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import type { CatalogServer } from "./hooks";
 import { catalogTeamUsage, type CatalogTeamUsageMap } from "./team-usage";
 
@@ -16,7 +16,11 @@ const EMPTY: CatalogTeamUsageMap = new Map();
 export function useCatalogTeamUsage(
   catalog: readonly CatalogServer[],
   catalogLoaded: boolean,
-): { usage: CatalogTeamUsageMap; canSeeUsage: boolean } {
+): {
+  usage: CatalogTeamUsageMap;
+  canSeeUsage: boolean;
+  refetch: () => void;
+} {
   const project = useProject();
   const organization = useOrganization();
   const { hasScope, isLoading: rbacLoading } = useRBAC();
@@ -26,10 +30,20 @@ export function useCatalogTeamUsage(
     canSeeUsage && catalogLoaded,
   );
 
+  // Gated on canSeeUsage too: the query keeps its cached rows when it is
+  // disabled, and they must not reach someone who is no longer an admin.
   const usage = useMemo(
-    () => (inventory.data ? catalogTeamUsage(catalog, inventory.data) : EMPTY),
-    [catalog, inventory.data],
+    () =>
+      canSeeUsage && inventory.data
+        ? catalogTeamUsage(catalog, inventory.data)
+        : EMPTY,
+    [canSeeUsage, catalog, inventory.data],
   );
 
-  return { usage, canSeeUsage };
+  const refetchInventory = inventory.refetch;
+  const refetch = useCallback(() => {
+    if (canSeeUsage) void refetchInventory();
+  }, [canSeeUsage, refetchInventory]);
+
+  return { usage, canSeeUsage, refetch };
 }

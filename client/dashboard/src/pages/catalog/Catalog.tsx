@@ -121,11 +121,6 @@ function CatalogInner() {
     () => toCatalogFilterValues(dimensionFilters.values),
     [dimensionFilters.values],
   );
-  const filterState = useMemo(
-    () => ({ sort: pageState.sort, filters }),
-    [pageState.sort, filters],
-  );
-
   const [viewMode, setViewMode] = useViewMode();
   const [addingServers, setAddingServers] = useState<CatalogServer[]>([]);
 
@@ -145,10 +140,19 @@ function CatalogInner() {
 
   // The team's own use of each server, from Shadow MCP. It loads after the
   // catalog and fills in on the cards; nothing waits for it.
-  const { usage: teamUsage, canSeeUsage } = useCatalogTeamUsage(
-    allServers,
-    !isLoading && allServers.length > 0,
-  );
+  const {
+    usage: teamUsage,
+    canSeeUsage,
+    refetch: refetchTeamUsage,
+  } = useCatalogTeamUsage(allServers, !isLoading && allServers.length > 0);
+
+  // Someone who cannot see usage may still open a link sorted by it; they
+  // get the default order and a toolbar that matches it.
+  const sort: SortOption =
+    pageState.sort === "team-usage" && !canSeeUsage
+      ? "alphabetical"
+      : pageState.sort;
+  const filterState = useMemo(() => ({ sort, filters }), [sort, filters]);
 
   // Search, sort, and filter the full catalog client-side.
   const filteredServers = useMemo(() => {
@@ -210,14 +214,17 @@ function CatalogInner() {
           onClearAll: dimensionFilters.clearAll,
         }}
         sort={{
-          value: pageState.sort,
+          value: sort,
           onChange: (v) => pageState.setSort(v as SortOption),
           options: canSeeUsage
             ? [TEAM_USAGE_SORT_OPTION, ...CATALOG_SORT_OPTIONS]
             : CATALOG_SORT_OPTIONS,
         }}
         viewToggle={{ value: viewMode, onChange: setViewMode }}
-        onRefresh={() => void refetchCatalog()}
+        onRefresh={() => {
+          void refetchCatalog();
+          refetchTeamUsage();
+        }}
         isRefreshing={isFetching}
       >
         {/* Server grid / table */}
