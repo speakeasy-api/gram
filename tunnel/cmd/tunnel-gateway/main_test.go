@@ -29,3 +29,25 @@ func TestParseMaxSessionsRejectsInvalidValue(t *testing.T) {
 	_, err = parseMaxSessions("-1")
 	require.Error(t, err)
 }
+
+func TestParsePartitionDefaultsToUSWhenUnset(t *testing.T) {
+	got, err := parsePartition("", false)
+	require.NoError(t, err)
+	require.Equal(t, "us", got)
+}
+
+func TestParsePartitionAcceptsKnownPartitions(t *testing.T) {
+	for _, want := range []string{"us", "eu"} {
+		got, err := parsePartition(want, true)
+		require.NoError(t, err)
+		require.Equal(t, want, got)
+	}
+}
+
+func TestParsePartitionRejectsEmptyOrUnknown(t *testing.T) {
+	_, err := parsePartition("", true)
+	require.ErrorContains(t, err, `unknown partition ""`)
+
+	_, err = parsePartition("apac", true)
+	require.ErrorContains(t, err, `unknown partition "apac"`)
+}

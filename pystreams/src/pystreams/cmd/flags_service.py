@@ -1,6 +1,27 @@
+import os
 from collections.abc import Sequence
 
 import click
+
+from pystreams import partition
+
+
+def _reject_empty_partition_env(
+    _ctx: click.Context, _param: click.Parameter, value: str
+) -> str:
+    """Fail on a GRAM_PARTITION that is set but empty.
+
+    Click treats an empty environment variable as unset and falls back to the
+    default, while the Go server rejects it. Rejecting it here too keeps a
+    misrendered deployment from running pystreams as ``us`` while the Go
+    processes refuse to start.
+    """
+    if os.environ.get("GRAM_PARTITION") == "":
+        raise click.BadParameter(
+            "GRAM_PARTITION is set but empty; set it to one of: "
+            + ", ".join(partition.PARTITIONS)
+        )
+    return value
 
 
 def service_options() -> Sequence[click.Option]:
@@ -16,6 +37,17 @@ def service_options() -> Sequence[click.Option]:
             type=str,
             envvar="GRAM_ENVIRONMENT",
             help="Set the environment.",
+        ),
+        click.Option(
+            ["--partition"],
+            type=click.Choice(partition.PARTITIONS, case_sensitive=True),
+            default=partition.DEFAULT,
+            show_default=True,
+            envvar="GRAM_PARTITION",
+            callback=_reject_empty_partition_env,
+            help="Partition this deployment runs in. A partition is an "
+            "independent production deployment with its own data stores and "
+            "hosts.",
         ),
         click.Option(
             ["--git-sha"],

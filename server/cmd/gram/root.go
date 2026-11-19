@@ -37,6 +37,7 @@ func newApp() *cli.App {
 				Usage:   "Enable pretty logging",
 				EnvVars: []string{"GRAM_LOG_PRETTY"},
 			},
+			partitionCLIFlag(),
 		},
 		Commands: []*cli.Command{
 			newStartCommand(),
@@ -61,6 +62,12 @@ func newApp() *cli.App {
 			newVersionCommand(),
 		},
 		Before: func(c *cli.Context) error {
+			p, err := partitionFromCLI(c)
+			if err != nil {
+				return err
+			}
+			c.Context = PushPartition(c.Context, p)
+
 			c.Context = o11y.PushAppInfo(c.Context, &o11y.AppInfo{
 				Name:    "gram",
 				Command: "",
@@ -74,6 +81,7 @@ func newApp() *cli.App {
 			})).With(
 				attr.SlogDataDogGitCommitSHA(GitSHA),
 				attr.SlogDataDogGitRepoURL("github.com/speakeasy-api/gram"),
+				attr.SlogPartition(p),
 			)
 
 			// Sets `GOMEMLIMIT` to 90% of cgroup's memory limit.

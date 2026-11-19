@@ -87,6 +87,7 @@ async def multi(
     # Service options
     service_version: str | None,
     environment: str | None,
+    partition: str,
     git_sha: str | None,
     log_level: str,
     pretty_log: bool,
@@ -121,6 +122,7 @@ async def multi(
             attr.SERVICE_NAME: "gram-pystreams",
             attr.SERVICE_VERSION: service_version,
             attr.SERVICE_ENVIRONMENT: environment,
+            attr.PARTITION: partition,
         },
     )
     logger: structlog.stdlib.BoundLogger = structlog.get_logger()
@@ -144,6 +146,7 @@ async def multi(
         service_version=service_version,
         git_sha=git_sha,
         environment=environment,
+        partition=partition,
         enable_tracing=enable_tracing,
         enable_metrics=enable_metrics,
     )

@@ -4,10 +4,12 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,8 +24,24 @@ import (
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
+// partitionAttrKey matches the gram.partition attribute the Speakeasy server
+// puts on its logs, so the gateway's logs filter the same way.
+const partitionAttrKey = "gram.partition"
+
+// knownPartitions mirrors the closed set in server/internal/partition, which
+// this module cannot import. Its first entry is the default.
+var knownPartitions = []string{"us", "eu"}
+
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	rawPartition, partitionSet := os.LookupEnv("GRAM_PARTITION")
+	partition, err := parsePartition(rawPartition, partitionSet)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "invalid GRAM_PARTITION", slog.Any("error", err))
+		os.Exit(2)
+	}
+	logger = logger.With(slog.String(partitionAttrKey, partition))
 
 	publicListenAddr := envOr("TUNNEL_GATEWAY_PUBLIC_ADDR", envOr("TUNNEL_GATEWAY_ADDR", ":8090"))
 	forwardListenAddr := envOr("TUNNEL_GATEWAY_FORWARD_ADDR", ":8091")
@@ -197,4 +215,16 @@ func parseMaxSessions(raw string) (int, error) {
 		return 0, errors.New("max sessions must be non-negative")
 	}
 	return parsed, nil
+}
+
+// parsePartition returns the partition named by GRAM_PARTITION. Unset selects
+// the default (us); set but empty or unknown is an error, as in the server.
+func parsePartition(raw string, set bool) (string, error) {
+	if !set {
+		return knownPartitions[0], nil
+	}
+	if !slices.Contains(knownPartitions, raw) {
+		return "", fmt.Errorf("unknown partition %q: must be one of %s", raw, strings.Join(knownPartitions, ", "))
+	}
+	return raw, nil
 }

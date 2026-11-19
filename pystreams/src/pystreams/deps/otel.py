@@ -83,6 +83,7 @@ class OTelOptions:
     service_version: str | None
     git_sha: str | None
     environment: str | None
+    partition: str
     enable_tracing: bool
     enable_metrics: bool
 
@@ -186,6 +187,7 @@ def _build_resource(options: OTelOptions) -> Resource:
         attr.SERVICE_NAME: options.service_name,
         attr.SERVICE_VERSION: options.service_version,
         attr.SERVICE_ENVIRONMENT: options.environment,
+        attr.PARTITION: options.partition,
         attr.DATADOG_GIT_COMMIT_SHA: options.git_sha,
         attr.DATADOG_GIT_REPOSITORY_URL: _REPOSITORY_URL,
     }
