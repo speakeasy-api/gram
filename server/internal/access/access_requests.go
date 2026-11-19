@@ -660,7 +660,10 @@ func (s *Service) openChallengesForRequest(ctx context.Context, request repo.Acc
 	principal := recipient.String()
 	scope := request.Scope
 	from := request.CreatedAt.Time.Add(-openChallengeLookback)
+	// A fixed end keeps pages stable while new denials arrive.
+	to := time.Now()
 	queries := chrepo.New(s.chReadConn)
+	seen := make(map[string]struct{}, maxResolvedChallenges)
 
 	// Denials of other resources and ones already resolved are filtered out
 	// after the read, so page until enough open ones are found or the window
@@ -678,14 +681,14 @@ func (s *Service) openChallengesForRequest(ctx context.Context, request repo.Acc
 				MemberUserIDs:  nil,
 			},
 			From:           &from,
-			To:             nil,
+			To:             &to,
 			Limit:          openChallengePageSize,
 			Offset:         uint64(page) * openChallengePageSize,
 			SkipPagination: false,
 		})
 		if err != nil {
 			logger.WarnContext(ctx, "list denials an access request answers", attr.SlogError(err))
-			return ids
+			return nil
 		}
 		covered := make([]chrepo.ChallengeSummary, 0, len(challenges))
 		for _, challenge := range challenges {
@@ -697,12 +700,16 @@ func (s *Service) openChallengesForRequest(ctx context.Context, request repo.Acc
 			resolutions, err := s.lookupResolutions(ctx, request.OrganizationID, covered)
 			if err != nil {
 				logger.WarnContext(ctx, "read resolutions of denials an access request answers", attr.SlogError(err))
-				return ids
+				return nil
 			}
 			for _, challenge := range covered {
 				if _, resolved := resolutions[challenge.ID]; resolved {
 					continue
 				}
+				if _, dup := seen[challenge.ID]; dup {
+					continue
+				}
+				seen[challenge.ID] = struct{}{}
 				ids = append(ids, challenge.ID)
 				if len(ids) == maxResolvedChallenges {
 					return ids
