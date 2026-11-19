@@ -3,6 +3,7 @@ package usersessions
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -42,6 +43,35 @@ func (s *Service) requireIssuerOwnerWrite(ctx context.Context, authCtx *contextv
 		return oops.E(oops.CodeForbidden, nil, "clients of an organization user session issuer can only be managed from a user session")
 	}
 	return s.authz.Require(ctx, authz.Org(authCtx.ActiveOrganizationID).Admin())
+}
+
+// auditActor is the request's authenticated actor, so a mutation made with an
+// API key is attributed to that key rather than to an empty user. Only a user
+// actor carries the session email as its display name.
+func auditActor(ctx context.Context, authCtx *contextvalues.AuthContext) (urn.Principal, *string, error) {
+	actor, ok := contextvalues.AuthenticatedActor(ctx)
+	if !ok {
+		if authCtx.UserID == "" {
+			return urn.Principal{}, nil, oops.C(oops.CodeUnauthorized)
+		}
+		actor = urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+	}
+	if actor.Type != urn.PrincipalTypeUser {
+		return actor, nil, nil
+	}
+	return actor, authCtx.Email, nil
+}
+
+// validateRedirectFragments rejects a redirect URI carrying a fragment, which
+// RFC 6749 §3.1.2 forbids. The shared validator does not check it, and these
+// endpoints are new, so they hold registrations to the spec from the start.
+func validateRedirectFragments(uris []string) error {
+	for _, u := range uris {
+		if strings.Contains(u, "#") {
+			return &oauthwire.Error{Code: "invalid_redirect_uri", Description: "redirect_uri must not include a fragment"}
+		}
+	}
+	return nil
 }
 
 // CreateUserSessionClient registers a confidential client on an operator's
@@ -91,7 +121,11 @@ func (s *Service) CreateUserSessionClient(ctx context.Context, payload *gen.Crea
 		JWKSURI:                 "",
 	}
 	req.SetDefaults()
-	if err := req.Validate(RegistrableGrantTypes, operatorAuthMethods); err != nil {
+	err = req.Validate(RegistrableGrantTypes, operatorAuthMethods)
+	if err == nil {
+		err = validateRedirectFragments(req.RedirectURIs)
+	}
+	if err != nil {
 		if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
 			return nil, oops.E(oops.CodeBadRequest, err, "%s", oauthErr.Description).LogError(ctx, logger)
 		}
@@ -132,11 +166,16 @@ func (s *Service) CreateUserSessionClient(ctx context.Context, payload *gen.Crea
 
 	view := mv.BuildUserSessionClientView(row, 0)
 
+	actor, actorDisplayName, err := auditActor(ctx, authCtx)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := s.audit.LogUserSessionClientCreate(ctx, dbtx, audit.LogUserSessionClientCreateEvent{
 		OrganizationID:                 authCtx.ActiveOrganizationID,
 		ProjectID:                      issuer.ProjectID.UUID,
-		Actor:                          urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:               authCtx.Email,
+		Actor:                          actor,
+		ActorDisplayName:               actorDisplayName,
 		ActorSlug:                      nil,
 		UserSessionClientURN:           urn.NewUserSessionClient(row.ID),
 		ClientID:                       row.ClientID,
@@ -210,7 +249,11 @@ func (s *Service) UpdateUserSessionClientRedirectURIs(ctx context.Context, paylo
 	}
 
 	for _, u := range payload.RedirectUris {
-		if err := oauthwire.ValidateRedirectURI(u); err != nil {
+		err := oauthwire.ValidateRedirectURI(u)
+		if err == nil {
+			err = validateRedirectFragments([]string{u})
+		}
+		if err != nil {
 			if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
 				return nil, oops.E(oops.CodeBadRequest, err, "%s", oauthErr.Description).LogError(ctx, logger)
 			}
@@ -246,11 +289,16 @@ func (s *Service) UpdateUserSessionClientRedirectURIs(ctx context.Context, paylo
 	beforeView := mv.BuildUserSessionClientView(before, counts[before.ID])
 	afterView := mv.BuildUserSessionClientView(after, counts[after.ID])
 
+	actor, actorDisplayName, err := auditActor(ctx, authCtx)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := s.audit.LogUserSessionClientUpdateRedirectURIs(ctx, dbtx, audit.LogUserSessionClientUpdateRedirectURIsEvent{
 		OrganizationID:                  authCtx.ActiveOrganizationID,
 		ProjectID:                       issuer.ProjectID.UUID,
-		Actor:                           urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:                authCtx.Email,
+		Actor:                           actor,
+		ActorDisplayName:                actorDisplayName,
 		ActorSlug:                       nil,
 		UserSessionClientURN:            urn.NewUserSessionClient(after.ID),
 		ClientID:                        after.ClientID,

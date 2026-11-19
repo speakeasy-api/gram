@@ -107,6 +107,9 @@ func TestUpdateUserSessionClientRedirectURIs_RejectsUnsafeRedirectURI(t *testing
 
 	_, err = ti.service.UpdateUserSessionClientRedirectURIs(ctx, updateRedirectURIsPayload(created.Client.ID, "https://agent.example.com/cb", "javascript:alert(1)"))
 	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	_, err = ti.service.UpdateUserSessionClientRedirectURIs(ctx, updateRedirectURIsPayload(created.Client.ID, "https://agent.example.com/cb#frag"))
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 func TestUpdateUserSessionClientRedirectURIs_NotFound(t *testing.T) {

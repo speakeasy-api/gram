@@ -109,7 +109,7 @@ func TestCreateUserSessionClient_RejectsUnsafeRedirectURI(t *testing.T) {
 	ctx, ti := newTestService(t)
 	issuerID := seedIssuer(t, ctx, ti, "create-client-bad-uri")
 
-	for _, uri := range []string{"javascript:alert(1)", "http://agent.example.com/cb", "not a url"} {
+	for _, uri := range []string{"javascript:alert(1)", "http://agent.example.com/cb", "not a url", "https://agent.example.com/cb#frag"} {
 		_, err := ti.service.CreateUserSessionClient(ctx, createClientPayload(issuerID.String(), uri))
 		requireOopsCode(t, err, oops.CodeBadRequest)
 	}
