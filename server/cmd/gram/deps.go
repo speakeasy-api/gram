@@ -107,6 +107,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpkms"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/tunnel/redisswitch"
 )
 
 func noopShutdown(context.Context) error { return nil }
@@ -471,7 +472,9 @@ type redisClientOptions struct {
 
 func newRedisClient(ctx context.Context, opts redisClientOptions) (*redis.Client, error) {
 	db := 0
-	redisClient := redis.NewClient(&redis.Options{
+	// With GRAM_REDIS_NEXT_ADDR set, the client follows the switch key to the
+	// next instance without a restart; without it this is an ordinary client.
+	redisClient, err := redisswitch.NewClient(ctx, slog.Default(), &redis.Options{
 		Addr:            opts.redisAddr,
 		Password:        opts.redisPassword,
 		DB:              db,
@@ -479,7 +482,10 @@ func newRedisClient(ctx context.Context, opts redisClientOptions) (*redis.Client
 		ReadTimeout:     300 * time.Millisecond,
 		WriteTimeout:    1 * time.Second,
 		DisableIdentity: true,
-	})
+	}, redisswitch.DefaultRole, redisswitch.NextFromEnv())
+	if err != nil {
+		return nil, fmt.Errorf("create redis client: %w", err)
+	}
 
 	if err := redisClient.Ping(ctx).Err(); err != nil {
 		return nil, fmt.Errorf("redis connection failed: %w", err)

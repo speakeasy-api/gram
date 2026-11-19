@@ -24,6 +24,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/tunnel/redisswitch"
 )
 
 const (
@@ -222,7 +223,10 @@ func New[R any](
 	redisOptions := cfg.RedisOptions
 	redisOptions.PoolSize = defaultPoolSize
 	redisOptions.DisableIdentity = true
-	client := redis.NewClient(&redisOptions)
+	// Options copied from a client that follows the Redis instance switch keep
+	// its dialer but lose its command gate; Wrap restores it, so this pool
+	// stops popping replies while the instances are being copied.
+	client := redisswitch.Wrap(&redisOptions)
 	if err := client.Ping(ctx).Err(); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("ping reply inbox redis: %w", err)
