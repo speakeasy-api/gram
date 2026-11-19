@@ -7,6 +7,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 // pluginReadToolNames are the plugin tools the managed assistant may call.
@@ -41,7 +43,7 @@ func requirePluginToolAudiences(t *testing.T, registrar *Registrar) {
 func TestUnavailablePluginToolsKeepReadsForBothAudiencesAndMutationsExternal(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	requirePluginToolAudiences(t, registrar)
 
 	assistant := map[string]bool{}
@@ -79,7 +81,7 @@ func requireRepublishPluginDeclaration(t *testing.T, registrar *Registrar) {
 func TestUnavailableRepublishPluginToolKeepsTheLiveContract(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	requireRepublishPluginDeclaration(t, registrar)
 	require.Equal(t, unavailableRepublishPluginDescription, descriptorByName(t, registrar, operationRepublishPlugin).Description)
 }

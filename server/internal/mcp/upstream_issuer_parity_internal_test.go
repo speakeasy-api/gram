@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
@@ -84,7 +85,7 @@ func TestUpstreamIssuerReconsent(t *testing.T) {
 func TestRecordUpstreamIssuerParity_LogsADisagreementOnce(t *testing.T) {
 	t.Parallel()
 
-	s := &Service{upstreamIssuerParityLog: newOnceLog()}
+	s := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), upstreamIssuerParityLog: newOnceLog()}
 	key := upstreamIssuerParity{
 		organizationID:   "org_a",
 		serverID:         uuid.New(),
@@ -102,7 +103,7 @@ func TestRecordUpstreamIssuerParity_LogsADisagreementOnce(t *testing.T) {
 func TestRecordUpstreamIssuerReconsent_LogsAForcedReconsentOncePerConsenter(t *testing.T) {
 	t.Parallel()
 
-	s := &Service{upstreamIssuerParityLog: newOnceLog()}
+	s := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), upstreamIssuerParityLog: newOnceLog()}
 	serverID := uuid.New()
 	check := upstreamIssuerReconsentCheck{
 		organizationID: "org_a",
@@ -126,7 +127,7 @@ func TestRecordUpstreamIssuerReconsent_LogsAForcedReconsentOncePerConsenter(t *t
 func TestRecordUpstreamIssuerParity_CountsErrorsWithoutPanicking(t *testing.T) {
 	t.Parallel()
 
-	s := &Service{upstreamIssuerParityLog: newOnceLog()}
+	s := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), upstreamIssuerParityLog: newOnceLog()}
 	s.recordUpstreamIssuerParity(t.Context(), discardLogger, upstreamIssuerParity{
 		organizationID:   "org_a",
 		serverID:         uuid.New(),
@@ -161,7 +162,7 @@ func TestDirectUpstreamIssuer_RoutesBothSourcesAndFollowsTheFlag(t *testing.T) {
 	}
 	flags := new(feature.InMemory)
 	flags.SetFlag(feature.FlagUpstreamIssuerFromAssociations, "org_on", true)
-	s := &Service{upstreamIssuerParityLog: newOnceLog(), features: flags}
+	s := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), upstreamIssuerParityLog: newOnceLog(), features: flags}
 
 	require.Equal(t, column, s.directUpstreamIssuer(t.Context(), discardLogger, input("org_off")), "off, the column routes")
 	require.Equal(t, association, s.directUpstreamIssuer(t.Context(), discardLogger, input("org_on")), "on, the associations route")

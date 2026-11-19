@@ -27,7 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -40,8 +39,8 @@ const (
 	verifyRateBurst  = 5
 )
 
-// Lists Speakeasy's curated CIMD preset catalog. The catalog is a compile-time
-// constant with no tenant data, but the endpoint still carries the standard
+// Lists Speakeasy's curated CIMD preset catalog. The catalog is a periodically
+// refreshed database snapshot with no tenant data, but the endpoint still carries the standard
 // project auth: it is only meaningful next to the issuer configuration it
 // accompanies, and an unauthenticated surface would be a needless addition
 // to the public attack area.
@@ -55,7 +54,7 @@ func (s *Service) ListPresets(ctx context.Context, payload *gen.ListPresetsPaylo
 		return nil, err
 	}
 
-	presets := admission.Catalog()
+	presets := s.aiCatalog.Snapshot().Catalog()
 	items := make([]*types.CimdClientPreset, 0, len(presets))
 	for _, preset := range presets {
 		items = append(items, &types.CimdClientPreset{

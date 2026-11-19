@@ -10,6 +10,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	channelsrepo "github.com/speakeasy-api/gram/server/internal/channels/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -310,8 +311,8 @@ func TestChannelsAccessResolvesExactProjectID(t *testing.T) {
 
 func TestChannelsAccessToolContract(t *testing.T) {
 	t.Parallel()
-	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "live", Version: "1"}, nil))
-	unavailable := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "unavailable", Version: "1"}, nil))
+	live := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "live", Version: "1"}, nil))
+	unavailable := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "unavailable", Version: "1"}, nil))
 	registerChannelsAccessTool(live, &ChannelsAccessService{})
 	registerChannelsAccessTool(unavailable, nil)
 	a := descriptorByName(t, live, getMyChannelsAccessName)

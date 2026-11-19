@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -45,9 +46,9 @@ func TestDelegatedDiagnosticsToolsRequireProjectReadDiscovery(t *testing.T) {
 	t.Parallel()
 
 	registrars := []*Registrar{}
-	_, unavailable := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, unavailable := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	registrars = append(registrars, unavailable)
-	live := newRegistrar(newTestMCPServer())
+	live := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerDiagnosticsTools(live, nil)
 	registerToolUsageSummaryTool(live, nil)
 	registerRecentToolCallTools(live, nil)

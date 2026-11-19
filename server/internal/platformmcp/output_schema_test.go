@@ -12,6 +12,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -35,7 +36,7 @@ func TestEveryAdvertisedOutputSchemaAcceptsAPopulatedResult(t *testing.T) {
 	// pool registers the live handlers, whose result types are the ones under
 	// test. Neither handler is ever called.
 	for _, reader := range []Reader{nil, NewPostgresReader(testenv.NewLogger(t), nil)} {
-		server, registrar := newServer(reader, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+		server, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), reader, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 		bindExternalTestPrincipal(server)
 		registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})
 
@@ -91,7 +92,7 @@ func TestEveryAdvertisedOutputSchemaAcceptsAPopulatedResult(t *testing.T) {
 func TestFindAndGetMCPOutputSchemasAcceptPluginMemberships(t *testing.T) {
 	t.Parallel()
 
-	server, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	server, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	bindExternalTestPrincipal(server)
 	registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})
 

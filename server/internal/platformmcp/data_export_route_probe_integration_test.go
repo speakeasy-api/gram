@@ -14,6 +14,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
@@ -262,7 +263,7 @@ func TestDataExportTestEventUnavailableManifestMatchesLive(t *testing.T) {
 	ctx := t.Context()
 	f := newDataExportTestEventFixture(t, ctx, "platform_mcp_data_export_test_event_manifest", http.StatusOK)
 	describe := func(service *DataExportTestEventService) Descriptor {
-		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "data-export-test-event", Version: "0.0.1"}, nil))
+		registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "data-export-test-event", Version: "0.0.1"}, nil))
 		registrar.withProjects(&RegistrationStore{db: f.conn, icons: nil})
 		registerDataExportTestEventTool(registrar, service)
 		descriptors := registrar.Descriptors()

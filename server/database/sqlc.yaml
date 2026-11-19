@@ -1314,6 +1314,16 @@ sql:
         omit_unused_structs: true
 
   - schema: [schema.sql, sqlc_retired_columns.sql]
+    queries: ../internal/aivendors/catalogseed/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/aivendors/catalogseed/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: [schema.sql, sqlc_retired_columns.sql]
     queries: ../internal/roledistribution/queries.sql
     engine: postgresql
     gen:
@@ -1361,4 +1371,16 @@ sql:
         package: "fixturerepo"
         out: "../internal/channels/authn/fixturerepo"
         sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: [schema.sql, sqlc_retired_columns.sql]
+    queries: ../internal/aivendors/queries.sql
+    engine: postgresql
+    database:
+      managed: true
+    gen:
+      go:
+        package: repo
+        out: ../internal/aivendors/repo
+        sql_package: pgx/v5
         omit_unused_structs: true

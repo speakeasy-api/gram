@@ -14,6 +14,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -461,7 +462,7 @@ func TestRiskFindingListToolsMCPInProcess(t *testing.T) {
 	f := newFindingListFixture(t)
 	f.clickhouse.rows = append(f.clickhouse.rows, f.clickhouse.rows[1])
 	server := mcp.NewServer(&mcp.Implementation{Name: "finding-list-test", Version: "1"}, nil)
-	reg := newRegistrar(server)
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
 	registerRiskFindingListTools(reg, &budgetedRiskFindingList{service: f.service, budget: allowBudget()})
 	for _, name := range []string{riskFindingListToolName, riskFindingByChatToolName, riskRuleBreakdownToolName} {
@@ -550,7 +551,7 @@ func TestRiskFindingListToolsStub(t *testing.T) {
 	t.Parallel()
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "finding-list-stub", Version: "1"}, nil)
-	reg := newRegistrar(server)
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	registerRiskFindingListTools(reg, nil)
 	for name, arguments := range map[string]string{riskFindingListToolName: `{}`, riskFindingByChatToolName: `{}`, riskRuleBreakdownToolName: `{"category":"secrets"}`} {
 		d := descriptorByName(t, reg, name)
@@ -564,7 +565,7 @@ func TestRiskFindingListToolsStub(t *testing.T) {
 
 	// The whole-server composition serves the stubs without a Postgres reader
 	// and exactly once each.
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	names := map[string]int{}
 	for _, d := range registrar.Descriptors() {
 		names[d.Name]++

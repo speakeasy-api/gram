@@ -12,6 +12,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	gatewaygen "github.com/speakeasy-api/gram/server/gen/gateway_sessions"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -87,8 +88,8 @@ func TestGatewaySessionToolFilteringAndPrivacy(t *testing.T) {
 
 func TestGatewaySessionToolContract(t *testing.T) {
 	t.Parallel()
-	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "live", Version: "1"}, nil))
-	unavailable := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "unavailable", Version: "1"}, nil))
+	live := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "live", Version: "1"}, nil))
+	unavailable := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "unavailable", Version: "1"}, nil))
 	registerGatewaySessionTool(live, gatewaySessionManagementFunc(func(context.Context, *gatewaygen.ListGatewaySessionsPayload) (*gatewaygen.GatewaySessionsResult, error) {
 		return nil, ErrUnavailable
 	}))
@@ -116,7 +117,7 @@ func TestGatewaySessionToolInvocationRefusals(t *testing.T) {
 	principal := Principal{OrganizationID: "test-org", UserID: "test-user"}
 	ctx := ContextWithPrincipal(contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}), principal)
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID)})
-	reg := newRegistrar(newTestMCPServer())
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerGatewaySessionTool(reg, gatewaySessionManagementFunc(func(context.Context, *gatewaygen.ListGatewaySessionsPayload) (*gatewaygen.GatewaySessionsResult, error) {
 		return nil, oops.E(oops.CodeBadRequest, nil, "private internal details")
 	}))
@@ -136,7 +137,7 @@ func TestGatewaySessionToolInvocationRefusals(t *testing.T) {
 
 func TestGatewaySessionInputBounds(t *testing.T) {
 	t.Parallel()
-	reg := newRegistrar(newTestMCPServer())
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerGatewaySessionTool(reg, nil)
 	var schema jsonschema.Schema
 	require.NoError(t, json.Unmarshal(descriptorByName(t, reg, listGatewaySessionsToolName).InputSchema, &schema))

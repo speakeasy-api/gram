@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/assistant_platform_mcp_adapter"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -189,7 +190,7 @@ func TestAssistantPlatformTool_WorkloadTurnIsToldItNeedsAPerson(t *testing.T) {
 	workloadCtx = contextvalues.SetAssistantPrincipal(workloadCtx, contextvalues.AssistantPrincipal{AssistantID: uuid.New(), ThreadID: uuid.New()})
 
 	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(ti.conn, ti.authzEngine)
-	descriptors := platformmcp.NewRuntimeWithLifecycle(
+	descriptors := platformmcp.NewRuntimeWithLifecycle(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
 		ti.logger, nil, nil, authorizer, "", "test-cursor-key",
 		platformmcp.NewPostgresReader(ti.logger, ti.conn).WithAuthorization(ti.authzEngine), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		platformmcp.CatalogDescriptor{},

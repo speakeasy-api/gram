@@ -9,6 +9,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -44,7 +45,7 @@ func TestOrganizationGatewayProjectDiscovery(t *testing.T) {
 			return next(contextWithPrincipal(ctx, principal), method, req)
 		}
 	})
-	reg := newRegistrar(server)
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
 	registerOrganizationGatewayTool(reg, service)
 	session := connectTestClient(t, server)
@@ -102,7 +103,7 @@ func TestOrganizationGatewayProjectContract(t *testing.T) {
 	_, _, service, _, _ := newOrganizationGatewayFixture(t)
 	var liveSchema []byte
 	for _, svc := range []*OrganizationGatewayService{service, nil} {
-		reg := newRegistrar(newTestMCPServer())
+		reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 		registerOrganizationGatewayTool(reg, svc)
 		require.Empty(t, reg.For(AudienceAssistant))
 		require.Len(t, reg.Descriptors(), 2)
@@ -160,7 +161,7 @@ func TestOrganizationGatewayProjectReadableRefusals(t *testing.T) {
 	ctx, _, service, principal, _ := newOrganizationGatewayFixture(t)
 	ctx = contextWithPrincipal(ctx, principal)
 	for _, svc := range []*OrganizationGatewayService{nil, service} {
-		reg := newRegistrar(newTestMCPServer())
+		reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 		reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
 		registerOrganizationGatewayTool(reg, svc)
 		d := descriptorByName(t, reg, "get_my_project_gateway")

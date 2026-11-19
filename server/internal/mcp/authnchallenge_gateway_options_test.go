@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
@@ -18,13 +19,13 @@ import (
 
 func TestConsentGatewayModeChoices(t *testing.T) {
 	t.Parallel()
-	service := &Service{codeExecutor: codemode.Disabled{}}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), codeExecutor: codemode.Disabled{}}
 	endpoint := &ResolvedMcpEndpoint{MetaMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, OrganizationID: "org_test", ProjectID: uuid.New()}
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org_test", OrganizationSlug: "test-org"})
 	_, err := service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "code_mode")
 	requireOopsCode(t, err, oops.CodeUnavailable, "a runtime that cannot start runners is retryable")
 	entitled := false
-	available := &Service{codeExecutor: availableCodeExecutor{}, platformFeatureChecker: func(context.Context, string, string) bool { return entitled }}
+	available := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), codeExecutor: availableCodeExecutor{}, platformFeatureChecker: func(context.Context, string, string) bool { return entitled }}
 	_, err = available.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "code_mode")
 	requireOopsCode(t, err, oops.CodeForbidden, "an organization without the entitlement is refused")
 	entitled = true
@@ -59,7 +60,7 @@ func TestConsentGatewayModeChoices(t *testing.T) {
 // nothing for first-party and agent approvals, which follow the live default.
 func TestConsentGatewayDefaultRecordsMode(t *testing.T) {
 	t.Parallel()
-	service := &Service{codeExecutor: codemode.Disabled{}}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), codeExecutor: codemode.Disabled{}}
 	organizationGateway := &ResolvedMcpEndpoint{MetaMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, OrganizationID: "org_test", RouteBase: mcproute.OrganizationGateway}
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org_test", OrganizationSlug: "test-org"})
 	policy, err := service.consentGatewayPolicy(ctx, organizationGateway, AuthnChallengeState{}, "", "")

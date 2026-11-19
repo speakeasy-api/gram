@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
@@ -94,7 +95,7 @@ func TestLogReadToolsDiscoverability(t *testing.T) {
 	t.Parallel()
 
 	principal := testPrincipal()
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	admin := []authz.Grant{
 		authz.NewGrant(authz.ScopeProjectRead, toolCallSearchTestProject),
 		authz.NewGrant(authz.ScopeProjectWrite, toolCallSearchTestProject),

@@ -11,6 +11,7 @@ import (
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -41,7 +42,7 @@ func TestConnectionRecoveryCompletionCacheReadFailure(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			s := &Service{connectionRecoveryCache: cache.NewTypedObjectCache[connectionRecovery](testenv.NewLogger(t), recoveryReadFailureCache{err: tt.cause}, cache.SuffixNone)}
+			s := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connectionRecoveryCache: cache.NewTypedObjectCache[connectionRecovery](testenv.NewLogger(t), recoveryReadFailureCache{err: tt.cause}, cache.SuffixNone)}
 			req := httptest.NewRequest("GET", connectionRecoveryDonePath, nil)
 			handled, err := s.verifyConnectionRecoveryCompletion(req, remotesessions.RemoteLoginState{FinalRedirectURI: connectionRecoveryDonePath, ParentChallengeID: "login"})
 			require.True(t, handled)
@@ -65,7 +66,7 @@ func TestConnectionRecoveryCompletionInvalidStoredLogin(t *testing.T) {
 		t.Run(login.ID, func(t *testing.T) {
 			t.Parallel()
 			backend := testenv.NewMemoryCache()
-			s := &Service{connectionRecoveryCache: cache.NewTypedObjectCache[connectionRecovery](testenv.NewLogger(t), backend, cache.SuffixNone)}
+			s := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connectionRecoveryCache: cache.NewTypedObjectCache[connectionRecovery](testenv.NewLogger(t), backend, cache.SuffixNone)}
 			require.NoError(t, backend.Set(t.Context(), "connectionRecovery:login:", login, time.Minute))
 			handled, err := s.verifyConnectionRecoveryCompletion(httptest.NewRequest("GET", connectionRecoveryDonePath, nil), remotesessions.RemoteLoginState{FinalRedirectURI: connectionRecoveryDonePath, ParentChallengeID: "login"})
 			require.True(t, handled)

@@ -13,6 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -40,8 +41,8 @@ func (s assertionReuseManagementStub) UpdateIssuer(ctx context.Context, p *gen.U
 
 func TestWorkloadAssertionReuseToolContracts(t *testing.T) {
 	t.Parallel()
-	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "live", Version: "1"}, nil))
-	unavailable := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "unavailable", Version: "1"}, nil))
+	live := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "live", Version: "1"}, nil))
+	unavailable := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "unavailable", Version: "1"}, nil))
 	registerWorkloadAssertionReuseTools(live, &WorkloadAssertionReuseService{})
 	registerWorkloadAssertionReuseTools(unavailable, nil)
 	unavailable.withProjects(slugProjects{"workload-project": uuid.New()})
@@ -285,7 +286,7 @@ func TestWorkloadAssertionReuseAPIAndMCPRequireSameWriteScope(t *testing.T) {
 
 func TestWorkloadAssertionReuseDiscoveryUsesExistingScopes(t *testing.T) {
 	t.Parallel()
-	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "policy", Version: "1"}, nil))
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "policy", Version: "1"}, nil))
 	registerWorkloadAssertionReuseTools(reg, nil)
 	p := Principal{OrganizationID: "test-org", UserID: "test-user"}
 	tools := []*mcp.Tool{{Name: "get_workload_assertion_reuse"}, {Name: "set_workload_assertion_reuse"}}
@@ -319,7 +320,7 @@ func TestWorkloadAssertionReuseDiscoveryUsesExistingScopes(t *testing.T) {
 
 func TestWorkloadAssertionReuseSchemaRejectsMissingOrUntypedPolicy(t *testing.T) {
 	t.Parallel()
-	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "policy", Version: "1"}, nil))
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "policy", Version: "1"}, nil))
 	registerWorkloadAssertionReuseTools(reg, nil)
 	descriptor := descriptorByName(t, reg, "set_workload_assertion_reuse")
 	for _, value := range []any{nil, "true", 1} {

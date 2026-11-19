@@ -13,6 +13,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -61,7 +62,7 @@ func TestHarnessForClient(t *testing.T) {
 		testOtherClientID:                                       "unknown",
 		"00000000-0000-0000-0000-000000000000":                  "unknown",
 	} {
-		require.Equal(t, want, harnessForClient(clientID), clientID)
+		require.Equal(t, want, harnessForClient(aivendors.NewSnapshot(aivendors.Products()), clientID), clientID)
 	}
 }
 
@@ -555,7 +556,7 @@ func discoveryToolError(t *testing.T, runtime *Runtime, name string, arguments m
 func TestFirstRunToolsFitHostBudget(t *testing.T) {
 	t.Parallel()
 
-	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "first-run-budget"}, nil))
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "first-run-budget"}, nil))
 	registerCatalogTools(reg, nil, OperationBudget{}, nil, nil, nil)
 	registerCandidateInspectionTool(reg, nil, nil, nil, OperationBudget{})
 	registerCatalogRegistrationTool(reg, &RegistrationService{}, nil)

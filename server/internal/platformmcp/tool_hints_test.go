@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -28,7 +29,7 @@ func TestEveryAdvertisedToolDeclaresExplicitHints(t *testing.T) {
 
 	seen := map[string]*mcp.ToolAnnotations{}
 	for _, reader := range []Reader{nil, NewPostgresReader(testenv.NewLogger(t), nil)} {
-		server, registrar := newServer(reader, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+		server, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), reader, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 		bindExternalTestPrincipal(server)
 		registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})
 

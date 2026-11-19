@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 
 	"github.com/google/uuid"
@@ -13,7 +14,7 @@ import (
 
 func TestCodeBridgeAdmissionAllowsCallerOutsideOrganization(t *testing.T) {
 	t.Parallel()
-	backend, err := newMetaCodeBackend(t.Context(), &Service{}, &metaGateContext{}, nil, endpointrepo.McpEndpoint{}, uuid.NullUUID{}, nil, nil)
+	backend, err := newMetaCodeBackend(t.Context(), &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products()))}, &metaGateContext{}, nil, endpointrepo.McpEndpoint{}, uuid.NullUUID{}, nil, nil)
 	require.NoError(t, err, "a caller outside the organization needs no user grant boundary")
 	require.Empty(t, backend.admitted)
 	require.False(t, backend.gate.authenticated)
@@ -37,7 +38,7 @@ func TestCodeMemberSessionCallerScopeIgnoresGrantOrder(t *testing.T) {
 	makeBackend := func(grants []authz.Grant) *metaCodeBackend {
 		ctx := authz.GrantsToContext(t.Context(), grants)
 		ctx = context.WithValue(ctx, metaCodeCredentialKey{}, "credential")
-		backend, err := newMetaCodeBackend(ctx, &Service{codeSessions: newCodeMemberSessions(nil, 0, 0, 0, 1)}, &metaGateContext{authenticated: true}, nil, endpointrepo.McpEndpoint{}, uuid.NullUUID{}, nil, nil)
+		backend, err := newMetaCodeBackend(ctx, &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), codeSessions: newCodeMemberSessions(nil, 0, 0, 0, 1)}, &metaGateContext{authenticated: true}, nil, endpointrepo.McpEndpoint{}, uuid.NullUUID{}, nil, nil)
 		require.NoError(t, err)
 		return backend
 	}

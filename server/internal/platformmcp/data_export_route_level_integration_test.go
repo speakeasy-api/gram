@@ -9,6 +9,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -187,7 +188,7 @@ func TestSetDataExportMinSeverityUnavailableManifestMatchesLive(t *testing.T) {
 	ctx := t.Context()
 	f := newDataExportToggleFixture(t, ctx, "platform_mcp_data_export_level_manifest")
 	describe := func(service *DataExportRouteToggleService) Descriptor {
-		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "data-export-level", Version: "0.0.1"}, nil))
+		registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "data-export-level", Version: "0.0.1"}, nil))
 		registrar.withProjects(&RegistrationStore{db: f.conn, icons: nil})
 		registerDataExportLevelTool(registrar, service)
 		descriptors := registrar.Descriptors()

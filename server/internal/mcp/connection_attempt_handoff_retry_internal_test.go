@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -32,7 +33,7 @@ func TestFederatedOnwardPreservesResponse(t *testing.T) {
 			rec := mcpconnectionattemptstest.New(t)
 			endpoint := directEndpoint()
 			tracker := rec.Recorder.Track(connectionScope(endpoint, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepInboundSignIn)
-			tracker.Attach(openState().connectionAttempt(endpoint))
+			tracker.Attach(openState().connectionAttempt(aivendors.NewSnapshot(aivendors.Products()), endpoint))
 			tracker.Consumed()
 			got := federatedOnward(t.Context(), tracker, tt.err)
 			if tt.err == nil {
@@ -63,7 +64,7 @@ func TestRemoteSessionRefusalLeavesAttemptRetryable(t *testing.T) {
 		t.Run(string(tt.verdict), func(t *testing.T) {
 			t.Parallel()
 			rec := mcpconnectionattemptstest.New(t)
-			service := &Service{connections: rec.Recorder}
+			service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connections: rec.Recorder}
 			endpoint, state := directEndpoint(), openState()
 			session := uuid.New()
 			service.recordRemoteSessionVerdict(t.Context(), mcpconnectionattempts.FromRequest(nil), endpoint, state, remotesessions.Client{}, validationTarget{}, session, tt.verdict, probeFailure{}, remotesessionmetrics.ValidationTriggerVerify)

@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -693,7 +694,7 @@ func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, op
 		runtimeAuthorizer = NewLiveOrgAdminAuthorizer(conn, authzEngine)
 	}
 	runtime := NewRuntimeWithLifecycle(
-		logger, &testAuthenticator{principal: principal}, testGate{enabled: true}, runtimeAuthorizer,
+		aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), logger, &testAuthenticator{principal: principal}, testGate{enabled: true}, runtimeAuthorizer,
 		"", "test-cursor-key", nil, nil, nil, nil, nil, nil, nil, nil, skillsSurface, nil, nil, nil, CatalogDescriptor{},
 	)
 	server := httptest.NewServer(runtime.Handler())

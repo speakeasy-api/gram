@@ -6,12 +6,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 func TestAccessRoleMutationToolsAreStableExternalOnlyMutations(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	registrar.withProjects(slugProjects{"access-project": uuid.MustParse("00000000-0000-0000-0000-000000000001")})
 	for _, name := range []string{operationCreateMCPAccessRole, operationUpdateMCPAccessRole, operationAssignMCPAccessRole, operationConfigureInferenceAccessRole, operationConfigureMemoryAccessRole, operationSetMCPRoleAuthClientAccess} {
 		descriptor := descriptorByName(t, registrar, name)
@@ -51,7 +53,7 @@ func TestAccessRoleMutationToolsAreStableExternalOnlyMutations(t *testing.T) {
 
 func TestCredentialOfferDescribesRemovalBoundary(t *testing.T) {
 	t.Parallel()
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	descriptor := descriptorByName(t, registrar, operationOfferMCPUpstreamCredential)
 	require.Equal(t, externalOnly, descriptor.Meta.Audiences)
 	require.Equal(t, ExternalAuthorizationOrgAdmin, descriptor.Meta.Authorization)

@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 var (
@@ -40,18 +41,20 @@ type shadowAILibraryReader interface {
 // PostgresShadowAILibrary reads the library from the agent tables, where
 // Overlay composes it per read — no snapshot to go stale against the defaults.
 type PostgresShadowAILibrary struct {
+	aiCatalog *aivendors.Store
+
 	queries *agentrepo.Queries
 }
 
-func NewPostgresShadowAILibrary(queries *agentrepo.Queries) *PostgresShadowAILibrary {
-	return &PostgresShadowAILibrary{queries: queries}
+func NewPostgresShadowAILibrary(aiCatalog *aivendors.Store, queries *agentrepo.Queries) *PostgresShadowAILibrary {
+	return &PostgresShadowAILibrary{aiCatalog: aiCatalog, queries: queries}
 }
 
 func (l *PostgresShadowAILibrary) LoadLibrary(ctx context.Context, organizationID string) (*aitargets.OrganizationList, error) {
 	if l == nil || l.queries == nil {
 		return nil, ErrShadowAIUnavailable
 	}
-	list, err := aitargets.LoadOrganizationList(ctx, l.queries, organizationID)
+	list, err := aitargets.LoadOrganizationList(ctx, l.queries, organizationID, l.aiCatalog.Snapshot())
 	if err != nil {
 		return nil, fmt.Errorf("load ai scan library: %w", err)
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -121,7 +122,7 @@ func TestSetupConnectionFollowsTypedOffersUnderEnforcement(t *testing.T) {
 			}
 			serverID := typedCatalogServer(t, ctx, conn, fixture, 1)
 
-			prober := NewRemoteMCPReadinessProber(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), fixture.policy, fixture.sessions)
+			prober := NewRemoteMCPReadinessProber(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), fixture.policy, fixture.sessions)
 			result, err := prober.TestUserConnection(ctx, fixture.principal.OrganizationID, fixture.principal.UserID, fixture.projectID, serverID, fixture.remoteID, fixture.userSessionIssuerID)
 			require.NoError(t, err)
 			require.Equal(t, tc.status, result.Status)
@@ -141,7 +142,7 @@ func TestRemoteMCPReadinessChoosesFirstUsableTypedOffer(t *testing.T) {
 	_, err = productfeaturesrepo.New(conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: f.principal.OrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
 	require.NoError(t, err)
 	serverID := typedCatalogServer(t, ctx, conn, f, 2)
-	prober := NewRemoteMCPReadinessProber(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), f.policy, f.sessions)
+	prober := NewRemoteMCPReadinessProber(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), f.policy, f.sessions)
 	clients, err := prober.offeredRegistrations(ctx, f.principal.OrganizationID, f.projectID, []uuid.UUID{serverID}, []string{authz.AuthClientTypeRemoteSession})
 	require.NoError(t, err)
 	require.Len(t, clients, 2)

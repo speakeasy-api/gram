@@ -13,6 +13,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -724,8 +725,8 @@ func TestUserMetricsTools_OrdersBrokenToolsFirstAndReportsTruncation(t *testing.
 func TestUserSearchTools_DeclareOrgAdminReadsForBothAudiences(t *testing.T) {
 	t.Parallel()
 
-	_, unavailable := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
-	live := newRegistrar(newTestMCPServer())
+	_, unavailable := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	live := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerUserSearchTools(live, nil)
 
 	for _, registrar := range []*Registrar{unavailable, live} {
@@ -751,7 +752,7 @@ func TestUserSearchTools_DeclareOrgAdminReadsForBothAudiences(t *testing.T) {
 func TestUserSearchTools_UnavailableStubsRefuseReadably(t *testing.T) {
 	t.Parallel()
 
-	server, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	server, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	bindExternalTestPrincipal(server)
 	registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})
 

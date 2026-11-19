@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -43,7 +44,7 @@ func newSkillsTestHandler(t *testing.T, gate SkillsGate) http.Handler {
 
 	catalog, err := mcpskills.NewEmbeddedCatalog()
 	require.NoError(t, err)
-	runtime, err := NewRuntime(testenv.NewLogger(t), &testAuthenticator{principal: testPrincipal()}, testGate{enabled: true}, &testAuthorizer{}, "", "test-cursor-key", nil, nil, nil, nil, nil).WithSkills(catalog, gate)
+	runtime, err := NewRuntime(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), testenv.NewLogger(t), &testAuthenticator{principal: testPrincipal()}, testGate{enabled: true}, &testAuthorizer{}, "", "test-cursor-key", nil, nil, nil, nil, nil).WithSkills(catalog, gate)
 	require.NoError(t, err)
 	return runtime.Handler()
 }

@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 func TestParseRiskFindingIDsValidatesAndDeduplicates(t *testing.T) {
@@ -146,7 +148,7 @@ func TestRiskFindingFalsePositiveToolSchemasBoundInput(t *testing.T) {
 	t.Parallel()
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "risk-findings-test", Version: "0.0.1"}, nil)
-	reg := newRegistrar(server)
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	registerUnavailableRiskTools(reg)
 
 	for _, name := range []string{operationMarkRiskFindingsFalsePositive, operationUnmarkRiskFindingsFalsePositive} {

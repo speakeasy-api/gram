@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/device_integrations"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations"
 )
@@ -240,8 +241,8 @@ func TestDeviceCoverageGetCoverageRejectsUnknownProviderAndWrapsReadErrors(t *te
 func TestDeviceCoverageToolsMatchWhenUnavailable(t *testing.T) {
 	t.Parallel()
 
-	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "device-coverage-live", Version: "0.0.1"}, nil))
-	unavailable := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "device-coverage-unavailable", Version: "0.0.1"}, nil))
+	live := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "device-coverage-live", Version: "0.0.1"}, nil))
+	unavailable := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "device-coverage-unavailable", Version: "0.0.1"}, nil))
 	registerDeviceCoverageTools(live, NewDeviceCoverageService(&stubDeviceCoverageReader{}, &stubOrgReadAuthorizer{}, allowingBudget()))
 	// An invalid service falls back to the unavailable tools.
 	registerDeviceCoverageTools(unavailable, nil)

@@ -8,6 +8,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
@@ -26,7 +27,7 @@ func TestCardResourceIsListedAndReadable(t *testing.T) {
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "card-resource"}, nil)
 	bindExternalTestPrincipal(server)
-	reg := newRegistrar(server)
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
 	registerCardResource(reg)
 	session := connectTestClient(t, server)
@@ -76,7 +77,7 @@ func TestCardToolsLinkTheServedCardView(t *testing.T) {
 	registrations := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, &recordingRegistrationStore{}).
 		WithDirectRemoteInspector(&testDirectRemoteInspector{})
 	registrations.budgets.Registration = OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}
-	server, _ := newServer(nil, nil, registrations, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	server, _ := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, registrations, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	var served []string
 	for resource, err := range connectTestClient(t, server).Resources(t.Context(), nil) {
 		require.NoError(t, err)

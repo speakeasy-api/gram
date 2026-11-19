@@ -9,6 +9,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_approval"
@@ -60,7 +61,7 @@ func (s stubMCPReviewProjects) ResolveReviewProject(_ context.Context, _ Princip
 }
 
 func liveReviewRequestRegistrar(service MCPReviewRequestService, projects MCPReviewProjectResolver) *Registrar {
-	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "review-request-test", Version: "test"}, nil))
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "review-request-test", Version: "test"}, nil))
 	registerReviewRequestTools(registrar, service, projects, allowBudget(), nil)
 	return registrar
 }
@@ -104,7 +105,7 @@ func TestMCPReviewRequestBudgetStopsBeforeEvidenceGathering(t *testing.T) {
 
 	service := &stubMCPReviewRequests{}
 	denied := OperationBudget{Connection: &recordingOperationLimiter{result: ratelimit.Result{Allowed: false}}, Organization: allowOperationLimiter{}}
-	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "review-request-test", Version: "test"}, nil))
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "review-request-test", Version: "test"}, nil))
 	projectID := uuid.New()
 	registerReviewRequestTools(registrar, service, stubMCPReviewProjects{project: ResolvedProject{ID: projectID}}, denied, nil)
 	registrar.withProjects(slugProjects{"project": projectID})
@@ -162,7 +163,7 @@ func TestMCPReviewRequestToolsReturnTheReviewPage(t *testing.T) {
 	createInput := json.RawMessage(`{"project_slug":"project","target_kind":"server_url","target":"https://example.test/mcp","justification":"needed for work"}`)
 	readInput := json.RawMessage(`{"project_slug":"project","request_id":"` + requestID.String() + `"}`)
 	register := func(service *stubMCPReviewRequests, links *stubReviewLinks) *Registrar {
-		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "review-request-test", Version: "test"}, nil))
+		registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "review-request-test", Version: "test"}, nil))
 		registerReviewRequestTools(registrar, service, stubMCPReviewProjects{project: ResolvedProject{ID: projectID, Name: "Project", Slug: "project"}}, allowBudget(), links)
 		registrar.withProjects(slugProjects{"project": projectID})
 		return registrar

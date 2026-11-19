@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -87,7 +88,7 @@ func TestUpdateCodeReconnectApprovalWinsEitherOrder(t *testing.T) {
 		t.Run(map[bool]string{false: "approve then cancel", true: "cancel then approve"}[cancelFirst], func(t *testing.T) {
 			t.Parallel()
 			adapter := &popupGrantCASCache{Cache: testenv.NewMemoryCache()}
-			service := &Service{authnChallengeCache: cache.NewTypedObjectCache[AuthnChallengeState](testenv.NewLogger(t), adapter, cache.SuffixNone)}
+			service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), authnChallengeCache: cache.NewTypedObjectCache[AuthnChallengeState](testenv.NewLogger(t), adapter, cache.SuffixNone)}
 			state := AuthnChallengeState{ID: uuid.NewString(), CreatedAt: time.Now(), CodeReconnect: &CodeReconnectBinding{CatalogID: uuid.New()}}
 			require.NoError(t, service.authnChallengeCache.Store(t.Context(), state))
 			approved := *state.CodeReconnect
@@ -112,7 +113,7 @@ func TestUpdateCodeReconnectApprovalWinsEitherOrder(t *testing.T) {
 func TestUpdateCodeReconnectPreservesCompletedApproval(t *testing.T) {
 	t.Parallel()
 	adapter := &popupGrantCASCache{Cache: testenv.NewMemoryCache()}
-	service := &Service{authnChallengeCache: cache.NewTypedObjectCache[AuthnChallengeState](testenv.NewLogger(t), adapter, cache.SuffixNone)}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), authnChallengeCache: cache.NewTypedObjectCache[AuthnChallengeState](testenv.NewLogger(t), adapter, cache.SuffixNone)}
 	current := AuthnChallengeState{ID: uuid.NewString(), CreatedAt: time.Now(), CodeReconnect: &CodeReconnectBinding{CatalogID: uuid.New(), CredentialID: uuid.New(), CatalogComplete: true}}
 	require.NoError(t, service.authnChallengeCache.Store(t.Context(), current))
 	stale := *current.CodeReconnect

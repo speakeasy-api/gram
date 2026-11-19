@@ -11,6 +11,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 )
 
@@ -33,7 +34,7 @@ func newBrowserCatalogRegistrationHarnessWithAuthSetup(t *testing.T, ctx context
 		remoteURL:        "https://reviewed.example.test/mcp",
 	}}, &testRegistrationGate{enabled: true}, store).WithDashboardURL(dashboardURL)
 
-	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
 	registerCatalogRegistrationTool(reg, registrations, NewOnboardingService(conn))
 	return principal, project, reg
 }

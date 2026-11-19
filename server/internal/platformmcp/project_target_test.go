@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -56,7 +57,7 @@ func TestToolsResolveTheProjectSlugBeforeTheHandler(t *testing.T) {
 	t.Parallel()
 
 	projectID := uuid.New()
-	reg := newRegistrar(newTestMCPServer())
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	reg.withProjects(slugProjects{"payments": projectID})
 	addTool(reg, &mcp.Tool{Name: "project_target"}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(_ context.Context, _ *mcp.CallToolRequest, input projectSlugTargetInput) (*mcp.CallToolResult, projectSlugTargetOutput, error) {
 		return nil, projectSlugTargetOutput{ProjectID: input.ProjectID, ProjectSlug: input.ProjectSlug}, nil
@@ -76,7 +77,7 @@ func TestToolsResolveTheProjectSlugBeforeTheHandler(t *testing.T) {
 		require.Contains(t, refusal.Payload, "project_slug is required")
 	}
 
-	defaultable := newRegistrar(newTestMCPServer())
+	defaultable := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	defaultable.withProjects(slugProjects{"payments": projectID})
 	addTool(defaultable, &mcp.Tool{Name: "project_target"}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeDefaultable}, func(_ context.Context, _ *mcp.CallToolRequest, input projectSlugTargetInput) (*mcp.CallToolResult, projectSlugTargetOutput, error) {
 		return nil, projectSlugTargetOutput{ProjectID: input.ProjectID}, nil
@@ -85,7 +86,7 @@ func TestToolsResolveTheProjectSlugBeforeTheHandler(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, output.ProjectID, "a defaultable tool resolves an omitted project itself")
 
-	unresolved := newRegistrar(newTestMCPServer())
+	unresolved := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	addTool(unresolved, &mcp.Tool{Name: "project_target"}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(_ context.Context, _ *mcp.CallToolRequest, input projectSlugTargetInput) (*mcp.CallToolResult, projectSlugTargetOutput, error) {
 		return nil, projectSlugTargetOutput{ProjectID: input.ProjectID}, nil
 	})
@@ -103,7 +104,7 @@ func TestHiddenProjectIDRequiresProjectSlug(t *testing.T) {
 		ProjectID string `json:"-"`
 	}
 	require.Panics(t, func() {
-		addTool(newRegistrar(newTestMCPServer()), &mcp.Tool{Name: "no_slug"}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(context.Context, *mcp.CallToolRequest, input) (*mcp.CallToolResult, projectSlugTargetOutput, error) {
+		addTool(newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer()), &mcp.Tool{Name: "no_slug"}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(context.Context, *mcp.CallToolRequest, input) (*mcp.CallToolResult, projectSlugTargetOutput, error) {
 			return nil, projectSlugTargetOutput{}, nil
 		})
 	})

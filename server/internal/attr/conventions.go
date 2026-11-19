@@ -158,6 +158,10 @@ const (
 	RegistryInvalidPathsKey          = attribute.Key("gram.registry.entry.invalid_paths") // JSON Pointers to the record fields that failed validation
 	RegistryEntryNameKey             = attribute.Key("gram.registry.entry.name")
 	RegistrySeedOutcomeKey           = attribute.Key("gram.registry.seed.outcome")
+	AICatalogSeedVersionKey          = attribute.Key("gram.ai_catalog.seed.version")
+	AICatalogProductsInsertedKey     = attribute.Key("gram.ai_catalog.products_inserted")
+	AICatalogDocumentsInsertedKey    = attribute.Key("gram.ai_catalog.documents_inserted")
+	AICatalogDecisionsLinkedKey      = attribute.Key("gram.ai_catalog.decisions_linked")
 	AdminOIDCSubjectKey              = attribute.Key("gram.admin.oidc_subject")
 	AuthSourceKey                    = attribute.Key("gram.auth.source")
 	AuthorizationOrganizationIDKey   = attribute.Key("gram.authorization.organization_id")
@@ -4595,4 +4599,16 @@ func SlogRegistryInvalidPaths(v []string) slog.Attr {
 func SlogRegistryEntryName(v string) slog.Attr { return slog.String(string(RegistryEntryNameKey), v) }
 func SlogRegistrySeedOutcome(v string) slog.Attr {
 	return slog.String(string(RegistrySeedOutcomeKey), v)
+}
+func SlogAICatalogSeedVersion(v string) slog.Attr {
+	return slog.String(string(AICatalogSeedVersionKey), v)
+}
+func SlogAICatalogProductsInserted(v int64) slog.Attr {
+	return slog.Int64(string(AICatalogProductsInsertedKey), v)
+}
+func SlogAICatalogDocumentsInserted(v int64) slog.Attr {
+	return slog.Int64(string(AICatalogDocumentsInsertedKey), v)
+}
+func SlogAICatalogDecisionsLinked(v int64) slog.Attr {
+	return slog.Int64(string(AICatalogDecisionsLinkedKey), v)
 }

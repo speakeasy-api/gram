@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -80,7 +81,7 @@ func TestDirectConsentPickDoesNotBuildCardsForInapplicableEndpoints(t *testing.T
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			// No card-building dependencies: the caller supplies its already-built cards.
-			picks, err := (&Service{}).consentDirectAuthClientPick(t.Context(), &tc.endpoint, tc.state, "", nil, nil)
+			picks, err := (&Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products()))}).consentDirectAuthClientPick(t.Context(), &tc.endpoint, tc.state, "", nil, nil)
 			require.NoError(t, err)
 			require.Nil(t, picks)
 		})
@@ -122,7 +123,7 @@ func TestConsentSkipsARefusedConnectionInAnOutage(t *testing.T) {
 			member := metaMember{slug: "db", serverID: serverID, backend: metaMemberBackendProxied, associatedClients: map[uuid.UUID]bool{refusedID: true, healthyID: true}}
 			cards := []remoteSessionCard{refused, {ClientID: healthyID.String(), Connected: true}}
 			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
-			choices, err := (&Service{}).gatewayConsentServiceChoices(t.Context(), request, endpoint, urn.NewUserSubject("user_1"), []metaMember{member}, cards)
+			choices, err := (&Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products()))}).gatewayConsentServiceChoices(t.Context(), request, endpoint, urn.NewUserSubject("user_1"), []metaMember{member}, cards)
 			require.NoError(t, err)
 			require.Empty(t, choices, "one usable connection leaves nothing to choose between")
 		})
@@ -143,7 +144,7 @@ func TestConsentKeepsAHealthyConnectionInAnOutage(t *testing.T) {
 	member := metaMember{slug: "db", serverID: serverID, backend: metaMemberBackendProxied, associatedClients: map[uuid.UUID]bool{outageID: true, healthyID: true}}
 	cards := []remoteSessionCard{outage, {ClientID: healthyID.String(), Connected: true}}
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
-	choices, err := (&Service{db: pool}).gatewayConsentServiceChoices(t.Context(), request, endpoint, urn.NewUserSubject("user_1"), []metaMember{member}, cards)
+	choices, err := (&Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), db: pool}).gatewayConsentServiceChoices(t.Context(), request, endpoint, urn.NewUserSubject("user_1"), []metaMember{member}, cards)
 	require.NoError(t, err)
 	require.Len(t, choices[serverID].Options, 2)
 }

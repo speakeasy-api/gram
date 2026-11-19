@@ -7,13 +7,15 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 func TestCandidateInspectionIncludesCatalogSetupIntent(t *testing.T) {
 	t.Parallel()
 
 	server := newTestMCPServer()
-	registrar := newRegistrar(server)
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	catalog := testCatalog{details: CatalogDetails{
 		CatalogCandidate: CatalogCandidate{
 			ProviderKey:  "provider",
@@ -43,7 +45,7 @@ func TestCandidateInspectionReturnsSafeDirectRemoteErrors(t *testing.T) {
 	t.Parallel()
 
 	server := newTestMCPServer()
-	registrar := newRegistrar(server)
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	registerCandidateInspectionTool(
 		registrar,
 		nil,
@@ -67,7 +69,7 @@ func TestCandidateInspectionReturnsOAuthSetupCategoryAndActions(t *testing.T) {
 	t.Parallel()
 
 	server := newTestMCPServer()
-	registrar := newRegistrar(server)
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	registerCandidateInspectionTool(
 		registrar,
 		nil,
@@ -112,7 +114,7 @@ func TestCandidateInspectionReportsAutomaticClientRegistrationPath(t *testing.T)
 	} {
 		t.Run(test.oauthDiscovery, func(t *testing.T) {
 			t.Parallel()
-			registrar := newRegistrar(newTestMCPServer())
+			registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 			registerCandidateInspectionTool(registrar, nil, &testDirectRemoteInspector{inspection: DirectRemoteInspection{
 				CanonicalURL:           "https://remote.example.test/mcp",
 				Transport:              "streamable-http",
@@ -156,7 +158,7 @@ func TestCandidateInspectionDirectRemoteClientRegistrationPaths(t *testing.T) {
 		t.Run(tc.mode, func(t *testing.T) {
 			t.Parallel()
 			inspector, _ := directRemoteProtocolFixture(t, tc.mode)
-			registrar := newRegistrar(newTestMCPServer())
+			registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 			registerCandidateInspectionTool(registrar, nil, inspector, &testRegistrationGate{enabled: true}, allowBudget())
 			result, err := catalogInspectionDescriptor(t, registrar).Invoke(ContextWithPrincipal(t.Context(), registrationServicePrincipal()), json.RawMessage(`{"remote_url":"https://remote.example.test/mcp"}`))
 			require.NoError(t, err)
@@ -173,7 +175,7 @@ func TestCandidateInspectionDirectRemoteClientRegistrationPaths(t *testing.T) {
 func TestCandidateInspectionOmitsAutomaticClientRegistrationForAnonymous(t *testing.T) {
 	t.Parallel()
 
-	registrar := newRegistrar(newTestMCPServer())
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerCandidateInspectionTool(registrar, nil, &testDirectRemoteInspector{inspection: DirectRemoteInspection{
 		CanonicalURL:   "https://remote.example.test/mcp",
 		Transport:      "streamable-http",
@@ -205,7 +207,7 @@ func TestCandidateInspectionReportsToolEvidenceOnlyWhenListed(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			registrar := newRegistrar(newTestMCPServer())
+			registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 			registerCandidateInspectionTool(registrar, nil, &testDirectRemoteInspector{inspection: test.inspection}, &testRegistrationGate{enabled: true}, allowBudget())
 			result, err := catalogInspectionDescriptor(t, registrar).Invoke(ContextWithPrincipal(t.Context(), registrationServicePrincipal()), json.RawMessage(`{"remote_url":"https://remote.example.test/mcp"}`))
 			require.NoError(t, err)
@@ -256,7 +258,7 @@ func TestCandidateInspectionDirectRemoteProtocols(t *testing.T) {
 		t.Run(tc.mode, func(t *testing.T) {
 			t.Parallel()
 			inspector, _ := directRemoteProtocolFixture(t, tc.mode)
-			registrar := newRegistrar(newTestMCPServer())
+			registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 			registerCandidateInspectionTool(registrar, nil, inspector, &testRegistrationGate{enabled: true}, allowBudget())
 			result, err := catalogInspectionDescriptor(t, registrar).Invoke(ContextWithPrincipal(t.Context(), registrationServicePrincipal()), json.RawMessage(`{"remote_url":"https://remote.example.test/mcp"}`))
 			require.NoError(t, err)

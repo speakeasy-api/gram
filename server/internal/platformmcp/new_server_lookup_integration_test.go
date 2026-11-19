@@ -16,6 +16,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -65,7 +66,7 @@ func newRemoteRegistrar(store *RegistrationStore, gate *testRegistrationGate, ca
 // own server name.
 func newInspectedRemoteRegistrar(store *RegistrationStore, gate *testRegistrationGate, inspector *testDirectRemoteInspector) *Registrar {
 	registrations := newRegistrationService(testCatalog{}, gate, store).WithDirectRemoteInspector(inspector)
-	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
 	registerRemoteRegistrationTool(reg, registrations, nil)
 	return reg
 }
@@ -532,7 +533,7 @@ func TestMCPIDToolsRefuseServersTheCallerCannotActOn(t *testing.T) {
 		WithDirectRemoteInspector(namedRemoteInspector("https://remote.example.test/mcp", "")).
 		WithIdentityProviderAttachment(attachment).
 		WithDashboardURL(dashboardURL)
-	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
 	registerRemoteRegistrationTool(reg, registrations, nil)
 	registerIdentityProviderTool(reg, registrations)
 	registerReadinessTools(reg, NewReadinessService(store, gate, NewProviderAdapters(nil), allowOperationLimiter{}, allowBudget(), &countingCatalogReadinessProber{}))

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"html/template"
 	"net/url"
 	"os"
@@ -150,7 +151,7 @@ func gallerySampleInput(schema []byte) map[string]any {
 // where one can be reached. A live registration given empty services still
 // declares its real output type; the handlers never run.
 func galleryDescriptors() []Descriptor {
-	_, base := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, base := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	byName := map[string]Descriptor{}
 	var order []string
 	for _, descriptor := range base.Descriptors() {
@@ -240,7 +241,7 @@ func liveDescriptors(register func(*Registrar)) (descriptors []Descriptor) {
 			descriptors = nil
 		}
 	}()
-	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "card-gallery", Version: "0.0.1"}, nil))
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "card-gallery", Version: "0.0.1"}, nil))
 	register(registrar)
 	return registrar.Descriptors()
 }

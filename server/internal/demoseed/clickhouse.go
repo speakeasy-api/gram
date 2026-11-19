@@ -8,13 +8,15 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 // runClickHouse regenerates the tenant's telemetry. Rows are built in Go from
 // the same helpers as the Postgres seed (chat ids, owners, timestamps), so the
 // two stores join exactly.
-func (s *seeder) runClickHouse(ctx context.Context, ch driver.Conn) error {
+func (s *seeder) runClickHouse(ctx context.Context, ch driver.Conn, catalog *aivendors.Snapshot) error {
+	s.catalog = catalog
 	// lightweight_deletes_sync=2 waits for ALL replicas (prod ClickHouse Cloud
 	// is replicated; =1 would let the re-insert race a delete still running on
 	// another replica). The base client caps max_execution_time at 60s, which

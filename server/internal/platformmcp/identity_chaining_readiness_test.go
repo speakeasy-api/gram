@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -126,7 +127,7 @@ func seedChainedCatalogFixtureClient(t *testing.T, ctx context.Context, conn *pg
 
 func (f chainedCatalogFixture) probe(t *testing.T, conn *pgxpool.Pool, governor IdentityChainingGovernor) ProviderReadinessProbeResult {
 	t.Helper()
-	prober := NewRemoteMCPReadinessProber(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), f.policy, f.sessions)
+	prober := NewRemoteMCPReadinessProber(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), f.policy, f.sessions)
 	if governor != nil {
 		prober = prober.WithIdentityChaining(governor)
 	}
