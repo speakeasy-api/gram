@@ -31,7 +31,7 @@ export type GetPluginsResult = {
    */
   configuration?: DeviceAgentConfiguration | undefined;
   /**
-   * Opaque revision identifier covering the marketplace, plugin, MCP server (including each server's token endpoint, audience and resource), remote-configuration, and organization-gateway set. The agent stores this to detect changes between polls.
+   * Opaque revision identifier covering the marketplace, plugin, MCP server (including each server's token endpoint, audience and resource), remote-configuration, organization-gateway, and tool-configuration set. The agent stores this to detect changes between polls.
    */
   etag: string;
   /**
@@ -51,6 +51,10 @@ export type GetPluginsResult = {
    */
   plugins: Array<AgentPlugin>;
   principal?: AgentPollingPrincipal | undefined;
+  /**
+   * Tool-native settings keyed by stable tool ID (`claude_code`, `codex`), which each tool's syncer merges into that tool's own configuration with leaf ownership. Carries the inference endpoint the caller's inference profile rules resolve to; never a credential. Absent when nothing applies, which tells the agent to remove the settings it wrote earlier.
+   */
+  toolConfig?: { [k: string]: any } | undefined;
 };
 
 /** @internal */
@@ -66,11 +70,13 @@ export const GetPluginsResult$inboundSchema: z.ZodMiniType<
     organization_gateway_url: z.optional(z.string()),
     plugins: z.array(AgentPlugin$inboundSchema),
     principal: z.optional(AgentPollingPrincipal$inboundSchema),
+    tool_config: z.optional(z.record(z.string(), z.any())),
   }),
   z.transform((v) => {
     return remap$(v, {
       "mcp_servers": "mcpServers",
       "organization_gateway_url": "organizationGatewayUrl",
+      "tool_config": "toolConfig",
     });
   }),
 );

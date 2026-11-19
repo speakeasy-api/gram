@@ -161,8 +161,8 @@ type CreateSessionHandoffRequestBody struct {
 type GetPluginsResponseBody struct {
 	// Opaque revision identifier covering the marketplace, plugin, MCP server
 	// (including each server's token endpoint, audience and resource),
-	// remote-configuration, and organization-gateway set. The agent stores this to
-	// detect changes between polls.
+	// remote-configuration, organization-gateway, and tool-configuration set. The
+	// agent stores this to detect changes between polls.
 	Etag *string `form:"etag,omitempty" json:"etag,omitempty" xml:"etag,omitempty"`
 	// Plugin marketplaces the agent should register with the tools it manages.
 	// Sorted by name.
@@ -183,6 +183,12 @@ type GetPluginsResponseBody struct {
 	// The non-human principal the plugin set was resolved for. Present only when
 	// the caller authenticated with an agent API key.
 	Principal *AgentPollingPrincipalResponseBody `form:"principal,omitempty" json:"principal,omitempty" xml:"principal,omitempty"`
+	// Tool-native settings keyed by stable tool ID (`claude_code`, `codex`), which
+	// each tool's syncer merges into that tool's own configuration with leaf
+	// ownership. Carries the inference endpoint the caller's inference profile
+	// rules resolve to; never a credential. Absent when nothing applies, which
+	// tells the agent to remove the settings it wrote earlier.
+	ToolConfig map[string]any `form:"tool_config,omitempty" json:"tool_config,omitempty" xml:"tool_config,omitempty"`
 	// Speakeasy-hosted MCP servers the agent registers directly in each managed
 	// tool's configuration, authorized by the device's own mcp:connect credential.
 	// Populated only when the caller polls as an agent (an agent API key, or a
@@ -4065,6 +4071,14 @@ func NewGetPluginsResultOK(body *GetPluginsResponseBody) *agent.GetPluginsResult
 	}
 	if body.Principal != nil {
 		v.Principal = unmarshalAgentPollingPrincipalResponseBodyToAgentAgentPollingPrincipal(body.Principal)
+	}
+	if body.ToolConfig != nil {
+		v.ToolConfig = make(map[string]any, len(body.ToolConfig))
+		for key, val := range body.ToolConfig {
+			tk := key
+			tv := val
+			v.ToolConfig[tk] = tv
+		}
 	}
 	v.McpServers = make([]*agent.AgentMCPServer, len(body.McpServers))
 	for i, val := range body.McpServers {

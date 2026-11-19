@@ -134,6 +134,7 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 		Configuration:          nil,
 		OrganizationGatewayURL: nil,
 		Principal:              nil,
+		ToolConfig:             nil,
 		McpServers:             []*gen.AgentMCPServer{},
 	}
 }

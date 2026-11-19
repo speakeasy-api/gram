@@ -48,6 +48,8 @@ var All = []outbox.EventRegistration{
 	GcpIamCredentialV1,
 	GcpKmsKeyV1,
 	IdentityProviderConnectionV1,
+	InferenceProfileRuleV1,
+	InferenceProfileV1,
 	InternalSessionIssuerV1,
 	IssuanceSelectionProfileV1,
 	JsonWebKeySetV1,
