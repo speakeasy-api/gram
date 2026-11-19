@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 )
@@ -18,7 +19,8 @@ const demoAccessRequestCount = 2
 
 // seedRolesAccessRequests gives the Access Requests tab a pending request to
 // review and a denied one in its history: Amara asks for the demo project's
-// tool logs, and Lucas, an admin, denied Hana's request to read chats.
+// tool logs, and Lucas, an admin, denied Hana's request to view environments,
+// which hold secret values. Neither holds the scope they asked for.
 func (s *seeder) seedRolesAccessRequests(ctx context.Context) error {
 	org := s.orgID()
 	if err := s.q.RolesDeleteAccessRequests(ctx, org); err != nil {
@@ -29,7 +31,7 @@ func (s *seeder) seedRolesAccessRequests(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("encode demo access request selector: %w", err)
 	}
-	chatSelector, err := json.Marshal(map[string]string{"resource_kind": "chat", "resource_id": "*"})
+	environmentSelector, err := json.Marshal(authz.NewSelector(authz.ScopeEnvironmentRead, authz.WildcardResource))
 	if err != nil {
 		return fmt.Errorf("encode demo access request selector: %w", err)
 	}
@@ -55,10 +57,10 @@ func (s *seeder) seedRolesAccessRequests(ctx context.Context) error {
 			ID:              s.det("access-request-denied"),
 			OrganizationID:  org,
 			RequesterUserID: s.userID("hana"),
-			Scope:           "chat:read",
-			Selector:        chatSelector,
+			Scope:           string(authz.ScopeEnvironmentRead),
+			Selector:        environmentSelector,
 			ResourceName:    conv.ToPGTextEmpty(""),
-			Message:         conv.ToPGText("Want to look over last week's billing conversations."),
+			Message:         conv.ToPGText("Want to check which credentials the billing server is configured with."),
 			Status:          "denied",
 			DecidedByUserID: conv.ToPGText(s.userID("lucas")),
 			DecidedVia:      conv.ToPGText("slack"),
