@@ -21,12 +21,12 @@ WHERE p.id = @ai_product_id AND p.deleted IS FALSE
   AND NOT EXISTS (SELECT 1 FROM ai_product_cimd_documents d WHERE d.url = @url::text)
 ON CONFLICT DO NOTHING;
 
--- Links only unlinked decision-only rows, across every organization.
+-- Links only unlinked decision-only rows to live products, across every organization.
 -- name: BackfillDecisions :execrows
 UPDATE ai_scan_targets t
 SET ai_product_id = p.id
 FROM ai_products p
-WHERE t.id = p.id AND t.id = ANY(@ids::text[]) AND t.ai_product_id IS NULL
+WHERE t.id = p.id AND p.deleted IS FALSE AND t.id = ANY(@ids::text[]) AND t.ai_product_id IS NULL
   AND t.display_name IS NULL AND t.category IS NULL AND t.version_plist_key IS NULL
   AND cardinality(t.bundle_ids) = 0 AND cardinality(t.binaries) = 0
   AND cardinality(t.config_dirs) = 0 AND cardinality(t.process_names) = 0

@@ -618,7 +618,7 @@ SELECT pg_advisory_xact_lock(hashtextextended('ai_scan_targets:' || @organizatio
 -- Only decision-only rows may take a catalog link; an ID match is not enough.
 -- name: GetAIScanTargetCatalogState :one
 SELECT
-  EXISTS (SELECT 1 FROM ai_products p WHERE p.id = @id) AS product_exists,
+  EXISTS (SELECT 1 FROM ai_products p WHERE p.id = @id AND p.deleted IS FALSE) AS product_exists,
   EXISTS (
     SELECT 1 FROM ai_scan_targets t
     WHERE t.organization_id = @organization_id AND t.id = @id

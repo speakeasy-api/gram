@@ -16,7 +16,7 @@ const backfillDecisions = `-- name: BackfillDecisions :execrows
 UPDATE ai_scan_targets t
 SET ai_product_id = p.id
 FROM ai_products p
-WHERE t.id = p.id AND t.id = ANY($1::text[]) AND t.ai_product_id IS NULL
+WHERE t.id = p.id AND p.deleted IS FALSE AND t.id = ANY($1::text[]) AND t.ai_product_id IS NULL
   AND t.display_name IS NULL AND t.category IS NULL AND t.version_plist_key IS NULL
   AND cardinality(t.bundle_ids) = 0 AND cardinality(t.binaries) = 0
   AND cardinality(t.config_dirs) = 0 AND cardinality(t.process_names) = 0
@@ -24,7 +24,7 @@ WHERE t.id = p.id AND t.id = ANY($1::text[]) AND t.ai_product_id IS NULL
   AND cardinality(t.client_info_names) = 0
 `
 
-// Links only unlinked decision-only rows, across every organization.
+// Links only unlinked decision-only rows to live products, across every organization.
 func (q *Queries) BackfillDecisions(ctx context.Context, ids []string) (int64, error) {
 	result, err := q.db.Exec(ctx, backfillDecisions, ids)
 	if err != nil {
