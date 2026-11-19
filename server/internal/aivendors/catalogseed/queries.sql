@@ -1,18 +1,17 @@
 -- Catalog rows are global reference data, not tenant-owned records.
--- name: InsertProduct :exec
+-- name: InsertProduct :execrows
 INSERT INTO ai_products (
   id, vendor_key, display_name, category, bundle_ids, binaries, config_dirs,
-  process_names, version_plist_key, client_info_names
+  process_names, version_plist_key, client_info_names, family
 ) VALUES (
   @id, @vendor_key, @display_name, sqlc.narg('category'), @bundle_ids::text[],
   @binaries::text[], @config_dirs::text[], @process_names::text[],
-  sqlc.narg('version_plist_key'), @client_info_names::text[]
+  sqlc.narg('version_plist_key'), @client_info_names::text[], sqlc.narg('family')
 )
 ON CONFLICT DO NOTHING;
 
--- Stable IDs preserve seed-owned rows even after their URL changes. Historical
--- URL rows also prevent restoring a document that staff deliberately deleted.
--- name: InsertDocument :exec
+-- Any row holding the URL, even soft-deleted, blocks the insert.
+-- name: InsertDocument :execrows
 INSERT INTO ai_product_cimd_documents (
   id, ai_product_id, url, display_name, enabled, is_pattern
 )
@@ -22,10 +21,8 @@ WHERE p.id = @ai_product_id AND p.deleted IS FALSE
   AND NOT EXISTS (SELECT 1 FROM ai_product_cimd_documents d WHERE d.url = @url::text)
 ON CONFLICT DO NOTHING;
 
--- Only decision-only rows for the frozen scan library are backfilled. Never
--- overwrite a reference or turn an organization's own definition into a built-in.
--- This deployment-wide repair intentionally spans organizations.
--- name: BackfillDecisions :exec
+-- Links only unlinked decision-only rows, across every organization.
+-- name: BackfillDecisions :execrows
 UPDATE ai_scan_targets t
 SET ai_product_id = p.id
 FROM ai_products p

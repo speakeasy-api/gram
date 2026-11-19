@@ -1,10 +1,24 @@
 # AI client catalog bootstrap
 
-`catalog.json` is a frozen bootstrap of 51 products and 26 CIMD documents.
-Production is the source of truth after bootstrap. New clients belong in the
-admin review queue, not this file. API, MCP, and private ingress processes
-synchronously ensure reference data and load a database snapshot before serving.
-They refresh that snapshot about once a minute.
+`catalog.json` holds 53 products and 26 CIMD documents. It tracks the compiled
+`aivendors` registry until that registry is removed (AIM-450), then becomes
+frozen. `TestCatalogMatchesRegistry` fails when any field differs, including a
+field newly added to the registry. Reported-name aliases are not in the file
+or the database: they change with plugin and telemetry code, so they stay in
+the registry (`Product.Aliases`, `aivendors.Identify`).
+
+Regenerate the file from the registry, then format it:
+
+```sh
+mise run test:server ./internal/aivendors/catalogseed/ -run TestCatalogMatchesRegistry -args -update
+mise exec -- aube exec oxfmt -- --write server/internal/aivendors/catalogseed/catalog.json
+```
+
+Production is the source of truth after bootstrap. The seed only inserts, so a
+registry change reaches existing rows only as new products or documents. New
+clients belong in the admin review queue. API, MCP, and private ingress
+processes synchronously ensure reference data and load a database snapshot
+before serving. They refresh that snapshot about once a minute.
 
 The `ai-client-catalog` startup seed hashes the embedded file and its application
 revision. Workers apply each version through the existing startup workflow.
@@ -17,6 +31,18 @@ rerun. Existing URLs, including soft-deleted rows, are left alone. Documents
 are not inserted under deleted products. Arbitrary URL history of preexisting
 non-bootstrap rows is not recoverable after their URL has been edited.
 
+Loading rejects unknown fields and a document URL under two products.
+
+A product's family is written only when the product is inserted, so a family
+staff later set or cleared survives a rerun.
+
+Catalog rows must only ever be soft-deleted: the next run reinserts a
+hard-deleted seed row.
+
+Catalog inserts commit in one transaction and the decision backfill runs in a
+second, so a failed backfill never leaves the catalog empty. Each run logs the
+seed version and the counts inserted and linked.
+
 The seed fills only missing references on decision-only rows for the frozen
 scan library. It preserves definitions, existing references, decisions,
 rationales and timestamps. Historical references may name soft-deleted products;
@@ -26,7 +52,9 @@ built-in decision writes set the reference directly; before the product exists
 they return a retryable unavailable error.
 
 After all previous-version API replicas have stopped during the initial rolling
-deployment, run the deployed binary with its configured database connection:
+deployment, run the deployed binary with its configured database URL and site
+URL (`--database-url` / `GRAM_DATABASE_URL` and `--site-url` / `GRAM_SITE_URL`,
+both required):
 
 ```sh
 gram app-seed --name ai-client-catalog

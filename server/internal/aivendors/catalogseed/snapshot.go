@@ -16,6 +16,9 @@ type product struct {
 	// VendorKey groups products from the same vendor.
 	VendorKey string `json:"VendorKey"`
 
+	// Family groups a vendor's related products; empty means its own family.
+	Family string `json:"Family"`
+
 	// DisplayName is the initial product label.
 	DisplayName string `json:"DisplayName"`
 

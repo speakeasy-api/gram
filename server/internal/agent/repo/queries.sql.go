@@ -171,9 +171,7 @@ type GetAIScanTargetCatalogStateRow struct {
 	HasDefinition bool
 }
 
-// ID matching alone cannot establish a stored row's kind: an organization's
-// definition may predate a built-in with the same ID. Only decision-only rows
-// can acquire a catalog reference, even while readers still overlay by ID.
+// Only decision-only rows may take a catalog link; an ID match is not enough.
 func (q *Queries) GetAIScanTargetCatalogState(ctx context.Context, arg GetAIScanTargetCatalogStateParams) (GetAIScanTargetCatalogStateRow, error) {
 	row := q.db.QueryRow(ctx, getAIScanTargetCatalogState, arg.ID, arg.OrganizationID)
 	var i GetAIScanTargetCatalogStateRow
@@ -999,10 +997,7 @@ type UpsertAIScanTargetParams struct {
 // endpoints, so neither upsert touches the other's columns: adding a target
 // must not silently clear a standing block, and blocking one must not wipe
 // the signatures agents scan for.
-// Writing a definition makes the row the organization's own target. A
-// decision-only row left by a built-in since removed from the registry may
-// still reference its product, and keeping that would mark the definition
-// as a built-in's.
+// A definition makes the row the organization's own, so drop any product link.
 func (q *Queries) UpsertAIScanTarget(ctx context.Context, arg UpsertAIScanTargetParams) (AiScanTarget, error) {
 	row := q.db.QueryRow(ctx, upsertAIScanTarget,
 		arg.OrganizationID,

@@ -64,18 +64,14 @@ func chatgptDesktopPayload() *gen.UpsertAiScanTargetPayload {
 	}
 }
 
-// TestUpsertAiScanTargetUnlinksAProductReference: a decision-only row can
-// outlive its built-in in the registry while still referencing the catalog
-// product. Writing an organization's own definition under that id makes the
-// row the organization's target, so the reference must not survive.
+// An organization's own definition under a linked id drops the product link.
 func TestUpsertAiScanTargetUnlinksAProductReference(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
 	require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
 
-	// "claude" is a catalog product that is not a scanned built-in, standing
-	// in for a built-in since removed from the registry.
+	// "claude" stands in for a built-in since removed from the registry.
 	_, isBuiltin := aitargets.DefaultByID(aivendors.NewSnapshot(aivendors.Products()), "claude")
 	require.False(t, isBuiltin)
 	q := repo.New(ti.conn)

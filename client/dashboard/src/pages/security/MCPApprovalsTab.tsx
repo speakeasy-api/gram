@@ -5,7 +5,7 @@ import {
 } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
 import { Alert, AlertDescription } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { useProject } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
 import { useMembers } from "@gram/client/react-query/members.js";

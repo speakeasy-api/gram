@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const backfillDecisions = `-- name: BackfillDecisions :exec
+const backfillDecisions = `-- name: BackfillDecisions :execrows
 UPDATE ai_scan_targets t
 SET ai_product_id = p.id
 FROM ai_products p
@@ -24,15 +24,16 @@ WHERE t.id = p.id AND t.id = ANY($1::text[]) AND t.ai_product_id IS NULL
   AND cardinality(t.client_info_names) = 0
 `
 
-// Only decision-only rows for the frozen scan library are backfilled. Never
-// overwrite a reference or turn an organization's own definition into a built-in.
-// This deployment-wide repair intentionally spans organizations.
-func (q *Queries) BackfillDecisions(ctx context.Context, ids []string) error {
-	_, err := q.db.Exec(ctx, backfillDecisions, ids)
-	return err
+// Links only unlinked decision-only rows, across every organization.
+func (q *Queries) BackfillDecisions(ctx context.Context, ids []string) (int64, error) {
+	result, err := q.db.Exec(ctx, backfillDecisions, ids)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
-const insertDocument = `-- name: InsertDocument :exec
+const insertDocument = `-- name: InsertDocument :execrows
 INSERT INTO ai_product_cimd_documents (
   id, ai_product_id, url, display_name, enabled, is_pattern
 )
@@ -52,10 +53,9 @@ type InsertDocumentParams struct {
 	AiProductID string
 }
 
-// Stable IDs preserve seed-owned rows even after their URL changes. Historical
-// URL rows also prevent restoring a document that staff deliberately deleted.
-func (q *Queries) InsertDocument(ctx context.Context, arg InsertDocumentParams) error {
-	_, err := q.db.Exec(ctx, insertDocument,
+// Any row holding the URL, even soft-deleted, blocks the insert.
+func (q *Queries) InsertDocument(ctx context.Context, arg InsertDocumentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertDocument,
 		arg.ID,
 		arg.Url,
 		arg.DisplayName,
@@ -63,17 +63,20 @@ func (q *Queries) InsertDocument(ctx context.Context, arg InsertDocumentParams) 
 		arg.IsPattern,
 		arg.AiProductID,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
-const insertProduct = `-- name: InsertProduct :exec
+const insertProduct = `-- name: InsertProduct :execrows
 INSERT INTO ai_products (
   id, vendor_key, display_name, category, bundle_ids, binaries, config_dirs,
-  process_names, version_plist_key, client_info_names
+  process_names, version_plist_key, client_info_names, family
 ) VALUES (
   $1, $2, $3, $4, $5::text[],
   $6::text[], $7::text[], $8::text[],
-  $9, $10::text[]
+  $9, $10::text[], $11
 )
 ON CONFLICT DO NOTHING
 `
@@ -89,11 +92,12 @@ type InsertProductParams struct {
 	ProcessNames    []string
 	VersionPlistKey pgtype.Text
 	ClientInfoNames []string
+	Family          pgtype.Text
 }
 
 // Catalog rows are global reference data, not tenant-owned records.
-func (q *Queries) InsertProduct(ctx context.Context, arg InsertProductParams) error {
-	_, err := q.db.Exec(ctx, insertProduct,
+func (q *Queries) InsertProduct(ctx context.Context, arg InsertProductParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertProduct,
 		arg.ID,
 		arg.VendorKey,
 		arg.DisplayName,
@@ -104,8 +108,12 @@ func (q *Queries) InsertProduct(ctx context.Context, arg InsertProductParams) er
 		arg.ProcessNames,
 		arg.VersionPlistKey,
 		arg.ClientInfoNames,
+		arg.Family,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const listDocuments = `-- name: ListDocuments :many
@@ -148,7 +156,7 @@ func (q *Queries) ListDocuments(ctx context.Context) ([]AiProductCimdDocument, e
 }
 
 const listProducts = `-- name: ListProducts :many
-SELECT id, vendor_key, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, client_info_names, created_by, updated_by, created_at, updated_at, deleted_at, deleted FROM ai_products ORDER BY id
+SELECT id, vendor_key, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, client_info_names, family, created_by, updated_by, created_at, updated_at, deleted_at, deleted FROM ai_products ORDER BY id
 `
 
 func (q *Queries) ListProducts(ctx context.Context) ([]AiProduct, error) {
@@ -171,6 +179,7 @@ func (q *Queries) ListProducts(ctx context.Context) ([]AiProduct, error) {
 			&i.ProcessNames,
 			&i.VersionPlistKey,
 			&i.ClientInfoNames,
+			&i.Family,
 			&i.CreatedBy,
 			&i.UpdatedBy,
 			&i.CreatedAt,

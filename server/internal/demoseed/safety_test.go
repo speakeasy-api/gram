@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 	"github.com/stretchr/testify/require"
 
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -86,6 +87,11 @@ func TestDemoSeedSafety(t *testing.T) {
 	require.NoError(t, demoseedtest.PlantPrivateNetworkState(
 		ctx, db, otherTenantSpec.OrgID,
 	))
+	// The cross-organization decision backfill would link this row.
+	_, err = agentrepo.New(db).SetAIScanTargetStatus(ctx, agentrepo.SetAIScanTargetStatusParams{
+		OrganizationID: otherTenantSpec.OrgID, ID: "cursor", Status: "approved",
+	})
+	require.NoError(t, err)
 	organizationMismatches, err := demoseedtest.ProjectOrganizationMismatchCounts(
 		ctx, db, []string{otherTenantSpec.ProjectID()},
 	)
@@ -177,6 +183,15 @@ func TestDemoSeedSafety(t *testing.T) {
 	require.NoError(t, err)
 
 	requirePostgresRowsPreserved(t, pgBefore, pgAfter2)
+	otherTargets, err := agentrepo.New(db).ListAIScanTargets(ctx, otherTenantSpec.OrgID)
+	require.NoError(t, err)
+	var unlinked bool
+	for _, target := range otherTargets {
+		if target.ID == "cursor" {
+			unlinked = !target.AiProductID.Valid
+		}
+	}
+	require.True(t, unlinked, "demo seeding linked another tenant's built-in decision")
 	milestoneCount, err = demoseedtest.CountReseedSafetyProjectMilestones(
 		ctx, db, otherTenantSpec.OrgID, otherTenantSpec.ProjectID(),
 	)

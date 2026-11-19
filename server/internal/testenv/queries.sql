@@ -2775,7 +2775,8 @@ WHERE network_ingress_id = @network_ingress_id
 
 -- name: EditProductFixture :exec
 UPDATE ai_products
-SET display_name = @display_name, deleted_at = sqlc.narg('deleted_at')
+SET display_name = @display_name, family = sqlc.narg('family'),
+    deleted_at = sqlc.narg('deleted_at')
 WHERE id = @id;
 
 -- name: EditDocumentFixture :exec

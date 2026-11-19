@@ -4,6 +4,7 @@
     {
       "ID": "claude-code",
       "VendorKey": "anthropic",
+      "Family": "claude",
       "DisplayName": "Claude Code",
       "Category": "harness",
       "Signatures": {
@@ -13,7 +14,7 @@
         "ProcessNames": ["claude"]
       },
       "VersionPlistKey": "",
-      "ClientInfoNames": ["claude-code", "Claude Code", "claude-ai"],
+      "ClientInfoNames": ["claude-code", "Claude Code"],
       "Documents": [
         {
           "URL": "https://claude.ai/oauth/claude-code-client-metadata",
@@ -25,6 +26,7 @@
     {
       "ID": "claude",
       "VendorKey": "anthropic",
+      "Family": "claude",
       "DisplayName": "Claude",
       "Category": "",
       "Signatures": {
@@ -44,8 +46,25 @@
       ]
     },
     {
+      "ID": "cowork",
+      "VendorKey": "anthropic",
+      "Family": "claude",
+      "DisplayName": "Cowork",
+      "Category": "",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": null,
+        "ConfigDirs": null,
+        "ProcessNames": null
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": null,
+      "Documents": null
+    },
+    {
       "ID": "vscode",
       "VendorKey": "microsoft",
+      "Family": "",
       "DisplayName": "Visual Studio Code",
       "Category": "",
       "Signatures": {
@@ -72,6 +91,7 @@
     {
       "ID": "zed",
       "VendorKey": "zed",
+      "Family": "",
       "DisplayName": "Zed",
       "Category": "harness",
       "Signatures": {
@@ -93,6 +113,7 @@
     {
       "ID": "goose",
       "VendorKey": "block",
+      "Family": "",
       "DisplayName": "Goose",
       "Category": "harness",
       "Signatures": {
@@ -114,6 +135,7 @@
     {
       "ID": "chatgpt",
       "VendorKey": "openai",
+      "Family": "",
       "DisplayName": "ChatGPT",
       "Category": "assistant",
       "Signatures": {
@@ -140,6 +162,7 @@
     {
       "ID": "chatgpt-classic",
       "VendorKey": "openai",
+      "Family": "",
       "DisplayName": "ChatGPT Classic",
       "Category": "assistant",
       "Signatures": {
@@ -155,6 +178,7 @@
     {
       "ID": "codex",
       "VendorKey": "openai",
+      "Family": "",
       "DisplayName": "Codex",
       "Category": "harness",
       "Signatures": {
@@ -181,6 +205,7 @@
     {
       "ID": "notion",
       "VendorKey": "notion",
+      "Family": "",
       "DisplayName": "Notion",
       "Category": "",
       "Signatures": {
@@ -207,6 +232,7 @@
     {
       "ID": "mcpjam",
       "VendorKey": "mcpjam",
+      "Family": "",
       "DisplayName": "MCPJam Inspector",
       "Category": "",
       "Signatures": {
@@ -228,6 +254,7 @@
     {
       "ID": "factory-droid",
       "VendorKey": "factory",
+      "Family": "",
       "DisplayName": "Factory Droid",
       "Category": "",
       "Signatures": {
@@ -249,6 +276,7 @@
     {
       "ID": "toolhive",
       "VendorKey": "stacklok",
+      "Family": "",
       "DisplayName": "ToolHive",
       "Category": "",
       "Signatures": {
@@ -270,6 +298,7 @@
     {
       "ID": "hermes-agent",
       "VendorKey": "nousresearch",
+      "Family": "",
       "DisplayName": "Hermes Agent",
       "Category": "assistant",
       "Signatures": {
@@ -291,6 +320,7 @@
     {
       "ID": "skydive",
       "VendorKey": "skydive",
+      "Family": "",
       "DisplayName": "Skydive",
       "Category": "",
       "Signatures": {
@@ -312,6 +342,7 @@
     {
       "ID": "opencode",
       "VendorKey": "opencode",
+      "Family": "",
       "DisplayName": "opencode",
       "Category": "harness",
       "Signatures": {
@@ -333,6 +364,7 @@
     {
       "ID": "github-copilot-cli",
       "VendorKey": "github",
+      "Family": "",
       "DisplayName": "GitHub Copilot CLI",
       "Category": "",
       "Signatures": {
@@ -354,6 +386,7 @@
     {
       "ID": "conductor",
       "VendorKey": "conductor",
+      "Family": "",
       "DisplayName": "Conductor",
       "Category": "harness",
       "Signatures": {
@@ -375,6 +408,7 @@
     {
       "ID": "vercel-connect",
       "VendorKey": "vercel",
+      "Family": "",
       "DisplayName": "Vercel Connect",
       "Category": "",
       "Signatures": {
@@ -396,6 +430,7 @@
     {
       "ID": "linear",
       "VendorKey": "linear",
+      "Family": "",
       "DisplayName": "Linear",
       "Category": "",
       "Signatures": {
@@ -417,6 +452,7 @@
     {
       "ID": "lovable",
       "VendorKey": "lovable",
+      "Family": "",
       "DisplayName": "Lovable",
       "Category": "",
       "Signatures": {
@@ -438,6 +474,7 @@
     {
       "ID": "antigravity",
       "VendorKey": "google",
+      "Family": "",
       "DisplayName": "Google Antigravity",
       "Category": "harness",
       "Signatures": {
@@ -459,6 +496,7 @@
     {
       "ID": "cursor",
       "VendorKey": "cursor",
+      "Family": "",
       "DisplayName": "Cursor",
       "Category": "harness",
       "Signatures": {
@@ -474,6 +512,7 @@
     {
       "ID": "gemini-cli",
       "VendorKey": "google",
+      "Family": "",
       "DisplayName": "Gemini CLI",
       "Category": "harness",
       "Signatures": {
@@ -489,6 +528,7 @@
     {
       "ID": "windsurf",
       "VendorKey": "codeium",
+      "Family": "",
       "DisplayName": "Windsurf",
       "Category": "harness",
       "Signatures": {
@@ -504,6 +544,7 @@
     {
       "ID": "aider",
       "VendorKey": "aider",
+      "Family": "",
       "DisplayName": "Aider",
       "Category": "harness",
       "Signatures": {
@@ -519,6 +560,7 @@
     {
       "ID": "openclaw",
       "VendorKey": "openclaw",
+      "Family": "",
       "DisplayName": "OpenClaw",
       "Category": "assistant",
       "Signatures": {
@@ -534,6 +576,7 @@
     {
       "ID": "pi",
       "VendorKey": "pi",
+      "Family": "",
       "DisplayName": "Pi",
       "Category": "harness",
       "Signatures": {
@@ -558,8 +601,25 @@
       ]
     },
     {
+      "ID": "vibe",
+      "VendorKey": "mistral",
+      "Family": "",
+      "DisplayName": "Mistral Vibe",
+      "Category": "harness",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": ["vibe"],
+        "ConfigDirs": ["~/.vibe"],
+        "ProcessNames": ["vibe"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["vibe", "mistral-vibe", "Mistral Vibe"],
+      "Documents": null
+    },
+    {
       "ID": "crush",
       "VendorKey": "charm",
+      "Family": "",
       "DisplayName": "Crush",
       "Category": "harness",
       "Signatures": {
@@ -575,6 +635,7 @@
     {
       "ID": "qwen-code",
       "VendorKey": "alibaba",
+      "Family": "",
       "DisplayName": "Qwen Code",
       "Category": "harness",
       "Signatures": {
@@ -590,6 +651,7 @@
     {
       "ID": "cline",
       "VendorKey": "cline",
+      "Family": "",
       "DisplayName": "Cline",
       "Category": "harness",
       "Signatures": {
@@ -609,6 +671,7 @@
     {
       "ID": "roo-code",
       "VendorKey": "roocode",
+      "Family": "",
       "DisplayName": "Roo Code",
       "Category": "harness",
       "Signatures": {
@@ -628,6 +691,7 @@
     {
       "ID": "continue",
       "VendorKey": "continue",
+      "Family": "",
       "DisplayName": "Continue",
       "Category": "harness",
       "Signatures": {
@@ -647,6 +711,7 @@
     {
       "ID": "kilo-code",
       "VendorKey": "kilocode",
+      "Family": "",
       "DisplayName": "Kilo Code",
       "Category": "harness",
       "Signatures": {
@@ -666,6 +731,7 @@
     {
       "ID": "augment",
       "VendorKey": "augment",
+      "Family": "",
       "DisplayName": "Augment Code",
       "Category": "harness",
       "Signatures": {
@@ -685,6 +751,7 @@
     {
       "ID": "devin",
       "VendorKey": "cognition",
+      "Family": "",
       "DisplayName": "Devin",
       "Category": "harness",
       "Signatures": {
@@ -704,6 +771,7 @@
     {
       "ID": "amp",
       "VendorKey": "sourcegraph",
+      "Family": "",
       "DisplayName": "Amp",
       "Category": "harness",
       "Signatures": {
@@ -719,6 +787,7 @@
     {
       "ID": "openhands",
       "VendorKey": "allhands",
+      "Family": "",
       "DisplayName": "OpenHands",
       "Category": "harness",
       "Signatures": {
@@ -734,6 +803,7 @@
     {
       "ID": "trae",
       "VendorKey": "bytedance",
+      "Family": "",
       "DisplayName": "Trae",
       "Category": "harness",
       "Signatures": {
@@ -749,6 +819,7 @@
     {
       "ID": "warp",
       "VendorKey": "warp",
+      "Family": "",
       "DisplayName": "Warp",
       "Category": "harness",
       "Signatures": {
@@ -764,6 +835,7 @@
     {
       "ID": "cherry-studio",
       "VendorKey": "cherrystudio",
+      "Family": "",
       "DisplayName": "Cherry Studio",
       "Category": "assistant",
       "Signatures": {
@@ -779,6 +851,7 @@
     {
       "ID": "msty",
       "VendorKey": "msty",
+      "Family": "",
       "DisplayName": "Msty",
       "Category": "assistant",
       "Signatures": {
@@ -794,6 +867,7 @@
     {
       "ID": "anythingllm",
       "VendorKey": "mintplexlabs",
+      "Family": "",
       "DisplayName": "AnythingLLM",
       "Category": "assistant",
       "Signatures": {
@@ -809,6 +883,7 @@
     {
       "ID": "open-webui",
       "VendorKey": "openwebui",
+      "Family": "",
       "DisplayName": "Open WebUI",
       "Category": "assistant",
       "Signatures": {
@@ -824,6 +899,7 @@
     {
       "ID": "jan",
       "VendorKey": "menlo",
+      "Family": "",
       "DisplayName": "Jan",
       "Category": "local_model",
       "Signatures": {
@@ -839,6 +915,7 @@
     {
       "ID": "gpt4all",
       "VendorKey": "nomic",
+      "Family": "",
       "DisplayName": "GPT4All",
       "Category": "local_model",
       "Signatures": {
@@ -854,6 +931,7 @@
     {
       "ID": "llamacpp",
       "VendorKey": "ggml",
+      "Family": "",
       "DisplayName": "llama.cpp",
       "Category": "local_model",
       "Signatures": {
@@ -869,6 +947,7 @@
     {
       "ID": "vllm",
       "VendorKey": "vllm",
+      "Family": "",
       "DisplayName": "vLLM",
       "Category": "local_model",
       "Signatures": {
@@ -884,6 +963,7 @@
     {
       "ID": "localai",
       "VendorKey": "localai",
+      "Family": "",
       "DisplayName": "LocalAI",
       "Category": "local_model",
       "Signatures": {
@@ -899,6 +979,7 @@
     {
       "ID": "koboldcpp",
       "VendorKey": "koboldcpp",
+      "Family": "",
       "DisplayName": "KoboldCpp",
       "Category": "local_model",
       "Signatures": {
@@ -914,6 +995,7 @@
     {
       "ID": "ollama",
       "VendorKey": "ollama",
+      "Family": "",
       "DisplayName": "Ollama",
       "Category": "local_model",
       "Signatures": {
@@ -929,6 +1011,7 @@
     {
       "ID": "lmstudio",
       "VendorKey": "lmstudio",
+      "Family": "",
       "DisplayName": "LM Studio",
       "Category": "local_model",
       "Signatures": {

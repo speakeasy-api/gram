@@ -428,6 +428,9 @@ type AiProduct struct {
 	// Names the product reports at MCP initialize. Attribution only, never enforcement: they are self-reported, so any client can claim any name.
 	// @access: opaque-confidential
 	ClientInfoNames []string
+	// Groups a vendor's related products, e.g. claude for Claude Code, Claude and Cowork. Null means the product is a family of its own.
+	// @access: confidential
+	Family pgtype.Text
 	// Subject URN of the staff member who created the row; null for seeded rows.
 	// @access: confidential-pii
 	CreatedBy pgtype.Text

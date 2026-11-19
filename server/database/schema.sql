@@ -1945,6 +1945,7 @@ CREATE TABLE IF NOT EXISTS ai_products (
   process_names TEXT[] NOT NULL DEFAULT '{}',
   version_plist_key TEXT,
   client_info_names TEXT[] NOT NULL DEFAULT '{}',
+  family TEXT CHECK (family <> ''),
 
   created_by TEXT,
   updated_by TEXT,
@@ -1976,6 +1977,8 @@ COMMENT ON COLUMN ai_products.version_plist_key IS 'Info.plist key read for the 
 @access: confidential';
 COMMENT ON COLUMN ai_products.client_info_names IS 'Names the product reports at MCP initialize. Attribution only, never enforcement: they are self-reported, so any client can claim any name.
 @access: opaque-confidential';
+COMMENT ON COLUMN ai_products.family IS 'Groups a vendor''s related products, e.g. claude for Claude Code, Claude and Cowork. Null means the product is a family of its own.
+@access: confidential';
 COMMENT ON COLUMN ai_products.created_by IS 'Subject URN of the staff member who created the row; null for seeded rows.
 @access: confidential-pii';
 COMMENT ON COLUMN ai_products.updated_by IS 'Subject URN of the staff member who last changed the row; null for seeded rows.

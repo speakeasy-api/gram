@@ -62,20 +62,19 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 		return err
 	}
 
-	// Reference data precedes tenant provisioning, without a global decision
-	// backfill that could modify another organization's rows during a reseed.
+	// The advisory lock holds one connection for the whole run, and the
+	// upstream auth backfills acquire another while it is held.
+	if db.Config().MaxConns < 2 {
+		return fmt.Errorf("demo seed needs a postgres pool of at least 2 connections, got %d", db.Config().MaxConns)
+	}
+
+	// Reference data only; the decision backfill would touch other organizations.
 	if err := catalogseed.EnsureCatalog(ctx, db); err != nil {
 		return fmt.Errorf("ensure AI catalog before demo seed: %w", err)
 	}
 	catalog, err := aivendors.Load(ctx, db, logger, aitargets.ValidateCatalog)
 	if err != nil {
 		return fmt.Errorf("load AI catalog before demo seed: %w", err)
-	}
-
-	// The advisory lock holds one connection for the whole run, and the
-	// upstream auth backfills acquire another while it is held.
-	if db.Config().MaxConns < 2 {
-		return fmt.Errorf("demo seed needs a postgres pool of at least 2 connections, got %d", db.Config().MaxConns)
 	}
 
 	return withSeedLock(ctx, logger, db, func(conn *pgxpool.Conn) error {

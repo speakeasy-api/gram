@@ -1657,18 +1657,25 @@ func (q *Queries) EditDocumentFixture(ctx context.Context, arg EditDocumentFixtu
 
 const editProductFixture = `-- name: EditProductFixture :exec
 UPDATE ai_products
-SET display_name = $1, deleted_at = $2
-WHERE id = $3
+SET display_name = $1, family = $2,
+    deleted_at = $3
+WHERE id = $4
 `
 
 type EditProductFixtureParams struct {
 	DisplayName string
+	Family      pgtype.Text
 	DeletedAt   pgtype.Timestamptz
 	ID          string
 }
 
 func (q *Queries) EditProductFixture(ctx context.Context, arg EditProductFixtureParams) error {
-	_, err := q.db.Exec(ctx, editProductFixture, arg.DisplayName, arg.DeletedAt, arg.ID)
+	_, err := q.db.Exec(ctx, editProductFixture,
+		arg.DisplayName,
+		arg.Family,
+		arg.DeletedAt,
+		arg.ID,
+	)
 	return err
 }
 
