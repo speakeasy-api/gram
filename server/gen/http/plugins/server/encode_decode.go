@@ -4697,6 +4697,7 @@ func marshalPluginsPluginToPluginResponseBody(v *plugins.Plugin) *PluginResponse
 		IsDefault:                v.IsDefault,
 		AutoCreated:              v.AutoCreated,
 		AutoSyncEnabled:          v.AutoSyncEnabled,
+		AutoAddServersEnabled:    v.AutoAddServersEnabled,
 		ServerCount:              v.ServerCount,
 		SkillCount:               v.SkillCount,
 		AssignmentCount:          v.AssignmentCount,

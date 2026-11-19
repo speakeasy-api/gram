@@ -90,7 +90,7 @@ func (s *Service) requireAdmin(ctx context.Context) (*contextvalues.AuthContext,
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Org(authCtx.ActiveOrganizationID).Admin()); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 	return authCtx, nil

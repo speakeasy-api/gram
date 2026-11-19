@@ -27,12 +27,22 @@ const mocks = vi.hoisted(() => ({
   issuersLoading: false,
   issuersFailed: false,
   authorizationServers: undefined as string[] | undefined,
+  discover: vi.fn(),
+  getIssuer: vi.fn(),
+  fetchMetadata: vi.fn(),
+  createIssuer: vi.fn(),
 }));
 
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
   useProjectSlugForRequests: () => "project",
   useSdkClient: () => ({
+    remoteMcp: { discoverProtectedResourceMetadata: mocks.discover },
+    remoteSessionIssuers: {
+      get: mocks.getIssuer,
+      fetchMetadata: mocks.fetchMetadata,
+      create: mocks.createIssuer,
+    },
     remoteSessionClients: {
       create: mocks.createSignIn,
       createCimd: mocks.createDocumentSignIn,
@@ -70,6 +80,7 @@ vi.mock("@gram/client/react-query/remoteSessionClients.js", () => ({
 }));
 
 vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
+  invalidateAllRemoteSessionIssuers: vi.fn(),
   useRemoteSessionIssuersInfinite: () => ({
     data: { pages: [{ result: { items: mocks.pickableIssuers } }] },
     isFetching: false,
@@ -1054,6 +1065,208 @@ describe("AddCredentialSheet", () => {
       expect(
         mocks.createSignIn.mock.calls[0]![0].createRemoteSessionClientForm,
       ).not.toHaveProperty("templateClientId");
+    });
+  });
+
+  describe("the authorization server the server advertises", () => {
+    const linear = {
+      id: "linear",
+      issuer: "https://mcp.linear.app/",
+      name: "Linear",
+      authorizationEndpoint: "https://mcp.linear.app/authorize",
+      tokenEndpoint: "https://mcp.linear.app/token",
+      clientIdMetadataDocumentSupported: true,
+    };
+    const advertise = (issuer: string) =>
+      mocks.discover.mockResolvedValue({
+        available: true,
+        metadata: { authorizationServers: [issuer] },
+      });
+    const choosePersonal = () => {
+      fireEvent.click(
+        screen.getByRole("radio", { name: /^Each person's own account/ }),
+      );
+      fireEvent.change(screen.getByLabelText("Name (required)"), {
+        target: { value: "Linear for engineering" },
+      });
+    };
+
+    it("preselects it when the project already has it", async () => {
+      mocks.clientPages = [];
+      mocks.pickableIssuers = [linear];
+      advertise(linear.issuer);
+      mocks.getIssuer.mockResolvedValue(linear);
+      renderSheet();
+      choosePersonal();
+
+      expect(
+        await screen.findByText("Detected from this server."),
+      ).toBeTruthy();
+      expect(screen.getByText("Linear — https://mcp.linear.app/")).toBeTruthy();
+      expect(mocks.fetchMetadata).not.toHaveBeenCalled();
+    });
+
+    it("adds it on save when the project does not have it yet", async () => {
+      mocks.clientPages = [];
+      advertise("https://auth.example.com");
+      mocks.getIssuer.mockRejectedValue(
+        Object.assign(new Error("not found"), { statusCode: 404 }),
+      );
+      mocks.fetchMetadata.mockResolvedValue({
+        issuer: "https://auth.example.com",
+        authorizationEndpoint: "https://auth.example.com/authorize",
+        tokenEndpoint: "https://auth.example.com/token",
+        clientIdMetadataDocumentSupported: true,
+      });
+      mocks.createIssuer.mockResolvedValue({
+        id: "added",
+        issuer: "https://auth.example.com",
+      });
+      mocks.createDocumentSignIn.mockResolvedValue({
+        id: "new-sign-in",
+        clientId: "https://app.example.com/cimd",
+        projectId: "project-1",
+      });
+      renderSheet();
+      choosePersonal();
+
+      expect(
+        await screen.findByText(
+          /Example isn't set up yet, so it's added to Authorization Servers when you save/,
+        ),
+      ).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Add credential" }));
+
+      await waitFor(() => expect(mocks.createIssuer).toHaveBeenCalledOnce());
+      expect(
+        mocks.createIssuer.mock.calls[0]![0].createRemoteSessionIssuerForm,
+      ).toMatchObject({
+        issuer: "https://auth.example.com",
+        authorizationEndpoint: "https://auth.example.com/authorize",
+        tokenEndpoint: "https://auth.example.com/token",
+      });
+      await waitFor(() =>
+        expect(mocks.createDocumentSignIn).toHaveBeenCalledWith({
+          createCimdForm: { remoteSessionIssuerId: "added" },
+        }),
+      );
+    });
+
+    it("refuses metadata that names a different issuer", async () => {
+      mocks.clientPages = [];
+      advertise("https://auth.example.com");
+      mocks.getIssuer.mockRejectedValue(
+        Object.assign(new Error("not found"), { statusCode: 404 }),
+      );
+      mocks.fetchMetadata.mockResolvedValue({
+        issuer: "https://other.example.com",
+        authorizationEndpoint: "https://other.example.com/authorize",
+        tokenEndpoint: "https://other.example.com/token",
+      });
+      renderSheet();
+      choosePersonal();
+
+      await waitFor(() => expect(mocks.fetchMetadata).toHaveBeenCalled());
+      expect(screen.queryByText(/Detected from this server/)).toBeNull();
+      expect(screen.getByText(/Not listed\? Add it in/)).toBeTruthy();
+    });
+
+    it.each([
+      [
+        "advertises no metadata",
+        () => mocks.discover.mockResolvedValue({ available: false }),
+      ],
+      [
+        "cannot be checked",
+        () => mocks.discover.mockRejectedValue(new Error("unreachable")),
+      ],
+    ])("keeps the picker when the server %s", async (_, setUp) => {
+      mocks.clientPages = [];
+      setUp();
+      renderSheet();
+      choosePersonal();
+
+      await waitFor(() => expect(mocks.discover).toHaveBeenCalled());
+      expect(screen.queryByText(/Detected from this server/)).toBeNull();
+      expect(await screen.findByText(/Not listed\? Add it in/)).toBeTruthy();
+    });
+
+    it("uses a later advertised authorization server when the first cannot be used", async () => {
+      mocks.clientPages = [];
+      mocks.pickableIssuers = [linear];
+      mocks.discover.mockResolvedValue({
+        available: true,
+        metadata: {
+          authorizationServers: [
+            "",
+            "https://broken.example.com",
+            linear.issuer,
+          ],
+        },
+      });
+      mocks.getIssuer.mockImplementation(({ issuer }: { issuer: string }) =>
+        issuer === linear.issuer
+          ? Promise.resolve(linear)
+          : Promise.reject(
+              Object.assign(new Error("not found"), { statusCode: 404 }),
+            ),
+      );
+      mocks.fetchMetadata.mockRejectedValue(new Error("unreachable"));
+      renderSheet();
+      choosePersonal();
+
+      expect(
+        await screen.findByText("Detected from this server."),
+      ).toBeTruthy();
+      expect(screen.getByText("Linear — https://mcp.linear.app/")).toBeTruthy();
+    });
+
+    it("keeps the added authorization server in use when a later step fails", async () => {
+      mocks.clientPages = [];
+      advertise("https://auth.example.com");
+      mocks.getIssuer.mockRejectedValue(
+        Object.assign(new Error("not found"), { statusCode: 404 }),
+      );
+      mocks.fetchMetadata.mockResolvedValue({
+        issuer: "https://auth.example.com",
+        authorizationEndpoint: "https://auth.example.com/authorize",
+        tokenEndpoint: "https://auth.example.com/token",
+        clientIdMetadataDocumentSupported: true,
+      });
+      mocks.createIssuer.mockResolvedValue({
+        id: "added",
+        issuer: "https://auth.example.com",
+      });
+      mocks.createDocumentSignIn.mockRejectedValue(new Error("upstream down"));
+      renderSheet();
+      choosePersonal();
+
+      await screen.findByText(
+        /Example isn't set up yet, so it's added to Authorization Servers when you save/,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Add credential" }));
+
+      await waitFor(() =>
+        expect(mocks.createDocumentSignIn).toHaveBeenCalled(),
+      );
+      expect(screen.queryByText("Use it instead")).toBeNull();
+    });
+
+    it("names the credential after the detected service when no name was typed", async () => {
+      mocks.clientPages = [];
+      mocks.pickableIssuers = [linear];
+      advertise(linear.issuer);
+      mocks.getIssuer.mockResolvedValue(linear);
+      renderSheet();
+      fireEvent.click(
+        screen.getByRole("radio", { name: /^Each person's own account/ }),
+      );
+
+      await waitFor(() =>
+        expect(
+          (screen.getByLabelText("Name (required)") as HTMLInputElement).value,
+        ).toBe("Linear"),
+      );
     });
   });
 });

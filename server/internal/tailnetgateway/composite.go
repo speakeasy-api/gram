@@ -45,7 +45,7 @@ func NewCompositeProvisioner(operator OperatorProvisioner, gateway *Provisioner,
 	return &CompositeProvisioner{operator: operator, gateway: gateway, gatewayDeployed: gatewayDeployed}, nil
 }
 
-//nolint:exhaustruct // observations populate only the state they know.
+//nolint:exhaustruct_v5 // observations populate only the state they know.
 func (c *CompositeProvisioner) Apply(ctx context.Context, desired k8s.NetworkIngressDesired) (k8s.NetworkIngressObservation, error) {
 	if !onGateway(desired.Runtime) {
 		if c.operator == nil {

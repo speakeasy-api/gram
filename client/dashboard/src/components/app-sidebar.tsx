@@ -97,6 +97,8 @@ export function AppSidebar({
     return map;
   }, [allNavRoutes]);
   const isAssistantsEnabled = navAccess.has(routes.assistants.url);
+  // Chat is listed only while assistants run on this deployment.
+  const isChatEnabled = navAccess.has(routes.chat.url);
   const isOrgMemoryEnabled = navAccess.has(routes.orgMemory.url);
   const isExploreEnabled = navAccess.has(routes.explore.url);
   const isRiskWatchdogEnabled = navAccess.has(routes.watchdog.url);
@@ -234,7 +236,7 @@ export function AppSidebar({
   const hasTopItems =
     hasAnyScope(["org:read", "project:read", "org:admin"]) ||
     canSee(accessFor(routes.home)) ||
-    canSee(accessFor(routes.chat));
+    (isChatEnabled && canSee(accessFor(routes.chat)));
   const navLayout = sidebarNavLayout(navGroups, hasTopItems, hasAnyScope);
   const flatEntries = navLayout.flatEntries;
 
@@ -320,10 +322,12 @@ export function AppSidebar({
 
           {/* Chat — top-level, no group; a full-page entry to the
                   Project Assistant alongside the docked composer */}
-          <ScopeGatedTopLevelItem
-            item={routes.chat}
-            {...accessFor(routes.chat)}
-          />
+          {isChatEnabled && (
+            <ScopeGatedTopLevelItem
+              item={routes.chat}
+              {...accessFor(routes.chat)}
+            />
+          )}
 
           {/* Divider: sets Home + Chat apart from the grouped nav below.
               Only drawn when there is something on both sides of it. */}

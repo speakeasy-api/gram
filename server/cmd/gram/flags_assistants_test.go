@@ -10,6 +10,8 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/speakeasy-api/gram/server/internal/assistants"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestAssistantRuntimeConfigFromCLIAcceptsGKEProvider(t *testing.T) {
@@ -110,6 +112,69 @@ func TestAssistantRuntimeConfigFromCLIEnablesLocalInLocalEnvironment(t *testing.
 	// Locally created rows stay routable for cleanup even when targeting
 	// another backend.
 	require.True(t, cfg.Local.Enabled)
+}
+
+func TestAssistantRuntimeConfigFromCLIAcceptsDisabledProvider(t *testing.T) {
+	t.Parallel()
+
+	ctx := newAssistantRuntimeCLIContext(t, map[string]string{
+		"assistant-runtime-provider": assistants.RuntimeProviderDisabled,
+	})
+
+	cfg, err := assistantRuntimeConfigFromCLI(ctx, &url.URL{Scheme: "https", Host: "gram.example.com"})
+	require.NoError(t, err)
+	require.Equal(t, assistants.RuntimeProviderDisabled, cfg.Provider)
+	require.False(t, cfg.Local.Enabled)
+}
+
+func TestAssistantRuntimeConfigFromCLIDisabledInLocalEnvironmentWithoutImage(t *testing.T) {
+	t.Parallel()
+
+	ctx := newAssistantRuntimeCLIContext(t, map[string]string{
+		"assistant-runtime-provider":  assistants.RuntimeProviderDisabled,
+		"assistant-runtime-oci-image": "",
+		"environment":                 "local",
+	})
+
+	cfg, err := assistantRuntimeConfigFromCLI(ctx, &url.URL{Scheme: "https", Host: "localhost:8080"})
+	require.NoError(t, err)
+	// Without a runtime image the local backend could not validate, so a
+	// local stack can run disabled without building one.
+	require.False(t, cfg.Local.Enabled)
+}
+
+func TestAssistantRuntimeConfigFromCLIDisabledInLocalEnvironmentWithImage(t *testing.T) {
+	t.Parallel()
+
+	ctx := newAssistantRuntimeCLIContext(t, map[string]string{
+		"assistant-runtime-provider":  assistants.RuntimeProviderDisabled,
+		"assistant-runtime-oci-image": "gram-assistant-runtime",
+		"environment":                 "local",
+	})
+
+	cfg, err := assistantRuntimeConfigFromCLI(ctx, &url.URL{Scheme: "https", Host: "localhost:8080"})
+	require.NoError(t, err)
+	// Locally created rows stay routable for cleanup after switching to
+	// disabled.
+	require.True(t, cfg.Local.Enabled)
+}
+
+func TestNewAssistantRuntimeDisabledNeedsNoClusterOrPublicURL(t *testing.T) {
+	t.Parallel()
+
+	ctx := newAssistantRuntimeCLIContext(t, map[string]string{
+		"assistant-runtime-provider": assistants.RuntimeProviderDisabled,
+	})
+
+	// A loopback server URL fails the GKE public-host check; the disabled
+	// target launches nothing, so it is accepted.
+	backend, err := newAssistantRuntime(t.Context(), testenv.NewLogger(t), testenv.NewTracerProvider(t), ctx, guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), nil, &url.URL{Scheme: "http", Host: "localhost:8080"})
+	require.NoError(t, err)
+	require.Equal(t, assistants.RuntimeProviderDisabled, backend.Backend())
+	require.Empty(t, backend.ImageRef())
+	require.Nil(t, backend.ServerURL())
+	require.False(t, backend.SupportsBackend(assistants.RuntimeProviderGKE))
+	require.False(t, backend.SupportsBackend(assistants.RuntimeProviderLocal))
 }
 
 func TestAssistantRuntimeConfigFromCLIImageTag(t *testing.T) {

@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Attribution projections intentionally omit documented optional fields.
+//nolint:exhaustruct_v5 // Attribution projections intentionally omit documented optional fields.
 package platformmcp
 
 import (

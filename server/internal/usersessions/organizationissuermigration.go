@@ -851,6 +851,9 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 	if err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "migrate remote-session provenance").LogError(ctx, logger)
 	}
+	if _, err := q.UpdatePrincipalRemoteSessionBindingsToUserSessionIssuer(ctx, repo.UpdatePrincipalRemoteSessionBindingsToUserSessionIssuerParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, OrganizationID: organizationID}); err != nil {
+		return run, oops.E(oops.CodeUnexpected, err, "migrate agent connection attachments").LogError(ctx, logger)
+	}
 	if _, err := q.DeleteSourceRemoteSessionClientIssuerLinks(ctx, repo.DeleteSourceRemoteSessionClientIssuerLinksParams{SourceIssuerID: source.ID, TargetIssuerID: target.ID, OrganizationID: organizationID}); err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "remove source remote-session client links").LogError(ctx, logger)
 	}

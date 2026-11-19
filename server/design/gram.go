@@ -41,7 +41,6 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/identity"
 	_ "github.com/speakeasy-api/gram/server/design/identityproviderconnections"
 	_ "github.com/speakeasy-api/gram/server/design/inferenceprofiles"
-	_ "github.com/speakeasy-api/gram/server/design/instances"
 	_ "github.com/speakeasy-api/gram/server/design/integrations"
 	_ "github.com/speakeasy-api/gram/server/design/internalsessionissuers"
 	_ "github.com/speakeasy-api/gram/server/design/jsonwebkeysets"

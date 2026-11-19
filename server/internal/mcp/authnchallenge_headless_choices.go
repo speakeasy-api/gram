@@ -189,7 +189,7 @@ func (s *Service) headlessTargetServers(ctx context.Context, endpoint *ResolvedM
 	case endpoint.McpServerID.Valid && !endpoint.ToolsetID.Valid:
 		return []consentAuthServer{{id: endpoint.McpServerID.UUID, projectID: endpoint.ProjectID}}, nil
 	case endpoint.MetaMcpServerID.Valid:
-		members, err := s.consentSubjectMembers(ctx, endpoint, AuthnChallengeState{Subject: &subject, ID: "headless:" + uuid.NewString()}) //nolint:exhaustruct // only the subject and a session-like id are read
+		members, err := s.consentSubjectMembers(ctx, endpoint, AuthnChallengeState{Subject: &subject, ID: "headless:" + uuid.NewString()}) //nolint:exhaustruct_v5 // only the subject and a session-like id are read
 		if err != nil {
 			return nil, fmt.Errorf("list gateway members: %w", err)
 		}

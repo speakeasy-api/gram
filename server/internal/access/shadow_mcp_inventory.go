@@ -310,12 +310,13 @@ func (s *Service) attachShadowMCPOfficialServers(ctx context.Context, organizati
 			continue
 		}
 		server.OfficialServer = &gen.ShadowMCPOfficialServer{
-			McpServerID:         match.MCPServerID.String(),
-			Name:                match.Name,
-			Slug:                conv.PtrEmpty(match.Slug),
-			URL:                 conv.PtrEmpty(match.URL),
-			GatewayName:         conv.PtrEmpty(match.GatewayName),
-			DirectAccessAllowed: match.DirectAccessAllowed,
+			McpServerID: match.MCPServerID.String(),
+			Name:        match.Name,
+			Slug:        conv.PtrEmpty(match.Slug),
+			URL:         conv.PtrEmpty(match.URL),
+			GatewayName: conv.PtrEmpty(match.GatewayName),
+			// Deprecated field, sent for older dashboards that require it.
+			DirectAccessAllowed: new(false),
 		}
 	}
 }
@@ -564,7 +565,7 @@ func (s *Service) shadowMCPApprovalRequestTarget(ctx context.Context, input Shad
 		// Keep this explicit: the generated rows intentionally share a shape, but
 		// converting them positionally would let same-typed SQL columns be reordered
 		// without a compile error while silently changing the public projection.
-		result := mcpapprovalrepo.ListApprovalRequestTargetsRow{} //nolint:exhaustruct // Filled explicitly below to protect generated query field order.
+		result := mcpapprovalrepo.ListApprovalRequestTargetsRow{} //nolint:exhaustruct_v5 // Filled explicitly below to protect generated query field order.
 		result.ID = request.ID
 		result.TargetKind = request.TargetKind
 		result.TargetRaw = request.TargetRaw

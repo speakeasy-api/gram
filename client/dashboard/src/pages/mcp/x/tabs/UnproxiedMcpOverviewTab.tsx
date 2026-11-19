@@ -15,6 +15,8 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 type UnproxiedMcpOverviewTabProps = {
   unproxiedMcpServerId: string;
+  /** Shown above the activity panels. */
+  header?: React.ReactNode;
 };
 
 /**
@@ -26,6 +28,7 @@ type UnproxiedMcpOverviewTabProps = {
  */
 export function UnproxiedMcpOverviewTab({
   unproxiedMcpServerId,
+  header,
 }: UnproxiedMcpOverviewTabProps): JSX.Element {
   const { from, to } = useMemo(() => {
     const to = new Date();
@@ -98,6 +101,7 @@ export function UnproxiedMcpOverviewTab({
   return (
     <DetailBody spacing="none" className="px-0 pt-0">
       <Stack gap={6}>
+        {header}
         <div className="border-neutral-softest border p-6">
           <Heading variant="h4">Tool calls over time</Heading>
           <Text small muted className="mt-1">

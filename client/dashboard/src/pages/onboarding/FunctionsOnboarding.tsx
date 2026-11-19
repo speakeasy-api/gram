@@ -1,3 +1,5 @@
+import { Navigate } from "react-router";
+import { useFunctionsAvailability } from "@/hooks/useFunctionsAvailability";
 import { useGatewayCreation } from "@/pages/mcp/gateway/useGatewayCreation";
 import { useProject } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
@@ -11,6 +13,30 @@ import { Stack } from "@/components/ui/Stack";
 import { CodeIcon } from "lucide-react";
 
 export default function FunctionsOnboarding(): JSX.Element {
+  const routes = useRoutes();
+  const functionsAvailability = useFunctionsAvailability();
+
+  // A deployment without Functions has no way to deploy them, so a stale link
+  // or bookmark lands on the add-server page instead.
+  if (functionsAvailability === "unavailable") {
+    return <Navigate to={routes.mcp.add.href()} replace />;
+  }
+
+  if (functionsAvailability === "loading") {
+    return (
+      <Page>
+        <Page.Header>
+          <Page.Header.Breadcrumbs />
+        </Page.Header>
+        <Page.Body isLoading>{null}</Page.Body>
+      </Page>
+    );
+  }
+
+  return <FunctionsOnboardingContent />;
+}
+
+function FunctionsOnboardingContent(): JSX.Element {
   const gateway = useGatewayCreation();
   const project = useProject();
   const routes = useRoutes();

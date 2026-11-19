@@ -4,12 +4,14 @@ import (
 	"context"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"go.opentelemetry.io/otel/attribute"
 )
 
 // logIdentity writes whose event a log record is: the session, the turn,
-// the subject, the person and the account.
+// the subject, the person, the account and the agent.
 type logIdentity struct{}
 
 func (*logIdentity) Name() string {
@@ -46,5 +48,19 @@ func (*logIdentity) Enrich(_ context.Context, record *otelv1.InboundLogRecord) (
 	if key, v, err := d.ExternalOrgID(record); known(key, err) {
 		out = append(out, AgentExternalOrgIDKey.String(v))
 	}
+	if agentID := inboundLogAgentID(record); agentID != "" {
+		out = append(out, AgentAgentIDKey.String(agentID))
+	}
 	return out, nil
+}
+
+// inboundLogAgentID trusts only Speakeasy-emitted records, since a producer can send the same attributes.
+func inboundLogAgentID(record *otelv1.InboundLogRecord) string {
+	if record.GetProvenance().GetSource() != InternalProvenanceSource {
+		return ""
+	}
+	if inboundLogAttributeString(record, string(attr.AuthorizationActorTypeKey)) != string(urn.PrincipalTypeAgent) {
+		return ""
+	}
+	return inboundLogAttributeString(record, string(attr.AuthorizationActorIDKey))
 }

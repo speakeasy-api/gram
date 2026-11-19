@@ -24,7 +24,7 @@ const (
 )
 
 type ToolDescriptor struct {
-	ThreadContext ThreadContextPolicy `exhaustruct:"optional"`
+	ThreadContext ThreadContextPolicy
 	SourceSlug    string
 	HandlerName   string
 	Name          string

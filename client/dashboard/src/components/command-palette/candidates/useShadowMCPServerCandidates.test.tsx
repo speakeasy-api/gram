@@ -46,7 +46,8 @@ vi.mock("@gram/client/react-query/shadowMCPInventory.core.js", () => ({
       mocks.requests.push(request);
       const page = mocks.pages[(request.cursor as string | undefined) ?? ""];
       if (page instanceof Error) throw page;
-      return page ?? { servers: [] };
+      // The SDK wraps each page of a paginated operation in `result`.
+      return { result: page ?? { servers: [] } };
     },
   }),
 }));

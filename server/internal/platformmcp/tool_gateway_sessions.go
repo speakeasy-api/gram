@@ -130,7 +130,7 @@ func gatewaySessionInputSchema() *jsonschema.Schema {
 func registerGatewaySessionTool(reg *Registrar, service GatewaySessionManagement) {
 	// This can span every project in an organization. Managed assistants have no
 	// organization-admin identity, so only external administrators are admitted.
-	addTool(reg, &mcp.Tool{ //nolint:exhaustruct // Optional SDK fields use documented defaults.
+	addTool(reg, &mcp.Tool{ //nolint:exhaustruct_v5 // Optional SDK fields use documented defaults.
 		Name: listGatewaySessionsToolName, Title: "List Gateway Sessions",
 		Description: "Inspect a bounded page of inbound gateway authorizations. Choose organization scope explicitly, an exact gateway ID, or a project_slug to list that project's Project Gateway (the Organization Gateway limited to the project's servers). Filter by caller-supplied identity search (at most 200 Unicode characters), member server association, provider, status, and creation timestamps; order by creation, last use, or authorization expiry. Reuse next_cursor only with identical filters. Results omit identities, client names, JWT identifiers, workload claims, and secrets. Association does not prove historical use. An unexpired authorization deadline does not guarantee a refresh grant exists. Read-only; use the dashboard to review identities or revoke sessions.",
 		Annotations: readOnlyAnnotations(),

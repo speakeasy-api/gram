@@ -48,7 +48,7 @@ func TestGovernor_ResourceMetadataRestrictsAuthorizationServer(t *testing.T) {
 			roots.AddCert(server.Certificate())
 			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil, guardian.WithTLSRootCAs(roots))
 			require.NoError(t, err)
-			manager := remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), f.db, f.chainer.enc, policy, nil, nil, nil)
+			manager := remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), f.db, f.enc, policy, nil, nil, nil)
 			f.chainer.SetResourceResolver(manager.ResolveEMAResource)
 			selected, outcome := f.chainer.selectBinding(t.Context(), f.chainer.logger, f.req)
 			if allowed {

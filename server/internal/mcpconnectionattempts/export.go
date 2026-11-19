@@ -355,9 +355,10 @@ func newExportRecord(eventName string, at time.Time, severity log.Severity, seve
 	return record
 }
 
-// addressNamesTheFailure reports whether the row's host is the external system that failed:
-// the sign-in provider on sign-in and refresh steps, the upstream MCP server on MCP requests.
-// A failure on Speakeasy's side, or one a call site marked as elsewhere, is not that host's.
+// addressNamesTheFailure reports whether the row's host is where it failed: the sign-in provider
+// on sign-in and refresh steps, the upstream MCP server on MCP requests, and for an address code
+// the configured host Speakeasy did not dial. A failure on Speakeasy's side, or one a call site
+// marked as elsewhere, such as a server's request stopped by its sign-in's address, is not that host's.
 func addressNamesTheFailure(row Row) bool {
 	return !row.failedElsewhere && WhoFixes(row.WhoFixes) != WhoSpeakeasy
 }

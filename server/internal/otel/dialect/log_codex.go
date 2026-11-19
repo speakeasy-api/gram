@@ -2,6 +2,7 @@ package dialect
 
 import (
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/genaiconv"
 )
 
@@ -81,6 +82,17 @@ func (CodexLog) Provider(*otelv1.InboundLogRecord) (string, string, error) {
 
 func (CodexLog) Surface(*otelv1.InboundLogRecord) (string, string, error) {
 	return scopeNameKey, codexSurface, nil
+}
+
+// Identity is Codex, with the client its service.name implies: the Rust CLI
+// and exec runs report their own names.
+func (CodexLog) Identity(record *otelv1.InboundLogRecord) (string, aivendors.Identity, error) {
+	serviceKey, serviceName := getLogResourceAttr(record, serviceNameKey)
+	if identity, ok := aivendors.Identify(serviceName); ok && identity.ProductID == codexSurface {
+		return serviceKey, identity, nil
+	}
+	identity, _ := aivendors.Identify(codexSurface)
+	return scopeNameKey, identity, nil
 }
 
 func (CodexLog) EventName(record *otelv1.InboundLogRecord) (string, string, error) {

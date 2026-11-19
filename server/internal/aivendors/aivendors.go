@@ -76,6 +76,10 @@ type Product struct {
 	// VendorKey groups products by vendor. Not unique; stable.
 	VendorKey string
 
+	// Family groups a vendor's related products, such as Claude Code, Claude and
+	// Cowork. Empty means the product is a family of its own.
+	Family string
+
 	DisplayName string
 
 	// Category is required when Signatures are set.
@@ -93,6 +97,11 @@ type Product struct {
 	// only — self-reported, so any client can claim any name.
 	ClientInfoNames []string
 
+	// Aliases are the other names producers report for the product: hook
+	// sources and the surfaces telemetry dialects state, each with the client
+	// the name implies. Attribution only, like ClientInfoNames.
+	Aliases []Alias
+
 	// Documents are the CIMD documents it publishes.
 	Documents []Document
 }
@@ -104,6 +113,14 @@ type Product struct {
 // vendor be classified as enforceable.
 func (p Product) SpeaksCIMD() bool {
 	return hasEnabledDocument(p)
+}
+
+// FamilyID is the product's family, or its own ID when it declares none.
+func (p Product) FamilyID() string {
+	if p.Family == "" {
+		return p.ID
+	}
+	return p.Family
 }
 
 // IsScanned reports whether device agents probe for this product.
@@ -209,6 +226,7 @@ func (p Product) clone() Product {
 		ProcessNames: slices.Clone(p.Signatures.ProcessNames),
 	}
 	out.ClientInfoNames = slices.Clone(p.ClientInfoNames)
+	out.Aliases = slices.Clone(p.Aliases)
 	out.Documents = slices.Clone(p.Documents)
 	return out
 }

@@ -11,13 +11,25 @@ import { GramCore } from "../core.js";
 import { accessListShadowMCPInventory } from "../funcs/accessListShadowMCPInventory.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { ListShadowMCPInventoryResult } from "../models/components/listshadowmcpinventoryresult.js";
 import {
   ListShadowMCPInventoryRequest,
+  ListShadowMCPInventoryResponse,
   ListShadowMCPInventorySecurity,
 } from "../models/operations/listshadowmcpinventory.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ShadowMCPInventoryQueryData = ListShadowMCPInventoryResult;
+import { PageIterator, unwrapResultIterator } from "../types/operations.js";
+import { pageIteratorToJSON } from "./_types.js";
+export type ShadowMCPInventoryQueryData = ListShadowMCPInventoryResponse;
+
+export type ShadowMCPInventoryInfiniteQueryData = PageIterator<
+  ListShadowMCPInventoryResponse,
+  { cursor: string }
+>;
+
+export type ShadowMCPInventoryPageParams = PageIterator<
+  ListShadowMCPInventoryResponse,
+  { cursor: string }
+>["~next"];
 
 export function prefetchShadowMCPInventory(
   queryClient: QueryClient,
@@ -33,6 +45,26 @@ export function prefetchShadowMCPInventory(
       security,
       options,
     ),
+  });
+}
+
+export function prefetchShadowMCPInventoryInfinite(
+  queryClient: QueryClient,
+  client$: GramCore,
+  request: ListShadowMCPInventoryRequest,
+  security?: ListShadowMCPInventorySecurity | undefined,
+  options?: RequestOptions,
+): Promise<void> {
+  return queryClient.prefetchInfiniteQuery({
+    ...buildShadowMCPInventoryInfiniteQuery(
+      client$,
+      request,
+      security,
+      options,
+    ),
+    initialPageParam: undefined as ShadowMCPInventoryPageParams,
+    getNextPageParam: (previousPage: ShadowMCPInventoryInfiniteQueryData) =>
+      previousPage["~next"],
   });
 }
 
@@ -78,6 +110,60 @@ export function buildShadowMCPInventoryQuery(
   };
 }
 
+export function buildShadowMCPInventoryInfiniteQuery(
+  client$: GramCore,
+  request: ListShadowMCPInventoryRequest,
+  security?: ListShadowMCPInventorySecurity | undefined,
+  options?: RequestOptions,
+): {
+  queryKey: QueryKey;
+  queryFn: (
+    context: QueryFunctionContext<QueryKey, ShadowMCPInventoryPageParams>,
+  ) => Promise<ShadowMCPInventoryInfiniteQueryData>;
+} {
+  return {
+    queryKey: queryKeyShadowMCPInventoryInfinite({
+      projectId: request.projectId,
+      limit: request.limit,
+      cursor: request.cursor,
+      gramSession: request.gramSession,
+    }),
+    queryFn: async function shadowMCPInventoryQuery(
+      ctx,
+    ): Promise<ShadowMCPInventoryInfiniteQueryData> {
+      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
+      const mergedOptions = {
+        ...options,
+        fetchOptions: { ...options?.fetchOptions, signal: sig },
+      };
+
+      if (!ctx.pageParam) {
+        const pageResult = await unwrapResultIterator(
+          accessListShadowMCPInventory(
+            client$,
+            request,
+            security,
+            mergedOptions,
+          ),
+        );
+        return pageIteratorToJSON(pageResult);
+      }
+      const pageResult = await unwrapResultIterator(
+        accessListShadowMCPInventory(
+          client$,
+          {
+            ...request,
+            cursor: ctx.pageParam.cursor,
+          },
+          security,
+          mergedOptions,
+        ),
+      );
+      return pageIteratorToJSON(pageResult);
+    },
+  };
+}
+
 export function queryKeyShadowMCPInventory(
   parameters: {
     projectId: string;
@@ -87,4 +173,21 @@ export function queryKeyShadowMCPInventory(
   },
 ): QueryKey {
   return ["@gram/client", "access", "listShadowMCPInventory", parameters];
+}
+
+export function queryKeyShadowMCPInventoryInfinite(
+  parameters: {
+    projectId: string;
+    limit?: number | undefined;
+    cursor?: string | undefined;
+    gramSession?: string | undefined;
+  },
+): QueryKey {
+  return [
+    "@gram/client",
+    "access",
+    "listShadowMCPInventory",
+    "infinite",
+    parameters,
+  ];
 }

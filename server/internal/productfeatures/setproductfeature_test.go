@@ -620,34 +620,38 @@ func TestProductFeaturesClient_SkillsAlwaysEnabled(t *testing.T) {
 	require.True(t, enabled)
 }
 
-func TestProductFeaturesService_RejectsRetiredRoleDistributionFlag(t *testing.T) {
+func TestProductFeaturesService_RejectsRetiredRolloutFlags(t *testing.T) {
 	t.Parallel()
-	for _, staff := range []bool{false, true} {
-		t.Run(fmt.Sprintf("staff=%v", staff), func(t *testing.T) {
-			t.Parallel()
-			ctx, ti := newTestProductFeaturesService(t)
-			if staff {
-				ctx = withPlatformAdmin(t, ctx)
-			}
-			err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
-				OrganizationID: requestedOrganizationID(ctx),
-				FeatureName:    gen.ProductFeatureName("automatic-role-distribution"), Enabled: true,
+	for _, feature := range []string{"automatic-role-distribution", "provider_setup"} {
+		for _, staff := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/staff=%v", feature, staff), func(t *testing.T) {
+				t.Parallel()
+				ctx, ti := newTestProductFeaturesService(t)
+				if staff {
+					ctx = withPlatformAdmin(t, ctx)
+				}
+				err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+					OrganizationID: requestedOrganizationID(ctx),
+					FeatureName:    gen.ProductFeatureName(feature), Enabled: true,
+				})
+				requireOopsCode(t, err, oops.CodeInvalid)
+				enabled, err := repo.New(ti.conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{OrganizationID: activeOrganizationID(t, ctx), FeatureName: feature})
+				require.NoError(t, err)
+				require.False(t, enabled)
 			})
-			requireOopsCode(t, err, oops.CodeInvalid)
-			enabled, err := repo.New(ti.conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{OrganizationID: activeOrganizationID(t, ctx), FeatureName: "automatic-role-distribution"})
-			require.NoError(t, err)
-			require.False(t, enabled)
-		})
+		}
 	}
 }
 
-func TestMutatorRejectsRetiredRoleDistributionFlag(t *testing.T) {
+func TestMutatorRejectsRetiredRolloutFlags(t *testing.T) {
 	t.Parallel()
 	mutator := productfeatures.NewMutator(nil, nil)
-	for _, enabled := range []bool{false, true} {
-		changed, err := mutator.ApplyFeatureChangeTx(t.Context(), nil, "org_retired_flag", productfeatures.Feature("automatic-role-distribution"), enabled, productfeatures.MutationActor{})
-		require.False(t, changed)
-		requireOopsCode(t, err, oops.CodeInvalid)
+	for _, feature := range []string{"automatic-role-distribution", "provider_setup"} {
+		for _, enabled := range []bool{false, true} {
+			changed, err := mutator.ApplyFeatureChangeTx(t.Context(), nil, "org_retired_flag", productfeatures.Feature(feature), enabled, productfeatures.MutationActor{})
+			require.False(t, changed)
+			requireOopsCode(t, err, oops.CodeInvalid)
+		}
 	}
 }
 

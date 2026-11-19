@@ -18,7 +18,6 @@ import {
 } from "@/pages/mcp/MCPToolFilterScopesPanel";
 import { AddToolsDialog } from "@/pages/toolsets/AddToolsDialog";
 import { ToolsetEmptyState } from "@/pages/toolsets/ToolsetEmptyState";
-import { useRoutes } from "@/routes";
 import {
   invalidateListToolsetToolFilters,
   useListToolsetToolFilters,
@@ -30,20 +29,24 @@ import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router";
 import { toast } from "sonner";
 
 /** The toolset's tools: list, add, edit, remove. */
 export function HostedToolsTab({
   toolset,
+  inspectHref,
 }: {
   toolset: Toolset;
+  /** This server's Inspect tab, where its tools can be tried in chat. */
+  inspectHref: string;
 }): React.JSX.Element {
   const { hasScope } = useRBAC();
   const canWrite = hasScope("mcp:write", toolset.id);
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
   const client = useSdkClient();
-  const routes = useRoutes();
+  const navigate = useNavigate();
   const { data: fullToolset, refetch } = useToolset(toolset.slug);
 
   // Read-only tool filtering ("scopes") view. The resolved variation group, when
@@ -141,9 +144,9 @@ export function HostedToolsTab({
     [fullToolset?.toolUrns, toolset.slug, updateToolsetMutation, telemetry],
   );
 
-  const handleTestInPlayground = useCallback(() => {
-    routes.playground.goTo(toolset.slug);
-  }, [toolset.slug, routes.playground]);
+  const handleTestInInspect = useCallback(() => {
+    void navigate(inspectHref);
+  }, [navigate, inspectHref]);
 
   // Group filtering
   const grouped = useGroupedTools(tools);
@@ -257,7 +260,7 @@ export function HostedToolsTab({
           onToolUpdate={canWrite ? updateTool : undefined}
           isToolUpdating={isUpdating}
           onToolsRemove={canWrite ? handleToolsRemove : undefined}
-          onTestInPlayground={handleTestInPlayground}
+          onTestInInspect={handleTestInInspect}
           readOnly={!canWrite}
         />
       ) : (

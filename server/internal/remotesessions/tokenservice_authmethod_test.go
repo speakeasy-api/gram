@@ -102,7 +102,7 @@ func setupRefreshFixture(t *testing.T, authMethod string, clientSecret string, s
 		require.NoError(t, encErr)
 		secretPG = conv.ToPGText(secretCiphertext)
 	}
-	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+	client, err := q.CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   issuer.ID,
@@ -138,7 +138,7 @@ func seedExpiredRemoteSession(t *testing.T, ctx context.Context, ti *testInstanc
 	require.NoError(t, err)
 	refreshEncStr := refreshEnc
 
-	_, err = repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	_, err = repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userIssuerID,
 		RemoteSessionClientID: clientID,

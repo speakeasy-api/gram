@@ -30,7 +30,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -368,6 +370,14 @@ func recheckServerIdentityTarget(ctx context.Context, tx pgx.Tx, projectID uuid.
 func identityOopsError(err error, message string) *oops.ShareableError {
 	var refusal *IdentityError
 	if !errors.As(err, &refusal) {
+		switch {
+		case errors.Is(err, clientsecrets.ErrUnattributed):
+			return oops.E(oops.CodeFailedPrecondition, err, "this client was stored without its organization, so its secret cannot be stored while the organization moves to its own encryption key; backfill the client's organization first")
+		case orgencryption.IsKeyProblem(err):
+			return oops.E(oops.CodeUnavailable, err, "the organization's encryption key is unavailable, so the client secret could not be stored; try again shortly")
+		case orgencryption.IsUnreadable(err):
+			return oops.E(oops.CodeConflict, err, "the source client's stored secret could not be read; enter a client_secret instead")
+		}
 		return oops.E(oops.CodeUnexpected, err, "%s", message)
 	}
 	code := oops.CodeUnexpected

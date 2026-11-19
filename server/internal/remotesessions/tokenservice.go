@@ -48,13 +48,17 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -1065,7 +1069,7 @@ func OutageProviderHost(err error) string {
 // setup, also reads as busy here, though ConnectionOutageHappened records them differently.
 func RefreshBusy(err error) bool {
 	refreshErr, ok := errors.AsType[*RefreshError](err)
-	return ok && refreshErr.Outcome == remotesessionmetrics.RefreshOutcomeDeferred && refreshErr.visibleOutage == RefreshOutageNone
+	return ok && refreshErr.Outcome == remotesessionmetrics.RefreshOutcomeDeferred && refreshErr.visibleOutage == RefreshOutageNone && OutageAddress(err) == guardian.AddressFine
 }
 
 // HeldWithoutToken reports a subject's connection kept without a token so routing never calls its server without it.
@@ -1212,7 +1216,8 @@ func (m *ChallengeManager) storedGrantsNeedReconnect(
 		}
 		// The rule resolution uses: a live readable access token serves, even
 		// inside the expiry skew, and a readable usable refresh token renews.
-		if !readStoredTokens(m.enc, sess, now).usable {
+		// A key that cannot open them right now is not a reason to reconnect.
+		if readStoredTokens(ctx, m.tokens, sess, now).needsSignIn() {
 			return true, nil
 		}
 	}
@@ -1252,7 +1257,12 @@ func (m *ChallengeManager) validateAndRefresh(
 		return "", sess, sess.UpdatedAt.Time, ErrNoValidToken
 	}
 
-	stored := readStoredTokens(m.enc, sess, now)
+	stored := readStoredTokens(ctx, m.tokens, sess, now)
+	if stored.keyErr != nil {
+		// The grant may be fine; only the organization's key could not open
+		// it right now, so nobody is asked to sign in again.
+		return "", sess, sess.UpdatedAt.Time, &storedTokenKeyError{err: stored.keyErr}
+	}
 	if stored.unreadable {
 		m.reportUnreadable(ctx, sess, stored)
 		return "", sess, sess.UpdatedAt.Time, stored.err()
@@ -1263,7 +1273,7 @@ func (m *ChallengeManager) validateAndRefresh(
 	}
 	if stored.accessErr != nil {
 		// A refresh (RFC 6749 section 6) stores a new pair under the current key.
-		m.logger.ErrorContext(ctx, "remote session stored access token could not be decrypted; renewing it", storedTokenAttrs(m.enc, sess, stored.accessErr)...)
+		m.logger.ErrorContext(ctx, "remote session stored access token could not be decrypted; renewing it", storedTokenAttrs(m.tokens, sess, stored.accessErr)...)
 	}
 
 	hasRefresh := hasRefreshToken(sess)
@@ -1280,9 +1290,12 @@ func (m *ChallengeManager) validateAndRefresh(
 	}
 
 	if stored.access != "" && accessTokenLive(sess, now) {
-		// An unreadable refresh token is never sent; the stored access token serves until its deadline.
-		if _, err := m.enc.Decrypt(sess.RefreshTokenEncrypted.String); err != nil {
-			m.refresher.refreshTokenUnreadable(ctx, sess, err)
+		// An unreadable refresh token is never sent, nor one the organization's
+		// key cannot open right now; the stored access token serves until its deadline.
+		if _, err := openRefreshToken(ctx, m.tokens, sess); err != nil {
+			if orgencryption.IsUnreadable(err) {
+				m.refresher.refreshTokenUnreadable(ctx, sess, err)
+			}
 			return stored.access, sess, sess.UpdatedAt.Time, nil
 		}
 	}
@@ -1382,11 +1395,24 @@ func (s *RefreshService) refreshSessionTokens(
 		return zero, noToken, err
 	}
 
+	// A refresh may rotate the refresh token at the provider, and the only
+	// copy of the new one is what it answers, so the tokens must be storable
+	// before the provider is asked. A key that is unusable right now leaves the
+	// grant intact; the refresh is only retried later.
+	if err := s.tokens.RequireUsable(ctx, nil, sess.OrganizationID); err != nil {
+		return zero, noToken, newTokenRefreshError("the session's tokens cannot be stored right now; try again shortly", err, refreshRemedyRetry)
+	}
+
 	var clientSecret string
-	if client.ClientSecretEncrypted.Valid && client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
-		clientSecret, err = s.enc.Decrypt(client.ClientSecretEncrypted.String)
-		if err != nil {
+	if stored := clientsecrets.Stored(client.ClientSecretEncrypted, client.ClientSecretOrgEncrypted); clientsecrets.Has(stored) && client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
+		clientSecret, err = s.secrets.Open(ctx, nil, clientsecrets.OwnerOf(client.ClientOrganizationID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}), stored)
+		switch {
+		case orgencryption.IsUnreadable(err):
 			return zero, noToken, newTokenRefreshError("the client secret could not be read; check the issuer's configuration", err, refreshRemedyAdministrator)
+		case err != nil:
+			// The grant is intact; the client secret only could not be opened
+			// right now, so the user is never asked to sign in again.
+			return zero, noToken, newTokenRefreshError("the client secret could not be opened right now; try again shortly", err, refreshRemedyRetry)
 		}
 	}
 
@@ -1448,21 +1474,9 @@ func (s *RefreshService) refreshSessionTokens(
 		return zero, noToken, err
 	}
 
-	accessEnc, err := s.enc.Encrypt([]byte(tok.AccessToken))
-	if err != nil {
-		return zero, noToken, fmt.Errorf("encrypt new access token: %w", err)
-	}
-	// An echoed refresh token keeps its stored ciphertext: re-encrypting it
-	// would read as a rotation to anything comparing the columns.
-	newRefreshEnc := sess.RefreshTokenEncrypted
+	// An echoed or omitted refresh token keeps its stored copies: sealing it
+	// again would read as a rotation to anything comparing the columns.
 	refreshRotated := tok.RefreshToken != "" && tok.RefreshToken != refreshToken
-	if refreshRotated {
-		v, eerr := s.enc.Encrypt([]byte(tok.RefreshToken))
-		if eerr != nil {
-			return zero, noToken, fmt.Errorf("encrypt new refresh token: %w", eerr)
-		}
-		newRefreshEnc = conv.PtrToPGText(&v)
-	}
 
 	// No reported expiry ⇒ NULL (no known expiry), matching the code
 	// exchange. Never fabricate a deadline the upstream did not assert.
@@ -1486,19 +1500,17 @@ func (s *RefreshService) refreshSessionTokens(
 	// CAS on the updated_at read before the POST: overwriting a row someone
 	// else rotated would persist a refresh token the provider has already
 	// consumed. A revocation mid-POST drops the row out of scope too.
-	updated, err := q.UpdateRemoteSessionTokensIfUnchanged(ctx, remotesessions_repo.UpdateRemoteSessionTokensIfUnchangedParams{
+	updated, err := s.storeRefreshedSession(ctx, sess, remotesessions_repo.UpdateRefreshedRemoteSessionIfUnchangedParams{
 		SubjectUrn:             sess.SubjectUrn,
 		RemoteSessionClientID:  sess.RemoteSessionClientID,
-		AccessTokenEncrypted:   accessEnc,
 		AccessExpiresAt:        conv.PtrToPGTimestamptz(accessExpires),
-		RefreshTokenEncrypted:  newRefreshEnc,
 		AuthorizationExpiresAt: authorizationExpires,
 		RefreshExpiresAt:       refreshExpires,
 		RefreshTokenRotated:    refreshRotated,
 		Scopes:                 scopes,
 		BackfillResource:       conv.ToPGTextEmpty(resource), // the query's COALESCE/NULLIF keeps a stored binding and rejects an empty stamp
 		ExpectedUpdatedAt:      sess.UpdatedAt,
-	})
+	}, upstreamtokens.RemoteSessionTokens{AccessToken: tok.AccessToken, RefreshToken: tok.RefreshToken, KeepRefreshToken: !refreshRotated})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return zero, noToken, newTokenRefreshError("the session was rotated by another request or revoked while this refresh was in flight; reload to see its current state", errRefreshNotApplied, refreshRemedyRetry)
@@ -1527,6 +1539,37 @@ func (s *RefreshService) refreshSessionTokens(
 	s.logger.InfoContext(ctx, "upstream remote session tokens refreshed", refreshedAttrs...)
 
 	return updated, tok, nil
+}
+
+// storeRefreshedSession writes a refresh's result in one short transaction:
+// the compare-and-swap on everything but the tokens, then the tokens through
+// the seam. pgx.ErrNoRows means the compare-and-swap lost; any other error
+// from the token write rolls back the whole refresh, so the row never holds
+// the new deadlines with the old tokens.
+func (s *RefreshService) storeRefreshedSession(ctx context.Context, sess remotesessions_repo.RemoteSession, params remotesessions_repo.UpdateRefreshedRemoteSessionIfUnchangedParams, tokens upstreamtokens.RemoteSessionTokens) (remotesessions_repo.RemoteSession, error) {
+	var zero remotesessions_repo.RemoteSession
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return zero, fmt.Errorf("begin refreshed session write: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	updated, err := remotesessions_repo.New(dbtx).UpdateRefreshedRemoteSessionIfUnchanged(ctx, params)
+	if err != nil {
+		return zero, fmt.Errorf("update refreshed session: %w", err)
+	}
+
+	stored, err := s.tokens.SetRemoteSession(ctx, dbtx, updated.ID, updated.OrganizationID, tokens)
+	if err != nil {
+		return zero, fmt.Errorf("store refreshed tokens of %s: %w", sess.ID, err)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return zero, fmt.Errorf("commit refreshed session write: %w", err)
+	}
+
+	return stored, nil
 }
 
 // identityRestatementBudget bounds one restatement on a context detached from
@@ -1594,7 +1637,7 @@ func (s *RefreshService) restateIdentity(
 	needsIdentity := identity == nil && (!sess.IdentitySource.Valid || slices.Contains(overwritableIdentitySources(IdentitySourceJWTAccessToken), sess.IdentitySource.String))
 	needsScope := !tok.ScopeReported()
 	if s.enricher != nil && !idTokenRejected && (needsIdentity || needsScope) {
-		target := enrichmentTargetFromClient(client, "")
+		target := enrichmentTargetFromClient(client, "", s.secrets)
 		target.resource = conv.FromPGTextOrEmpty[string](sess.Resource)
 		access = s.enricher.jwtAccessToken(ctx, target, tok.AccessToken)
 		s.enricher.rejectJWTForOtherSubject(ctx, target, &access, previousSubject)

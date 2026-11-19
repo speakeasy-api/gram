@@ -150,7 +150,7 @@ func credentialsFrom(encoded []byte) (tailscaleapi.Credentials, error) {
 	return tailscaleapi.Credentials{ClientID: parsed.ClientID, ClientSecret: parsed.ClientSecret}, nil
 }
 
-//nolint:exhaustruct // observations populate only the state they know.
+//nolint:exhaustruct_v5 // observations populate only the state they know.
 func errorObservation(code string) k8s.NetworkIngressObservation {
 	return k8s.NetworkIngressObservation{Status: k8s.NetworkIngressStatusError, ErrorCode: code}
 }
@@ -460,7 +460,7 @@ func (p *Provisioner) Observe(ctx context.Context, resources k8s.NetworkIngressR
 	return observation, err
 }
 
-//nolint:exhaustruct // observations populate only the state they know.
+//nolint:exhaustruct_v5 // observations populate only the state they know.
 func (p *Provisioner) observe(ctx context.Context, id uuid.UUID, organizationID string) (k8s.NetworkIngressObservation, error) {
 	nodes, err := repo.New(p.db).ListNetworkIngressNodes(ctx, repo.ListNetworkIngressNodesParams{NetworkIngressID: id, OrganizationID: organizationID})
 	if err != nil {

@@ -1250,6 +1250,7 @@ func (s *Service) writeSetupCallbackError(w http.ResponseWriter, r *http.Request
 		Setup:    true, Status: status, Reason: oauthui.ReasonDefault,
 		ErrorID: "", Code: oautherr.CodeInvalidRequest, Description: description,
 		ProviderName: "",
+		AdminDetail:  "",
 		CallbackURL:  "", ClientName: "", ClientID: "", ClientIDOrigin: "", ServerName: "",
 	}
 	switch {
@@ -1952,10 +1953,11 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		WorkOSSessionID:        idpUser.WorkOSSessionID,
 		AuthenticationMethod:   idpUser.AuthenticationMethod,
 		Evidence: signins.Evidence{
-			HostedDomain:       idpUser.Evidence.HostedDomain,
-			TenantID:           idpUser.Evidence.TenantID,
-			VerifiedEmail:      idpUser.Evidence.VerifiedEmail,
-			IDPAuthenticatedAt: idpUser.Evidence.AuthenticatedAt,
+			HostedDomain:        idpUser.Evidence.HostedDomain,
+			HostedDomainChecked: idpUser.Evidence.HostedDomainChecked,
+			TenantID:            idpUser.Evidence.TenantID,
+			VerifiedEmail:       idpUser.Evidence.VerifiedEmail,
+			IDPAuthenticatedAt:  idpUser.Evidence.AuthenticatedAt,
 		},
 		Impersonated:    idpUser.ImpersonatorEmail() != "",
 		AuthenticatedAt: authenticatedAt,
@@ -1994,7 +1996,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		s.logger.WarnContext(ctx, "invite callback: failed to invalidate user info cache", attr.SlogError(err))
 	}
 
-	//nolint:exhaustruct // only desired fields — avoid unexpected zero-value behavior
+	//nolint:exhaustruct_v5 // only desired fields — avoid unexpected zero-value behavior
 	http.SetCookie(w, &http.Cookie{
 		Name:     constants.SessionCookie,
 		Value:    sessionID,
