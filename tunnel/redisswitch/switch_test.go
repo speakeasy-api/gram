@@ -152,16 +152,13 @@ func TestStartFailsWhenTheNextInstanceRejectsThePassword(t *testing.T) {
 	require.ErrorContains(t, err, "check next redis instance")
 }
 
-func TestArmedClientNeverRetriesAndNamesItsConnections(t *testing.T) {
+func TestArmedClientNeverRetriesAndDoesNotNameItsConnections(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
 	require.Equal(t, 0, f.client.Options().MaxRetries, "a command interrupted by the move must not be replayed")
 	require.Equal(t, 1, f.client.Options().DialerRetries)
-
-	name, err := f.client.ClientGetName(t.Context()).Result()
-	require.NoError(t, err)
-	require.Equal(t, ClientName(DefaultRole), name)
+	require.Empty(t, f.client.Options().ClientName, "an instance that rejects CLIENT would refuse a named connection")
 }
 
 func TestCommandsUseTheCurrentInstanceByDefault(t *testing.T) {
@@ -442,7 +439,7 @@ func TestNewConnectionIsRefusedWhenTheInstanceHasMoved(t *testing.T) {
 	require.ErrorIs(t, f.sw.verifyCurrent(t.Context(), conn), ErrHolding)
 }
 
-func TestWrapBindsTheDialerEvenForOptionsThatOnlyShareTheName(t *testing.T) {
+func TestWrapBindsTheDialerEvenForOptionsThatOnlyShareTheAddress(t *testing.T) {
 	t.Parallel()
 
 	current := miniredis.RunT(t)
@@ -453,8 +450,8 @@ func TestWrapBindsTheDialerEvenForOptionsThatOnlyShareTheName(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = first.Close() })
 
-	// Options built by hand, with the right address and name but no dialer.
-	second := Wrap(&redis.Options{Addr: current.Addr(), ClientName: ClientName(DefaultRole)})
+	// Options built by hand, with the right address but no dialer.
+	second := Wrap(&redis.Options{Addr: current.Addr()})
 	t.Cleanup(func() { _ = second.Close() })
 
 	require.NoError(t, second.Set(t.Context(), "k", "v", 0).Err())
@@ -470,14 +467,14 @@ func TestWrapWaitsForASwitchThatIsStillStarting(t *testing.T) {
 	next := miniredis.RunT(t)
 
 	// The registry as NewClient leaves it between reserving and starting.
-	key := registryKey(current.Addr(), ClientName(DefaultRole))
+	key := current.Addr()
 	reserved := &entry{ready: make(chan struct{}), sw: nil}
 	switches.Store(key, reserved)
 	t.Cleanup(func() { switches.Delete(key) })
 
 	wrapped := make(chan *redis.Client)
 	go func() {
-		wrapped <- Wrap(&redis.Options{Addr: current.Addr(), ClientName: ClientName(DefaultRole)})
+		wrapped <- Wrap(&redis.Options{Addr: current.Addr()})
 	}()
 
 	select {
@@ -508,10 +505,10 @@ func TestWrapRefusesToConnectForASwitchThatFailedToStart(t *testing.T) {
 	_, err := NewClient(t.Context(), slog.New(slog.DiscardHandler), &redis.Options{Addr: current.Addr()}, DefaultRole, Target{Addr: next.Addr(), Password: ""})
 	require.ErrorIs(t, err, ErrNotArmed)
 
-	client := Wrap(&redis.Options{Addr: current.Addr(), ClientName: ClientName(DefaultRole)})
+	client := Wrap(&redis.Options{Addr: current.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
 	require.ErrorIs(t, client.Set(t.Context(), "k", "v", 0).Err(), ErrNotStarted)
-	require.False(t, current.Exists("k"), "an ordinary client must not carry the switch's name")
+	require.False(t, current.Exists("k"), "a client whose switch failed to start must not connect")
 
 	// Starting again once the instance is armed replaces the failed entry.
 	require.NoError(t, current.Set(stateKey, valueCurrent))
@@ -564,42 +561,7 @@ func TestWaitersAllWakeWhenTheMoveHappens(t *testing.T) {
 	}
 }
 
-func TestTwoRolesOnOneInstanceMoveIndependently(t *testing.T) {
-	t.Parallel()
-
-	current := miniredis.RunT(t)
-	require.NoError(t, current.Set(StateKey("sessions"), valueCurrent))
-	require.NoError(t, current.Set(StateKey("cache"), valueCurrent))
-	sessionsNext := miniredis.RunT(t)
-	cacheNext := miniredis.RunT(t)
-	logger := slog.New(slog.DiscardHandler)
-
-	sessions, err := NewClient(t.Context(), logger, &redis.Options{Addr: current.Addr()}, "sessions", Target{Addr: sessionsNext.Addr(), Password: ""})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = sessions.Close() })
-	cache, err := NewClient(t.Context(), logger, &redis.Options{Addr: current.Addr()}, "cache", Target{Addr: cacheNext.Addr(), Password: ""})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = cache.Close() })
-
-	// A client built from a copy of the cache client's options must follow the
-	// cache role, not the other role on the same instance.
-	copied := *cache.Options()
-	cacheCopy := Wrap(&copied)
-	t.Cleanup(func() { _ = cacheCopy.Close() })
-
-	require.NoError(t, current.Set(StateKey("cache"), movedPrefix+"run-1"))
-	require.Eventually(t, func() bool {
-		return cacheCopy.Set(t.Context(), "probe", "v", 0).Err() == nil && cacheNext.Exists("probe")
-	}, settle, 20*time.Millisecond)
-
-	require.NoError(t, cache.Set(t.Context(), "c", "v", 0).Err())
-	require.NoError(t, sessions.Set(t.Context(), "s", "v", 0).Err())
-	require.True(t, cacheNext.Exists("c"))
-	require.True(t, current.Exists("s"), "the role that did not move stays on the instance")
-	require.False(t, sessionsNext.Exists("s"))
-}
-
-func TestNewClientRefusesASecondSwitchForTheSameRole(t *testing.T) {
+func TestNewClientRefusesASecondSwitchForTheSameInstance(t *testing.T) {
 	t.Parallel()
 
 	current := miniredis.RunT(t)
@@ -612,5 +574,5 @@ func TestNewClientRefusesASecondSwitchForTheSameRole(t *testing.T) {
 	t.Cleanup(func() { _ = first.Close() })
 
 	_, err = NewClient(t.Context(), logger, &redis.Options{Addr: current.Addr()}, DefaultRole, Target{Addr: next.Addr(), Password: ""})
-	require.ErrorContains(t, err, "already follows role")
+	require.ErrorContains(t, err, "already follows this instance")
 }

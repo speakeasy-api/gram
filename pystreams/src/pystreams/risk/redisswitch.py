@@ -30,9 +30,6 @@ STATE_KEY_PREFIX: Final = "gram:redis-switch:state:"
 # The role of a process that keeps everything on one instance.
 DEFAULT_ROLE: Final = "all"
 HOLD_KEY: Final = "gram:redis-switch:hold"
-# Named connections let the operator's job tell switch-aware clients from ones
-# that would ignore a hold. The role follows the prefix.
-CLIENT_NAME_PREFIX: Final = "gram-redisswitch"
 
 _VALUE_CURRENT: Final = b"current"
 _MOVED_PREFIX: Final = b"moved:"
@@ -44,11 +41,6 @@ RETRY_INTERVAL_SECONDS: Final = 0.25
 HOLD_TIMEOUT_SECONDS: Final = 60.0
 
 Write = Callable[[redis_asyncio.client.Pipeline], None]
-
-
-def client_name(role: str) -> str:
-    """The name of every connection a role's clients open."""
-    return CLIENT_NAME_PREFIX + ":" + role
 
 
 def _as_bytes(value: bytes | str | None) -> bytes | None:
