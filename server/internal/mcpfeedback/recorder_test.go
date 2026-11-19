@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
 	"github.com/speakeasy-api/gram/server/internal/chatredact"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -20,12 +21,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpfeedback/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
-const logRecordTopic = "gram.otel.v1.InboundLogRecord"
+const (
+	webhookTopic   = "gram.webhooks.v1.Event"
+	logRecordTopic = "gram.otel.v1.InboundLogRecord"
+)
 
 // noLimits is a recorder that accepts every report.
 var noLimits = mcpfeedback.Limits{Caller: nil, Server: nil}
@@ -141,7 +146,7 @@ func TestRecorderOffersTheToolOnlyWhenSwitchedOn(t *testing.T) {
 	require.False(t, offered, "switching the tool off keeps its settings and stops offering it")
 }
 
-func TestRecorderSubmitStoresTheReportAndQueuesItsLogRecord(t *testing.T) {
+func TestRecorderSubmitStoresTheReportAndQueuesBothDeliveries(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -168,6 +173,38 @@ func TestRecorderSubmitStoresTheReportAndQueuesItsLogRecord(t *testing.T) {
 	require.Equal(t, "idp|priya", row.ExternalUserID.String)
 	require.Equal(t, "claude-code", row.ClientName.String)
 	require.Equal(t, "2.1.0", row.ClientVersion.String)
+
+	// The webhook event is delivered under an id derived from the report, and
+	// carries the member's email although the row does not.
+	webhooks := queuedFor(t, ctx, ti, webhookTopic)
+	require.Len(t, webhooks, 1)
+	require.Equal(t, events.McpFeedbackSubmittedEventID(receipt.ID), webhooks[0].PublicID)
+	require.Equal(t, target.OrganizationID, webhooks[0].OrganizationID)
+	var envelope webhooksv1.Event
+	require.NoError(t, proto.Unmarshal(webhooks[0].Message, &envelope))
+	require.Equal(t, "mcp_feedback.submitted_v1", envelope.GetEventType())
+	require.Equal(t, target.OrganizationID, envelope.GetOrganizationId())
+	var payload events.McpFeedbackSubmittedPayloadV1
+	require.NoError(t, json.Unmarshal(envelope.GetPayload(), &payload))
+	require.Equal(t, events.McpFeedbackSubmittedPayloadV1{
+		ID:             receipt.ID,
+		OrganizationID: target.OrganizationID,
+		ProjectID:      server.ProjectID,
+		McpServerID:    server.ID,
+		Content:        sampleReport().Content,
+		Severity:       "degraded",
+		Workaround:     "Queried a wider range.",
+		Intention:      "Find a failing request.",
+		ToolName:       "search_logs",
+		Model:          "Claude in Claude Code",
+		UserID:         "user-1",
+		UserEmail:      "priya@acme.example",
+		ExternalUserID: "idp|priya",
+		ClientName:     "claude-code",
+		ClientVersion:  "2.1.0",
+		CreatedAt:      payload.CreatedAt,
+	}, payload)
+	require.True(t, payload.CreatedAt.Equal(row.CreatedAt.Time))
 
 	// The log record is stamped with the feedback provenance source, which is
 	// what routes it to the MCP feedback export, under the server's tenant.
@@ -278,6 +315,11 @@ func TestRecorderSubmitMasksSecretsAndPersonalData(t *testing.T) {
 	}
 	require.NotContains(t, rows[0].Content, "jane@customer.example")
 
+	webhooks := queuedFor(t, ctx, ti, webhookTopic)
+	require.Len(t, webhooks, 1)
+	require.NotContains(t, string(webhooks[0].Message), secret)
+	require.NotContains(t, string(webhooks[0].Message), "jane@customer.example")
+
 	records := queuedFor(t, ctx, ti, logRecordTopic)
 	require.Len(t, records, 1)
 	require.NotContains(t, string(records[0].Message), secret)
@@ -332,10 +374,11 @@ func TestRecorderSubmitStoresNothingWhenTheScanFails(t *testing.T) {
 	require.ErrorContains(t, err, "redact feedback")
 
 	require.Empty(t, storedFeedback(t, ctx, ti, server))
+	require.Empty(t, queuedFor(t, ctx, ti, webhookTopic))
 	require.Empty(t, queuedFor(t, ctx, ti, logRecordTopic))
 }
 
-// A report is stored only together with its log record.
+// A report is stored only together with its deliveries.
 func TestRecorderSubmitStoresNothingWhenADeliveryCannotBeQueued(t *testing.T) {
 	t.Parallel()
 
@@ -345,7 +388,7 @@ func TestRecorderSubmitStoresNothingWhenADeliveryCannotBeQueued(t *testing.T) {
 	require.NoError(t, testrepo.New(ti.conn).RejectPublishOutboxWritesFixture(ctx))
 
 	_, err := recorder.Submit(ctx, targetOf(t, ctx, server), sampleCaller(), sampleReport())
-	require.ErrorContains(t, err, "queue feedback log record")
+	require.ErrorContains(t, err, "queue feedback webhook event")
 
 	require.Empty(t, storedFeedback(t, ctx, ti, server))
 }
