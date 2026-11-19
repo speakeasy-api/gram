@@ -340,7 +340,7 @@ export function ConnectionLogsView({
         const urn = row.person.subjectUrn;
         actions.push({
           icon: "user",
-          label: "Show only this person",
+          label: "Filter logs to this person",
           separatorBefore: true,
           onClick: () => showOnly("person", urn),
         });
@@ -349,7 +349,7 @@ export function ConnectionLogsView({
         const id = row.server.id;
         actions.push({
           icon: "server",
-          label: "Show only this server",
+          label: "Filter logs to this server",
           separatorBefore: !row.person,
           onClick: () => showOnly("server", id),
         });
@@ -456,7 +456,7 @@ export function ConnectionLogsView({
       <InlineEmptyState
         icon="file-x"
         heading="Connection Logs needs logging"
-        description={`Logging is off for ${organization.name || "this organization"}, so attempts are not kept. Turning it on starts the log from that moment.`}
+        description={`Logging is off for ${organization.name || "this organization"}, so connection attempt logs are not kept. Turning it on starts logging from that moment.`}
         action={<EnableLoggingAction />}
       />
     );
@@ -484,7 +484,7 @@ export function ConnectionLogsView({
         icon="triangle-alert"
         orientation="horizontal"
         heading="Couldn't load Connection Logs"
-        description="Connections are not affected."
+        description="Your MCP connections aren't affected."
         action={
           <Button
             variant="secondary"
@@ -768,8 +768,8 @@ function EnableLoggingAction(): JSX.Element {
 export function OwnAttemptsNotice(): JSX.Element {
   return (
     <p className="text-muted-foreground text-sm">
-      You see only your own connection attempts. People with access to logs see
-      everyone&apos;s.
+      This shows only your own connection attempts. To see everyone&apos;s, ask
+      an administrator for permission to read logs.
     </p>
   );
 }

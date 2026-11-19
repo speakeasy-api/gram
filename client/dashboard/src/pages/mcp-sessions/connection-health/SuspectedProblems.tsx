@@ -7,15 +7,15 @@ import type { SuspectedProblem } from "./types";
 const VISIBLE = 3;
 
 const SUSPECTED_PROBLEMS_RULE =
-  "Failed the same way and not connected since: 3 or more people on one server, service or app version, or one person for 24 hours.";
+  "Failed the same way and not connected since: 3 or more people on one MCP server, one service or one app version, or one person for 24 hours.";
 
 /** The rule where problems signing in to Speakeasy sit beside problems connecting to a service. */
 const MIXED_PROBLEMS_RULE =
-  "Failed the same way with no success since: 3 or more people on one server, service or app version, or one person for 24 hours.";
+  "Failed the same way with no success since: 3 or more people on one MCP server, one service or one app version, or one person for 24 hours.";
 
 /** The rule as the provider Overview states it, which lists only problems signing in to Speakeasy. */
 export const SIGN_IN_PROBLEMS_RULE =
-  "Failed to sign in the same way and not signed in since: 3 or more people on one server or app version, or one person for 24 hours.";
+  "Failed to sign in the same way and not signed in since: 3 or more people on one MCP server or one app version, or one person for 24 hours.";
 
 /** The one panel that says we suspect something; nothing when there is none. */
 export function SuspectedProblems({
@@ -70,7 +70,7 @@ export function SuspectedProblems({
                 <span className="text-muted-foreground block text-xs">
                   {problem.peopleOnServerCount !== undefined &&
                   problem.peopleOnServerCount < problem.peopleCount
-                    ? `${problem.peopleOnServerCount} on this server · ${problem.peopleCount} ${problem.scope.kind === "service" ? `across the ${problem.scope.name}` : "in all"}. `
+                    ? `${problem.peopleOnServerCount} on this server · ${problem.peopleCount} ${problem.scope.kind === "service" ? `on all servers that use the ${problem.scope.name}` : "in all"}. `
                     : ""}
                   {problem.fact}
                 </span>

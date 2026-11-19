@@ -11,6 +11,7 @@ import {
 } from "./api";
 import { ConnectionLogsView } from "./ConnectionLogsView";
 import { presetWindow, PROBLEM_PARAM, useSetSearchParam } from "./filters";
+import { SERVICE_DEFINITION } from "./format";
 import { ProblemDetailSheet } from "./ProblemDetailSheet";
 import { SuspectedProblems } from "./SuspectedProblems";
 
@@ -48,17 +49,23 @@ export function ServerConnectionHealth({
   const summary = useSignInSummary(scope, window, "hour").data;
   const showProblems =
     summary?.loggingEnabled === true && summary.viewerScope === "all";
+  const shownProblems = showProblems ? (problems.data?.problems ?? []) : [];
   const provider = providers.find((p) => p.id === providerId);
 
   const setParam = useSetSearchParam(SHEET_PARAMS);
 
   return (
     <div className="space-y-8">
-      <SuspectedProblems
-        problems={showProblems ? (problems.data?.problems ?? []) : []}
-        now={now}
-        onOpen={(problem) => setParam(PROBLEM_PARAM, problem.id)}
-      />
+      <div className="space-y-3 empty:hidden">
+        <SuspectedProblems
+          problems={shownProblems}
+          now={now}
+          onOpen={(problem) => setParam(PROBLEM_PARAM, problem.id)}
+        />
+        {shownProblems.some((p) => p.part === "service") ? (
+          <p className="text-muted-foreground text-sm">{SERVICE_DEFINITION}</p>
+        ) : null}
+      </div>
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <SegmentedControl

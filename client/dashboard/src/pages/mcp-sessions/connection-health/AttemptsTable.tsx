@@ -46,7 +46,7 @@ const OUTCOME_ICONS: Record<Outcome, LucideIcon> = {
   in_progress: LoaderCircle,
 };
 
-/** An outcome as a monochrome icon and its word, with a ×N badge for repeats. */
+/** An outcome as an icon and its word, with a count badge for repeats. */
 export function OutcomeLabel({
   outcome,
   count = 1,
@@ -63,16 +63,23 @@ export function OutcomeLabel({
   const Icon = OUTCOME_ICONS[outcome] ?? CircleDashed;
   return (
     <span className={cn("inline-flex items-center gap-1.5", className)}>
-      <Icon className="text-muted-foreground size-3.5 shrink-0" aria-hidden />
+      <Icon
+        className={cn(
+          "size-3.5 shrink-0",
+          outcome === "blocked" || outcome === "failed"
+            ? "text-destructive"
+            : "text-muted-foreground",
+        )}
+        aria-hidden
+      />
       <span>
         {outcome === "connected" && connectedLabel
           ? connectedLabel
           : outcomeLabel(outcome)}
       </span>
       {count > 1 ? (
-        <span className="border-destructive text-destructive border px-1 font-mono text-[11px] leading-4">
-          <span aria-hidden>×{formatCount(count)}</span>
-          <span className="sr-only">{formatCount(count)} times</span>
+        <span className="border-destructive text-destructive inline-flex h-4 items-center border px-1 font-mono text-[11px] leading-none">
+          {formatCount(count)} times
         </span>
       ) : null}
     </span>

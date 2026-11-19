@@ -119,6 +119,14 @@ function problemPlace(problem: SuspectedProblemDetail): string {
   }
 }
 
+/** The service or app the failures came from, when the problem names one. */
+function sourceName(problem: SuspectedProblemDetail): string | undefined {
+  if (problem.source === "service") return problem.filters.services?.[0];
+  if (problem.source !== "app") return undefined;
+  const apps = new Set(problem.people.map((p) => appLabel(p.app)));
+  return apps.size === 1 ? [...apps][0] : undefined;
+}
+
 function investigationFor(problem: SuspectedProblemDetail): Investigation {
   const target = problemTarget(problem);
   return {
@@ -128,7 +136,7 @@ function investigationFor(problem: SuspectedProblemDetail): Investigation {
         : `these ${problem.peopleCount} people`
     } ${
       problem.part === "speakeasy"
-        ? `sign in to Speakeasy${target ? ` on ${target}` : ""}`
+        ? `sign in to MCP${target ? ` on ${target}` : ""}`
         : `connect${target ? ` to ${target}` : ""}`
     }, and is there anything I should change?`,
     context: [
@@ -139,7 +147,9 @@ function investigationFor(problem: SuspectedProblemDetail): Investigation {
       `Since ${problem.since}`,
       problem.fact,
       `Rule: ${problemRule(problem)}`,
-      problem.source ? `Source: ${SOURCE_LABELS[problem.source]}` : null,
+      problem.source
+        ? `Failures came from: ${SOURCE_LABELS[problem.source]}${sourceName(problem) ? ` (${sourceName(problem)})` : ""}`
+        : null,
       `Messages: ${problem.messages.map((m) => `${m.message} (${m.reason}, ${m.attempts})`).join("; ")}`,
       `Servers: ${problem.servers.map((s) => `${serverLabel(s)} (${s.attempts})`).join("; ")}`,
       problem.lastConnectedAt
@@ -210,11 +220,9 @@ function ProblemBody({
           <p className="text-muted-foreground">Rule: {problemRule(problem)}</p>
           {problem.source ? (
             <p className="text-muted-foreground">
-              Source: {SOURCE_LABELS[problem.source].toLowerCase()}
-              {problem.source === "service" && problem.filters.services?.[0]
-                ? ` (${problem.filters.services[0]})`
-                : ""}
-              .
+              The failures came from{" "}
+              {SOURCE_LABELS[problem.source].toLowerCase()}
+              {sourceName(problem) ? ` (${sourceName(problem)})` : ""}.
             </p>
           ) : null}
         </div>

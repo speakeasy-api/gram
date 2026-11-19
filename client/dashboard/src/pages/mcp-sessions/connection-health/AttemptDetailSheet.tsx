@@ -104,11 +104,11 @@ export function AttemptDetailSheet({
                   }
                   description={
                     failed
-                      ? "Connections are not affected."
+                      ? "Your MCP connections aren't affected."
                       : elsewhere
                         ? "Search for its reference in that view to open it."
                         : query.data?.loggingEnabled === false
-                          ? "Attempts are not kept while logging is off for this organization."
+                          ? "Connection attempt logs are not kept while logging is off for this organization."
                           : query.data?.viewerScope === "own"
                             ? "Connection Logs keep the last 30 days, and you see only your own attempts."
                             : "Connection Logs keep the last 30 days of this project."
@@ -136,8 +136,6 @@ function questionFor(attempt: AttemptDetail, who: string, where: string) {
   const known = attempt.person && attempt.person.kind !== "anonymous";
   const connection = `${known ? `${who}'s` : "this"} connection${to}`;
   switch (attempt.outcome) {
-    case "connected":
-      return `What happened in ${connection}, and does anything look wrong?`;
     case "in_progress":
       return `${connection.charAt(0).toUpperCase()}${connection.slice(1)} is still in progress. What has happened so far?`;
     case "failed":
@@ -171,7 +169,9 @@ function investigationFor(attempt: AttemptDetail): Investigation {
         ? `Technical detail: ${attempt.technicalMessage}`
         : null,
       attempt.reason ? `Reason code: ${attempt.reason}` : null,
-      attempt.source ? `Source: ${SOURCE_LABELS[attempt.source]}` : null,
+      attempt.source
+        ? `Failure came from: ${SOURCE_LABELS[attempt.source]}`
+        : null,
       attempt.count > 1
         ? `Stands for ${attempt.count} attempts: this one and ${plural(attempt.count - 1, "repeat")}`
         : null,
@@ -343,14 +343,16 @@ function AttemptDetailBody({
         </TabsContent>
       </Tabs>
 
-      <SheetFooter className="bg-card sticky bottom-0 border-t px-6 py-4">
-        <div className="flex">
-          <AskAiButton
-            investigation={investigationFor(attempt)}
-            onLaunched={onClose}
-          />
-        </div>
-      </SheetFooter>
+      {attempt.outcome === "connected" ? null : (
+        <SheetFooter className="bg-card sticky bottom-0 border-t px-6 py-4">
+          <div className="flex">
+            <AskAiButton
+              investigation={investigationFor(attempt)}
+              onLaunched={onClose}
+            />
+          </div>
+        </SheetFooter>
+      )}
     </div>
   );
 }
@@ -383,10 +385,12 @@ function ContextFacts({
   const facts: [string, ReactNode][] = [];
   if (attempt.source) {
     facts.push([
-      "Source",
+      "Came from",
       attempt.source === "service" && attempt.service
         ? `${SOURCE_LABELS.service} (${attempt.service})`
-        : SOURCE_LABELS[attempt.source],
+        : attempt.source === "app"
+          ? `${SOURCE_LABELS.app} (${appLabel(attempt.app)})`
+          : SOURCE_LABELS[attempt.source],
     ]);
   }
   if (attempt.reason) {

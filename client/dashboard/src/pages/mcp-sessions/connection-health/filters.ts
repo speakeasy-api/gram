@@ -39,7 +39,8 @@ export const LOG_FILTERS = defineFilters([
     pinned: true,
     defaultPreset: DEFAULT_LOG_RANGE,
     presets: [...TIME_RANGE_PRESETS],
-    description: "Connection Logs cover the last 30 days.",
+    description:
+      "Connection Logs are deleted after 30 days for your data privacy.",
   },
   { id: "outcome", label: "Outcome", kind: "multiselect", pinned: true },
   {

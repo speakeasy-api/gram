@@ -27,10 +27,10 @@ export function outcomeLabel(outcome: string): string {
 
 export const STEP_LABELS: Record<StepGroup, string> = {
   connect: "Connect",
-  sign_in: "Sign-in",
+  sign_in: "MCP sign-in",
   service_sign_in: "Service sign-in",
-  sign_in_renewal: "Sign-in renewal",
-  service_renewal: "Service renewal",
+  sign_in_renewal: "MCP sign-in renewal",
+  service_renewal: "Service sign-in renewal",
   listing_tools: "Listing tools",
   request: "Request",
   other: "Other",
@@ -39,12 +39,21 @@ export const STEP_LABELS: Record<StepGroup, string> = {
 const STEP_RESULT_LABELS: Record<string, string> = {
   accepted: "Accepted",
   signed_in: "Signed in",
+  code_issued: "Signed in",
+  assertion_issued: "Sign-in confirmed",
   renewed: "Renewed",
   refreshed: "Renewed",
+  refresh_replayed: "Renewed",
+  adopted_concurrent_winner: "Renewed",
   listed: "Listed",
+  complete: "Done",
   completed: "Done",
+  partial: "Partly done",
+  needs_sign_in: "Sign-in needed",
+  needs_consent: "Approval needed",
   failed: "Failed",
   blocked: "Blocked",
+  policy_blocked: "Blocked",
   declined: "Declined",
   didnt_finish: "Didn't finish",
   in_progress: "In progress",
@@ -218,6 +227,10 @@ export const formatCount = (n: number): string => n.toLocaleString();
 export function plural(n: number, one: string, many = `${one}s`): string {
   return `${formatCount(n)} ${n === 1 ? one : many}`;
 }
+
+/** What tells an MCP server from the service behind it, where both words meet. */
+export const SERVICE_DEFINITION =
+  "An MCP server is what the AI app connects to in Speakeasy. A service is the outside system that server works with for the person, like Linear. Each has its own sign-in.";
 
 const PROBLEM_RULES: Record<ProblemRule, string> = {
   three_people_same_service:

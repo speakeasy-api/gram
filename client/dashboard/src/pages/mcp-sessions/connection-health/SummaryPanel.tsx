@@ -88,7 +88,7 @@ export function SummaryPanel({
           </h2>
           <p className="text-muted-foreground mt-1 text-sm">
             {metric === "sign-ins"
-              ? "Sign-ins and renewals to Speakeasy through this provider."
+              ? "MCP sign-ins and renewals through this provider."
               : "Sessions through this provider: signed in, not expired or revoked."}
           </p>
         </div>

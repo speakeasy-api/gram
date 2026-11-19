@@ -310,7 +310,7 @@ function problems(): SuspectedProblemDetail[] {
   };
   const cursor: SuspectedProblemDetail = {
     id: "problem_cursor_github",
-    headline: "3 people on Cursor 2.0.1 can't renew their sign-in to Speakeasy",
+    headline: "3 people on Cursor 2.0.1 can't renew their MCP sign-in",
     fact: "On the GitHub server. Other apps renewed there in this time.",
     since: at(-2, "10:20").toISOString(),
     peopleCount: 3,
@@ -352,7 +352,7 @@ function problems(): SuspectedProblemDetail[] {
   };
   const dana: SuspectedProblemDetail = {
     id: "problem_dana_linear",
-    headline: "Dana Reyes can't renew a sign-in to Speakeasy",
+    headline: "Dana Reyes can't renew an MCP sign-in",
     fact: "On the Linear server. Sign-in reached its time limit.",
     since: at(-3, "09:12").toISOString(),
     peopleCount: 1,

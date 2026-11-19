@@ -41,6 +41,7 @@ import {
   formatDayMonth,
   formatLast,
   formatSessionLength,
+  SERVICE_DEFINITION,
   plural,
 } from "./format";
 import { ProblemDetailSheet } from "./ProblemDetailSheet";
@@ -140,8 +141,8 @@ export function OverviewTab({
         )}
 
         <p className="text-muted-foreground text-sm">
-          Problems connecting to a service show on that server&apos;s page,
-          under{" "}
+          {SERVICE_DEFINITION} Problems with a service show on the page of the
+          MCP server that uses it, under{" "}
           <Link
             to={routes.mcpSessions.provider.mcpServers.href(providerId)}
             className="text-foreground underline-offset-4 hover:underline"
@@ -228,7 +229,7 @@ export function OverviewTab({
 
       <OverviewSection
         title="Sign-in activity"
-        description="Latest first. Sign-ins and renewals to Speakeasy through this provider."
+        description="Latest first. MCP sign-ins and renewals through this provider."
         action={
           <ArrowLink
             to={logsHref(
@@ -251,7 +252,7 @@ export function OverviewTab({
           </p>
         ) : activityRows.length === 0 ? (
           <p className="text-muted-foreground border px-4 py-6 text-sm">
-            No sign-ins or renewals to Speakeasy in the last 30 days.
+            No MCP sign-ins or renewals in the last 30 days.
           </p>
         ) : (
           <AttemptsTable
@@ -298,12 +299,12 @@ function OverviewSection({
 }): JSX.Element {
   return (
     <section className="space-y-3">
-      <div className="flex items-end justify-between gap-4">
-        <div>
+      <div>
+        <div className="flex items-center justify-between gap-4">
           <h2 className="text-eyebrow">{title}</h2>
-          <p className="text-muted-foreground mt-1 text-sm">{description}</p>
+          {action}
         </div>
-        {action}
+        <p className="text-muted-foreground mt-1 text-sm">{description}</p>
       </div>
       {children}
     </section>
@@ -353,7 +354,7 @@ function KillswitchesInForce({
     return [
       {
         key: "who",
-        header: "Who",
+        header: "Blocked",
         width: "1.4fr",
         render: (k) => (
           <div>
