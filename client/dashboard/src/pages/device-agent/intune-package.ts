@@ -5,12 +5,12 @@ import { zipSync } from "fflate";
 // apps (identity config, agent msi, tray startup shortcut) packaged and
 // ready to upload, with the Program and Detection settings in a README.
 
-export const MSI_UPGRADE_CODE = "{368EC0A6-8862-4906-AF34-8C3ADB92C6E0}";
+const MSI_UPGRADE_CODE = "{368EC0A6-8862-4906-AF34-8C3ADB92C6E0}";
 
-export const CONFIG_SCRIPT = "Deploy-SpeakeasyManagedJson.ps1";
-export const STARTUP_SCRIPT = "Deploy-SpeakeasyStartup.ps1";
-export const DETECT_SCRIPT = "Detect-SpeakeasyAgent.ps1";
-export const AGENT_INSTALL_SCRIPT = "Install-SpeakeasyAgent.cmd";
+const CONFIG_SCRIPT = "Deploy-SpeakeasyManagedJson.ps1";
+const STARTUP_SCRIPT = "Deploy-SpeakeasyStartup.ps1";
+const DETECT_SCRIPT = "Detect-SpeakeasyAgent.ps1";
+const AGENT_INSTALL_SCRIPT = "Install-SpeakeasyAgent.cmd";
 
 const POWERSHELL =
   "%windir%\\sysnative\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File";
@@ -108,7 +108,7 @@ New-Item -ItemType File -Force -Path (Join-Path $dir "managed-$configRevision.in
 `;
 }
 
-export const startupScript = `# Starts the Speakeasy tray app at sign-in for every user. Runs as SYSTEM from Intune.
+const startupScript = `# Starts the Speakeasy tray app at sign-in for every user. Runs as SYSTEM from Intune.
 $ErrorActionPreference = 'Stop'
 
 $startup = [Environment]::GetFolderPath('CommonStartup')
@@ -138,7 +138,7 @@ exit 1
 `;
 }
 
-export function readme(c: {
+function readme(c: {
   version: string;
   msiFile: string;
   revision: string;
@@ -194,7 +194,7 @@ app 3. Then replace the detection script with the new one.
 // The agent package's setup file is a .cmd rather than the msi. With an msi
 // setup file Intune expects the MsiInfo block IntuneWinAppUtil reads out of
 // the msi database, which we don't parse here.
-export function agentInstallScript(msiFile: string): string {
+function agentInstallScript(msiFile: string): string {
   return `@echo off\r\nmsiexec /i "%~dp0${msiFile}" /qn /norestart\r\nexit /b %errorlevel%\r\n`;
 }
 
