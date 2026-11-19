@@ -2,16 +2,11 @@ import type { ShadowMCPInventoryServer } from "@gram/client/models/components/sh
 
 /**
  * The query param that switches the catalog to the servers the team already
- * connects to directly. It lives in the URL so a link can open that view.
+ * connects to directly. It lives in the URL so the view survives a reload.
  */
 export const CATALOG_SHOW_PARAM = "show";
 export const CATALOG_SHOW_TEAM = "team";
 export type CatalogShow = "all" | typeof CATALOG_SHOW_TEAM;
-
-/** The catalog, opened on the servers the team already uses. */
-export function catalogTeamUsageHref(catalogHref: string): string {
-  return `${catalogHref}?${CATALOG_SHOW_PARAM}=${CATALOG_SHOW_TEAM}`;
-}
 
 /**
  * Hosts Speakeasy can never reach from its own infrastructure: the machine
