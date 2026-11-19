@@ -8,19 +8,26 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
@@ -107,6 +114,8 @@ func TestClientToolSurfacesMatchGolden(t *testing.T) {
 	handler := runtime.Handler()
 	initialize := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`
 	call := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_platform_context","arguments":{}}}`
+	discover := `{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/clientInfo":{"name":"test","version":"1"}}}}`
+	discoverHeader := http.Header{"Mcp-Protocol-Version": {"2026-07-28"}, "Mcp-Method": {"server/discover"}}
 
 	var surfaces []goldenClientSurface
 	for _, id := range []string{testChatGPTConnectorClientID, testCodexClientID, testOtherClientID} {
@@ -118,6 +127,12 @@ func TestClientToolSurfacesMatchGolden(t *testing.T) {
 			Instructions string `json:"instructions"`
 		}
 		allowlistRPC(t, handler, runtime, id, initialize, &initialized)
+		var discovered struct {
+			Instructions string `json:"instructions"`
+		}
+		allowlistRPC(t, handler, runtime, id, discover, &discovered, discoverHeader)
+		// server/discover filters the instructions the way initialize does.
+		require.Equal(t, initialized.Instructions, discovered.Instructions, id)
 		surface := goldenClientSurface{ClientID: id, Tools: toolNames(list.Tools), Instructions: initialized.Instructions, HiddenCall: ""}
 		if response := allowlistRPCRaw(t, handler, runtime, id, call); response.Error != nil {
 			surface.HiddenCall = response.Error.Message
@@ -144,27 +159,72 @@ func TestRuntimeReadsTheInjectedCatalog(t *testing.T) {
 }
 
 // goldenOAuthAdmission is how the Platform MCP authorization server admits one
-// client ID and what it records about it.
+// client ID: the refusal it returns and the outcome it records.
 type goldenOAuthAdmission struct {
 	ClientID string                 `json:"client_id"`
 	Denial   admission.DenialReason `json:"denial"`
-	Shadow   admission.AdmitReason  `json:"shadow"`
+	Recorded []string               `json:"recorded"`
+}
+
+// recordedAdmissionOutcomes reads the cumulative admission counter by outcome.
+func recordedAdmissionOutcomes(t *testing.T, reader *sdkmetric.ManualReader) map[string]int64 {
+	t.Helper()
+
+	var collected metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &collected))
+	counts := map[string]int64{}
+	for _, scope := range collected.ScopeMetrics {
+		for _, m := range scope.Metrics {
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			if !ok {
+				continue
+			}
+			for _, point := range sum.DataPoints {
+				if outcome, ok := point.Attributes.Value(attr.CIMDAdmissionOutcomeKey); ok {
+					counts[outcome.AsString()] += point.Value
+				}
+			}
+		}
+	}
+	return counts
 }
 
 func TestOAuthClientAdmissionMatchesGolden(t *testing.T) {
 	t.Parallel()
 
-	service := newTestOAuthHTTP(t)
-	catalog := service.aiCatalog.Snapshot()
+	reader := sdkmetric.NewManualReader()
+	base, err := url.Parse("https://gram.example")
+	require.NoError(t, err)
+	service, err := NewOAuthHTTP(OAuthHTTPConfig{
+		AICatalog:     aivendorstest.NewStore(),
+		BaseURL:       base,
+		Cache:         &memoryCache{values: map[string]any{}},
+		Store:         platformoauth.NewInMemoryStore(),
+		Identity:      testIdentity{},
+		Gate:          allowGate{},
+		Authorizer:    allowAuthorizer{},
+		Organizations: testOrganizationSelector{organizations: []OrganizationOption{{ID: "org-1", Name: "Organization one"}}},
+		Signer:        sessiontokens.NewSigner("test-key"),
+		Encryption:    testEncryption(t),
+		MeterProvider: sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)),
+	})
+	require.NoError(t, err)
 	ids := goldenCatalogClientIDs(t)
 	admissions := make([]goldenOAuthAdmission, 0, len(ids))
 	for _, id := range ids {
-		result := goldenOAuthAdmission{ClientID: id, Denial: "", Shadow: service.shadowCIMDAdmitReason(t.Context(), catalog, id)}
+		before := recordedAdmissionOutcomes(t, reader)
+		result := goldenOAuthAdmission{ClientID: id, Denial: "", Recorded: []string{}}
 		if err := service.admitCIMDClient(t.Context(), id); err != nil {
 			var denial *admission.DenialError
 			require.ErrorAs(t, err, &denial)
 			result.Denial = denial.Reason
 		}
+		for outcome, count := range recordedAdmissionOutcomes(t, reader) {
+			for range count - before[outcome] {
+				result.Recorded = append(result.Recorded, outcome)
+			}
+		}
+		slices.Sort(result.Recorded)
 		admissions = append(admissions, result)
 	}
 	data, err := json.Marshal(admissions)
@@ -192,29 +252,6 @@ func TestAIScanLibraryWithoutOverlayMatchesGolden(t *testing.T) {
 	data, err := json.Marshal(output)
 	require.NoError(t, err)
 	testenv.RequireJSONGolden(t, "testdata/ai_catalog_scan_library_golden.json", data)
-}
-
-// server/discover filters the instructions the way initialize does.
-func TestDiscoverInstructionsMatchGolden(t *testing.T) {
-	t.Parallel()
-
-	data, err := os.ReadFile("testdata/ai_catalog_client_surfaces_golden.json")
-	require.NoError(t, err)
-	var surfaces []goldenClientSurface
-	require.NoError(t, json.Unmarshal(data, &surfaces))
-	require.Len(t, surfaces, 3)
-
-	runtime := newAllowlistTestRuntime(t, []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)})
-	handler := runtime.Handler()
-	discover := `{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/clientInfo":{"name":"test","version":"1"}}}}`
-	header := http.Header{"Mcp-Protocol-Version": {"2026-07-28"}, "Mcp-Method": {"server/discover"}}
-	for _, surface := range surfaces {
-		var discovered struct {
-			Instructions string `json:"instructions"`
-		}
-		allowlistRPC(t, handler, runtime, surface.ClientID, discover, &discovered, header)
-		require.Equal(t, surface.Instructions, discovered.Instructions, surface.ClientID)
-	}
 }
 
 // get_inbound_ema_trust lists the catalog's enabled presets in order.
