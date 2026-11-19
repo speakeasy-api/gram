@@ -2716,8 +2716,9 @@ func fromCowork(payload *gen.IngestPayload) bool {
 }
 
 // persistCoworkEventRow stores a Cowork event under the
-// key its transcript entry shares. Events without a shared id are left to the
-// transcript.
+// key its transcript entry shares, or a reply sent from a session without a
+// transcript under its own key (claudeReplyKey). Other events without a
+// shared id are left to the transcript.
 func (s *Service) persistCoworkEventRow(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, hookSource string, occurredAt time.Time) {
 	sessionID := canonicalSessionID(payload)
 	if sessionID == "" || authCtx.ProjectID == nil {

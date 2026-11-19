@@ -126,6 +126,63 @@ func TestIngest_CoworkHooksAndTranscriptStoreEachMessageOnce(t *testing.T) {
 	require.Contains(t, keys, "claude-tool-call:toolu_1")
 }
 
+// TestIngest_CoworkReplyWithoutTranscriptStoredOnce: a Cowork session that
+// runs Claude Code only as a tool server writes no transcript, so the Stop
+// hook sends each reply as assistant.responded. The reply is stored as the
+// session's assistant row, once however often the same event is re-sent,
+// and a second reply to the same prompt gets its own row.
+func TestIngest_CoworkReplyWithoutTranscriptStoredOnce(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	sessionID := uuid.NewString()
+	surface := surfaceCowork
+	promptID := "prompt-1"
+	now := time.Now().UTC()
+	event := func(eventType string, occurredAt time.Time) *gen.IngestPayload {
+		payload := canonicalIngestPayload("claude", eventType, sessionID)
+		payload.Session.Surface = &surface
+		payload.Session.TurnID = &promptID
+		at := occurredAt.Format(time.RFC3339Nano)
+		payload.Event.OccurredAt = &at
+		return payload
+	}
+	reply := func(text string, occurredAt time.Time) *gen.IngestPayload {
+		payload := event("assistant.responded", occurredAt)
+		role := "assistant"
+		payload.Data = &gen.HookIngestData{Message: &gen.HookMessageData{Text: &text, Role: &role}}
+		return payload
+	}
+
+	prompt := "list the files"
+	promptEvent := event("prompt.submitted", now.Add(-2*time.Second))
+	promptEvent.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
+	_, err := ti.service.IngestAuthenticated(ctx, authCtx, promptEvent)
+	require.NoError(t, err)
+
+	first := reply("Two files.", now.Add(-time.Second))
+	for range 2 { // the binary's offline spool can send the same event again
+		_, err = ti.service.IngestAuthenticated(ctx, authCtx, first)
+		require.NoError(t, err)
+	}
+	_, err = ti.service.IngestAuthenticated(ctx, authCtx, reply("Done.", now))
+	require.NoError(t, err)
+
+	messages, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{ChatID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	got := make([]string, 0, len(messages))
+	for _, m := range messages {
+		got = append(got, m.Role+": "+m.Content)
+		require.Equal(t, "cowork", m.Source.String)
+	}
+	require.Equal(t, []string{"user: list the files", "assistant: Two files.", "assistant: Done."}, got)
+}
+
 // An event from outside Cowork is the capture path, as before.
 func TestIngest_NonCoworkEventStoresRow(t *testing.T) {
 	t.Parallel()

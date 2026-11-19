@@ -533,7 +533,16 @@ func cursorMCPEcho(base *agenthooks.Event, toolName string) bool {
 
 func (r *Relay) onStop(ctx context.Context, e *agenthooks.StopEvent) (agenthooks.StopDecision, error) {
 	if inCoworkVM(&e.Event) {
-		warnings := r.shipTranscript(ctx, e)
+		warnings, noTranscript := r.shipTranscript(ctx, e)
+		// Some Cowork sessions run Claude Code only as a tool server
+		// (`claude mcp serve`): the conversation lives on claude.ai, no
+		// transcript is written and transcript_path is empty. The reply then
+		// reaches the server only as an event carrying Stop's
+		// last_assistant_message, as it does outside Cowork. A session with a
+		// transcript never sends one, so the server never stores a reply twice.
+		if noTranscript {
+			r.deliver(ctx, e)
+		}
 		// A Stop that follows a warning continuation ships the reply but never
 		// continues again, so a replayed upload cannot loop Claude.
 		if len(warnings) == 0 || e.PreviouslyContinued {
