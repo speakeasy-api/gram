@@ -78,7 +78,7 @@ export function OutcomeLabel({
           : outcomeLabel(outcome)}
       </span>
       {count > 1 ? (
-        <span className="border-destructive text-destructive inline-flex h-4 items-center border px-1 font-mono text-[11px] leading-none">
+        <span className="border-destructive text-destructive inline-flex h-4 shrink-0 items-center border px-1 font-mono whitespace-nowrap text-[11px] leading-none">
           {formatCount(count)} times
         </span>
       ) : null}
@@ -215,7 +215,7 @@ export function AttemptsTable({
       {
         key: "outcome",
         header: "Outcome",
-        width: "140px",
+        width: "200px",
         render: (row) => (
           <OutcomeLabel
             outcome={row.outcome}
@@ -357,7 +357,7 @@ const SKELETON_COLUMNS: Column<{ id: string }>[] = [
   {
     key: "outcome",
     header: "Outcome",
-    width: "140px",
+    width: "200px",
     render: () => <Bar className="my-1 w-16" />,
   },
   {
