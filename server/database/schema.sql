@@ -12544,6 +12544,171 @@ ON authz_challenge_resolutions (organization_id, challenge_id);
 CREATE INDEX IF NOT EXISTS authz_challenge_resolutions_org_principal_idx
 ON authz_challenge_resolutions (organization_id, principal_urn);
 
+-- A member's request for access they were denied, decided by an organization
+-- admin from the dashboard or a Slack DM. Approving creates a temporary grant
+-- in principal_grants.
+CREATE TABLE IF NOT EXISTS access_requests (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+
+  -- The member asking. Only people request access; API keys and agents cannot.
+  requester_user_id TEXT NOT NULL,
+  -- The scope asked for, e.g. "project:read". Validated in application code
+  -- against the temporarily grantable scopes.
+  scope TEXT NOT NULL,
+  -- Where the scope applies, in the same shape as principal_grants.selectors.
+  selector JSONB NOT NULL,
+  -- The resource's name when the request was made, for display after it is
+  -- renamed or removed.
+  resource_name TEXT,
+  -- The requester's note to the admins.
+  message TEXT,
+
+  -- 'pending', 'approved', 'denied', 'expired' or 'withdrawn'. Valid values
+  -- enforced in the application layer.
+  status TEXT NOT NULL DEFAULT 'pending',
+  decided_by_user_id TEXT,
+  -- Where the decision came from: 'dashboard' or 'slack'.
+  decided_via TEXT,
+  decided_at timestamptz,
+  -- The grant an approval created. Soft reference: the grant may be revoked
+  -- (deleted) or lapse later.
+  temporary_grant_id uuid,
+  -- Denied challenges this request covers, from the ClickHouse
+  -- authz_challenges table (soft cross-DB reference).
+  challenge_ids TEXT[] NOT NULL DEFAULT '{}',
+  -- When a pending request lapses.
+  expires_at timestamptz NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT access_requests_pkey PRIMARY KEY (id),
+  CONSTRAINT access_requests_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT access_requests_selector_check CHECK (jsonb_typeof(selector) = 'object')
+);
+
+COMMENT ON TABLE access_requests IS 'Requests from members for access they were denied, decided by an organization admin. An approval creates a temporary grant.';
+COMMENT ON COLUMN access_requests.id IS '@access: confidential';
+COMMENT ON COLUMN access_requests.organization_id IS '@access: confidential';
+COMMENT ON COLUMN access_requests.requester_user_id IS 'The Speakeasy user who asked for access.
+@access: confidential';
+COMMENT ON COLUMN access_requests.scope IS 'The scope asked for, e.g. "project:read".
+@access: confidential';
+COMMENT ON COLUMN access_requests.selector IS 'Where the scope applies, in the shape of principal_grants.selectors.
+@access: opaque-restricted';
+COMMENT ON COLUMN access_requests.resource_name IS 'Name of the resource the request is for, as it was when requested.
+@access: opaque-confidential';
+COMMENT ON COLUMN access_requests.message IS 'Free-form note from the requester to the admins.
+@access: opaque-restricted';
+COMMENT ON COLUMN access_requests.status IS 'pending, approved, denied, expired or withdrawn.
+@access: confidential';
+COMMENT ON COLUMN access_requests.decided_by_user_id IS 'The admin who approved or denied the request.
+@access: confidential';
+COMMENT ON COLUMN access_requests.decided_via IS 'Where the decision came from: dashboard or slack.
+@access: confidential';
+COMMENT ON COLUMN access_requests.decided_at IS '@access: confidential';
+COMMENT ON COLUMN access_requests.temporary_grant_id IS 'The principal_grants row an approval created. Soft reference: the grant may be revoked later.
+@access: confidential';
+COMMENT ON COLUMN access_requests.challenge_ids IS 'IDs of the denied challenges in the ClickHouse authz_challenges table that this request covers.
+@access: opaque-confidential';
+COMMENT ON COLUMN access_requests.expires_at IS 'When a pending request lapses.
+@access: confidential';
+COMMENT ON COLUMN access_requests.created_at IS '@access: confidential';
+COMMENT ON COLUMN access_requests.updated_at IS '@access: confidential';
+COMMENT ON COLUMN access_requests.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN access_requests.deleted IS '@access: confidential';
+
+-- Target of the tenant-pinned foreign key from access_request_messages, so a
+-- message cannot point at another organization's request. Also backs the
+-- organization foreign key.
+CREATE UNIQUE INDEX IF NOT EXISTS access_requests_organization_id_id_key
+ON access_requests (organization_id, id);
+
+-- One open request per person and access, so asking again returns the open
+-- request instead of sending another round of DMs.
+CREATE UNIQUE INDEX IF NOT EXISTS access_requests_open_request_key
+ON access_requests (organization_id, requester_user_id, scope, selector)
+WHERE deleted IS FALSE AND status = 'pending';
+
+-- The admins' list of requests.
+CREATE INDEX IF NOT EXISTS access_requests_org_status_created_at_idx
+ON access_requests (organization_id, status, created_at DESC)
+WHERE deleted IS FALSE;
+
+-- A requester's own requests, for the state shown on the page they were
+-- blocked on.
+CREATE INDEX IF NOT EXISTS access_requests_org_requester_created_at_idx
+ON access_requests (organization_id, requester_user_id, created_at DESC)
+WHERE deleted IS FALSE;
+
+-- Finding pending requests that have lapsed.
+CREATE INDEX IF NOT EXISTS access_requests_status_expires_at_idx
+ON access_requests (status, expires_at)
+WHERE deleted IS FALSE;
+
+-- One notification sent for an access request, such as the Slack DM to one
+-- admin. Kept so a decision can update every message and so a click can be
+-- matched to the DM it came from.
+CREATE TABLE IF NOT EXISTS access_request_messages (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  access_request_id uuid NOT NULL,
+
+  -- Notification channel, 'slack' for now. Valid values enforced in the
+  -- application layer.
+  provider TEXT NOT NULL,
+  -- 'dm' for now.
+  kind TEXT NOT NULL,
+  -- The Speakeasy user the message was sent to.
+  recipient_user_id TEXT NOT NULL,
+  slack_team_id TEXT,
+  slack_user_id TEXT,
+  slack_channel_id TEXT,
+  slack_message_ts TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT access_request_messages_pkey PRIMARY KEY (id),
+  CONSTRAINT access_request_messages_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  -- Pinned to the organization, so a message cannot carry a different tenant
+  -- than its request.
+  CONSTRAINT access_request_messages_organization_id_access_request_id_fkey FOREIGN KEY (organization_id, access_request_id) REFERENCES access_requests (organization_id, id) ON DELETE CASCADE
+);
+
+COMMENT ON TABLE access_request_messages IS 'Notifications sent for an access request, such as one Slack DM per admin.';
+COMMENT ON COLUMN access_request_messages.id IS '@access: confidential';
+COMMENT ON COLUMN access_request_messages.organization_id IS '@access: confidential';
+COMMENT ON COLUMN access_request_messages.access_request_id IS '@access: confidential';
+COMMENT ON COLUMN access_request_messages.provider IS '@access: confidential';
+COMMENT ON COLUMN access_request_messages.kind IS '@access: confidential';
+COMMENT ON COLUMN access_request_messages.recipient_user_id IS '@access: confidential';
+COMMENT ON COLUMN access_request_messages.slack_team_id IS '@access: confidential';
+COMMENT ON COLUMN access_request_messages.slack_user_id IS '@access: confidential';
+COMMENT ON COLUMN access_request_messages.slack_channel_id IS '@access: confidential';
+COMMENT ON COLUMN access_request_messages.slack_message_ts IS '@access: confidential';
+COMMENT ON COLUMN access_request_messages.created_at IS '@access: confidential';
+COMMENT ON COLUMN access_request_messages.updated_at IS '@access: confidential';
+COMMENT ON COLUMN access_request_messages.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN access_request_messages.deleted IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS access_request_messages_request_recipient_key
+ON access_request_messages (access_request_id, provider, recipient_user_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS access_request_messages_slack_message_idx
+ON access_request_messages (slack_team_id, slack_channel_id, slack_message_ts)
+WHERE deleted IS FALSE;
+
+-- Backs the tenant-pinned foreign key and the organization foreign key.
+CREATE INDEX IF NOT EXISTS access_request_messages_organization_id_access_request_id_idx
+ON access_request_messages (organization_id, access_request_id);
+
 CREATE TABLE IF NOT EXISTS risk_policy_bypass_requests (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
