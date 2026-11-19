@@ -61,11 +61,11 @@ export function ApprovalReview({
    */
   title?: string;
   /**
-   * Put the gathered evidence and web research behind one "Evidence"
-   * disclosure, open only while a decision is awaited. The server page sets
-   * it: there the decision and the official server come first, and the
-   * evidence is detail a reviewer opens when they need it. The review sheet
-   * exists to show the evidence, so it leaves it inline.
+   * Put the gathered evidence and web research behind one closed "Evidence"
+   * disclosure. The server page sets it: there the decision and the official
+   * server come first, and the evidence is detail a reviewer opens when they
+   * need it. The review sheet exists to show the evidence, so it leaves it
+   * inline.
    */
   collapseEvidence?: boolean;
   /** A control for the evidence itself, such as re-gathering it. Shown on
@@ -160,11 +160,7 @@ export function ApprovalReview({
       status={detail.request.status}
       createdAt={asked ? detail.request.createdAt : undefined}
       versionPinned={collapseEvidence || detail.request.versionPinned}
-      notice={
-        untouched
-          ? "No one has asked for it — this is its first review."
-          : undefined
-      }
+      notice={untouched ? "No one has asked for it yet." : undefined}
       boxed={!collapseEvidence}
     />
   );
@@ -188,10 +184,6 @@ export function ApprovalReview({
       {reviewBody}
       {collapseEvidence ? (
         <EvidenceDisclosure
-          // Keyed by status so a decision recorded while the page is open
-          // folds the evidence away again, and a new ask opens it.
-          key={detail.request.status}
-          defaultOpen={detail.request.status === "requested"}
           collectedAt={detail.evidenceCollectedAt}
           versionPinned={detail.request.versionPinned}
           action={evidenceAction}
@@ -211,20 +203,18 @@ export function ApprovalReview({
  * gathered, and the control to gather it again.
  */
 function EvidenceDisclosure({
-  defaultOpen,
   collectedAt,
   versionPinned,
   action,
   children,
 }: {
-  defaultOpen: boolean;
   collectedAt: Date | undefined;
   versionPinned: boolean;
   action?: React.ReactNode;
   children: React.ReactNode;
 }): JSX.Element {
   return (
-    <Collapsible defaultOpen={defaultOpen} className="border-border border-t">
+    <Collapsible className="border-border border-t">
       <div className="flex flex-wrap items-center justify-between gap-3 pt-3">
         <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-sm transition-colors [&[data-state=open]>svg]:rotate-90">
           <ChevronRight className="size-3.5 transition-transform" aria-hidden />

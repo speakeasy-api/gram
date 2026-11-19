@@ -682,6 +682,35 @@ export default function ShadowMCPServerDetail(): JSX.Element {
     );
   }
 
+  const awaitingDecision = server?.approvalRequest?.status === "requested";
+  let accessReview: React.ReactNode = null;
+  if (server?.approvalRequest) {
+    accessReview = (
+      <section className="shrink-0">
+        <ApprovalReview
+          requestId={server.approvalRequest.id}
+          title="Access review"
+          collapseEvidence
+          evidenceAction={
+            <RefreshEvidenceButton
+              requestId={server.approvalRequest.id}
+              projectSlug={project.slug}
+              ready={decideTarget === null}
+            />
+          }
+        />
+      </section>
+    );
+  }
+  if (server && !server.approvalRequest) {
+    accessReview = (
+      <section className="shrink-0 space-y-3">
+        <SectionHeading>Access review</SectionHeading>
+        <EnsureServerReview canonicalServerUrl={server.canonicalServerUrl} />
+      </section>
+    );
+  }
+
   const openDecide = () => {
     if (!server) return;
     setDecideTarget({
@@ -746,7 +775,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                   </Text>
                 </div>
               ) : (
-                <div className="flex min-h-0 flex-col gap-6 pb-8">
+                <div className="flex min-h-0 flex-col gap-8 pb-8">
                   {/* pb-8: the last thing on this page is a disclosure
                       toggle, and a control flush against the bottom edge
                       reads as cut off rather than as the end of the page. */}
@@ -762,39 +791,18 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                     members={membersQuery.data?.members ?? []}
                     roles={rolesQuery.data?.roles ?? []}
                   />
-                  {/* State first, then the two outcomes: serve it as an
-                      official server, or decide who may connect. Who uses
-                      it is what either outcome changes, so it comes next;
-                      the review and its evidence are detail below. */}
+                  {/* State first. A request someone is waiting on is the
+                      task, so its review comes next; otherwise the review
+                      is detail below the two outcomes: serve it as an
+                      official server, and who it affects. */}
                   <ServerSummary server={server} />
+                  {awaitingDecision && accessReview}
                   <OfficialServerPanel server={server} />
-                  <section className="space-y-3">
+                  <section className="shrink-0 space-y-3">
                     <SectionHeading>Who uses it</SectionHeading>
                     {usersPanel}
                   </section>
-                  <section className="min-h-0 space-y-3">
-                    {server.approvalRequest ? (
-                      <ApprovalReview
-                        requestId={server.approvalRequest.id}
-                        title="Access review"
-                        collapseEvidence
-                        evidenceAction={
-                          <RefreshEvidenceButton
-                            requestId={server.approvalRequest.id}
-                            projectSlug={project.slug}
-                            ready={decideTarget === null}
-                          />
-                        }
-                      />
-                    ) : (
-                      <>
-                        <SectionHeading>Access review</SectionHeading>
-                        <EnsureServerReview
-                          canonicalServerUrl={server.canonicalServerUrl}
-                        />
-                      </>
-                    )}
-                  </section>
+                  {!awaitingDecision && accessReview}
                 </div>
               )}
             </Page.Section.Body>

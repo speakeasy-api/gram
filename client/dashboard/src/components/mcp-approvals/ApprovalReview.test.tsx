@@ -185,7 +185,7 @@ describe("ApprovalReview collapsed evidence", () => {
     expect(screen.getByText("Evidence groups")).toBeTruthy();
   });
 
-  it("opens the evidence while a decision is awaited", () => {
+  it("keeps the evidence closed even while a decision is awaited", () => {
     mocks.detail = detail({ status: "requested" });
 
     render(
@@ -196,6 +196,6 @@ describe("ApprovalReview collapsed evidence", () => {
       />,
     );
 
-    expect(screen.getByText("Evidence groups")).toBeTruthy();
+    expect(screen.queryByText("Evidence groups")).toBeNull();
   });
 });

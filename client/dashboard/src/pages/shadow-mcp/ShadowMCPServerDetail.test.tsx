@@ -917,6 +917,45 @@ describe("ShadowMCPServerDetail", () => {
     expect(screen.getByRole("heading", { name: "Who uses it" })).toBeTruthy();
   });
 
+  it("puts a review someone is waiting on before the official server", () => {
+    const order = () => {
+      const review = screen.getByTestId("approval-review");
+      const panel = screen.getByTestId("official-server-panel");
+      return review.compareDocumentPosition(panel) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+        ? "review first"
+        : "panel first";
+    };
+    mocks.useShadowMCPInventoryServer.mockReturnValue({
+      data: inventoryServer({
+        approvalRequest: {
+          id: "request-4",
+          requesterCount: 1,
+          status: "requested",
+        },
+      }),
+      error: null,
+      isLoading: false,
+    });
+    renderDetailPage();
+    expect(order()).toBe("review first");
+
+    cleanup();
+    mocks.useShadowMCPInventoryServer.mockReturnValue({
+      data: inventoryServer({
+        approvalRequest: {
+          id: "request-5",
+          requesterCount: 0,
+          status: "approved",
+        },
+      }),
+      error: null,
+      isLoading: false,
+    });
+    renderDetailPage();
+    expect(order()).toBe("panel first");
+  });
+
   it("carries the pending legacy bypass request into the decide sheet", () => {
     mocks.useShadowMCPInventoryServer.mockReturnValue({
       data: inventoryServer({
