@@ -147,7 +147,7 @@ func TestRecheckWorkloadGrantStoredGatewayRequiresCurrentRollout(t *testing.T) {
 	}
 	grant := workloadGrantIssuance{endpoint: endpoint}
 
-	require.ErrorIs(t, service.recheckWorkloadGrantAuthorization(t.Context(), grant), errStoredGatewayMachineAccessDisabled)
+	require.ErrorIs(t, service.recheckWorkloadGrantAuthorization(t.Context(), grant), errGatewayMachineAccessDisabled)
 	lookupErr := errors.New("flag lookup failed")
 	service.features = failingFeatureProvider{err: lookupErr}
 	err := service.recheckWorkloadGrantAuthorization(t.Context(), grant)

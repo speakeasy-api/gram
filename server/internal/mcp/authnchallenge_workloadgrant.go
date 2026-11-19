@@ -212,7 +212,7 @@ func workloadGrantStageUnavailable(reason string, err error) error {
 	return &workloadGrantError{reason: reason, outcome: workloadGrantUnavailable, retryAfter: workloadGrantUnavailableRetryAfter, err: err}
 }
 
-var errStoredGatewayMachineAccessDisabled = errors.New("stored gateway machine access is disabled")
+var errGatewayMachineAccessDisabled = errors.New("gateway machine access is disabled")
 
 // presentedWorkload is what an assertion claims before and after verification:
 // the iss and sub it presented, and the issuer row iss resolved to once it
@@ -485,7 +485,7 @@ func (s *Service) handleWorkloadAssertionGrant(
 				return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refusal)
 			}
 			if !enabled {
-				refusal := refuseWorkloadGrant("gateway_machine_access_disabled", errStoredGatewayMachineAccessDisabled)
+				refusal := refuseWorkloadGrant("gateway_machine_access_disabled", errGatewayMachineAccessDisabled)
 				refuseWorkloadGrantRow(ctx, t, refusal)
 				return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refusal)
 			}
@@ -955,7 +955,7 @@ func (s *Service) recheckWorkloadGrantAuthorization(ctx context.Context, grant w
 				return workloadGrantStageUnavailable("gateway_machine_access_rollout_unavailable", err)
 			}
 			if !enabled {
-				return refuseWorkloadGrant("gateway_machine_access_disabled", errStoredGatewayMachineAccessDisabled)
+				return refuseWorkloadGrant("gateway_machine_access_disabled", errGatewayMachineAccessDisabled)
 			}
 		} else {
 			target, ok := agentAuthorizationTarget(grant.endpoint)
