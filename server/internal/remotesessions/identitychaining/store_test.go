@@ -826,3 +826,22 @@ func TestAcquire_UnusableOrganizationKeyAsksNoProvider(t *testing.T) {
 	require.True(t, outcome.Retryable)
 	require.Empty(t, f.credentials(t), "nothing was stored")
 }
+
+func TestGovernor_RefreshUnconfirmedWhileTheOrganizationKeyIsUnusable(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	f.retainRefreshableDelegation(t, "durable_credential_present")
+	g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.tokens, f.chainer.delegation)
+	require.Equal(t, RefreshServed, g.RefreshDecision(t.Context(), f.req).Decision, "a refresh grant renews the delegation")
+
+	fixture := orgencryptiontest.New(t, f.db)
+	transitions := orgencryption.NewTransitions(testenv.NewLogger(t), f.db, audit.NewLogger(), fixture.Provisioner, orgencryption.TransitionsConfig{ClearSettleDelay: time.Millisecond})
+	g.tokens = upstreamtokens.New(testenv.NewLogger(t), orgencryption.NewCipher(testenv.NewLogger(t), f.enc, fixture.Service, transitions), f.enc)
+	_, err := transitions.Enroll(t.Context(), f.req.OrganizationID, orgencryption.UseCaseOAuthSessionTokens, orgencryption.SystemActor())
+	require.NoError(t, err)
+	require.NoError(t, fixture.Provisioner.Suspend(t.Context(), f.req.OrganizationID, "customer disabled the key", orgencryption.SystemActor()))
+
+	verdict := g.RefreshDecision(t.Context(), f.req)
+	require.Equal(t, RefreshUnconfirmed, verdict.Decision, "acquisition could not store a new credential, so the refresh is not served, and nobody is asked to reconnect")
+	require.Equal(t, ReasonTransientFailure, verdict.Reason)
+}

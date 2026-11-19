@@ -372,7 +372,10 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 			// to seal them before the provider is asked.
 			if s.federatedLoginConsumer != nil {
 				if err := s.remoteChallengeMgr.UpstreamTokens().RequireUsable(ctx, nil, conv.ToPGText(endpoint.OrganizationID)); err != nil {
-					return failFederationDependency(fmt.Errorf("%w: organization key: %w", remotesessions.ErrFederatedUnavailable, err), "Sign-in is temporarily unavailable. Try again shortly")
+					// Retryable for the caller, but recorded as a Speakeasy
+					// fault: the identity provider was never asked.
+					logger.WarnContext(ctx, "organization key cannot store federated login credentials", attr.SlogError(err))
+					return finishFederation(mcpconnectionattempts.CodeTransientFailure, oops.CodeUnavailable, remotesessions.ErrFederatedUnavailable, "Sign-in is temporarily unavailable. Try again shortly", false)
 				}
 			}
 			verified, err = s.remoteChallengeMgr.ExchangeFederatedCode(ctx, provider, federation.CallbackURL, code, federation.Nonce, federation.Verifier)

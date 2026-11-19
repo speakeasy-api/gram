@@ -1935,3 +1935,40 @@ func TestDelegationServiceCheckResolvable(t *testing.T) {
 		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrReauthentication, "a sign-in replaces an erased row")
 	})
 }
+
+func TestDelegationServiceEchoedRefreshTokenKeepsStoredCopies(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		ambiguous bool
+	}{
+		{name: "renewed", ambiguous: false},
+		{name: "ambiguous result", ambiguous: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s, store, p, b, allow := newDelegationUnitFixture(t)
+			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
+			planted := plantedSecret(t, s, "old-refresh")
+			store.mu.Lock()
+			row := store.rows[b]
+			row.refresh = planted
+			store.rows[b] = row
+			store.mu.Unlock()
+
+			s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+				r := delegationRenewal(p, s.now(), "new-id", "old-refresh")
+				if tc.ambiguous {
+					return r, errors.New("connection reset after the provider answered")
+				}
+				return r, nil
+			}
+			_, _ = s.Resolve(t.Context(), b, allow)
+
+			c, err := store.load(t.Context(), b)
+			require.NoError(t, err)
+			require.NotNil(t, c.refresh.stored, "an echoed refresh token is not a rotation, so nothing is sealed again")
+			require.Equal(t, *planted.stored, *c.refresh.stored, "the stored copies are kept as they were")
+		})
+	}
+}

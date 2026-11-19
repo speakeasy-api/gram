@@ -25,6 +25,8 @@ import (
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption/orgencryptiontest"
@@ -255,6 +257,11 @@ func runFederatedLogin(t *testing.T, scenario string, rotate federationRotation)
 		callback, nonce, id = rotate(ctx, ti, provider, f.clientID, f.organizationID, req, callback)
 		expectedSecret = "rotated-secret"
 	}
+	var attempts *mcpconnectionattemptstest.Recording
+	if scenario == "organization_key_unusable" {
+		attempts = mcpconnectionattemptstest.New(t)
+		ti.service.SetConnectionRecorder(attempts.Recorder)
+	}
 	result := httptest.NewRecorder()
 	err = ti.service.HandleIDPCallback(result, routeIDPCallback(callback))
 	success := scenario == "success" || scenario == "first_party" || scenario == "consumer"
@@ -303,6 +310,13 @@ func runFederatedLogin(t *testing.T, scenario string, rotate federationRotation)
 		failure, parseErr := url.Parse(result.Header().Get("Location"))
 		require.NoError(t, parseErr)
 		require.Equal(t, "Sign-in is temporarily unavailable. Try again shortly", failure.Query().Get("error_description"))
+		require.Equal(t, "temporarily_unavailable", failure.Query().Get("error"), "the caller may retry")
+		reasons := make([]string, 0, len(attempts.Rows()))
+		for _, row := range attempts.Rows() {
+			reasons = append(reasons, row.Reason)
+		}
+		require.Contains(t, reasons, mcpconnectionattempts.CodeTransientFailure.String(), "a Speakeasy fault: the identity provider was never asked")
+		require.NotContains(t, reasons, mcpconnectionattempts.CodeIDPTransientFailure.String())
 	}
 	require.Zero(t, f.otherProviderCalls.Load(), "never contact a provider from another organization")
 	if scenario == "consumer" || scenario == "consumer_failure" {

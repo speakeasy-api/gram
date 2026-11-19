@@ -693,7 +693,8 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 			refreshErr = &RefreshError{Kind: RefreshAmbiguous, SigningFailure: false, RetryAfter: 0}
 			c.assertion = erasedSecret()
 			c.assertionExpiry = time.Time{}
-			if rotation := result.Credentials.RefreshToken(); rotation != "" {
+			// An echoed refresh token keeps its stored copies.
+			if rotation := result.Credentials.RefreshToken(); rotation != "" && rotation != refresh {
 				c.refresh = newSecret(rotation)
 			}
 			if expiry := result.Credentials.RefreshExpiresAt(); expiry != nil {
@@ -718,7 +719,9 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	next.retryAfter = time.Time{}
 	next.assertion = erasedSecret()
 	next.assertionExpiry = time.Time{}
-	if rotation := result.Credentials.RefreshToken(); rotation != "" {
+	// An echoed refresh token is not a rotation: its stored copies are kept
+	// rather than sealed again.
+	if rotation := result.Credentials.RefreshToken(); rotation != "" && rotation != refresh {
 		next.refresh = newSecret(rotation)
 	}
 	// Lifetime updates are independent of token rotation. Omission cannot

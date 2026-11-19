@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/sessionlist"
 	"strings"
@@ -311,6 +312,11 @@ func (s *Service) RefreshSession(ctx context.Context, payload *orgsessionsgen.Re
 	// access token remains connected.
 	result, err := s.refresher.RefreshNow(ctx, row.RemoteSession, "", remotesessionmetrics.RefreshTriggerManual, RefreshIn(mcpconnectionattempts.ProviderSessionScope(authCtx.ActiveOrganizationID, row.ClientProjectID.UUID, mcpconnectionattempts.AppFirstParty)))
 	if err != nil {
+		// The organization's key cannot store a refreshed pair right now. The
+		// request itself is fine and succeeds once the key is usable again.
+		if orgencryption.IsKeyProblem(err) {
+			return nil, oops.E(oops.CodeUnavailable, err, "the session's tokens cannot be stored right now; try again shortly").LogWarn(ctx, logger)
+		}
 		// Operator-actionable failures carry a public-safe reason; surface it so
 		// the admin sees why the refresh failed instead of a generic error.
 		if refreshErr, ok := errors.AsType[*TokenRefreshError](err); ok {

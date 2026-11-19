@@ -736,18 +736,18 @@ WITH cleanup_budget AS (
   RETURNING s.id
 ), expired AS (
 UPDATE trusted_issuer_sessions AS s SET
-  identity_assertion_encrypted = CASE WHEN c.orphaned OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= clock_timestamp() THEN NULL ELSE s.identity_assertion_encrypted END,
-  identity_assertion_org_encrypted = CASE WHEN c.orphaned OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= clock_timestamp() THEN NULL ELSE s.identity_assertion_org_encrypted END,
-  identity_assertion_expires_at = CASE WHEN c.orphaned OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= clock_timestamp() THEN NULL ELSE s.identity_assertion_expires_at END,
-  refresh_token_encrypted = CASE WHEN c.orphaned OR s.refresh_expires_at <= clock_timestamp() THEN NULL ELSE s.refresh_token_encrypted END,
-  refresh_token_org_encrypted = CASE WHEN c.orphaned OR s.refresh_expires_at <= clock_timestamp() THEN NULL ELSE s.refresh_token_org_encrypted END,
-  refresh_expires_at = CASE WHEN c.orphaned OR s.refresh_expires_at <= clock_timestamp() THEN NULL ELSE s.refresh_expires_at END,
-  upstream_subject_encrypted = CASE WHEN c.orphaned OR (((s.identity_assertion_encrypted IS NULL AND s.identity_assertion_org_encrypted IS NULL) OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= clock_timestamp()) AND ((s.refresh_token_encrypted IS NULL AND s.refresh_token_org_encrypted IS NULL) OR s.refresh_expires_at <= clock_timestamp())) THEN NULL ELSE s.upstream_subject_encrypted END,
-  upstream_subject_org_encrypted = CASE WHEN c.orphaned OR (((s.identity_assertion_encrypted IS NULL AND s.identity_assertion_org_encrypted IS NULL) OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= clock_timestamp()) AND ((s.refresh_token_encrypted IS NULL AND s.refresh_token_org_encrypted IS NULL) OR s.refresh_expires_at <= clock_timestamp())) THEN NULL ELSE s.upstream_subject_org_encrypted END,
-  nonce_encrypted = CASE WHEN c.orphaned OR (((s.identity_assertion_encrypted IS NULL AND s.identity_assertion_org_encrypted IS NULL) OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= clock_timestamp()) AND ((s.refresh_token_encrypted IS NULL AND s.refresh_token_org_encrypted IS NULL) OR s.refresh_expires_at <= clock_timestamp())) THEN NULL ELSE s.nonce_encrypted END,
-  nonce_org_encrypted = CASE WHEN c.orphaned OR (((s.identity_assertion_encrypted IS NULL AND s.identity_assertion_org_encrypted IS NULL) OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= clock_timestamp()) AND ((s.refresh_token_encrypted IS NULL AND s.refresh_token_org_encrypted IS NULL) OR s.refresh_expires_at <= clock_timestamp())) THEN NULL ELSE s.nonce_org_encrypted END,
+  identity_assertion_encrypted = CASE WHEN c.orphaned OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= statement_timestamp() THEN NULL ELSE s.identity_assertion_encrypted END,
+  identity_assertion_org_encrypted = CASE WHEN c.orphaned OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= statement_timestamp() THEN NULL ELSE s.identity_assertion_org_encrypted END,
+  identity_assertion_expires_at = CASE WHEN c.orphaned OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= statement_timestamp() THEN NULL ELSE s.identity_assertion_expires_at END,
+  refresh_token_encrypted = CASE WHEN c.orphaned OR s.refresh_expires_at <= statement_timestamp() THEN NULL ELSE s.refresh_token_encrypted END,
+  refresh_token_org_encrypted = CASE WHEN c.orphaned OR s.refresh_expires_at <= statement_timestamp() THEN NULL ELSE s.refresh_token_org_encrypted END,
+  refresh_expires_at = CASE WHEN c.orphaned OR s.refresh_expires_at <= statement_timestamp() THEN NULL ELSE s.refresh_expires_at END,
+  upstream_subject_encrypted = CASE WHEN c.orphaned OR (((s.identity_assertion_encrypted IS NULL AND s.identity_assertion_org_encrypted IS NULL) OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= statement_timestamp()) AND ((s.refresh_token_encrypted IS NULL AND s.refresh_token_org_encrypted IS NULL) OR s.refresh_expires_at <= statement_timestamp())) THEN NULL ELSE s.upstream_subject_encrypted END,
+  upstream_subject_org_encrypted = CASE WHEN c.orphaned OR (((s.identity_assertion_encrypted IS NULL AND s.identity_assertion_org_encrypted IS NULL) OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= statement_timestamp()) AND ((s.refresh_token_encrypted IS NULL AND s.refresh_token_org_encrypted IS NULL) OR s.refresh_expires_at <= statement_timestamp())) THEN NULL ELSE s.upstream_subject_org_encrypted END,
+  nonce_encrypted = CASE WHEN c.orphaned OR (((s.identity_assertion_encrypted IS NULL AND s.identity_assertion_org_encrypted IS NULL) OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= statement_timestamp()) AND ((s.refresh_token_encrypted IS NULL AND s.refresh_token_org_encrypted IS NULL) OR s.refresh_expires_at <= statement_timestamp())) THEN NULL ELSE s.nonce_encrypted END,
+  nonce_org_encrypted = CASE WHEN c.orphaned OR (((s.identity_assertion_encrypted IS NULL AND s.identity_assertion_org_encrypted IS NULL) OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= statement_timestamp()) AND ((s.refresh_token_encrypted IS NULL AND s.refresh_token_org_encrypted IS NULL) OR s.refresh_expires_at <= statement_timestamp())) THEN NULL ELSE s.nonce_org_encrypted END,
   refresh_claim_id = CASE WHEN c.orphaned THEN NULL ELSE s.refresh_claim_id END,
-  credential_generation = CASE WHEN c.orphaned OR s.refresh_expires_at <= clock_timestamp() THEN COALESCE(s.credential_generation, 1) + 1 ELSE s.credential_generation END,
+  credential_generation = CASE WHEN c.orphaned OR s.refresh_expires_at <= statement_timestamp() THEN COALESCE(s.credential_generation, 1) + 1 ELSE s.credential_generation END,
   updated_at = clock_timestamp()
 FROM candidates AS c WHERE s.id = c.id AND NOT c.orphaned
 RETURNING s.id
@@ -764,6 +764,8 @@ type CleanupTrustedDelegationCredentialsBatchParams struct {
 // Include inactive rows and use bounded
 // row locking. Orphans are deleted even without ciphertext: subject_urn is personal
 // data. Live expired credentials are erased without releasing refresh claims.
+// Every expiry comparison uses statement_timestamp(), so the rows picked and
+// every column erased agree on one cutoff and both copies of a value go together.
 func (q *Queries) CleanupTrustedDelegationCredentialsBatch(ctx context.Context, arg CleanupTrustedDelegationCredentialsBatchParams) (int64, error) {
 	row := q.db.QueryRow(ctx, cleanupTrustedDelegationCredentialsBatch, arg.BatchSize, arg.OrganizationID)
 	var affected_rows int64
