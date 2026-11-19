@@ -379,7 +379,7 @@ await waitForHookState(() =>
 );
 ```
 
-Await the specific transition the next action needs: `loading === false` does not guarantee a follow-up effect has finished. Preserve every case and assertion when migrating; do not replace failures with sleeps or swallowed errors. Keep the helper's timeout/retry regression tests in `src/test/waitForHookState.test.ts` passing.
+Await the specific transition the next action needs: `loading === false` does not guarantee a follow-up effect has finished. Preserve every case and assertion when migrating; do not replace failures with sleeps or swallowed errors. Keep the helper's timeout/retry regression tests in `client/dashboard/src/test/waitForHookState.test.ts` passing.
 
 For performance claims, compare alternating before/after runs with the same revision baseline, worker count, and cache settings; preserve test counts and distinguish test execution from whole-command/full-suite wall time. A faster hook file does not by itself prove a faster suite.
 
