@@ -17,12 +17,13 @@ CREATE TABLE "ai_product_aliases" (
   "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
   PRIMARY KEY ("id"),
   CONSTRAINT "ai_product_aliases_ai_product_id_fkey" FOREIGN KEY ("ai_product_id") REFERENCES "ai_products" ("id") ON UPDATE NO ACTION ON DELETE RESTRICT,
+  CONSTRAINT "ai_product_aliases_client_check" CHECK (client <> ''::text),
   CONSTRAINT "ai_product_aliases_name_check" CHECK (name <> ''::text)
 );
 -- Create index "ai_product_aliases_ai_product_id_idx" to table: "ai_product_aliases"
 CREATE INDEX "ai_product_aliases_ai_product_id_idx" ON "ai_product_aliases" ("ai_product_id");
 -- Create index "ai_product_aliases_name_key" to table: "ai_product_aliases"
-CREATE UNIQUE INDEX "ai_product_aliases_name_key" ON "ai_product_aliases" ("name") WHERE (deleted IS FALSE);
+CREATE UNIQUE INDEX "ai_product_aliases_name_key" ON "ai_product_aliases" ((translate(lower(name), ' 	_-'::text, ''::text))) WHERE (deleted IS FALSE);
 -- Set comment to table: "ai_product_aliases"
 COMMENT ON TABLE "ai_product_aliases" IS 'Other names each catalog product is reported under. Attribution only, never enforcement: the names are self-reported.';
 -- Set comment to column: "id" on table: "ai_product_aliases"
@@ -30,7 +31,7 @@ COMMENT ON COLUMN "ai_product_aliases"."id" IS '@access: confidential';
 -- Set comment to column: "ai_product_id" on table: "ai_product_aliases"
 COMMENT ON COLUMN "ai_product_aliases"."ai_product_id" IS '@access: confidential';
 -- Set comment to column: "name" on table: "ai_product_aliases"
-COMMENT ON COLUMN "ai_product_aliases"."name" IS 'The reported name. Stored as written; lookups fold case and treat spaces, underscores and hyphens alike in application code.
+COMMENT ON COLUMN "ai_product_aliases"."name" IS 'The reported name, stored as written. Lookups ignore case, spaces, tabs, underscores and hyphens, so claude_code and Claude Code are the same name.
 @access: opaque-confidential';
 -- Set comment to column: "client" on table: "ai_product_aliases"
 COMMENT ON COLUMN "ai_product_aliases"."client" IS 'Kind of client the name implies (cli, ide, desktop, web, mobile, cloud, slack); null when the name implies none. Validated in application code.
