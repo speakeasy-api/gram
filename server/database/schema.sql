@@ -2810,9 +2810,9 @@ CREATE TABLE IF NOT EXISTS network_ingresses (
   -- configured/not-configured state.
   credentials_encrypted TEXT,
   -- The same credential document sealed under the organization's own
-  -- encryption key. Written alongside credentials_encrypted while
-  -- organizations move to organization encryption; cleared whenever
-  -- credentials_encrypted is.
+  -- encryption key. Each write sets one or both copies per the organization's
+  -- integration-credentials transition; only this copy remains once its
+  -- platform-key copies are cleared.
   credentials_org_encrypted TEXT,
   attestor_namespace TEXT NOT NULL,
   attestor_service_account TEXT NOT NULL,
@@ -8296,8 +8296,9 @@ CREATE TABLE IF NOT EXISTS slack_directory_connections (
   -- from directory API responses.
   credentials_encrypted TEXT,
   -- The same token bundle sealed under the organization's own encryption key.
-  -- Written alongside credentials_encrypted while organizations move to
-  -- organization encryption; cleared whenever credentials_encrypted is.
+  -- Each write sets one or both copies per the organization's
+  -- integration-credentials transition; only this copy remains once its
+  -- platform-key copies are cleared.
   credentials_org_encrypted TEXT,
   granted_scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   -- Replace this value on disconnect, reconnect, or replacement authorization
@@ -13794,8 +13795,9 @@ CREATE TABLE IF NOT EXISTS device_integration_configs (
   -- set. NULL once the organization's platform-key copies are cleared.
   credentials_encrypted TEXT,
   -- The same credential document sealed under the organization's own
-  -- encryption key. Written alongside credentials_encrypted while
-  -- organizations move to organization encryption.
+  -- encryption key. Each write sets one or both copies per the organization's
+  -- integration-credentials transition; only this copy remains once its
+  -- platform-key copies are cleared.
   credentials_org_encrypted TEXT,
   -- Non-secret, admin-visible provider settings (e.g. the Jamf instance URL
   -- or Drata region). Split from credentials_encrypted so the dashboard can
