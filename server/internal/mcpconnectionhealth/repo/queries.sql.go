@@ -12,277 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const averageEndedSessionSeconds = `-- name: AverageEndedSessionSeconds :one
-WITH endpoints AS (
-  SELECT endpoint.project_id, endpoint.slug, domain.domain AS host, COALESCE(endpoint.is_domain_root, FALSE) AS is_root,
-         endpoint.created_at AS live_from,
-         LEAST(COALESCE(endpoint.deleted_at, 'infinity'::timestamptz), COALESCE(domain.deleted_at, 'infinity'::timestamptz)) AS gone_at
-  FROM mcp_endpoints AS endpoint
-  JOIN projects AS project ON project.id = endpoint.project_id
-  LEFT JOIN custom_domains AS domain ON domain.id = endpoint.custom_domain_id AND domain.organization_id = $3::text
-  WHERE project.organization_id = $3::text
-),
-candidates AS (
-  SELECT session.id, session.project_id, session.organization_id, session.user_session_issuer_id, session.user_session_client_id, session.subject_urn, session.authorizer_user_id, session.delegated_grants, session.delegated_grants_version, session.jti, session.refresh_token_hash, session.refresh_expires_at, session.expires_at, session.tool_selection, session.last_used_at, session.resource, session.sign_in_id, session.credential_id, session.created_at, session.updated_at, session.deleted_at, session.deleted,
-         substring(session.resource from '^https?://([^/?#]+)') AS resource_host,
-         regexp_replace(regexp_replace(session.resource, '^https?://[^/?#]+', ''), '[?#].*$', '') AS resource_path
-  FROM user_sessions AS session
-  WHERE session.user_session_issuer_id = $4
-    AND (session.project_id = $5 OR (session.project_id IS NULL AND session.organization_id = $3::text))
-    AND COALESCE(session.credential_id, session.id) IN (
-      SELECT COALESCE(recent.credential_id, recent.id)
-      FROM user_sessions AS recent
-      WHERE recent.user_session_issuer_id = $4
-        AND LEAST(COALESCE(recent.deleted_at, 'infinity'::timestamptz), CASE WHEN recent.refresh_token_hash LIKE $6::text THEN recent.expires_at ELSE recent.refresh_expires_at END) >= $7::timestamptz
-    )
-),
-scoped AS (
-  SELECT COALESCE(session.credential_id, session.id) AS credential,
-         session.created_at AS started_at,
-         LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE $6::text THEN session.expires_at ELSE session.refresh_expires_at END) AS ended_at,
-         session.deleted
-  FROM candidates AS session
-  WHERE session.project_id = $5
-     OR NOT COALESCE(
-          (session.resource LIKE $8::text AND session.resource <> $9::text)
-          OR EXISTS (SELECT 1 FROM user_session_clients AS client
-                     WHERE client.id = session.user_session_client_id AND client.organization_id = $3::text
-                       AND client.project_id <> $5)
-          OR (EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id <> $5 AND endpoint.live_from <= session.created_at AND endpoint.gone_at > session.created_at
-                        AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
-                        AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
-                                 ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)
-              AND NOT EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id = $5 AND endpoint.live_from <= session.created_at AND endpoint.gone_at > session.created_at
-                        AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
-                        AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
-                                 ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)),
-          FALSE)
-),
-lives AS (
-  SELECT scoped.credential, MIN(scoped.started_at) AS started_at, MAX(scoped.ended_at) AS ended_at
-  FROM scoped
-  GROUP BY scoped.credential
-)
-SELECT COALESCE(AVG(EXTRACT(EPOCH FROM lives.ended_at - lives.started_at)), -1)::float8 AS average_seconds
-FROM lives
-WHERE lives.ended_at >= $1::timestamptz
-  AND lives.ended_at < $2::timestamptz
-  AND lives.ended_at <= clock_timestamp()
-`
-
-type AverageEndedSessionSecondsParams struct {
-	FromTime                 pgtype.Timestamptz
-	ToTime                   pgtype.Timestamptz
-	OrganizationID           string
-	IssuerID                 uuid.UUID
-	ProjectID                uuid.NullUUID
-	DashboardMintPattern     string
-	LiveSince                pgtype.Timestamptz
-	InferenceResourcePattern string
-	ProjectInferenceResource string
-}
-
-// Mean length, first sign-in to expiry or revocation, of sessions that ended
-// in the range and have no live row. Only credentials with a row ending after
-// live_since are read, all of their rows included.
-func (q *Queries) AverageEndedSessionSeconds(ctx context.Context, arg AverageEndedSessionSecondsParams) (float64, error) {
-	row := q.db.QueryRow(ctx, averageEndedSessionSeconds,
-		arg.FromTime,
-		arg.ToTime,
-		arg.OrganizationID,
-		arg.IssuerID,
-		arg.ProjectID,
-		arg.DashboardMintPattern,
-		arg.LiveSince,
-		arg.InferenceResourcePattern,
-		arg.ProjectInferenceResource,
-	)
-	var average_seconds float64
-	err := row.Scan(&average_seconds)
-	return average_seconds, err
-}
-
-const countActiveSessionsByDay = `-- name: CountActiveSessionsByDay :many
-WITH days AS (
-  SELECT day_start::timestamptz AS day_start
-  FROM generate_series($2::timestamptz, $3::timestamptz, '1 day'::interval) AS day_start
-),
-endpoints AS (
-  SELECT endpoint.project_id, endpoint.slug, domain.domain AS host, COALESCE(endpoint.is_domain_root, FALSE) AS is_root,
-         endpoint.created_at AS live_from,
-         LEAST(COALESCE(endpoint.deleted_at, 'infinity'::timestamptz), COALESCE(domain.deleted_at, 'infinity'::timestamptz)) AS gone_at
-  FROM mcp_endpoints AS endpoint
-  JOIN projects AS project ON project.id = endpoint.project_id
-  LEFT JOIN custom_domains AS domain ON domain.id = endpoint.custom_domain_id AND domain.organization_id = $4::text
-  WHERE project.organization_id = $4::text
-),
-candidates AS (
-  SELECT session.id, session.project_id, session.organization_id, session.user_session_issuer_id, session.user_session_client_id, session.subject_urn, session.authorizer_user_id, session.delegated_grants, session.delegated_grants_version, session.jti, session.refresh_token_hash, session.refresh_expires_at, session.expires_at, session.tool_selection, session.last_used_at, session.resource, session.sign_in_id, session.credential_id, session.created_at, session.updated_at, session.deleted_at, session.deleted,
-         substring(session.resource from '^https?://([^/?#]+)') AS resource_host,
-         regexp_replace(regexp_replace(session.resource, '^https?://[^/?#]+', ''), '[?#].*$', '') AS resource_path
-  FROM user_sessions AS session
-  WHERE session.user_session_issuer_id = $5
-    AND (session.project_id = $6 OR (session.project_id IS NULL AND session.organization_id = $4::text))
-    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE $7::text THEN session.expires_at ELSE session.refresh_expires_at END) >= $8::timestamptz
-),
-scoped AS (
-  SELECT COALESCE(session.credential_id, session.id) AS credential,
-         session.created_at AS started_at,
-         LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE $7::text THEN session.expires_at ELSE session.refresh_expires_at END) AS ended_at,
-         session.deleted
-  FROM candidates AS session
-  WHERE session.project_id = $6
-     OR NOT COALESCE(
-          (session.resource LIKE $9::text AND session.resource <> $10::text)
-          OR EXISTS (SELECT 1 FROM user_session_clients AS client
-                     WHERE client.id = session.user_session_client_id AND client.organization_id = $4::text
-                       AND client.project_id <> $6)
-          OR (EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id <> $6 AND endpoint.live_from <= session.created_at AND endpoint.gone_at > session.created_at
-                        AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
-                        AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
-                                 ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)
-              AND NOT EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id = $6 AND endpoint.live_from <= session.created_at AND endpoint.gone_at > session.created_at
-                        AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
-                        AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
-                                 ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)),
-          FALSE)
-)
-SELECT days.day_start, COUNT(DISTINCT scoped.credential)::bigint AS active_sessions
-FROM days
-LEFT JOIN scoped
-  ON scoped.started_at < days.day_start + '1 day'::interval
-  AND scoped.ended_at > days.day_start
-  AND scoped.started_at < $1::timestamptz
-  AND scoped.ended_at > $2::timestamptz
-GROUP BY days.day_start
-ORDER BY days.day_start
-`
-
-type CountActiveSessionsByDayParams struct {
-	ToDay                    pgtype.Timestamptz
-	FromDay                  pgtype.Timestamptz
-	LastDay                  pgtype.Timestamptz
-	OrganizationID           string
-	IssuerID                 uuid.UUID
-	ProjectID                uuid.NullUUID
-	DashboardMintPattern     string
-	LiveSince                pgtype.Timestamptz
-	InferenceResourcePattern string
-	ProjectInferenceResource string
-}
-
-type CountActiveSessionsByDayRow struct {
-	DayStart       pgtype.Timestamptz
-	ActiveSessions int64
-}
-
-// A credential keeps its id across refresh rotation, so it is one session. A
-// row lives from creation until deleted or its deadline; a dashboard mint has
-// no refresh, so its access token's. An organization session counts unless its
-// resource or client ties it to another project only.
-func (q *Queries) CountActiveSessionsByDay(ctx context.Context, arg CountActiveSessionsByDayParams) ([]CountActiveSessionsByDayRow, error) {
-	rows, err := q.db.Query(ctx, countActiveSessionsByDay,
-		arg.ToDay,
-		arg.FromDay,
-		arg.LastDay,
-		arg.OrganizationID,
-		arg.IssuerID,
-		arg.ProjectID,
-		arg.DashboardMintPattern,
-		arg.LiveSince,
-		arg.InferenceResourcePattern,
-		arg.ProjectInferenceResource,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []CountActiveSessionsByDayRow
-	for rows.Next() {
-		var i CountActiveSessionsByDayRow
-		if err := rows.Scan(&i.DayStart, &i.ActiveSessions); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const countActiveSessionsNow = `-- name: CountActiveSessionsNow :one
-WITH endpoints AS (
-  SELECT endpoint.project_id, endpoint.slug, domain.domain AS host, COALESCE(endpoint.is_domain_root, FALSE) AS is_root,
-         endpoint.created_at AS live_from,
-         LEAST(COALESCE(endpoint.deleted_at, 'infinity'::timestamptz), COALESCE(domain.deleted_at, 'infinity'::timestamptz)) AS gone_at
-  FROM mcp_endpoints AS endpoint
-  JOIN projects AS project ON project.id = endpoint.project_id
-  LEFT JOIN custom_domains AS domain ON domain.id = endpoint.custom_domain_id AND domain.organization_id = $1::text
-  WHERE project.organization_id = $1::text
-),
-candidates AS (
-  SELECT session.id, session.project_id, session.organization_id, session.user_session_issuer_id, session.user_session_client_id, session.subject_urn, session.authorizer_user_id, session.delegated_grants, session.delegated_grants_version, session.jti, session.refresh_token_hash, session.refresh_expires_at, session.expires_at, session.tool_selection, session.last_used_at, session.resource, session.sign_in_id, session.credential_id, session.created_at, session.updated_at, session.deleted_at, session.deleted,
-         substring(session.resource from '^https?://([^/?#]+)') AS resource_host,
-         regexp_replace(regexp_replace(session.resource, '^https?://[^/?#]+', ''), '[?#].*$', '') AS resource_path
-  FROM user_sessions AS session
-  WHERE session.user_session_issuer_id = $2
-    AND (session.project_id = $3 OR (session.project_id IS NULL AND session.organization_id = $1::text))
-    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE $4::text THEN session.expires_at ELSE session.refresh_expires_at END) >= $5::timestamptz
-),
-scoped AS (
-  SELECT COALESCE(session.credential_id, session.id) AS credential,
-         session.created_at AS started_at,
-         LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE $4::text THEN session.expires_at ELSE session.refresh_expires_at END) AS ended_at,
-         session.deleted
-  FROM candidates AS session
-  WHERE session.project_id = $3
-     OR NOT COALESCE(
-          (session.resource LIKE $6::text AND session.resource <> $7::text)
-          OR EXISTS (SELECT 1 FROM user_session_clients AS client
-                     WHERE client.id = session.user_session_client_id AND client.organization_id = $1::text
-                       AND client.project_id <> $3)
-          OR (EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id <> $3 AND endpoint.live_from <= session.created_at AND endpoint.gone_at > session.created_at
-                        AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
-                        AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
-                                 ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)
-              AND NOT EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id = $3 AND endpoint.live_from <= session.created_at AND endpoint.gone_at > session.created_at
-                        AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
-                        AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
-                                 ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)),
-          FALSE)
-)
-SELECT COUNT(DISTINCT scoped.credential)::bigint AS active_sessions
-FROM scoped
-WHERE scoped.deleted IS FALSE
-  AND scoped.ended_at > clock_timestamp()
-`
-
-type CountActiveSessionsNowParams struct {
-	OrganizationID           string
-	IssuerID                 uuid.UUID
-	ProjectID                uuid.NullUUID
-	DashboardMintPattern     string
-	LiveSince                pgtype.Timestamptz
-	InferenceResourcePattern string
-	ProjectInferenceResource string
-}
-
-func (q *Queries) CountActiveSessionsNow(ctx context.Context, arg CountActiveSessionsNowParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countActiveSessionsNow,
-		arg.OrganizationID,
-		arg.IssuerID,
-		arg.ProjectID,
-		arg.DashboardMintPattern,
-		arg.LiveSince,
-		arg.InferenceResourcePattern,
-		arg.ProjectInferenceResource,
-	)
-	var active_sessions int64
-	err := row.Scan(&active_sessions)
-	return active_sessions, err
-}
-
 const getProviderIssuer = `-- name: GetProviderIssuer :one
 SELECT issuer.id, issuer.slug, issuer.session_duration
 FROM user_session_issuers AS issuer
@@ -312,6 +41,146 @@ func (q *Queries) GetProviderIssuer(ctx context.Context, arg GetProviderIssuerPa
 	var i GetProviderIssuerRow
 	err := row.Scan(&i.ID, &i.Slug, &i.SessionDuration)
 	return i, err
+}
+
+const getSessionActivity = `-- name: GetSessionActivity :many
+WITH endpoints AS (
+  SELECT endpoint.project_id, endpoint.slug, domain.domain AS host, COALESCE(endpoint.is_domain_root, FALSE) AS is_root,
+         endpoint.created_at AS live_from,
+         LEAST(COALESCE(endpoint.deleted_at, 'infinity'::timestamptz), COALESCE(domain.deleted_at, 'infinity'::timestamptz)) AS gone_at
+  FROM mcp_endpoints AS endpoint
+  JOIN projects AS project ON project.id = endpoint.project_id
+  LEFT JOIN custom_domains AS domain ON domain.id = endpoint.custom_domain_id AND domain.organization_id = $3::text
+  WHERE project.organization_id = $3::text
+),
+candidates AS (
+  SELECT session.id, session.project_id, session.organization_id, session.user_session_issuer_id, session.user_session_client_id, session.subject_urn, session.authorizer_user_id, session.delegated_grants, session.delegated_grants_version, session.jti, session.refresh_token_hash, session.refresh_expires_at, session.expires_at, session.tool_selection, session.last_used_at, session.resource, session.sign_in_id, session.credential_id, session.created_at, session.updated_at, session.deleted_at, session.deleted,
+         substring(session.resource from '^https?://([^/?#]+)') AS resource_host,
+         regexp_replace(regexp_replace(session.resource, '^https?://[^/?#]+', ''), '[?#].*$', '') AS resource_path
+  FROM user_sessions AS session
+  WHERE session.user_session_issuer_id = $4
+    AND (session.project_id = $5 OR (session.project_id IS NULL AND session.organization_id = $3::text))
+    AND COALESCE(session.credential_id, session.id) IN (
+      SELECT COALESCE(recent.credential_id, recent.id)
+      FROM user_sessions AS recent
+      WHERE recent.user_session_issuer_id = $4
+        AND LEAST(COALESCE(recent.deleted_at, 'infinity'::timestamptz), CASE WHEN recent.refresh_token_hash LIKE $6::text THEN recent.expires_at ELSE recent.refresh_expires_at END) >= $7::timestamptz
+    )
+),
+addressed AS (
+  SELECT session.id, session.project_id, session.organization_id, session.user_session_issuer_id, session.user_session_client_id, session.subject_urn, session.authorizer_user_id, session.delegated_grants, session.delegated_grants_version, session.jti, session.refresh_token_hash, session.refresh_expires_at, session.expires_at, session.tool_selection, session.last_used_at, session.resource, session.sign_in_id, session.credential_id, session.created_at, session.updated_at, session.deleted_at, session.deleted, session.resource_host, session.resource_path,
+         EXISTS (SELECT 1 FROM custom_domains AS domain WHERE domain.organization_id = $3::text AND domain.domain = session.resource_host) AS on_custom_domain,
+         substring(session.resource_path from '^/mcp/([^/]+)/?$') AS endpoint_slug,
+         substring(session.resource_path from '^/mcp/gateway/[^/]+/projects/([^/]+)/?$') AS gateway_project_slug
+  FROM candidates AS session
+),
+scoped AS (
+  SELECT COALESCE(session.credential_id, session.id) AS credential,
+         session.created_at AS started_at,
+         LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE $6::text THEN session.expires_at ELSE session.refresh_expires_at END) AS ended_at,
+         session.deleted
+  FROM addressed AS session
+  WHERE session.project_id = $5
+     OR NOT COALESCE(
+          (session.resource LIKE $8::text AND session.resource <> $9::text)
+          OR EXISTS (SELECT 1 FROM user_session_clients AS client
+                     WHERE client.id = session.user_session_client_id AND client.organization_id = $3::text
+                       AND client.project_id <> $5)
+          OR session.gateway_project_slug <> (SELECT project.slug FROM projects AS project WHERE project.id = $5 AND project.organization_id = $3::text)
+          OR (EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id <> $5 AND endpoint.live_from <= session.created_at AND endpoint.gone_at > session.created_at
+                        AND (endpoint.host = session.resource_host OR (endpoint.host IS NULL AND NOT session.on_custom_domain))
+                        AND ((endpoint.is_root AND session.resource_path IN ('', '/')) OR endpoint.slug = session.endpoint_slug))
+              AND NOT EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id = $5 AND endpoint.live_from <= session.created_at AND endpoint.gone_at > session.created_at
+                        AND (endpoint.host = session.resource_host OR (endpoint.host IS NULL AND NOT session.on_custom_domain))
+                        AND ((endpoint.is_root AND session.resource_path IN ('', '/')) OR endpoint.slug = session.endpoint_slug))),
+          FALSE)
+),
+lives AS (
+  SELECT scoped.credential, MIN(scoped.started_at) AS started_at, MAX(scoped.ended_at) AS ended_at
+  FROM scoped
+  GROUP BY scoped.credential
+),
+days AS (
+  SELECT day_start::timestamptz AS day_start
+  FROM generate_series($10::timestamptz, $11::timestamptz, '1 day'::interval) AS day_start
+)
+SELECT days.day_start,
+       COUNT(DISTINCT scoped.credential)::bigint AS active_sessions,
+       (SELECT COUNT(DISTINCT live.credential) FROM scoped AS live
+        WHERE live.deleted IS FALSE AND live.ended_at > clock_timestamp())::bigint AS active_now,
+       (SELECT COALESCE(AVG(EXTRACT(EPOCH FROM ended.ended_at - ended.started_at)), -1) FROM lives AS ended
+        WHERE ended.ended_at >= $1::timestamptz
+          AND ended.ended_at < $2::timestamptz
+          AND ended.ended_at <= clock_timestamp())::float8 AS average_seconds
+FROM days
+LEFT JOIN scoped
+  ON scoped.started_at < days.day_start + '1 day'::interval
+  AND scoped.ended_at > days.day_start
+GROUP BY days.day_start
+ORDER BY days.day_start
+`
+
+type GetSessionActivityParams struct {
+	AverageFrom              pgtype.Timestamptz
+	AverageTo                pgtype.Timestamptz
+	OrganizationID           string
+	IssuerID                 uuid.UUID
+	ProjectID                uuid.NullUUID
+	DashboardMintPattern     string
+	LiveSince                pgtype.Timestamptz
+	InferenceResourcePattern string
+	ProjectInferenceResource string
+	FromDay                  pgtype.Timestamptz
+	LastDay                  pgtype.Timestamptz
+}
+
+type GetSessionActivityRow struct {
+	DayStart       pgtype.Timestamptz
+	ActiveSessions int64
+	ActiveNow      int64
+	AverageSeconds float64
+}
+
+// A credential keeps its id across refresh rotation, so it is one session. A
+// row lives from creation until deleted or its deadline; a dashboard mint has
+// no refresh, so its access token's. An organization session counts unless its
+// resource or client ties it to another project only. Credentials with a row
+// ending after live_since are read, all of their rows included.
+func (q *Queries) GetSessionActivity(ctx context.Context, arg GetSessionActivityParams) ([]GetSessionActivityRow, error) {
+	rows, err := q.db.Query(ctx, getSessionActivity,
+		arg.AverageFrom,
+		arg.AverageTo,
+		arg.OrganizationID,
+		arg.IssuerID,
+		arg.ProjectID,
+		arg.DashboardMintPattern,
+		arg.LiveSince,
+		arg.InferenceResourcePattern,
+		arg.ProjectInferenceResource,
+		arg.FromDay,
+		arg.LastDay,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetSessionActivityRow
+	for rows.Next() {
+		var i GetSessionActivityRow
+		if err := rows.Scan(
+			&i.DayStart,
+			&i.ActiveSessions,
+			&i.ActiveNow,
+			&i.AverageSeconds,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listIssuerServerIDs = `-- name: ListIssuerServerIDs :many

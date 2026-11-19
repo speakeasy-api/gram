@@ -60,115 +60,12 @@ WHERE relationship.organization_id = @organization_id::text
   AND relationship.deleted IS FALSE
   AND member.id = ANY(@ids::text[]);
 
--- name: CountActiveSessionsByDay :many
+-- name: GetSessionActivity :many
 -- A credential keeps its id across refresh rotation, so it is one session. A
 -- row lives from creation until deleted or its deadline; a dashboard mint has
 -- no refresh, so its access token's. An organization session counts unless its
--- resource or client ties it to another project only.
-WITH days AS (
-  SELECT day_start::timestamptz AS day_start
-  FROM generate_series(@from_day::timestamptz, @last_day::timestamptz, '1 day'::interval) AS day_start
-),
-endpoints AS (
-  SELECT endpoint.project_id, endpoint.slug, domain.domain AS host, COALESCE(endpoint.is_domain_root, FALSE) AS is_root,
-         endpoint.created_at AS live_from,
-         LEAST(COALESCE(endpoint.deleted_at, 'infinity'::timestamptz), COALESCE(domain.deleted_at, 'infinity'::timestamptz)) AS gone_at
-  FROM mcp_endpoints AS endpoint
-  JOIN projects AS project ON project.id = endpoint.project_id
-  LEFT JOIN custom_domains AS domain ON domain.id = endpoint.custom_domain_id AND domain.organization_id = @organization_id::text
-  WHERE project.organization_id = @organization_id::text
-),
-candidates AS (
-  SELECT session.*,
-         substring(session.resource from '^https?://([^/?#]+)') AS resource_host,
-         regexp_replace(regexp_replace(session.resource, '^https?://[^/?#]+', ''), '[?#].*$', '') AS resource_path
-  FROM user_sessions AS session
-  WHERE session.user_session_issuer_id = @issuer_id
-    AND (session.project_id = @project_id OR (session.project_id IS NULL AND session.organization_id = @organization_id::text))
-    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE @dashboard_mint_pattern::text THEN session.expires_at ELSE session.refresh_expires_at END) >= @live_since::timestamptz
-),
-scoped AS (
-  SELECT COALESCE(session.credential_id, session.id) AS credential,
-         session.created_at AS started_at,
-         LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE @dashboard_mint_pattern::text THEN session.expires_at ELSE session.refresh_expires_at END) AS ended_at,
-         session.deleted
-  FROM candidates AS session
-  WHERE session.project_id = @project_id
-     OR NOT COALESCE(
-          (session.resource LIKE @inference_resource_pattern::text AND session.resource <> @project_inference_resource::text)
-          OR EXISTS (SELECT 1 FROM user_session_clients AS client
-                     WHERE client.id = session.user_session_client_id AND client.organization_id = @organization_id::text
-                       AND client.project_id <> @project_id)
-          OR (EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id <> @project_id AND endpoint.live_from <= session.created_at AND endpoint.gone_at > session.created_at
-                        AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
-                        AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
-                                 ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)
-              AND NOT EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id = @project_id AND endpoint.live_from <= session.created_at AND endpoint.gone_at > session.created_at
-                        AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
-                        AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
-                                 ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)),
-          FALSE)
-)
-SELECT days.day_start, COUNT(DISTINCT scoped.credential)::bigint AS active_sessions
-FROM days
-LEFT JOIN scoped
-  ON scoped.started_at < days.day_start + '1 day'::interval
-  AND scoped.ended_at > days.day_start
-  AND scoped.started_at < @to_day::timestamptz
-  AND scoped.ended_at > @from_day::timestamptz
-GROUP BY days.day_start
-ORDER BY days.day_start;
-
--- name: CountActiveSessionsNow :one
-WITH endpoints AS (
-  SELECT endpoint.project_id, endpoint.slug, domain.domain AS host, COALESCE(endpoint.is_domain_root, FALSE) AS is_root,
-         endpoint.created_at AS live_from,
-         LEAST(COALESCE(endpoint.deleted_at, 'infinity'::timestamptz), COALESCE(domain.deleted_at, 'infinity'::timestamptz)) AS gone_at
-  FROM mcp_endpoints AS endpoint
-  JOIN projects AS project ON project.id = endpoint.project_id
-  LEFT JOIN custom_domains AS domain ON domain.id = endpoint.custom_domain_id AND domain.organization_id = @organization_id::text
-  WHERE project.organization_id = @organization_id::text
-),
-candidates AS (
-  SELECT session.*,
-         substring(session.resource from '^https?://([^/?#]+)') AS resource_host,
-         regexp_replace(regexp_replace(session.resource, '^https?://[^/?#]+', ''), '[?#].*$', '') AS resource_path
-  FROM user_sessions AS session
-  WHERE session.user_session_issuer_id = @issuer_id
-    AND (session.project_id = @project_id OR (session.project_id IS NULL AND session.organization_id = @organization_id::text))
-    AND LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE @dashboard_mint_pattern::text THEN session.expires_at ELSE session.refresh_expires_at END) >= @live_since::timestamptz
-),
-scoped AS (
-  SELECT COALESCE(session.credential_id, session.id) AS credential,
-         session.created_at AS started_at,
-         LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE @dashboard_mint_pattern::text THEN session.expires_at ELSE session.refresh_expires_at END) AS ended_at,
-         session.deleted
-  FROM candidates AS session
-  WHERE session.project_id = @project_id
-     OR NOT COALESCE(
-          (session.resource LIKE @inference_resource_pattern::text AND session.resource <> @project_inference_resource::text)
-          OR EXISTS (SELECT 1 FROM user_session_clients AS client
-                     WHERE client.id = session.user_session_client_id AND client.organization_id = @organization_id::text
-                       AND client.project_id <> @project_id)
-          OR (EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id <> @project_id AND endpoint.live_from <= session.created_at AND endpoint.gone_at > session.created_at
-                        AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
-                        AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
-                                 ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)
-              AND NOT EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id = @project_id AND endpoint.live_from <= session.created_at AND endpoint.gone_at > session.created_at
-                        AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
-                        AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
-                                 ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)),
-          FALSE)
-)
-SELECT COUNT(DISTINCT scoped.credential)::bigint AS active_sessions
-FROM scoped
-WHERE scoped.deleted IS FALSE
-  AND scoped.ended_at > clock_timestamp();
-
--- name: AverageEndedSessionSeconds :one
--- Mean length, first sign-in to expiry or revocation, of sessions that ended
--- in the range and have no live row. Only credentials with a row ending after
--- live_since are read, all of their rows included.
+-- resource or client ties it to another project only. Credentials with a row
+-- ending after live_since are read, all of their rows included.
 WITH endpoints AS (
   SELECT endpoint.project_id, endpoint.slug, domain.domain AS host, COALESCE(endpoint.is_domain_root, FALSE) AS is_root,
          endpoint.created_at AS live_from,
@@ -192,35 +89,54 @@ candidates AS (
         AND LEAST(COALESCE(recent.deleted_at, 'infinity'::timestamptz), CASE WHEN recent.refresh_token_hash LIKE @dashboard_mint_pattern::text THEN recent.expires_at ELSE recent.refresh_expires_at END) >= @live_since::timestamptz
     )
 ),
+addressed AS (
+  SELECT session.*,
+         EXISTS (SELECT 1 FROM custom_domains AS domain WHERE domain.organization_id = @organization_id::text AND domain.domain = session.resource_host) AS on_custom_domain,
+         substring(session.resource_path from '^/mcp/([^/]+)/?$') AS endpoint_slug,
+         substring(session.resource_path from '^/mcp/gateway/[^/]+/projects/([^/]+)/?$') AS gateway_project_slug
+  FROM candidates AS session
+),
 scoped AS (
   SELECT COALESCE(session.credential_id, session.id) AS credential,
          session.created_at AS started_at,
          LEAST(COALESCE(session.deleted_at, 'infinity'::timestamptz), CASE WHEN session.refresh_token_hash LIKE @dashboard_mint_pattern::text THEN session.expires_at ELSE session.refresh_expires_at END) AS ended_at,
          session.deleted
-  FROM candidates AS session
+  FROM addressed AS session
   WHERE session.project_id = @project_id
      OR NOT COALESCE(
           (session.resource LIKE @inference_resource_pattern::text AND session.resource <> @project_inference_resource::text)
           OR EXISTS (SELECT 1 FROM user_session_clients AS client
                      WHERE client.id = session.user_session_client_id AND client.organization_id = @organization_id::text
                        AND client.project_id <> @project_id)
+          OR session.gateway_project_slug <> (SELECT project.slug FROM projects AS project WHERE project.id = @project_id AND project.organization_id = @organization_id::text)
           OR (EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id <> @project_id AND endpoint.live_from <= session.created_at AND endpoint.gone_at > session.created_at
-                        AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
-                        AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
-                                 ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)
+                        AND (endpoint.host = session.resource_host OR (endpoint.host IS NULL AND NOT session.on_custom_domain))
+                        AND ((endpoint.is_root AND session.resource_path IN ('', '/')) OR endpoint.slug = session.endpoint_slug))
               AND NOT EXISTS (SELECT 1 FROM endpoints AS endpoint WHERE endpoint.project_id = @project_id AND endpoint.live_from <= session.created_at AND endpoint.gone_at > session.created_at
-                        AND (endpoint.host IS NULL OR endpoint.host = session.resource_host)
-                        AND CASE WHEN endpoint.is_root THEN session.resource_path IN ('', '/')
-                                 ELSE endpoint.slug = substring(session.resource_path from '/([^/]+)/?$') END)),
+                        AND (endpoint.host = session.resource_host OR (endpoint.host IS NULL AND NOT session.on_custom_domain))
+                        AND ((endpoint.is_root AND session.resource_path IN ('', '/')) OR endpoint.slug = session.endpoint_slug))),
           FALSE)
 ),
 lives AS (
   SELECT scoped.credential, MIN(scoped.started_at) AS started_at, MAX(scoped.ended_at) AS ended_at
   FROM scoped
   GROUP BY scoped.credential
+),
+days AS (
+  SELECT day_start::timestamptz AS day_start
+  FROM generate_series(@from_day::timestamptz, @last_day::timestamptz, '1 day'::interval) AS day_start
 )
-SELECT COALESCE(AVG(EXTRACT(EPOCH FROM lives.ended_at - lives.started_at)), -1)::float8 AS average_seconds
-FROM lives
-WHERE lives.ended_at >= @from_time::timestamptz
-  AND lives.ended_at < @to_time::timestamptz
-  AND lives.ended_at <= clock_timestamp();
+SELECT days.day_start,
+       COUNT(DISTINCT scoped.credential)::bigint AS active_sessions,
+       (SELECT COUNT(DISTINCT live.credential) FROM scoped AS live
+        WHERE live.deleted IS FALSE AND live.ended_at > clock_timestamp())::bigint AS active_now,
+       (SELECT COALESCE(AVG(EXTRACT(EPOCH FROM ended.ended_at - ended.started_at)), -1) FROM lives AS ended
+        WHERE ended.ended_at >= @average_from::timestamptz
+          AND ended.ended_at < @average_to::timestamptz
+          AND ended.ended_at <= clock_timestamp())::float8 AS average_seconds
+FROM days
+LEFT JOIN scoped
+  ON scoped.started_at < days.day_start + '1 day'::interval
+  AND scoped.ended_at > days.day_start
+GROUP BY days.day_start
+ORDER BY days.day_start;

@@ -109,58 +109,42 @@ func (s *Service) GetSessionActivity(ctx context.Context, payload *gen.GetSessio
 		return nil, err
 	}
 
-	queries := repo.New(s.db)
-	project := uuid.NullUUID{UUID: c.projectID, Valid: true}
-	projectInferenceResource := mcp.InferenceResource + ":" + c.projectID.String()
 	firstDay := time.Date(from.Year(), from.Month(), from.Day(), 0, 0, 0, 0, time.UTC)
 	lastDay := time.Date(to.Year(), to.Month(), to.Day(), 0, 0, 0, 0, time.UTC)
 	if lastDay.Equal(to) {
 		lastDay = lastDay.AddDate(0, 0, -1)
 	}
-	days, err := queries.CountActiveSessionsByDay(ctx, repo.CountActiveSessionsByDayParams{
+	averageFrom := now.Add(-averageSessionWindow)
+	liveSince := firstDay
+	if averageFrom.Before(liveSince) {
+		liveSince = averageFrom
+	}
+	days, err := repo.New(s.db).GetSessionActivity(ctx, repo.GetSessionActivityParams{
+		OrganizationID:           c.organizationID,
+		IssuerID:                 issuer.ID,
+		ProjectID:                uuid.NullUUID{UUID: c.projectID, Valid: true},
+		DashboardMintPattern:     dashboardMintPattern,
+		LiveSince:                timestamptz(liveSince),
+		InferenceResourcePattern: inferenceResourcePattern,
+		ProjectInferenceResource: mcp.InferenceResource + ":" + c.projectID.String(),
 		FromDay:                  timestamptz(firstDay),
 		LastDay:                  timestamptz(lastDay),
-		IssuerID:                 issuer.ID,
-		ProjectID:                project,
-		OrganizationID:           c.organizationID,
-		ToDay:                    timestamptz(lastDay.AddDate(0, 0, 1)),
-		LiveSince:                timestamptz(firstDay),
-		DashboardMintPattern:     dashboardMintPattern,
-		InferenceResourcePattern: inferenceResourcePattern,
-		ProjectInferenceResource: projectInferenceResource,
+		AverageFrom:              timestamptz(averageFrom),
+		AverageTo:                timestamptz(now.Add(clockSkewAllowance)),
 	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count active sessions").LogError(ctx, s.logger)
-	}
-	activeNow, err := queries.CountActiveSessionsNow(ctx, repo.CountActiveSessionsNowParams{IssuerID: issuer.ID, ProjectID: project, OrganizationID: c.organizationID, DashboardMintPattern: dashboardMintPattern, InferenceResourcePattern: inferenceResourcePattern, ProjectInferenceResource: projectInferenceResource, LiveSince: timestamptz(now)})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count active sessions now").LogError(ctx, s.logger)
-	}
-	averageFrom := now.Add(-averageSessionWindow)
-	average, err := queries.AverageEndedSessionSeconds(ctx, repo.AverageEndedSessionSecondsParams{
-		FromTime:                 timestamptz(averageFrom),
-		ToTime:                   timestamptz(now.Add(clockSkewAllowance)),
-		IssuerID:                 issuer.ID,
-		ProjectID:                project,
-		OrganizationID:           c.organizationID,
-		DashboardMintPattern:     dashboardMintPattern,
-		InferenceResourcePattern: inferenceResourcePattern,
-		ProjectInferenceResource: projectInferenceResource,
-		LiveSince:                timestamptz(averageFrom),
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "average session length").LogError(ctx, s.logger)
+	if err != nil || len(days) == 0 {
+		return nil, oops.E(oops.CodeUnexpected, err, "read session activity").LogError(ctx, s.logger)
 	}
 
 	result := &gen.ConnectionSessionActivityResult{
 		Days:                     make([]*gen.ConnectionSessionDay, len(days)),
-		ActiveNow:                activeNow,
+		ActiveNow:                days[0].ActiveNow,
 		AverageSessionSeconds:    nil,
 		ConfiguredSessionSeconds: intervalSeconds(issuer.SessionDuration),
 		AverageWindowFrom:        formatTime(averageFrom),
 		AverageWindowTo:          formatTime(now),
 	}
-	if average >= 0 {
+	if average := days[0].AverageSeconds; average >= 0 {
 		result.AverageSessionSeconds = new(int64(average))
 	}
 	for i, day := range days {

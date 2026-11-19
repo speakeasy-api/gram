@@ -26,9 +26,6 @@ const (
 	OutcomeInProgress Outcome = "in_progress"
 )
 
-// Outcomes are every Outcome.
-var Outcomes = []Outcome{OutcomeConnected, OutcomeFailed, OutcomeBlocked, OutcomeDeclined, OutcomeDidntFinish, OutcomeInProgress}
-
 // StepGroup is one of the plain step names the pages show.
 type StepGroup string
 
@@ -42,9 +39,6 @@ const (
 	StepRequest        StepGroup = "request"
 	StepOther          StepGroup = "other"
 )
-
-// StepGroups are every StepGroup.
-var StepGroups = []StepGroup{StepConnect, StepSignIn, StepServiceSignIn, StepSignInRenewal, StepServiceRenewal, StepListingTools, StepRequest, StepOther}
 
 // signInGroups are the steps the sign-in summary counts as first sign-ins.
 var signInGroups = []StepGroup{StepSignIn, StepServiceSignIn}
@@ -281,6 +275,5 @@ func reasonsWithOutcome(outcome mcpconnectionattempts.Outcome) []string {
 			codes = append(codes, code)
 		}
 	}
-	slices.Sort(codes)
 	return codes
 }

@@ -150,7 +150,7 @@ func Count(ctx context.Context, ch driver.Conn, s Scope, f Filters, now time.Tim
 	args = append(args, maxCubeRows+1)
 	query := `
 	SELECT d_outcome AS c_outcome, d_step AS c_step, a_server AS c_server, d_member AS c_member,
-		a_subject AS c_subject, a_device AS c_network, d_app AS c_app, d_app_version AS c_app_version,
+		a_subject AS c_subject, if(a_subject = '', a_device, '') AS c_network, d_app AS c_app, d_app_version AS c_app_version,
 		d_reason AS c_reason, d_service AS c_service, sum(a_weight) AS c_attempts
 	FROM (` + attempts + `)
 	GROUP BY c_outcome, c_step, c_server, c_member, c_subject, c_network, c_app, c_app_version, c_reason, c_service

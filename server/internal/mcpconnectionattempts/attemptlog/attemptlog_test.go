@@ -2,6 +2,7 @@ package attemptlog_test
 
 import (
 	"context"
+	"encoding/base64"
 	"log"
 	"os"
 	"slices"
@@ -517,4 +518,43 @@ func TestList_ANetworkFilterKeepsAttemptsWithNoKnownPersonLikeItsCount(t *testin
 	counts, err = attemptlog.Count(t.Context(), f.ch, f.scope(), empty, f.now)
 	require.NoError(t, err)
 	require.Zero(t, counts.Total)
+}
+
+func TestList_AVersionBelongsToTheAppThatReportedIt(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	a := f.attempt(f.org, f.project, f.server, f.now.Add(-time.Hour))
+	f.row(a, mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultCodeIssued, false, time.Second).ClientFamily = mcpconnectionattempts.FamilyCursor
+	late := f.row(a, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, 2*time.Second)
+	late.ClientFamily, late.ClientVersion = mcpconnectionattempts.FamilyClaudeCode, "8.4.0"
+	f.insert()
+
+	rows := list(t, f, f.scope(), attemptlog.Filters{})
+	require.Len(t, rows, 1)
+	require.Equal(t, mcpconnectionattempts.FamilyCursor, rows[0].App)
+	require.Empty(t, rows[0].AppVersion)
+}
+
+func TestList_FailuresAtTwoStoredStepsOfOneGroupFold(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	for i, step := range []mcpconnectionattempts.Step{mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.StepInboundConsent} {
+		a := f.attempt(f.org, f.project, f.server, f.now.Add(-time.Hour+time.Duration(i)*time.Minute))
+		f.row(a, step, mcpconnectionattempts.CodeInternalError, true, time.Second, person("u1"))
+	}
+	f.insert()
+
+	rows := list(t, f, f.scope(), attemptlog.Filters{})
+	require.Len(t, rows, 1)
+	require.Equal(t, uint64(2), rows[0].Count)
+}
+
+func TestDecodeCursor_RejectsACursorWithoutATime(t *testing.T) {
+	t.Parallel()
+	_, err := attemptlog.DecodeCursor(base64.RawURLEncoding.EncodeToString([]byte(`{"i":"` + uuid.NewString() + `"}`)))
+	require.ErrorIs(t, err, attemptlog.ErrBadCursor)
+	cursor := attemptlog.Cursor{Time: time.Unix(0, 0).UTC(), ID: uuid.New()}
+	decoded, err := attemptlog.DecodeCursor(cursor.Encode())
+	require.NoError(t, err)
+	require.Equal(t, cursor, decoded)
 }
