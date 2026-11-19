@@ -5674,6 +5674,243 @@ func DecodeGetShadowMCPInventoryServerResponse(decoder func(*http.Response) goah
 	}
 }
 
+// BuildFindShadowMCPInventoryServersRequest instantiates a HTTP request object
+// with method and path set to call the "access" service
+// "findShadowMCPInventoryServers" endpoint
+func (c *Client) BuildFindShadowMCPInventoryServersRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: FindShadowMCPInventoryServersAccessPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "findShadowMCPInventoryServers", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeFindShadowMCPInventoryServersRequest returns an encoder for requests
+// sent to the access findShadowMCPInventoryServers server.
+func EncodeFindShadowMCPInventoryServersRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.FindShadowMCPInventoryServersPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "findShadowMCPInventoryServers", "*access.FindShadowMCPInventoryServersPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("project_id", p.ProjectID)
+		for _, value := range p.ServerUrls {
+			values.Add("server_urls", value)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeFindShadowMCPInventoryServersResponse returns a decoder for responses
+// returned by the access findShadowMCPInventoryServers endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeFindShadowMCPInventoryServersResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeFindShadowMCPInventoryServersResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body FindShadowMCPInventoryServersResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "findShadowMCPInventoryServers", err)
+			}
+			err = ValidateFindShadowMCPInventoryServersResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "findShadowMCPInventoryServers", err)
+			}
+			res := NewFindShadowMCPInventoryServersResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body FindShadowMCPInventoryServersUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "findShadowMCPInventoryServers", err)
+			}
+			err = ValidateFindShadowMCPInventoryServersUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "findShadowMCPInventoryServers", err)
+			}
+			return nil, NewFindShadowMCPInventoryServersUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body FindShadowMCPInventoryServersForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "findShadowMCPInventoryServers", err)
+			}
+			err = ValidateFindShadowMCPInventoryServersForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "findShadowMCPInventoryServers", err)
+			}
+			return nil, NewFindShadowMCPInventoryServersForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body FindShadowMCPInventoryServersBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "findShadowMCPInventoryServers", err)
+			}
+			err = ValidateFindShadowMCPInventoryServersBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "findShadowMCPInventoryServers", err)
+			}
+			return nil, NewFindShadowMCPInventoryServersBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body FindShadowMCPInventoryServersNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "findShadowMCPInventoryServers", err)
+			}
+			err = ValidateFindShadowMCPInventoryServersNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "findShadowMCPInventoryServers", err)
+			}
+			return nil, NewFindShadowMCPInventoryServersNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body FindShadowMCPInventoryServersConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "findShadowMCPInventoryServers", err)
+			}
+			err = ValidateFindShadowMCPInventoryServersConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "findShadowMCPInventoryServers", err)
+			}
+			return nil, NewFindShadowMCPInventoryServersConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body FindShadowMCPInventoryServersUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "findShadowMCPInventoryServers", err)
+			}
+			err = ValidateFindShadowMCPInventoryServersUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "findShadowMCPInventoryServers", err)
+			}
+			return nil, NewFindShadowMCPInventoryServersUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body FindShadowMCPInventoryServersInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "findShadowMCPInventoryServers", err)
+			}
+			err = ValidateFindShadowMCPInventoryServersInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "findShadowMCPInventoryServers", err)
+			}
+			return nil, NewFindShadowMCPInventoryServersInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body FindShadowMCPInventoryServersInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "findShadowMCPInventoryServers", err)
+				}
+				err = ValidateFindShadowMCPInventoryServersInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "findShadowMCPInventoryServers", err)
+				}
+				return nil, NewFindShadowMCPInventoryServersInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body FindShadowMCPInventoryServersUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "findShadowMCPInventoryServers", err)
+				}
+				err = ValidateFindShadowMCPInventoryServersUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "findShadowMCPInventoryServers", err)
+				}
+				return nil, NewFindShadowMCPInventoryServersUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "findShadowMCPInventoryServers", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body FindShadowMCPInventoryServersGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "findShadowMCPInventoryServers", err)
+			}
+			err = ValidateFindShadowMCPInventoryServersGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "findShadowMCPInventoryServers", err)
+			}
+			return nil, NewFindShadowMCPInventoryServersGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "findShadowMCPInventoryServers", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildUpdateShadowMCPInventoryServerNameRequest instantiates a HTTP request
 // object with method and path set to call the "access" service
 // "updateShadowMCPInventoryServerName" endpoint
@@ -11675,6 +11912,18 @@ func unmarshalShadowMCPSuggestedOfficialServerResponseBodyToAccessShadowMCPSugge
 		Name:        *v.Name,
 		Slug:        v.Slug,
 	}
+
+	return res
+}
+
+// unmarshalShadowMCPInventoryServerMatchResponseBodyToAccessShadowMCPInventoryServerMatch
+// builds a value of type *access.ShadowMCPInventoryServerMatch from a value of
+// type *ShadowMCPInventoryServerMatchResponseBody.
+func unmarshalShadowMCPInventoryServerMatchResponseBodyToAccessShadowMCPInventoryServerMatch(v *ShadowMCPInventoryServerMatchResponseBody) *access.ShadowMCPInventoryServerMatch {
+	res := &access.ShadowMCPInventoryServerMatch{
+		ServerURL: *v.ServerURL,
+	}
+	res.Server = unmarshalShadowMCPInventoryServerResponseBodyToAccessShadowMCPInventoryServer(v.Server)
 
 	return res
 }

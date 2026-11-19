@@ -22,10 +22,12 @@ const mockUnproxiedDeleteServer = vi.fn();
 const mockFetchImageFromURL = vi.fn();
 const mockMcpMetadataSet = vi.fn();
 const mockUseEffectiveUserSessionIssuers = vi.fn();
+const mockSetShadowMCPOfficialServer = vi.fn();
 
 // Return a stable client reference to avoid re-render loops from useCallback deps
 const mockClient = {
   risk: { policies: { create: mockCreatePolicy } },
+  access: { setShadowMCPOfficialServer: mockSetShadowMCPOfficialServer },
   remoteMcp: {
     createServer: mockCreateServer,
     deleteServer: mockDeleteServer,
@@ -118,6 +120,16 @@ vi.mock("@gram/client/react-query/riskListPolicies.js", () => ({
   invalidateAllRiskListPolicies: vi.fn(() => Promise.resolve()),
 }));
 
+vi.mock("@gram/client/react-query/shadowMCPInventory.js", () => ({
+  invalidateAllShadowMCPInventory: vi.fn(() => Promise.resolve()),
+}));
+vi.mock("@gram/client/react-query/shadowMCPInventoryServer.js", () => ({
+  invalidateAllShadowMCPInventoryServer: vi.fn(() => Promise.resolve()),
+}));
+vi.mock("@gram/client/react-query/findShadowMCPInventoryServers.js", () => ({
+  invalidateAllFindShadowMCPInventoryServers: vi.fn(() => Promise.resolve()),
+}));
+
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({}),
 }));
@@ -165,6 +177,20 @@ function makeServer(overrides: Partial<CatalogServer> = {}): CatalogServer {
 // literals in the renderHook callback create a new array each render →
 // infinite loop → OOM.
 const EMPTY_SERVERS: CatalogServer[] = [];
+
+// The Shadow MCP server people reach directly at the catalog endpoint. Kept
+// stable for the same reason as the servers array.
+const SHADOW_REPLACEMENTS = [
+  {
+    projectId: "proj-1",
+    remoteUrl: "https://mcp.example.com/mcp",
+    shadowServerUrl: "https://mcp.example.com/mcp/",
+    shadowName: "Example",
+    shadowServerSlug: "mcp-example-com-mcp-12345678",
+    userCount: 3,
+  },
+];
+const NO_SHADOW_REPLACEMENTS: typeof SHADOW_REPLACEMENTS = [];
 
 describe("useRemoteMcpInstallWorkflow", () => {
   beforeEach(() => {
@@ -1228,6 +1254,126 @@ describe("useRemoteMcpInstallWorkflow", () => {
     if (state.phase !== "complete") throw new Error("unexpected phase");
     expect(state.statuses[0]).toMatchObject({ status: "failed" });
     expect(state.statuses[0]!.error).toContain("boom");
+  });
+
+  it("replaces a chosen Shadow MCP server with the added server", async () => {
+    mockSetShadowMCPOfficialServer.mockResolvedValue(undefined);
+    const servers = [makeServer({ title: "Example Official" })];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({
+        servers,
+        shadowMCPReplacements: SHADOW_REPLACEMENTS,
+      }),
+    );
+
+    await startInstall(result);
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+
+    // The added server becomes the official version, which blocks direct use.
+    expect(mockSetShadowMCPOfficialServer).toHaveBeenCalledWith(
+      {
+        setShadowMCPOfficialServerForm: {
+          projectId: "proj-1",
+          serverUrl: "https://mcp.example.com/mcp/",
+          mcpServerId: "mcp-server-1",
+          allowDirectAccess: false,
+        },
+      },
+      undefined,
+      undefined,
+    );
+    const state = result.current;
+    if (state.phase !== "complete") throw new Error("unexpected phase");
+    expect(state.shadowReplacements).toEqual([
+      {
+        status: "replaced",
+        shadowName: "Example",
+        shadowServerSlug: "mcp-example-com-mcp-12345678",
+        serverName: "Example Official",
+      },
+    ]);
+  });
+
+  it("adds the server only when the admin keeps the Shadow MCP server", async () => {
+    const servers = [makeServer()];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({
+        servers,
+        shadowMCPReplacements: NO_SHADOW_REPLACEMENTS,
+      }),
+    );
+
+    await startInstall(result);
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+
+    expect(mockMcpServersCreate).toHaveBeenCalledOnce();
+    expect(mockSetShadowMCPOfficialServer).not.toHaveBeenCalled();
+    const state = result.current;
+    if (state.phase !== "complete") throw new Error("unexpected phase");
+    expect(state.shadowReplacements).toBeUndefined();
+  });
+
+  it("does not replace a Shadow MCP server with a server kept disabled for setup", async () => {
+    mockDiscoverProtectedResourceMetadata.mockResolvedValue({
+      available: true,
+      metadata: { authorizationServers: ["https://id.example.com"] },
+    });
+    mockFetchIssuerMetadata.mockResolvedValue({
+      issuer: "https://id.example.com",
+      authorizationEndpoint: "https://id.example.com/authorize",
+      tokenEndpoint: "https://id.example.com/token",
+      registrationEndpoint: "https://id.example.com/register",
+    });
+    mockGetIssuer.mockRejectedValue(
+      Object.assign(new Error("not found"), { statusCode: 404 }),
+    );
+    mockCommitIdentity.mockResolvedValue({
+      manualSetupRequired: false,
+      registrationMethod: "dcr",
+      failure: {
+        outcome: "refused",
+        reason: "authorization_rejected",
+        retryable: false,
+      },
+    });
+    const servers = [makeServer({ supportsDcr: true, title: "Example" })];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({
+        servers,
+        shadowMCPReplacements: SHADOW_REPLACEMENTS,
+      }),
+    );
+
+    await startInstall(result);
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+
+    expect(mockSetShadowMCPOfficialServer).not.toHaveBeenCalled();
+    const state = result.current;
+    if (state.phase !== "complete") throw new Error("unexpected phase");
+    expect(state.shadowReplacements).toMatchObject([
+      { status: "setup-required", shadowName: "Example" },
+    ]);
+  });
+
+  it("reports a failed replacement and keeps the added server", async () => {
+    mockSetShadowMCPOfficialServer.mockRejectedValue(new Error("denied"));
+    const servers = [makeServer()];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({
+        servers,
+        shadowMCPReplacements: SHADOW_REPLACEMENTS,
+      }),
+    );
+
+    await startInstall(result);
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+
+    const state = result.current;
+    if (state.phase !== "complete") throw new Error("unexpected phase");
+    expect(state.statuses[0]).toMatchObject({ status: "completed" });
+    expect(state.shadowReplacements).toMatchObject([
+      { status: "failed", error: "denied" },
+    ]);
   });
 
   it("continues installing remaining servers after one fails", async () => {

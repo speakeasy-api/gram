@@ -40,6 +40,7 @@ trackedFiles:
   src/funcs/accessDeleteDirectoryRoleMapping.ts: {}
   src/funcs/accessDeleteRole.ts: {}
   src/funcs/accessExplainResourceAccess.ts: {}
+  src/funcs/accessFindShadowMCPInventoryServers.ts: {}
   src/funcs/accessGetDirectoryReviewSettings.ts: {}
   src/funcs/accessGetRole.ts: {}
   src/funcs/accessGetShadowMCPInventoryServer.ts: {}
@@ -1297,6 +1298,7 @@ trackedFiles:
   src/models/components/fetchissuermetadatarequestbody.ts: {}
   src/models/components/fetchopenapiv3fromurlform2.ts: {}
   src/models/components/filteroption.ts: {}
+  src/models/components/findshadowmcpinventoryserversresult.ts: {}
   src/models/components/fleetcoverage.ts: {}
   src/models/components/fleetdevice.ts: {}
   src/models/components/functionenvironmentvariable.ts: {}
@@ -2003,6 +2005,7 @@ trackedFiles:
   src/models/components/shadowmcpinventoryapprovalrequest.ts: {}
   src/models/components/shadowmcpinventoryrequestsummary.ts: {}
   src/models/components/shadowmcpinventoryserver.ts: {}
+  src/models/components/shadowmcpinventoryservermatch.ts: {}
   src/models/components/shadowmcpinventoryurlstate.ts: {}
   src/models/components/shadowmcpinventoryuser.ts: {}
   src/models/components/shadowmcpinventoryusersource.ts: {}
@@ -2535,6 +2538,7 @@ trackedFiles:
   src/models/operations/fetchopenapiv3fromurl.ts: {}
   src/models/operations/fetchorganizationremotesessionissuermetadata.ts: {}
   src/models/operations/fetchremotesessionissuermetadata.ts: {}
+  src/models/operations/findshadowmcpinventoryservers.ts: {}
   src/models/operations/generatetitle.ts: {}
   src/models/operations/generateworkosadminportallink.ts: {}
   src/models/operations/getactivedeployment.ts: {}
@@ -3504,6 +3508,8 @@ trackedFiles:
   src/react-query/fetchOpenAPIv3FromURL.ts: {}
   src/react-query/fetchOrganizationRemoteSessionIssuerMetadata.ts: {}
   src/react-query/fetchRemoteSessionIssuerMetadata.ts: {}
+  src/react-query/findShadowMCPInventoryServers.core.ts: {}
+  src/react-query/findShadowMCPInventoryServers.ts: {}
   src/react-query/fleetCoverage.core.ts: {}
   src/react-query/fleetCoverage.ts: {}
   src/react-query/fleetDevices.core.ts: {}
@@ -7378,6 +7384,19 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  findShadowMCPInventoryServers:
+    speakeasy-default-find-shadow-MCP-inventory-servers:
+      parameters:
+        query:
+          project_id: "29b4e959-de83-422d-8967-7a4a667bedc1"
+          server_urls: ["<value 1>", "<value 2>"]
+      responses:
+        "200":
+          application/json: {"matches": [{"server": {"access": "allowed", "allowed_policy_ids": ["<value 1>"], "blocked_policy_ids": [], "canonical_server_url": "https://shocked-scenario.biz/", "first_seen": "2026-10-18T12:00:17.066Z", "last_seen": "2026-06-30T15:28:45.997Z", "observed_use_count": 405909, "request_count": 574069, "server_slug": "<value>", "top_users": ["<value 1>", "<value 2>"], "url_host": "<value>", "user_count": 799229}, "server_url": "https://leading-valuable.org/"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   generateTitle:
     speakeasy-default-generate-title:
       requestBody:

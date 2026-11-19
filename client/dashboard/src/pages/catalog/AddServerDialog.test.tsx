@@ -28,6 +28,8 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   updateServerConfig: vi.fn(),
   workflow: vi.fn(),
+  shadowReplacement: vi.fn(),
+  setShadowSelected: vi.fn(),
 }));
 
 vi.mock("sonner", () => ({
@@ -67,6 +69,34 @@ vi.mock("./useRemoteMcpInstallWorkflow", () => ({
   ) => `${serverIndex}:${remoteUrl}:${headerName}`,
   useRemoteMcpInstallWorkflow: (options: unknown) => mocks.workflow(options),
 }));
+
+vi.mock("./useShadowMCPReplacement", () => ({
+  useShadowMCPReplacement: (options: unknown) =>
+    mocks.shadowReplacement(options),
+}));
+
+const shadowCandidate = {
+  projectId: "project-1",
+  remoteUrl: "https://mcp.example.test/mcp",
+  shadowServerUrl: "https://mcp.example.test/mcp",
+  shadowName: "Example Tools",
+  shadowServerSlug: "mcp-example-test-mcp-12345678",
+  userCount: 4,
+};
+
+function mockShadowReplacement(
+  candidates: (typeof shadowCandidate)[] = [],
+  selected = true,
+): void {
+  mocks.shadowReplacement.mockReturnValue({
+    candidates,
+    selected: selected ? candidates : [],
+    isSelected: () => selected,
+    setSelected: mocks.setShadowSelected,
+    isLoading: false,
+    reset: vi.fn(),
+  });
+}
 
 const server = {
   description: "A test server",
@@ -163,6 +193,7 @@ beforeEach(() => {
   sessionStorage.clear();
   mocks.hasScope.mockReturnValue(false);
   mockConfigureWorkflow();
+  mockShadowReplacement();
 });
 
 afterEach(() => {
@@ -875,3 +906,65 @@ describe.each(["snowflake", "okta"] as const)(
     );
   },
 );
+
+describe("AddServerDialog Shadow MCP replacement", () => {
+  it("asks nothing when no Shadow MCP server matches", async () => {
+    renderDialog();
+    await screen.findByRole("button", { name: "Add to Project" });
+    expect(screen.queryByText("Replace the Shadow MCP version")).toBeNull();
+    expect(mocks.workflow).toHaveBeenLastCalledWith(
+      expect.objectContaining({ shadowMCPReplacements: [] }),
+    );
+  });
+
+  it("offers to replace a matching Shadow MCP server, on by default", async () => {
+    mockShadowReplacement([shadowCandidate]);
+    renderDialog();
+
+    const option = await screen.findByRole("checkbox", {
+      name: "Replace the Shadow MCP version of Example Tools",
+    });
+    expect(option.getAttribute("aria-checked")).toBe("true");
+    expect(
+      screen.getByText(/4 people use Example Tools directly today/),
+    ).toBeDefined();
+    expect(mocks.workflow).toHaveBeenLastCalledWith(
+      expect.objectContaining({ shadowMCPReplacements: [shadowCandidate] }),
+    );
+
+    fireEvent.click(option);
+    expect(mocks.setShadowSelected).toHaveBeenCalledWith(
+      shadowCandidate,
+      false,
+    );
+  });
+
+  it("adds the server only when the admin turns the replacement off", async () => {
+    mockShadowReplacement([shadowCandidate], false);
+    renderDialog();
+
+    const option = await screen.findByRole("checkbox", {
+      name: "Replace the Shadow MCP version of Example Tools",
+    });
+    expect(option.getAttribute("aria-checked")).toBe("false");
+    expect(mocks.workflow).toHaveBeenLastCalledWith(
+      expect.objectContaining({ shadowMCPReplacements: [] }),
+    );
+  });
+
+  it("does not look for Shadow MCP servers in a headless install", () => {
+    render(
+      <AddServerDialog
+        servers={[server]}
+        open
+        headless
+        onOpenChange={(open) => {
+          mocks.onOpenChange(open);
+        }}
+      />,
+    );
+    expect(mocks.shadowReplacement).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: false }),
+    );
+  });
+});

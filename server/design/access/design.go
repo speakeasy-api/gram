@@ -656,6 +656,37 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventoryServer"}`)
 	})
 
+	Method("findShadowMCPInventoryServers", func() {
+		Description("Find the Shadow MCP servers in use whose upstream URL matches one of the given URLs, for example the endpoints of a server about to be added from the catalog. URLs match when they name the same upstream (case, default ports and a trailing slash are ignored). Requires an authenticated session authorized for org:admin on the active organization.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("project_id", String, func() {
+				Format(FormatUUID)
+			})
+			Attribute("server_urls", ArrayOf(String), "The upstream URLs to look for.", func() {
+				MinLength(1)
+				MaxLength(50)
+			})
+			Required("project_id", "server_urls")
+			security.SessionPayload()
+		})
+
+		Result(FindShadowMCPInventoryServersResult)
+
+		HTTP(func() {
+			GET("/rpc/access.findShadowMCPInventoryServers")
+			Param("project_id")
+			Param("server_urls")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "findShadowMCPInventoryServers")
+		Meta("openapi:extension:x-speakeasy-name-override", "findShadowMCPInventoryServers")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "FindShadowMCPInventoryServers"}`)
+	})
+
 	Method("updateShadowMCPInventoryServerName", func() {
 		Description("Update or clear the administrator-defined display name for one project-scoped Shadow MCP inventory server URL.")
 		Security(security.Session)
@@ -1867,6 +1898,19 @@ var ListShadowMCPInventoryResult = Type("ListShadowMCPInventoryResult", func() {
 	Required("servers")
 	Attribute("servers", ArrayOf(ShadowMCPInventoryServerModel))
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
+})
+
+var ShadowMCPInventoryServerMatchModel = Type("ShadowMCPInventoryServerMatch", func() {
+	Description("A Shadow MCP server in use whose upstream URL matches one of the URLs looked up.")
+	Required("server_url", "server")
+
+	Attribute("server_url", String, "The URL that was looked up, exactly as given.")
+	Attribute("server", ShadowMCPInventoryServerModel)
+})
+
+var FindShadowMCPInventoryServersResult = Type("FindShadowMCPInventoryServersResult", func() {
+	Required("matches")
+	Attribute("matches", ArrayOf(ShadowMCPInventoryServerMatchModel), "One entry per looked-up URL that matches a Shadow MCP server in use. URLs without a match are left out.")
 })
 
 var ShadowMCPInventoryUserSourceModel = Type("ShadowMCPInventoryUserSource", func() {

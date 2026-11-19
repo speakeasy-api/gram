@@ -10,6 +10,14 @@ import { salesforceSetupInstallServer } from "./provider-setup/salesforce";
 import { useNavigate } from "react-router";
 import { CatalogLogo } from "./CatalogLogo";
 import { CatalogGuardrailsPhase } from "./CatalogGuardrailsPhase";
+import {
+  ShadowMCPReplacementNotice,
+  ShadowMCPReplacementOption,
+} from "./ShadowMCPReplacement";
+import {
+  useShadowMCPReplacement,
+  type ShadowMCPReplacementState,
+} from "./useShadowMCPReplacement";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useOrganization, useProject } from "@/contexts/Auth";
@@ -263,6 +271,14 @@ export function AddServerDialog({
   const { hasScope } = useRBAC();
   const mcpScoped =
     useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies).status === "enabled";
+  // Adding a server people already reach directly offers to replace that
+  // Shadow MCP version. Nobody answers the question in a headless or
+  // auto-started install, so those add the server only.
+  const shadowReplacement = useShadowMCPReplacement({
+    servers: enrichedServers,
+    projectSlug,
+    enabled: open && !headless && !autoStartInstall,
+  });
   const workflow = useRemoteMcpInstallWorkflow({
     servers: installServers,
     initialConfiguration,
@@ -273,6 +289,7 @@ export function AddServerDialog({
       !headless &&
       !autoStartInstall,
     projectSlug,
+    shadowMCPReplacements: shadowReplacement.selected,
     autoSelectRemotes: !!(autoStartInstall || headless),
     offerGuardrails:
       mcpScoped &&
@@ -312,6 +329,7 @@ export function AddServerDialog({
       setSalesforceIdentity(undefined);
       setupHandoffRef.current = false;
       releaseState.reset();
+      shadowReplacement.reset();
       autoStartRef.current = false;
       finishedRef.current = false;
     }
@@ -632,6 +650,7 @@ export function AddServerDialog({
           releaseState={releaseState}
           isSingle={isSingle}
           bulk={bulk}
+          shadowReplacement={shadowReplacement}
           onClose={() => onOpenChange(false)}
         />
       </Dialog.Content>
@@ -691,11 +710,13 @@ function PhaseContent({
   releaseState,
   isSingle,
   bulk,
+  shadowReplacement,
   onClose,
 }: {
   releaseState: RemoteMcpInstallWorkflow;
   isSingle: boolean;
   bulk?: boolean;
+  shadowReplacement: ShadowMCPReplacementState;
   onClose: () => void;
 }) {
   switch (releaseState.phase) {
@@ -711,6 +732,7 @@ function PhaseContent({
         <ConfigurePhaseContent
           releaseState={releaseState}
           bulk={bulk}
+          shadowReplacement={shadowReplacement}
           onClose={onClose}
         />
       );
@@ -911,10 +933,12 @@ function SelectRemotesPhaseContent({
 function ConfigurePhaseContent({
   releaseState,
   bulk,
+  shadowReplacement,
   onClose,
 }: {
   releaseState: ConfigurePhase;
   bulk?: boolean;
+  shadowReplacement: ShadowMCPReplacementState;
   onClose: () => void;
 }) {
   const project = useProject();
@@ -944,8 +968,14 @@ function ConfigurePhaseContent({
       );
   // When every server came through the selectRemotes phase and none needs
   // header values, there is nothing left to configure — install immediately.
+  // A matching Shadow MCP server is a question to ask, so the step waits for
+  // the lookup and stays when there is one.
   const nothingToConfigure =
-    singleRemoteConfigs.length === 0 && !hasHeaderInputs && !hasIdentityChoices;
+    singleRemoteConfigs.length === 0 &&
+    !hasHeaderInputs &&
+    !hasIdentityChoices &&
+    !shadowReplacement.isLoading &&
+    shadowReplacement.candidates.length === 0;
 
   const userIdentityPermissionBlocked =
     !canCreateIdentity &&
@@ -1016,6 +1046,7 @@ function ConfigurePhaseContent({
           rbacLoading={rbacLoading}
         />
         {!bulk && <HeaderValueSections releaseState={releaseState} />}
+        <ShadowMCPReplacementOption state={shadowReplacement} />
         {releaseState.installBlockedReason && (
           <InstallBlockedWarning reason={releaseState.installBlockedReason} />
         )}
@@ -1610,6 +1641,11 @@ function CompletePhaseContent({
       ) : null}
 
       <GuardrailOutcomeNotice outcome={releaseState.guardrail} />
+
+      <ShadowMCPReplacementNotice
+        outcomes={releaseState.shadowReplacements}
+        projectSlug={releaseState.projectSlug}
+      />
 
       {/* Per-server results — only shown if something failed */}
       {!allSucceeded && (

@@ -41,6 +41,10 @@ import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remo
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { invalidateAllUnproxiedMcpServers } from "@gram/client/react-query/unproxiedMcpServers.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
+import { invalidateAllShadowMCPInventory } from "@gram/client/react-query/shadowMCPInventory.js";
+import { invalidateAllShadowMCPInventoryServer } from "@gram/client/react-query/shadowMCPInventoryServer.js";
+import { invalidateAllFindShadowMCPInventoryServers } from "@gram/client/react-query/findShadowMCPInventoryServers.js";
+import type { ShadowMCPReplacement } from "./useShadowMCPReplacement";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -82,6 +86,22 @@ interface MultiRemoteServerConfig {
   remotes: ExternalMCPRemote[];
   selectedRemoteUrls: Set<string>;
 }
+
+/** How replacing one Shadow MCP server with an added server ended. */
+export type ShadowMCPReplacementOutcome = {
+  shadowName: string;
+  shadowServerSlug: string;
+  /** The added server that replaces it. */
+  serverName: string;
+} & (
+  | { status: "replaced" }
+  /** The server was kept disabled for identity setup, and a disabled server
+   *  cannot stand in for the one people use today. */
+  | { status: "setup-required" }
+  /** The server was not added, so there is nothing to replace it with. */
+  | { status: "not-added" }
+  | { status: "failed"; error: string }
+);
 
 /** How the optional guardrail for an install ended. */
 type GuardrailOutcome =
@@ -223,6 +243,9 @@ export interface CompletePhase extends WorkflowBase {
   statuses: ServerInstallStatus[];
   /** Absent unless a guardrail was requested. */
   guardrail?: GuardrailOutcome;
+  /** One entry per Shadow MCP server the admin chose to replace. Absent
+   *  when none was. */
+  shadowReplacements?: ShadowMCPReplacementOutcome[];
 }
 
 export type RemoteMcpInstallWorkflow =
@@ -253,6 +276,12 @@ interface UseRemoteMcpInstallWorkflowOptions {
   beforeInstall?: () => Promise<boolean>;
   /** Interactive account-specific installs start disabled and configure on Setup. */
   accountSetupEnabled?: boolean;
+  /**
+   * Shadow MCP servers to replace with the servers this install adds: each
+   * added server whose endpoint matches is linked as the official version,
+   * which blocks direct use and points agents at it.
+   */
+  shadowMCPReplacements?: ShadowMCPReplacement[];
 }
 
 /** Key into [ServerConfig.headerValues] for one header of one remote. */
@@ -404,6 +433,7 @@ export function useRemoteMcpInstallWorkflow({
   beforeInstall,
   accountSetupEnabled = false,
   initialConfiguration,
+  shadowMCPReplacements,
 }: UseRemoteMcpInstallWorkflowOptions): RemoteMcpInstallWorkflow {
   const client = useSdkClient();
   const detectorMode = useDetectorMode();
@@ -429,6 +459,9 @@ export function useRemoteMcpInstallWorkflow({
   const [guardrailOutcome, setGuardrailOutcome] = useState<
     GuardrailOutcome | undefined
   >(undefined);
+  const [shadowReplacementOutcomes, setShadowReplacementOutcomes] = useState<
+    ShadowMCPReplacementOutcome[]
+  >([]);
 
   // State for multi-remote server selection
   const [multiRemoteConfigs, setMultiRemoteConfigs] = useState<
@@ -904,6 +937,12 @@ export function useRemoteMcpInstallWorkflow({
       // Servers that were created, for scoping the guardrail. A server kept
       // disabled for identity setup still exists and is still worth guarding.
       const installedServerIds: string[] = [];
+      // Each added server by the catalog endpoint it was added for, to pair
+      // with the Shadow MCP servers it replaces.
+      const addedByRemoteUrl = new Map<
+        string,
+        { mcpServerId: string; name: string; setupRequired: boolean }
+      >();
       for (const [index, target] of targets.entries()) {
         setStatusAt(index, { status: "creating" });
         try {
@@ -917,6 +956,11 @@ export function useRemoteMcpInstallWorkflow({
           }
           const identitySetupRequired =
             result.identityConfiguration?.status === "setup-required";
+          addedByRemoteUrl.set(target.remote.url, {
+            mcpServerId: result.mcpServer.id,
+            name: target.name,
+            setupRequired: identitySetupRequired,
+          });
           const setupPolicy = pendingAccountProvider(result.remoteUrl)
             ? options?.customize
             : undefined;
@@ -1022,6 +1066,65 @@ export function useRemoteMcpInstallWorkflow({
         }
       }
 
+      // Replacing a Shadow MCP server reuses the Shadow MCP page's link: the
+      // added server becomes its official version, so direct use is blocked
+      // and the block sends agents to it.
+      const replacements = shadowMCPReplacements ?? [];
+      const outcomes: ShadowMCPReplacementOutcome[] = [];
+      for (const replacement of replacements) {
+        const added = addedByRemoteUrl.get(replacement.remoteUrl);
+        const shadow = {
+          shadowName: replacement.shadowName,
+          shadowServerSlug: replacement.shadowServerSlug,
+          serverName: added?.name ?? "",
+        };
+        if (!added) {
+          // The endpoint was not selected, or its server failed to install.
+          const selected = targets.some(
+            (target) => target.remote.url === replacement.remoteUrl,
+          );
+          if (selected) outcomes.push({ ...shadow, status: "not-added" });
+          continue;
+        }
+        if (added.setupRequired) {
+          outcomes.push({ ...shadow, status: "setup-required" });
+          continue;
+        }
+        try {
+          await client.access.setShadowMCPOfficialServer(
+            {
+              setShadowMCPOfficialServerForm: {
+                projectId: replacement.projectId,
+                serverUrl: replacement.shadowServerUrl,
+                mcpServerId: added.mcpServerId,
+                allowDirectAccess: false,
+              },
+            },
+            undefined,
+            reqOpts,
+          );
+          outcomes.push({ ...shadow, status: "replaced" });
+        } catch (err) {
+          outcomes.push({
+            ...shadow,
+            status: "failed",
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+      setShadowReplacementOutcomes(outcomes);
+      if (outcomes.some((outcome) => outcome.status === "replaced")) {
+        void Promise.all([
+          invalidateAllShadowMCPInventory(queryClient, { refetchType: "all" }),
+          invalidateAllShadowMCPInventoryServer(queryClient, {
+            refetchType: "all",
+          }),
+          invalidateAllFindShadowMCPInventoryServers(queryClient, {
+            refetchType: "all",
+          }),
+        ]).catch(() => undefined);
+      }
+
       setPhase("complete");
       return deferredCustomization ? [] : installedServerIds;
     },
@@ -1034,6 +1137,7 @@ export function useRemoteMcpInstallWorkflow({
       projectSlug,
       queryClient,
       serverConfigs,
+      shadowMCPReplacements,
     ],
   );
 
@@ -1057,6 +1161,7 @@ export function useRemoteMcpInstallWorkflow({
     setGuardrail(null);
     setConfigureSkipped(false);
     setGuardrailOutcome(undefined);
+    setShadowReplacementOutcomes([]);
     partitionServers();
   }, [partitionServers]);
 
@@ -1119,7 +1224,15 @@ export function useRemoteMcpInstallWorkflow({
     case "installing":
       return { phase, statuses, ...base };
     case "complete":
-      return { phase, statuses, guardrail: guardrailOutcome, ...base };
+      return {
+        phase,
+        statuses,
+        guardrail: guardrailOutcome,
+        ...(shadowReplacementOutcomes.length > 0
+          ? { shadowReplacements: shadowReplacementOutcomes }
+          : {}),
+        ...base,
+      };
   }
 }
 

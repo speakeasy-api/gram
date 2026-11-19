@@ -865,6 +865,107 @@ paths:
       x-speakeasy-name-override: explainResourceAccess
       x-speakeasy-react-hook:
         name: ExplainResourceAccess
+  /rpc/access.findShadowMCPInventoryServers:
+    get:
+      description: Find the Shadow MCP servers in use whose upstream URL matches one of the given URLs, for example the endpoints of a server about to be added from the catalog. URLs match when they name the same upstream (case, default ports and a trailing slash are ignored). Requires an authenticated session authorized for org:admin on the active organization.
+      operationId: findShadowMCPInventoryServers
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: project_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The upstream URLs to look for.
+          in: query
+          name: server_urls
+          required: true
+          schema:
+            description: The upstream URLs to look for.
+            items:
+              type: string
+            maxItems: 50
+            minItems: 1
+            type: array
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FindShadowMCPInventoryServersResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: findShadowMCPInventoryServers access
+      tags:
+        - access
+      x-speakeasy-name-override: findShadowMCPInventoryServers
+      x-speakeasy-react-hook:
+        name: FindShadowMCPInventoryServers
   /rpc/access.getDirectoryReviewSettings:
     get:
       description: 'Get the organization''s directory review settings: whether its admins are emailed when directory changes are waiting for a decision.'
@@ -99200,6 +99301,16 @@ components:
         - id
         - label
         - count
+    FindShadowMCPInventoryServersResult:
+      type: object
+      properties:
+        matches:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShadowMCPInventoryServerMatch'
+          description: One entry per looked-up URL that matches a Shadow MCP server in use. URLs without a match are left out.
+      required:
+        - matches
     FleetCoverage:
       type: object
       properties:
@@ -117435,6 +117546,18 @@ components:
         - request_count
         - allowed_policy_ids
         - blocked_policy_ids
+    ShadowMCPInventoryServerMatch:
+      type: object
+      properties:
+        server:
+          $ref: '#/components/schemas/ShadowMCPInventoryServer'
+        server_url:
+          type: string
+          description: The URL that was looked up, exactly as given.
+      description: A Shadow MCP server in use whose upstream URL matches one of the URLs looked up.
+      required:
+        - server_url
+        - server
     ShadowMCPInventoryURLState:
       type: object
       properties:

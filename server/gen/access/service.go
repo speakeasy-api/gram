@@ -104,6 +104,12 @@ type Service interface {
 	// policy-bypass state. Requires an authenticated session authorized for
 	// org:admin on the active organization.
 	GetShadowMCPInventoryServer(context.Context, *GetShadowMCPInventoryServerPayload) (res *ShadowMCPInventoryServer, err error)
+	// Find the Shadow MCP servers in use whose upstream URL matches one of the
+	// given URLs, for example the endpoints of a server about to be added from the
+	// catalog. URLs match when they name the same upstream (case, default ports
+	// and a trailing slash are ignored). Requires an authenticated session
+	// authorized for org:admin on the active organization.
+	FindShadowMCPInventoryServers(context.Context, *FindShadowMCPInventoryServersPayload) (res *FindShadowMCPInventoryServersResult, err error)
 	// Update or clear the administrator-defined display name for one
 	// project-scoped Shadow MCP inventory server URL.
 	UpdateShadowMCPInventoryServerName(context.Context, *UpdateShadowMCPInventoryServerNamePayload) (err error)
@@ -243,7 +249,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [46]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "listDirectoryPeople", "syncDirectoryGroups", "setDirectoryRoleMapping", "setDirectoryRoleMappings", "deleteDirectoryRoleMapping", "previewDirectoryRoleSetup", "applyDirectoryRoleSetup", "listDirectoryReviewItems", "resolveDirectoryReviewItem", "getDirectoryReviewSettings", "updateDirectoryReviewSettings", "listScopes", "listAgentPolicyScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "setShadowMCPOfficialServer", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "explainResourceAccess", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess", "createTemporaryGrant", "listTemporaryGrants", "renewTemporaryGrant", "revokeTemporaryGrant"}
+var MethodNames = [47]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "listDirectoryPeople", "syncDirectoryGroups", "setDirectoryRoleMapping", "setDirectoryRoleMappings", "deleteDirectoryRoleMapping", "previewDirectoryRoleSetup", "applyDirectoryRoleSetup", "listDirectoryReviewItems", "resolveDirectoryReviewItem", "getDirectoryReviewSettings", "updateDirectoryReviewSettings", "listScopes", "listAgentPolicyScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "findShadowMCPInventoryServers", "updateShadowMCPInventoryServerName", "setShadowMCPOfficialServer", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "explainResourceAccess", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess", "createTemporaryGrant", "listTemporaryGrants", "renewTemporaryGrant", "revokeTemporaryGrant"}
 
 // One AI detection target aggregated across an organization's device-agent
 // scan reports.
@@ -899,6 +905,23 @@ type ExplainedAccessRule struct {
 	// also hold it directly. Returned only to organization administrators, because
 	// attribute values can carry personal data.
 	DirectorySources []*ExplainedAccessDirectorySource
+}
+
+// FindShadowMCPInventoryServersPayload is the payload type of the access
+// service findShadowMCPInventoryServers method.
+type FindShadowMCPInventoryServersPayload struct {
+	ProjectID string
+	// The upstream URLs to look for.
+	ServerUrls   []string
+	SessionToken *string
+}
+
+// FindShadowMCPInventoryServersResult is the result type of the access service
+// findShadowMCPInventoryServers method.
+type FindShadowMCPInventoryServersResult struct {
+	// One entry per looked-up URL that matches a Shadow MCP server in use. URLs
+	// without a match are left out.
+	Matches []*ShadowMCPInventoryServerMatch
 }
 
 // GetDirectoryReviewSettingsPayload is the payload type of the access service
@@ -1794,6 +1817,14 @@ type ShadowMCPInventoryServer struct {
 	// A project MCP server that proxies to the same upstream URL, offered as the
 	// server to link. Present only while no official server is linked.
 	SuggestedOfficialServer *ShadowMCPSuggestedOfficialServer
+}
+
+// A Shadow MCP server in use whose upstream URL matches one of the URLs looked
+// up.
+type ShadowMCPInventoryServerMatch struct {
+	// The URL that was looked up, exactly as given.
+	ServerURL string
+	Server    *ShadowMCPInventoryServer
 }
 
 // ShadowMCPInventoryURLState is the result type of the access service
