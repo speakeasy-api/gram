@@ -151,9 +151,9 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// duplicated any of them would leave the badges telling a different
 		// story than the one they were seeded to tell.
 		// Example OAuth's and Example Shared Credential's issuers, three
-		// independent gateway issuers, one Connections issuer, Linear's and
-		// Notion's.
-		{byProj(s.q.PostflightIDProjectUserSessionIssuers), 8, "demo seed postflight: expected 8 project user session issuers, found %d"},
+		// independent gateway issuers, one Connections issuer, Linear's,
+		// Notion's and Support Tools' (the Shadow MCP official server).
+		{byProj(s.q.PostflightIDProjectUserSessionIssuers), 9, "demo seed postflight: expected 9 project user session issuers, found %d"},
 		{byProj(s.q.PostflightIDGatewayIssuers), 3, "demo seed postflight: expected 3 distinct gateway issuers, found %d"},
 		// The workforce issuer. The local fixtures add the Enterprise Sign-In
 		// (ID-JAG) Server's own federated sign-in after this check.
