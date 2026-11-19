@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-export const INSPECT_OAUTH_CALLBACK = "/mcp-inspect/oauth/callback";
+// Keep this outside the dashboard proxy prefixes (e.g. /mcp and /oauth).
+export const INSPECT_OAUTH_CALLBACK = "/inspect/oauth/callback";
 const clientId = "speakeasy-dashboard-inspect";
 const pendingKey = "inspect-oauth:pending";
 const pendingLifetime = 15 * 60_000;
@@ -137,6 +138,8 @@ export function acceptInspectCallback(
         .parse(JSON.parse(atob(payload)));
       if (claims.sub !== `user:${userId}`)
         return "Sign in with the same account you use in the dashboard.";
+      // The tab stores only the short-lived access token, not the refresh
+      // token, so it can return to Inspect and survive a dashboard reload.
       sessionStorage.setItem(
         grantKey,
         JSON.stringify({

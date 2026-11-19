@@ -61,11 +61,9 @@ type RemoteMcpToolsSectionProps = {
  * Inspect for one MCP server: the tools this viewer's agents get, why any are
  * missing, and a panel to run one or chat with the server.
  *
- * Issuer-gated servers connect with a minted user-session JWT. With no upstream
- * session yet the listing 401s into `needsAuth`, and Connect opens the
- * first-party connect page in a new tab; returning focus lists again. That page
- * 404s unless the server is issuer-gated on a Speakeasy-hosted address, so a 401
- * from any other server points at authentication settings instead.
+ * For issuer-gated servers, Connect takes this tab through OAuth consent and
+ * returns with the grant needed to list tools. Without a supported sign-in
+ * target, point users to authentication settings instead.
  *
  * Expected fetch failures render inline. The surrounding ErrorBoundary is the
  * defensive layer for unexpected render-time throws.

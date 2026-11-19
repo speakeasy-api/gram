@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"net/url"
 	"slices"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 
@@ -16,7 +18,7 @@ import (
 
 const (
 	dashboardInspectClientID     = "speakeasy-dashboard-inspect"
-	dashboardInspectCallbackPath = "/mcp-inspect/oauth/callback"
+	dashboardInspectCallbackPath = "/inspect/oauth/callback"
 )
 
 // dashboardInspectRedirectURIs is deployment configuration, not request data.
@@ -25,7 +27,10 @@ const (
 func (s *Service) dashboardInspectRedirectURIs() []string {
 	var callbacks []string
 	add := func(base *url.URL) {
-		if base == nil || (base.Scheme != "https" && base.Scheme != "http") || base.Host == "" || base.User != nil {
+		if base == nil || base.Hostname() == "" || base.User != nil {
+			return
+		}
+		if base.Scheme != "https" && !(base.Scheme == "http" && isLoopbackDashboardHost(base.Hostname())) {
 			return
 		}
 		callback := (&url.URL{Scheme: base.Scheme, Host: base.Host, Path: dashboardInspectCallbackPath}).String()
@@ -42,6 +47,14 @@ func (s *Service) dashboardInspectRedirectURIs() []string {
 	}
 	slices.Sort(callbacks)
 	return callbacks
+}
+
+func isLoopbackDashboardHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	addr, err := netip.ParseAddr(host)
+	return err == nil && addr.IsLoopback()
 }
 
 // registerDashboardInspectClient lazily provisions the public client at the

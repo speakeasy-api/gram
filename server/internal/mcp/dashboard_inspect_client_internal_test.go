@@ -16,11 +16,14 @@ func TestDashboardInspectRedirectURIs(t *testing.T) {
 		serverURL: &url.URL{Scheme: "https", Host: "server.example.test"},
 		platformHosts: map[string]string{
 			"dashboard.example.test": "https://dashboard.example.test",
+			"insecure.example.test":  "http://insecure.example.test",
+			"127.0.0.1":              "http://127.0.0.1:6161",
 		},
 	}
 	require.Equal(t, []string{
-		"https://dashboard.example.test/mcp-inspect/oauth/callback",
-		"https://localhost:5342/mcp-inspect/oauth/callback",
-		"https://server.example.test/mcp-inspect/oauth/callback",
+		"http://127.0.0.1:6161/inspect/oauth/callback",
+		"https://dashboard.example.test/inspect/oauth/callback",
+		"https://localhost:5342/inspect/oauth/callback",
+		"https://server.example.test/inspect/oauth/callback",
 	}, service.dashboardInspectRedirectURIs())
 }

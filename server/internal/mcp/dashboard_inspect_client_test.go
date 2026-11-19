@@ -28,7 +28,7 @@ func TestDashboardInspectOAuthClient(t *testing.T) {
 	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "public"})
 
 	const clientID = "speakeasy-dashboard-inspect"
-	redirectURI := ti.serverURL.ResolveReference(&url.URL{Path: "/mcp-inspect/oauth/callback"}).String()
+	redirectURI := ti.serverURL.ResolveReference(&url.URL{Path: "/inspect/oauth/callback"}).String()
 	verifier := pkceVerifier(t)
 	params := usersessions_repo.GetUserSessionClientByClientIDParams{UserSessionIssuerID: issuer.ID, ClientID: clientID}
 	queries := usersessions_repo.New(ti.conn)
@@ -54,7 +54,7 @@ func TestDashboardInspectOAuthClient(t *testing.T) {
 	}
 
 	for _, bad := range []string{
-		"https://untrusted.example/mcp-inspect/oauth/callback",
+		"https://untrusted.example/inspect/oauth/callback",
 		redirectURI + "?next=https://untrusted.example",
 		redirectURI + "#",
 		strings.TrimSuffix(redirectURI, "/callback") + "/other",
