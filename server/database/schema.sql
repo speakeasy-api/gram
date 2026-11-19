@@ -1212,6 +1212,10 @@ CREATE TABLE IF NOT EXISTS plugins (
   -- marketplace by hand. NULL or TRUE means changes publish automatically
   -- (the historical default).
   auto_sync_enabled boolean,
+  -- When TRUE, role audiences add and remove MCP servers in this plugin
+  -- automatically from the roles' Use access. FALSE (the default) keeps the
+  -- plugin's server list exactly as admins set it.
+  auto_add_servers_enabled boolean NOT NULL DEFAULT false,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1231,6 +1235,7 @@ COMMENT ON COLUMN plugins.slug IS '@access: confidential';
 COMMENT ON COLUMN plugins.description IS '@access: opaque-restricted';
 COMMENT ON COLUMN plugins.auto_created IS '@access: confidential';
 COMMENT ON COLUMN plugins.auto_sync_enabled IS '@access: confidential';
+COMMENT ON COLUMN plugins.auto_add_servers_enabled IS '@access: confidential';
 COMMENT ON COLUMN plugins.created_at IS '@access: confidential';
 COMMENT ON COLUMN plugins.updated_at IS '@access: confidential';
 COMMENT ON COLUMN plugins.deleted_at IS '@access: confidential';
@@ -4281,12 +4286,11 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   -- moves to organization encryption, and the only copy written once it is
   -- finalized. Both copies are cleared together when the secret is removed.
   client_secret_org_encrypted TEXT,
-  -- Meant to be incremented by every statement that sets, replaces or clears
-  -- the client secret, and left alone when the same secret is sealed again
-  -- (dual write, backfill, finalize, key rotation). Nothing increments it
-  -- until organization-key sealing of client secrets ships (AIM-1003). Code
-  -- that needs to know the secret changed should read this rather than hash a
-  -- ciphertext, which changes on every seal.
+  -- Incremented by every statement that sets, replaces or clears the client
+  -- secret, and left alone when the same secret is sealed again (dual write,
+  -- backfill, finalize, key rotation). Code that needs to know the secret
+  -- changed reads this rather than hashing a ciphertext, which changes on
+  -- every seal.
   client_secret_generation bigint NOT NULL DEFAULT 1,
   client_id_issued_at timestamptz,
   client_secret_expires_at timestamptz,
@@ -5707,6 +5711,8 @@ CREATE TABLE IF NOT EXISTS sign_ins (
   authentication_method TEXT NOT NULL,
   -- Domain the social identity provider vouches the account belongs to: the
   -- Google Workspace hosted domain, or a Microsoft work account's UPN domain.
+  -- NULL: no lookup answered (unknown). Empty string: Google answered with no
+  -- Workspace domain (a personal account). Otherwise: the domain.
   idp_hosted_domain TEXT,
   -- Microsoft Entra tenant of a work or school account.
   idp_tenant_id TEXT,
@@ -6390,6 +6396,9 @@ COMMENT ON COLUMN remote_sessions.deleted IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_client_issuer_id_key
 ON remote_sessions (remote_session_client_id, user_session_issuer_id, id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_client_id_key
+ON remote_sessions (remote_session_client_id, id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_subject_client_key
 ON remote_sessions (subject_urn, remote_session_client_id)
@@ -7202,7 +7211,6 @@ COMMENT ON COLUMN chat_messages.replayed IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.created_at IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.risk_analyzed_at IS '@access: confidential';
 
-CREATE INDEX IF NOT EXISTS chat_messages_chat_id_idx ON chat_messages (chat_id);
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_generation_seq_idx ON chat_messages (chat_id, generation, seq);
 
 -- Transcript readers and keyset pages order by (created_at, seq) within a
@@ -7227,13 +7235,8 @@ ON chat_messages (chat_id, project_id, created_at);
 
 -- Latest non-empty source per chat as a single index-only probe (agent-type
 -- filter options via chats.listSources and the source filter on chats.list).
-CREATE INDEX IF NOT EXISTS chat_messages_chat_id_created_at_source_idx
-ON chat_messages (chat_id, created_at) INCLUDE (source)
-WHERE source IS NOT NULL AND source <> '';
-
--- Source probe with project_id so a sibling-project stamp cannot advertise a
--- source this project cannot load. Kept alongside the (chat_id, created_at)
--- source index until listing queries have moved onto this one.
+-- Keyed on project_id so a sibling-project stamp cannot advertise a source
+-- this project cannot load.
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_project_id_created_at_source_idx
 ON chat_messages (chat_id, project_id, created_at) INCLUDE (source)
 WHERE source IS NOT NULL AND source <> '';
@@ -8468,7 +8471,9 @@ CREATE TABLE IF NOT EXISTS principal_remote_session_bindings (
   CONSTRAINT principal_remote_session_bindings_issuer_scope_fkey FOREIGN KEY (user_session_issuer_id, issuer_attachment_scope) REFERENCES user_session_issuers (id, attachment_scope) ON UPDATE CASCADE ON DELETE CASCADE,
   CONSTRAINT principal_remote_session_bindings_client_scope_fkey FOREIGN KEY (remote_session_client_id, client_attachment_scope) REFERENCES remote_session_clients (id, attachment_scope) ON DELETE CASCADE,
   CONSTRAINT principal_remote_session_bindings_client_issuer_fkey FOREIGN KEY (remote_session_client_id, user_session_issuer_id) REFERENCES remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id) ON DELETE CASCADE,
-  CONSTRAINT principal_remote_session_bindings_session_fkey FOREIGN KEY (remote_session_client_id, user_session_issuer_id, remote_session_id) REFERENCES remote_sessions (remote_session_client_id, user_session_issuer_id, id) ON UPDATE CASCADE ON DELETE CASCADE,
+  -- The attached session shares the binding's client but may have been made
+  -- through another issuer bound to that client, such as a team gateway's.
+  CONSTRAINT principal_remote_session_bindings_client_session_fkey FOREIGN KEY (remote_session_client_id, remote_session_id) REFERENCES remote_sessions (remote_session_client_id, id) ON UPDATE CASCADE ON DELETE CASCADE,
   -- Scope checks bind the copied FK keys to this attachment's tenant. The
   -- client may be platform-global, but its issuer must belong to this tenant.
   CONSTRAINT principal_remote_session_bindings_issuer_scope_check CHECK (
@@ -9548,116 +9553,6 @@ COMMENT ON COLUMN project_allowed_origins.deleted IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS project_allowed_origins_project_id_origin_key
 ON project_allowed_origins (project_id, origin)
-WHERE deleted IS FALSE;
-
--- Organization-level OAuth client registrations from Dynamic Client Registration (DCR)
--- When Gram acts as an OAuth client to external MCP servers using MCP OAuth 2.1,
--- it needs to register itself via DCR and store the resulting client credentials.
--- These credentials are shared by all users in the organization.
-CREATE TABLE IF NOT EXISTS external_oauth_client_registrations (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  organization_id TEXT NOT NULL,
-  project_id uuid NOT NULL,
-
-  -- OAuth server issuer URL (from AS metadata or derived from auth endpoint origin)
-  oauth_server_issuer TEXT NOT NULL CHECK (oauth_server_issuer <> ''),
-
-  -- Client credentials from DCR response
-  client_id TEXT NOT NULL CHECK (client_id <> ''),
-  client_secret_encrypted TEXT,  -- May be null for public clients (PKCE-only)
-  client_id_issued_at timestamptz,
-  client_secret_expires_at timestamptz,  -- When the secret expires (null = never)
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT external_oauth_client_registrations_pkey PRIMARY KEY (id),
-  CONSTRAINT external_oauth_client_registrations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE,
-  CONSTRAINT external_oauth_client_registrations_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-);
-
-COMMENT ON COLUMN external_oauth_client_registrations.id IS '@access: confidential';
-COMMENT ON COLUMN external_oauth_client_registrations.organization_id IS '@access: confidential';
-COMMENT ON COLUMN external_oauth_client_registrations.project_id IS '@access: confidential';
-COMMENT ON COLUMN external_oauth_client_registrations.oauth_server_issuer IS '@access: restricted';
-COMMENT ON COLUMN external_oauth_client_registrations.client_id IS '@access: restricted';
-COMMENT ON COLUMN external_oauth_client_registrations.client_secret_encrypted IS '@access: secret-restricted';
-COMMENT ON COLUMN external_oauth_client_registrations.client_id_issued_at IS '@access: confidential';
-COMMENT ON COLUMN external_oauth_client_registrations.client_secret_expires_at IS '@access: confidential';
-COMMENT ON COLUMN external_oauth_client_registrations.created_at IS '@access: confidential';
-COMMENT ON COLUMN external_oauth_client_registrations.updated_at IS '@access: confidential';
-COMMENT ON COLUMN external_oauth_client_registrations.deleted_at IS '@access: confidential';
-COMMENT ON COLUMN external_oauth_client_registrations.deleted IS '@access: confidential';
-
--- Unique constraint: one client registration per org per OAuth issuer
-CREATE UNIQUE INDEX IF NOT EXISTS external_oauth_client_registrations_org_issuer_key
-ON external_oauth_client_registrations (organization_id, oauth_server_issuer)
-WHERE deleted IS FALSE;
-
--- User OAuth tokens for external MCP servers
--- Stores tokens obtained from external OAuth 2.1 providers (e.g., Google, Atlassian)
--- when users authenticate to use external MCP servers in the Playground.
--- Scoped per user + organization + OAuth issuer, allowing one token to work
--- for multiple MCP servers that share the same OAuth provider.
-CREATE TABLE IF NOT EXISTS user_oauth_tokens (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-
-  -- Scoping: per user, per org, per toolset
-  user_id TEXT NOT NULL,
-  organization_id TEXT NOT NULL,
-  project_id uuid NOT NULL,
-  client_registration_id uuid NOT NULL,  -- FK to external_oauth_client_registrations
-  toolset_id uuid NOT NULL,  -- FK to toolsets
-
-  -- OAuth 2.1 server issuer URL (from AS metadata, e.g., "https://accounts.google.com")
-  oauth_server_issuer TEXT NOT NULL CHECK (oauth_server_issuer <> '' AND CHAR_LENGTH(oauth_server_issuer) <= 500),
-
-  -- Token data (encrypted at rest via application layer)
-  access_token_encrypted TEXT NOT NULL,
-  refresh_token_encrypted TEXT,  -- Optional, for refresh flow
-  token_type TEXT,
-  expires_at timestamptz,  -- When access token expires (NULL if non-expiring)
-  scopes TEXT[] NOT NULL,
-
-  -- Metadata for debugging/display
-  provider_name TEXT,  -- Human-readable name (e.g., "Google", "Atlassian")
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT user_oauth_tokens_pkey PRIMARY KEY (id),
-  CONSTRAINT user_oauth_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-  CONSTRAINT user_oauth_tokens_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT user_oauth_tokens_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT user_oauth_tokens_client_registration_id_fkey FOREIGN KEY (client_registration_id) REFERENCES external_oauth_client_registrations (id) ON DELETE CASCADE,
-  CONSTRAINT user_oauth_tokens_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE
-);
-
-COMMENT ON COLUMN user_oauth_tokens.id IS '@access: confidential';
-COMMENT ON COLUMN user_oauth_tokens.user_id IS '@access: confidential';
-COMMENT ON COLUMN user_oauth_tokens.organization_id IS '@access: confidential';
-COMMENT ON COLUMN user_oauth_tokens.project_id IS '@access: confidential';
-COMMENT ON COLUMN user_oauth_tokens.client_registration_id IS '@access: confidential';
-COMMENT ON COLUMN user_oauth_tokens.toolset_id IS '@access: confidential';
-COMMENT ON COLUMN user_oauth_tokens.oauth_server_issuer IS '@access: restricted';
-COMMENT ON COLUMN user_oauth_tokens.access_token_encrypted IS '@access: secret-restricted';
-COMMENT ON COLUMN user_oauth_tokens.refresh_token_encrypted IS '@access: secret-restricted';
-COMMENT ON COLUMN user_oauth_tokens.token_type IS '@access: confidential';
-COMMENT ON COLUMN user_oauth_tokens.expires_at IS '@access: confidential';
-COMMENT ON COLUMN user_oauth_tokens.scopes IS '@access: opaque-restricted';
-COMMENT ON COLUMN user_oauth_tokens.provider_name IS '@access: confidential';
-COMMENT ON COLUMN user_oauth_tokens.created_at IS '@access: confidential';
-COMMENT ON COLUMN user_oauth_tokens.updated_at IS '@access: confidential';
-COMMENT ON COLUMN user_oauth_tokens.deleted_at IS '@access: confidential';
-COMMENT ON COLUMN user_oauth_tokens.deleted IS '@access: confidential';
-
--- Unique constraint: one token per user per org per OAuth issuer
-CREATE UNIQUE INDEX IF NOT EXISTS user_oauth_tokens_user_org_issuer_key
-ON user_oauth_tokens (user_id, organization_id, toolset_id)
 WHERE deleted IS FALSE;
 
 -- Server display name overrides for hooks dashboard
@@ -11969,6 +11864,51 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_installation_repo_ke
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_marketplace_token_key
   ON plugin_github_connections (marketplace_token)
   WHERE marketplace_token IS NOT NULL;
+
+-- Hooks version rollout pins, set by Speakeasy staff from the admin dashboard.
+-- A pin names the highest hooksGeneratorVersion an organization is cleared to
+-- receive: the plugin publisher only regenerates an organization's hooks
+-- plugin once its effective pin reaches the current generator version.
+--
+-- A row with a NULL organization_id sets the platform-wide default pin. A row
+-- with an organization_id overrides the default for that organization, and a
+-- NULL version on such a row clears the override. The table is append-only:
+-- the row with the highest seq in a scope is the current pin and older rows
+-- are its history.
+CREATE TABLE IF NOT EXISTS hooks_rollout_pins (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  -- Orders the history. generate_uuidv7() is not monotonic within a
+  -- millisecond, so it cannot decide which of two close writes is current.
+  seq BIGINT NOT NULL GENERATED BY DEFAULT AS IDENTITY,
+  organization_id TEXT,
+  version integer,
+  set_by TEXT NOT NULL CHECK (set_by <> ''),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT hooks_rollout_pins_pkey PRIMARY KEY (id),
+  -- CASCADE rather than SET NULL: nulling organization_id would turn an
+  -- organization's override into a platform-wide default pin.
+  CONSTRAINT hooks_rollout_pins_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS hooks_rollout_pins_seq_key
+  ON hooks_rollout_pins (seq);
+
+CREATE INDEX IF NOT EXISTS hooks_rollout_pins_organization_id_seq_idx
+  ON hooks_rollout_pins (organization_id, seq DESC);
+
+COMMENT ON COLUMN hooks_rollout_pins.id IS '@access: confidential';
+COMMENT ON COLUMN hooks_rollout_pins.seq IS '@access: confidential';
+COMMENT ON COLUMN hooks_rollout_pins.organization_id IS 'NULL for the platform-wide default pin.
+@access: confidential';
+COMMENT ON COLUMN hooks_rollout_pins.version IS 'Highest hooks generator version the scope is cleared for. NULL clears an organization override.
+@access: confidential';
+COMMENT ON COLUMN hooks_rollout_pins.set_by IS 'Email of the staff operator who made the change.
+@access: confidential-pii';
+COMMENT ON COLUMN hooks_rollout_pins.created_at IS '@access: confidential';
+COMMENT ON COLUMN hooks_rollout_pins.updated_at IS '@access: confidential';
 
 -- Per-project marketplace configuration applied to the marketplace.json
 -- generated for Claude Code, Cursor, and Codex. Designed to be extensible:

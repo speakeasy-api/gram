@@ -41,7 +41,7 @@ func plantOktaTenant(t *testing.T, ctx context.Context, db *pgxpool.Pool, apps [
 	issuerID := provisiontest.CreateIssuer(t, ctx, db, orgID, uuid.NullUUID{}, "https://tenant.okta.com/oauth2/v1/token")
 	issuer, err := repo.New(db).AdminGetIssuerFixture(ctx, issuerID)
 	require.NoError(t, err)
-	client, err := remotesessionsrepo.New(db).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+	client, err := remotesessionsrepo.New(db).CreateRemoteSessionClientFixture(ctx, remotesessionsrepo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:                       uuid.NullUUID{},
 		OrganizationID:                  conv.ToPGText(orgID),
 		RemoteSessionIssuerID:           issuerID,

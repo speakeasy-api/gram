@@ -241,7 +241,7 @@ func provisionedResourceCounts(t *testing.T, ctx context.Context, ti *testInstan
 	return len(remoteServers), len(mcpServers), len(issuers)
 }
 
-func TestCreateServerAndMcpServer_UsesURLDisplayFallback(t *testing.T) {
+func TestCreateServerAndMcpServer_ReadsNameFromURL(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -260,7 +260,7 @@ func TestCreateServerAndMcpServer_UsesURLDisplayFallback(t *testing.T) {
 	require.NotNil(t, result.McpServer)
 	require.Nil(t, result.RemoteMcpServer.Name)
 	require.NotNil(t, result.McpServer.Name)
-	require.Equal(t, "mcp.example.com/remote", *result.McpServer.Name)
+	require.Equal(t, "Example", *result.McpServer.Name)
 }
 
 func TestCreateServer(t *testing.T) {

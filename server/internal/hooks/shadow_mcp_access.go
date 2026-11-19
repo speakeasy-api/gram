@@ -36,10 +36,8 @@ func (s *Service) enforceShadowMCPToolAccess(
 	// Onboarding takes effect at once: when the project serves an official
 	// version of this server, the direct connection is blocked whatever the
 	// policy's default and whatever access was granted to the direct URL
-	// before. The block message sends the agent to the official version. An
-	// administrator can keep direct connections under the ordinary rules
-	// instead, for example while the official server is tested.
-	if official, ok := s.shadowMCPOfficialServer(ctx, organizationID, projectID, evidence.FullURL); ok && !official.DirectAccessAllowed {
+	// before. The block message sends the agent to the official version.
+	if official, ok := s.shadowMCPOfficialServer(ctx, organizationID, projectID, evidence.FullURL); ok {
 		s.logger.InfoContext(ctx, "shadow-mcp call blocked: an official version of the server exists",
 			attr.SlogEvent("shadow_mcp_official_server_redirect"),
 			attr.SlogOrganizationID(organizationID),

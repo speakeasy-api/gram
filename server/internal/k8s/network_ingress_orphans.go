@@ -55,7 +55,7 @@ func (r *NetworkIngressProvisionerRegistry) FindOrphans(ctx context.Context, kno
 	return result, nil
 }
 
-//nolint:exhaustruct // Internal identity keys intentionally build up namespace/name fields in stages.
+//nolint:exhaustruct_v5 // Internal identity keys intentionally build up namespace/name fields in stages.
 func (p *TailscaleNetworkIngressProvisioner) FindOrphans(ctx context.Context, known []NetworkIngressResourceNames) ([]NetworkIngressOrphan, error) {
 	type resourceKey struct{ kind, namespace, name string }
 	expected := make(map[resourceKey]uuid.UUID)

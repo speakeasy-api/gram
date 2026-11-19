@@ -128,7 +128,7 @@ func (m *Mutator) SetFeature(ctx context.Context, organizationID string, feature
 }
 
 func (m *Mutator) applyFeatureTx(ctx context.Context, dbtx pgx.Tx, organizationID string, feature Feature, enabled bool, actor MutationActor) (bool, error) {
-	if feature == Feature("automatic-role-distribution") {
+	if feature == Feature("automatic-role-distribution") || feature == Feature("provider_setup") {
 		return false, oops.E(oops.CodeInvalid, nil, "unknown product feature")
 	}
 	if feature == FeatureRemoteSessionAutoRefreshEnforced {

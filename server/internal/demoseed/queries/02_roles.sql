@@ -73,8 +73,11 @@ WHERE organization_id = @organization_id AND project_id = @project_id AND delete
 ORDER BY created_at, id LIMIT 1;
 
 -- name: RolesInsertRolePlugin :one
-INSERT INTO plugins (organization_id, project_id, name, slug, auto_created)
-VALUES (@organization_id, @project_id, @name, @slug, true)
+-- Role plugins opt in to automatic server adding, so the seeded role server
+-- contents match what role delivery would keep in them. Engineering Essentials
+-- and Default stay off to show a hand-managed server list.
+INSERT INTO plugins (organization_id, project_id, name, slug, auto_created, auto_add_servers_enabled)
+VALUES (@organization_id, @project_id, @name, @slug, true, true)
 RETURNING id;
 
 -- name: RolesInsertRolePluginAssignment :exec

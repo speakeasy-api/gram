@@ -35,6 +35,7 @@ type fakeServer struct {
 	mu       sync.Mutex
 	requests []components.IngestRequestBody
 	headers  []http.Header
+	paths    []string
 	respond  func(components.IngestRequestBody) (int, decision)
 	// effects, when set, is merged into the response body alongside the
 	// decision, mirroring the server's org_settings side channel.
@@ -43,7 +44,7 @@ type fakeServer struct {
 
 func newFakeServer(t *testing.T, respond func(components.IngestRequestBody) (int, decision)) *fakeServer {
 	t.Helper()
-	fs := &fakeServer{Server: nil, mu: sync.Mutex{}, requests: nil, headers: nil, respond: respond, effects: nil}
+	fs := &fakeServer{Server: nil, mu: sync.Mutex{}, requests: nil, headers: nil, paths: nil, respond: respond, effects: nil}
 	fs.Server = httptest.NewServer(http.HandlerFunc(fs.serve))
 	t.Cleanup(fs.Close)
 	return fs
@@ -53,7 +54,7 @@ func newFakeServer(t *testing.T, respond func(components.IngestRequestBody) (int
 // that run inside a synctest bubble.
 func newPipeFakeServer(t *testing.T, respond func(components.IngestRequestBody) (int, decision)) *fakeServer {
 	t.Helper()
-	fs := &fakeServer{Server: nil, mu: sync.Mutex{}, requests: nil, headers: nil, respond: respond, effects: nil}
+	fs := &fakeServer{Server: nil, mu: sync.Mutex{}, requests: nil, headers: nil, paths: nil, respond: respond, effects: nil}
 	fs.Server = newPipeServer(t, http.HandlerFunc(fs.serve))
 	return fs
 }
@@ -65,6 +66,7 @@ func (fs *fakeServer) serve(w http.ResponseWriter, r *http.Request) {
 	fs.mu.Lock()
 	fs.requests = append(fs.requests, p)
 	fs.headers = append(fs.headers, r.Header.Clone())
+	fs.paths = append(fs.paths, r.URL.Path)
 	fs.mu.Unlock()
 
 	status, dec := http.StatusOK, decision{Decision: "allow", Reason: "", Message: ""}

@@ -508,7 +508,7 @@ func grantedMCPAccess(ctx context.Context, db platformrepo.DBTX, roles *access.R
 	for _, role := range listed.Roles {
 		roleNames[role.PrincipalUrn] = role.Name
 	}
-	//nolint:exhaustruct // Optional inventory filters intentionally stay unset.
+	//nolint:exhaustruct_v5 // Optional inventory filters intentionally stay unset.
 	rows, err := platformrepo.New(db).ListPlatformMCPInventory(ctx, platformrepo.ListPlatformMCPInventoryParams{
 		OrganizationID: organizationID, SkipAuthorizationFilter: true, LimitValue: maxMemberMCPAccessServers + 1,
 	})
@@ -529,7 +529,7 @@ func grantedMCPAccess(ctx context.Context, db platformrepo.DBTX, roles *access.R
 		if err != nil {
 			return nil, false, fmt.Errorf("explain access to MCP %q: %w", name, err)
 		}
-		//nolint:exhaustruct // Access mode helpers only consume endpoint-kind fields.
+		//nolint:exhaustruct_v5 // Access mode helpers only consume endpoint-kind fields.
 		item := platformrepo.GetPlatformMCPInventoryItemRow{
 			Visibility: row.Visibility, RemoteMcpServerID: row.RemoteMcpServerID, TunneledMcpServerID: row.TunneledMcpServerID,
 			ToolsetID: row.ToolsetID, UnproxiedMcpServerID: row.UnproxiedMcpServerID,

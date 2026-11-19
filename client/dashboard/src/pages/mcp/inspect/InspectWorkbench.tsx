@@ -279,8 +279,10 @@ export function InspectWorkbench({
     // Wide, it fills the tab's height: the list and the panel scroll inside
     // it, so the page itself never moves under the inspector. Narrower, the
     // panel stacks under the list and the page scrolls.
-    <div className="border-border bg-card flex min-h-[480px] flex-1 flex-col border">
-      <div className="border-border shrink-0 border-b px-6 py-4">{lens}</div>
+    <div className="border-border bg-card short:min-h-[360px] flex min-h-[480px] flex-1 flex-col border">
+      <div className="border-border short:py-3 shrink-0 border-b px-6 py-4">
+        {lens}
+      </div>
       {wide ? (
         // Drag the rule between the list and the panel to resize them.
         <ResizablePanel useDefaultHandle={false} className="min-h-0 flex-1">

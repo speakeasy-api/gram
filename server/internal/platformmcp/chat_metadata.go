@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Chat metadata projections intentionally omit documented optional fields.
+//nolint:exhaustruct_v5 // Chat metadata projections intentionally omit documented optional fields.
 package platformmcp
 
 import (

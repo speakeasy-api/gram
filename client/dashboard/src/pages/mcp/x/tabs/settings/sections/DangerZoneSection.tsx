@@ -23,6 +23,7 @@ import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { DangerSettingsSection } from "@/components/detail/settings-section";
 import { DeleteSourceBackedServerDialogContent } from "./DeleteSourceBackedServerDialogContent";
+import { ServerControlRow } from "./ServerControlRow";
 import {
   linkedMcpServersFilter,
   serversBackedBySameSource,
@@ -34,30 +35,6 @@ import { DeleteHostedServerButton } from "@/pages/mcp/x/hosted/DeleteHostedServe
 import { ServerUsageConfirmation } from "@/components/mcp-server-usage/ServerUsageConfirmation";
 import { useServerUsageConfirmation } from "@/components/mcp-server-usage/useServerUsageConfirmation";
 import type { Toolset } from "@/lib/toolTypes";
-
-function ServerControlRow({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0 space-y-1">
-        <Text small className="font-medium">
-          {title}
-        </Text>
-        <Text muted small className="max-w-2xl">
-          {description}
-        </Text>
-      </div>
-      <div className="flex shrink-0 items-center gap-2">{children}</div>
-    </div>
-  );
-}
 
 const SOURCE_KIND_LABEL: Record<SourceBackedDeleteTarget["kind"], string> = {
   remote: "remote MCP source",

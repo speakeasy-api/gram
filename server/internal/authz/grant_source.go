@@ -2,21 +2,8 @@ package authz
 
 import "fmt"
 
-// GrantSource says where the grants of a scope are set: through roles, or
-// through risk policies. Reads can show every grant, but a write must come
-// from the scope's source, so one part of the product cannot replace grants
-// that another part sets. The stored values predate the name: "access" means
-// roles.
-type GrantSource string
-
-const (
-	GrantSourceRoles      GrantSource = "access"
-	GrantSourceRiskPolicy GrantSource = "risk_policy"
-)
-
-// scopeGrantSource maps every scope to where its grants are set.
-// Derived from Model: a block is written where its permission is.
-var scopeGrantSource = Model.deriveGrantSource()
+// GrantSource and its values are generated from the registry into
+// grant_source_gen.go.
 
 // ScopeGrantSource returns where the grants of scope are set.
 func ScopeGrantSource(scope Scope) (GrantSource, bool) {

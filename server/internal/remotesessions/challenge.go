@@ -65,10 +65,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -292,6 +295,8 @@ type ChallengeManager struct {
 	logger      *slog.Logger
 	db          *pgxpool.Pool
 	enc         *encryption.Client
+	secrets     *clientsecrets.Secrets
+	tokens      *upstreamtokens.Tokens
 	policy      *guardian.Policy
 	tunnels     *tunnelrouting.HTTPClient
 	cache       cache.TypedCacheObject[RemoteLoginState]
@@ -396,6 +401,34 @@ type RemoteLoginResult struct {
 type PrivateAuthorityValidator func(context.Context, RemoteLoginState) error
 
 type ChallengeManagerOption func(*ChallengeManager)
+
+// WithClientSecrets installs the process's client secret seam, which knows
+// the organization encryption configured in the process. Without it the
+// manager seals and opens client secrets as a process without organization
+// encryption: platform_key works and every other transition state fails
+// closed. Production wiring always passes it.
+func WithClientSecrets(secrets *clientsecrets.Secrets) ChallengeManagerOption {
+	return func(m *ChallengeManager) {
+		m.secrets = secrets
+	}
+}
+
+// WithUpstreamTokens installs the process's upstream token seam, which knows the
+// organization encryption configured in the process. Without it the manager
+// seals and opens stored upstream tokens as a process without organization
+// encryption: platform_key works and every other transition state fails
+// closed. Production wiring always passes it.
+func WithUpstreamTokens(tokens *upstreamtokens.Tokens) ChallengeManagerOption {
+	return func(m *ChallengeManager) {
+		m.tokens = tokens
+	}
+}
+
+// UpstreamTokens is the seam the manager opens and stores upstream tokens
+// with, for components built over the same manager.
+func (m *ChallengeManager) UpstreamTokens() *upstreamtokens.Tokens {
+	return m.tokens
+}
 
 func WithPrivateAuthorityValidator(validator PrivateAuthorityValidator) ChallengeManagerOption {
 	return func(m *ChallengeManager) {
@@ -520,6 +553,8 @@ func NewChallengeManager(
 		logger:  logger,
 		db:      db,
 		enc:     enc,
+		secrets: nil,
+		tokens:  nil,
 		policy:  policy,
 		tunnels: tunnels,
 		cache: cache.NewTypedObjectCache[RemoteLoginState](
@@ -533,7 +568,7 @@ func NewChallengeManager(
 		issuerMetadata: nil,
 		serverURL:      serverURL,
 		origins:        DefaultCallbackOrigins(serverURL),
-		revoker:        NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy, tunnels),
+		revoker:        NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, nil, nil, policy, tunnels),
 		authorizeInterceptors: []interceptors.AuthorizeInterceptor{
 			interceptors.NewGoogle(logger),
 		},
@@ -555,13 +590,21 @@ func NewChallengeManager(
 	for _, option := range options {
 		option(manager)
 	}
+	if manager.secrets == nil {
+		manager.secrets = clientsecrets.WithoutOrganizationEncryption(logger, db, enc)
+	}
+	if manager.tokens == nil {
+		manager.tokens = upstreamtokens.WithoutOrganizationEncryption(logger, db, enc)
+	}
 	manager.revoker.assertions = manager.assertions
+	manager.revoker.secrets = manager.secrets
+	manager.revoker.tokens = manager.tokens
 	if manager.enricher == nil {
 		manager.enricher = NewSessionEnricher(logger, enc, policy, nil, nil, tunnels, manager.issuerMetadata)
 	}
 	// The manager's own refreshes restate identity with the same verifier.
-	manager.refresher = NewRefreshService(logger, meterProvider, db, enc, policy, tunnels, cacheImpl, WithRefreshIDTokenVerifier(manager.idTokens), WithRefreshIssuerMetadataRefresher(manager.issuerMetadata), WithRefreshSessionEnricher(manager.enricher), WithRefreshTokenEndpointAssertionSigner(manager.assertions), WithRefreshConnectionRecorder(manager.connections), WithRefreshFeatureFlags(manager.features))
-	manager.rotator = NewClientRotator(logger, db, enc, policy, tunnels, cacheImpl, serverURL, manager.revoker, manager.auditLogger, manager.registrationTelemetry)
+	manager.refresher = NewRefreshService(logger, meterProvider, db, enc, policy, tunnels, cacheImpl, WithRefreshClientSecrets(manager.secrets), WithRefreshUpstreamTokens(manager.tokens), WithRefreshIDTokenVerifier(manager.idTokens), WithRefreshIssuerMetadataRefresher(manager.issuerMetadata), WithRefreshSessionEnricher(manager.enricher), WithRefreshTokenEndpointAssertionSigner(manager.assertions), WithRefreshConnectionRecorder(manager.connections), WithRefreshFeatureFlags(manager.features))
+	manager.rotator = NewClientRotator(logger, db, enc, manager.secrets, policy, tunnels, cacheImpl, serverURL, manager.revoker, manager.auditLogger, manager.registrationTelemetry)
 	manager.rotator.origins = manager.origins
 	if manager.clientCredentialBuilder != nil {
 		manager.clientCredentials = manager.clientCredentialBuilder(manager)
@@ -582,7 +625,6 @@ type Client struct {
 
 	RemoteSessionIssuerID uuid.UUID
 	ExternalClientID      string
-	ClientSecretEncrypted *string
 	IssuerSlug            string
 
 	// IssuerName is the issuer's operator-set display name, nil when unset.
@@ -1059,7 +1101,6 @@ func clientFromRow(r remotesessions_repo.ListRemoteSessionClientsForUserSessionI
 		ProjectID:                        r.ClientProjectID,
 		RemoteSessionIssuerID:            r.RemoteSessionIssuerID,
 		ExternalClientID:                 r.ExternalClientID,
-		ClientSecretEncrypted:            conv.FromPGText[string](r.ClientSecretEncrypted),
 		IssuerSlug:                       r.IssuerSlug,
 		IssuerName:                       conv.FromPGText[string](r.IssuerName),
 		IssuerLogoAssetID:                r.IssuerLogoAssetID,
@@ -1235,26 +1276,30 @@ func (m *ChallengeManager) remoteSessionStatuses(
 	if err != nil {
 		return nil, fmt.Errorf("list remote session statuses: %w", err)
 	}
-	return m.remoteSessionStates(rows), nil
+	return m.remoteSessionStates(ctx, rows), nil
 }
 
 // remoteSessionStates keys each status row by its client. A row with nothing
-// resolution can use reports expired, so connecting again rewrites it.
-func (m *ChallengeManager) remoteSessionStates(rows []remotesessions_repo.ListRemoteSessionStatusesForSubjectRow) map[uuid.UUID]RemoteSessionState {
+// resolution can use reports expired, so connecting again rewrites it. A row
+// whose organization key cannot open its tokens right now keeps its status,
+// since a sign-in would not help, but offers no refresh.
+func (m *ChallengeManager) remoteSessionStates(ctx context.Context, rows []remotesessions_repo.ListRemoteSessionStatusesForSubjectRow) map[uuid.UUID]RemoteSessionState {
 	statuses := make(map[uuid.UUID]RemoteSessionState, len(rows))
 	now := time.Now()
 	for _, row := range rows {
 		status, canRefresh := RemoteSessionStatus(row.Status), row.CanRefresh
 		stored := storedTokenRow(row)
-		read := readStoredTokens(m.enc, stored, now)
-		if status == RemoteSessionActive && !read.usable {
+		read := readStoredTokens(ctx, m.tokens, stored, now)
+		if status == RemoteSessionActive && read.needsSignIn() {
 			status, canRefresh = RemoteSessionExpired, false
 		}
-		// A refresh token this key can't read can't be sent, so Refresh is not offered.
+		// A refresh token the keys can't read can't be sent, so Refresh is not offered.
 		if canRefresh {
 			refreshErr := read.refreshErr
-			if !read.refreshRead {
-				_, refreshErr = m.enc.Decrypt(stored.RefreshTokenEncrypted.String)
+			if read.keyErr != nil {
+				refreshErr = read.keyErr
+			} else if !read.refreshRead {
+				_, refreshErr = openRefreshToken(ctx, m.tokens, stored)
 			}
 			canRefresh = refreshErr == nil
 		}
@@ -1352,7 +1397,7 @@ func (m *ChallengeManager) RefreshRemoteSession(
 	if err != nil {
 		return zero, fmt.Errorf("get consent remote session: %w", err)
 	}
-	if !session.RefreshTokenEncrypted.Valid || session.RefreshTokenEncrypted.String == "" {
+	if !hasRefreshToken(session) {
 		return zero, ErrRemoteSessionNotRefreshable
 	}
 
@@ -1404,8 +1449,9 @@ func (m *ChallengeManager) DisconnectRemoteSession(ctx context.Context, subject 
 	for _, row := range disconnected {
 		m.revoker.RevokeDetached(ctx, RevokedCredentials{
 			RemoteSessionClientID: row.RemoteSessionClientID,
-			AccessTokenEncrypted:  row.AccessTokenEncrypted.String,
-			RefreshTokenEncrypted: row.RefreshTokenEncrypted,
+			OrganizationID:        row.OrganizationID,
+			AccessToken:           upstreamtokens.Stored(row.AccessTokenEncrypted, row.AccessTokenOrgEncrypted),
+			RefreshToken:          upstreamtokens.Stored(row.RefreshTokenEncrypted, row.RefreshTokenOrgEncrypted),
 		})
 	}
 
@@ -1674,15 +1720,16 @@ func (m *ChallengeManager) mintAuthorization(
 // organization's grant.
 var errRemoteLoginWithoutOrganization = errors.New("remote login state has no organization")
 
-// storeRemoteSessionGrant records a consent for (subject, client). A live
-// grant consented through another organization's sign-in is tombstoned first,
-// so the new row records the organization the consent was made in; otherwise
-// the grant is updated in place. q must be the caller's transaction, holding
-// the sign-in and client locks.
-func storeRemoteSessionGrant(ctx context.Context, q *remotesessions_repo.Queries, organizationID string, params remotesessions_repo.UpsertRemoteSessionParams) (remotesessions_repo.RemoteSession, error) {
+// storeRemoteSessionGrant records a consent for (subject, client) and stores
+// its tokens. A live grant consented through another organization's sign-in is
+// tombstoned first, so the new row records the organization the consent was
+// made in; otherwise the grant is updated in place. dbtx must be the caller's
+// transaction, holding the sign-in and client locks.
+func storeRemoteSessionGrant(ctx context.Context, dbtx remotesessions_repo.DBTX, tokens *upstreamtokens.Tokens, organizationID string, params remotesessions_repo.UpsertRemoteSessionGrantParams, issued upstreamtokens.RemoteSessionTokens) (remotesessions_repo.RemoteSession, error) {
 	if organizationID == "" {
 		return remotesessions_repo.RemoteSession{}, errRemoteLoginWithoutOrganization
 	}
+	q := remotesessions_repo.New(dbtx)
 	if _, err := q.SoftDeleteRemoteSessionConsentedInOtherOrganization(ctx, remotesessions_repo.SoftDeleteRemoteSessionConsentedInOtherOrganizationParams{
 		SubjectUrn:            params.SubjectUrn,
 		RemoteSessionClientID: params.RemoteSessionClientID,
@@ -1690,9 +1737,13 @@ func storeRemoteSessionGrant(ctx context.Context, q *remotesessions_repo.Queries
 	}); err != nil {
 		return remotesessions_repo.RemoteSession{}, fmt.Errorf("tombstone grant from another organization: %w", err)
 	}
-	sess, err := q.UpsertRemoteSession(ctx, params)
+	sess, err := q.UpsertRemoteSessionGrant(ctx, params)
 	if err != nil {
 		return sess, fmt.Errorf("upsert remote session: %w", err)
+	}
+	sess, err = tokens.SetRemoteSession(ctx, dbtx, sess.ID, sess.OrganizationID, issued)
+	if err != nil {
+		return sess, fmt.Errorf("store remote session tokens: %w", err)
 	}
 	return sess, nil
 }
@@ -1907,11 +1958,15 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	}
 
 	var clientSecret string
-	if client.ClientSecretEncrypted.Valid && client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
-		decoded, derr := m.enc.Decrypt(client.ClientSecretEncrypted.String)
-		if derr != nil {
+	if stored := clientsecrets.Stored(client.ClientSecretEncrypted, client.ClientSecretOrgEncrypted); clientsecrets.Has(stored) && client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
+		decoded, derr := m.secrets.Open(ctx, nil, clientOwner(client), stored)
+		switch {
+		case orgencryption.IsUnreadable(derr):
 			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return none, oops.E(oops.CodeUnexpected, derr, "decrypt client secret").LogError(ctx, logger)
+		case derr != nil:
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+			return none, oops.E(oops.CodeUnavailable, derr, "the client secret could not be opened right now; try signing in again shortly").LogError(ctx, logger)
 		}
 		clientSecret = decoded
 	}
@@ -1944,6 +1999,19 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		t.Refuse(ctx, mcpconnectionattempts.CodeCredentialMisconfigured)
 		return none, oops.E(oops.CodeUnauthorized, err, "the remote session client's assertion audience is misconfigured").LogError(ctx, logger)
 	}
+	// The pair the exchange returns has to be stored, and the code cannot be
+	// redeemed twice, so the organization's key must be able to seal it first:
+	// the organization the session will be stored with, resolved as the grant
+	// upsert resolves it.
+	sessionOrganization, err := remotesessions_repo.New(m.db).GetRemoteSessionClientSessionOrganization(ctx, client.ID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+		return none, oops.E(oops.CodeUnexpected, err, "resolve the session's organization").LogError(ctx, logger)
+	}
+	if err := m.tokens.RequireUsable(ctx, nil, conv.ToPGTextEmpty(sessionOrganization)); err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeTransientFailure)
+		return none, oops.E(oops.CodeUnavailable, err, "the session's tokens cannot be stored right now; try signing in again shortly").LogError(ctx, logger)
+	}
 	tok, err := m.exchangeCode(ctx, doer, state, TokenEndpointClientAuth{
 		Method:                authMethod,
 		RemoteSessionClientID: client.ID,
@@ -1961,17 +2029,13 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		t.At(mcpconnectionattempts.StepProviderToken)
 		t.Refuse(ctx, exchangeHappened(err, clientRow.TunneledMcpServerID.Valid))
 		m.noteExchangeTokenEndpointMissing(ctx, logger, client.ID, err)
-		failure := exchangeFailure(ctx, logger, err, clientRow.TunneledMcpServerID.Valid)
-		if !exchangeFailureIsProviderOutage(failure, err) {
-			return none, failure
-		}
-		return none, providerOutageError(failure, m.providerLabel(ctx, state))
+		return none, exchangeFailureAnswer(ctx, logger, err, clientRow.TunneledMcpServerID.Valid, func() string { return m.providerLabel(ctx, state) })
 	}
 	// The pair is live upstream from this line on, and every path out of here
 	// that does not store it strands it: unreachable through Speakeasy, and outside
 	// the reach of every revoke path since no row points at it. So arm the
 	// revocation on the exchange rather than on the first thing done with the
-	// result — encrypting it can fail too — and disarm it once the row is
+	// result — sealing it can fail too — and disarm it once the row is
 	// committed.
 	t.At(mcpconnectionattempts.StepProviderToken)
 	stranded := true
@@ -1992,21 +2056,6 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		if enrichment, err = buildEnrichment(noTokenResponse, nil, interfaces, nil); err != nil {
 			logIdentityFailure(ctx, logger, "enrichment interfaces dropped; session stored without them", err, attr.SlogRemoteSessionClientID(client.ID.String()))
 		}
-	}
-
-	accessEnc, err := m.enc.Encrypt([]byte(tok.AccessToken))
-	if err != nil {
-		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
-		return none, oops.E(oops.CodeUnexpected, err, "encrypt access token").LogError(ctx, logger)
-	}
-	var refreshEnc *string
-	if tok.RefreshToken != "" {
-		v, eerr := m.enc.Encrypt([]byte(tok.RefreshToken))
-		if eerr != nil {
-			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
-			return none, oops.E(oops.CodeUnexpected, eerr, "encrypt refresh token").LogError(ctx, logger)
-		}
-		refreshEnc = &v
 	}
 
 	// A token with no reported expiry — neither expires_in nor a JWT exp —
@@ -2053,7 +2102,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		scopes = []string{}
 	}
 	// Only the visible consent control opts a new session into scheduled
-	// keepalive. On reconnect, UpsertRemoteSession preserves the stored choice.
+	// keepalive. On reconnect, UpsertRemoteSessionGrant preserves the stored choice.
 	autoRefresh := false
 	if state.AutoRefresh != nil {
 		autoRefresh = *state.AutoRefresh
@@ -2151,13 +2200,11 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		}
 	}
 
-	storedSession, err := storeRemoteSessionGrant(ctx, txQueries, state.OrganizationID, remotesessions_repo.UpsertRemoteSessionParams{
+	storedSession, err := storeRemoteSessionGrant(ctx, dbtx, m.tokens, state.OrganizationID, remotesessions_repo.UpsertRemoteSessionGrantParams{
 		SubjectUrn:            *state.Subject,
 		UserSessionIssuerID:   state.UserSessionIssuerID,
 		RemoteSessionClientID: state.RemoteSessionClientID,
-		AccessTokenEncrypted:  accessEnc,
 		AccessExpiresAt:       conv.PtrToPGTimestamptz(accessExpires),
-		RefreshTokenEncrypted: conv.PtrToPGText(refreshEnc),
 		AuthorizationExpiresAt: conv.PtrToPGTimestamptz(
 			authorizationExpires,
 		),
@@ -2170,11 +2217,15 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		UpstreamDisplayName: identityCols.DisplayName,
 		IdentitySource:      identityCols.Source,
 		Enrichment:          enrichment,
-	})
+	}, upstreamtokens.RemoteSessionTokens{AccessToken: tok.AccessToken, RefreshToken: tok.RefreshToken, KeepRefreshToken: false})
 	if err != nil {
 		if errors.Is(err, errRemoteLoginWithoutOrganization) {
 			t.Refuse(ctx, mcpconnectionattempts.CodeExpired)
 			return none, oops.E(oops.CodeUnauthorized, err, "this login expired, start it again").LogWarn(ctx, logger)
+		}
+		if orgencryption.IsKeyProblem(err) {
+			t.Refuse(ctx, mcpconnectionattempts.CodeTransientFailure)
+			return none, oops.E(oops.CodeUnavailable, err, "the session's tokens cannot be stored right now; try signing in again shortly").LogError(ctx, logger)
 		}
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return none, oops.E(oops.CodeUnexpected, err, "store remote session").LogError(ctx, logger)
@@ -2306,6 +2357,9 @@ func exchangeHappened(err error, tunneled bool) mcpconnectionattempts.Code {
 		if errors.Is(err, tunnelrouting.ErrNoTunnelRoute) {
 			return mcpconnectionattempts.CodeTunnelUnavailable
 		}
+		if code, ok := mcpconnectionattempts.AddressHappened(err, tunneled); ok {
+			return code
+		}
 		return mcpconnectionattempts.CodeProviderUnreachable
 	}
 	endpointErr, ok := errors.AsType[*tokenEndpointError](err)
@@ -2385,6 +2439,20 @@ func (m *ChallengeManager) providerLabel(ctx context.Context, state RemoteLoginS
 		return ""
 	}
 	return parsed.Hostname()
+}
+
+// exchangeFailureAnswer is what a failed code exchange shows: an address an admin fixes, a provider outage, or the failure.
+func exchangeFailureAnswer(ctx context.Context, logger *slog.Logger, err error, tunneled bool, provider func() string) error {
+	failure := exchangeFailure(ctx, logger, err, tunneled)
+	_, transport := errors.AsType[*tokenExchangeUnavailableError](err)
+	if address := guardian.AddressFailureOf(err, tunneled); transport && address != guardian.AddressFine {
+		// Still tagged as caused outside Speakeasy, so the response headers stay as they were.
+		return fmt.Errorf("complete remote login: %w: %w", ErrProviderOutageExternal, oops.WithBrowserAdminDetail(oops.WithBrowserReason(failure, SignInAddressReason(address)), SignInAddressDetail(address)))
+	}
+	if !exchangeFailureIsProviderOutage(failure, err) {
+		return failure
+	}
+	return providerOutageError(failure, provider())
 }
 
 // exchangeFailureIsProviderOutage excludes failures Speakeasy's own signing caused.
@@ -2576,6 +2644,9 @@ func exchangeFailure(ctx context.Context, logger *slog.Logger, err error, tunnel
 		return oops.E(code, err, "%s: the client assertion could not be signed", message).LogError(ctx, logger)
 	}
 	if _, ok := errors.AsType[*tokenExchangeUnavailableError](err); ok {
+		if address := guardian.AddressFailureOf(err, tunneled); address != guardian.AddressFine {
+			return oops.E(oops.CodeGatewayError, err, "token exchange failed: %s. Ask your administrator to check the sign-in provider's address", address.Problem("the sign-in provider")).LogWarn(ctx, logger)
+		}
 		reason := "the identity provider could not be reached"
 		if errors.Is(err, tunnelrouting.ErrNoTunnelRoute) {
 			reason = "the MCP tunnel is not connected"
@@ -2718,7 +2789,7 @@ func (m *ChallengeManager) identityFromExchange(ctx context.Context, logger *slo
 			return nil, map[string]interfaceRecord{IdentitySourceIDToken: {Status: interfaceStatusRejected, At: time.Now(), HTTPStatus: 0, Reason: "rejected at exchange"}}, noAccess
 		}
 	}
-	target := enrichmentTargetFromClient(issuer, organizationID)
+	target := enrichmentTargetFromClient(issuer, organizationID, m.secrets)
 	target.resource = resource
 	interfaces := map[string]interfaceRecord{}
 	if selected == nil {
@@ -2782,8 +2853,11 @@ func (e *tokenExchangeUnavailableError) Unwrap() error { return e.err }
 // storedTokenRow is the part of a status row readStoredTokens judges.
 func storedTokenRow(row remotesessions_repo.ListRemoteSessionStatusesForSubjectRow) remotesessions_repo.RemoteSession {
 	var sess remotesessions_repo.RemoteSession
+	sess.OrganizationID = row.OrganizationID
 	sess.AccessTokenEncrypted = row.AccessTokenEncrypted
+	sess.AccessTokenOrgEncrypted = row.AccessTokenOrgEncrypted
 	sess.RefreshTokenEncrypted = row.RefreshTokenEncrypted
+	sess.RefreshTokenOrgEncrypted = row.RefreshTokenOrgEncrypted
 	sess.AccessExpiresAt = row.AccessExpiresAt
 	sess.RefreshExpiresAt = row.RefreshExpiresAt
 	sess.AuthorizationExpiresAt = row.AuthorizationExpiresAt

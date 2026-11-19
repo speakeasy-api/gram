@@ -115,6 +115,50 @@ func TestRootTriggerPauseKeepsIdentity(t *testing.T) {
 	require.Equal(t, paused, f.resolve(t, f.assistantID, item.ID))
 }
 
+// unavailableAssistantDispatcher stands in for the assistants service on a
+// deployment with the disabled runtime provider.
+type unavailableAssistantDispatcher struct{}
+
+func (unavailableAssistantDispatcher) Kind() string { return triggers.TargetKindAssistant }
+func (unavailableAssistantDispatcher) Dispatch(context.Context, triggers.Task) error {
+	return nil
+}
+func (unavailableAssistantDispatcher) TargetAvailable() bool { return false }
+
+func TestTriggerResumeRefusedWhenTargetUnavailable(t *testing.T) {
+	t.Parallel()
+	f := newIdentityFixture(t)
+	params := f.createParams()
+	params.Status = triggers.StatusPaused
+	item, err := f.app.Create(t.Context(), params)
+	require.NoError(t, err)
+
+	f.app.RegisterDispatcher(unavailableAssistantDispatcher{})
+
+	_, err = f.app.SetStatus(t.Context(), f.projectID, item.ID, triggers.StatusActive)
+	require.ErrorIs(t, err, triggers.ErrTargetUnavailable)
+	stored, err := triggerrepo.New(f.db).GetTriggerInstanceByID(t.Context(), triggerrepo.GetTriggerInstanceByIDParams{ID: item.ID, ProjectID: f.projectID})
+	require.NoError(t, err)
+	require.Equal(t, triggers.StatusPaused, stored.Status)
+
+}
+
+func TestTriggerPauseAllowedWhenTargetUnavailable(t *testing.T) {
+	t.Parallel()
+	f := newIdentityFixture(t)
+	params := f.createParams()
+	params.Status = triggers.StatusActive
+	item, err := f.app.Create(t.Context(), params)
+	require.NoError(t, err)
+
+	f.app.RegisterDispatcher(unavailableAssistantDispatcher{})
+
+	// Pausing stays allowed so triggers can be wound down.
+	paused, err := f.app.SetStatus(t.Context(), f.projectID, item.ID, triggers.StatusPaused)
+	require.NoError(t, err)
+	require.Equal(t, triggers.StatusPaused, paused.Status)
+}
+
 func TestRootTriggerCreateCompensationWithdrawsIdentity(t *testing.T) {
 	t.Parallel()
 	f := newIdentityFixture(t)

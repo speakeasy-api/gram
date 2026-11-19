@@ -9,7 +9,8 @@ import {
 } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
-import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { Markdown } from "@/elements/components/Markdown";

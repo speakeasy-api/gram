@@ -35,7 +35,7 @@ func TestPluginsService_MutationsSignalRepublish(t *testing.T) {
 		require.Equal(t, authCtx.UserID, last.createdByUserID)
 	}
 
-	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Signalled"})
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Signalled", AutoAddServersEnabled: new(true)})
 	require.NoError(t, err)
 	assertSignalled(t, 1, "creating a plugin")
 
@@ -88,7 +88,7 @@ func TestPluginsService_AssignmentContentChangeSignalsRepublish(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Assignment Signal"})
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Assignment Signal", AutoAddServersEnabled: new(true)})
 	require.NoError(t, err)
 	require.Len(t, ti.publisher.captured(), 1)
 

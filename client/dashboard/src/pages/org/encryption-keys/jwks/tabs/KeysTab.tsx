@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/Label";
 import { MoreActions, type Action } from "@/components/ui/MoreActions";
 import { Stack } from "@/components/ui/Stack";
 import { Switch } from "@/components/ui/Switch";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Text } from "@/components/ui/Text";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { HumanizeDateTime } from "@/lib/dates";

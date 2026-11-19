@@ -81,7 +81,7 @@ func NewService(logger *slog.Logger,
 // and for slug-miss paths in update/delete/clone, where authorizing before
 // reporting not-found keeps the response from becoming an existence oracle.
 func (s *Service) requireProjectEnvironmentWrite(ctx context.Context, projectID uuid.UUID) error {
-	return s.authz.Require(ctx, authz.Environments(projectID).Write())
+	return s.authz.Require(ctx, authz.Environments(authz.ProjectIDOf(projectID)).Write())
 }
 
 // requireLinkedEnvironmentRead authorizes removing a link with the same grant
@@ -91,11 +91,11 @@ func (s *Service) requireProjectEnvironmentWrite(ctx context.Context, projectID 
 func (s *Service) requireLinkedEnvironmentRead(ctx context.Context, projectID uuid.UUID, linked repo.Environment, err error) error {
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return s.authz.Require(ctx, authz.Environments(projectID).Read())
+		return s.authz.Require(ctx, authz.Environments(authz.ProjectIDOf(projectID)).Read())
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "failed to load linked environment").LogError(ctx, s.logger)
 	}
-	return s.authz.Require(ctx, authz.Environment(linked.ID, projectID).Read())
+	return s.authz.Require(ctx, authz.Environment(authz.EnvironmentIDOf(linked.ID), authz.ProjectIDOf(projectID)).Read())
 }
 
 // resolveLinkableEnvironment parses and loads the environment a caller wants to
@@ -226,7 +226,7 @@ func (s *Service) ListEnvironments(ctx context.Context, payload *gen.ListEnviron
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Project(*authCtx.ProjectID).Read()); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -273,7 +273,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch environment").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Environment(environment.ID, *authCtx.ProjectID).Write()); err != nil {
+	if err := s.authz.Require(ctx, authz.Environment(authz.EnvironmentIDOf(environment.ID), authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -458,7 +458,7 @@ func (s *Service) CloneEnvironment(ctx context.Context, payload *gen.CloneEnviro
 	// dimension covers reading it (env:write implies env:read). Cloning also
 	// creates an environment, so it needs the same project-wide env:write as
 	// CreateEnvironment: a grant on the source alone does not allow it.
-	if err := s.authz.Require(ctx, authz.Environment(sourceEnv.ID, *authCtx.ProjectID).Write()); err != nil {
+	if err := s.authz.Require(ctx, authz.Environment(authz.EnvironmentIDOf(sourceEnv.ID), authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 	if err := s.requireProjectEnvironmentWrite(ctx, *authCtx.ProjectID); err != nil {
@@ -566,7 +566,7 @@ func (s *Service) DeleteEnvironment(ctx context.Context, payload *gen.DeleteEnvi
 		return oops.E(oops.CodeUnexpected, err, "failed to fetch environment").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Environment(environment.ID, *authCtx.ProjectID).Write()); err != nil {
+	if err := s.authz.Require(ctx, authz.Environment(authz.EnvironmentIDOf(environment.ID), authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return err
 	}
 
@@ -704,7 +704,7 @@ func (s *Service) GetSourceEnvironment(ctx context.Context, payload *gen.GetSour
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Project(*authCtx.ProjectID).Read()); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -797,7 +797,7 @@ func (s *Service) GetToolsetEnvironment(ctx context.Context, payload *gen.GetToo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Project(*authCtx.ProjectID).Read()); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 

@@ -7,6 +7,8 @@ server:
   - "ci/**"
   - "server/**"
   - "infra/**"
+  - ".mise-tasks/build/gcl.sh"
+  - ".mise-tasks/go/server-lint-packages.sh"
   - ".mise-tasks/test/ci.sh"
   - ".mise-tasks/test/server.sh"
 

@@ -1,4 +1,5 @@
 import type { IconName } from "@/components/ui/Icon/names";
+import { useAssistantsAvailable } from "@/hooks/useAssistantsAvailability";
 import { useMemo } from "react";
 import { useNavigate } from "react-router";
 import { getRecentLabelOverride, useRecentlyVisited } from "../recentlyVisited";
@@ -23,6 +24,7 @@ export function useRecentCandidates({
   projectSlug: string | undefined;
 }): LauncherCandidate[] {
   const navigate = useNavigate();
+  const assistantsAvailable = useAssistantsAvailable();
   const resolved = enabled && Boolean(userId);
   const recents = useRecentlyVisited(
     userId ?? undefined,
@@ -39,6 +41,15 @@ export function useRecentCandidates({
         .filter(
           (recent) =>
             !/\/projects\/[^/]+\/channels(\/|$)/.test(
+              recent.href.split("?")[0]!,
+            ),
+        )
+        // Chat and Assistants redirect away on a deployment without
+        // assistants, so stored visits must not resurface them.
+        .filter(
+          (recent) =>
+            assistantsAvailable ||
+            !/\/projects\/[^/]+\/(chat|assistants)(\/|$)/.test(
               recent.href.split("?")[0]!,
             ),
         )
@@ -61,6 +72,6 @@ export function useRecentCandidates({
             },
           };
         }),
-    [resolved, recents, navigate],
+    [resolved, recents, navigate, assistantsAvailable],
   );
 }

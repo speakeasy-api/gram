@@ -61,6 +61,9 @@ const (
 	FlagPlatformMCPPluginAssignmentMutations Flag = "platform-mcp-plugin-assignment-mutations"
 	// FlagGatewayPluginMembership gates new gateway attachments to plugins.
 	FlagGatewayPluginMembership Flag = "gateway-plugin-membership"
+	// FlagStoredGatewayMachineAccess lets admitted agents and workloads use
+	// stored gateways. The server evaluates it per organization and fails closed.
+	FlagStoredGatewayMachineAccess Flag = "stored-gateway-machine-access"
 	// FlagPlatformMCPAccessRoleMutations is the exact-project kill switch for
 	// creating and updating custom MCP-only access roles through Platform MCP.
 	// It is evaluated at invocation time and fails closed.
@@ -151,6 +154,17 @@ const (
 	// the PostHog flag must be person-aggregated and match distinct_id in a
 	// list of organization ids; a group-aggregated flag never matches.
 	FlagSignInEnforcement Flag = "sign-in-enforcement"
+
+	// FlagMCPConsentAccountSwitch lets a person whose personal account company
+	// sign-in refused switch to their company account from the MCP connect
+	// page: the offer and the switch action, the spent-page message, and the
+	// browser binding /authorize sets on the WorkOS sign-in path. Evaluated
+	// locally for the organization that owns the MCP server, with its id as
+	// the distinct id and no groups, so the PostHog flag must be
+	// person-aggregated and match distinct_id in a list of organization ids.
+	// Off, missing or failing, the connect page behaves as before. Removed
+	// once the switch is GA.
+	FlagMCPConsentAccountSwitch Flag = "mcp-consent-account-switch"
 
 	// FlagEMAProviders gates changing a vendor's EMA provider order while the
 	// Speakeasy issuer is dogfooded. Targeted by PostHog organization group.

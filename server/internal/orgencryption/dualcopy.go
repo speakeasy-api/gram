@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/repo"
 )
 
 // Copies are the two stored copies of one value.
@@ -93,11 +94,33 @@ func (c *Cipher) Decide(ctx context.Context, organizationID string, useCase UseC
 	return c.decision(transition)
 }
 
+// DecideIn is Decide for a writer inside a transaction: a cache miss reads
+// transition state through db instead of another pooled connection.
+func (c *Cipher) DecideIn(ctx context.Context, db repo.DBTX, organizationID string, useCase UseCase) (Decision, error) {
+	transition, err := c.transitions.GetIn(ctx, db, organizationID, useCase)
+	if err != nil {
+		return Decision{}, err
+	}
+
+	return c.decision(transition)
+}
+
 // Redecide returns a decision from transition state read again from the
 // database. Writers call it after ErrFenced or ErrDecisionExpired, then seal
 // the same plaintext again.
 func (c *Cipher) Redecide(ctx context.Context, stale Decision) (Decision, error) {
 	transition, err := c.transitions.GetFresh(ctx, stale.OrganizationID, stale.UseCase)
+	if err != nil {
+		return Decision{}, err
+	}
+
+	return c.decision(transition)
+}
+
+// RedecideIn is Redecide reading transition state through db, such as the
+// writer's transaction.
+func (c *Cipher) RedecideIn(ctx context.Context, db repo.DBTX, stale Decision) (Decision, error) {
+	transition, err := c.transitions.GetFreshIn(ctx, db, stale.OrganizationID, stale.UseCase)
 	if err != nil {
 		return Decision{}, err
 	}

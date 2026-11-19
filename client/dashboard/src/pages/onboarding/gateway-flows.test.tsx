@@ -1,6 +1,6 @@
 import type { ComponentProps, ReactNode } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import UploadOpenAPI from "./UploadOpenAPI";
 import FunctionsOnboarding from "./FunctionsOnboarding";
@@ -18,6 +18,12 @@ const state = vi.hoisted(() => ({
   complete: vi.fn(),
   retry: vi.fn().mockResolvedValue(undefined),
   deploy: vi.fn(),
+}));
+const functionsAvailability = vi.hoisted(() => ({ available: true }));
+vi.mock("@/hooks/useFunctionsAvailability", () => ({
+  useFunctionsAvailability: () =>
+    functionsAvailability.available ? "available" : "unavailable",
+  useFunctionsAvailable: () => functionsAvailability.available,
 }));
 vi.mock("@/pages/mcp/gateway/useGatewayCreation", async (importOriginal) => ({
   ...(await importOriginal<
@@ -133,6 +139,7 @@ beforeEach(() => {
   state.gatewayId = "gateway";
   state.createdServerId = null;
   state.attachmentError = null;
+  functionsAvailability.available = true;
 });
 it("keeps function gateway context when continuing from CLI instructions to source selection", () => {
   render(<FunctionsOnboarding />, { wrapper: MemoryRouter });
@@ -152,6 +159,25 @@ it("does not add gateway actions to standalone function instructions", () => {
   expect(
     screen.queryByRole("link", { name: /select deployed function/i }),
   ).toBeNull();
+});
+it("sends function instructions to the add-server page on a deployment without Functions", () => {
+  functionsAvailability.available = false;
+  render(
+    <MemoryRouter initialEntries={["/org/projects/project/mcp/add/function"]}>
+      <Routes>
+        <Route
+          path="/org/projects/project/mcp/add/function"
+          element={<FunctionsOnboarding />}
+        />
+        <Route
+          path="/org/projects/project/mcp/add"
+          element={<p>Add server page</p>}
+        />
+      </Routes>
+    </MemoryRouter>,
+  );
+  expect(screen.getByText("Add server page")).toBeTruthy();
+  expect(screen.queryByText("speakeasy functions init")).toBeNull();
 });
 it("passes gateway completion into OpenAPI creation and prevents leaving for inventory prematurely", () => {
   render(<UploadOpenAPI />, { wrapper: MemoryRouter });

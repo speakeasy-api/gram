@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -318,15 +319,18 @@ func memberFailureSignIn(ctx context.Context, gate metaGateContext, member metaM
 		return signInRow(metamcp.SignInError, memberErrorMessage(err), nil)
 	}
 	name := cmp.Or(member.name, member.slug)
+	if unavailable.address != guardian.AddressFine {
+		return signInRow(metamcp.SignInUnavailable, memberErrorMessage(err), &metamcp.ConnectionStatusOutage{Message: unavailable.address.EndUserMessage(name, guardian.SignInAddress), ReconnectURL: "", NeedsAdmin: true})
+	}
 	if unavailable.session == nil {
-		return signInRow(metamcp.SignInUnavailable, memberErrorMessage(err), &metamcp.ConnectionStatusOutage{Message: name + " isn't available right now. Try again shortly.", ReconnectURL: ""})
+		return signInRow(metamcp.SignInUnavailable, memberErrorMessage(err), &metamcp.ConnectionStatusOutage{Message: name + " isn't available right now. Try again shortly.", ReconnectURL: "", NeedsAdmin: false})
 	}
 	kind := remotesessions.OutageKindOf(unavailable.session)
 	reconnectURL := ""
 	if kind == remotesessions.RefreshOutageProvider {
 		reconnectURL = gate.memberCallerURL(member)
 	}
-	return signInRow(metamcp.SignInUnavailable, memberErrorMessage(err), &metamcp.ConnectionStatusOutage{Message: connectionOutageMessage(name, kind, remotesessions.RetryAfter(unavailable.session)), ReconnectURL: reconnectURL})
+	return signInRow(metamcp.SignInUnavailable, memberErrorMessage(err), &metamcp.ConnectionStatusOutage{Message: connectionOutageMessage(name, kind, remotesessions.RetryAfter(unavailable.session)), ReconnectURL: reconnectURL, NeedsAdmin: false})
 }
 
 // refreshProvenance reports an error known to come from a refresh that wrote its own failed row.

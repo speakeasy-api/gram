@@ -59,6 +59,10 @@ export type ProbeURLResult = {
    */
   reason?: string | undefined;
   /**
+   * The name the server reports for itself in the MCP handshake: its title, or its name when it has no title. Present only when outcome is mcp_available and the server reports one.
+   */
+  serverName?: string | undefined;
+  /**
    * How Speakeasy can register as a client with the server's sign-in provider. Present only when authentication is required and the challenge advertised protected resource metadata: dcr (dynamic client registration), cimd (client ID metadata document), manual (a client must be registered by hand), or unknown (the provider's metadata could not be read).
    */
   signInSetup?: SignInSetup | undefined;
@@ -84,12 +88,14 @@ export const ProbeURLResult$inboundSchema: z.ZodMiniType<
     outcome: ProbeURLResultOutcome$inboundSchema,
     protected_resource_metadata_url: z.optional(z.string()),
     reason: z.optional(z.string()),
+    server_name: z.optional(z.string()),
     sign_in_setup: z.optional(SignInSetup$inboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {
       "http_status": "httpStatus",
       "protected_resource_metadata_url": "protectedResourceMetadataUrl",
+      "server_name": "serverName",
       "sign_in_setup": "signInSetup",
     });
   }),

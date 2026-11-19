@@ -577,10 +577,11 @@ func newAdminCommand() *cli.Command {
 				// is misconfigured.
 				// TODO(AIM-1007): pass it to the admin service for organization
 				// encryption counts, backfills and finalization.
-				if _, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, audit.NewLogger()); err != nil {
+				orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, audit.NewLogger())
+				if err != nil {
 					return err
 				}
-				adminService.SetRemoteSessionService(remotesessions.NewGlobalService(logger, tracerProvider, meterProvider, db, applicationEncryption, guardianPolicy))
+				adminService.SetRemoteSessionService(remotesessions.NewGlobalService(logger, tracerProvider, meterProvider, db, applicationEncryption, orgEncryption.ClientSecrets(logger, applicationEncryption), guardianPolicy))
 			} else {
 				logger.WarnContext(ctx, "Admin issuers unavailable; no application encryption key configured")
 			}
@@ -596,6 +597,7 @@ func newAdminCommand() *cli.Command {
 				defer o11y.LogDefer(ctx, logger, "shut down admin asset storage", func() error { return assetShutdown(ctx) })
 				platformAssets = assets.NewPlatformService(logger, tracerProvider, guardianPolicy, db, assetStorage)
 				adminService.SetAssetService(platformAssets)
+				adminService.SetMCPSourceStorage(assetStorage)
 			}
 			adminService.SetGCPIdentity(gcpIdentity)
 			admin.Attach(mux, adminService)

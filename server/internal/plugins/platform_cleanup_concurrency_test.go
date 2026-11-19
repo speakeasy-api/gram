@@ -40,7 +40,7 @@ func TestPlatformCleanupPreservesConcurrentManualUpdate(t *testing.T) {
 			require.NoError(t, err)
 			_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{OrganizationID: org, PrincipalUrn: principal, Scope: string(authz.ScopeMCPConnect), Selectors: selectors})
 			require.NoError(t, err)
-			plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Concurrent cleanup"})
+			plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Concurrent cleanup", AutoAddServersEnabled: new(true)})
 			require.NoError(t, err)
 			_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{PluginID: plugin.ID, PrincipalUrns: []string{role}})
 			require.NoError(t, err)

@@ -112,6 +112,8 @@ var connectionRequestEndings = []connectionEnding{
 	{mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.ResultRenewed},
 	{mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.CodeReauthenticationRequired},
 	{mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.CodeRenewalRetryable},
+	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeAddressNotAllowed},
+	{mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeAddressNotFound},
 }
 
 // connectionRequestRows seeds single-row outcomes each day, each its own attempt.
@@ -134,7 +136,7 @@ func (s *seeder) connectionRequestRows() ([]mcpconnectionattempts.Row, error) {
 			started := s.now.AddDate(0, 0, -day-1).Add(time.Duration(hash64(s.name(key), "at")%connectionAttemptWindowSeconds) * time.Second)
 			opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&subject)}
 			// On a gateway, these refusals come from a selected member, never the gateway itself.
-			if scope != s.connectionServerScope() && ending.step == mcpconnectionattempts.StepMCPRequest && (ending.what == mcpconnectionattempts.CodeProviderServerError || ending.what == mcpconnectionattempts.CodeToolPermissionDenied || ending.what == mcpconnectionattempts.CodeUsageLimitReached || ending.what == mcpconnectionattempts.CodeProviderRejected || ending.what == mcpconnectionattempts.CodeMCPToolCallsPaused || ending.what == mcpconnectionattempts.CodeStoredSignInUnreadable) {
+			if scope != s.connectionServerScope() && ending.step == mcpconnectionattempts.StepMCPRequest && (ending.what == mcpconnectionattempts.CodeProviderServerError || ending.what == mcpconnectionattempts.CodeToolPermissionDenied || ending.what == mcpconnectionattempts.CodeUsageLimitReached || ending.what == mcpconnectionattempts.CodeProviderRejected || ending.what == mcpconnectionattempts.CodeMCPToolCallsPaused || ending.what == mcpconnectionattempts.CodeStoredSignInUnreadable || ending.what == mcpconnectionattempts.CodeAddressNotAllowed) {
 				scope = mcpconnectionattempts.GatewayScope(s.orgID(), s.projectID(), s.det("metamcp-1"), mcpconnectionattempts.AppDCR)
 				opts = append(opts, mcpconnectionattempts.Member(s.supportServer()))
 			}
@@ -333,13 +335,13 @@ func (s *seeder) stoppedAttemptRows(attempt mcpconnectionattempts.Attempt, key s
 	return append(rows, member), nil
 }
 
-// connectionWorkloadRows seeds token requests from a workload and an assistant, and a server
-// that rejected the credential on initialize, one of each on the last few days.
+// connectionWorkloadRows seeds token requests from a workload, an assistant and an app using company-managed
+// sign-in, and a server that rejected the credential on initialize, one of each on the last few days.
 func (s *seeder) connectionWorkloadRows() ([]mcpconnectionattempts.Row, error) {
 	admitted := urn.NewWorkloadSubject(s.det("workload-issuer-1"), "repo:acme/payments-api:ref:refs/heads/main")
 	stranger := urn.NewWorkloadSubject(s.det("workload-issuer-1"), "repo:acme/sandbox:ref:refs/heads/experiment")
 	person := urn.NewUserSubject(s.userID("amara"))
-	workload := []mcpconnectionattempts.Option{mcpconnectionattempts.Grant(oauthwire.GrantTypeJWTBearer), mcpconnectionattempts.UserSessionIssuer(s.usIssuer())}
+	jwtBearer := []mcpconnectionattempts.Option{mcpconnectionattempts.Grant(oauthwire.GrantTypeJWTBearer), mcpconnectionattempts.UserSessionIssuer(s.usIssuer())}
 	server := mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-linear"), mcpconnectionattempts.AppWorkload)
 	sharedServer := mcpconnectionattempts.AuthorizationServerScope(s.orgID(), s.projectID(), s.usIssuer(), mcpconnectionattempts.AppWorkload)
 	assistant := mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-linear"), mcpconnectionattempts.AppDCR)
@@ -350,10 +352,12 @@ func (s *seeder) connectionWorkloadRows() ([]mcpconnectionattempts.Row, error) {
 		caller string
 		opts   []mcpconnectionattempts.Option
 	}{
-		{server, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultSignedIn, "workload", append([]mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&admitted)}, workload...)},
-		{sharedServer, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeSubjectNotAdmitted, "workload", append([]mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&stranger), mcpconnectionattempts.Detail("subject_not_admitted")}, workload...)},
+		{server, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultSignedIn, "workload", append([]mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&admitted)}, jwtBearer...)},
+		{sharedServer, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeSubjectNotAdmitted, "workload", append([]mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&stranger), mcpconnectionattempts.Detail("subject_not_admitted")}, jwtBearer...)},
 		{assistant, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeSignInMethodNotAccepted, "assistant", []mcpconnectionattempts.Option{mcpconnectionattempts.Grant(oauthwire.GrantTypeClientCredentials), mcpconnectionattempts.Detail("assistant_tokens_not_issued")}},
 		{s.connectionServerScope(), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected, "", []mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&person), mcpconnectionattempts.RequestMethod("initialize"), mcpconnectionattempts.Provider(demoConnectionProvider)}},
+		{s.connectionServerScope(), mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultSignedIn, "app", append([]mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&person)}, jwtBearer...)},
+		{s.connectionServerScope(), mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeSubjectNotProvisioned, "app", append([]mcpconnectionattempts.Option{mcpconnectionattempts.Detail("subject_not_provisioned")}, jwtBearer...)},
 	}
 	rows := make([]mcpconnectionattempts.Row, 0, len(seeded))
 	for n, row := range seeded {
@@ -364,10 +368,10 @@ func (s *seeder) connectionWorkloadRows() ([]mcpconnectionattempts.Row, error) {
 			return nil, fmt.Errorf("build connection token event: %w", err)
 		}
 		built.TraceID = md5Hex(s.name(key))
-		switch row.step {
-		case mcpconnectionattempts.StepMCPRequest:
+		switch {
+		case row.step == mcpconnectionattempts.StepMCPRequest, row.caller == "app":
 			s.setConnectionClient(&built, key)
-		case mcpconnectionattempts.StepInboundToken:
+		case row.step == mcpconnectionattempts.StepInboundToken:
 			// A workload or assistant asks with an HTTP library from a machine of its own, not a person's device.
 			built.ClientFamily, built.ClientVersion = mcpconnectionattempts.FamilyScript, demoScriptVersion
 			built.DeviceKey = md5Hex(s.name("connection-device-" + row.caller))

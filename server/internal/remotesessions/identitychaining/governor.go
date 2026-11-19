@@ -13,10 +13,10 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -26,7 +26,7 @@ import (
 type Governor struct {
 	logger     *slog.Logger
 	db         *pgxpool.Pool
-	enc        *encryption.Client
+	tokens     *upstreamtokens.Tokens
 	delegation *remotesessions.DelegationService
 	now        func() time.Time
 
@@ -45,12 +45,12 @@ type Governor struct {
 	recentRefusal func(context.Context, Request, selection) (Outcome, bool)
 }
 
-// NewGovernor builds a configuration governor; enc verifies stored credentials
+// NewGovernor builds a configuration governor; tokens opens stored credentials
 // and delegation checks the human's retained delegation against the current
 // trusted registration.
-func NewGovernor(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, delegation *remotesessions.DelegationService) *Governor {
+func NewGovernor(logger *slog.Logger, db *pgxpool.Pool, tokens *upstreamtokens.Tokens, delegation *remotesessions.DelegationService) *Governor {
 	g := &Governor{
-		logger: logger.With(attr.SlogComponent("identity_chaining")), db: db, enc: enc, delegation: delegation, now: time.Now,
+		logger: logger.With(attr.SlogComponent("identity_chaining")), db: db, tokens: tokens, delegation: delegation, now: time.Now,
 		resolveResource: nil,
 		cachedResource:  nil,
 		recentRefusal:   nil,
@@ -261,10 +261,10 @@ func (g *Governor) hasExternalCredential(ctx context.Context, req Request, sel s
 		g.logger.WarnContext(ctx, "read identity chaining credential", attr.SlogError(err))
 		return false
 	}
-	if !row.Usable || g.enc == nil {
+	if !row.Usable || g.tokens == nil {
 		return false
 	}
-	value, err := g.enc.Decrypt(row.AccessTokenEncrypted.String)
+	value, err := openCredential(ctx, g.tokens, row)
 	if err != nil {
 		g.logger.WarnContext(ctx, "decrypt identity chaining credential", attr.SlogError(err))
 		return false

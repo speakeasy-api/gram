@@ -314,7 +314,7 @@ func insertQualifiedRemoteSessionToken(
 
 	accessTokenEncrypted, err := ti.enc.Encrypt([]byte(accessToken))
 	require.NoError(t, err)
-	_, err = remotesessions_repo.New(ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	_, err = remotesessions_repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userSessionIssuerID,
 		RemoteSessionClientID: remoteSessionClientID,

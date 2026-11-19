@@ -124,7 +124,7 @@ func withMandatoryAdmission(ctx context.Context) context.Context {
 	if shared, ok := ctx.Value(mandatoryAdmissionKey{}).(*mandatoryAdmission); ok && shared.authCtx == authCtx {
 		return ctx
 	}
-	return context.WithValue(ctx, mandatoryAdmissionKey{}, &mandatoryAdmission{authCtx: authCtx}) //nolint:exhaustruct // filled once on first use
+	return context.WithValue(ctx, mandatoryAdmissionKey{}, &mandatoryAdmission{authCtx: authCtx}) //nolint:exhaustruct_v5 // filled once on first use
 }
 
 // admitMandatoryShadow admits the caller for the shadow, reusing the

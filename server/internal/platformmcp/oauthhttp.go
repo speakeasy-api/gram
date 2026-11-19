@@ -1,4 +1,4 @@
-//nolint:exhaustruct // OAuth handlers intentionally use zero values for non-wire Platform MCP contract fields and third-party request structs.
+//nolint:exhaustruct_v5 // OAuth handlers intentionally use zero values for non-wire Platform MCP contract fields and third-party request structs.
 package platformmcp
 
 import (

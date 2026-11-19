@@ -73,12 +73,19 @@ export function McpDetailFrame({
         <DetailHeaderLayout
           title={
             chrome ? (
-              <TitleBlock chrome={chrome} />
+              <TitleBlock chrome={chrome} compact={activeTab === "inspect"} />
             ) : (
               <DetailHeaderTitleSkeleton />
             )
           }
-          controls={chrome ? <HeaderControls chrome={chrome} /> : null}
+          controls={
+            chrome ? (
+              <HeaderControls
+                chrome={chrome}
+                compact={activeTab === "inspect"}
+              />
+            ) : null
+          }
         />
       }
     >
@@ -90,11 +97,6 @@ export function McpDetailFrame({
       >
         {activeTab === "overview" && chrome?.overviewSetup ? (
           <div className="mb-6">{chrome.overviewSetup}</div>
-        ) : null}
-        {activeTab === "overview" && chrome?.overviewBanner ? (
-          // The banner renders nothing for viewers who can't manage
-          // plugins, so the gap goes with it.
-          <div className="mb-6 empty:hidden">{chrome.overviewBanner}</div>
         ) : null}
         {children}
       </ReadinessIssuesProvider>
@@ -161,9 +163,16 @@ export function McpSetupFrame({
   );
 }
 
-function TitleBlock({ chrome }: { chrome: McpDetailChrome }): JSX.Element {
+function TitleBlock({
+  chrome,
+  compact,
+}: {
+  chrome: McpDetailChrome;
+  compact: boolean;
+}): JSX.Element {
   return (
     <DetailHeaderTitle
+      compact={compact}
       icon={chrome.icon("size-10 shrink-0 object-contain")}
       eyebrow={chrome.kindLabel ? `Connect · ${chrome.kindLabel}` : "Connect"}
       name={chrome.name}
@@ -215,8 +224,10 @@ function TitleBlock({ chrome }: { chrome: McpDetailChrome }): JSX.Element {
  */
 function HeaderControls({
   chrome,
+  compact,
 }: {
   chrome: McpDetailChrome;
+  compact: boolean;
 }): JSX.Element | null {
   const rows: DetailHeaderControlRow[] = [];
   if (chrome.readinessChecks.length > 0) {
@@ -234,7 +245,7 @@ function HeaderControls({
         <Link
           to={chrome.identity.href}
           state={HIGHLIGHT_STATE}
-          aria-label={`Upstream auth: ${chrome.identity.label}. Open authentication settings`}
+          aria-label={`Upstream auth: ${chrome.identity.label}. ${chrome.identity.opens ?? "Open authentication settings"}`}
           className={DETAIL_HEADER_CONTROL_BUTTON}
         >
           {chrome.identity.tone ? (
@@ -265,7 +276,7 @@ function HeaderControls({
       ),
     });
   }
-  return <DetailHeaderControls rows={rows} />;
+  return <DetailHeaderControls rows={rows} compact={compact} />;
 }
 
 /** The server's other addresses, one click from the primary one. */

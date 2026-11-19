@@ -15,8 +15,9 @@ const LOCAL_IMAGE = "gram-assistant-runtime";
 const PROVIDER_KEY = "GRAM_ASSISTANT_RUNTIME_PROVIDER";
 const IMAGE_KEY = "GRAM_ASSISTANT_RUNTIME_OCI_IMAGE";
 // The providers the server accepts (see server/cmd/gram/flags_assistants.go).
-// A retired one, such as flyio, stops the worker from starting.
-const SUPPORTED_PROVIDERS = new Set(["gke", LOCAL_PROVIDER]);
+// A retired one, such as flyio, stops the worker from starting. disabled turns
+// assistants off for the stack.
+const SUPPORTED_PROVIDERS = new Set(["gke", LOCAL_PROVIDER, "disabled"]);
 
 function isSet(value: string | undefined): boolean {
   return typeof value === "string" && value !== "" && value !== "unset";

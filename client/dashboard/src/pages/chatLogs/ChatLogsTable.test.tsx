@@ -12,6 +12,9 @@ const { sessionLinks } = vi.hoisted(() => ({
   sessionLinks: [] as ChatSessionLink[],
 }));
 
+vi.mock("@/hooks/useAssistantsAvailability", () => ({
+  useAssistantsAvailable: () => true,
+}));
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),
 }));
