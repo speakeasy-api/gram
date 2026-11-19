@@ -183,10 +183,10 @@ func TestShadowMandatoryAuthClientChecksTheStoredOwner(t *testing.T) {
 	record(sessionContext(t, shadowOrg, personal), authClientTypeRemoteSession, "user_2")
 	record(sessionContext(t, shadowOrg), authClientTypeServiceAccount, "")
 	require.Equal(t, map[attribute.Set]int64{
-		shadowKey(mandatorySurfaceAuthClient, mandatoryCallerRepresented, "user", true, "allow", "request", "none"):       2,
-		shadowKey(mandatorySurfaceAuthClient, mandatoryCallerRepresented, "user", true, "deny", "request", "not_granted"): 1,
-		shadowKey(mandatorySurfaceAuthClient, mandatoryCallerRepresented, "user", true, "deny", "request", "no_policy"):   1,
-	}, h.points(t), "a personal connection only serves its own owner")
+		shadowKey(mandatorySurfaceAuthClient, mandatoryCallerRepresented, "user", true, "allow", "request", "none"):      2,
+		shadowKey(mandatorySurfaceAuthClient, mandatoryCallerRepresented, "user", true, "deny", "request", "owner_only"): 1,
+		shadowKey(mandatorySurfaceAuthClient, mandatoryCallerRepresented, "user", true, "deny", "request", "no_policy"):  1,
+	}, h.points(t), "a personal connection only serves its own owner, and the refusal says so")
 }
 
 func TestShadowRequireOnlyComparesDecisions(t *testing.T) {

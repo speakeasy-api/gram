@@ -100,10 +100,14 @@ const (
 	authClientReasonNoAuthForbidden = "no_auth_forbidden"
 	authClientReasonNoAuthStale     = "no_auth_server_has_clients"
 	authClientReasonNotPermitted    = "not_permitted"
-	// authClientReasonOwnerOnly is a refusal to use a personal connection
-	// that belongs to a member other than the one the request represents: for
-	// an agent key, the member who issued it. No grant changes it.
-	authClientReasonOwnerOnly       = "connection_not_key_issuers"
+	// authClientReasonNotKeyIssuers refuses an agent a personal connection
+	// owned by a member other than the one who issued its key, whose access
+	// it acts with. No grant changes it.
+	authClientReasonNotKeyIssuers = "connection_not_key_issuers"
+	// authClientReasonNotOwners refuses any other caller a personal
+	// connection owned by a member other than the one it represents, such as
+	// one that represents nobody. No grant changes it either.
+	authClientReasonNotOwners       = "connection_not_owners"
 	authClientReasonSetup           = "setup"
 	authClientReasonHeadersStale    = "client_headers_stale"
 	authClientReasonLegacyMayChain  = "legacy_may_chain"
@@ -625,7 +629,7 @@ func (s *Service) checkAuthClientPermission(ctx context.Context, permit authClie
 			res.outcome = authClientNoAccess
 			res.reason = authClientReasonNotPermitted
 			if decision.ownerOnly {
-				res.reason = authClientReasonOwnerOnly
+				res.reason = ownerOnlyReason(permit.Subject)
 			}
 		}
 	}
@@ -923,6 +927,22 @@ func (s *Service) serveAuthClient(ctx context.Context, w http.ResponseWriter, au
 	return res.choice, nil
 }
 
+// ownerOnlyReason names an owner-only refusal by its caller: an agent acts
+// with the access of the member who issued its key, and any other caller
+// with that of the member it represents, if any.
+func ownerOnlyReason(subject urn.SessionSubject) string {
+	if subject.Kind == urn.SessionSubjectKindAgent {
+		return authClientReasonNotKeyIssuers
+	}
+	return authClientReasonNotOwners
+}
+
+// notOwnersConnectionMessage refuses a caller other than an agent a personal
+// connection owned by a member other than the one it represents. It names no
+// one.
+const notOwnersConnectionMessage = "this MCP server uses a personal connection that belongs to a different member, and a personal connection can only be used for its owner. " +
+	"Ask an organization administrator to set up a shared credential for this server."
+
 // ownerOnlyConnectionMessage refuses an agent key a personal connection owned
 // by a member other than the one who issued the key, whose access the key
 // acts with. No grant changes that, so it offers no request-access link. It
@@ -933,8 +953,11 @@ const ownerOnlyConnectionMessage = "this MCP server's connection on the agent be
 // authClientNoAccessError refuses a caller the chosen client. A refusal a
 // grant can fix links to request access to the server.
 func (s *Service) authClientNoAccessError(ctx context.Context, serverID uuid.UUID, res authClientResolution) error {
-	if res.reason == authClientReasonOwnerOnly {
+	switch res.reason {
+	case authClientReasonNotKeyIssuers:
 		return oops.E(oops.CodeForbidden, errAuthClientNoAccess, "%s", ownerOnlyConnectionMessage).LogWarn(ctx, s.logger, attr.SlogAuthClientID(res.clientID.String()), attr.SlogAuthClientReason(res.reason))
+	case authClientReasonNotOwners:
+		return oops.E(oops.CodeForbidden, errAuthClientNoAccess, "%s", notOwnersConnectionMessage).LogWarn(ctx, s.logger, attr.SlogAuthClientID(res.clientID.String()), attr.SlogAuthClientReason(res.reason))
 	}
 	message := "you don't have access to the connection this MCP server uses. Ask an organization administrator to grant access."
 	if link := strings.TrimSpace(s.requestAccessURL(ctx, serverID.String(), res.serverName)); link != "" {

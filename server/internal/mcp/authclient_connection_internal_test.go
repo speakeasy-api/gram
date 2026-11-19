@@ -154,7 +154,7 @@ func TestAttachedAgentAuthClientChecksTheAttachedConnectionOwner(t *testing.T) {
 		res, err := f.service.resolveAuthClientForServing(sessionContext(t, f.orgID, personalAuthGrant(), authz.NewGrant(authz.ScopeMCPAuth, authz.WildcardResource)), selector, f.serverID, f.projectID, agent)
 		require.NoError(t, err)
 		require.Equal(t, authClientNoAccess, res.outcome, "ownership filters grants and never grants, even against a wildcard")
-		require.Equal(t, authClientReasonOwnerOnly, res.reason, "the refusal says the connection is not the key issuer's")
+		require.Equal(t, authClientReasonNotKeyIssuers, res.reason, "the refusal says the connection is not the key issuer's")
 		require.Equal(t, map[string]int64{"deny/owner_only": 1}, authClientShadowOutcomes(t, reader))
 	})
 
@@ -169,7 +169,7 @@ func TestAttachedAgentAuthClientChecksTheAttachedConnectionOwner(t *testing.T) {
 		_, err := f.service.enforceAuthClient(sessionContext(t, f.orgID, personalAuthGrant()), httptest.NewRecorder(), &issuerGateAuthentication{endpoint: endpoint, subject: agent}, selector)
 		require.Error(t, err)
 		row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess)
-		require.Equal(t, authClientReasonOwnerOnly, row.SubReason, "the row tells an owner-only refusal apart")
+		require.Equal(t, authClientReasonNotKeyIssuers, row.SubReason, "the row tells an owner-only refusal apart")
 		require.Len(t, rec.Rows(), 1)
 	})
 
@@ -189,6 +189,19 @@ func TestAttachedAgentAuthClientChecksTheAttachedConnectionOwner(t *testing.T) {
 		require.NotContains(t, err.Error(), "user_2", "the refusal never names the owner")
 		require.NotContains(t, err.Error(), "grant access", "no grant can fix it")
 		require.NotContains(t, err.Error(), "Request access", "no grant can fix it")
+	})
+
+	t.Run("a caller other than an agent gets a refusal that names no key", func(t *testing.T) {
+		t.Parallel()
+		require.Equal(t, authClientReasonNotKeyIssuers, ownerOnlyReason(urn.NewAgentSubject(uuid.New())))
+		require.Equal(t, authClientReasonNotOwners, ownerOnlyReason(urn.SessionSubject{Kind: urn.SessionSubjectKindAPIKey, ID: "key_1"}))
+		service := &Service{logger: testenv.NewLogger(t)}
+		err := service.authClientNoAccessError(t.Context(), uuid.New(), authClientResolution{outcome: authClientNoAccess, reason: authClientReasonNotOwners})
+		require.ErrorIs(t, err, errAuthClientNoAccess)
+		require.ErrorContains(t, err, "personal connection that belongs to a different member, and a personal connection can only be used for its owner")
+		require.ErrorContains(t, err, "shared credential")
+		require.NotContains(t, err.Error(), "key")
+		require.NotContains(t, err.Error(), "grant access")
 	})
 
 	t.Run("a refusal a grant can fix keeps asking for access", func(t *testing.T) {

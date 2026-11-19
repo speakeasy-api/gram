@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
@@ -170,10 +171,12 @@ func (g metaGateContext) agentReconnectError(member metaMember) error {
 
 // withAgentMemberFix replaces an agent refusal from the shared authorization
 // path with the gateway's own: a missing connection asks for a reconnect; a
-// refused use, which reconnecting does not change, asks for a permissions
-// review; and a server that offers the agent no auth client asks an admin of
-// the server's project. Any other error, and any gateway that is not an
-// agent's, passes through.
+// connection its key's issuer does not own, which no permissions review or
+// grant changes, says how to attach one the issuer owns; any other refused
+// use, which reconnecting does not change, asks for a permissions review; and
+// a server that offers the agent no auth client asks an admin of the server's
+// project. Any other error, and any gateway that is not an agent's, passes
+// through.
 func (g metaGateContext) withAgentMemberFix(member metaMember, err error) error {
 	if err == nil || g.agentFix == nil {
 		return err
@@ -186,7 +189,8 @@ func (g metaGateContext) withAgentMemberFix(member metaMember, err error) error 
 		return err
 	}
 	if access.ownerOnly {
-		return agentOwnerOnlyError(member.slug, g.memberFix(member).url)
+		// The connection row records it as a refused use, with the reason.
+		return memberConnectionError{agentOwnerOnlyError(member.slug, g.memberFix(member).url), mcpconnectionattempts.CodeNoServerAccess}
 	}
 	const refused = "server %q refused this agent: it is not allowed to use a connection to this server, and reconnecting does not change that. "
 	if access.server {
@@ -208,8 +212,23 @@ func agentOwnerOnlyError(slug, signInURL string) error {
 	if signInURL != "" {
 		where = "on the agent's MCP sign-in tab at " + signInURL
 	}
-	return &metaMemberError{message: fmt.Sprintf("server %q refused this call: the agent's connection to it belongs to a different member than the one who issued the agent's key, and an agent key can only use connections owned by the member who issued it. "+
-		"The agent's permissions do not change that. To fix this, attach a connection owned by the key's issuer %s, have the connection's owner issue the agent's key, or ask an organization administrator to set up a shared credential for this server, then retry", slug, where)}
+	return agentOwnerOnlyRefusal{&metaMemberError{message: fmt.Sprintf("server %q refused this call: the agent's connection to it belongs to a different member than the one who issued the agent's key, and an agent key can only use connections owned by the member who issued it. "+
+		"The agent's permissions do not change that. To fix this, attach a connection owned by the key's issuer %s, have the connection's owner issue the agent's key, or ask an organization administrator to set up a shared credential for this server, then retry", slug, where)}}
+}
+
+// agentOwnerOnlyRefusal is an agent gateway member refused a connection its
+// key's issuer does not own.
+type agentOwnerOnlyRefusal struct{ *metaMemberError }
+
+func (e agentOwnerOnlyRefusal) Unwrap() error { return e.metaMemberError }
+
+// memberFailureDetail is the row detail a member failure carries beyond its
+// code, if any.
+func memberFailureDetail(err error) []mcpconnectionattempts.Option {
+	if _, ok := errors.AsType[agentOwnerOnlyRefusal](err); ok {
+		return []mcpconnectionattempts.Option{mcpconnectionattempts.Detail(authClientReasonNotKeyIssuers)}
+	}
+	return nil
 }
 
 // agentFixLinks builds an agent gateway's fix links. It reads the agent

@@ -355,7 +355,7 @@ func (s *Service) recordDialFailure(ctx context.Context, gate *metaGateContext, 
 	if stale, ok := errors.AsType[memberStaleChoiceError](err); ok && stale.saved {
 		return
 	}
-	var opts []mcpconnectionattempts.Option
+	opts := memberFailureDetail(err)
 	if id, ok := remotesessions.UnreadableRemoteSessionID(err); ok {
 		opts = append(opts, mcpconnectionattempts.RemoteSession(id))
 	}

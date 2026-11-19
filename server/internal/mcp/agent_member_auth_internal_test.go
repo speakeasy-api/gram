@@ -306,6 +306,7 @@ func TestAgentMemberRefusesAnotherMembersAttachedConnectionAsOwnerOnly(t *testin
 			require.True(t, ok, "a refused use, never a missing connection: %v", err)
 			require.Equal(t, tc.ownerOnly, access.ownerOnly)
 			require.NotContains(t, err.Error(), "user_owner", "the refusal never names the owner")
+			require.NotContains(t, err.Error(), "user_issuer", "the refusal never names the issuer")
 		})
 	}
 }

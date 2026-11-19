@@ -10,6 +10,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -352,6 +353,16 @@ func TestWithAgentMemberFix_ExplainsAnotherMembersConnection(t *testing.T) {
 
 	refused := agent.withAgentMemberFix(member, agentServerAccessError(member.slug))
 	require.NotContains(t, refused.Error(), "issued the agent's key", "other refusals keep their message")
+
+	// The connection row records a refused use, told apart by its detail,
+	// whether the member was lost from a listing or a call.
+	code, recorded := agent.listingFailureHappened(member, explained)
+	require.True(t, recorded)
+	require.Equal(t, mcpconnectionattempts.CodeNoServerAccess, code)
+	rec := mcpconnectionattemptstest.New(t)
+	rec.Recorder.Once(t.Context(), mcpconnectionattempts.ServerScope("org", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepMCPRequest, code, memberFailureDetail(explained)...)
+	require.Equal(t, authClientReasonNotKeyIssuers, rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess).SubReason)
+	require.Empty(t, memberFailureDetail(refused), "other refusals carry no owner-only detail")
 }
 
 // connection_status marks a row the agent's sign-in step fixes by the error

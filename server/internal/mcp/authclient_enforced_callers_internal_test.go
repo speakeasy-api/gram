@@ -19,9 +19,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -895,6 +898,23 @@ func TestEnforcedAgentKeyServiceAccountMember(t *testing.T) {
 		require.False(t, agentConnectionMissing(gate.withAgentMemberFix(member, agentServerAccessError(member.slug))))
 		require.False(t, agentConnectionMissing(gate.withAgentMemberFix(member, agentServerGapError(member.slug))))
 		require.False(t, agentConnectionMissing(agentServerAccessError(member.slug)), "the server's own endpoint sees the shared refusal")
+	})
+
+	// The server's own endpoint explains a connection the key's issuer does
+	// not own the same way, and its row tells it apart.
+	t.Run("a connection the key's issuer does not own is explained", func(t *testing.T) {
+		t.Parallel()
+		f, gate, member, _, _ := seed(t)
+		rec := mcpconnectionattemptstest.New(t)
+		f.service.connections = rec.Recorder
+		err := f.service.directAgentKeyError(t.Context(), f.authentication(urn.NewAgentSubject(gate.agentID)), agentServerOwnerOnlyError(member.slug))
+		shareable, ok := errors.AsType[*oops.ShareableError](err)
+		require.True(t, ok)
+		require.Equal(t, oops.CodeForbidden, shareable.Code)
+		require.ErrorContains(t, err, "belongs to a different member than the one who issued the agent's key")
+		require.NotContains(t, err.Error(), "review its permissions")
+		row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess)
+		require.Equal(t, authClientReasonNotKeyIssuers, row.SubReason)
 	})
 
 	t.Run("a service account the agent cannot use asks an admin of the server's project", func(t *testing.T) {

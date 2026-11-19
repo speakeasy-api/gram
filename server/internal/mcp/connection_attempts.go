@@ -886,7 +886,8 @@ func (s *Service) recordListingFailures(ctx context.Context, gate *metaGateConte
 			continue
 		}
 		if what, recorded := gate.listingFailureHappened(failed.member, failed.err); recorded {
-			s.connections.Once(ctx, scope, mcpconnectionattempts.StepDiscoveryMember, what, gate.fromRequest, mcpconnectionattempts.Member(failed.member.serverID), mcpconnectionattempts.Subject(subject), mcpconnectionattempts.Provider(memberUpstreamHost(failed.err)))
+			opts := append([]mcpconnectionattempts.Option{gate.fromRequest, mcpconnectionattempts.Member(failed.member.serverID), mcpconnectionattempts.Subject(subject), mcpconnectionattempts.Provider(memberUpstreamHost(failed.err))}, memberFailureDetail(failed.err)...)
+			s.connections.Once(ctx, scope, mcpconnectionattempts.StepDiscoveryMember, what, opts...)
 		}
 	}
 }
