@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/Badge";
 import type { CatalogInstallState } from "./catalogInstall";
 import type { CatalogServer } from "./hooks";
 import { ManualSetupBadge } from "./ManualSetupBadge";
-import { CatalogInstallButton } from "./ServerCard";
+import { CatalogInstallButton, TeamUsageNote } from "./ServerCard";
+import type { CatalogTeamUsage } from "./team-usage";
 
 interface ServerTableRowProps {
   server: CatalogServer;
@@ -16,6 +17,10 @@ interface ServerTableRowProps {
   installState: CatalogInstallState;
   /** Starts the install flow for this one server. */
   onAdd: () => void;
+  /** Whether the table has a "Your team" column (org admins only). */
+  showTeamUsage?: boolean;
+  /** Absent while it loads and for servers nobody uses. */
+  teamUsage?: CatalogTeamUsage;
 }
 
 export function ServerTableRow({
@@ -23,6 +28,8 @@ export function ServerTableRow({
   detailHref,
   installState,
   onAdd,
+  showTeamUsage = false,
+  teamUsage,
 }: ServerTableRowProps): JSX.Element {
   const displayName = server.title ?? server.registrySpecifier;
   const theme = useIsDarkTheme() ? "dark" : "light";
@@ -76,6 +83,13 @@ export function ServerTableRow({
           {server.description}
         </Text>
       </td>
+
+      {/* The team's own use of the server; fills in after the rows load. */}
+      {showTeamUsage && (
+        <td className="relative z-20 px-3 py-3">
+          {teamUsage && <TeamUsageNote usage={teamUsage} />}
+        </td>
+      )}
 
       {/* Add — sits above the row's stretched link overlay so it stays
           clickable without navigating. */}

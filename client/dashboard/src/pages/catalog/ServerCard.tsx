@@ -7,11 +7,17 @@ import { Text } from "@/components/ui/Text";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Plus } from "lucide-react";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Plus, Users } from "lucide-react";
 import { Link } from "react-router";
 import type { CatalogInstallState } from "./catalogInstall";
 import type { CatalogServer } from "./hooks";
 import { ManualSetupBadge } from "./ManualSetupBadge";
+import {
+  TEAM_USAGE_TOOLTIP,
+  teamUsageLabel,
+  type CatalogTeamUsage,
+} from "./team-usage";
 
 interface ServerCardProps {
   server: CatalogServer;
@@ -20,6 +26,11 @@ interface ServerCardProps {
   installState: CatalogInstallState;
   /** Starts the install flow for this one server. */
   onAdd: () => void;
+  /**
+   * How much the team already uses this server directly, from Shadow MCP.
+   * Absent while it loads, for servers nobody uses, and for non-admins.
+   */
+  teamUsage?: CatalogTeamUsage;
 }
 
 export function CatalogInstallButton({
@@ -74,6 +85,7 @@ export function ServerCard({
   detailHref,
   installState,
   onAdd,
+  teamUsage,
 }: ServerCardProps): JSX.Element {
   const displayName = server.title ?? server.registrySpecifier;
   const theme = useIsDarkTheme() ? "dark" : "light";
@@ -145,8 +157,11 @@ export function ServerCard({
           {server.description}
         </Text>
 
-        {/* Footer row with the install action */}
-        <div className="mt-auto flex items-center justify-end gap-2 pt-2">
+        {/* Footer row: the team's own use of the server, then the install
+            action. The usage fills in after the cards load, in a row that is
+            already there, so nothing moves. */}
+        <div className="mt-auto flex items-center justify-between gap-2 pt-2">
+          {teamUsage ? <TeamUsageNote usage={teamUsage} /> : <span />}
           <CatalogInstallButton
             state={installState}
             onAdd={onAdd}
@@ -155,5 +170,21 @@ export function ServerCard({
         </div>
       </Card.Entity>
     </Link>
+  );
+}
+
+/** "Used by 5 people · 51 calls", with where the counts come from on hover. */
+export function TeamUsageNote({
+  usage,
+}: {
+  usage: CatalogTeamUsage;
+}): JSX.Element {
+  return (
+    <SimpleTooltip tooltip={TEAM_USAGE_TOOLTIP}>
+      <span className="text-muted-foreground flex min-w-0 items-center gap-1.5 text-xs">
+        <Users className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        <span className="truncate">{teamUsageLabel(usage)}</span>
+      </span>
+    </SimpleTooltip>
   );
 }

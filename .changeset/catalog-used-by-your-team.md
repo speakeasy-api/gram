@@ -2,4 +2,4 @@
 "dashboard": minor
 ---
 
-Org admins can switch the MCP catalog to "Used by your team" to see the remote MCP servers their team's agents already connect to directly, most used first. Local commands and servers on localhost or a private network are left out. Add opens the catalog entry's install flow when one exists, or the remote MCP server form with the URL and name filled in. Servers already in Speakeasy show as added, with a link to open them.
+Catalog cards now show how much your team already uses each server, from Shadow MCP: "Used by 5 people · 51 calls". The table view has a matching "Your team" column, and a "Most used by your team" sort puts those servers first. Org admins see this. The usage loads after the catalog, so the cards never wait for it.

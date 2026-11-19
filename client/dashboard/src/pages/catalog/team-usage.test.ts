@@ -1,12 +1,20 @@
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { describe, expect, it } from "vitest";
-import {
-  isHostableShadowServer,
-  isLocalServerUrl,
-  teamUsedServers,
-} from "./team-usage";
+import type { CatalogServer } from "./hooks";
+import { catalogTeamUsage, teamUsageLabel } from "./team-usage";
 
-function server(
+function entry(registrySpecifier: string, urls: string[]): CatalogServer {
+  return {
+    registrySpecifier,
+    description: "",
+    version: "1.0.0",
+    meta: {},
+    supportsDcr: true,
+    remotes: urls.map((url) => ({ url, transportType: "streamable-http" })),
+  } as unknown as CatalogServer;
+}
+
+function shadow(
   overrides: Partial<ShadowMCPInventoryServer>,
 ): ShadowMCPInventoryServer {
   return {
@@ -26,97 +34,76 @@ function server(
   } as ShadowMCPInventoryServer;
 }
 
-describe("isLocalServerUrl", () => {
-  it.each([
-    "http://localhost:3000/mcp",
-    "http://127.0.0.1:8080/mcp",
-    "http://[::1]:8080/mcp",
-    "http://0.0.0.0/mcp",
-    "http://10.1.2.3/mcp",
-    "http://172.20.0.4/mcp",
-    "http://192.168.1.10/mcp",
-    "http://169.254.169.254/mcp",
-    "http://[fd12::1]/mcp",
-    "http://[::ffff:127.0.0.1]/mcp",
-    "http://[::ffff:10.0.0.5]/mcp",
-    "http://[0:0:0:0:0:ffff:c0a8:101]/mcp",
-    "http://mcp:8080/mcp",
-    "https://tools.localhost/mcp",
-    "http://printer.local/mcp",
-    "not a url",
-  ])("treats %s as local", (url) => {
-    expect(isLocalServerUrl(url)).toBe(true);
+describe("catalogTeamUsage", () => {
+  const catalog = [
+    entry("app.linear/linear", [
+      "https://mcp.linear.app/mcp",
+      "https://mcp.linear.app/sse",
+    ]),
+    entry("com.notion/notion", ["https://mcp.notion.com/mcp"]),
+  ];
+
+  it("matches inventory URLs to catalog entries the way Shadow MCP compares them", () => {
+    const usage = catalogTeamUsage(catalog, [
+      shadow({
+        canonicalServerUrl: "https://MCP.notion.com:443/mcp/",
+        observedUseCount: 36,
+        userCount: 5,
+      }),
+    ]);
+    expect(usage.get("com.notion/notion")).toEqual({
+      userCount: 5,
+      callCount: 36,
+    });
   });
 
-  it.each([
-    "https://mcp.linear.app/mcp",
-    "https://8.8.8.8/mcp",
-    "https://172.32.0.1/mcp",
-    "https://postgres.internal.example.com/mcp",
-    "https://[::ffff:8.8.8.8]/mcp",
-  ])("treats %s as public", (url) => {
-    expect(isLocalServerUrl(url)).toBe(false);
+  it("adds calls across an entry's URLs but not people", () => {
+    const usage = catalogTeamUsage(catalog, [
+      shadow({
+        canonicalServerUrl: "https://mcp.linear.app/mcp",
+        observedUseCount: 20,
+        userCount: 4,
+      }),
+      shadow({
+        canonicalServerUrl: "https://mcp.linear.app/sse",
+        observedUseCount: 3,
+        userCount: 2,
+      }),
+    ]);
+    expect(usage.get("app.linear/linear")).toEqual({
+      userCount: 4,
+      callCount: 23,
+    });
+  });
+
+  it("ignores local commands, unused rows and URLs outside the catalog", () => {
+    const usage = catalogTeamUsage(catalog, [
+      shadow({
+        targetKind: "stdio_command",
+        canonicalServerUrl: "https://mcp.notion.com/mcp",
+        observedUseCount: 9,
+      }),
+      shadow({
+        canonicalServerUrl: "https://mcp.linear.app/mcp",
+        observedUseCount: 0,
+        userCount: 0,
+      }),
+      shadow({
+        canonicalServerUrl: "https://tools.example.com/mcp",
+        observedUseCount: 50,
+      }),
+    ]);
+    expect(usage.size).toBe(0);
   });
 });
 
-describe("isHostableShadowServer", () => {
-  it("keeps public HTTP servers", () => {
-    expect(isHostableShadowServer(server({}))).toBe(true);
-    expect(
-      isHostableShadowServer(
-        server({ canonicalServerUrl: "http://mcp.example.com/mcp" }),
-      ),
-    ).toBe(true);
-  });
-
-  it("drops local commands, local hosts and other schemes", () => {
-    expect(
-      isHostableShadowServer(
-        server({
-          targetKind: "stdio_command",
-          canonicalServerUrl: "npx some-mcp",
-        }),
-      ),
-    ).toBe(false);
-    expect(
-      isHostableShadowServer(
-        server({ canonicalServerUrl: "http://localhost:3000/mcp" }),
-      ),
-    ).toBe(false);
-    expect(
-      isHostableShadowServer(
-        server({ canonicalServerUrl: "ws://mcp.example.com/mcp" }),
-      ),
-    ).toBe(false);
-  });
-});
-
-describe("teamUsedServers", () => {
-  it("keeps hostable servers, most used first", () => {
-    const sorted = teamUsedServers([
-      server({
-        canonicalServerUrl: "https://b.example.com/mcp",
-        observedUseCount: 5,
-        userCount: 1,
-      }),
-      server({
-        canonicalServerUrl: "http://localhost:1/mcp",
-        observedUseCount: 900,
-      }),
-      server({
-        canonicalServerUrl: "https://a.example.com/mcp",
-        observedUseCount: 40,
-      }),
-      server({
-        canonicalServerUrl: "https://c.example.com/mcp",
-        observedUseCount: 5,
-        userCount: 3,
-      }),
-    ]);
-    expect(sorted.map((s) => s.canonicalServerUrl)).toEqual([
-      "https://a.example.com/mcp",
-      "https://c.example.com/mcp",
-      "https://b.example.com/mcp",
-    ]);
+describe("teamUsageLabel", () => {
+  it("names people and calls", () => {
+    expect(teamUsageLabel({ userCount: 5, callCount: 1234 })).toBe(
+      "Used by 5 people · 1,234 calls",
+    );
+    expect(teamUsageLabel({ userCount: 1, callCount: 1 })).toBe(
+      "Used by 1 person · 1 call",
+    );
   });
 });

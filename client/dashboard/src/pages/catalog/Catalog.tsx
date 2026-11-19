@@ -5,10 +5,7 @@ import { Heading } from "@/components/ui/Heading";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
-import { useOrganization, useProject } from "@/contexts/Auth";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
-import { useShadowMCPPolicyInventory } from "@/components/shadow-mcp/useShadowMCPPolicyInventory";
-import { useRBAC } from "@/hooks/useRBAC";
+import { useProject } from "@/contexts/Auth";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import { useSdkClient } from "@/contexts/Sdk";
 import { invalidateAllMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers.js";
@@ -40,13 +37,7 @@ import { filterAndSortServers } from "./hooks/serverMetadata";
 import { useFilterState, type SortOption } from "./hooks/useFilterState";
 import { ServerCard } from "./ServerCard";
 import { ServerTableRow } from "./ServerTableRow";
-import { TeamUsageTable } from "./TeamUsageTable";
-import {
-  CATALOG_SHOW_PARAM,
-  CATALOG_SHOW_TEAM,
-  type CatalogShow,
-  teamUsedServers,
-} from "./team-usage";
+import { useCatalogTeamUsage } from "./useCatalogTeamUsage";
 
 // Sort options shown in the toolbar (mirrors the legacy SortDropdown order).
 const CATALOG_SORT_OPTIONS: { value: SortOption; label: string }[] = [
@@ -55,6 +46,12 @@ const CATALOG_SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "alphabetical", label: "A → Z" },
   { value: "alphabetical-desc", label: "Z → A" },
 ];
+
+// Offered to org admins only, the people who can see Shadow MCP usage.
+const TEAM_USAGE_SORT_OPTION: { value: SortOption; label: string } = {
+  value: "team-usage",
+  label: "Most used by your team",
+};
 
 export function CatalogRoot(): JSX.Element {
   return <Outlet />;
@@ -77,46 +74,8 @@ function CatalogInner() {
   const navigate = useNavigate();
   // Deep link from a gateway's Add member sheet: servers installed here get
   // attached to that gateway as members, and the flow returns to it.
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const attachToGatewayId = searchParams.get("attachToGateway");
-
-  // The team view reads the org's Shadow MCP inventory, which only org admins
-  // may see, so everyone else gets the catalog alone and never fires the call.
-  // It is also left out while adding members to a gateway, a flow about the
-  // catalog's own entries.
-  const organization = useOrganization();
-  const { hasScope, isLoading: rbacLoading } = useRBAC();
-  const canSeeTeamUsage =
-    !rbacLoading &&
-    !attachToGatewayId &&
-    hasScope("org:admin", organization.id);
-  const show: CatalogShow =
-    canSeeTeamUsage &&
-    searchParams.get(CATALOG_SHOW_PARAM) === CATALOG_SHOW_TEAM
-      ? CATALOG_SHOW_TEAM
-      : "all";
-  const setShow = (next: CatalogShow) => {
-    setSearchParams(
-      (prev) => {
-        const params = new URLSearchParams(prev);
-        if (next === CATALOG_SHOW_TEAM) {
-          params.set(CATALOG_SHOW_PARAM, CATALOG_SHOW_TEAM);
-          return params;
-        }
-        params.delete(CATALOG_SHOW_PARAM);
-        return params;
-      },
-      { replace: true },
-    );
-  };
-  const teamInventory = useShadowMCPPolicyInventory(
-    project.id,
-    show === CATALOG_SHOW_TEAM,
-  );
-  const teamServers = useMemo(
-    () => teamUsedServers(teamInventory.data ?? []),
-    [teamInventory.data],
-  );
 
   const attachInstalledToGateway = async (result: {
     status: "succeeded" | "failed";
@@ -184,14 +143,22 @@ function CatalogInner() {
     [data],
   );
 
+  // The team's own use of each server, from Shadow MCP. It loads after the
+  // catalog and fills in on the cards; nothing waits for it.
+  const { usage: teamUsage, canSeeUsage } = useCatalogTeamUsage(
+    allServers,
+    !isLoading && allServers.length > 0,
+  );
+
   // Search, sort, and filter the full catalog client-side.
   const filteredServers = useMemo(() => {
     return filterAndSortServers(
       allServers,
       filterState,
       searchQuery || undefined,
+      teamUsage,
     );
-  }, [allServers, filterState, searchQuery]);
+  }, [allServers, filterState, searchQuery, teamUsage]);
 
   // Check if any granular filters are active
   const hasActiveFilters = useMemo(
@@ -231,80 +198,30 @@ function CatalogInner() {
           onChange: setSearchQuery,
           placeholder: "Search MCP servers...",
         }}
-        toolbarActions={
-          canSeeTeamUsage ? (
-            <SegmentedControl<CatalogShow>
-              ariaLabel="Which servers to show"
-              value={show}
-              onChange={setShow}
-              options={[
-                {
-                  value: "all",
-                  label: "All servers",
-                  tooltip: "Every server in the catalog",
-                },
-                {
-                  value: CATALOG_SHOW_TEAM,
-                  label: "Used by your team",
-                  tooltip:
-                    "Remote servers your team's agents connect to directly, most used first",
-                },
-              ]}
-            />
-          ) : undefined
-        }
-        filters={
-          show === CATALOG_SHOW_TEAM
-            ? undefined
-            : {
-                schema: CATALOG_FILTERS,
-                values: dimensionFilters.values,
-                optionsById: CATALOG_FILTER_OPTIONS,
-                onChange: dimensionFilters.setValue as (
-                  id: string,
-                  value: FilterValue,
-                ) => void,
-                onClear: dimensionFilters.clearValue as (id: string) => void,
-                onClearAll: dimensionFilters.clearAll,
-              }
-        }
-        sort={
-          show === CATALOG_SHOW_TEAM
-            ? undefined
-            : {
-                value: pageState.sort,
-                onChange: (v) => pageState.setSort(v as SortOption),
-                options: CATALOG_SORT_OPTIONS,
-              }
-        }
-        viewToggle={
-          show === CATALOG_SHOW_TEAM
-            ? undefined
-            : { value: viewMode, onChange: setViewMode }
-        }
-        onRefresh={() => {
-          if (show === CATALOG_SHOW_TEAM) {
-            void teamInventory.refetch();
-            return;
-          }
-          void refetchCatalog();
+        filters={{
+          schema: CATALOG_FILTERS,
+          values: dimensionFilters.values,
+          optionsById: CATALOG_FILTER_OPTIONS,
+          onChange: dimensionFilters.setValue as (
+            id: string,
+            value: FilterValue,
+          ) => void,
+          onClear: dimensionFilters.clearValue as (id: string) => void,
+          onClearAll: dimensionFilters.clearAll,
         }}
-        isRefreshing={
-          show === CATALOG_SHOW_TEAM ? teamInventory.isFetching : isFetching
-        }
+        sort={{
+          value: pageState.sort,
+          onChange: (v) => pageState.setSort(v as SortOption),
+          options: canSeeUsage
+            ? [TEAM_USAGE_SORT_OPTION, ...CATALOG_SORT_OPTIONS]
+            : CATALOG_SORT_OPTIONS,
+        }}
+        viewToggle={{ value: viewMode, onChange: setViewMode }}
+        onRefresh={() => void refetchCatalog()}
+        isRefreshing={isFetching}
       >
-        {show === CATALOG_SHOW_TEAM ? (
-          <TeamUsageTable
-            servers={teamServers}
-            catalog={allServers}
-            catalogLoading={isLoading}
-            search={searchQuery}
-            isLoading={teamInventory.isPending}
-            isError={teamInventory.isError}
-            onRetry={() => void teamInventory.refetch()}
-            onAddFromCatalog={handleAdd}
-          />
-        ) : isLoading ? (
+        {/* Server grid / table */}
+        {isLoading ? (
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             {Array.from({ length: 6 }, (_, i) => `skeleton-${i}`).map((id) => (
               <Skeleton key={id} className="h-[200px]" />
@@ -323,6 +240,7 @@ function CatalogInner() {
                   )}
                   installState={installState(server)}
                   onAdd={() => handleAdd(server)}
+                  teamUsage={teamUsage.get(server.registrySpecifier)}
                 />
               );
             })}
@@ -335,6 +253,7 @@ function CatalogInner() {
                 { label: "Name" },
                 { label: "Version" },
                 { label: "Description" },
+                ...(canSeeUsage ? [{ label: "Your team" }] : []),
                 { label: "" },
               ]}
             >
@@ -349,6 +268,8 @@ function CatalogInner() {
                     )}
                     installState={installState(server)}
                     onAdd={() => handleAdd(server)}
+                    showTeamUsage={canSeeUsage}
+                    teamUsage={teamUsage.get(server.registrySpecifier)}
                   />
                 );
               })}
@@ -357,7 +278,7 @@ function CatalogInner() {
         )}
 
         {/* Empty state */}
-        {show === "all" && !isLoading && filteredServers.length === 0 && (
+        {!isLoading && filteredServers.length === 0 && (
           <EmptySearchResult
             hasFilters={hasActiveFilters || searchQuery !== ""}
             onClear={() => {
