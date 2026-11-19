@@ -72,12 +72,23 @@ describe("Datadog RUM collection", () => {
     expect(datadogRum.init).not.toHaveBeenCalled();
   });
 
-  it.each(Object.keys(rumSettings))("stays off without %s", (key) => {
+  it.each(Object.keys(rumSettings))("stays off and warns without %s", (key) => {
     const partial: Record<string, unknown> = { ...rumSettings };
     delete partial[key];
     setRuntimeConfig(partial);
     render(<TelemetryProvider>{null}</TelemetryProvider>);
     expect(datadogRum.init).not.toHaveBeenCalled();
+    expect(console.warn).toHaveBeenCalledWith(
+      expect.stringContaining("incomplete Datadog RUM settings"),
+    );
+  });
+
+  it("does not warn about RUM when no RUM setting is present", () => {
+    setRuntimeConfig({});
+    render(<TelemetryProvider>{null}</TelemetryProvider>);
+    expect(console.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining("Datadog RUM"),
+    );
   });
 });
 
@@ -118,5 +129,19 @@ describe("missing PostHog settings", () => {
     expect(console.warn).toHaveBeenCalledWith(
       expect.stringContaining("feature flags are off"),
     );
+  });
+
+  it("does not warn on the public share page, which never starts PostHog", async () => {
+    window.history.pushState({}, "", "/shared/skills/token");
+    try {
+      vi.resetModules();
+      const { TelemetryProvider: FreshProvider } =
+        await import("./TelemetryProvider");
+      setRuntimeConfig(null);
+      render(<FreshProvider>{null}</FreshProvider>);
+      expect(console.warn).not.toHaveBeenCalled();
+    } finally {
+      window.history.pushState({}, "", "/");
+    }
   });
 });

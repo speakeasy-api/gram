@@ -148,9 +148,10 @@ export function useMCPTools({
         const result = settled[i]!;
         if (result.status === "rejected") {
           rejected++;
+          // The error can carry the endpoint URL and response body, so log
+          // only which server failed.
           console.error(
-            `Failed to list MCP tools from ${server.name ?? deriveNameFromUrl(server.url)}:`,
-            result.reason,
+            `Failed to list MCP tools from ${server.name ?? deriveNameFromUrl(server.url)}.`,
           );
           continue;
         }
@@ -312,10 +313,11 @@ async function withSkillTool(
       },
       discovered: true,
     };
-  } catch (error) {
+  } catch {
+    // The error can carry the endpoint URL and response body, so log only
+    // which server failed.
     console.error(
-      `Failed to list MCP skills from ${server.name ?? deriveNameFromUrl(server.url)}:`,
-      error,
+      `Failed to list MCP skills from ${server.name ?? deriveNameFromUrl(server.url)}.`,
     );
     return { tools, discovered: false };
   }

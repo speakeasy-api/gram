@@ -2,7 +2,11 @@ import {
   rememberLandingUtm,
   setAnalyticsSessionIdSource,
 } from "@/lib/signup-attribution";
-import { datadogRumConfig, posthogConfig } from "@/lib/runtime-config";
+import {
+  datadogRumConfig,
+  hasAnyDatadogRumSetting,
+  posthogConfig,
+} from "@/lib/runtime-config";
 import { getServerURL } from "@/lib/utils";
 import posthog from "posthog-js";
 import { type ReactNode, useEffect } from "react";
@@ -81,6 +85,7 @@ export const TelemetryProvider = (props: {
   if (
     !posthogSettings &&
     !warnedMissingPostHog &&
+    !isPublicSharePath() &&
     !shouldUseDevTelemetry(serverURL)
   ) {
     // Without PostHog every feature flag reads false. Every deployment except
@@ -119,6 +124,11 @@ export const TelemetryProvider = (props: {
     }
 
     const rum = datadogRumConfig();
+    if (!rum && hasAnyDatadogRumSetting()) {
+      console.warn(
+        "Dashboard runtime configuration has incomplete Datadog RUM settings; RUM is off.",
+      );
+    }
     if (rum) {
       datadogRum.init({
         applicationId: rum.applicationId,
