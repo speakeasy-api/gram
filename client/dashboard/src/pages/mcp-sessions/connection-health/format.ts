@@ -219,7 +219,7 @@ export function plural(n: number, one: string, many = `${one}s`): string {
   return `${formatCount(n)} ${n === 1 ? one : many}`;
 }
 
-export const PROBLEM_RULES: Record<ProblemRule, string> = {
+const PROBLEM_RULES: Record<ProblemRule, string> = {
   three_people_same_service:
     "3 or more people got the same kind of failure from one service and have not connected since.",
   three_people_same_server:
