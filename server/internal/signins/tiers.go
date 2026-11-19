@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/signins/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -49,32 +50,48 @@ func TierMaxAge(tier string) time.Duration { return tierMaxAge[tier] }
 // ValidTier reports whether tier names a known sign-in tier.
 func ValidTier(tier string) bool { return slices.Contains(AllTiers, tier) }
 
-// classify maps a recorded sign-in to its tier, or a reason it has none.
-// Evidence that can't be confirmed fails closed.
-func classify(row repo.GetSignInEligibilityRow) (string, Reason) {
-	switch row.AuthenticationMethod.String {
+// methodTier maps an authentication method to its tier; false when no tier accepts it.
+func methodTier(method string) (string, bool) {
+	switch method {
 	case MethodSSO:
-		return TierSSO, ReasonEligible
+		return TierSSO, true
 	case MethodGoogleOAuth:
-		if !onVerifiedDomain(row.IdpHostedDomain.String, row.VerifiedDomains) {
-			return "", ReasonUnmanagedAccount
-		}
-		return TierGoogle, ReasonEligible
+		return TierGoogle, true
 	case MethodMicrosoftOAuth:
+		return TierMicrosoft, true
+	case MethodMagicAuth:
+		return TierMagicLink, true
+	case MethodPassword:
+		return TierPassword, true
+	default:
+		return "", false
+	}
+}
+
+// accountEvidence checks that a social sign-in's account belongs to the
+// organization. Evidence that can't be confirmed fails closed.
+func accountEvidence(tier string, row repo.GetSignInEligibilityRow) Reason {
+	switch tier {
+	case TierGoogle:
+		// '' means Google answered with no Workspace domain: a personal account.
+		return managedDomain(row.IdpHostedDomain, row.VerifiedDomains, true)
+	case TierMicrosoft:
 		tenant := row.IdpTenantID.String
-		if tenant == "" || strings.EqualFold(tenant, MicrosoftConsumerTenantID) || !onVerifiedDomain(row.IdpHostedDomain.String, row.VerifiedDomains) {
-			return "", ReasonUnmanagedAccount
+		switch {
+		case strings.EqualFold(tenant, MicrosoftConsumerTenantID):
+			return ReasonUnmanagedAccount
+		case tenant == "":
+			return ReasonAccountEvidenceUnavailable
+		}
+		if reason := managedDomain(row.IdpHostedDomain, row.VerifiedDomains, false); reason != ReasonEligible {
+			return reason
 		}
 		if !tenantAllowed(tenant, row.AllowedMicrosoftTenantIds) {
-			return "", ReasonTenantNotAllowed
+			return ReasonTenantNotAllowed
 		}
-		return TierMicrosoft, ReasonEligible
-	case MethodMagicAuth:
-		return TierMagicLink, ReasonEligible
-	case MethodPassword:
-		return TierPassword, ReasonEligible
+		return ReasonEligible
 	default:
-		return "", ReasonMethodNotEligible
+		return ReasonEligible
 	}
 }
 
@@ -98,6 +115,21 @@ func tenantAllowed(tenant string, allowed []string) bool {
 		pinned, err := uuid.Parse(a)
 		return err == nil && strings.EqualFold(a, pinned.String()) && pinned == id && !strings.EqualFold(a, MicrosoftConsumerTenantID)
 	})
+}
+
+// managedDomain: NULL is unknown evidence; an empty domain is a personal
+// account only where the provider answered with none; an unverified one is the admin's.
+func managedDomain(domain pgtype.Text, verified []string, emptyIsPersonal bool) Reason {
+	switch {
+	case !domain.Valid || (domain.String == "" && !emptyIsPersonal):
+		return ReasonAccountEvidenceUnavailable
+	case domain.String == "":
+		return ReasonUnmanagedAccount
+	case !onVerifiedDomain(domain.String, verified):
+		return ReasonAccountDomainNotVerified
+	default:
+		return ReasonEligible
+	}
 }
 
 func onVerifiedDomain(domain string, verified []string) bool {

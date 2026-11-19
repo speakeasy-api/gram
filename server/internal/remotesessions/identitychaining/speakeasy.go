@@ -131,11 +131,14 @@ func (s speakeasySource) authorizeIdentity(ctx context.Context, logger *slog.Log
 	return success
 }
 
-// signInRefusalReason: refusals a new sign-in can fix ask for one; the rest are the admin's.
+// signInRefusalReason: a new sign-in, the person, or the admin fixes each refusal.
 func signInRefusalReason(reason signins.Reason) Reason {
 	switch reason {
-	case signins.ReasonUnmanagedAccount, signins.ReasonMethodNotEligible, signins.ReasonMethodNotAllowed, signins.ReasonTenantNotAllowed,
-		signins.ReasonOrganizationDisabled, signins.ReasonNotMember, signins.ReasonDeprovisioned, signins.ReasonEmailNotVerified, signins.ReasonEmailDomain:
+	case signins.ReasonUnmanagedAccount:
+		return ReasonUnmanagedAccount
+	case signins.ReasonMethodNotEligible, signins.ReasonMethodNotAllowed, signins.ReasonTenantNotAllowed, signins.ReasonOrganizationDisabled,
+		signins.ReasonNotMember, signins.ReasonDeprovisioned, signins.ReasonEmailNotVerified, signins.ReasonEmailDomain,
+		signins.ReasonAccountDomainNotVerified, signins.ReasonAccountEvidenceUnavailable:
 		return ReasonIneligibleIdentity
 	case signins.ReasonEligible, signins.ReasonSessionNotFound, signins.ReasonSessionExpired, signins.ReasonNotLinked, signins.ReasonNotUserSubject,
 		signins.ReasonSignInRevoked, signins.ReasonExpired, signins.ReasonEmailChanged, signins.ReasonAuthTimeUnknown:
