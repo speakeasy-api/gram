@@ -292,7 +292,10 @@ export function useOwnerConnections(
       const authRead = auth[personal.indexOf(server)];
       if (shared(server) || !authRead?.data || authRead.isError) continue;
       if (bindingsHidden(server)) {
-        assignedByServer.set(server.id, { status: "forbidden" });
+        // A failed read of the viewer's own connection stays an error: it
+        // is theirs to retry, and the tab counts it.
+        if (byServer.get(server.id)?.status !== "error")
+          assignedByServer.set(server.id, { status: "forbidden" });
         continue;
       }
       const clientsRead = signIns(server);

@@ -24,6 +24,8 @@ const mocks = vi.hoisted(() => {
     bindings: [] as unknown[],
     // Set when reading the agent's attachments fails.
     bindingsError: undefined as Error | undefined,
+    // Set when reading the viewer's own sessions fails.
+    sessionsError: false,
   };
 });
 vi.mock("@/hooks/useUpstreamAuthEnforcement", () => ({
@@ -67,6 +69,8 @@ vi.mock("@tanstack/react-query", () => ({
               refetch: mocks.refetch,
             }
           : { data: { items: mocks.bindings }, refetch: mocks.refetch };
+      if (queryKey[1] === "sessions" && mocks.sessionsError)
+        return { isError: true, refetch: mocks.refetch };
       return {
         data: queryKey[1] === "clients" ? mocks.clients : mocks.sessions,
         refetch: mocks.refetch,
@@ -83,6 +87,7 @@ afterEach(() => {
   mocks.enforcement = "legacy";
   mocks.bindings = [];
   mocks.bindingsError = undefined;
+  mocks.sessionsError = false;
 });
 
 // The org-wide issuer lists a personal sign-in that belongs to another server.
@@ -511,6 +516,21 @@ describe("an agent whose attachments the viewer may not read", () => {
     });
     expect(result.current.assignedByServer?.get(server.id)).toEqual({
       status: "forbidden",
+    });
+  });
+
+  it("keeps a failed read of the viewer's own connection an error", () => {
+    mocks.bindingsError = httpError(403);
+    mocks.auth.set(server.id, {
+      data: { status: "configured", clients: [mocks.personalClient] },
+    });
+    mocks.sessionsError = true;
+    const { result } = renderHook(() =>
+      useOwnerConnections([server], true, "agent_example"),
+    );
+    expect(result.current.byServer.get(server.id)).toEqual({ status: "error" });
+    expect(result.current.assignedByServer?.get(server.id)).toEqual({
+      status: "error",
     });
   });
 

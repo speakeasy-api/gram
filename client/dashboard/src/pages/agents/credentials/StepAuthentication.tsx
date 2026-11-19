@@ -259,10 +259,12 @@ export function StepAuthentication({
                         (connection?.status === "missing" ||
                           connection?.status === "ready" ||
                           connection?.status === "ended" ||
-                          // A read that failed and is being retried keeps a
-                          // personal connection already picked, rather than
-                          // clearing it as no longer offered.
-                          (connection?.status === "error" &&
+                          // A read that failed and is being retried, or one
+                          // the viewer may not make, keeps a personal
+                          // connection already picked, rather than clearing
+                          // it as no longer offered.
+                          ((connection?.status === "error" ||
+                            connection?.status === "forbidden") &&
                             choice === ACCOUNT_CHOICE))
                       }
                       pickSole
