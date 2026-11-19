@@ -107,6 +107,20 @@ func TestSnapshotPatternPriorityIgnoresInputOrder(t *testing.T) {
 	}
 }
 
+func TestSnapshotIdenticalPatternsPreferLowerProductID(t *testing.T) {
+	t.Parallel()
+	products := []Product{
+		{ID: "vendor-b", Documents: []Document{{URL: "https://example.com/oauth/*/client.json", Enabled: true, Pattern: true}}},
+		{ID: "vendor-a", Documents: []Document{{URL: "https://example.com/oauth/*/client.json", Enabled: true, Pattern: true}}},
+	}
+	for range 2 {
+		got, ok := NewSnapshot(products).CatalogPreset("https://example.com/oauth/some-client/client.json")
+		require.True(t, ok)
+		require.Equal(t, "vendor-a", got.ProductID)
+		slices.Reverse(products)
+	}
+}
+
 func TestSnapshotDisabledDocumentsDoNotShadow(t *testing.T) {
 	t.Parallel()
 	products := []Product{
