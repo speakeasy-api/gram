@@ -98,6 +98,7 @@ export function useServerTools(
     target: { kind: "mcpServer", id: previewEnabled ? server?.id : undefined },
     userSessionIssuerId: mcpServer.data?.userSessionIssuerId,
     project: projectRef,
+    throwOnError: false,
   });
   const live = useRemoteMcpToolConnection({
     mcpUrl: platformSlug ? `${getServerURL()}/mcp/${platformSlug}` : undefined,
@@ -143,6 +144,8 @@ export function useServerTools(
   if (!platformSlug) return { status: "needs-connect", connect: undefined };
   if (live.loading) return { status: "loading" };
   if (live.needsAuth) return { status: "needs-connect", connect: live.connect };
+  if (dashboardToken.isError)
+    return { status: "error", retry: dashboardToken.refetch };
   if (live.isError) return { status: "error", retry: live.refetch };
   return { status: "ready", tools: liveTools ?? [] };
 }

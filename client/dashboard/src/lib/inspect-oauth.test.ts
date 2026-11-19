@@ -46,6 +46,17 @@ afterEach(() => {
 });
 
 describe("Inspect OAuth", () => {
+  it("does not send OAuth credentials over non-loopback HTTP", async () => {
+    await expect(
+      prepareInspectAuthorization({
+        serverUrl,
+        tokenUrl: "http://platform.example/mcp/test-server/token",
+        grantKey,
+        userId: "viewer",
+      }),
+    ).rejects.toThrow("secure OAuth endpoint");
+  });
+
   it("exchanges a matching state and the original S256 verifier once, then scopes the grant to its target", async () => {
     const authorize = await start();
     const redirect = `${location.origin}${INSPECT_OAUTH_CALLBACK}`;

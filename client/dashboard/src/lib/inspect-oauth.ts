@@ -40,6 +40,23 @@ function base64url(bytes: Uint8Array) {
     .replace(/=+$/, "");
 }
 
+function oauthEndpoint(url: string): URL {
+  const endpoint = new URL(url, location.origin);
+  // HTTP is permitted only for directly addressed local development services.
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(
+    endpoint.hostname,
+  );
+  if (
+    (endpoint.protocol !== "https:" &&
+      !(loopback && endpoint.protocol === "http:")) ||
+    endpoint.username ||
+    endpoint.password
+  ) {
+    throw new Error("Inspect requires a secure OAuth endpoint.");
+  }
+  return endpoint;
+}
+
 const callbackUrl = () => new URL(INSPECT_OAUTH_CALLBACK, location.origin).href;
 
 export function readInspectGrant(
@@ -63,7 +80,8 @@ export async function prepareInspectAuthorization(input: {
     "SHA-256",
     new TextEncoder().encode(verifier),
   );
-  const authorize = new URL(`${input.serverUrl}/authorize`);
+  const authorize = oauthEndpoint(`${input.serverUrl}/authorize`);
+  const tokenUrl = oauthEndpoint(input.tokenUrl);
   authorize.search = new URLSearchParams({
     response_type: "code",
     client_id: clientId,
@@ -79,7 +97,7 @@ export async function prepareInspectAuthorization(input: {
     JSON.stringify({
       state,
       verifier,
-      tokenUrl: new URL(input.tokenUrl, location.origin).href,
+      tokenUrl: tokenUrl.href,
       returnTo: location.pathname + location.search + location.hash,
       grantKey: input.grantKey,
       userId: input.userId,
@@ -114,7 +132,7 @@ export function acceptInspectCallback(
     returnTo: destination.href,
     exchange: async (): Promise<string | undefined> => {
       if (query.has("error") || !code) return "Sign-in wasn't completed.";
-      const response = await fetch(tokenUrl, {
+      const response = await fetch(oauthEndpoint(tokenUrl).href, {
         method: "POST",
         credentials: "omit",
         redirect: "error",
