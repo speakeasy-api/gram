@@ -53,7 +53,7 @@ func Tools(executeToolSchema json.RawMessage) []Tool {
 		{
 			Name:        ToolListServers,
 			Title:       "List MCP Servers",
-			Description: "List member server names, slugs, and connection status. Use a slug from this list with describe_server to read the member instructions before using its tools. Status \"unknown\" means not checked, not broken: this list does not contact remote servers; call connection_status to check sign-in.",
+			Description: "List member server names, slugs, and connection status. Use a slug from this list with describe_server to read the member instructions, when available, before using its tools. Status \"unknown\" means not checked, not broken: this list does not contact remote servers; call connection_status to check sign-in.",
 			InputSchema: listServersSchema,
 		},
 		{
