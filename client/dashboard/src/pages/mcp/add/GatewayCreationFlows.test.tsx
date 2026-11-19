@@ -344,6 +344,32 @@ it("saves an unproxied server without verifying connectivity", async () => {
   );
 });
 
+it("keeps a name a setup link filled in when the URL checks out", () => {
+  state.flow.gatewayId = null;
+  state.verifyResult.mockReturnValue(undefined);
+  const view = render(<CreateRemoteMcp />, {
+    wrapper: ({ children }) => (
+      <MemoryRouter
+        initialEntries={[
+          "/?url=https%3A%2F%2Fexample.com%2Fmcp&name=Team%20tools",
+        ]}
+      >
+        {children}
+      </MemoryRouter>
+    ),
+  });
+  state.verifyResult.mockReturnValue({
+    verified: true,
+    url: "https://example.com/mcp",
+    serverName: "Example Server",
+  });
+  view.rerender(<CreateRemoteMcp />);
+  expect(
+    (screen.getByLabelText("Display name (optional)") as HTMLInputElement)
+      .value,
+  ).toBe("Team tools");
+});
+
 it("keeps a name the person typed when the URL checks out", async () => {
   state.flow.gatewayId = null;
   state.verifyResult.mockReturnValue(undefined);
