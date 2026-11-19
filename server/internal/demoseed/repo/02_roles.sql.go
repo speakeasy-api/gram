@@ -792,8 +792,8 @@ func (q *Queries) RolesInsertRoleAssignment(ctx context.Context, arg RolesInsert
 }
 
 const rolesInsertRolePlugin = `-- name: RolesInsertRolePlugin :one
-INSERT INTO plugins (organization_id, project_id, name, slug, auto_created)
-VALUES ($1, $2, $3, $4, true)
+INSERT INTO plugins (organization_id, project_id, name, slug, auto_created, auto_add_servers_enabled)
+VALUES ($1, $2, $3, $4, true, true)
 RETURNING id
 `
 
@@ -804,6 +804,9 @@ type RolesInsertRolePluginParams struct {
 	Slug           string
 }
 
+// Role plugins opt in to automatic server adding, so the seeded role server
+// contents match what role delivery would keep in them. Engineering Essentials
+// and Default stay off to show a hand-managed server list.
 func (q *Queries) RolesInsertRolePlugin(ctx context.Context, arg RolesInsertRolePluginParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, rolesInsertRolePlugin,
 		arg.OrganizationID,

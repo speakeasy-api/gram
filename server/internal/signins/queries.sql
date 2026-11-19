@@ -133,6 +133,16 @@ WHERE organization_id = @organization_id
   AND user_id = @user_id
   AND workos_session_id = @workos_session_id;
 
+-- name: GetSignInWorkOSSession :one
+-- The WorkOS session behind one of a user's sign-ins in an organization, with
+-- the email it verified and the organization's WorkOS id and verified domains.
+SELECT si.workos_session_id, si.verified_email, om.workos_id AS workos_organization_id, om.verified_domains
+FROM sign_ins AS si
+JOIN organization_metadata AS om ON om.id = si.organization_id
+WHERE si.id = @id
+  AND si.organization_id = @organization_id
+  AND si.user_id = @user_id;
+
 -- name: GetLiveSignInBySession :one
 SELECT id
 FROM sign_ins

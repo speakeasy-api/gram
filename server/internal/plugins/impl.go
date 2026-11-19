@@ -361,6 +361,7 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 			IsDefault:                conv.FromPGBool[bool](r.IsDefault),
 			AutoCreated:              r.AutoCreated,
 			AutoSyncEnabled:          PluginAutoSyncEnabled(r.AutoSyncEnabled),
+			AutoAddServersEnabled:    r.AutoAddServersEnabled,
 			ServerCount:              &r.ServerCount,
 			SkillCount:               &r.SkillCount,
 			AssignmentCount:          &r.AssignmentCount,
@@ -536,13 +537,14 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	created, err := NewPluginMetadataCore(s.audit, s.publicationRequests).CreateInTransaction(ctx, tx, CreatePluginMutation{
-		OrganizationID:  ac.ActiveOrganizationID,
-		ProjectID:       *ac.ProjectID,
-		Name:            payload.Name,
-		Slug:            payload.Slug,
-		Description:     payload.Description,
-		AutoSyncEnabled: payload.AutoSyncEnabled,
-		Actor:           PluginMetadataActor{UserID: ac.UserID, DisplayName: ac.Email},
+		OrganizationID:        ac.ActiveOrganizationID,
+		ProjectID:             *ac.ProjectID,
+		Name:                  payload.Name,
+		Slug:                  payload.Slug,
+		Description:           payload.Description,
+		AutoSyncEnabled:       payload.AutoSyncEnabled,
+		AutoAddServersEnabled: payload.AutoAddServersEnabled,
+		Actor:                 PluginMetadataActor{UserID: ac.UserID, DisplayName: ac.Email},
 	})
 	if err != nil {
 		return nil, s.pluginMetadataError(ctx, err, "create plugin")
@@ -603,18 +605,37 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 		}
 	}
 
-	updated, err := NewPluginMetadataCore(s.audit, s.publicationRequests).UpdateInTransaction(ctx, tx, UpdatePluginMutation{
-		OrganizationID:  ac.ActiveOrganizationID,
-		ProjectID:       *ac.ProjectID,
-		PluginID:        pluginID,
-		Name:            &payload.Name,
-		Slug:            &payload.Slug,
-		Description:     payload.Description,
-		KeepDescription: false,
-		AutoSyncEnabled: payload.AutoSyncEnabled,
-		Actor:           PluginMetadataActor{UserID: ac.UserID, DisplayName: ac.Email},
+	// Turning on automatic server adding fills the plugin from its role
+	// audiences. Like adding a server by hand, an organization administrator's
+	// own change is recorded as the Shadow MCP approval it stands for.
+	updateCtx := ctx
+	if payload.AutoAddServersEnabled != nil && *payload.AutoAddServersEnabled {
+		admissionCtx, admissionErr := admission.AdministratorWriteContext(ctx, s.authz, ac.ActiveOrganizationID)
+		if admissionErr != nil {
+			return nil, oops.E(oops.CodeUnavailable, admissionErr, "distribution approval could not be verified safely").LogError(ctx, s.logger)
+		}
+		updateCtx = admissionCtx
+	}
+
+	updated, err := NewPluginMetadataCore(s.audit, s.publicationRequests).UpdateInTransaction(updateCtx, tx, UpdatePluginMutation{
+		OrganizationID:        ac.ActiveOrganizationID,
+		ProjectID:             *ac.ProjectID,
+		PluginID:              pluginID,
+		Name:                  &payload.Name,
+		Slug:                  &payload.Slug,
+		Description:           payload.Description,
+		KeepDescription:       false,
+		AutoSyncEnabled:       payload.AutoSyncEnabled,
+		AutoAddServersEnabled: payload.AutoAddServersEnabled,
+		DeliveryGuard:         s.distributionAdmission,
+		Actor:                 PluginMetadataActor{UserID: ac.UserID, DisplayName: ac.Email},
 	})
 	if err != nil {
+		// Turning on automatic server adding fills the plugin from its role
+		// audiences, which the Shadow MCP admission guard can refuse.
+		if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrPrivateGatewayAudience) || errors.Is(err, admission.ErrUnavailable) {
+			return nil, mapDistributionAdmissionError(err)
+		}
 		return nil, s.pluginMetadataError(ctx, err, "update plugin")
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -3872,6 +3893,7 @@ func pluginToGen(p repo.Plugin, servers []repo.PluginServer, wrappers map[uuid.U
 		IsDefault:                conv.FromPGBool[bool](p.IsDefault),
 		AutoCreated:              p.AutoCreated,
 		AutoSyncEnabled:          PluginAutoSyncEnabled(p.AutoSyncEnabled),
+		AutoAddServersEnabled:    p.AutoAddServersEnabled,
 		ServerCount:              nil,
 		SkillCount:               nil,
 		AssignmentCount:          nil,

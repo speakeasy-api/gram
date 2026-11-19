@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-jose/go-jose/v4"
 
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	assertioncore "github.com/speakeasy-api/gram/server/internal/usersessions/assertion"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 )
@@ -34,6 +35,9 @@ func NewIssuerVerificationKeys(keys assertioncore.VerificationKeys, cache jwks.C
 
 var _ assertioncore.VerificationKeys = (*IssuerVerificationKeys)(nil)
 
+// ErrStaleKeysUnreadable is our own key store failing during the stale-key fallback; the refusal is unchanged.
+var ErrStaleKeysUnreadable = errors.New("stale issuer keys could not be read")
+
 // VerificationKeyForAlgorithm uses a stored key after a transient fetch error
 // only when it is still fresh or inside the bounded stale window and matches
 // the assertion's kid and algorithm. A newer successful refresh replaces the
@@ -48,7 +52,7 @@ func (k *IssuerVerificationKeys) VerificationKeyForAlgorithm(ctx context.Context
 	}
 	state, cacheErr := k.cache.Get(ctx, source.CacheKey())
 	if cacheErr != nil {
-		return nil, fmt.Errorf("read stale issuer keys: %w", cacheErr)
+		return nil, fmt.Errorf("read stale issuer keys: %w: %w", ErrStaleKeysUnreadable, oops.MarkStoreConnectionLost(cacheErr))
 	}
 	now := time.Now()
 	if len(state.Document) == 0 || state.ExpiresAt.IsZero() || !now.Before(state.ExpiresAt.Add(MaxStaleKeys)) {

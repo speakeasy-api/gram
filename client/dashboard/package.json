@@ -1,7 +1,7 @@
 {
   "name": "dashboard",
   "private": true,
-  "version": "0.150.0",
+  "version": "0.151.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port ${GRAM_SITE_PORT:-5173}",
@@ -86,7 +86,7 @@
     "react-grid-layout": "^2.2.4",
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4.12.2",
-    "react-router": "^8.5.0",
+    "react-router": "^8.5.2",
     "recharts": "^3.9.2",
     "remark-gfm": "^4.0.1",
     "shiki": "^4.4.1",

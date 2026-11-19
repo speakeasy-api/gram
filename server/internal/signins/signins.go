@@ -57,6 +57,10 @@ const (
 	ReasonEmailChanged         Reason = "email_changed"
 	ReasonAuthTimeUnknown      Reason = "authentication_time_unknown"
 	ReasonTenantNotAllowed     Reason = "microsoft_tenant_not_allowed"
+	// ReasonAccountDomainNotVerified: a managed account whose domain the organization hasn't verified.
+	ReasonAccountDomainNotVerified Reason = "account_domain_not_verified"
+	// ReasonAccountEvidenceUnavailable: the provider's account evidence wasn't collected, so the account can't be confirmed.
+	ReasonAccountEvidenceUnavailable Reason = "account_evidence_unavailable"
 )
 
 // Identity is the verified identity of an eligible grant.
@@ -94,6 +98,9 @@ type Evidence struct {
 	// HostedDomain is the domain a social provider says manages the account:
 	// the Google Workspace hosted domain or a Microsoft work account's UPN domain.
 	HostedDomain string
+	// HostedDomainChecked is set when the provider lookup answered: an empty
+	// HostedDomain is then stored as '' (no domain), otherwise as NULL (unknown).
+	HostedDomainChecked bool
 	// TenantID is a Microsoft account's Entra tenant.
 	TenantID string
 	// VerifiedEmail is the email the identity provider verified, empty when
@@ -152,7 +159,7 @@ func Record(ctx context.Context, db Beginner, p RecordParams) (Recorded, error) 
 		UserID:               p.UserID,
 		WorkosSessionID:      p.WorkOSSessionID,
 		AuthenticationMethod: p.AuthenticationMethod,
-		IdpHostedDomain:      conv.ToPGTextEmpty(p.Evidence.HostedDomain),
+		IdpHostedDomain:      pgtype.Text{String: p.Evidence.HostedDomain, Valid: p.Evidence.HostedDomain != "" || p.Evidence.HostedDomainChecked},
 		IdpTenantID:          conv.ToPGTextEmpty(p.Evidence.TenantID),
 		VerifiedEmail:        conv.ToPGTextEmpty(conv.NormalizeEmail(p.Evidence.VerifiedEmail)),
 		AuthenticatedAt:      pgtype.Timestamptz{Time: p.AuthenticatedAt, InfinityModifier: pgtype.Finite, Valid: true},
@@ -221,6 +228,41 @@ func SignInForSession(ctx context.Context, db repo.DBTX, organizationID, userID,
 	return uuid.NullUUID{UUID: id, Valid: true}, nil
 }
 
+// SignInSession is the WorkOS session behind a sign-in and what steers a new
+// sign-in toward the same organization and work email.
+type SignInSession struct {
+	WorkOSSessionID string
+	// WorkEmail is the sign-in's verified email when it is on one of the
+	// organization's verified domains, otherwise empty.
+	WorkEmail            string
+	WorkOSOrganizationID string
+}
+
+// SessionForSignIn returns the WorkOS session behind a user's sign-in in an
+// organization, or a zero value when that user has no such sign-in there.
+func SessionForSignIn(ctx context.Context, db repo.DBTX, organizationID, userID string, signInID uuid.UUID) (SignInSession, error) {
+	var none SignInSession
+	if organizationID == "" || userID == "" || signInID == uuid.Nil {
+		return none, nil
+	}
+	row, err := repo.New(db).GetSignInWorkOSSession(ctx, repo.GetSignInWorkOSSessionParams{
+		ID:             signInID,
+		OrganizationID: organizationID,
+		UserID:         userID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return none, nil
+	case err != nil:
+		return none, fmt.Errorf("get sign-in workos session: %w", err)
+	}
+	workEmail := conv.NormalizeEmail(row.VerifiedEmail.String)
+	if !emailOnDomain(workEmail, row.VerifiedDomains) {
+		workEmail = ""
+	}
+	return SignInSession{WorkOSSessionID: row.WorkosSessionID, WorkEmail: workEmail, WorkOSOrganizationID: row.WorkosOrganizationID.String}, nil
+}
+
 // CheckSignInIdentity judges whether an MCP grant traces to a current sign-in
 // whose user Speakeasy may vouch for in organizationID. The sign-in's tier sets
 // how old it may be; a positive maxAge can only shorten that. A grant without a
@@ -281,12 +323,16 @@ func judge(row repo.GetSignInEligibilityRow, now time.Time, maxAge time.Duration
 	if row.RevokedAt.Valid || row.Fenced {
 		return reject(ReasonSignInRevoked)
 	}
-	tier, reason := classify(row)
-	if reason != ReasonEligible {
-		return reject(reason)
+	tier, ok := methodTier(row.AuthenticationMethod.String)
+	if !ok {
+		return reject(ReasonMethodNotEligible)
 	}
+	// A method the organization doesn't allow says so before its evidence is judged.
 	if !tierAllowed(tier, row) {
 		return reject(ReasonMethodNotAllowed)
+	}
+	if reason := accountEvidence(tier, row); reason != ReasonEligible {
+		return reject(reason)
 	}
 	if limit := TierMaxAge(tier); maxAge <= 0 || maxAge > limit {
 		maxAge = limit

@@ -28,6 +28,7 @@ import (
 	usagegen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -74,6 +75,7 @@ type Service struct {
 	registry         *mcpregistry.Service
 	remoteSessions   *remotesessions.Service
 	assets           *assets.Service
+	mcpSourceStorage blobio.Reader
 
 	// gcpIdentity screens and verifies platform external credentials. Nil
 	// leaves those methods unavailable.
@@ -276,7 +278,7 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{catalogPromotion: nil, providerHealth: nil, projectRedeployer: nil, assistantIdentities: nil, remoteSessions: nil, assets: nil, gcpIdentity: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
+	return &Service{mcpSourceStorage: nil, catalogPromotion: nil, providerHealth: nil, projectRedeployer: nil, assistantIdentities: nil, remoteSessions: nil, assets: nil, gcpIdentity: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
 		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:                     logger,
@@ -330,8 +332,7 @@ func (s *Service) GetSession(ctx context.Context, _ *gen.GetSessionPayload) (*ge
 
 func productFeaturesResult(snapshot productfeatures.ProductFeaturesSnapshot) *gen.ProductFeatures {
 	return &gen.ProductFeatures{
-		ProviderSetupEnabled: new(snapshot.ProviderSetupEnabled),
-		LogsEnabled:          snapshot.LogsEnabled, ToolIoLogsEnabled: snapshot.ToolIoLogsEnabled, SessionCaptureEnabled: snapshot.SessionCaptureEnabled,
+		LogsEnabled: snapshot.LogsEnabled, ToolIoLogsEnabled: snapshot.ToolIoLogsEnabled, SessionCaptureEnabled: snapshot.SessionCaptureEnabled,
 		AuthzChallengeLoggingEnabled: snapshot.AuthzChallengeLoggingEnabled, SsoEnabled: snapshot.SsoEnabled, ScimEnabled: snapshot.ScimEnabled,
 		HooksBrowserLoginEnabled: snapshot.HooksBrowserLoginEnabled, HooksFailOpenEnabled: snapshot.HooksFailOpenEnabled,
 		CustomModelKeysEnabled: snapshot.CustomModelKeysEnabled, SkillsEnabled: snapshot.SkillsEnabled, SkillCaptureMetadataOnly: snapshot.SkillCaptureMetadataOnly,
@@ -369,22 +370,6 @@ func (s *Service) GetOrganizationFeaturesStrict(ctx context.Context, organizatio
 		return nil, fmt.Errorf("read organization features: %w", err)
 	}
 	return productFeaturesResult(snapshot), nil
-}
-
-func (s *Service) SetOrganizationProviderSetup(ctx context.Context, payload *gen.SetOrganizationProviderSetupPayload) (*gen.ProductFeatures, error) {
-	if _, ok := contextvalues.GetAdminAuthContext(ctx); !ok {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, payload.OrganizationID)
-	if err != nil {
-		return nil, err
-	}
-	actor, displayName, _ := adminActor(ctx)
-	err = productfeatures.NewMutator(s.productFeatures, s.audit).SetFeature(ctx, organizationID, productfeatures.FeatureProviderSetup, payload.Enabled, productfeatures.MutationActor{Principal: actor, DisplayName: displayName, Slug: nil})
-	if err != nil {
-		return nil, fmt.Errorf("set provider setup rollout: %w", err)
-	}
-	return productFeaturesResult(s.productFeatures.Snapshot(ctx, organizationID)), nil
 }
 
 func (s *Service) SetOrganizationFeature(ctx context.Context, payload *gen.SetOrganizationFeaturePayload) (*gen.ProductFeatures, error) {
@@ -515,7 +500,6 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.GetSpendBreakdown = service.preauthorizeAdmin(server.GetSpendBreakdown)
 	server.ListCustomerUsage = service.preauthorizeAdmin(server.ListCustomerUsage)
 	server.OpenOrganizationInDashboard = service.preauthorizeAdmin(server.OpenOrganizationInDashboard)
-	server.SetOrganizationProviderSetup = service.strictAdminJSON(server.SetOrganizationProviderSetup, func() any { return new(adminserver.SetOrganizationProviderSetupRequestBody) })
 	server.GetMemoryEvalOptions = service.preauthorizeAdmin(server.GetMemoryEvalOptions)
 	server.ListMemoryEvalRuns = service.preauthorizeAdmin(server.ListMemoryEvalRuns)
 	server.GetMemoryEvalRun = service.preauthorizeAdmin(server.GetMemoryEvalRun)
@@ -571,6 +555,8 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.MigrateOrganizationAssistantIdentities = service.strictAdminJSON(server.MigrateOrganizationAssistantIdentities, func() any { return new(adminserver.MigrateOrganizationAssistantIdentitiesRequestBody) })
 	server.MigrateOrganizationAssistantsToKit = service.strictAdminJSON(server.MigrateOrganizationAssistantsToKit, func() any { return new(adminserver.MigrateOrganizationAssistantsToKitRequestBody) })
 	adminserver.Mount(mux, server)
+	mux.Handle(http.MethodGet, "/admin/mcpServerSources", service.mcpServerSourcesHandler(false).ServeHTTP)
+	mux.Handle(http.MethodGet, "/admin/mcpServerSourceDownload", service.mcpServerSourcesHandler(true).ServeHTTP)
 
 }
 

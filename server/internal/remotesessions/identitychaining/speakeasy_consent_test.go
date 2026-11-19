@@ -374,3 +374,28 @@ func TestSpeakeasyConsent_DenyRetiresPendingCredential(t *testing.T) {
 	lf.acquire(t, lf.newGrant(t, lf.signIn.ID), true)
 	require.EqualValues(t, 2, lf.calls.Load(), "nothing is left to adopt")
 }
+
+// Only a Google lookup that answered with no Workspace domain is the person's to fix; missing evidence and an unverified domain stay with the administrator.
+func TestSpeakeasyConsent_GoogleAccountEvidence(t *testing.T) {
+	t.Parallel()
+	lf := newSpeakeasyLiveFixture(t)
+	for _, tc := range []struct {
+		name     string
+		evidence signins.Evidence
+		want     Reason
+	}{
+		{"lookup answered with no domain", signins.Evidence{HostedDomain: "", HostedDomainChecked: true}, ReasonUnmanagedAccount},
+		{"no lookup answered", signins.Evidence{HostedDomain: "", HostedDomainChecked: false}, ReasonIneligibleIdentity},
+		{"unverified domain", signins.Evidence{HostedDomain: "other.test", HostedDomainChecked: true}, ReasonIneligibleIdentity},
+	} {
+		at := time.Now().Add(-time.Minute)
+		tc.evidence.VerifiedEmail = lf.f.req.UserID + "@example.test"
+		tc.evidence.IDPAuthenticatedAt = at
+		signIn, err := signins.Record(t.Context(), lf.f.db, signins.RecordParams{OrganizationID: lf.f.req.OrganizationID, UserID: lf.f.req.UserID, WorkOSSessionID: uuid.NewString(), AuthenticationMethod: signins.MethodGoogleOAuth, AuthenticatedAt: at, Evidence: tc.evidence})
+		require.NoError(t, err, tc.name)
+		outcome := lf.chainer.CheckConsent(t.Context(), lf.consentRequest(), signIn.ID.UUID)
+		require.Equal(t, tc.want, outcome.Reason, tc.name)
+		require.Equal(t, StageAuthorization, outcome.Stage, tc.name)
+	}
+	require.Zero(t, lf.calls.Load(), "a refused sign-in never reaches the vendor")
+}

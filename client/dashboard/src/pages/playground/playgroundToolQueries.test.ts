@@ -1,5 +1,4 @@
 // @vitest-environment node
-import { queryKeyInstance } from "@gram/client/react-query/instance.js";
 import { queryKeyListTools } from "@gram/client/react-query/listTools.js";
 import { queryKeyToolset } from "@gram/client/react-query/toolset.js";
 import { QueryClient } from "@tanstack/react-query";
@@ -7,12 +6,11 @@ import { describe, expect, it } from "vitest";
 import { invalidatePlaygroundToolQueries } from "./playgroundToolQueries";
 
 describe("invalidatePlaygroundToolQueries", () => {
-  it("invalidates the global tools list and both toolset views", async () => {
+  it("invalidates the global tools list and the toolset view", async () => {
     const queryClient = new QueryClient();
     const queryKeys = [
       queryKeyListTools({}),
       queryKeyToolset({ slug: "weather-tools" }),
-      queryKeyInstance({ toolsetSlug: "weather-tools" }),
     ];
 
     for (const queryKey of queryKeys) {
@@ -20,7 +18,7 @@ describe("invalidatePlaygroundToolQueries", () => {
       expect(queryClient.getQueryState(queryKey)?.isInvalidated).toBe(false);
     }
 
-    await invalidatePlaygroundToolQueries(queryClient, "weather-tools");
+    await invalidatePlaygroundToolQueries(queryClient);
 
     for (const queryKey of queryKeys) {
       expect(queryClient.getQueryState(queryKey)?.isInvalidated).toBe(true);

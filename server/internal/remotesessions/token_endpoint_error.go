@@ -6,6 +6,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 )
 
@@ -36,6 +37,12 @@ type TokenEndpointError struct {
 	// Signing reports that the private_key_jwt client assertion could not be
 	// signed, so nothing was sent.
 	Signing bool
+
+	// address is a configured address the request never reached.
+	address guardian.AddressFailure
+
+	// issuer is the configured issuer whose token endpoint that address is, set with address.
+	issuer string
 }
 
 func (e *TokenEndpointError) Error() string {

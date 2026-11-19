@@ -270,7 +270,7 @@ func newRoleDeliveryFixture(t *testing.T) (context.Context, *roleDeliveryFixture
 	pluginService := plugins.NewService(logger, tracer, ti.conn, sessions, cache.NewRedisCacheAdapter(redis), ti.service.authz, ti.service.audit, githubConfig, "test", "https://example.com", nil, nil)
 	signals := &recordingPublishSignaler{}
 	ti.service.roleMgr = NewRoleManager(logger, ti.conn, ti.roles, ti.service.audit, plugins.PublicationRequests{Enabled: true}, nil).WithPluginPublisher(signals)
-	plugin, err := pluginService.CreatePlugin(ctx, &plugingen.CreatePluginPayload{Name: "Delivery audience"})
+	plugin, err := pluginService.CreatePlugin(ctx, &plugingen.CreatePluginPayload{Name: "Delivery audience", AutoAddServersEnabled: new(true)})
 	require.NoError(t, err)
 	_, err = pluginService.SetPluginAssignments(ctx, &plugingen.SetPluginAssignmentsPayload{PluginID: plugin.ID, PrincipalUrns: []string{"role:organization:" + roleID}})
 	require.NoError(t, err)
