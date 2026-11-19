@@ -413,6 +413,12 @@ type Proxy struct {
 	// skip this loop entirely.
 	ToolsListResponseInterceptors []ToolsListResponseInterceptor
 
+	// LocalTools resolves the tools this proxy serves itself: each is added to
+	// tools/list results once ToolsListResponseInterceptors have run, and a
+	// tools/call naming one is answered here, before ToolsCallRequestInterceptors
+	// run, and never forwarded. Nil serves none. See [LocalTool].
+	LocalTools LocalToolsResolver
+
 	// ResourcesReadRequestInterceptors run for inbound "resources/read"
 	// JSON-RPC requests only, after the generic UserRequestInterceptors
 	// chain has completed. Non-resources/read requests skip this loop
@@ -775,6 +781,13 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		// populates for proxied traffic without any further plumbing —
 		// matching how /mcp aggregations already work.
 		span.SetAttributes(attr.ToolName(toolsCallReq.Params.Name))
+		// A call without an id is owed no reply, so there is nothing to answer
+		// it with here.
+		if userReqID.IsValid() {
+			if local, ok := p.localToolNamed(ctx, toolsCallReq.Params.Name); ok {
+				return p.answerLocalToolCall(ctx, w, span, userReqID, toolsCallReq, local, &responseBytes)
+			}
+		}
 		if err := p.runToolsCallRequestInterceptors(ctx, toolsCallReq); err != nil {
 			return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
 		}
@@ -1947,7 +1960,8 @@ func (p *Proxy) runToolsListRequestInterceptors(ctx context.Context, list *Tools
 
 // runToolsListResponseInterceptors invokes each configured
 // ToolsListResponseInterceptor in order, returning the first wrapped
-// rejection error or nil if all interceptors accept the response.
+// rejection error, and then lists the proxy's local tools on the accepted
+// response.
 func (p *Proxy) runToolsListResponseInterceptors(ctx context.Context, list *ToolsListResponse) error {
 	for _, interceptor := range p.ToolsListResponseInterceptors {
 		iterCtx, span := p.Tracer.Start(ctx, "remotemcp.proxy.ToolsListResponseInterceptor",
@@ -1960,7 +1974,9 @@ func (p *Proxy) runToolsListResponseInterceptors(ctx context.Context, list *Tool
 		}
 		span.End()
 	}
-	return nil
+	// Local tools are listed last so no interceptor above filters them out or
+	// records them as the remote server's.
+	return p.listLocalTools(ctx, list)
 }
 
 // runResourcesReadRequestInterceptors invokes each configured
