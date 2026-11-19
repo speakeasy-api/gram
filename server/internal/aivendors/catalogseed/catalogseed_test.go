@@ -29,8 +29,11 @@ func TestApplyCompleteAndIdempotent(t *testing.T) {
 	require.NoError(t, err)
 	documents, err := q.ListDocuments(ctx)
 	require.NoError(t, err)
-	require.Len(t, products, 51)
+	aliases, err := q.ListAliases(ctx)
+	require.NoError(t, err)
+	require.Len(t, products, 53)
 	require.Len(t, documents, 26)
+	require.Len(t, aliases, 41)
 
 	var data snapshot
 	require.NoError(t, json.Unmarshal(catalog, &data))
@@ -50,11 +53,26 @@ func TestApplyCompleteAndIdempotent(t *testing.T) {
 			require.Equal(t, conv.DefaultSlice(p.Signatures.ProcessNames, []string{}), row.ProcessNames)
 			require.Equal(t, conv.ToPGTextEmpty(p.VersionPlistKey), row.VersionPlistKey)
 			require.Equal(t, conv.DefaultSlice(p.ClientInfoNames, []string{}), row.ClientInfoNames)
+			require.Equal(t, conv.ToPGTextEmpty(p.Family), row.Family)
 			require.False(t, row.Deleted)
 			require.False(t, row.CreatedBy.Valid)
 			require.False(t, row.UpdatedBy.Valid)
 		}
 		require.True(t, found, p.ID)
+		for _, a := range p.Aliases {
+			var found bool
+			for _, row := range aliases {
+				if row.Name != a.Name {
+					continue
+				}
+				found = true
+				require.Equal(t, p.ID, row.AiProductID)
+				require.Equal(t, conv.ToPGTextEmpty(a.Client), row.Client)
+				require.False(t, row.Deleted)
+				require.False(t, row.CreatedBy.Valid)
+			}
+			require.True(t, found, a.Name)
+		}
 		for _, d := range p.Documents {
 			var found bool
 			for _, row := range documents {
@@ -78,8 +96,11 @@ func TestApplyCompleteAndIdempotent(t *testing.T) {
 	require.NoError(t, err)
 	afterDocuments, err := q.ListDocuments(ctx)
 	require.NoError(t, err)
+	afterAliases, err := q.ListAliases(ctx)
+	require.NoError(t, err)
 	require.Equal(t, products, afterProducts, "including timestamps")
 	require.Equal(t, documents, afterDocuments, "including IDs and timestamps")
+	require.Equal(t, aliases, afterAliases, "including IDs and timestamps")
 }
 
 func TestApplyPreservesStaffEditsAndDeletions(t *testing.T) {
@@ -93,6 +114,27 @@ func TestApplyPreservesStaffEditsAndDeletions(t *testing.T) {
 		ID: "claude-code", DisplayName: "Staff title",
 		DeletedAt: pgtype.Timestamptz{Time: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), Valid: true},
 	}))
+	require.NoError(t, q.EditProductFixture(ctx, repo.EditProductFixtureParams{
+		ID: "claude", DisplayName: "Claude", Family: pgtype.Text{},
+	}))
+	require.NoError(t, q.EditProductFixture(ctx, repo.EditProductFixtureParams{
+		ID: "cursor", DisplayName: "Cursor", Family: conv.ToPGText("staff-family"),
+	}))
+	aliases, err := q.ListAliases(ctx)
+	require.NoError(t, err)
+	for i, a := range aliases {
+		switch i % 3 {
+		case 0:
+			require.NoError(t, q.EditAliasFixture(ctx, repo.EditAliasFixtureParams{
+				ID: a.ID, Name: a.Name, Client: a.Client,
+				DeletedAt: pgtype.Timestamptz{Time: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), Valid: true},
+			}))
+		case 1:
+			require.NoError(t, q.EditAliasFixture(ctx, repo.EditAliasFixtureParams{
+				ID: a.ID, Name: "staff-" + a.ID.String(), Client: conv.ToPGText("web"),
+			}))
+		}
+	}
 	docs, err := q.ListDocuments(ctx)
 	require.NoError(t, err)
 	for i, d := range docs {
@@ -109,13 +151,18 @@ func TestApplyPreservesStaffEditsAndDeletions(t *testing.T) {
 	require.NoError(t, err)
 	beforeDocs, err := q.ListDocuments(ctx)
 	require.NoError(t, err)
+	beforeAliases, err := q.ListAliases(ctx)
+	require.NoError(t, err)
 	require.NoError(t, Apply(ctx, db))
 	afterProducts, err := q.ListProducts(ctx)
 	require.NoError(t, err)
 	afterDocs, err := q.ListDocuments(ctx)
 	require.NoError(t, err)
+	afterAliases, err := q.ListAliases(ctx)
+	require.NoError(t, err)
 	require.Equal(t, beforeProducts, afterProducts)
 	require.Equal(t, beforeDocs, afterDocs)
+	require.Equal(t, beforeAliases, afterAliases)
 }
 
 func TestApplyConcurrent(t *testing.T) {
@@ -135,6 +182,9 @@ func TestApplyConcurrent(t *testing.T) {
 	docs, err := repo.New(db).ListDocuments(t.Context())
 	require.NoError(t, err)
 	require.Len(t, docs, 26)
+	aliases, err := repo.New(db).ListAliases(t.Context())
+	require.NoError(t, err)
+	require.Len(t, aliases, 41)
 }
 
 func TestBackfillOnlyUnlinkedBuiltinDecisions(t *testing.T) {
@@ -246,5 +296,95 @@ func TestApplySkipsDocumentsOfDeletedProduct(t *testing.T) {
 	require.Len(t, docs, 25)
 	for _, d := range docs {
 		require.NotEqual(t, "claude-code", d.AiProductID)
+	}
+	aliases, err := q.ListAliases(ctx)
+	require.NoError(t, err)
+	require.Len(t, aliases, 36)
+	for _, a := range aliases {
+		require.NotEqual(t, "claude-code", a.AiProductID)
+	}
+}
+
+func TestApplyPreservesExistingAliasName(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		alias   string
+		deleted bool
+	}{
+		{name: "live", alias: "claude-code-cli"},
+		{name: "deleted", alias: "claude-code-cli", deleted: true},
+		{name: "live respelled", alias: "Claude_Code CLI"},
+		{name: "deleted respelled", alias: "Claude_Code CLI", deleted: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			db, err := infra.CloneTestDatabase(t, "testdb")
+			require.NoError(t, err)
+			q := repo.New(db)
+			require.NoError(t, q.InsertProduct(ctx, repo.InsertProductParams{
+				ID: "staff-product", VendorKey: "staff", DisplayName: "Staff product",
+				BundleIds: []string{}, Binaries: []string{}, ConfigDirs: []string{},
+				ProcessNames: []string{}, ClientInfoNames: []string{},
+			}))
+			id := uuid.New()
+			require.NoError(t, q.InsertAlias(ctx, repo.InsertAliasParams{
+				ID: id, AiProductID: "staff-product", Name: tc.alias, Client: conv.ToPGText("ide"),
+			}))
+			if tc.deleted {
+				require.NoError(t, q.EditAliasFixture(ctx, repo.EditAliasFixtureParams{
+					ID: id, Name: tc.alias, Client: conv.ToPGText("ide"),
+					DeletedAt: pgtype.Timestamptz{Time: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), Valid: true},
+				}))
+			}
+			before, err := q.ListAliases(ctx)
+			require.NoError(t, err)
+			require.NoError(t, Apply(ctx, db))
+			after, err := q.ListAliases(ctx)
+			require.NoError(t, err)
+			require.Len(t, after, 41)
+			require.Contains(t, after, before[0])
+			for _, a := range after {
+				require.False(t, a.AiProductID == "claude-code" && a.Name == "claude-code-cli")
+			}
+		})
+	}
+}
+
+func TestCatalogReportedNamesBelongToOneProduct(t *testing.T) {
+	t.Parallel()
+	var data snapshot
+	require.NoError(t, json.Unmarshal(catalog, &data))
+	fold := func(name string) string {
+		return strings.Map(func(r rune) rune {
+			if strings.ContainsRune(" \t_-", r) {
+				return -1
+			}
+			return r
+		}, strings.ToLower(name))
+	}
+	aliases := map[string]string{}
+	owners := map[string]string{}
+	for _, p := range data.Products {
+		for _, a := range p.Aliases {
+			key := fold(a.Name)
+			_, taken := aliases[key]
+			require.False(t, taken, "alias %q folds to a name already seeded", a.Name)
+			aliases[key] = p.ID
+			if owner, ok := owners[key]; ok {
+				require.Equal(t, owner, p.ID, "%q is reported for two products", a.Name)
+			}
+			owners[key] = p.ID
+		}
+	}
+	for _, p := range data.Products {
+		for _, name := range p.ClientInfoNames {
+			key := fold(name)
+			if owner, ok := owners[key]; ok {
+				require.Equal(t, owner, p.ID, "%q is reported for two products", name)
+			}
+			owners[key] = p.ID
+		}
 	}
 }

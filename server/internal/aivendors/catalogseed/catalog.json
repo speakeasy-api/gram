@@ -4,6 +4,7 @@
     {
       "ID": "claude-code",
       "VendorKey": "anthropic",
+      "Family": "claude",
       "DisplayName": "Claude Code",
       "Category": "harness",
       "Signatures": {
@@ -13,7 +14,29 @@
         "ProcessNames": ["claude"]
       },
       "VersionPlistKey": "",
-      "ClientInfoNames": ["claude-code", "Claude Code", "claude-ai"],
+      "ClientInfoNames": ["claude-code", "Claude Code"],
+      "Aliases": [
+        {
+          "Name": "claude-code",
+          "Client": ""
+        },
+        {
+          "Name": "claude-code-cli",
+          "Client": "cli"
+        },
+        {
+          "Name": "claude-code-web",
+          "Client": "cloud"
+        },
+        {
+          "Name": "claude-code-desktop",
+          "Client": "desktop"
+        },
+        {
+          "Name": "claude-tag",
+          "Client": "slack"
+        }
+      ],
       "Documents": [
         {
           "URL": "https://claude.ai/oauth/claude-code-client-metadata",
@@ -25,6 +48,7 @@
     {
       "ID": "claude",
       "VendorKey": "anthropic",
+      "Family": "claude",
       "DisplayName": "Claude",
       "Category": "",
       "Signatures": {
@@ -35,6 +59,36 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": null,
+      "Aliases": [
+        {
+          "Name": "claude-chat",
+          "Client": ""
+        },
+        {
+          "Name": "claude-chat-web",
+          "Client": "web"
+        },
+        {
+          "Name": "claude-web",
+          "Client": "web"
+        },
+        {
+          "Name": "claude-desktop",
+          "Client": "desktop"
+        },
+        {
+          "Name": "claude-chat-desktop",
+          "Client": "desktop"
+        },
+        {
+          "Name": "Anthropic/ClaudeAI",
+          "Client": ""
+        },
+        {
+          "Name": "claude-ai",
+          "Client": "desktop"
+        }
+      ],
       "Documents": [
         {
           "URL": "https://claude.ai/oauth/mcp-oauth-client-metadata",
@@ -44,8 +98,39 @@
       ]
     },
     {
+      "ID": "cowork",
+      "VendorKey": "anthropic",
+      "Family": "claude",
+      "DisplayName": "Cowork",
+      "Category": "",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": null,
+        "ConfigDirs": null,
+        "ProcessNames": null
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": null,
+      "Aliases": [
+        {
+          "Name": "cowork",
+          "Client": "desktop"
+        },
+        {
+          "Name": "claude-cowork",
+          "Client": "desktop"
+        },
+        {
+          "Name": "cowork-desktop",
+          "Client": "desktop"
+        }
+      ],
+      "Documents": null
+    },
+    {
       "ID": "vscode",
       "VendorKey": "microsoft",
+      "Family": "",
       "DisplayName": "Visual Studio Code",
       "Category": "",
       "Signatures": {
@@ -56,6 +141,7 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": null,
+      "Aliases": null,
       "Documents": [
         {
           "URL": "https://vscode.dev/oauth/client-metadata.json",
@@ -72,6 +158,7 @@
     {
       "ID": "zed",
       "VendorKey": "zed",
+      "Family": "",
       "DisplayName": "Zed",
       "Category": "harness",
       "Signatures": {
@@ -82,6 +169,7 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": null,
+      "Aliases": null,
       "Documents": [
         {
           "URL": "https://zed.dev/oauth/client-metadata.json",
@@ -93,6 +181,7 @@
     {
       "ID": "goose",
       "VendorKey": "block",
+      "Family": "",
       "DisplayName": "Goose",
       "Category": "harness",
       "Signatures": {
@@ -103,6 +192,7 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": null,
+      "Aliases": null,
       "Documents": [
         {
           "URL": "https://goose-docs.ai/oauth/client-metadata.json",
@@ -114,6 +204,7 @@
     {
       "ID": "chatgpt",
       "VendorKey": "openai",
+      "Family": "",
       "DisplayName": "ChatGPT",
       "Category": "assistant",
       "Signatures": {
@@ -124,6 +215,20 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": ["ChatGPT", "chatgpt"],
+      "Aliases": [
+        {
+          "Name": "chatgpt",
+          "Client": ""
+        },
+        {
+          "Name": "chatgpt-work",
+          "Client": ""
+        },
+        {
+          "Name": "openai-mcp",
+          "Client": ""
+        }
+      ],
       "Documents": [
         {
           "URL": "https://chatgpt.com/oauth/*/client.json",
@@ -140,6 +245,7 @@
     {
       "ID": "chatgpt-classic",
       "VendorKey": "openai",
+      "Family": "",
       "DisplayName": "ChatGPT Classic",
       "Category": "assistant",
       "Signatures": {
@@ -150,11 +256,13 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": null,
+      "Aliases": null,
       "Documents": null
     },
     {
       "ID": "codex",
       "VendorKey": "openai",
+      "Family": "",
       "DisplayName": "Codex",
       "Category": "harness",
       "Signatures": {
@@ -165,6 +273,48 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": ["codex", "codex-cli", "Codex CLI"],
+      "Aliases": [
+        {
+          "Name": "codex",
+          "Client": ""
+        },
+        {
+          "Name": "codex-cli",
+          "Client": "cli"
+        },
+        {
+          "Name": "codex-web",
+          "Client": "cloud"
+        },
+        {
+          "Name": "openai-mcp (Codex)",
+          "Client": "cloud"
+        },
+        {
+          "Name": "codex-cli-rs",
+          "Client": "cli"
+        },
+        {
+          "Name": "codex-exec",
+          "Client": "cli"
+        },
+        {
+          "Name": "codex-tui",
+          "Client": "cli"
+        },
+        {
+          "Name": "codex-exec-server",
+          "Client": ""
+        },
+        {
+          "Name": "codex-app-server",
+          "Client": ""
+        },
+        {
+          "Name": "codex-mcp-client",
+          "Client": ""
+        }
+      ],
       "Documents": [
         {
           "URL": "https://chatgpt.com/oauth/codex/*/client.json",
@@ -181,6 +331,7 @@
     {
       "ID": "notion",
       "VendorKey": "notion",
+      "Family": "",
       "DisplayName": "Notion",
       "Category": "",
       "Signatures": {
@@ -191,6 +342,7 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": null,
+      "Aliases": null,
       "Documents": [
         {
           "URL": "https://www.notion.so/oauth/mcp-client-metadata.json",
@@ -207,6 +359,7 @@
     {
       "ID": "mcpjam",
       "VendorKey": "mcpjam",
+      "Family": "",
       "DisplayName": "MCPJam Inspector",
       "Category": "",
       "Signatures": {
@@ -217,6 +370,7 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": null,
+      "Aliases": null,
       "Documents": [
         {
           "URL": "https://www.mcpjam.com/.well-known/oauth/client-metadata.json",
@@ -228,6 +382,7 @@
     {
       "ID": "factory-droid",
       "VendorKey": "factory",
+      "Family": "",
       "DisplayName": "Factory Droid",
       "Category": "",
       "Signatures": {
@@ -238,6 +393,7 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": null,
+      "Aliases": null,
       "Documents": [
         {
           "URL": "https://api.factory.ai/mcp/oauth-client",
@@ -249,6 +405,7 @@
     {
       "ID": "toolhive",
       "VendorKey": "stacklok",
+      "Family": "",
       "DisplayName": "ToolHive",
       "Category": "",
       "Signatures": {
@@ -259,6 +416,7 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": null,
+      "Aliases": null,
       "Documents": [
         {
           "URL": "https://toolhive.dev/oauth/client-metadata.json",
@@ -270,6 +428,7 @@
     {
       "ID": "hermes-agent",
       "VendorKey": "nousresearch",
+      "Family": "",
       "DisplayName": "Hermes Agent",
       "Category": "assistant",
       "Signatures": {
@@ -280,6 +439,12 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": null,
+      "Aliases": [
+        {
+          "Name": "hermes-agent",
+          "Client": ""
+        }
+      ],
       "Documents": [
         {
           "URL": "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json",
@@ -291,6 +456,7 @@
     {
       "ID": "skydive",
       "VendorKey": "skydive",
+      "Family": "",
       "DisplayName": "Skydive",
       "Category": "",
       "Signatures": {
@@ -301,6 +467,7 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": null,
+      "Aliases": null,
       "Documents": [
         {
           "URL": "https://www.skydive.com/api/v1/external-oauth/client-metadata",
@@ -312,6 +479,7 @@
     {
       "ID": "opencode",
       "VendorKey": "opencode",
+      "Family": "",
       "DisplayName": "opencode",
       "Category": "harness",
       "Signatures": {
@@ -322,6 +490,12 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": ["opencode"],
+      "Aliases": [
+        {
+          "Name": "opencode",
+          "Client": "cli"
+        }
+      ],
       "Documents": [
         {
           "URL": "https://opencode.ai/oauth/opencode/client.json",
@@ -333,6 +507,7 @@
     {
       "ID": "github-copilot-cli",
       "VendorKey": "github",
+      "Family": "",
       "DisplayName": "GitHub Copilot CLI",
       "Category": "",
       "Signatures": {
@@ -343,6 +518,12 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": null,
+      "Aliases": [
+        {
+          "Name": "copilot-cli",
+          "Client": "cli"
+        }
+      ],
       "Documents": [
         {
           "URL": "https://github.com/copilot/cli/client-metadata.json",
@@ -354,6 +535,7 @@
     {
       "ID": "conductor",
       "VendorKey": "conductor",
+      "Family": "",
       "DisplayName": "Conductor",
       "Category": "harness",
       "Signatures": {
@@ -364,6 +546,7 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": null,
+      "Aliases": null,
       "Documents": [
         {
           "URL": "https://api.conductor.build/oauth/client-metadata.json",
@@ -375,6 +558,7 @@
     {
       "ID": "vercel-connect",
       "VendorKey": "vercel",
+      "Family": "",
       "DisplayName": "Vercel Connect",
       "Category": "",
       "Signatures": {
@@ -385,6 +569,7 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": null,
+      "Aliases": null,
       "Documents": [
         {
           "URL": "https://connect.vercel.com/connectors/*",
@@ -396,6 +581,7 @@
     {
       "ID": "linear",
       "VendorKey": "linear",
+      "Family": "",
       "DisplayName": "Linear",
       "Category": "",
       "Signatures": {
@@ -406,6 +592,7 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": null,
+      "Aliases": null,
       "Documents": [
         {
           "URL": "https://linear.app/.well-known/oauth-client-metadata/mcp.json",
@@ -417,6 +604,7 @@
     {
       "ID": "lovable",
       "VendorKey": "lovable",
+      "Family": "",
       "DisplayName": "Lovable",
       "Category": "",
       "Signatures": {
@@ -427,6 +615,7 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": null,
+      "Aliases": null,
       "Documents": [
         {
           "URL": "https://api.lovable.dev/.well-known/oauth-client",
@@ -438,6 +627,7 @@
     {
       "ID": "antigravity",
       "VendorKey": "google",
+      "Family": "",
       "DisplayName": "Google Antigravity",
       "Category": "harness",
       "Signatures": {
@@ -448,6 +638,7 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": null,
+      "Aliases": null,
       "Documents": [
         {
           "URL": "https://antigravity.google/oauth/client-metadata.json",
@@ -459,6 +650,7 @@
     {
       "ID": "cursor",
       "VendorKey": "cursor",
+      "Family": "",
       "DisplayName": "Cursor",
       "Category": "harness",
       "Signatures": {
@@ -469,11 +661,26 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": ["Cursor", "cursor", "cursor-vscode"],
+      "Aliases": [
+        {
+          "Name": "cursor",
+          "Client": "ide"
+        },
+        {
+          "Name": "cursor-vscode",
+          "Client": "ide"
+        },
+        {
+          "Name": "cursor-cli",
+          "Client": "cli"
+        }
+      ],
       "Documents": null
     },
     {
       "ID": "gemini-cli",
       "VendorKey": "google",
+      "Family": "",
       "DisplayName": "Gemini CLI",
       "Category": "harness",
       "Signatures": {
@@ -484,11 +691,22 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": ["gemini-cli", "Gemini CLI"],
+      "Aliases": [
+        {
+          "Name": "gemini",
+          "Client": ""
+        },
+        {
+          "Name": "gemini-cli",
+          "Client": "cli"
+        }
+      ],
       "Documents": null
     },
     {
       "ID": "windsurf",
       "VendorKey": "codeium",
+      "Family": "",
       "DisplayName": "Windsurf",
       "Category": "harness",
       "Signatures": {
@@ -499,11 +717,18 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": ["Windsurf", "windsurf"],
+      "Aliases": [
+        {
+          "Name": "windsurf",
+          "Client": "ide"
+        }
+      ],
       "Documents": null
     },
     {
       "ID": "aider",
       "VendorKey": "aider",
+      "Family": "",
       "DisplayName": "Aider",
       "Category": "harness",
       "Signatures": {
@@ -514,11 +739,13 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": ["aider"],
+      "Aliases": null,
       "Documents": null
     },
     {
       "ID": "openclaw",
       "VendorKey": "openclaw",
+      "Family": "",
       "DisplayName": "OpenClaw",
       "Category": "assistant",
       "Signatures": {
@@ -529,11 +756,18 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": ["openclaw", "OpenClaw"],
+      "Aliases": [
+        {
+          "Name": "openclaw",
+          "Client": ""
+        }
+      ],
       "Documents": null
     },
     {
       "ID": "pi",
       "VendorKey": "pi",
+      "Family": "",
       "DisplayName": "Pi",
       "Category": "harness",
       "Signatures": {
@@ -544,6 +778,12 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": ["pi"],
+      "Aliases": [
+        {
+          "Name": "pi",
+          "Client": "cli"
+        }
+      ],
       "Documents": [
         {
           "URL": "https://pi.dev/oauth/client.json",
@@ -558,8 +798,26 @@
       ]
     },
     {
+      "ID": "vibe",
+      "VendorKey": "mistral",
+      "Family": "",
+      "DisplayName": "Mistral Vibe",
+      "Category": "harness",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": ["vibe"],
+        "ConfigDirs": ["~/.vibe"],
+        "ProcessNames": ["vibe"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["vibe", "mistral-vibe", "Mistral Vibe"],
+      "Aliases": null,
+      "Documents": null
+    },
+    {
       "ID": "crush",
       "VendorKey": "charm",
+      "Family": "",
       "DisplayName": "Crush",
       "Category": "harness",
       "Signatures": {
@@ -570,11 +828,13 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": ["crush", "Crush"],
+      "Aliases": null,
       "Documents": null
     },
     {
       "ID": "qwen-code",
       "VendorKey": "alibaba",
+      "Family": "",
       "DisplayName": "Qwen Code",
       "Category": "harness",
       "Signatures": {
@@ -585,11 +845,13 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": ["qwen-code", "Qwen Code"],
+      "Aliases": null,
       "Documents": null
     },
     {
       "ID": "cline",
       "VendorKey": "cline",
+      "Family": "",
       "DisplayName": "Cline",
       "Category": "harness",
       "Signatures": {
@@ -604,11 +866,13 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": ["cline", "Cline"],
+      "Aliases": null,
       "Documents": null
     },
     {
       "ID": "roo-code",
       "VendorKey": "roocode",
+      "Family": "",
       "DisplayName": "Roo Code",
       "Category": "harness",
       "Signatures": {
@@ -623,11 +887,13 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": ["roo-code", "Roo Code"],
+      "Aliases": null,
       "Documents": null
     },
     {
       "ID": "continue",
       "VendorKey": "continue",
+      "Family": "",
       "DisplayName": "Continue",
       "Category": "harness",
       "Signatures": {
@@ -642,11 +908,13 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": ["continue", "Continue"],
+      "Aliases": null,
       "Documents": null
     },
     {
       "ID": "kilo-code",
       "VendorKey": "kilocode",
+      "Family": "",
       "DisplayName": "Kilo Code",
       "Category": "harness",
       "Signatures": {
@@ -661,11 +929,13 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": ["kilo-code", "Kilo Code"],
+      "Aliases": null,
       "Documents": null
     },
     {
       "ID": "augment",
       "VendorKey": "augment",
+      "Family": "",
       "DisplayName": "Augment Code",
       "Category": "harness",
       "Signatures": {
@@ -680,11 +950,13 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": ["augment", "Augment Code"],
+      "Aliases": null,
       "Documents": null
     },
     {
       "ID": "devin",
       "VendorKey": "cognition",
+      "Family": "",
       "DisplayName": "Devin",
       "Category": "harness",
       "Signatures": {
@@ -699,11 +971,13 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": ["devin", "Devin"],
+      "Aliases": null,
       "Documents": null
     },
     {
       "ID": "amp",
       "VendorKey": "sourcegraph",
+      "Family": "",
       "DisplayName": "Amp",
       "Category": "harness",
       "Signatures": {
@@ -714,11 +988,22 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": ["amp", "Amp"],
+      "Aliases": [
+        {
+          "Name": "amp-thread-actor",
+          "Client": ""
+        },
+        {
+          "Name": "amp-mcp-client",
+          "Client": ""
+        }
+      ],
       "Documents": null
     },
     {
       "ID": "openhands",
       "VendorKey": "allhands",
+      "Family": "",
       "DisplayName": "OpenHands",
       "Category": "harness",
       "Signatures": {
@@ -729,11 +1014,13 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": ["openhands", "OpenHands"],
+      "Aliases": null,
       "Documents": null
     },
     {
       "ID": "trae",
       "VendorKey": "bytedance",
+      "Family": "",
       "DisplayName": "Trae",
       "Category": "harness",
       "Signatures": {
@@ -744,11 +1031,13 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": ["trae", "Trae"],
+      "Aliases": null,
       "Documents": null
     },
     {
       "ID": "warp",
       "VendorKey": "warp",
+      "Family": "",
       "DisplayName": "Warp",
       "Category": "harness",
       "Signatures": {
@@ -759,11 +1048,13 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": ["warp", "Warp"],
+      "Aliases": null,
       "Documents": null
     },
     {
       "ID": "cherry-studio",
       "VendorKey": "cherrystudio",
+      "Family": "",
       "DisplayName": "Cherry Studio",
       "Category": "assistant",
       "Signatures": {
@@ -774,11 +1065,13 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": ["cherry-studio", "Cherry Studio"],
+      "Aliases": null,
       "Documents": null
     },
     {
       "ID": "msty",
       "VendorKey": "msty",
+      "Family": "",
       "DisplayName": "Msty",
       "Category": "assistant",
       "Signatures": {
@@ -789,11 +1082,13 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": ["msty", "Msty"],
+      "Aliases": null,
       "Documents": null
     },
     {
       "ID": "anythingllm",
       "VendorKey": "mintplexlabs",
+      "Family": "",
       "DisplayName": "AnythingLLM",
       "Category": "assistant",
       "Signatures": {
@@ -804,11 +1099,13 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": ["anythingllm", "AnythingLLM"],
+      "Aliases": null,
       "Documents": null
     },
     {
       "ID": "open-webui",
       "VendorKey": "openwebui",
+      "Family": "",
       "DisplayName": "Open WebUI",
       "Category": "assistant",
       "Signatures": {
@@ -819,11 +1116,13 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": ["open-webui", "Open WebUI"],
+      "Aliases": null,
       "Documents": null
     },
     {
       "ID": "jan",
       "VendorKey": "menlo",
+      "Family": "",
       "DisplayName": "Jan",
       "Category": "local_model",
       "Signatures": {
@@ -834,11 +1133,13 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": null,
+      "Aliases": null,
       "Documents": null
     },
     {
       "ID": "gpt4all",
       "VendorKey": "nomic",
+      "Family": "",
       "DisplayName": "GPT4All",
       "Category": "local_model",
       "Signatures": {
@@ -849,11 +1150,13 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": null,
+      "Aliases": null,
       "Documents": null
     },
     {
       "ID": "llamacpp",
       "VendorKey": "ggml",
+      "Family": "",
       "DisplayName": "llama.cpp",
       "Category": "local_model",
       "Signatures": {
@@ -864,11 +1167,13 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": null,
+      "Aliases": null,
       "Documents": null
     },
     {
       "ID": "vllm",
       "VendorKey": "vllm",
+      "Family": "",
       "DisplayName": "vLLM",
       "Category": "local_model",
       "Signatures": {
@@ -879,11 +1184,13 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": null,
+      "Aliases": null,
       "Documents": null
     },
     {
       "ID": "localai",
       "VendorKey": "localai",
+      "Family": "",
       "DisplayName": "LocalAI",
       "Category": "local_model",
       "Signatures": {
@@ -894,11 +1201,13 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": null,
+      "Aliases": null,
       "Documents": null
     },
     {
       "ID": "koboldcpp",
       "VendorKey": "koboldcpp",
+      "Family": "",
       "DisplayName": "KoboldCpp",
       "Category": "local_model",
       "Signatures": {
@@ -909,11 +1218,13 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": null,
+      "Aliases": null,
       "Documents": null
     },
     {
       "ID": "ollama",
       "VendorKey": "ollama",
+      "Family": "",
       "DisplayName": "Ollama",
       "Category": "local_model",
       "Signatures": {
@@ -924,11 +1235,13 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": null,
+      "Aliases": null,
       "Documents": null
     },
     {
       "ID": "lmstudio",
       "VendorKey": "lmstudio",
+      "Family": "",
       "DisplayName": "LM Studio",
       "Category": "local_model",
       "Signatures": {
@@ -939,6 +1252,7 @@
       },
       "VersionPlistKey": "",
       "ClientInfoNames": null,
+      "Aliases": null,
       "Documents": null
     }
   ]

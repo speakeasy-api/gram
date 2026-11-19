@@ -64,8 +64,19 @@ func apply(ctx context.Context, db *pgxpool.Pool, backfill bool) error {
 				ProcessNames:    conv.DefaultSlice(p.Signatures.ProcessNames, []string{}),
 				VersionPlistKey: conv.ToPGTextEmpty(p.VersionPlistKey),
 				ClientInfoNames: conv.DefaultSlice(p.ClientInfoNames, []string{}),
+				Family:          conv.ToPGTextEmpty(p.Family),
 			}); err != nil {
 				return fmt.Errorf("seed AI product %s: %w", p.ID, err)
+			}
+			for _, a := range p.Aliases {
+				if err := q.InsertAlias(ctx, repo.InsertAliasParams{
+					ID:          uuid.NewSHA1(uuid.NameSpaceURL, []byte("speakeasy:ai-catalog-bootstrap:alias:"+a.Name)),
+					AiProductID: p.ID,
+					Name:        a.Name,
+					Client:      conv.ToPGTextEmpty(a.Client),
+				}); err != nil {
+					return fmt.Errorf("seed AI alias for %s: %w", p.ID, err)
+				}
 			}
 			for _, d := range p.Documents {
 				if err := q.InsertDocument(ctx, repo.InsertDocumentParams{

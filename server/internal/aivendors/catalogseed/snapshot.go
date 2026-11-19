@@ -5,7 +5,7 @@ type snapshot struct {
 	// Notice records the ownership and maintenance policy in the embedded file.
 	Notice string `json:"Notice"`
 
-	// Products contains every product and document at bootstrap time.
+	// Products contains every product, alias and document at bootstrap time.
 	Products []product `json:"Products"`
 }
 
@@ -15,6 +15,9 @@ type product struct {
 
 	// VendorKey groups products from the same vendor.
 	VendorKey string `json:"VendorKey"`
+
+	// Family groups a vendor's related products; empty means its own family.
+	Family string `json:"Family"`
 
 	// DisplayName is the initial product label.
 	DisplayName string `json:"DisplayName"`
@@ -30,6 +33,9 @@ type product struct {
 
 	// ClientInfoNames contains self-reported MCP names for attribution only.
 	ClientInfoNames []string `json:"ClientInfoNames"`
+
+	// Aliases contains other reported names for attribution only.
+	Aliases []alias `json:"Aliases"`
 
 	// Documents contains the product's exact URLs and wildcard patterns.
 	Documents []document `json:"Documents"`
@@ -58,4 +64,12 @@ type document struct {
 
 	// Enabled records whether this document initially admits clients.
 	Enabled bool `json:"Enabled"`
+}
+
+type alias struct {
+	// Name is the reported name, stored as written.
+	Name string `json:"Name"`
+
+	// Client is the kind of client the name implies; empty means none.
+	Client string `json:"Client"`
 }

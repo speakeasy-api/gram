@@ -32,6 +32,29 @@ func (q *Queries) BackfillDecisions(ctx context.Context, ids []string) error {
 	return err
 }
 
+const editAliasFixture = `-- name: EditAliasFixture :exec
+UPDATE ai_product_aliases
+SET name = $1, client = $2, deleted_at = $3
+WHERE id = $4
+`
+
+type EditAliasFixtureParams struct {
+	Name      string
+	Client    pgtype.Text
+	DeletedAt pgtype.Timestamptz
+	ID        uuid.UUID
+}
+
+func (q *Queries) EditAliasFixture(ctx context.Context, arg EditAliasFixtureParams) error {
+	_, err := q.db.Exec(ctx, editAliasFixture,
+		arg.Name,
+		arg.Client,
+		arg.DeletedAt,
+		arg.ID,
+	)
+	return err
+}
+
 const editDocumentFixture = `-- name: EditDocumentFixture :exec
 UPDATE ai_product_cimd_documents
 SET url = $1, display_name = $2, enabled = $3,
@@ -60,18 +83,57 @@ func (q *Queries) EditDocumentFixture(ctx context.Context, arg EditDocumentFixtu
 
 const editProductFixture = `-- name: EditProductFixture :exec
 UPDATE ai_products
-SET display_name = $1, deleted_at = $2
-WHERE id = $3
+SET display_name = $1, family = $2,
+    deleted_at = $3
+WHERE id = $4
 `
 
 type EditProductFixtureParams struct {
 	DisplayName string
+	Family      pgtype.Text
 	DeletedAt   pgtype.Timestamptz
 	ID          string
 }
 
 func (q *Queries) EditProductFixture(ctx context.Context, arg EditProductFixtureParams) error {
-	_, err := q.db.Exec(ctx, editProductFixture, arg.DisplayName, arg.DeletedAt, arg.ID)
+	_, err := q.db.Exec(ctx, editProductFixture,
+		arg.DisplayName,
+		arg.Family,
+		arg.DeletedAt,
+		arg.ID,
+	)
+	return err
+}
+
+const insertAlias = `-- name: InsertAlias :exec
+INSERT INTO ai_product_aliases (id, ai_product_id, name, client)
+SELECT $1::uuid, p.id, $2::text, $3
+FROM ai_products p
+WHERE p.id = $4 AND p.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1 FROM ai_product_aliases a
+    WHERE translate(lower(a.name), E' \t_-', '') = translate(lower($2::text), E' \t_-', '')
+  )
+ON CONFLICT DO NOTHING
+`
+
+type InsertAliasParams struct {
+	ID          uuid.UUID
+	Name        string
+	Client      pgtype.Text
+	AiProductID string
+}
+
+// Same guarantees as documents, compared in the unique index's folded form: any
+// row with the folded name, live or deleted, wins. The untargeted conflict clause
+// absorbs a renamed seed row and a concurrent insert of the same folded name.
+func (q *Queries) InsertAlias(ctx context.Context, arg InsertAliasParams) error {
+	_, err := q.db.Exec(ctx, insertAlias,
+		arg.ID,
+		arg.Name,
+		arg.Client,
+		arg.AiProductID,
+	)
 	return err
 }
 
@@ -112,11 +174,11 @@ func (q *Queries) InsertDocument(ctx context.Context, arg InsertDocumentParams) 
 const insertProduct = `-- name: InsertProduct :exec
 INSERT INTO ai_products (
   id, vendor_key, display_name, category, bundle_ids, binaries, config_dirs,
-  process_names, version_plist_key, client_info_names
+  process_names, version_plist_key, client_info_names, family
 ) VALUES (
   $1, $2, $3, $4, $5::text[],
   $6::text[], $7::text[], $8::text[],
-  $9, $10::text[]
+  $9, $10::text[], $11
 )
 ON CONFLICT DO NOTHING
 `
@@ -132,6 +194,7 @@ type InsertProductParams struct {
 	ProcessNames    []string
 	VersionPlistKey pgtype.Text
 	ClientInfoNames []string
+	Family          pgtype.Text
 }
 
 // Catalog rows are global reference data, not tenant-owned records.
@@ -147,8 +210,44 @@ func (q *Queries) InsertProduct(ctx context.Context, arg InsertProductParams) er
 		arg.ProcessNames,
 		arg.VersionPlistKey,
 		arg.ClientInfoNames,
+		arg.Family,
 	)
 	return err
+}
+
+const listAliases = `-- name: ListAliases :many
+SELECT id, ai_product_id, name, client, created_by, updated_by, created_at, updated_at, deleted_at, deleted FROM ai_product_aliases ORDER BY id
+`
+
+func (q *Queries) ListAliases(ctx context.Context) ([]AiProductAlias, error) {
+	rows, err := q.db.Query(ctx, listAliases)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AiProductAlias
+	for rows.Next() {
+		var i AiProductAlias
+		if err := rows.Scan(
+			&i.ID,
+			&i.AiProductID,
+			&i.Name,
+			&i.Client,
+			&i.CreatedBy,
+			&i.UpdatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listDocuments = `-- name: ListDocuments :many
@@ -191,7 +290,7 @@ func (q *Queries) ListDocuments(ctx context.Context) ([]AiProductCimdDocument, e
 }
 
 const listProducts = `-- name: ListProducts :many
-SELECT id, vendor_key, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, client_info_names, created_by, updated_by, created_at, updated_at, deleted_at, deleted FROM ai_products ORDER BY id
+SELECT id, vendor_key, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, client_info_names, family, created_by, updated_by, created_at, updated_at, deleted_at, deleted FROM ai_products ORDER BY id
 `
 
 func (q *Queries) ListProducts(ctx context.Context) ([]AiProduct, error) {
@@ -214,6 +313,7 @@ func (q *Queries) ListProducts(ctx context.Context) ([]AiProduct, error) {
 			&i.ProcessNames,
 			&i.VersionPlistKey,
 			&i.ClientInfoNames,
+			&i.Family,
 			&i.CreatedBy,
 			&i.UpdatedBy,
 			&i.CreatedAt,

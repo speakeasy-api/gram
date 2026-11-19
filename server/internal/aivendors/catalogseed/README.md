@@ -1,6 +1,7 @@
 # AI client catalog bootstrap
 
-`catalog.json` is a frozen bootstrap of 51 products and 26 CIMD documents.
+`catalog.json` is a frozen bootstrap of 53 products, 41 aliases and 26 CIMD
+documents, generated once from the compiled `aivendors` registry.
 Production is the source of truth after bootstrap. New clients belong in the
 admin review queue, not this file. This seed does not change the compiled
 catalog readers; that transition belongs to AIM-449.
@@ -15,6 +16,12 @@ IDs, so editing their URL, disabling them, or soft-deleting them survives a
 rerun. Existing URLs, including soft-deleted rows, are left alone. Documents
 are not inserted under deleted products. Arbitrary URL history of preexisting
 non-bootstrap rows is not recoverable after their URL has been edited.
+
+Aliases follow the same rules keyed by name: deterministic IDs, and an
+existing name (live or soft-deleted, under any product, in any spelling that
+folds to the same name) is left alone. None are inserted under deleted products.
+A test rejects a file where one folded name belongs to two products. A product's family is written only when the product is
+inserted, so a family staff later set or cleared survives a rerun.
 
 The seed fills only missing references on decision-only rows for the frozen
 scan library. It preserves definitions, existing references, decisions,

@@ -2,11 +2,11 @@
 -- name: InsertProduct :exec
 INSERT INTO ai_products (
   id, vendor_key, display_name, category, bundle_ids, binaries, config_dirs,
-  process_names, version_plist_key, client_info_names
+  process_names, version_plist_key, client_info_names, family
 ) VALUES (
   @id, @vendor_key, @display_name, sqlc.narg('category'), @bundle_ids::text[],
   @binaries::text[], @config_dirs::text[], @process_names::text[],
-  sqlc.narg('version_plist_key'), @client_info_names::text[]
+  sqlc.narg('version_plist_key'), @client_info_names::text[], sqlc.narg('family')
 )
 ON CONFLICT DO NOTHING;
 
@@ -20,6 +20,20 @@ SELECT @id::uuid, p.id, @url::text, @display_name, @enabled, @is_pattern
 FROM ai_products p
 WHERE p.id = @ai_product_id AND p.deleted IS FALSE
   AND NOT EXISTS (SELECT 1 FROM ai_product_cimd_documents d WHERE d.url = @url::text)
+ON CONFLICT DO NOTHING;
+
+-- Same guarantees as documents, compared in the unique index's folded form: any
+-- row with the folded name, live or deleted, wins. The untargeted conflict clause
+-- absorbs a renamed seed row and a concurrent insert of the same folded name.
+-- name: InsertAlias :exec
+INSERT INTO ai_product_aliases (id, ai_product_id, name, client)
+SELECT @id::uuid, p.id, @name::text, sqlc.narg('client')
+FROM ai_products p
+WHERE p.id = @ai_product_id AND p.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1 FROM ai_product_aliases a
+    WHERE translate(lower(a.name), E' \t_-', '') = translate(lower(@name::text), E' \t_-', '')
+  )
 ON CONFLICT DO NOTHING;
 
 -- Only decision-only rows for the frozen scan library are backfilled. Never
@@ -42,9 +56,18 @@ SELECT * FROM ai_products ORDER BY id;
 -- name: ListDocuments :many
 SELECT * FROM ai_product_cimd_documents ORDER BY id;
 
+-- name: ListAliases :many
+SELECT * FROM ai_product_aliases ORDER BY id;
+
 -- name: EditProductFixture :exec
 UPDATE ai_products
-SET display_name = @display_name, deleted_at = sqlc.narg('deleted_at')
+SET display_name = @display_name, family = sqlc.narg('family'),
+    deleted_at = sqlc.narg('deleted_at')
+WHERE id = @id;
+
+-- name: EditAliasFixture :exec
+UPDATE ai_product_aliases
+SET name = @name, client = sqlc.narg('client'), deleted_at = sqlc.narg('deleted_at')
 WHERE id = @id;
 
 -- name: EditDocumentFixture :exec
