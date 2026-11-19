@@ -13099,6 +13099,14 @@ paths:
             tags:
                 - access
             x-speakeasy-name-override: listShadowMCPInventory
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
             x-speakeasy-react-hook:
                 name: ShadowMCPInventory
     /rpc/access.listShadowMCPInventoryServersForUser:

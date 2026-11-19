@@ -626,6 +626,7 @@ var _ = Service("access", func() {
 		Meta("openapi:operationId", "listShadowMCPInventory")
 		Meta("openapi:extension:x-speakeasy-name-override", "listShadowMCPInventory")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventory"}`)
+		shared.CursorPagination()
 	})
 
 	Method("getShadowMCPInventoryServer", func() {

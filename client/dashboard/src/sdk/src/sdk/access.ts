@@ -183,6 +183,7 @@ import {
 } from "../models/operations/listscopes.js";
 import {
   ListShadowMCPInventoryRequest,
+  ListShadowMCPInventoryResponse,
   ListShadowMCPInventorySecurity,
 } from "../models/operations/listshadowmcpinventory.js";
 import {
@@ -262,6 +263,7 @@ import {
   UpdateShadowMCPInventoryServerNameSecurity,
 } from "../models/operations/updateshadowmcpinventoryservername.js";
 import { unwrapAsync } from "../types/fp.js";
+import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
 export class Access extends ClientSDK {
   /**
@@ -749,8 +751,8 @@ export class Access extends ClientSDK {
     request: ListShadowMCPInventoryRequest,
     security?: ListShadowMCPInventorySecurity | undefined,
     options?: RequestOptions,
-  ): Promise<ListShadowMCPInventoryResult> {
-    return unwrapAsync(accessListShadowMCPInventory(
+  ): Promise<PageIterator<ListShadowMCPInventoryResponse, { cursor: string }>> {
+    return unwrapResultIterator(accessListShadowMCPInventory(
       this,
       request,
       security,
