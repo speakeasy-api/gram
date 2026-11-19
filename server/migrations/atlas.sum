@@ -1,4 +1,4 @@
-h1:XDO9z/E1qaolVBSVJ5RQJp3xvgbGX9N7lvs4NAgFMh4=
+h1:CBFbiDfhujFCXg0WxhBWwCoaT/gFSPD79AI/CaerECc=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -551,4 +551,4 @@ h1:XDO9z/E1qaolVBSVJ5RQJp3xvgbGX9N7lvs4NAgFMh4=
 20261118202235_binding-session-fk-any-issuer.sql h1:qmj+sBFXP3meXpljlvX6SeZdhSLxTzUiwwJ9n2GG6HM=
 20261119103854_drop-external-oauth-tables.sql h1:xPGduCyXFiqt55pmfQLCMU3p93SInfs4rPeDvbPk8iw=
 20261119105934_chat-messages-drop-redundant-indexes.sql h1:AFFX+uJXYJ3cZ9ADBJV0MBPqmNpzfBCpAuFlVLwxoqc=
-20261119191046_ai-products-family-aliases.sql h1:SB4KmXh1vIjY3NE0DXOAkEJn5UtLyxOu7/K/6BBE7WQ=
+20261119193702_ai-products-family.sql h1:5U/acuz2PTrDxH2l6tXdsR91oLmxu83a1mbhiUwAyy4=

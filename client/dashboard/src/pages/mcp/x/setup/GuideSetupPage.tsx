@@ -43,7 +43,7 @@ export function GuideSetupPage({
       </section>
       {/* Where the steps stand, beside them, so finishing the last one
             and marking it done are one glance apart. */}
-      <aside className="flex flex-col gap-3 self-start lg:sticky lg:top-6">
+      <aside className="flex flex-col gap-3 self-start lg:sticky lg:top-[calc(var(--detail-strip,0px)+1.5rem)]">
         <span className="text-eyebrow">Status</span>
         {doneAt ? (
           <span className="flex items-center gap-2 text-sm">
