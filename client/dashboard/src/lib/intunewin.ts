@@ -18,7 +18,7 @@ const INNER_FILE_NAME = "IntunePackage.intunewin";
 export async function buildIntuneWin(
   input: IntuneWinInput,
 ): Promise<Uint8Array> {
-  if (!(input.setupFile in input.files)) {
+  if (!Object.hasOwn(input.files, input.setupFile)) {
     throw new Error(`setup file ${input.setupFile} is not in the package`);
   }
 

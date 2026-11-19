@@ -96,12 +96,17 @@ $config = [ordered]@{
 $path = Join-Path $dir 'managed.json'
 [System.IO.File]::WriteAllText($path, ($config | ConvertTo-Json), (New-Object System.Text.UTF8Encoding $false))
 
-# SYSTEM and Administrators full control, Users read-only, no inheritance.
+# The agent runs as the signed-in user, so Users need read access.
 & icacls.exe $dir /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX' | Out-Null
+if ($LASTEXITCODE -ne 0) { Write-Error "icacls failed on $dir ($LASTEXITCODE)"; exit 1 }
 & icacls.exe $path /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' '*S-1-5-32-545:R' | Out-Null
+if ($LASTEXITCODE -ne 0) { Write-Error "icacls failed on $path ($LASTEXITCODE)"; exit 1 }
 
 $daemon = Join-Path $env:ProgramFiles 'Speakeasy\\speakeasyd.exe'
-if (Test-Path $daemon) { & $daemon -service restart }
+if (Test-Path $daemon) {
+  & $daemon -service restart
+  if ($LASTEXITCODE -ne 0) { Write-Error "speakeasyd restart failed ($LASTEXITCODE)"; exit 1 }
+}
 
 Get-ChildItem -Path $dir -Filter 'managed-*.installed' | Remove-Item -Force
 New-Item -ItemType File -Force -Path (Join-Path $dir "managed-$configRevision.installed") | Out-Null

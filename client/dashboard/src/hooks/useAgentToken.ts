@@ -24,8 +24,8 @@ export type UseAgentToken = {
   hasExistingAgentKey: boolean;
   /** Mint an additional agent key. Existing agent keys keep working. */
   generate: () => void;
-  /** Like generate, but resolves with the minted secret. */
-  generateAsync: () => Promise<string>;
+  /** Like generate, but resolves with the minted secret and its key id. */
+  generateAsync: () => Promise<{ token: string; id: string }>;
 };
 
 /**
@@ -102,7 +102,7 @@ export function useAgentToken(opts: {
   const generateAsync = async () => {
     const data = await createKeyMutation.mutateAsync(createRequest());
     if (!data.key) throw new Error("agent token: empty key in response");
-    return data.key;
+    return { token: data.key, id: data.id };
   };
 
   return {

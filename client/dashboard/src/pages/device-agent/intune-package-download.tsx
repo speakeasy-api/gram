@@ -3,7 +3,9 @@ import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useAgentToken } from "@/hooks/useAgentToken";
+import { downloadBlob } from "@/lib/download";
 import { useOrgRoutes } from "@/routes";
+import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
 import { Download } from "lucide-react";
 import React, { useState } from "react";
 import { Link } from "react-router";
@@ -33,6 +35,7 @@ export function IntunePackageDownload({
   const { name: orgName, slug: orgSlug } = useOrganization();
   const apiKeysHref = useOrgRoutes().apiKeys.href();
   const { canGenerate, generateAsync } = useAgentToken({});
+  const revokeKey = useRevokeAPIKeyMutation();
   const [status, setStatus] = useState<Status>({ kind: "idle" });
 
   const ready = version !== null && msiUrl !== null;
@@ -47,19 +50,32 @@ export function IntunePackageDownload({
         throw new Error(`Couldn't download the msi (HTTP ${res.status}).`);
       const msi = new Uint8Array(await res.arrayBuffer());
 
-      const orgToken = await generateAsync();
-      const bundle = await buildIntuneBundle({
-        orgToken,
-        orgSlug,
-        orgName,
-        autoUpdate,
-        revision: configRevision(new Date()),
-        version,
-        msi,
-      });
-
+      const minted = await generateAsync();
       const fileName = `speakeasy-intune-${version}.zip`;
-      saveFile(bundle, fileName);
+      try {
+        const bundle = await buildIntuneBundle({
+          orgToken: minted.token,
+          orgSlug,
+          orgName,
+          autoUpdate,
+          revision: configRevision(new Date()),
+          version,
+          msi,
+        });
+        downloadBlob(
+          new Blob([bundle as BlobPart], { type: "application/zip" }),
+          fileName,
+        );
+      } catch (err) {
+        // Best-effort: don't leave a token behind for a bundle nobody got.
+        await revokeKey
+          .mutateAsync({
+            security: { sessionHeaderGramSession: "" },
+            request: { id: minted.id },
+          })
+          .catch(() => undefined);
+        throw err;
+      }
       setStatus({ kind: "done", fileName });
     } catch (err) {
       setStatus({
@@ -84,7 +100,7 @@ export function IntunePackageDownload({
           variant="secondary"
           onClick={() => void download()}
           disabled={!ready || !canGenerate || status.kind === "working"}
-          title={
+          tooltip={
             !canGenerate
               ? "Building the Intune package mints an agent token, which requires the org:admin role."
               : !ready
@@ -126,15 +142,4 @@ export function IntunePackageDownload({
       )}
     </div>
   );
-}
-
-function saveFile(bytes: Uint8Array, fileName: string) {
-  const url = URL.createObjectURL(
-    new Blob([bytes as BlobPart], { type: "application/zip" }),
-  );
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = fileName;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
 }

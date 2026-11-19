@@ -48,7 +48,9 @@ function renderSetup(
     canGenerate: true,
     hasExistingAgentKey: false,
     generate: vi.fn<() => void>(),
-    generateAsync: vi.fn<() => Promise<string>>(),
+    generateAsync: vi
+      .fn<() => Promise<{ token: string; id: string }>>()
+      .mockResolvedValue({ token: "spk_org_test", id: "key_test" }),
     ...token,
   };
   // The release lookup retries once; no delay keeps a failed lookup fast.
