@@ -2793,33 +2793,6 @@ type ExternalMcpToolDefinition struct {
 	Deleted bool
 }
 
-type ExternalOauthClientRegistration struct {
-	// @access: confidential
-	ID uuid.UUID
-	// @access: confidential
-	OrganizationID string
-	// @access: confidential
-	ProjectID uuid.UUID
-	// @access: restricted
-	OauthServerIssuer string
-	// @access: restricted
-	ClientID string
-	// @access: secret-restricted
-	ClientSecretEncrypted pgtype.Text
-	// @access: confidential
-	ClientIDIssuedAt pgtype.Timestamptz
-	// @access: confidential
-	ClientSecretExpiresAt pgtype.Timestamptz
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
-	// @access: confidential
-	UpdatedAt pgtype.Timestamptz
-	// @access: confidential
-	DeletedAt pgtype.Timestamptz
-	// @access: confidential
-	Deleted bool
-}
-
 type ExternalOauthServerMetadatum struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -8802,43 +8775,6 @@ type UserHiddenMcpServer struct {
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
-}
-
-type UserOauthToken struct {
-	// @access: confidential
-	ID uuid.UUID
-	// @access: confidential
-	UserID string
-	// @access: confidential
-	OrganizationID string
-	// @access: confidential
-	ProjectID uuid.UUID
-	// @access: confidential
-	ClientRegistrationID uuid.UUID
-	// @access: confidential
-	ToolsetID uuid.UUID
-	// @access: restricted
-	OauthServerIssuer string
-	// @access: secret-restricted
-	AccessTokenEncrypted string
-	// @access: secret-restricted
-	RefreshTokenEncrypted pgtype.Text
-	// @access: confidential
-	TokenType pgtype.Text
-	// @access: confidential
-	ExpiresAt pgtype.Timestamptz
-	// @access: opaque-restricted
-	Scopes []string
-	// @access: confidential
-	ProviderName pgtype.Text
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
-	// @access: confidential
-	UpdatedAt pgtype.Timestamptz
-	// @access: confidential
-	DeletedAt pgtype.Timestamptz
-	// @access: confidential
-	Deleted bool
 }
 
 type UserSession struct {
