@@ -226,7 +226,7 @@ export function useAttemptBelongs(
   attempt: (AttemptRow & { userSessionIssuerId?: string }) | undefined,
   providerId: string,
   lockedServerId?: string,
-): "yes" | "no" | "pending" {
+): "yes" | "no" | "pending" | "error" {
   const needsServers =
     !!attempt && !attempt.userSessionIssuerId && !!attempt.server;
   const [window] = useState(() => {
@@ -244,7 +244,7 @@ export function useAttemptBelongs(
   if (attempt.userSessionIssuerId)
     return attempt.userSessionIssuerId === providerId ? "yes" : "no";
   if (!attempt.server) return "yes";
-  if (counts.isError) return "yes";
+  if (counts.isError) return "error";
   const servers = counts.data?.facets?.servers;
   if (!servers) return "pending";
   return servers.some((s) => s.value === attempt.server?.id) ? "yes" : "no";
@@ -287,6 +287,7 @@ export function useSuspectedProblem(
 /** The organization's killswitches in force now (first page of 100). */
 export function useActiveKillswitches(): {
   killswitches: ActiveKillswitch[];
+  hasMore: boolean;
   isPending: boolean;
   isError: boolean;
 } {
@@ -316,6 +317,7 @@ export function useActiveKillswitches(): {
     (query.error.statusCode === 401 || query.error.statusCode === 403);
   return {
     killswitches,
+    hasMore: !!query.data?.result.nextCursor,
     isPending: query.isPending,
     isError: query.isError && !forbidden,
   };

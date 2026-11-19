@@ -294,6 +294,18 @@ interface ToolbarFiltersProps {
    */
   extraChips?: ReactNode;
   projectSlug?: string;
+  /** Dimensions the page fixes: a padlocked chip in place, nothing to edit. */
+  locked?: Partial<Record<string, string>>;
+  /** Off: no count on "More filters" (the set filters already show as chips). */
+  showSheetCount?: boolean;
+  /** Off: the page places its own reset control. */
+  showClearAll?: boolean;
+  /** Replaces the standard filter sheet. */
+  renderSheet?: (sheet: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    accents: Record<string, string>;
+  }) => ReactNode;
 }
 
 function ToolbarFilters({
@@ -309,13 +321,19 @@ function ToolbarFilters({
   customBuilder,
   extraChips,
   projectSlug,
+  locked,
+  showSheetCount = true,
+  showClearAll = true,
+  renderSheet,
 }: ToolbarFiltersProps): JSX.Element {
   const [sheetOpen, setSheetOpen] = useState(false);
 
   // Pinned dims always pill (with an "All …" default); non-pinned pill once
   // active. hideChip dims never pill.
   const pillDims = schema.filter(
-    (d) => !d.hideChip && (d.pinned || isDimensionActive(d, values[d.id]!)),
+    (d) =>
+      !d.hideChip &&
+      (d.pinned || !!locked?.[d.id] || isDimensionActive(d, values[d.id]!)),
   );
 
   // Badge counts only filters hidden in the sheet (active non-pinned dims +
@@ -359,6 +377,18 @@ function ToolbarFilters({
   return (
     <div className="flex flex-wrap items-center gap-2">
       {pillDims.map((dim) => {
+        const lockedLabel = locked?.[dim.id];
+        if (lockedLabel) {
+          return (
+            <FilterChip
+              key={dim.id}
+              label={lockedLabel}
+              ariaLabel="Fixed on this tab"
+              color={accents[dim.id]}
+              locked
+            />
+          );
+        }
         const label = chipLabel(dim, values[dim.id]!, optionsById[dim.id]);
         const ariaLabel =
           dim.kind === "select" ||
@@ -411,7 +441,7 @@ function ToolbarFilters({
         >
           <SlidersHorizontal className="size-4" />
           <span className="text-eyebrow">More filters</span>
-          {sheetCount > 0 && (
+          {showSheetCount && sheetCount > 0 && (
             <Badge variant="neutral" className="ml-1 px-1.5">
               {sheetCount}
             </Badge>
@@ -419,7 +449,7 @@ function ToolbarFilters({
         </Button>
       )}
 
-      {hasClearable && (
+      {showClearAll && hasClearable && (
         <Button
           variant="tertiary"
           onClick={onClearAll}
@@ -430,21 +460,25 @@ function ToolbarFilters({
         </Button>
       )}
 
-      <FilterSheet
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
-        schema={schema}
-        values={values}
-        optionsById={optionsById}
-        onChange={onChange}
-        onClearAll={onClearAll}
-        accents={accents}
-        projectSlug={projectSlug}
-        customFilters={customFilters}
-        onEditCustomFilter={onEditCustomFilter}
-        onRemoveCustomFilter={onRemoveCustomFilter}
-        customBuilder={customBuilder}
-      />
+      {renderSheet ? (
+        renderSheet({ open: sheetOpen, onOpenChange: setSheetOpen, accents })
+      ) : (
+        <FilterSheet
+          open={sheetOpen}
+          onOpenChange={setSheetOpen}
+          schema={locked ? schema.filter((d) => !locked[d.id]) : schema}
+          values={values}
+          optionsById={optionsById}
+          onChange={onChange}
+          onClearAll={onClearAll}
+          accents={accents}
+          projectSlug={projectSlug}
+          customFilters={customFilters}
+          onEditCustomFilter={onEditCustomFilter}
+          onRemoveCustomFilter={onRemoveCustomFilter}
+          customBuilder={customBuilder}
+        />
+      )}
     </div>
   );
 }

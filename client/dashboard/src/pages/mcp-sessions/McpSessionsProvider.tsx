@@ -113,7 +113,7 @@ function ProviderPage(): JSX.Element {
   const activeTab = segment === "connection-logs" ? "connections" : segment;
   const provider = providers.find((p) => p.id === issuerId);
   // The frame owns the scroll container; a tab change starts at the top.
-  const contentRef = useTabScrollReset(activeTab);
+  const contentRef = useTabScrollReset(segment);
 
   const tabHref = (tab: HealthProviderSegment, id: string = issuerId) => {
     switch (tab) {
@@ -163,7 +163,21 @@ function ProviderPage(): JSX.Element {
 
   return (
     <DetailFrame
-      breadcrumbs={{ substitutions: { [issuerId]: provider?.slug } }}
+      breadcrumbs={{
+        substitutions: {
+          [issuerId]: provider?.slug,
+          "mcp-sessions": "MCP Sessions",
+        },
+        // Connection Logs is a view of the Connections tab.
+        insertAfter:
+          segment === "connection-logs"
+            ? {
+                segment: issuerId,
+                display: "Connections",
+                url: routes.mcpSessions.provider.connections.href(issuerId),
+              }
+            : undefined,
+      }}
       tabsLabel="MCP Authentication Provider sections"
       tabs={tabs}
       activeTab={activeTab}
@@ -245,7 +259,7 @@ function ProviderHeaderControls({
         rows={[
           {
             key: "session-duration",
-            label: "Session length",
+            label: "Session duration",
             control: (
               <SessionDurationControl
                 providerId={provider.id}

@@ -1,38 +1,27 @@
 import { ChartNoData } from "@/components/chart/ChartNoData";
-import {
-  chartColors,
-  EXPANDED_LEGEND,
-  SHARED_TOOLTIP,
-} from "@/components/chart/chartTheme";
+import { chartColors, SHARED_TOOLTIP } from "@/components/chart/chartTheme";
 import { OUTCOME, seriesForTheme } from "@/components/chart/palette";
-import { StackedTimeBarChart } from "@/components/chart/StackedTimeBarChart";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useIsDarkTheme } from "@/lib/theme";
-import type { ChartOptions } from "chart.js";
+import type { ChartOptions, Plugin } from "chart.js";
 import { ArrowRight } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 import { Line } from "react-chartjs-2";
 import { Link } from "react-router";
 import { useSessionActivity, useSignInSummary, type Window } from "./api";
+import { formatDayMonth, formatWeekdayDay } from "./format";
+import { HealthBarChart, LegendDot } from "./HealthBarChart";
 import type { SignInSummaryResponse, SummaryBucket } from "./types";
 
 export type SummaryMetric = "sign-ins" | "sessions";
 
 const HOUR = 3_600_000;
 
-const SHORT_DAY = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  day: "numeric",
-});
 const HOUR_LABEL = new Intl.DateTimeFormat(undefined, {
   hour: "2-digit",
   minute: "2-digit",
   hourCycle: "h23",
-});
-const DAY_MONTH = new Intl.DateTimeFormat(undefined, {
-  day: "numeric",
-  month: "short",
 });
 const TOOLTIP_TIME = new Intl.DateTimeFormat(undefined, {
   weekday: "short",
@@ -84,6 +73,8 @@ export function SummaryPanel({
   const sessions = useSessionActivity(providerId, window, {
     enabled: metric === "sessions",
   });
+  const lineColor = seriesForTheme(useIsDarkTheme())[0] ?? OUTCOME.ok;
+  const now = useMemo(() => new Date(window.to), [window.to]);
 
   return (
     <section className="space-y-3" aria-labelledby="summary-heading">
@@ -124,10 +115,7 @@ export function SummaryPanel({
                 organization.
               </ChartMessage>
             ) : (
-              <SignInBars
-                data={signIns.data}
-                dayLabels={signIns.data.bucket !== "hour"}
-              />
+              <SignInBars data={signIns.data} now={now} />
             )
           ) : sessions.isPending ? (
             <Skeleton className="h-full w-full" />
@@ -140,7 +128,17 @@ export function SummaryPanel({
             <ChartMessage>Couldn&apos;t load active sessions.</ChartMessage>
           )}
         </div>
-        <div className="mt-3 flex justify-end">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-4">
+            {metric === "sign-ins" ? (
+              <>
+                <LegendDot color={OUTCOME.ok} label="Signed in" />
+                <LegendDot color={OUTCOME.blocked} label="Didn't sign in" />
+              </>
+            ) : (
+              <LegendDot color={lineColor} label="Active sessions" />
+            )}
+          </div>
           <Link
             to={metric === "sign-ins" ? logsHref : sessionsHref}
             className="inline-flex items-center gap-1 text-sm hover:underline"
@@ -164,50 +162,66 @@ function ChartMessage({ children }: { children: ReactNode }): JSX.Element {
   );
 }
 
+/** One label per day, under the bucket that holds its noon; hours on a one-day range. */
+function barLabels(starts: number[], bucket: SummaryBucket): string[] {
+  return starts.map((start) => {
+    const date = new Date(start);
+    if (bucket === "hour") {
+      return date.getHours() % 4 === 0 ? HOUR_LABEL.format(date) : "";
+    }
+    if (bucket === "day") {
+      return date.getDate() % 5 === 0 ? formatDayMonth(date.toISOString()) : "";
+    }
+    const noon = new Date(date);
+    noon.setHours(12, 0, 0, 0);
+    const t = noon.getTime();
+    return t >= start && t < start + BUCKET_MS.six_hours
+      ? formatWeekdayDay(start)
+      : "";
+  });
+}
+
 function SignInBars({
   data,
-  dayLabels,
+  now,
 }: {
   data: SignInSummaryResponse;
-  dayLabels: boolean;
+  now: Date;
 }): JSX.Element {
   const bars = useMemo(() => signInBars(data), [data]);
+  const bucket = data.bucket ?? "hour";
   const chart = useMemo(() => {
-    const labels = bars.map((bar) =>
-      dayLabels ? SHORT_DAY.format(bar.start) : HOUR_LABEL.format(bar.start),
-    );
+    const starts = bars.map((bar) => bar.start);
     return {
-      labels,
-      timestamps: bars.map((bar) => bar.start),
-      tooltipLabels: bars.map((bar) => TOOLTIP_TIME.format(bar.start)),
-      datasets: [
+      labels: barLabels(starts, bucket),
+      timestamps: starts,
+      tooltipLabels: starts.map((start) => TOOLTIP_TIME.format(start)),
+      series: [
         {
           label: "Signed in",
           data: bars.map((bar) => bar.signedIn),
-          backgroundColor: OUTCOME.ok,
-          stack: "attempts",
+          color: OUTCOME.ok,
         },
         {
           label: "Didn't sign in",
           data: bars.map((bar) => bar.didNot),
-          backgroundColor: OUTCOME.blocked,
-          stack: "attempts",
+          color: OUTCOME.blocked,
         },
       ],
     };
-  }, [bars, dayLabels]);
+  }, [bars, bucket]);
   if (bars.every((bar) => bar.signedIn + bar.didNot === 0)) {
     return <ChartNoData />;
   }
   return (
-    <StackedTimeBarChart
+    <HealthBarChart
       labels={chart.labels}
       timestamps={chart.timestamps}
-      bucketMs={BUCKET_MS[data.bucket ?? "hour"]}
+      bucketMs={BUCKET_MS[bucket]}
       tooltipLabels={chart.tooltipLabels}
-      datasets={chart.datasets}
+      series={chart.series}
+      now={now}
       height={220}
-      expanded
     />
   );
 }
@@ -222,12 +236,20 @@ function ActiveSessionsLine({
   const isDark = useIsDarkTheme();
   const colors = chartColors(isDark);
   const line = seriesForTheme(isDark)[0] ?? OUTCOME.ok;
+  const font = useMemo(() => {
+    const family = getComputedStyle(document.documentElement)
+      .getPropertyValue("--font-mono")
+      .trim();
+    return family || "monospace";
+  }, []);
   const data = useMemo(
     () => ({
-      labels: points.map((p) => DAY_MONTH.format(new Date(`${p.day}T00:00`))),
+      labels: points.map((p) =>
+        formatDayMonth(new Date(`${p.day}T00:00`).toISOString()),
+      ),
       datasets: [
         {
-          label: `Active sessions · ${activeNow} now`,
+          label: "Active sessions",
           data: points.map((p) => p.activeSessions),
           borderColor: line,
           backgroundColor: line,
@@ -237,29 +259,61 @@ function ActiveSessionsLine({
         },
       ],
     }),
-    [points, activeNow, line],
+    [points, line],
   );
+  const lastLabel: Plugin<"line"> = {
+    id: "activeNowLabel",
+    afterDatasetsDraw(chart) {
+      const point = chart.getDatasetMeta(0).data.at(-1);
+      if (!point) return;
+      const ctx = chart.ctx;
+      ctx.save();
+      ctx.fillStyle = colors.label;
+      ctx.font = "12px sans-serif";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "bottom";
+      ctx.fillText(`${activeNow} today`, point.x, point.y - 8);
+      ctx.restore();
+    },
+  };
   const options: ChartOptions<"line"> = {
     responsive: true,
     maintainAspectRatio: false,
     interaction: { mode: "index", intersect: false },
+    layout: { padding: { top: 20, right: 8 } },
     plugins: {
-      legend: EXPANDED_LEGEND as unknown as NonNullable<
-        ChartOptions<"line">["plugins"]
-      >["legend"],
+      legend: { display: false },
       tooltip: SHARED_TOOLTIP,
     },
     scales: {
       x: {
         grid: { display: false },
-        ticks: { maxTicksLimit: 6, color: colors.labelFaded },
+        ticks: {
+          maxTicksLimit: 5,
+          maxRotation: 0,
+          color: colors.labelFaded,
+          font: { family: font, size: 11 },
+        },
       },
       y: {
         beginAtZero: true,
+        border: { display: false },
         grid: { color: colors.gridLine },
-        ticks: { maxTicksLimit: 5, color: colors.labelFaded },
+        ticks: {
+          maxTicksLimit: 5,
+          precision: 0,
+          color: colors.labelFaded,
+          font: { family: font, size: 11 },
+        },
       },
     },
   };
-  return <Line data={data} options={options} />;
+  return (
+    <Line
+      key={`${isDark}-${activeNow}`}
+      data={data}
+      options={options}
+      plugins={[lastLabel]}
+    />
+  );
 }

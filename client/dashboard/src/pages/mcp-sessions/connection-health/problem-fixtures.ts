@@ -283,7 +283,7 @@ function problems(): SuspectedProblemDetail[] {
       reasons: [REASONS.keyRejected.code],
     },
     source: "server",
-    failedPer10Minutes: tenMinutes(at(-1, "16:00"), [2, 3, 1, 0, 2, 4]),
+    failedPer10Minutes: tenMinutes(at(0, "10:00"), [2, 3, 1, 0, 4, 6]),
     otherFailuresOnService: 0,
     lastConnectedAt: at(-1, "15:58").toISOString(),
     messages: [
@@ -324,7 +324,10 @@ function problems(): SuspectedProblemDetail[] {
       reasons: [REASONS.staleGrant.code],
     },
     source: "app",
-    failedPer10Minutes: tenMinutes(at(0, "09:30"), [3, 5, 6, 4, 6, 7, 5, 2]),
+    failedPer10Minutes: tenMinutes(
+      at(0, "09:30"),
+      [8, 11, 13, 10, 12, 14, 11, 8],
+    ),
     otherFailuresOnService: 0,
     lastConnectedAt: at(-2, "10:12").toISOString(),
     messages: [
@@ -363,7 +366,7 @@ function problems(): SuspectedProblemDetail[] {
       outcomes: ["failed"],
     },
     source: "speakeasy_setting",
-    failedPer10Minutes: tenMinutes(at(-3, "16:00"), [5, 7, 6, 8, 5]),
+    failedPer10Minutes: tenMinutes(at(-3, "16:00"), [7, 9, 8, 10, 7]),
     otherFailuresOnService: 0,
     lastConnectedAt: at(-4, "17:20").toISOString(),
     messages: [
@@ -415,17 +418,28 @@ function later<T>(value: () => T): Promise<T> {
   });
 }
 
-export function fixtureListSuspectedProblems(_: {
+export function fixtureListSuspectedProblems({
+  serverId,
+}: {
   userSessionIssuerId: string;
   serverId?: string;
 }): Promise<ListSuspectedProblemsResponse> {
   return later(() => {
     if (quiet()) return { loggingEnabled: true, problems: [] };
     const list = problems();
+    if (!serverId)
+      return { loggingEnabled: true, problems: list.map(summaryOf) };
+    // A server's tab shows the sample server Linear's problems as its own.
+    const onServer = (p: SuspectedProblemDetail) =>
+      p.people.filter((person) => person.server?.id === SERVERS.linear.id);
     return {
       loggingEnabled: true,
-      // Sample problems name made-up servers, so no per-server share is shown.
-      problems: list.map(summaryOf),
+      problems: list
+        .filter((p) => onServer(p).length > 0)
+        .map((p) => ({
+          ...summaryOf(p),
+          peopleOnServerCount: onServer(p).length,
+        })),
     };
   });
 }
@@ -436,7 +450,7 @@ export function fixtureGetSuspectedProblem({
   id: string;
 }): Promise<GetSuspectedProblemResponse> {
   return later(() => {
-    const problem = problems().find((p) => p.id === id);
+    const problem = quiet() ? undefined : problems().find((p) => p.id === id);
     return { loggingEnabled: true, found: !!problem, problem };
   });
 }

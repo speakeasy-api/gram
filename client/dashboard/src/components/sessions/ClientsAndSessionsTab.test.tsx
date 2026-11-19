@@ -12,7 +12,9 @@ const {
   revokeSessionMutate,
   batchBadgesMutate,
   listAgents,
+  healthFlag,
 } = vi.hoisted(() => ({
+  healthFlag: { value: "off" as "pending" | "on" | "off" },
   useUserSessionClientsInfinite: vi.fn(),
   useUserSessionsInfinite: vi.fn(),
   invalidateAllUserSessionClients: vi.fn(),
@@ -22,8 +24,22 @@ const {
 }));
 
 vi.mock("@/pages/mcp-sessions/connection-health/flag", () => ({
-  useConnectionHealthFlag: () => "off",
+  useConnectionHealthFlag: () => healthFlag.value,
 }));
+
+vi.mock(
+  "@/pages/mcp-sessions/connection-health/ServerConnectionHealth",
+  async (importOriginal) => ({
+    ...(await importOriginal<object>()),
+    ServerConnectionHealth: ({
+      providerId,
+      server,
+    }: {
+      providerId: string;
+      server: { id: string };
+    }) => <div data-testid="server-health">{`${providerId}:${server.id}`}</div>,
+  }),
+);
 
 vi.mock("@gram/client/react-query/userSessionClients.js", () => ({
   useUserSessionClientsInfinite: (...args: unknown[]) =>
@@ -228,7 +244,39 @@ describe("ClientsAndSessionsTab", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    healthFlag.value = "off";
   });
+
+  it("shows connection health for the server when the flag is on", () => {
+    healthFlag.value = "on";
+    renderTab(
+      <ClientsAndSessionsTab
+        issuerId="issuer-1"
+        originatingMcpServerId="srv-1"
+      />,
+    );
+
+    expect(screen.getByTestId("server-health").textContent).toBe(
+      "issuer-1:srv-1",
+    );
+    expect(useUserSessionsInfinite).not.toHaveBeenCalled();
+  });
+
+  it.each(["off", "pending"] as const)(
+    "lists sessions without connection health when the flag is %s",
+    (value) => {
+      healthFlag.value = value;
+      renderTab(
+        <ClientsAndSessionsTab
+          issuerId="issuer-1"
+          originatingMcpServerId="srv-1"
+        />,
+      );
+
+      expect(screen.queryByTestId("server-health")).toBeNull();
+      expect(useUserSessionsInfinite).toHaveBeenCalled();
+    },
+  );
 
   it("explains why there is nothing to show when no issuer is attached", () => {
     renderTab(<ClientsAndSessionsTab issuerId={undefined} />);

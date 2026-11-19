@@ -30,8 +30,12 @@ export function ServerConnectionHealth({
   const { providers } = useProjectProviders();
   const [searchParams, setSearchParams] = useSearchParams();
   const [now] = useState(connectionHealthNow);
+  // A registration link opens its sheet, which lives in Active Sessions.
   const view =
-    searchParams.get(VIEW_PARAM) === "sessions" ? "sessions" : "logs";
+    searchParams.get(VIEW_PARAM) === "sessions" ||
+    searchParams.has("registration")
+      ? "sessions"
+      : "logs";
   const scope = useMemo(
     () => ({ providerId, serverId: server.id }),
     [providerId, server.id],
@@ -65,6 +69,7 @@ export function ServerConnectionHealth({
         <div className="flex items-center justify-between gap-4">
           <SegmentedControl
             ariaLabel="Connections view"
+            variant="view"
             value={view}
             onChange={(next) =>
               setParam(VIEW_PARAM, next === "sessions" ? "sessions" : null)

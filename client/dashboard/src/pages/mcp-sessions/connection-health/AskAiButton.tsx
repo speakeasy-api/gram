@@ -16,7 +16,11 @@ export interface Investigation {
 
 /** Context rides in the message's tagged block, which the chat shows as Additional context. */
 function investigationPrompt({ question, context }: Investigation): string {
-  return `<dashboard_context>\n${context}\n</dashboard_context>\n\n${question}`;
+  const safe = context.replaceAll(
+    "</dashboard_context>",
+    "&lt;/dashboard_context&gt;",
+  );
+  return `<dashboard_context>\n${safe}\n</dashboard_context>\n\n${question}`;
 }
 
 function useInvestigate(): (investigation: Investigation) => void {

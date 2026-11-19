@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { expect, it } from "vitest";
-import { customDateRangeBounds } from "./filter-schema";
+import { chipLabel, customDateRangeBounds } from "./filter-schema";
 
 it("uses the persisted calendar boundary, including a daylight-saving final day", () => {
   const from = new Date("2026-11-01T05:00:00Z");
@@ -33,4 +33,21 @@ it("keeps exact custom timestamps and leaves relative ranges unresolved", () => 
     }),
   ).toBeNull();
   expect(customDateRangeBounds(undefined)).toBeNull();
+});
+
+it("names the dimension on a chip only when the schema opts in", () => {
+  const options = [{ value: "a", label: "Linear" }];
+  const plain = { id: "s", label: "Service", kind: "select" } as const;
+  const prefixed = { ...plain, chipPrefix: true } as const;
+  expect(chipLabel(plain, "a", options)).toBe("Linear");
+  expect(chipLabel(prefixed, "a", options)).toBe("Service: Linear");
+  expect(chipLabel(prefixed, null, options)).toBe("All services");
+  const counted = {
+    id: "m",
+    label: "Message",
+    kind: "multiselect",
+    chipCount: true,
+  } as const;
+  expect(chipLabel(counted, ["x", "y", "z"])).toBe("Message: 3");
+  expect(chipLabel(counted, [])).toBe("All messages");
 });

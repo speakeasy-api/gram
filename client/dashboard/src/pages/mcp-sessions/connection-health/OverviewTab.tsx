@@ -1,4 +1,3 @@
-import { MetricCard } from "@/components/ui/MetricCard";
 import {
   Select,
   SelectContent,
@@ -9,7 +8,6 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Table, type Column } from "@/components/ui/Table";
 import { authorizationServerModeLabel } from "@/pages/user-session-issuers/issuerDisplay";
-import { splitIntoUnit } from "@/pages/mcp/x/tabs/settings/sections/authentication/sessionSettings";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { scopeLabel } from "@/components/killswitch/killswitch-view-model";
 import { useSession } from "@/contexts/Auth";
@@ -25,7 +23,6 @@ import {
   useActiveKillswitches,
   useConnectionAttempts,
   useDeniedClients,
-  useSessionAverage,
   useSuspectedProblems,
 } from "./api";
 import { AttemptDetailSheet } from "./AttemptDetailSheet";
@@ -187,7 +184,10 @@ export function OverviewTab({
       {activeKillswitches.length > 0 || deniedClients.length > 0 ? (
         <div className="grid gap-6 lg:grid-cols-2 [&>*:only-child]:lg:col-span-2">
           {activeKillswitches.length > 0 ? (
-            <KillswitchesInForce killswitches={activeKillswitches} />
+            <KillswitchesInForce
+              killswitches={activeKillswitches}
+              hasMore={killswitches.hasMore}
+            />
           ) : null}
           {deniedClients.length > 0 ? (
             <DeniedClients
@@ -315,8 +315,10 @@ function ArrowLink({
 
 function KillswitchesInForce({
   killswitches,
+  hasMore,
 }: {
   killswitches: ActiveKillswitch[];
+  hasMore: boolean;
 }): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const session = useSession();
@@ -338,13 +340,19 @@ function KillswitchesInForce({
         key: "who",
         header: "Who",
         width: "1.4fr",
-        render: (k) =>
-          names.get(k.userId) ??
-          (members.isPending
-            ? ""
-            : members.isError
-              ? "Unknown"
-              : "Former member"),
+        render: (k) => (
+          <div>
+            <div>
+              {names.get(k.userId) ??
+                (members.isPending
+                  ? ""
+                  : members.isError
+                    ? "Unknown"
+                    : "Former member")}
+            </div>
+            <div className="text-muted-foreground text-xs">Person</div>
+          </div>
+        ),
       },
       {
         key: "servers",
@@ -374,7 +382,7 @@ function KillswitchesInForce({
   ]);
   return (
     <OverviewSection
-      title={`Killswitches in force · ${killswitches.length}`}
+      title={`Killswitches in force · ${killswitches.length}${hasMore ? "+" : ""}`}
       description="Across this organization, not only this provider. They block tool calls right now."
       action={<ArrowLink to={orgRoutes.killswitch.href()}>View all</ArrowLink>}
     >
@@ -428,14 +436,7 @@ function DeniedClients({
         header: "Reason",
         width: "1.4fr",
         render: (c) => (
-          <div>
-            <div>{c.message}</div>
-            {c.technicalMessage ? (
-              <div className="text-muted-foreground text-xs">
-                {c.technicalMessage}
-              </div>
-            ) : null}
-          </div>
+          <div title={c.technicalMessage ?? undefined}>{c.message}</div>
         ),
       },
       {
@@ -469,19 +470,16 @@ function Configuration({
   provider: UserSessionIssuer;
   settingsHref: string;
 }): JSX.Element {
-  const duration = splitIntoUnit(provider.sessionDurationHours);
-  const average = useSessionAverage(provider.id).data;
-  const facts: [string, string, string?][] = [
+  const facts: [string, string][] = [
     [
-      "Session length",
-      `${duration.number} ${duration.unit}${duration.number === 1 ? "" : "s"}`,
-      average === undefined
-        ? undefined
-        : `Sessions averaged ${formatSessionLength(average)} in the last 30 days.`,
+      "Session duration",
+      formatSessionLength(provider.sessionDurationHours * 3_600),
     ],
     [
       "Client access",
-      clientAccessLabel(provider.clientIdMetadataAdmissionMode),
+      provider.clientIdMetadataAdmissionMode === "disabled"
+        ? "Self-registered clients only"
+        : clientAccessLabel(provider.clientIdMetadataAdmissionMode),
     ],
     ["Mode", authorizationServerModeLabel(provider)],
     [
@@ -503,18 +501,17 @@ function Configuration({
         </Link>
       }
     >
-      <MetricCard.Group>
-        {facts.map(([label, value, description]) => (
-          <MetricCard
+      <dl className="bg-card grid grid-cols-2 border lg:grid-cols-4">
+        {facts.map(([label, value], index) => (
+          <div
             key={label}
-            label={label}
-            value={value}
-            description={description}
-            tone="neutral"
-            size="xs"
-          />
+            className={`space-y-2 px-6 py-5 ${index > 0 ? "lg:border-l" : ""} ${index % 2 ? "border-l" : ""} ${index > 1 ? "border-t lg:border-t-0" : ""}`}
+          >
+            <dt className="text-eyebrow">{label}</dt>
+            <dd className="text-sm">{value}</dd>
+          </div>
         ))}
-      </MetricCard.Group>
+      </dl>
     </OverviewSection>
   );
 }

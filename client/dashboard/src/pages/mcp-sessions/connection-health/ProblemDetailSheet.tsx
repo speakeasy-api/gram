@@ -1,5 +1,5 @@
 import { OUTCOME } from "@/components/chart/palette";
-import { StackedTimeBarChart } from "@/components/chart/StackedTimeBarChart";
+import { HealthBarChart } from "./HealthBarChart";
 import { IdentityAvatar } from "@/components/identity-avatar";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Badge } from "@/components/ui/Badge";
@@ -97,18 +97,43 @@ export function ProblemDetailSheet({
   );
 }
 
+/** What the people could not reach: "Linear" for the Linear service. */
+function problemTarget(problem: SuspectedProblemDetail): string | undefined {
+  if (problem.scope.kind === "service")
+    return problem.scope.name.replace(/ service$/, "");
+  if (problem.scope.kind === "server") return problem.scope.name;
+  const server = problem.servers[0];
+  return server
+    ? serverLabel({ server: server.server, member: server.member })
+    : undefined;
+}
+
+/** "on the Linear service", "on Internal Wiki"; nothing for one person. */
+function problemPlace(problem: SuspectedProblemDetail): string {
+  switch (problem.scope.kind) {
+    case "service":
+      return ` on the ${problem.scope.name}`;
+    case "server":
+    case "app_version":
+      return ` on ${problem.scope.name}`;
+    case "person":
+      return "";
+  }
+}
+
 function investigationFor(problem: SuspectedProblemDetail): Investigation {
+  const target = problemTarget(problem);
   return {
     question: `Why can't ${
       problem.peopleCount === 1 && problem.people[0]
         ? personLabel(problem.people[0])
         : `these ${problem.peopleCount} people`
-    } connect, and is there anything I should change?`,
+    } connect${target ? ` to ${target}` : ""}, and is there anything I should change?`,
     context: [
+      `Suspected problem · ${problem.headline}`,
       SUSPECTED_PROBLEMS_ARE_SAMPLE
         ? "This suspected problem is sample data: its people, servers and times are made up."
         : null,
-      `Suspected problem · ${problem.headline}`,
       `Since ${problem.since}`,
       problem.fact,
       `Rule: ${PROBLEM_RULES[problem.rule]}`,
@@ -171,10 +196,12 @@ function ProblemBody({
           <p>
             {peopleCount === 1
               ? `${personLabel(problem.people[0]!)} failed`
-              : `${peopleCount} people failed`}{" "}
-            since {sinceLabel}.
+              : `${peopleCount} people failed`}
+            {problemPlace(problem)} since {sinceLabel}.
             {problem.lastConnectedAt
-              ? ` No one has connected since ${formatSince(problem.lastConnectedAt, now)}.`
+              ? problem.scope.kind === "person"
+                ? ` ${problem.scope.name} has not connected since ${formatSince(problem.lastConnectedAt, now)}.`
+                : ` No one has connected to it since ${formatSince(problem.lastConnectedAt, now)}.`
               : ""}
           </p>
           <p className="text-muted-foreground">
@@ -196,7 +223,7 @@ function ProblemBody({
           aside="10-minute intervals"
         >
           <div className="border p-3">
-            <FailureBars buckets={problem.failedPer10Minutes} />
+            <FailureBars buckets={problem.failedPer10Minutes} now={now} />
           </div>
         </Block>
 
@@ -362,8 +389,10 @@ const BUCKET_LABEL = new Intl.DateTimeFormat(undefined, {
 
 function FailureBars({
   buckets,
+  now,
 }: {
   buckets: { start: string; attempts: number }[];
+  now: Date;
 }): JSX.Element {
   const chart = useMemo(
     () => ({
@@ -373,23 +402,24 @@ function FailureBars({
       }),
       timestamps: buckets.map((b) => Date.parse(b.start)),
       tooltipLabels: buckets.map((b) => BUCKET_LABEL.format(new Date(b.start))),
-      datasets: [
+      series: [
         {
           label: "Failed",
           data: buckets.map((b) => b.attempts),
-          backgroundColor: OUTCOME.blocked,
+          color: OUTCOME.blocked,
         },
       ],
     }),
     [buckets],
   );
   return (
-    <StackedTimeBarChart
+    <HealthBarChart
       labels={chart.labels}
       timestamps={chart.timestamps}
       bucketMs={10 * 60_000}
       tooltipLabels={chart.tooltipLabels}
-      datasets={chart.datasets}
+      series={chart.series}
+      now={now}
       height={120}
     />
   );

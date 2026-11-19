@@ -46,6 +46,7 @@ describe("listAttempts", () => {
       listAttemptsRequestBody: {
         userSessionIssuerId: "issuer",
         from: new Date("2026-11-16T11:00:00.000Z"),
+        to: new Date("2026-11-17T11:00:00.000Z"),
         filters: { outcomes: ["failed"] },
       },
     });

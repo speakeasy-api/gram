@@ -40,7 +40,14 @@ export const LOG_FILTERS = defineFilters([
     description: "Connection Logs cover the last 30 days.",
   },
   { id: "outcome", label: "Outcome", kind: "multiselect", pinned: true },
-  { id: "server", label: "Server", kind: "select", pinned: true },
+  {
+    id: "server",
+    label: "Server",
+    kind: "select",
+    pinned: true,
+    chipPrefix: true,
+  },
+  { id: "service", label: "Service", kind: "select", chipPrefix: true },
   {
     id: "person",
     label: "Person",
@@ -48,9 +55,9 @@ export const LOG_FILTERS = defineFilters([
     pinned: true,
     allLabel: "All people",
     description: "Attempts with no known person are listed by network.",
+    chipPrefix: true,
   },
-  { id: "service", label: "Service", kind: "select" },
-  { id: "app", label: "App", kind: "select" },
+  { id: "app", label: "App", kind: "select", chipPrefix: true },
   {
     id: "appVersion",
     label: "App version",
@@ -58,15 +65,23 @@ export const LOG_FILTERS = defineFilters([
     allLabel: "Any version",
     description:
       "Apps report a version only when they finish or renew a sign-in, or make a request.",
+    chipPrefix: true,
   },
-  { id: "step", label: "Step", kind: "multiselect" },
+  { id: "step", label: "Step", kind: "multiselect", chipPrefix: true },
   {
     id: "message",
     label: "Message",
     kind: "multiselect",
     allLabel: "Anything",
+    chipCount: true,
   },
-  { id: "network", label: "Network", kind: "select", allLabel: "Any network" },
+  {
+    id: "network",
+    label: "Network",
+    kind: "select",
+    allLabel: "Any network",
+    chipPrefix: true,
+  },
 ]);
 
 export type LogFilterValues = FilterValues<typeof LOG_FILTERS>;

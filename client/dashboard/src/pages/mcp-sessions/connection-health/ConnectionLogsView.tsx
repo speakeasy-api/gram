@@ -8,10 +8,8 @@ import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/Button";
 import type { Action } from "@/components/ui/MoreActions";
-import { SkeletonTable } from "@/components/ui/Skeleton";
 import { useRoutes } from "@/routes";
-import { FilterChip } from "@/components/filters/FilterChip";
-import { ArrowRight, RefreshCw } from "lucide-react";
+import { ArrowRight, RefreshCw, X } from "lucide-react";
 import { RequireScope } from "@/components/require-scope";
 import { useOrganization } from "@/contexts/Auth";
 import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
@@ -31,7 +29,12 @@ import {
 } from "./api";
 import { useProjectProviders } from "../providers";
 import { AttemptDetailSheet } from "./AttemptDetailSheet";
-import { AttemptsFooter, AttemptsTable } from "./AttemptsTable";
+import {
+  AttemptsFooter,
+  AttemptsSkeleton,
+  AttemptsTable,
+} from "./AttemptsTable";
+import { LogFilterSheet } from "./LogFilterSheet";
 import {
   ATTEMPT_PARAM,
   LOG_FILTERS,
@@ -47,7 +50,13 @@ import {
   toAttemptFilters,
   type LogFilterValues,
 } from "./filters";
-import { formatSince, OUTCOME_LABELS, plural, STEP_LABELS } from "./format";
+import {
+  formatDayMonth,
+  formatSince,
+  OUTCOME_LABELS,
+  plural,
+  STEP_LABELS,
+} from "./format";
 import {
   ATTEMPT_OUTCOMES,
   FILTER_STEPS,
@@ -250,6 +259,7 @@ export function ConnectionLogsView({
   const referenced = reference.data?.attempt;
   const belongs = useAttemptBelongs(referenced, providerId, lockedServer?.id);
   const referenceHere = belongs === "yes" ? referenced : undefined;
+  const referenceFailed = reference.isError || belongs === "error";
 
   const optionsById = useMemo(() => optionsFrom(facets), [facets]);
 
@@ -350,7 +360,7 @@ export function ConnectionLogsView({
         ? null
         : rows[0]
           ? rows[0].count > 1
-            ? `1 match · ${plural(rows[0].count, "attempt")}`
+            ? `1 match · stands for ${plural(rows[0].count, "repeat")}`
             : "1 match"
           : "No match"
       : total === undefined
@@ -358,6 +368,26 @@ export function ConnectionLogsView({
         : plural(total, "attempt");
 
   const schema = lockedServer ? LOG_FILTERS_WITHOUT_SERVER : LOG_FILTERS;
+  const organization = useOrganization();
+  const { fetchNextPage } = list;
+  const loadMore = useCallback(async () => {
+    await fetchNextPage();
+  }, [fetchNextPage]);
+  // A range picked on the calendar has no words of its own; its chip names the days.
+  const chipValues = useMemo(() => {
+    const { customRange, customLabel } = filters.values.date;
+    if (!customRange || customLabel) return filters.values;
+    const end = new Date(customRange.to.getTime() - 1);
+    const from = formatDayMonth(customRange.from.toISOString());
+    const to = formatDayMonth(end.toISOString());
+    return {
+      ...filters.values,
+      date: {
+        ...filters.values.date,
+        customLabel: from === to ? from : `${from} – ${to}`,
+      },
+    };
+  }, [filters.values]);
   const filtersActive = schema.some(
     (dim) =>
       dim.kind !== "daterange" &&
@@ -375,6 +405,8 @@ export function ConnectionLogsView({
       void counts.refetch();
       void optionCounts.refetch();
       void list.refetch();
+      if (typeof textFilters === "object" && textFilters)
+        void searchedCounts.refetch();
     }
   };
   const isFetching = isReference
@@ -383,9 +415,7 @@ export function ConnectionLogsView({
 
   let body: JSX.Element;
   const countsFailed = textFilters === "pending" && counts.isError;
-  const isError = isReference
-    ? reference.isError
-    : list.isError || countsFailed;
+  const isError = isReference ? referenceFailed : list.isError || countsFailed;
   const isPending = isReference
     ? reference.isPending || (!!referenced && belongs === "pending")
     : list.isPending;
@@ -394,7 +424,7 @@ export function ConnectionLogsView({
       <InlineEmptyState
         icon="file-x"
         heading="Connection Logs needs logging"
-        description="Logging is off for this organization, so attempts are not kept. Turning it on starts logging for the whole organization, from that moment."
+        description={`Logging is off for ${organization.name || "this organization"}, so attempts are not kept. Turning it on starts the log from that moment.`}
         action={<EnableLoggingAction />}
       />
     );
@@ -452,12 +482,7 @@ export function ConnectionLogsView({
     (textFilters === "pending" || (isPending && !searchBlocked)) &&
     rows.length === 0
   ) {
-    body = (
-      <SkeletonTable
-        label="Loading Connection Logs"
-        columns={["120px", "1.2fr", "1fr", "140px", "2fr"]}
-      />
-    );
+    body = <AttemptsSkeleton label="Loading Connection Logs" />;
   } else if (textFilters === "too-broad") {
     body = (
       <InlineEmptyState
@@ -533,11 +558,14 @@ export function ConnectionLogsView({
         now={now}
         onOpen={(row) => setParam(ATTEMPT_PARAM, row.id)}
         rowActions={rowActions}
+        selectedId={openReference}
         hasMore={hasMore}
-        onLoadMore={async () => {
-          await list.fetchNextPage();
-        }}
-        footer={<AttemptsFooter total={total} hasMore={hasMore} />}
+        onLoadMore={loadMore}
+        footer={
+          isReference ? undefined : (
+            <AttemptsFooter total={total} hasMore={hasMore} />
+          )
+        }
       />
     );
   }
@@ -553,22 +581,33 @@ export function ConnectionLogsView({
             placeholder="Search reference, person or server"
             className="w-full max-w-md"
           />
-          {countText ? (
-            <Page.Toolbar.Actions>
-              <span className="text-muted-foreground text-sm whitespace-nowrap">
-                {countText}
-              </span>
-            </Page.Toolbar.Actions>
-          ) : null}
-          {lockedServer ? (
-            <Page.Toolbar.Actions>
-              <Link
-                to={`${routes.mcpSessions.provider.connectionLogs.href(providerId)}?${withServer(searchParams, lockedServer.id)}`}
-                className="inline-flex items-center gap-1 text-sm whitespace-nowrap hover:underline"
+          {filtersActive && loggingEnabled ? (
+            <Page.Toolbar.Leading>
+              <Button
+                variant="tertiary"
+                onClick={resetAll}
+                className="text-muted-foreground h-10 gap-1"
               >
-                Open in MCP Sessions with this server
-                <ArrowRight className="size-3.5" aria-hidden />
-              </Link>
+                <X className="size-3.5" />
+                <span className="text-eyebrow">Reset filters</span>
+              </Button>
+            </Page.Toolbar.Leading>
+          ) : null}
+          {countText || lockedServer ? (
+            <Page.Toolbar.Actions>
+              <span className="text-muted-foreground flex items-center gap-2 text-sm whitespace-nowrap">
+                {countText}
+                {countText && lockedServer ? <span aria-hidden>·</span> : null}
+                {lockedServer ? (
+                  <Link
+                    to={`${routes.mcpSessions.provider.connectionLogs.href(providerId)}?${withServer(searchParams, lockedServer.id)}`}
+                    className="text-foreground inline-flex items-center gap-1 hover:underline"
+                  >
+                    Open in MCP Sessions with this server
+                    <ArrowRight className="size-3.5" aria-hidden />
+                  </Link>
+                ) : null}
+              </span>
             </Page.Toolbar.Actions>
           ) : null}
           <Page.Toolbar.Refresh onRefresh={refresh} isRefreshing={isFetching} />
@@ -576,30 +615,47 @@ export function ConnectionLogsView({
         {loggingEnabled ? (
           <Page.Toolbar.Row>
             <Page.Toolbar.Filters
-              schema={schema}
-              extraChips={
-                lockedServer ? (
-                  <FilterChip
-                    label={`Server: ${lockedServer.name}`}
-                    ariaLabel="Fixed on this tab"
-                    locked
-                  />
-                ) : undefined
+              schema={LOG_FILTERS}
+              locked={
+                lockedServer
+                  ? { server: `Server: ${lockedServer.name}` }
+                  : undefined
               }
-              values={filters.values}
+              showSheetCount={false}
+              showClearAll={false}
+              values={chipValues}
               optionsById={optionsById}
               onChange={(id, value) =>
                 filters.setValue(id as keyof LogFilterValues, value as never)
               }
               onClear={(id) => filters.clearValue(id as keyof LogFilterValues)}
               onClearAll={filters.clearAll}
+              renderSheet={(sheet) => (
+                <LogFilterSheet
+                  {...sheet}
+                  schema={schema}
+                  values={filters.values}
+                  optionsById={optionsById}
+                  facets={counts.data?.facets}
+                  total={
+                    beforeRetention ? undefined : counts.data?.totalAttempts
+                  }
+                  onChange={(id, value) =>
+                    filters.setValue(
+                      id as keyof LogFilterValues,
+                      value as never,
+                    )
+                  }
+                  onReset={resetAll}
+                />
+              )}
             />
           </Page.Toolbar.Row>
         ) : null}
       </Page.Toolbar>
       {isReference ? (
         <p className="text-muted-foreground -mt-2 text-xs">
-          Reference search covers the last 30 days and ignores the filters.
+          Reference search covers all 30 days.
         </p>
       ) : null}
       {viewerScope === "own" ? <OwnAttemptsNotice /> : null}

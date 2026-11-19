@@ -23,8 +23,12 @@ export function SessionDurationControl({
   return (
     <Link
       to={href}
-      aria-label={`${label}. The average covers sessions that ended in the last 30 days. Change session duration in Settings`}
-      title="Average of sessions that ended in the last 30 days"
+      aria-label={`${label}. ${average === undefined ? "" : "The average covers sessions that ended in the last 30 days. "}Change session duration in Settings`}
+      title={
+        average === undefined
+          ? "Change session duration in Settings"
+          : "Average of sessions that ended in the last 30 days"
+      }
       className={DETAIL_HEADER_CONTROL_BUTTON}
     >
       <span className="min-w-0 flex-1 truncate text-left">{label}</span>

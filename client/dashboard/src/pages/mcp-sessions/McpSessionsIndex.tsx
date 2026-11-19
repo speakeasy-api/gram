@@ -18,9 +18,10 @@ const MCP_SESSIONS_TITLE = "MCP Sessions";
 const LEGACY_PROVIDER_PARAM = "issuerId";
 
 /**
- * `/mcp-sessions`: opens a provider's Connections. Links from People and
- * killswitches carry their filters in the query, which the Connections tab
- * reads, so the query goes along.
+ * `/mcp-sessions`: opens a provider's Connections, or its Overview for a bare
+ * visit while connection health is on. Links from People and killswitches
+ * carry their filters in the query, which the Connections tab reads, so the
+ * query goes along.
  */
 export default function McpSessionsIndex(): JSX.Element {
   const routes = useRoutes();

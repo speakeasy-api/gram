@@ -41,6 +41,7 @@ export function DetailFrame({
   breadcrumbs: {
     substitutions: Record<string, string | undefined>;
     skipSegments?: string[];
+    insertAfter?: { segment: string; display: string; url: string };
   };
   /** The header band's contents, usually a `DetailHeaderLayout`. */
   header: ReactNode;
@@ -68,6 +69,7 @@ export function DetailFrame({
         <Page.Header.Breadcrumbs
           substitutions={breadcrumbs.substitutions}
           skipSegments={breadcrumbs.skipSegments}
+          insertAfter={breadcrumbs.insertAfter}
         />
       </Page.Header>
 

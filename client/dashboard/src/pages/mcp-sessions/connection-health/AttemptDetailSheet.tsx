@@ -23,7 +23,13 @@ import { useProjectProviders } from "../providers";
 import { ArrowRight, ChevronDown, Globe, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { connectionHealthNow, useAttempt, useAttemptBelongs } from "./api";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  CONNECTION_HEALTH_QUERY_ROOT,
+  connectionHealthNow,
+  useAttempt,
+  useAttemptBelongs,
+} from "./api";
 import { AskAiButton, type Investigation } from "./AskAiButton";
 import { OutcomeLabel } from "./AttemptsTable";
 import { logsSearch, RETENTION_MS } from "./filters";
@@ -32,7 +38,7 @@ import {
   formatClock,
   formatDayMonth,
   formatFull,
-  OUTCOME_LABELS,
+  outcomeLabel,
   personLabel,
   serverLabel,
   SOURCE_LABELS,
@@ -56,11 +62,13 @@ export function AttemptDetailSheet({
   lockedServerId?: string;
   onClose: () => void;
 }): JSX.Element {
+  const queryClient = useQueryClient();
   const query = useAttempt(reference);
   const found = query.data?.attempt;
   // The lookup is project-wide; an attempt from elsewhere does not open here.
   const belongs = useAttemptBelongs(found, providerId, lockedServerId);
   const elsewhere = !!found && belongs === "no";
+  const failed = query.isError || belongs === "error";
   const attempt = belongs === "yes" ? found : undefined;
   const isPending = query.isPending || (!!found && belongs === "pending");
   return (
@@ -97,7 +105,7 @@ export function AttemptDetailSheet({
                 <InlineEmptyState
                   icon="search"
                   heading={
-                    query.isError
+                    failed
                       ? "Couldn't load this attempt"
                       : elsewhere
                         ? lockedServerId
@@ -108,7 +116,7 @@ export function AttemptDetailSheet({
                           : "No attempt with this reference"
                   }
                   description={
-                    query.isError
+                    failed
                       ? "Connections are not affected."
                       : elsewhere
                         ? "Search for its reference in that view to open it."
@@ -119,10 +127,15 @@ export function AttemptDetailSheet({
                             : "Connection Logs keep the last 30 days of this project."
                   }
                   action={
-                    query.isError ? (
+                    failed ? (
                       <Button
                         variant="secondary"
-                        onClick={() => void query.refetch()}
+                        onClick={() =>
+                          void queryClient.refetchQueries({
+                            queryKey: [CONNECTION_HEALTH_QUERY_ROOT],
+                            type: "active",
+                          })
+                        }
                       >
                         Try again
                       </Button>
@@ -149,7 +162,8 @@ function questionFor(attempt: AttemptDetail, who: string, where: string) {
     case "blocked":
     case "declined":
     case "didnt_finish":
-      return `Why did ${who}'s connection${to} end as "${OUTCOME_LABELS[attempt.outcome]}", and is there anything I should change?`;
+    default:
+      return `Why did ${who}'s connection${to} end as "${outcomeLabel(attempt.outcome)}", and is there anything I should change?`;
   }
 }
 
@@ -168,7 +182,7 @@ function investigationFor(attempt: AttemptDetail): Investigation {
     question: questionFor(attempt, who, where),
     context: [
       `Connection attempt ${attempt.id}`,
-      `${OUTCOME_LABELS[attempt.outcome]} at step ${STEP_LABELS[attempt.step]}, ${formatFull(attempt.time)}`,
+      `${outcomeLabel(attempt.outcome)} at step ${STEP_LABELS[attempt.step]}, ${formatFull(attempt.time)}`,
       `Person: ${who}; app: ${appLabel(attempt.app)}; server: ${where}`,
       attempt.service ? `Service: ${attempt.service}` : null,
       attempt.message ? `Message: ${attempt.message}` : null,
@@ -199,6 +213,8 @@ function AttemptDetailBody({
   const who = personLabel(attempt);
   const where = serverLabel(attempt);
   const now = connectionHealthNow();
+  const inLastDay =
+    now.getTime() - Date.parse(attempt.startedAt) < 24 * 60 * 60 * 1000;
   return (
     <div className="flex min-h-full flex-col">
       <SheetHeader className="gap-2 border-b px-6 py-5 pr-12">
@@ -237,19 +253,21 @@ function AttemptDetailBody({
       </SheetHeader>
 
       <Tabs defaultValue="details" className="flex-1 gap-0 px-6 py-5">
-        <TabsList className="w-full">
-          <TabsTrigger value="details" className="flex-1">
+        <TabsList className="h-9 w-full p-0.5">
+          <TabsTrigger value="details" className={SHEET_TAB}>
             Details
           </TabsTrigger>
-          <TabsTrigger value="raw" className="flex-1">
+          <TabsTrigger value="raw" className={SHEET_TAB}>
             Raw data
           </TabsTrigger>
         </TabsList>
         <TabsContent value="details" className="mt-5 space-y-6">
-          {attempt.message ? (
+          {attempt.message || attempt.technicalMessage ? (
             <div className="border-foreground border-l-2 pl-3">
               <div className="text-eyebrow mb-1">Message</div>
-              <p className="text-sm">{attempt.message}</p>
+              {attempt.message ? (
+                <p className="text-sm">{attempt.message}</p>
+              ) : null}
               {attempt.technicalMessage ? (
                 <p className="text-muted-foreground mt-1 text-sm">
                   {attempt.technicalMessage}
@@ -305,14 +323,16 @@ function AttemptDetailBody({
                 <RelatedLink
                   to={`${routes.mcpSessions.provider.connectionLogs.href(providerId)}${logsSearch(
                     {
-                      from: startOfDay(attempt.startedAt),
+                      ...(inLastDay
+                        ? { range: "1d" as const }
+                        : { from: startOfDay(attempt.startedAt) }),
                       people: [attempt.person.subjectUrn],
                       serverIds: attempt.server ? [attempt.server.id] : [],
                     },
                     now,
                   )}`}
                   title={`All outcomes for ${who}${where ? ` on ${where}` : ""}`}
-                  detail={`Since ${formatDayMonth(attempt.startedAt)} · Connection Logs`}
+                  detail={`${inLastDay ? "Last 24 hours" : `Since ${formatDayMonth(attempt.startedAt)}`} · Connection Logs`}
                 />
                 <RelatedLink
                   to={`${routes.mcpSessions.provider.connections.href(providerId)}?subjectUrn=${encodeURIComponent(attempt.person.subjectUrn)}`}
@@ -343,6 +363,8 @@ function AttemptDetailBody({
     </div>
   );
 }
+
+const SHEET_TAB = "flex-1 font-sans text-sm tracking-normal normal-case";
 
 function Section({
   title,
@@ -394,7 +416,7 @@ function ContextFacts({
     "App",
     attempt.app.version
       ? appLabel(attempt.app)
-      : `${attempt.app.name}. No version reported.`,
+      : `${attempt.app.name}. No version reported at this step.`,
   ]);
   if (provider) facts.push(["Provider", provider]);
   if (attempt.network) facts.push(["Network", attempt.network.label]);

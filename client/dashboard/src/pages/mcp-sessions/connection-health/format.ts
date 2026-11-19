@@ -17,6 +17,14 @@ export const OUTCOME_LABELS: Record<Outcome, string> = {
   in_progress: "In progress",
 };
 
+/** An outcome in words; one the dashboard does not know yet reads as itself. */
+export function outcomeLabel(outcome: string): string {
+  return (
+    (OUTCOME_LABELS as Record<string, string | undefined>)[outcome] ??
+    outcome.replace(/_/g, " ")
+  );
+}
+
 export const STEP_LABELS: Record<StepGroup, string> = {
   connect: "Connect",
   sign_in: "Sign-in",
@@ -32,6 +40,7 @@ const STEP_RESULT_LABELS: Record<string, string> = {
   accepted: "Accepted",
   signed_in: "Signed in",
   renewed: "Renewed",
+  refreshed: "Renewed",
   listed: "Listed",
   completed: "Done",
   failed: "Failed",
@@ -43,7 +52,8 @@ const STEP_RESULT_LABELS: Record<string, string> = {
 
 /** A raw step result in words; an unknown one reads as itself. */
 export function stepResultLabel(result: string): string {
-  return STEP_RESULT_LABELS[result] ?? result.replace(/_/g, " ");
+  const label = STEP_RESULT_LABELS[result] ?? result.replace(/_/g, " ");
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 export const SOURCE_LABELS: Record<Source, string> = {
@@ -70,7 +80,10 @@ export function serverLabel(
   const server = row.server
     ? (row.server.name ?? UNNAMED_SERVER[row.server.kind] ?? "Removed server")
     : "";
-  return row.member?.name ? `${server} › ${row.member.name}` : server;
+  if (!row.member) return server;
+  const member =
+    row.member.name ?? UNNAMED_SERVER[row.member.kind] ?? "Removed server";
+  return member ? `${server} › ${member}` : server;
 }
 
 export function appLabel(app: App): string {
@@ -228,7 +241,7 @@ export function problemHeadline(problem: SuspectedProblem, now: Date): string {
 
 /** A session length in its largest whole unit: "9 days", "5 hours". */
 export function formatSessionLength(seconds: number): string {
-  const hours = Math.round(seconds / 3_600);
+  const hours = Math.floor(seconds / 3_600);
   if (hours >= 24) {
     const days = Math.floor(hours / 24);
     const rest = hours % 24;
@@ -238,4 +251,28 @@ export function formatSessionLength(seconds: number): string {
   }
   if (hours >= 1) return plural(hours, "hour");
   return plural(Math.max(1, Math.round(seconds / 60)), "minute");
+}
+
+const WEEKDAY_DAY = new Intl.DateTimeFormat(undefined, {
+  weekday: "short",
+  day: "numeric",
+});
+
+/** "Wed 11": the weekday first, whatever the locale's order. */
+export function formatWeekdayDay(ms: number): string {
+  const parts = WEEKDAY_DAY.formatToParts(ms);
+  const weekday = parts.find((p) => p.type === "weekday")?.value ?? "";
+  const day = parts.find((p) => p.type === "day")?.value ?? "";
+  return `${weekday} ${day}`.trim();
+}
+
+/** Where "now" falls: the bucket it is in and how far through it. */
+export function nowPosition(
+  timestamps: number[],
+  bucketMs: number,
+  now: number,
+): { index: number; fraction: number } | null {
+  const index = timestamps.findIndex((t) => now >= t && now < t + bucketMs);
+  if (index === -1) return null;
+  return { index, fraction: (now - timestamps[index]!) / bucketMs };
 }

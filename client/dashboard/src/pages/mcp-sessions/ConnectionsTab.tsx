@@ -35,6 +35,18 @@ const USER_SESSION_FILTERS = defineFilters([
   { id: "subjectUrn", label: "User", kind: "select", pinned: true },
 ]);
 
+/** With connection health the list names people, as Connection Logs does. */
+const HEALTH_SESSION_FILTERS = defineFilters([
+  { id: "status", label: "Status", kind: "select" },
+  {
+    id: "subjectUrn",
+    label: "Person",
+    kind: "select",
+    pinned: true,
+    allLabel: "All people",
+  },
+]);
+
 const STATUS_TOOLBAR_OPTIONS = [
   { value: "active", label: "Active" },
   { value: "expired", label: "Expired" },
@@ -56,8 +68,11 @@ const CONNECTIONS_DESCRIPTION =
  */
 export function ConnectionsTab({
   providerId,
+  health,
 }: {
   providerId: string;
+  /** Connection health's Active Sessions: its count, toolbar and groups. */
+  health?: { activeNow: number | undefined };
 }): JSX.Element {
   const project = useProject();
   const { hasScope } = useRBAC();
@@ -66,6 +81,7 @@ export function ConnectionsTab({
   const canRevoke = hasScope("project:write", project.id);
   const [searchQuery, setSearchQuery] = useState("");
   const [grouping, setGrouping] = useState<ConnectionGrouping>("subject");
+  const activeNow = health?.activeNow;
 
   const handleFilterChange = (id: string, value: FilterValue) => {
     filters.setValue(id as keyof typeof filters.values, value as never);
@@ -172,15 +188,18 @@ export function ConnectionsTab({
         onRevoked={() => void refetch()}
         killswitchContext={{ capabilityKey: "mcp_tool_calls" }}
         project={project}
+        splitNeedsReauth={!!health}
       />
     );
   }
 
   return (
     <div className="space-y-4">
-      <p className="text-muted-foreground max-w-3xl text-sm">
-        {CONNECTIONS_DESCRIPTION}
-      </p>
+      {health ? null : (
+        <p className="text-muted-foreground max-w-3xl text-sm">
+          {CONNECTIONS_DESCRIPTION}
+        </p>
+      )}
       <Page.Toolbar>
         <Page.Toolbar.Search
           value={searchQuery}
@@ -189,13 +208,34 @@ export function ConnectionsTab({
           placeholder="Search connections"
         />
         <Page.Toolbar.Filters
-          schema={USER_SESSION_FILTERS}
+          schema={health ? HEALTH_SESSION_FILTERS : USER_SESSION_FILTERS}
           values={filters.values}
           optionsById={optionsById}
           onChange={handleFilterChange}
           onClear={filters.clearValue as (id: string) => void}
           onClearAll={filters.clearAll}
         />
+        {health ? (
+          <Page.Toolbar.Leading>
+            <span className="text-eyebrow ml-2">Group by</span>
+            <SegmentedControl
+              ariaLabel="Group by"
+              value={grouping}
+              onChange={(value: string) =>
+                setGrouping(value as ConnectionGrouping)
+              }
+              options={GROUPING_OPTIONS}
+            />
+          </Page.Toolbar.Leading>
+        ) : null}
+        {health && activeNow !== undefined ? (
+          <Page.Toolbar.Actions>
+            <span className="text-muted-foreground text-sm whitespace-nowrap">
+              {activeNow.toLocaleString()} active{" "}
+              {activeNow === 1 ? "session" : "sessions"}
+            </span>
+          </Page.Toolbar.Actions>
+        ) : null}
         <Page.Toolbar.Refresh
           onRefresh={() => void refetch()}
           isRefreshing={isFetching}
@@ -207,7 +247,7 @@ export function ConnectionsTab({
         shape. Sitting it directly above the table it restructures — and
         matching where the MCP server tab puts the same control — keeps the
         two surfaces reading alike. */}
-      <div className="flex justify-end">
+      <div className={health ? "hidden" : "flex justify-end"}>
         <SegmentedControl
           value={grouping}
           onChange={(value: string) => setGrouping(value as ConnectionGrouping)}

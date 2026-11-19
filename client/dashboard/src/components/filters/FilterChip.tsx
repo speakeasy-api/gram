@@ -88,10 +88,15 @@ export function FilterChip({
     return (
       <span
         title={ariaLabel}
-        className="bg-card border-foreground text-foreground inline-flex h-10 shrink-0 items-center gap-2 border px-3"
+        className="bg-muted border-foreground text-foreground inline-flex h-10 shrink-0 items-center gap-2 border px-3"
       >
-        <Lock className="size-3.5 shrink-0" aria-hidden />
+        <span
+          aria-hidden="true"
+          className="size-2 shrink-0"
+          style={{ backgroundColor: color ?? "var(--color-muted-foreground)" }}
+        />
         <span className="text-eyebrow">{label}</span>
+        <Lock className="size-3.5 shrink-0" aria-hidden />
         {ariaLabel ? <span className="sr-only">{ariaLabel}</span> : null}
       </span>
     );
