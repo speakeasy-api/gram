@@ -415,8 +415,11 @@ func (s *Service) changedMemberStatuses(ctx context.Context, logger *slog.Logger
 	return changed
 }
 
-func refusedConsentKey(attempt mcpconnectionattempts.Attempt, clientID uuid.UUID, code mcpconnectionattempts.Code) string {
-	return "connectionAttemptIneligible:" + attempt.ID().String() + ":" + clientID.String() + ":" + code.String()
+func refusedConsentKey(attempt mcpconnectionattempts.Attempt, clientID, signInID uuid.UUID, code mcpconnectionattempts.Code) string {
+	if signInID == uuid.Nil {
+		return "connectionAttemptIneligible:" + attempt.ID().String() + ":" + clientID.String() + ":" + code.String()
+	}
+	return "connectionAttemptIneligible:" + attempt.ID().String() + ":" + clientID.String() + ":" + signInID.String() + ":" + code.String()
 }
 
 // chainingRefusalCode is the row for a sign-in Speakeasy won't vouch for, naming who fixes it.
@@ -431,12 +434,12 @@ func chainingRefusalCode(reason identitychaining.Reason) (mcpconnectionattempts.
 	}
 }
 
-// recordRefusedConsent writes one row per attempt, client and code, however often the page reloads; a cache failure writes it anyway.
-func (s *Service) recordRefusedConsent(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, clientID uuid.UUID, code mcpconnectionattempts.Code, opts ...mcpconnectionattempts.Option) {
+// recordRefusedConsent writes one row per attempt, client, sign-in and code, however often the page reloads; a cache failure writes it anyway.
+func (s *Service) recordRefusedConsent(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, clientID, signInID uuid.UUID, code mcpconnectionattempts.Code, opts ...mcpconnectionattempts.Option) {
 	if attempt.IsZero() {
 		return
 	}
-	key := refusedConsentKey(attempt, clientID, code)
+	key := refusedConsentKey(attempt, clientID, signInID, code)
 	marked := false
 	if s.userSessionRefreshReplayCoordination != nil {
 		cacheCtx, cancel := context.WithTimeout(ctx, memberStatusTimeout)

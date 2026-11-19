@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
 	"sync"
@@ -289,6 +291,16 @@ func (s *Service) SetAuthzEngine(engine *authz.Engine) {
 	s.authz = engine
 }
 
+// SetIDPSessionRevoker swaps what ends identity provider sessions, to observe or fail it.
+func (s *Service) SetIDPSessionRevoker(revoker sessions.SessionRevoker) {
+	s.idpSessions = revoker
+}
+
+// SetIdentityResolver swaps the identity provider client, to observe the sign-ins it starts.
+func (s *Service) SetIdentityResolver(resolver IdentityResolver) {
+	s.identityResolver = resolver
+}
+
 // SetChatSessionsManager swaps the store revocation checks read, to take it down.
 func (s *Service) SetChatSessionsManager(manager *chatsessions.Manager) {
 	s.chatSessionsManager = manager
@@ -395,6 +407,36 @@ func NewExportingConnectionRecorder(t *testing.T) (recorder *mcpconnectionattemp
 		defer sink.mu.Unlock()
 		return slices.Clone(sink.records)
 	}
+}
+
+// MarkConsentSwitched writes a slug-less switch marker on issuerID, which only shared-server lookups honour.
+func (s *Service) MarkConsentSwitched(ctx context.Context, stateID string, issuerID uuid.UUID, clientName string) error {
+	if err := s.accountSwitchCache.Store(ctx, accountSwitchMarker{ID: stateID, McpSlug: "", UserSessionIssuerID: issuerID.String(), ClientName: clientName}); err != nil {
+		return fmt.Errorf("store switch marker: %w", err)
+	}
+	return nil
+}
+
+// BindConsentBrowser binds state to a new browser, as authorize does, and returns that browser's cookie.
+func BindConsentBrowser(state *AuthnChallengeState) (*http.Cookie, error) {
+	w := httptest.NewRecorder()
+	if err := bindConsentBrowser(w, state); err != nil {
+		return nil, err
+	}
+	res := w.Result()
+	defer func() { _ = res.Body.Close() }()
+	return res.Cookies()[0], nil
+}
+
+// ConsentBrowserMatches reports whether r comes from the browser state is bound to.
+func ConsentBrowserMatches(r *http.Request, state AuthnChallengeState) bool {
+	return consentBrowserMatches(r, state, time.Now())
+}
+
+// ConsentSwitched reports whether an account switch marked stateID as spent.
+func (s *Service) ConsentSwitched(ctx context.Context, stateID string) bool {
+	_, err := s.accountSwitchCache.Get(ctx, "authnChallengeSwitched:"+stateID)
+	return err == nil
 }
 
 // AgentConnectionsOutageError is the consent page's answer when an agent's connection is in an outage.

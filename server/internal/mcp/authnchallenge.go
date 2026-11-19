@@ -178,6 +178,8 @@ type AuthnChallengeState struct {
 	// FreshLoginForced marks a flow already sent back to the identity
 	// provider because its sign-in was revoked, so it never loops.
 	FreshLoginForced bool `json:"fresh_login_forced,omitempty"`
+	// AccountSwitches counts the person's switches to another Speakeasy account; maxAccountSwitches bounds it.
+	AccountSwitches int `json:"account_switches,omitempty"`
 	// AgentAuthorizationTarget fixes the only policy an agent selection may
 	// authorize. Older in-flight states omit it and remain self-only.
 	AgentAuthorizationTarget *AgentAuthorizationTarget `json:"agent_authorization_target,omitempty"`
