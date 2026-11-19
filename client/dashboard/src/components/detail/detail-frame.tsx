@@ -276,10 +276,13 @@ export type DetailHeaderControlRow = {
 export function DetailHeaderControls({
   rows,
   compact = false,
+  fitContent = false,
 }: {
   rows: DetailHeaderControlRow[];
   /** Tighter rows on a short screen. */
   compact?: boolean;
+  /** Grows past the fixed width (up to 480px) so a long readout is not cut. */
+  fitContent?: boolean;
 }): JSX.Element | null {
   if (rows.length === 0) return null;
   return (
@@ -287,7 +290,10 @@ export function DetailHeaderControls({
     // the halftone sea.
     <dl
       className={cn(
-        "before:bg-card/85 relative isolate grid w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 before:absolute before:-inset-y-5 before:-right-5 before:-left-12 before:-z-10 before:rounded-3xl before:blur-xl sm:w-[360px]",
+        "before:bg-card/85 relative isolate grid w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 before:absolute before:-inset-y-5 before:-right-5 before:-left-12 before:-z-10 before:rounded-3xl before:blur-xl",
+        fitContent
+          ? "sm:w-auto sm:max-w-[480px] sm:min-w-[360px]"
+          : "sm:w-[360px]",
         "gap-y-2",
         compact && "short:gap-y-1",
       )}

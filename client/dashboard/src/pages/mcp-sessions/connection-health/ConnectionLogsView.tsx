@@ -392,7 +392,7 @@ export function ConnectionLogsView({
         ? null
         : rows[0]
           ? rows[0].count > 1
-            ? `1 match · stands for ${plural(rows[0].count, "repeat")}`
+            ? `1 match · stands for ${plural(rows[0].count, "attempt")}`
             : "1 match"
           : "No match"
       : total === undefined

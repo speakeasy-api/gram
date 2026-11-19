@@ -42,9 +42,12 @@ export function ServerConnectionHealth({
     [providerId, server.id],
   );
   const problems = useSuspectedProblems(scope);
-  // Sample problems show only once logging is known to be on.
+  // Sample problems show only once logging is known to be on, and only to
+  // viewers who read everyone's attempts.
   const window = useMemo(() => presetWindow("1h", now), [now]);
-  const logging = useSignInSummary(scope, window, "hour").data?.loggingEnabled;
+  const summary = useSignInSummary(scope, window, "hour").data;
+  const showProblems =
+    summary?.loggingEnabled === true && summary.viewerScope === "all";
   const provider = providers.find((p) => p.id === providerId);
 
   const setParam = useSetSearchParam(SHEET_PARAMS);
@@ -52,7 +55,7 @@ export function ServerConnectionHealth({
   return (
     <div className="space-y-8">
       <SuspectedProblems
-        problems={logging === true ? (problems.data?.problems ?? []) : []}
+        problems={showProblems ? (problems.data?.problems ?? []) : []}
         now={now}
         onOpen={(problem) => setParam(PROBLEM_PARAM, problem.id)}
       />
@@ -87,7 +90,7 @@ export function ServerConnectionHealth({
         )}
       </div>
       <ProblemDetailSheet
-        id={logging === true ? searchParams.get(PROBLEM_PARAM) : null}
+        id={showProblems ? searchParams.get(PROBLEM_PARAM) : null}
         providerId={providerId}
         now={now}
         onClose={() => setParam(PROBLEM_PARAM, null)}

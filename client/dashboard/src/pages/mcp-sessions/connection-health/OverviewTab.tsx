@@ -114,10 +114,13 @@ export function OverviewTab({
   const activeKillswitches = killswitches.killswitches;
   const activityPage = activity.data?.pages[0];
   const activityRows = activityPage?.attempts ?? [];
+  // Problems name other people, so only viewers who read everyone's attempts see them.
+  const showProblems =
+    activityPage?.loggingEnabled === true && activityPage.viewerScope === "all";
 
   return (
     <div className="space-y-10 pb-8">
-      {activityPage?.loggingEnabled !== true ? null : problems.isPending ? (
+      {!showProblems ? null : problems.isPending ? (
         <Skeleton className="h-40 w-full" />
       ) : (
         <SuspectedProblems
@@ -249,11 +252,7 @@ export function OverviewTab({
         onClose={() => setParam(ATTEMPT_PARAM, null)}
       />
       <ProblemDetailSheet
-        id={
-          activityPage?.loggingEnabled === true
-            ? searchParams.get(PROBLEM_PARAM)
-            : null
-        }
+        id={showProblems ? searchParams.get(PROBLEM_PARAM) : null}
         providerId={providerId}
         now={now}
         onClose={() => setParam(PROBLEM_PARAM, null)}

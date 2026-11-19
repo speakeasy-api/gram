@@ -167,10 +167,12 @@ function ProviderPage(): JSX.Element {
         substitutions: {
           [issuerId]: provider?.slug,
           "mcp-sessions": "MCP Sessions",
+          ...(healthOn ? { connections: "Active Sessions" } : {}),
         },
-        // Connection Logs is a view of the Connections tab.
+        // Connection Logs and Active Sessions are views of the Connections tab.
         insertAfter:
-          segment === "connection-logs"
+          segment === "connection-logs" ||
+          (healthOn && segment === "connections")
             ? {
                 segment: issuerId,
                 display: "Connections",
@@ -256,6 +258,7 @@ function ProviderHeaderControls({
   if (healthOn) {
     return (
       <DetailHeaderControls
+        fitContent
         rows={[
           {
             key: "session-duration",

@@ -203,7 +203,11 @@ function AttemptDetailBody({
     <div className="flex min-h-full flex-col">
       <SheetHeader className="gap-2 border-b px-6 py-5 pr-12">
         <div className="text-eyebrow flex items-center gap-2">
-          <OutcomeLabel outcome={attempt.outcome} className="text-foreground" />
+          <OutcomeLabel
+            outcome={attempt.outcome}
+            count={attempt.count}
+            className="text-foreground"
+          />
           <span>{formatFull(attempt.time)}</span>
         </div>
         <SheetTitle className="font-mono text-lg font-normal">
