@@ -344,6 +344,25 @@ it("saves an unproxied server without verifying connectivity", async () => {
   );
 });
 
+it("prefers the name the server reports over one read from its address", () => {
+  state.flow.gatewayId = null;
+  state.verifyResult.mockReturnValue(undefined);
+  const view = render(<CreateRemoteMcp />, { wrapper: Router });
+  fireEvent.change(screen.getByLabelText("MCP server URL"), {
+    target: { value: "https://example.com/mcp" },
+  });
+  state.verifyResult.mockReturnValue({
+    verified: true,
+    url: "https://example.com/mcp",
+    serverName: "Example Server",
+  });
+  view.rerender(<CreateRemoteMcp />);
+  expect(
+    (screen.getByLabelText("Display name (optional)") as HTMLInputElement)
+      .value,
+  ).toBe("Example Server");
+});
+
 it("keeps a name a setup link filled in when the URL checks out", () => {
   state.flow.gatewayId = null;
   state.verifyResult.mockReturnValue(undefined);

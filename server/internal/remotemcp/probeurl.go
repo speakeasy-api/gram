@@ -440,8 +440,9 @@ func isAuthTokenByte(b byte) bool {
 const maxReportedServerNameLength = 100
 
 // reportedServerName is the human name a server gives itself: its title, or
-// its name when it has none. The server controls it, so control characters
-// and runs of whitespace become single spaces and it is cut to
+// its name when it has none. The server controls it, so control and format
+// characters (bidi controls among them, which could make it render
+// deceptively) and runs of whitespace become single spaces and it is cut to
 // maxReportedServerNameLength characters.
 func reportedServerName(result *mcp.InitializeResult) *string {
 	if result == nil || result.ServerInfo == nil {
@@ -449,7 +450,7 @@ func reportedServerName(result *mcp.InitializeResult) *string {
 	}
 	for _, candidate := range []string{result.ServerInfo.Title, result.ServerInfo.Name} {
 		words := strings.FieldsFunc(candidate, func(r rune) bool {
-			return unicode.IsSpace(r) || unicode.IsControl(r)
+			return unicode.IsSpace(r) || unicode.IsControl(r) || unicode.Is(unicode.Cf, r)
 		})
 		name := []rune(strings.Join(words, " "))
 		if len(name) > maxReportedServerNameLength {

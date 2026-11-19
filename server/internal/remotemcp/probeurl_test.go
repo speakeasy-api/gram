@@ -309,7 +309,7 @@ func TestProbeRemoteMcpURL_PrefersTheServersTitle(t *testing.T) {
 
 func TestProbeRemoteMcpURL_CleansTheReportedName(t *testing.T) {
 	t.Parallel()
-	title := "Acme\n\tWiki  " + strings.Repeat("x", 200)
+	title := "Acme\n\t\u202eWiki\u2066  " + strings.Repeat("x", 200)
 	server := mcp.NewServer(&mcp.Implementation{Name: "acme-wiki-mcp", Title: title, Version: "1"}, nil)
 	upstream := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil))
 	t.Cleanup(upstream.Close)

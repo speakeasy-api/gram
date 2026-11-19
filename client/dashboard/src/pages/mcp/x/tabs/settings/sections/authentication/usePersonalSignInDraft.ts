@@ -444,7 +444,9 @@ export function usePersonalSignInDraft({
                     serviceName:
                       readableServiceNameFromUrl(detection.data.draft.issuer) ??
                       detection.data.draft.issuer,
-                    inUse: !!pendingIssuer,
+                    // In use until someone picks another: still so once this
+                    // form has added it, and while detection is refreshed.
+                    inUse: !issuerId || issuerId === addedIssuerId,
                   }
                 : { state: "none" },
       clientTypes,

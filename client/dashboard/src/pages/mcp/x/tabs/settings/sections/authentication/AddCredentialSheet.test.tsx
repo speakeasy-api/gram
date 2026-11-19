@@ -1171,6 +1171,87 @@ describe("AddCredentialSheet", () => {
       expect(screen.getByText(/Not listed\? Add it in/)).toBeTruthy();
     });
 
+    it.each([
+      [
+        "advertises no metadata",
+        () => mocks.discover.mockResolvedValue({ available: false }),
+      ],
+      [
+        "cannot be checked",
+        () => mocks.discover.mockRejectedValue(new Error("unreachable")),
+      ],
+    ])("keeps the picker when the server %s", async (_, setUp) => {
+      mocks.clientPages = [];
+      setUp();
+      renderSheet();
+      choosePersonal();
+
+      await waitFor(() => expect(mocks.discover).toHaveBeenCalled());
+      expect(screen.queryByText(/Detected from this server/)).toBeNull();
+      expect(await screen.findByText(/Not listed\? Add it in/)).toBeTruthy();
+    });
+
+    it("uses a later advertised authorization server when the first cannot be used", async () => {
+      mocks.clientPages = [];
+      mocks.pickableIssuers = [linear];
+      mocks.discover.mockResolvedValue({
+        available: true,
+        metadata: {
+          authorizationServers: [
+            "",
+            "https://broken.example.com",
+            linear.issuer,
+          ],
+        },
+      });
+      mocks.getIssuer.mockImplementation(({ issuer }: { issuer: string }) =>
+        issuer === linear.issuer
+          ? Promise.resolve(linear)
+          : Promise.reject(
+              Object.assign(new Error("not found"), { statusCode: 404 }),
+            ),
+      );
+      mocks.fetchMetadata.mockRejectedValue(new Error("unreachable"));
+      renderSheet();
+      choosePersonal();
+
+      expect(
+        await screen.findByText("Detected from this server."),
+      ).toBeTruthy();
+      expect(screen.getByText("Linear — https://mcp.linear.app/")).toBeTruthy();
+    });
+
+    it("keeps the added authorization server in use when a later step fails", async () => {
+      mocks.clientPages = [];
+      advertise("https://auth.example.com");
+      mocks.getIssuer.mockRejectedValue(
+        Object.assign(new Error("not found"), { statusCode: 404 }),
+      );
+      mocks.fetchMetadata.mockResolvedValue({
+        issuer: "https://auth.example.com",
+        authorizationEndpoint: "https://auth.example.com/authorize",
+        tokenEndpoint: "https://auth.example.com/token",
+        clientIdMetadataDocumentSupported: true,
+      });
+      mocks.createIssuer.mockResolvedValue({
+        id: "added",
+        issuer: "https://auth.example.com",
+      });
+      mocks.createDocumentSignIn.mockRejectedValue(new Error("upstream down"));
+      renderSheet();
+      choosePersonal();
+
+      await screen.findByText(
+        /Example isn't set up yet, so it's added to Authorization Servers when you save/,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Add credential" }));
+
+      await waitFor(() =>
+        expect(mocks.createDocumentSignIn).toHaveBeenCalled(),
+      );
+      expect(screen.queryByText("Use it instead")).toBeNull();
+    });
+
     it("names the credential after the detected service when no name was typed", async () => {
       mocks.clientPages = [];
       mocks.pickableIssuers = [linear];

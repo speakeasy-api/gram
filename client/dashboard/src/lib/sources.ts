@@ -153,6 +153,30 @@ const SHARED_HOSTING_DOMAINS = [
 ];
 
 /**
+ * Labels that, before a two-letter country code, form a public suffix such as
+ * co.uk, or.jp or edu.au.
+ */
+const SECOND_LEVEL_SUFFIXES = [
+  "ac",
+  "co",
+  "com",
+  "edu",
+  "go",
+  "gob",
+  "gov",
+  "ltd",
+  "me",
+  "mil",
+  "ne",
+  "net",
+  "nom",
+  "or",
+  "org",
+  "plc",
+  "sch",
+];
+
+/**
  * A readable name for the service behind a URL, from its host:
  * "https://mcp.canva.com/mcp" reads "Canva" and "mcp.acme-wiki.example" reads
  * "Acme Wiki". Null when the host does not name a service: IP addresses,
@@ -186,9 +210,7 @@ export function readableServiceNameFromUrl(url: string): string | null {
   const suffixLength =
     labels.length >= 3 &&
     labels[labels.length - 1]!.length === 2 &&
-    ["co", "com", "org", "net", "ac", "gov"].includes(
-      labels[labels.length - 2]!,
-    )
+    SECOND_LEVEL_SUFFIXES.includes(labels[labels.length - 2]!)
       ? 2
       : 1;
   const name = labels[labels.length - 1 - suffixLength]!;

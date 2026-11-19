@@ -173,8 +173,10 @@ var sharedHostingDomains = []string{
 }
 
 // secondLevelSuffixes precede a two-letter country code in public suffixes
-// such as co.uk.
-var secondLevelSuffixes = map[string]bool{"co": true, "com": true, "org": true, "net": true, "ac": true, "gov": true}
+// such as co.uk, or.jp or edu.au.
+var secondLevelSuffixes = map[string]bool{
+	"ac": true, "co": true, "com": true, "edu": true, "go": true, "gob": true, "gov": true, "ltd": true, "me": true, "mil": true, "ne": true, "net": true, "nom": true, "or": true, "org": true, "plc": true, "sch": true,
+}
 
 // readableServiceName reads the service's name from a URL's host:
 // https://mcp.ramp.com/mcp reads "Ramp" and mcp.acme-wiki.example reads
@@ -190,11 +192,16 @@ func readableServiceName(rawURL string) string {
 	host := strings.ToLower(strings.TrimSuffix(parsed.Hostname(), "."))
 	labels := strings.Split(host, ".")
 	last := labels[len(labels)-1]
-	if len(labels) < 2 || strings.Trim(last, "0123456789") == "" || strings.Contains(host, ":") || strings.Contains(host, "xn--") {
+	if len(labels) < 2 || strings.Trim(last, "0123456789") == "" || strings.Contains(host, ":") {
 		return ""
 	}
 	for _, r := range host {
 		if r > unicode.MaxASCII {
+			return ""
+		}
+	}
+	for _, label := range labels {
+		if strings.HasPrefix(label, "xn--") {
 			return ""
 		}
 	}

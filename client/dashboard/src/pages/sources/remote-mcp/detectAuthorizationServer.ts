@@ -37,17 +37,16 @@ export type DetectionFailure =
   | "missing_endpoints";
 
 /**
- * Looks up the authorization server a remote MCP server advertises: an
- * existing one first, since a saved one carries what sign-in needs and a
- * private issuer cannot be discovered from the browser at all, then its
- * metadata when the project does not have it yet.
+ * Looks up the authorization server a remote MCP server advertises. A server
+ * may advertise several: the first that can be used wins, and when none can,
+ * the first one's failure is reported.
  */
 export async function detectAuthorizationServer(
   client: Gram,
   remoteMcpServerId: string,
   options?: RequestOptions,
 ): Promise<DetectedAuthorizationServer> {
-  let authorizationServer: string | undefined;
+  let advertised: string[] = [];
   try {
     const resource = await client.remoteMcp.discoverProtectedResourceMetadata(
       {
@@ -56,16 +55,39 @@ export async function detectAuthorizationServer(
       undefined,
       options,
     );
-    authorizationServer = resource.available
-      ? resource.metadata?.authorizationServers?.[0]
-      : undefined;
+    advertised = resource.available
+      ? (resource.metadata?.authorizationServers ?? [])
+          .map((server) => server.trim())
+          .filter(Boolean)
+      : [];
   } catch {
-    authorizationServer = undefined;
-  }
-  if (!authorizationServer) {
-    return { kind: "unavailable", reason: "no_metadata" };
+    advertised = [];
   }
 
+  let firstFailure: DetectedAuthorizationServer | undefined;
+  for (const authorizationServer of advertised) {
+    const detected = await resolveAuthorizationServer(
+      client,
+      authorizationServer,
+      options,
+    );
+    if (detected.kind !== "unavailable") return detected;
+    firstFailure ??= detected;
+  }
+  return firstFailure ?? { kind: "unavailable", reason: "no_metadata" };
+}
+
+/**
+ * One advertised authorization server: an existing one first, since a saved
+ * one carries what sign-in needs and a private issuer cannot be discovered
+ * from the browser at all, then its metadata when the project does not have
+ * it yet.
+ */
+async function resolveAuthorizationServer(
+  client: Gram,
+  authorizationServer: string,
+  options?: RequestOptions,
+): Promise<DetectedAuthorizationServer> {
   let issuer: RemoteSessionIssuer | null;
   try {
     issuer = await client.remoteSessionIssuers.get(

@@ -13,6 +13,10 @@ describe("readableServiceNameFromUrl", () => {
     ["https://slick.chat/mcp", "Slick"],
     ["https://api.example.co.uk/mcp", "Example"],
     ["https://MCP.Ramp.COM/mcp", "Ramp"],
+    ["https://api.example.or.jp/mcp", "Example"],
+    ["https://api.example.edu.au/mcp", "Example"],
+    ["https://mcp.example.me.uk/mcp", "Example"],
+    ["https://mcp.foo-xn--bar.example/mcp", "Foo Xn Bar"],
   ])("reads %s as %s", (url, name) => {
     expect(readableServiceNameFromUrl(url)).toBe(name);
   });

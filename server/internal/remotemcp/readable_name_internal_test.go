@@ -19,6 +19,10 @@ func TestRemoteMCPDisplayName(t *testing.T) {
 		{url: "https://app.asana.com", want: "Asana"},
 		{url: "https://mcp.acme-wiki.example/mcp", want: "Acme Wiki"},
 		{url: "https://api.example.co.uk/mcp", want: "Example"},
+		{url: "https://api.example.or.jp/mcp", want: "Example"},
+		{url: "https://api.example.edu.au/mcp", want: "Example"},
+		{url: "https://mcp.example.me.uk/mcp", want: "Example"},
+		{url: "https://mcp.foo-xn--bar.example/mcp", want: "Foo Xn Bar"},
 		// Hosts that do not name a service keep the address as the name.
 		{url: "http://127.0.0.1:4100/mcp", want: "127.0.0.1:4100/mcp"},
 		{url: "http://[::1]:4100/mcp", want: "[::1]:4100/mcp"},
