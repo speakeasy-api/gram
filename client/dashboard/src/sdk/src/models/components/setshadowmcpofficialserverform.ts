@@ -7,10 +7,6 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type SetShadowMCPOfficialServerForm = {
   /**
-   * Switch the link off: keep direct connections to the Shadow MCP server working under the ordinary Shadow MCP rules instead of blocking them. Requires mcp_server_id.
-   */
-  allowDirectAccess: boolean;
-  /**
    * The MCP server to link as the official version. Omit it to remove the link.
    */
   mcpServerId?: string | undefined;
@@ -23,7 +19,6 @@ export type SetShadowMCPOfficialServerForm = {
 
 /** @internal */
 export type SetShadowMCPOfficialServerForm$Outbound = {
-  allow_direct_access: boolean;
   mcp_server_id?: string | undefined;
   project_id: string;
   server_url: string;
@@ -35,14 +30,12 @@ export const SetShadowMCPOfficialServerForm$outboundSchema: z.ZodMiniType<
   SetShadowMCPOfficialServerForm
 > = z.pipe(
   z.object({
-    allowDirectAccess: z.boolean(),
     mcpServerId: z.optional(z.string()),
     projectId: z.string(),
     serverUrl: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
-      allowDirectAccess: "allow_direct_access",
       mcpServerId: "mcp_server_id",
       projectId: "project_id",
       serverUrl: "server_url",

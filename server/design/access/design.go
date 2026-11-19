@@ -677,7 +677,7 @@ var _ = Service("access", func() {
 	})
 
 	Method("setShadowMCPOfficialServer", func() {
-		Description("Link one project-scoped Shadow MCP server to its official version, switch the link off or on, or remove it. A link with allow_direct_access false blocks direct connections wherever a Shadow MCP policy applies and points agents at the linked server; true keeps the link but lets direct connections follow the ordinary rules. Omitting mcp_server_id (with allow_direct_access false) removes the link. Requires an authenticated session authorized for org:admin on the active organization.")
+		Description("Link one project-scoped Shadow MCP server to its official version, or remove the link. While a link exists, direct connections are blocked wherever a Shadow MCP policy applies and agents are pointed at the linked server. With mcp_server_id the link is added (or restored, when it was removed before) or pointed at that server; omitting mcp_server_id removes the link. Each add, change and removal is recorded in the audit log. Requires an authenticated session authorized for org:admin on the active organization.")
 		Security(security.Session)
 
 		Payload(func() {
@@ -1822,7 +1822,7 @@ var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
 	Attribute("allowed_policy_ids", ArrayOf(String))
 	Attribute("blocked_policy_ids", ArrayOf(String), "Enabled blocking policies that block this server via a risk_policy:block grant (allow_all policies only).")
 	Attribute("official_server", ShadowMCPOfficialServerModel, func() {
-		Description("The MCP server linked as this Shadow MCP server's official version. While the link is on, direct use is blocked wherever a Shadow MCP policy applies, and the block points agents here.")
+		Description("The MCP server linked as this Shadow MCP server's official version. While it is linked, direct use is blocked wherever a Shadow MCP policy applies, and the block points agents here.")
 	})
 	Attribute("suggested_official_server", ShadowMCPSuggestedOfficialServerModel, func() {
 		Description("A project MCP server that proxies to the same upstream URL, offered as the server to link. Present only while no official server is linked.")
@@ -1842,7 +1842,7 @@ var ShadowMCPSuggestedOfficialServerModel = Type("ShadowMCPSuggestedOfficialServ
 
 var ShadowMCPOfficialServerModel = Type("ShadowMCPOfficialServer", func() {
 	Description("The official, Speakeasy-served version of a Shadow MCP server, linked by an administrator.")
-	Required("mcp_server_id", "name", "direct_access_allowed")
+	Required("mcp_server_id", "name")
 
 	Attribute("mcp_server_id", String, func() {
 		Format(FormatUUID)
@@ -1851,16 +1851,14 @@ var ShadowMCPOfficialServerModel = Type("ShadowMCPOfficialServer", func() {
 	Attribute("slug", String, "The official server's slug, when it has one.")
 	Attribute("url", String, "Where agents connect. A gateway's address when the server is a gateway member. Absent while the server has no endpoint.")
 	Attribute("gateway_name", String, "The gateway that serves the official server, when url is a gateway's address.")
-	Attribute("direct_access_allowed", Boolean, "True while the link is switched off: direct connections to the Shadow MCP server follow the ordinary Shadow MCP rules instead of being blocked.")
 })
 
 var SetShadowMCPOfficialServerForm = Type("SetShadowMCPOfficialServerForm", func() {
-	Required("project_id", "server_url", "allow_direct_access")
+	Required("project_id", "server_url")
 
 	Attribute("project_id", String, func() { Format(FormatUUID) })
 	Attribute("server_url", String, "The Shadow MCP server's URL.", func() { Format(FormatURI) })
 	Attribute("mcp_server_id", String, "The MCP server to link as the official version. Omit it to remove the link.", func() { Format(FormatUUID) })
-	Attribute("allow_direct_access", Boolean, "Switch the link off: keep direct connections to the Shadow MCP server working under the ordinary Shadow MCP rules instead of blocking them. Requires mcp_server_id.")
 })
 
 var ListShadowMCPInventoryResult = Type("ListShadowMCPInventoryResult", func() {

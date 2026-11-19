@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -19,11 +20,12 @@ import (
 )
 
 // SetShadowMCPOfficialServer links one Shadow MCP server to its official
-// version, switches the link off or on, or removes it. Without
-// mcp_server_id and with allow_direct_access false, the link is removed,
-// which leaves the Shadow MCP server unmanaged so another server can be
-// linked. Without mcp_server_id and with allow_direct_access true, the
-// request is rejected: switching a link off needs the linked server.
+// version, or removes the link. With mcp_server_id the link is added, or
+// pointed at that server when it exists; adding a removed link back restores
+// its row. Without mcp_server_id the link is soft-deleted, which leaves the
+// Shadow MCP server unmanaged so another server can be linked. Every change
+// is recorded in the audit log; a request that changes nothing records
+// nothing.
 func (s *Service) SetShadowMCPOfficialServer(ctx context.Context, payload *gen.SetShadowMCPOfficialServerPayload) error {
 	ac, projectID, inventoryURL, err := s.shadowMCPInventoryMutationContext(ctx, payload.ProjectID, payload.ServerURL)
 	if err != nil {
@@ -54,11 +56,6 @@ func (s *Service) SetShadowMCPOfficialServer(ctx context.Context, payload *gen.S
 		}
 		chosen = uuid.NullUUID{UUID: server.ID, Valid: true}
 	}
-	// Switching a link off keeps the linked server; without one there is
-	// nothing to switch off.
-	if !chosen.Valid && payload.AllowDirectAccess {
-		return oops.E(oops.CodeBadRequest, nil, "switching a link off needs the linked mcp server").LogError(ctx, s.logger)
-	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -73,76 +70,122 @@ func (s *Service) SetShadowMCPOfficialServer(ctx context.Context, payload *gen.S
 	if err := q.LockShadowMCPOfficialServerURL(ctx, shadowmcprepo.LockShadowMCPOfficialServerURLParams{ProjectID: projectID, ServerUrl: key}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock shadow mcp official server url").LogError(ctx, s.logger)
 	}
-	var before *audit.ShadowMCPOfficialServerSnapshot
-	choiceID := uuid.Nil
-	existing, err := q.LockShadowMCPOfficialServerChoice(ctx, shadowmcprepo.LockShadowMCPOfficialServerChoiceParams{ProjectID: projectID, ServerUrl: key})
+	var existing *officialLinkRow
+	row, err := q.LockShadowMCPOfficialServerChoice(ctx, shadowmcprepo.LockShadowMCPOfficialServerChoiceParams{ProjectID: projectID, ServerUrl: key})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "lock shadow mcp official server choice").LogError(ctx, s.logger)
 	default:
-		before = officialServerSnapshot(existing)
-		choiceID = existing.ID
+		existing = &officialLinkRow{ID: row.ID, ServerURL: row.ServerUrl, MCPServerID: row.McpServerID}
 	}
 
-	var after *audit.ShadowMCPOfficialServerSnapshot
-	userID := conv.ToPGTextEmpty(ac.UserID)
-	removeLink := !chosen.Valid
-	if removeLink {
-		if before == nil {
-			// No link to remove: nothing changed, so nothing is recorded.
-			return nil
-		}
-		if _, err := q.DeleteShadowMCPOfficialServerChoice(ctx, shadowmcprepo.DeleteShadowMCPOfficialServerChoiceParams{UserID: userID, ProjectID: projectID, ServerUrl: key}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "clear shadow mcp official server choice").LogError(ctx, s.logger)
-		}
-	}
-	if !removeLink {
-		saved, err := q.UpsertShadowMCPOfficialServerChoice(ctx, shadowmcprepo.UpsertShadowMCPOfficialServerChoiceParams{
-			ProjectID:         projectID,
-			ServerUrl:         key,
-			McpServerID:       chosen,
-			AllowDirectAccess: payload.AllowDirectAccess,
-			UserID:            userID,
-		})
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "save shadow mcp official server choice").LogError(ctx, s.logger)
-		}
-		after = officialServerSnapshot(saved)
-		choiceID = saved.ID
-		if before != nil && *before == *after {
-			return nil
-		}
-	}
-
-	if err := s.audit.LogShadowMCPOfficialServerSet(ctx, dbtx, audit.LogShadowMCPOfficialServerSetEvent{
+	event := audit.ShadowMCPOfficialServerEvent{
 		OrganizationID:   ac.ActiveOrganizationID,
 		ProjectID:        projectID,
 		Actor:            temporaryGrantActor(ctx, ac.UserID),
 		ActorDisplayName: ac.Email,
 		ActorSlug:        nil,
-		ChoiceURN:        urn.NewShadowMCPOfficialServer(choiceID),
+		LinkURN:          urn.ShadowMCPOfficialServer{ID: uuid.Nil},
 		ServerURL:        key,
-		SnapshotBefore:   before,
-		SnapshotAfter:    after,
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "log shadow mcp official server choice").LogError(ctx, s.logger)
+	}
+	userID := conv.ToPGTextEmpty(ac.UserID)
+
+	switch {
+	case !chosen.Valid && existing == nil:
+		// No link to remove: nothing changed, so nothing is recorded.
+		return nil
+	case !chosen.Valid:
+		if _, err := q.DeleteShadowMCPOfficialServerChoice(ctx, shadowmcprepo.DeleteShadowMCPOfficialServerChoiceParams{UserID: userID, ProjectID: projectID, ServerUrl: key}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "remove shadow mcp official server link").LogError(ctx, s.logger)
+		}
+		event.LinkURN = urn.NewShadowMCPOfficialServer(existing.ID)
+		err = s.audit.LogShadowMCPOfficialServerDelete(ctx, dbtx, audit.LogShadowMCPOfficialServerDeleteEvent{
+			ShadowMCPOfficialServerEvent:          event,
+			ShadowMCPOfficialServerSnapshotBefore: existing.snapshot(),
+		})
+	case existing == nil:
+		saved, addErr := s.addShadowMCPOfficialServerLink(ctx, q, projectID, key, chosen, userID)
+		if addErr != nil {
+			return addErr
+		}
+		event.LinkURN = urn.NewShadowMCPOfficialServer(saved.ID)
+		err = s.audit.LogShadowMCPOfficialServerCreate(ctx, dbtx, audit.LogShadowMCPOfficialServerCreateEvent{
+			ShadowMCPOfficialServerEvent:         event,
+			ShadowMCPOfficialServerSnapshotAfter: saved.snapshot(),
+		})
+	case existing.MCPServerID == chosen:
+		// The link already points at this server.
+		return nil
+	default:
+		saved, upsertErr := q.UpsertShadowMCPOfficialServerChoice(ctx, shadowmcprepo.UpsertShadowMCPOfficialServerChoiceParams{
+			ProjectID:   projectID,
+			ServerUrl:   key,
+			McpServerID: chosen,
+			UserID:      userID,
+		})
+		if upsertErr != nil {
+			return oops.E(oops.CodeUnexpected, upsertErr, "update shadow mcp official server link").LogError(ctx, s.logger)
+		}
+		event.LinkURN = urn.NewShadowMCPOfficialServer(saved.ID)
+		after := officialLinkRow{ID: saved.ID, ServerURL: saved.ServerUrl, MCPServerID: saved.McpServerID}
+		err = s.audit.LogShadowMCPOfficialServerUpdate(ctx, dbtx, audit.LogShadowMCPOfficialServerUpdateEvent{
+			ShadowMCPOfficialServerEvent:          event,
+			ShadowMCPOfficialServerSnapshotBefore: existing.snapshot(),
+			ShadowMCPOfficialServerSnapshotAfter:  after.snapshot(),
+		})
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "log shadow mcp official server link").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit shadow mcp official server choice").LogError(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "commit shadow mcp official server link").LogError(ctx, s.logger)
 	}
 	return nil
 }
 
-func officialServerSnapshot(row shadowmcprepo.ShadowMcpOfficialServer) *audit.ShadowMCPOfficialServerSnapshot {
+// officialLinkRow is the part of a stored link the handler reads.
+type officialLinkRow struct {
+	ID          uuid.UUID
+	ServerURL   string
+	MCPServerID uuid.NullUUID
+}
+
+func (r officialLinkRow) snapshot() *audit.ShadowMCPOfficialServerSnapshot {
 	snapshot := &audit.ShadowMCPOfficialServerSnapshot{
-		ServerURL:         row.ServerUrl,
-		MCPServerID:       "",
-		AllowDirectAccess: row.AllowDirectAccess,
+		ServerURL:   r.ServerURL,
+		MCPServerID: "",
 	}
-	if row.McpServerID.Valid {
-		snapshot.MCPServerID = row.McpServerID.UUID.String()
+	if r.MCPServerID.Valid {
+		snapshot.MCPServerID = r.MCPServerID.UUID.String()
 	}
 	return snapshot
+}
+
+// addShadowMCPOfficialServerLink adds a link for a URL with no live link:
+// it restores the most recently removed row for the URL, or inserts one.
+func (s *Service) addShadowMCPOfficialServerLink(ctx context.Context, q *shadowmcprepo.Queries, projectID uuid.UUID, key string, chosen uuid.NullUUID, userID pgtype.Text) (officialLinkRow, error) {
+	restored, err := q.RestoreShadowMCPOfficialServerChoice(ctx, shadowmcprepo.RestoreShadowMCPOfficialServerChoiceParams{
+		McpServerID: chosen,
+		UserID:      userID,
+		ProjectID:   projectID,
+		ServerUrl:   key,
+	})
+	if err == nil {
+		return officialLinkRow{ID: restored.ID, ServerURL: restored.ServerUrl, MCPServerID: restored.McpServerID}, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return officialLinkRow{}, oops.E(oops.CodeUnexpected, err, "restore shadow mcp official server link").LogError(ctx, s.logger)
+	}
+	inserted, err := q.UpsertShadowMCPOfficialServerChoice(ctx, shadowmcprepo.UpsertShadowMCPOfficialServerChoiceParams{
+		ProjectID:   projectID,
+		ServerUrl:   key,
+		McpServerID: chosen,
+		UserID:      userID,
+	})
+	if err != nil {
+		return officialLinkRow{}, oops.E(oops.CodeUnexpected, err, "add shadow mcp official server link").LogError(ctx, s.logger)
+	}
+	return officialLinkRow{ID: inserted.ID, ServerURL: inserted.ServerUrl, MCPServerID: inserted.McpServerID}, nil
 }

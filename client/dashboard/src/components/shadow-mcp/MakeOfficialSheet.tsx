@@ -155,7 +155,6 @@ export function MakeOfficialSheet({
           await link.save({
             serverUrl: server.canonicalServerUrl,
             mcpServerId: mcpServer.id,
-            allowDirectAccess: false,
           });
         } catch {
           linkFailed = true;

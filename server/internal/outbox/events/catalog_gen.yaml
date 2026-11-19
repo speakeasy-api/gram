@@ -5106,7 +5106,7 @@ webhooks:
                 required: true
     audit_log.shadow_mcp_official_server_event_v1:
         post:
-            description: Emitted when an organization chooses the official version of a Shadow MCP server or keeps direct connections to it working
+            description: Emitted when an organization adds, changes or removes the link from a Shadow MCP server to its official version
             operationId: audit_log.shadow_mcp_official_server_event_v1
             requestBody:
                 content:

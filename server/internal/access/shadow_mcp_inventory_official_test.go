@@ -68,11 +68,10 @@ func TestService_ReadShadowMCPInventoryTarget_SuggestsThenReportsLinkedServer(t 
 	require.Equal(t, "Tracker (official)", server.SuggestedOfficialServer.Name)
 
 	require.NoError(t, ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
-		SessionToken:      nil,
-		ProjectID:         authCtx.ProjectID.String(),
-		ServerURL:         "https://github.example.com/mcp",
-		McpServerID:       new(official.ID.String()),
-		AllowDirectAccess: false,
+		SessionToken: nil,
+		ProjectID:    authCtx.ProjectID.String(),
+		ServerURL:    "https://github.example.com/mcp",
+		McpServerID:  new(official.ID.String()),
 	}))
 
 	server = read()
@@ -95,7 +94,6 @@ func TestService_ReadShadowMCPInventoryTarget_SuggestsThenReportsLinkedServer(t 
 	require.Len(t, list.Servers, 1)
 	require.NotNil(t, list.Servers[0].OfficialServer)
 	require.Equal(t, official.ID.String(), list.Servers[0].OfficialServer.McpServerID)
-	require.False(t, list.Servers[0].OfficialServer.DirectAccessAllowed)
 }
 
 func TestService_ReadShadowMCPInventoryTarget_NoOfficialServerByDefault(t *testing.T) {
@@ -154,7 +152,7 @@ func seedAccessOfficialServer(t *testing.T, ctx context.Context, ti *testInstanc
 	return server
 }
 
-func TestService_SetShadowMCPOfficialServer_LinkSwitchOffAndRemove(t *testing.T) {
+func TestService_SetShadowMCPOfficialServer_AddChangeRemoveAndAddBack(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -162,6 +160,7 @@ func TestService_SetShadowMCPOfficialServer_LinkSwitchOffAndRemove(t *testing.T)
 	seedShadowMCPInventoryServer(t, ctx, ti, authCtx.ProjectID.String(), "Tracker")
 
 	chosenID := seedAccessOfficialServer(t, ctx, ti, *authCtx.ProjectID, "Company Tools", "https://internal.example.com/mcp", "private").ID
+	otherID := seedAccessOfficialServer(t, ctx, ti, *authCtx.ProjectID, "Other Tools", "https://other.example.com/mcp", "private").ID
 	read := func() *gen.ShadowMCPInventoryServer {
 		server, err := ti.service.ReadShadowMCPInventoryTarget(ctx, ShadowMCPInventoryTargetInput{
 			OrganizationID: authCtx.ActiveOrganizationID,
@@ -172,69 +171,89 @@ func TestService_SetShadowMCPOfficialServer_LinkSwitchOffAndRemove(t *testing.T)
 		require.NoError(t, err)
 		return server
 	}
+	set := func(serverURL string, mcpServerID *string) {
+		t.Helper()
+		require.NoError(t, ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
+			SessionToken: nil,
+			ProjectID:    authCtx.ProjectID.String(),
+			ServerURL:    serverURL,
+			McpServerID:  mcpServerID,
+		}))
+	}
+	count := func(action audit.Action) int64 {
+		t.Helper()
+		n, err := audittest.AuditLogCountByAction(ctx, ti.conn, action)
+		require.NoError(t, err)
+		return n
+	}
 	require.Nil(t, read().OfficialServer)
 
-	// Link an unrelated server as the official version, with the link
-	// switched off while it is tested.
-	require.NoError(t, ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
-		SessionToken:      nil,
-		ProjectID:         authCtx.ProjectID.String(),
-		ServerURL:         "https://github.example.com/mcp/",
-		McpServerID:       new(chosenID.String()),
-		AllowDirectAccess: true,
-	}))
+	// Add: an unrelated server becomes the official version.
+	set("https://github.example.com/mcp/", new(chosenID.String()))
 	official := read().OfficialServer
 	require.NotNil(t, official)
 	require.Equal(t, chosenID.String(), official.McpServerID)
 	require.Equal(t, "Company Tools", official.Name)
-	require.True(t, official.DirectAccessAllowed)
 
-	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionShadowMCPOfficialServerSet)
+	created, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionShadowMCPOfficialServerCreate)
 	require.NoError(t, err)
-	require.Equal(t, "https://github.example.com/mcp", record.SubjectDisplay)
-	after, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.Equal(t, "https://github.example.com/mcp", created.SubjectDisplay)
+	require.Equal(t, "shadow_mcp_official_server", created.SubjectType)
+	after, err := audittest.DecodeAuditData(created.AfterSnapshot)
 	require.NoError(t, err)
 	require.Equal(t, chosenID.String(), after["mcp_server_id"])
-	require.Equal(t, true, after["allow_direct_access"])
+	require.NotContains(t, after, "allow_direct_access")
+	linkID := created.SubjectID
 
-	// Saving the same choice again records nothing new.
-	require.NoError(t, ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
-		SessionToken:      nil,
-		ProjectID:         authCtx.ProjectID.String(),
-		ServerURL:         "https://github.example.com/mcp",
-		McpServerID:       new(chosenID.String()),
-		AllowDirectAccess: true,
-	}))
-	count, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionShadowMCPOfficialServerSet)
+	// Saving the same link again changes nothing and records nothing.
+	set("https://github.example.com/mcp", new(chosenID.String()))
+	require.Equal(t, int64(1), count(audit.ActionShadowMCPOfficialServerCreate))
+	require.Equal(t, int64(0), count(audit.ActionShadowMCPOfficialServerUpdate))
+
+	// Change: the link points at another server.
+	set("https://github.example.com/mcp", new(otherID.String()))
+	require.Equal(t, otherID.String(), read().OfficialServer.McpServerID)
+	updated, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionShadowMCPOfficialServerUpdate)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), count)
+	require.Equal(t, linkID, updated.SubjectID)
+	before, err := audittest.DecodeAuditData(updated.BeforeSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, chosenID.String(), before["mcp_server_id"])
+	after, err = audittest.DecodeAuditData(updated.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, otherID.String(), after["mcp_server_id"])
 
-	// Keeping direct connections working needs the linked server in the
-	// payload: without its ID the request is rejected, and the link stays.
-	require.Error(t, ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
-		SessionToken:      nil,
-		ProjectID:         authCtx.ProjectID.String(),
-		ServerURL:         "https://github.example.com/mcp",
-		McpServerID:       nil,
-		AllowDirectAccess: true,
-	}))
-
-	// Removing the link leaves the server unmanaged.
-	require.NoError(t, ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
-		SessionToken:      nil,
-		ProjectID:         authCtx.ProjectID.String(),
-		ServerURL:         "https://github.example.com/mcp",
-		McpServerID:       nil,
-		AllowDirectAccess: false,
-	}))
+	// Remove: the link is soft-deleted and the server is unmanaged again.
+	set("https://github.example.com/mcp", nil)
 	require.Nil(t, read().OfficialServer)
-	count, err = audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionShadowMCPOfficialServerSet)
+	deleted, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionShadowMCPOfficialServerDelete)
 	require.NoError(t, err)
-	require.Equal(t, int64(2), count)
+	require.Equal(t, linkID, deleted.SubjectID)
+	before, err = audittest.DecodeAuditData(deleted.BeforeSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, otherID.String(), before["mcp_server_id"])
+	var deletedAt pgtype.Timestamptz
+	require.NoError(t, ti.conn.QueryRow(ctx, "SELECT deleted_at FROM shadow_mcp_official_servers WHERE id = $1", linkID).Scan(&deletedAt))
+	require.True(t, deletedAt.Valid, "removal soft-deletes the row")
+
+	// Removing it again changes nothing and records nothing.
+	set("https://github.example.com/mcp", nil)
+	require.Equal(t, int64(1), count(audit.ActionShadowMCPOfficialServerDelete))
+
+	// Add back: the removed row is restored, so the link keeps its id.
+	set("https://github.example.com/mcp", new(chosenID.String()))
+	require.Equal(t, chosenID.String(), read().OfficialServer.McpServerID)
+	require.Equal(t, int64(2), count(audit.ActionShadowMCPOfficialServerCreate))
+	restored, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionShadowMCPOfficialServerCreate)
+	require.NoError(t, err)
+	require.Equal(t, linkID, restored.SubjectID)
+	var rows int
+	require.NoError(t, ti.conn.QueryRow(ctx, "SELECT count(*) FROM shadow_mcp_official_servers WHERE project_id = $1", *authCtx.ProjectID).Scan(&rows))
+	require.Equal(t, 1, rows)
 }
 
 // Two first links to one URL serialize on the URL: the second waits for the
-// first to commit and audits the link it replaces.
+// first to commit and records a change from the link it replaces.
 func TestService_SetShadowMCPOfficialServer_ConcurrentFirstLinksAuditReplacedLink(t *testing.T) {
 	t.Parallel()
 
@@ -253,27 +272,25 @@ func TestService_SetShadowMCPOfficialServer_ConcurrentFirstLinksAuditReplacedLin
 	done := make(chan error, 1)
 	go func() {
 		done <- ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
-			SessionToken:      nil,
-			ProjectID:         authCtx.ProjectID.String(),
-			ServerURL:         key,
-			McpServerID:       new(second.ID.String()),
-			AllowDirectAccess: false,
+			SessionToken: nil,
+			ProjectID:    authCtx.ProjectID.String(),
+			ServerURL:    key,
+			McpServerID:  new(second.ID.String()),
 		})
 	}()
 	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(holder), 1)
 
 	_, err := holderQueries.UpsertShadowMCPOfficialServerChoice(ctx, shadowmcprepo.UpsertShadowMCPOfficialServerChoiceParams{
-		ProjectID:         *authCtx.ProjectID,
-		ServerUrl:         key,
-		McpServerID:       uuid.NullUUID{UUID: first.ID, Valid: true},
-		AllowDirectAccess: false,
-		UserID:            pgtype.Text{String: "", Valid: false},
+		ProjectID:   *authCtx.ProjectID,
+		ServerUrl:   key,
+		McpServerID: uuid.NullUUID{UUID: first.ID, Valid: true},
+		UserID:      pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 	require.NoError(t, holder.Commit(ctx))
 	require.NoError(t, <-done)
 
-	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionShadowMCPOfficialServerSet)
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionShadowMCPOfficialServerUpdate)
 	require.NoError(t, err)
 	before, err := audittest.DecodeAuditData(record.BeforeSnapshot)
 	require.NoError(t, err)
@@ -291,11 +308,10 @@ func TestService_SetShadowMCPOfficialServer_RejectsDisabledOrForeignServer(t *te
 
 	disabledID := seedAccessOfficialServer(t, ctx, ti, *authCtx.ProjectID, "Off", "https://off.example.com/mcp", "disabled").ID
 	err := ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
-		SessionToken:      nil,
-		ProjectID:         authCtx.ProjectID.String(),
-		ServerURL:         "https://github.example.com/mcp",
-		McpServerID:       new(disabledID.String()),
-		AllowDirectAccess: false,
+		SessionToken: nil,
+		ProjectID:    authCtx.ProjectID.String(),
+		ServerURL:    "https://github.example.com/mcp",
+		McpServerID:  new(disabledID.String()),
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 
@@ -304,20 +320,18 @@ func TestService_SetShadowMCPOfficialServer_RejectsDisabledOrForeignServer(t *te
 	otherProject := createShadowMCPProject(t, ctx, ti, authCtx.ActiveOrganizationID)
 	foreignID := seedAccessOfficialServer(t, ctx, ti, otherProject.ID, "Elsewhere", "https://elsewhere.example.com/mcp", "private").ID
 	err = ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
-		SessionToken:      nil,
-		ProjectID:         authCtx.ProjectID.String(),
-		ServerURL:         "https://github.example.com/mcp",
-		McpServerID:       new(foreignID.String()),
-		AllowDirectAccess: false,
+		SessionToken: nil,
+		ProjectID:    authCtx.ProjectID.String(),
+		ServerURL:    "https://github.example.com/mcp",
+		McpServerID:  new(foreignID.String()),
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
 
 	err = ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
-		SessionToken:      nil,
-		ProjectID:         authCtx.ProjectID.String(),
-		ServerURL:         "https://github.example.com/mcp",
-		McpServerID:       new(uuid.NewString()),
-		AllowDirectAccess: false,
+		SessionToken: nil,
+		ProjectID:    authCtx.ProjectID.String(),
+		ServerURL:    "https://github.example.com/mcp",
+		McpServerID:  new(uuid.NewString()),
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
 }

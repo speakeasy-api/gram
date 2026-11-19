@@ -53,7 +53,7 @@ export type SetShadowMCPOfficialServerMutationError =
  * setShadowMCPOfficialServer access
  *
  * @remarks
- * Link one project-scoped Shadow MCP server to its official version, switch the link off or on, or remove it. A link with allow_direct_access false blocks direct connections wherever a Shadow MCP policy applies and points agents at the linked server; true keeps the link but lets direct connections follow the ordinary rules. Omitting mcp_server_id (with allow_direct_access false) removes the link. Requires an authenticated session authorized for org:admin on the active organization.
+ * Link one project-scoped Shadow MCP server to its official version, or remove the link. While a link exists, direct connections are blocked wherever a Shadow MCP policy applies and agents are pointed at the linked server. With mcp_server_id the link is added (or restored, when it was removed before) or pointed at that server; omitting mcp_server_id removes the link. Each add, change and removal is recorded in the audit log. Requires an authenticated session authorized for org:admin on the active organization.
  */
 export function useSetShadowMCPOfficialServerMutation(
   options?: MutationHookOptions<

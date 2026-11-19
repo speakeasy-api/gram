@@ -4163,7 +4163,7 @@ paths:
         type: mutation
   /rpc/access.setShadowMCPOfficialServer:
     post:
-      description: Link one project-scoped Shadow MCP server to its official version, switch the link off or on, or remove it. A link with allow_direct_access false blocks direct connections wherever a Shadow MCP policy applies and points agents at the linked server; true keeps the link but lets direct connections follow the ordinary rules. Omitting mcp_server_id (with allow_direct_access false) removes the link. Requires an authenticated session authorized for org:admin on the active organization.
+      description: Link one project-scoped Shadow MCP server to its official version, or remove the link. While a link exists, direct connections are blocked wherever a Shadow MCP policy applies and agents are pointed at the linked server. With mcp_server_id the link is added (or restored, when it was removed before) or pointed at that server; omitting mcp_server_id removes the link. Each add, change and removal is recorded in the audit log. Requires an authenticated session authorized for org:admin on the active organization.
       operationId: setShadowMCPOfficialServer
       parameters:
         - allowEmptyValue: true
@@ -116998,9 +116998,6 @@ components:
     SetShadowMCPOfficialServerForm:
       type: object
       properties:
-        allow_direct_access:
-          type: boolean
-          description: 'Switch the link off: keep direct connections to the Shadow MCP server working under the ordinary Shadow MCP rules instead of blocking them. Requires mcp_server_id.'
         mcp_server_id:
           type: string
           description: The MCP server to link as the official version. Omit it to remove the link.
@@ -117015,7 +117012,6 @@ components:
       required:
         - project_id
         - server_url
-        - allow_direct_access
     SetSlackDirectoryDefaultProjectRequestBody:
       type: object
       properties:
@@ -117506,9 +117502,6 @@ components:
     ShadowMCPOfficialServer:
       type: object
       properties:
-        direct_access_allowed:
-          type: boolean
-          description: 'True while the link is switched off: direct connections to the Shadow MCP server follow the ordinary Shadow MCP rules instead of being blocked.'
         gateway_name:
           type: string
           description: The gateway that serves the official server, when url is a gateway's address.
@@ -117528,7 +117521,6 @@ components:
       required:
         - mcp_server_id
         - name
-        - direct_access_allowed
     ShadowMCPSuggestedOfficialServer:
       type: object
       properties:

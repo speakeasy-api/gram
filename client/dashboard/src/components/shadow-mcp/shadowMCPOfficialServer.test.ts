@@ -41,7 +41,6 @@ describe("canMakeShadowMCPServerOfficial", () => {
         officialServer: {
           mcpServerId: "id",
           name: "Sentry",
-          directAccessAllowed: false,
         },
       }),
     ).toBe(false);
@@ -53,7 +52,6 @@ describe("shadowMCPOfficialServerDescription", () => {
     mcpServerId: "id",
     name: "Linear",
     url: "https://app.example.com/mcp/linear",
-    directAccessAllowed: false,
   };
 
   it("says direct connections are blocked while the link is on, in every mode", () => {
@@ -74,23 +72,12 @@ describe("shadowMCPOfficialServerDescription", () => {
     ).toContain("through the gateway “Team Gateway”");
   });
 
-  it("says direct connections follow the usual rules while unlinked", () => {
-    expect(
-      shadowMCPOfficialServerDescription({
-        officialServer: { ...official, directAccessAllowed: true },
-      }),
-    ).toBe(
-      "Linked to “Linear”. The link is off, so direct connections follow the usual rules.",
-    );
-  });
-
   it("does not claim a block when the official server has no address", () => {
     expect(
       shadowMCPOfficialServerDescription({
         officialServer: {
           mcpServerId: "id",
           name: "GitHub",
-          directAccessAllowed: false,
         },
       }),
     ).toContain("It has no address yet, so direct connections still work");
@@ -198,19 +185,12 @@ describe("shadowMCPOfficialState", () => {
   const official = {
     mcpServerId: "id",
     name: "Linear",
-    directAccessAllowed: false,
   };
 
-  it("reads as onboarded only while the link is on", () => {
+  it("reads as onboarded while linked", () => {
     expect(shadowMCPOfficialState({ officialServer: official }, false)).toBe(
       "onboarded",
     );
-    expect(
-      shadowMCPOfficialState(
-        { officialServer: { ...official, directAccessAllowed: true } },
-        false,
-      ),
-    ).toBe(null);
   });
 
   it("leaves a pending request or an unmanaged server alone", () => {

@@ -107,13 +107,13 @@ type Service interface {
 	// Update or clear the administrator-defined display name for one
 	// project-scoped Shadow MCP inventory server URL.
 	UpdateShadowMCPInventoryServerName(context.Context, *UpdateShadowMCPInventoryServerNamePayload) (err error)
-	// Link one project-scoped Shadow MCP server to its official version, switch
-	// the link off or on, or remove it. A link with allow_direct_access false
-	// blocks direct connections wherever a Shadow MCP policy applies and points
-	// agents at the linked server; true keeps the link but lets direct connections
-	// follow the ordinary rules. Omitting mcp_server_id (with allow_direct_access
-	// false) removes the link. Requires an authenticated session authorized for
-	// org:admin on the active organization.
+	// Link one project-scoped Shadow MCP server to its official version, or remove
+	// the link. While a link exists, direct connections are blocked wherever a
+	// Shadow MCP policy applies and agents are pointed at the linked server. With
+	// mcp_server_id the link is added (or restored, when it was removed before) or
+	// pointed at that server; omitting mcp_server_id removes the link. Each add,
+	// change and removal is recorded in the audit log. Requires an authenticated
+	// session authorized for org:admin on the active organization.
 	SetShadowMCPOfficialServer(context.Context, *SetShadowMCPOfficialServerPayload) (err error)
 	// List users with observed telemetry usage for one project-scoped Shadow MCP
 	// server URL.
@@ -1676,10 +1676,6 @@ type SetShadowMCPOfficialServerPayload struct {
 	ServerURL string
 	// The MCP server to link as the official version. Omit it to remove the link.
 	McpServerID *string
-	// Switch the link off: keep direct connections to the Shadow MCP server
-	// working under the ordinary Shadow MCP rules instead of blocking them.
-	// Requires mcp_server_id.
-	AllowDirectAccess bool
 }
 
 // The enforcement verdict for a shadow MCP server, computed server-side from
@@ -1787,9 +1783,9 @@ type ShadowMCPInventoryServer struct {
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string
-	// The MCP server linked as this Shadow MCP server's official version. While
-	// the link is on, direct use is blocked wherever a Shadow MCP policy applies,
-	// and the block points agents here.
+	// The MCP server linked as this Shadow MCP server's official version. While it
+	// is linked, direct use is blocked wherever a Shadow MCP policy applies, and
+	// the block points agents here.
 	OfficialServer *ShadowMCPOfficialServer
 	// A project MCP server that proxies to the same upstream URL, offered as the
 	// server to link. Present only while no official server is linked.
@@ -1846,9 +1842,6 @@ type ShadowMCPOfficialServer struct {
 	URL *string
 	// The gateway that serves the official server, when url is a gateway's address.
 	GatewayName *string
-	// True while the link is switched off: direct connections to the Shadow MCP
-	// server follow the ordinary Shadow MCP rules instead of being blocked.
-	DirectAccessAllowed bool
 }
 
 // A project MCP server that already serves a Shadow MCP server's upstream URL

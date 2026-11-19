@@ -72,7 +72,6 @@ func (q *Queries) GetLiveMCPServerForShadowMCPChoice(ctx context.Context, arg Ge
 const getShadowMCPOfficialServerChoice = `-- name: GetShadowMCPOfficialServerChoice :one
 SELECT
     c.server_url,
-    c.allow_direct_access,
     m.id AS chosen_mcp_server_id,
     m.name AS chosen_mcp_server_name,
     m.slug AS chosen_mcp_server_slug
@@ -94,7 +93,6 @@ type GetShadowMCPOfficialServerChoiceParams struct {
 
 type GetShadowMCPOfficialServerChoiceRow struct {
 	ServerUrl           string
-	AllowDirectAccess   bool
 	ChosenMcpServerID   uuid.NullUUID
 	ChosenMcpServerName pgtype.Text
 	ChosenMcpServerSlug pgtype.Text
@@ -106,7 +104,6 @@ func (q *Queries) GetShadowMCPOfficialServerChoice(ctx context.Context, arg GetS
 	var i GetShadowMCPOfficialServerChoiceRow
 	err := row.Scan(
 		&i.ServerUrl,
-		&i.AllowDirectAccess,
 		&i.ChosenMcpServerID,
 		&i.ChosenMcpServerName,
 		&i.ChosenMcpServerSlug,
@@ -181,7 +178,6 @@ func (q *Queries) ListBlockedShadowMCPServerURLs(ctx context.Context, arg ListBl
 const listShadowMCPOfficialServerChoices = `-- name: ListShadowMCPOfficialServerChoices :many
 SELECT
     c.server_url,
-    c.allow_direct_access,
     m.id AS chosen_mcp_server_id,
     m.name AS chosen_mcp_server_name,
     m.slug AS chosen_mcp_server_slug
@@ -197,7 +193,6 @@ WHERE c.project_id = $1
 
 type ListShadowMCPOfficialServerChoicesRow struct {
 	ServerUrl           string
-	AllowDirectAccess   bool
 	ChosenMcpServerID   uuid.NullUUID
 	ChosenMcpServerName pgtype.Text
 	ChosenMcpServerSlug pgtype.Text
@@ -217,7 +212,6 @@ func (q *Queries) ListShadowMCPOfficialServerChoices(ctx context.Context, projec
 		var i ListShadowMCPOfficialServerChoicesRow
 		if err := rows.Scan(
 			&i.ServerUrl,
-			&i.AllowDirectAccess,
 			&i.ChosenMcpServerID,
 			&i.ChosenMcpServerName,
 			&i.ChosenMcpServerSlug,
@@ -279,7 +273,7 @@ func (q *Queries) ListStandingShadowMCPDecisions(ctx context.Context, projectID 
 }
 
 const lockShadowMCPOfficialServerChoice = `-- name: LockShadowMCPOfficialServerChoice :one
-SELECT id, project_id, server_url, mcp_server_id, allow_direct_access, created_by_user_id, updated_by_user_id, created_at, updated_at, deleted_at, deleted
+SELECT id, server_url, mcp_server_id
 FROM shadow_mcp_official_servers
 WHERE project_id = $1
     AND server_url = $2
@@ -292,23 +286,18 @@ type LockShadowMCPOfficialServerChoiceParams struct {
 	ServerUrl string
 }
 
+type LockShadowMCPOfficialServerChoiceRow struct {
+	ID          uuid.UUID
+	ServerUrl   string
+	McpServerID uuid.NullUUID
+}
+
 // The live choice row for one URL, locked for the update that replaces it.
-func (q *Queries) LockShadowMCPOfficialServerChoice(ctx context.Context, arg LockShadowMCPOfficialServerChoiceParams) (ShadowMcpOfficialServer, error) {
+// Columns are named so that dropping unused ones never breaks this query.
+func (q *Queries) LockShadowMCPOfficialServerChoice(ctx context.Context, arg LockShadowMCPOfficialServerChoiceParams) (LockShadowMCPOfficialServerChoiceRow, error) {
 	row := q.db.QueryRow(ctx, lockShadowMCPOfficialServerChoice, arg.ProjectID, arg.ServerUrl)
-	var i ShadowMcpOfficialServer
-	err := row.Scan(
-		&i.ID,
-		&i.ProjectID,
-		&i.ServerUrl,
-		&i.McpServerID,
-		&i.AllowDirectAccess,
-		&i.CreatedByUserID,
-		&i.UpdatedByUserID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
+	var i LockShadowMCPOfficialServerChoiceRow
+	err := row.Scan(&i.ID, &i.ServerUrl, &i.McpServerID)
 	return i, err
 }
 
@@ -328,12 +317,57 @@ func (q *Queries) LockShadowMCPOfficialServerURL(ctx context.Context, arg LockSh
 	return err
 }
 
+const restoreShadowMCPOfficialServerChoice = `-- name: RestoreShadowMCPOfficialServerChoice :one
+UPDATE shadow_mcp_official_servers
+SET deleted_at = NULL,
+    mcp_server_id = $1,
+    updated_by_user_id = $2,
+    updated_at = clock_timestamp()
+WHERE id = (
+    SELECT prev.id
+    FROM shadow_mcp_official_servers AS prev
+    WHERE prev.project_id = $3
+        AND prev.server_url = $4
+        AND prev.deleted IS TRUE
+    ORDER BY prev.deleted_at DESC
+    LIMIT 1
+)
+RETURNING id, server_url, mcp_server_id
+`
+
+type RestoreShadowMCPOfficialServerChoiceParams struct {
+	McpServerID uuid.NullUUID
+	UserID      pgtype.Text
+	ProjectID   uuid.UUID
+	ServerUrl   string
+}
+
+type RestoreShadowMCPOfficialServerChoiceRow struct {
+	ID          uuid.UUID
+	ServerUrl   string
+	McpServerID uuid.NullUUID
+}
+
+// Adding a removed link again restores the most recently removed row for the
+// URL, so the link keeps one id across its history. Callers hold
+// LockShadowMCPOfficialServerURL and have checked that no live row exists.
+func (q *Queries) RestoreShadowMCPOfficialServerChoice(ctx context.Context, arg RestoreShadowMCPOfficialServerChoiceParams) (RestoreShadowMCPOfficialServerChoiceRow, error) {
+	row := q.db.QueryRow(ctx, restoreShadowMCPOfficialServerChoice,
+		arg.McpServerID,
+		arg.UserID,
+		arg.ProjectID,
+		arg.ServerUrl,
+	)
+	var i RestoreShadowMCPOfficialServerChoiceRow
+	err := row.Scan(&i.ID, &i.ServerUrl, &i.McpServerID)
+	return i, err
+}
+
 const upsertShadowMCPOfficialServerChoice = `-- name: UpsertShadowMCPOfficialServerChoice :one
 INSERT INTO shadow_mcp_official_servers (
     project_id,
     server_url,
     mcp_server_id,
-    allow_direct_access,
     created_by_user_id,
     updated_by_user_id
 ) VALUES (
@@ -341,46 +375,38 @@ INSERT INTO shadow_mcp_official_servers (
     $2,
     $3,
     $4,
-    $5,
-    $5
+    $4
 )
 ON CONFLICT (project_id, server_url) WHERE deleted IS FALSE DO UPDATE SET
     mcp_server_id = EXCLUDED.mcp_server_id,
-    allow_direct_access = EXCLUDED.allow_direct_access,
     updated_by_user_id = EXCLUDED.updated_by_user_id,
     updated_at = clock_timestamp()
-RETURNING id, project_id, server_url, mcp_server_id, allow_direct_access, created_by_user_id, updated_by_user_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, server_url, mcp_server_id
 `
 
 type UpsertShadowMCPOfficialServerChoiceParams struct {
-	ProjectID         uuid.UUID
-	ServerUrl         string
-	McpServerID       uuid.NullUUID
-	AllowDirectAccess bool
-	UserID            pgtype.Text
+	ProjectID   uuid.UUID
+	ServerUrl   string
+	McpServerID uuid.NullUUID
+	UserID      pgtype.Text
 }
 
-func (q *Queries) UpsertShadowMCPOfficialServerChoice(ctx context.Context, arg UpsertShadowMCPOfficialServerChoiceParams) (ShadowMcpOfficialServer, error) {
+type UpsertShadowMCPOfficialServerChoiceRow struct {
+	ID          uuid.UUID
+	ServerUrl   string
+	McpServerID uuid.NullUUID
+}
+
+// Links a URL to a server: inserts the link, or points the live link at
+// another server.
+func (q *Queries) UpsertShadowMCPOfficialServerChoice(ctx context.Context, arg UpsertShadowMCPOfficialServerChoiceParams) (UpsertShadowMCPOfficialServerChoiceRow, error) {
 	row := q.db.QueryRow(ctx, upsertShadowMCPOfficialServerChoice,
 		arg.ProjectID,
 		arg.ServerUrl,
 		arg.McpServerID,
-		arg.AllowDirectAccess,
 		arg.UserID,
 	)
-	var i ShadowMcpOfficialServer
-	err := row.Scan(
-		&i.ID,
-		&i.ProjectID,
-		&i.ServerUrl,
-		&i.McpServerID,
-		&i.AllowDirectAccess,
-		&i.CreatedByUserID,
-		&i.UpdatedByUserID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
+	var i UpsertShadowMCPOfficialServerChoiceRow
+	err := row.Scan(&i.ID, &i.ServerUrl, &i.McpServerID)
 	return i, err
 }

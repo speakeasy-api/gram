@@ -147,10 +147,6 @@ type SetShadowMCPOfficialServerRequestBody struct {
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
 	// The MCP server to link as the official version. Omit it to remove the link.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	// Switch the link off: keep direct connections to the Shadow MCP server
-	// working under the ordinary Shadow MCP rules instead of blocking them.
-	// Requires mcp_server_id.
-	AllowDirectAccess *bool `form:"allow_direct_access,omitempty" json:"allow_direct_access,omitempty" xml:"allow_direct_access,omitempty"`
 }
 
 // ResolveShadowMCPInventoryRequestRequestBody is the type of the "access"
@@ -582,9 +578,9 @@ type GetShadowMCPInventoryServerResponseBody struct {
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string `form:"blocked_policy_ids" json:"blocked_policy_ids" xml:"blocked_policy_ids"`
-	// The MCP server linked as this Shadow MCP server's official version. While
-	// the link is on, direct use is blocked wherever a Shadow MCP policy applies,
-	// and the block points agents here.
+	// The MCP server linked as this Shadow MCP server's official version. While it
+	// is linked, direct use is blocked wherever a Shadow MCP policy applies, and
+	// the block points agents here.
 	OfficialServer *ShadowMCPOfficialServerResponseBody `form:"official_server,omitempty" json:"official_server,omitempty" xml:"official_server,omitempty"`
 	// A project MCP server that proxies to the same upstream URL, offered as the
 	// server to link. Present only while no official server is linked.
@@ -9843,9 +9839,9 @@ type ShadowMCPInventoryServerResponseBody struct {
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string `form:"blocked_policy_ids" json:"blocked_policy_ids" xml:"blocked_policy_ids"`
-	// The MCP server linked as this Shadow MCP server's official version. While
-	// the link is on, direct use is blocked wherever a Shadow MCP policy applies,
-	// and the block points agents here.
+	// The MCP server linked as this Shadow MCP server's official version. While it
+	// is linked, direct use is blocked wherever a Shadow MCP policy applies, and
+	// the block points agents here.
 	OfficialServer *ShadowMCPOfficialServerResponseBody `form:"official_server,omitempty" json:"official_server,omitempty" xml:"official_server,omitempty"`
 	// A project MCP server that proxies to the same upstream URL, offered as the
 	// server to link. Present only while no official server is linked.
@@ -9930,9 +9926,6 @@ type ShadowMCPOfficialServerResponseBody struct {
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The gateway that serves the official server, when url is a gateway's address.
 	GatewayName *string `form:"gateway_name,omitempty" json:"gateway_name,omitempty" xml:"gateway_name,omitempty"`
-	// True while the link is switched off: direct connections to the Shadow MCP
-	// server follow the ordinary Shadow MCP rules instead of being blocked.
-	DirectAccessAllowed bool `form:"direct_access_allowed" json:"direct_access_allowed" xml:"direct_access_allowed"`
 }
 
 // ShadowMCPSuggestedOfficialServerResponseBody is used to define fields on
@@ -18662,10 +18655,9 @@ func NewUpdateShadowMCPInventoryServerNamePayload(body *UpdateShadowMCPInventory
 // setShadowMCPOfficialServer endpoint payload.
 func NewSetShadowMCPOfficialServerPayload(body *SetShadowMCPOfficialServerRequestBody, sessionToken *string) *access.SetShadowMCPOfficialServerPayload {
 	v := &access.SetShadowMCPOfficialServerPayload{
-		ProjectID:         *body.ProjectID,
-		ServerURL:         *body.ServerURL,
-		McpServerID:       body.McpServerID,
-		AllowDirectAccess: *body.AllowDirectAccess,
+		ProjectID:   *body.ProjectID,
+		ServerURL:   *body.ServerURL,
+		McpServerID: body.McpServerID,
 	}
 	v.SessionToken = sessionToken
 
@@ -19187,9 +19179,6 @@ func ValidateSetShadowMCPOfficialServerRequestBody(body *SetShadowMCPOfficialSer
 	}
 	if body.ServerURL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("server_url", "body"))
-	}
-	if body.AllowDirectAccess == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("allow_direct_access", "body"))
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))

@@ -13626,7 +13626,7 @@ examples:
   setShadowMCPOfficialServer:
     speakeasy-default-set-shadow-MCP-official-server:
       requestBody:
-        application/json: {"allow_direct_access": true, "project_id": "040ef24d-51e0-4646-85b6-c7b50843c53a", "server_url": "https://super-behest.net"}
+        application/json: {"project_id": "040ef24d-51e0-4646-85b6-c7b50843c53a", "server_url": "https://super-behest.net"}
       responses:
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}

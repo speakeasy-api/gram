@@ -13,10 +13,6 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type ShadowMCPOfficialServer = {
   /**
-   * True while the link is switched off: direct connections to the Shadow MCP server follow the ordinary Shadow MCP rules instead of being blocked.
-   */
-  directAccessAllowed: boolean;
-  /**
    * The gateway that serves the official server, when url is a gateway's address.
    */
   gatewayName?: string | undefined;
@@ -41,7 +37,6 @@ export const ShadowMCPOfficialServer$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    direct_access_allowed: z.boolean(),
     gateway_name: z.optional(z.string()),
     mcp_server_id: z.string(),
     name: z.string(),
@@ -50,7 +45,6 @@ export const ShadowMCPOfficialServer$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
-      "direct_access_allowed": "directAccessAllowed",
       "gateway_name": "gatewayName",
       "mcp_server_id": "mcpServerId",
     });

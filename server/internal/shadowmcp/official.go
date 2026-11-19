@@ -32,10 +32,6 @@ type OfficialServer struct {
 	URL string
 	// GatewayName is set when URL is a gateway's address.
 	GatewayName string
-	// DirectAccessAllowed means the link is switched off: the server stays
-	// linked, but direct connections to the upstream follow the ordinary
-	// Shadow MCP rules instead of being blocked.
-	DirectAccessAllowed bool
 }
 
 // SuggestedOfficialServer is a project MCP server that proxies to the same
@@ -69,18 +65,17 @@ func OfficialServerKey(rawURL string) (string, bool) {
 // officialLink is a stored link from an upstream URL to a live MCP server,
 // before the server's address is resolved.
 type officialLink struct {
-	key               string
-	id                uuid.UUID
-	name              string
-	slug              string
-	allowDirectAccess bool
+	key  string
+	id   uuid.UUID
+	name string
+	slug string
 }
 
 // linkFromRow reads one stored link. A link whose server was deleted or
 // disabled reads as no link: the Shadow MCP server is unmanaged again.
-func linkFromRow(serverURL string, allowDirectAccess bool, chosenID uuid.NullUUID, chosenName, chosenSlug string) (officialLink, bool) {
+func linkFromRow(serverURL string, chosenID uuid.NullUUID, chosenName, chosenSlug string) (officialLink, bool) {
 	if !chosenID.Valid {
-		return officialLink{key: "", id: uuid.Nil, name: "", slug: "", allowDirectAccess: false}, false
+		return officialLink{key: "", id: uuid.Nil, name: "", slug: ""}, false
 	}
 	name := strings.TrimSpace(chosenName)
 	if name == "" {
@@ -89,7 +84,7 @@ func linkFromRow(serverURL string, allowDirectAccess bool, chosenID uuid.NullUUI
 	if name == "" {
 		name = "MCP server"
 	}
-	return officialLink{key: serverURL, id: chosenID.UUID, name: name, slug: chosenSlug, allowDirectAccess: allowDirectAccess}, true
+	return officialLink{key: serverURL, id: chosenID.UUID, name: name, slug: chosenSlug}, true
 }
 
 // OfficialServers maps every upstream URL the project has linked to an
@@ -106,7 +101,7 @@ func OfficialServers(ctx context.Context, db OfficialServerDBTX, organizationID 
 	}
 	links := make([]officialLink, 0, len(rows))
 	for _, row := range rows {
-		if link, ok := linkFromRow(row.ServerUrl, row.AllowDirectAccess, row.ChosenMcpServerID, row.ChosenMcpServerName.String, row.ChosenMcpServerSlug.String); ok {
+		if link, ok := linkFromRow(row.ServerUrl, row.ChosenMcpServerID, row.ChosenMcpServerName.String, row.ChosenMcpServerSlug.String); ok {
 			links = append(links, link)
 		}
 	}
@@ -166,12 +161,11 @@ func resolveOfficialServers(ctx context.Context, db OfficialServerDBTX, organiza
 	out := make(map[string]OfficialServer, len(byKey))
 	for key, candidate := range byKey {
 		server := OfficialServer{
-			MCPServerID:         candidate.id,
-			Name:                candidate.name,
-			Slug:                candidate.slug,
-			URL:                 own[candidate.id].URL,
-			GatewayName:         "",
-			DirectAccessAllowed: candidate.allowDirectAccess,
+			MCPServerID: candidate.id,
+			Name:        candidate.name,
+			Slug:        candidate.slug,
+			URL:         own[candidate.id].URL,
+			GatewayName: "",
 		}
 		if gateway, ok := gateways[candidate.id]; ok {
 			server.URL = gateway.url
@@ -193,7 +187,7 @@ func OfficialServerFor(servers map[string]OfficialServer, rawURL string) (Offici
 }
 
 func noOfficialServer() OfficialServer {
-	return OfficialServer{MCPServerID: uuid.Nil, Name: "", Slug: "", URL: "", GatewayName: "", DirectAccessAllowed: false}
+	return OfficialServer{MCPServerID: uuid.Nil, Name: "", Slug: "", URL: "", GatewayName: ""}
 }
 
 func officialServerName(row remotemcprepo.ListLiveRemoteBackedMcpServersRow) string {
@@ -294,7 +288,7 @@ func (c *Client) OfficialServerForURL(ctx context.Context, organizationID string
 	if err != nil {
 		return noOfficialServer(), false, fmt.Errorf("get shadow mcp official server link: %w", err)
 	}
-	link, ok := linkFromRow(row.ServerUrl, row.AllowDirectAccess, row.ChosenMcpServerID, row.ChosenMcpServerName.String, row.ChosenMcpServerSlug.String)
+	link, ok := linkFromRow(row.ServerUrl, row.ChosenMcpServerID, row.ChosenMcpServerName.String, row.ChosenMcpServerSlug.String)
 	if !ok {
 		return noOfficialServer(), false, nil
 	}
