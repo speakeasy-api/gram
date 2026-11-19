@@ -207,7 +207,7 @@ func (q *Queries) EnsureSync(ctx context.Context, deviceIntegrationScheduleID uu
 
 const getConfigByOrgAndProvider = `-- name: GetConfigByOrgAndProvider :one
 
-SELECT id, organization_id, provider, credentials_encrypted, settings, enabled, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, provider, credentials_encrypted, credentials_org_encrypted, settings, enabled, created_at, updated_at, deleted_at, deleted
 FROM device_integration_configs
 WHERE organization_id = $1
   AND provider = $2
@@ -230,6 +230,7 @@ func (q *Queries) GetConfigByOrgAndProvider(ctx context.Context, arg GetConfigBy
 		&i.OrganizationID,
 		&i.Provider,
 		&i.CredentialsEncrypted,
+		&i.CredentialsOrgEncrypted,
 		&i.Settings,
 		&i.Enabled,
 		&i.CreatedAt,
@@ -242,7 +243,7 @@ func (q *Queries) GetConfigByOrgAndProvider(ctx context.Context, arg GetConfigBy
 
 const getConfigByOrgAndProviderForUpdate = `-- name: GetConfigByOrgAndProviderForUpdate :one
 
-SELECT id, organization_id, provider, credentials_encrypted, settings, enabled, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, provider, credentials_encrypted, credentials_org_encrypted, settings, enabled, created_at, updated_at, deleted_at, deleted
 FROM device_integration_configs
 WHERE organization_id = $1
   AND provider = $2
@@ -266,6 +267,7 @@ func (q *Queries) GetConfigByOrgAndProviderForUpdate(ctx context.Context, arg Ge
 		&i.OrganizationID,
 		&i.Provider,
 		&i.CredentialsEncrypted,
+		&i.CredentialsOrgEncrypted,
 		&i.Settings,
 		&i.Enabled,
 		&i.CreatedAt,
@@ -1097,7 +1099,7 @@ type GetSyncTargetRow struct {
 	ConfigID             uuid.UUID
 	OrganizationID       string
 	Provider             string
-	CredentialsEncrypted string
+	CredentialsEncrypted pgtype.Text
 	Settings             []byte
 	Enabled              bool
 	Deleted              bool
@@ -1146,11 +1148,11 @@ INSERT INTO device_integration_configs (
 ) VALUES (
     $1
   , $2
-  , $3
+  , $3::text
   , $4
   , $5
 )
-RETURNING id, organization_id, provider, credentials_encrypted, settings, enabled, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, provider, credentials_encrypted, credentials_org_encrypted, settings, enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type InsertConfigParams struct {
@@ -1175,6 +1177,7 @@ func (q *Queries) InsertConfig(ctx context.Context, arg InsertConfigParams) (Dev
 		&i.OrganizationID,
 		&i.Provider,
 		&i.CredentialsEncrypted,
+		&i.CredentialsOrgEncrypted,
 		&i.Settings,
 		&i.Enabled,
 		&i.CreatedAt,
@@ -2628,14 +2631,14 @@ func (q *Queries) SoftDeleteConfig(ctx context.Context, arg SoftDeleteConfigPara
 const updateConfigCredentials = `-- name: UpdateConfigCredentials :one
 
 UPDATE device_integration_configs
-SET credentials_encrypted = $1,
+SET credentials_encrypted = $1::text,
     settings = $2,
     enabled = $3,
     updated_at = clock_timestamp()
 WHERE organization_id = $4
   AND provider = $5
   AND deleted IS FALSE
-RETURNING id, organization_id, provider, credentials_encrypted, settings, enabled, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, provider, credentials_encrypted, credentials_org_encrypted, settings, enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateConfigCredentialsParams struct {
@@ -2663,6 +2666,7 @@ func (q *Queries) UpdateConfigCredentials(ctx context.Context, arg UpdateConfigC
 		&i.OrganizationID,
 		&i.Provider,
 		&i.CredentialsEncrypted,
+		&i.CredentialsOrgEncrypted,
 		&i.Settings,
 		&i.Enabled,
 		&i.CreatedAt,
@@ -2681,7 +2685,7 @@ SET settings = $1,
 WHERE organization_id = $3
   AND provider = $4
   AND deleted IS FALSE
-RETURNING id, organization_id, provider, credentials_encrypted, settings, enabled, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, provider, credentials_encrypted, credentials_org_encrypted, settings, enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateConfigSettingsParams struct {
@@ -2704,6 +2708,7 @@ func (q *Queries) UpdateConfigSettings(ctx context.Context, arg UpdateConfigSett
 		&i.OrganizationID,
 		&i.Provider,
 		&i.CredentialsEncrypted,
+		&i.CredentialsOrgEncrypted,
 		&i.Settings,
 		&i.Enabled,
 		&i.CreatedAt,

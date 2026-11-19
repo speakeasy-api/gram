@@ -2312,7 +2312,9 @@ type DeviceIntegrationConfig struct {
 	// @access: confidential
 	Provider string
 	// @access: secret-restricted
-	CredentialsEncrypted string
+	CredentialsEncrypted pgtype.Text
+	// @access: secret-restricted
+	CredentialsOrgEncrypted pgtype.Text
 	// @access: opaque-restricted
 	Settings []byte
 	// @access: confidential
@@ -4238,6 +4240,8 @@ type NetworkIngress struct {
 	IdentityRequired bool
 	// @access: secret-restricted
 	CredentialsEncrypted pgtype.Text
+	// @access: secret-restricted
+	CredentialsOrgEncrypted pgtype.Text
 	// @access: confidential
 	AttestorNamespace string
 	// @access: confidential
@@ -7661,6 +7665,8 @@ type SlackDirectoryConnection struct {
 	SlackTeamName pgtype.Text
 	// @access: secret-restricted
 	CredentialsEncrypted pgtype.Text
+	// @access: secret-restricted
+	CredentialsOrgEncrypted pgtype.Text
 	// @access: opaque-restricted
 	GrantedScopes []string
 	// @access: confidential

@@ -200,7 +200,7 @@ func (s *Syncer) RunSync(ctx context.Context, syncID uuid.UUID) error {
 	// Decrypt/decode failures are deterministic — retrying cannot help — so
 	// they are recorded as sync failures (with backoff and eventual pause)
 	// rather than propagated: a silently hot-looping schedule helps nobody.
-	creds, err := s.store.decryptCredentials(target.CredentialsEncrypted)
+	creds, err := s.store.decryptCredentials(target.CredentialsEncrypted.String)
 	if err != nil {
 		return s.recordFailure(ctx, target, "stored credentials can no longer be decrypted; re-enter them to reconnect", true)
 	}

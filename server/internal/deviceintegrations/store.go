@@ -119,7 +119,7 @@ func (s *Store) LoadConfigWithCredentials(ctx context.Context, orgID string, pro
 	if err != nil {
 		return Config{}, nil, err
 	}
-	creds, err := s.decryptCredentials(row.CredentialsEncrypted)
+	creds, err := s.decryptCredentials(row.CredentialsEncrypted.String)
 	if err != nil {
 		return Config{}, nil, err
 	}
@@ -319,7 +319,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, desc providers
 	// to revoke credentials.
 	if exists && credentialsSupplied {
 		merged := providers.Credentials{}
-		if stored, decErr := s.decryptCredentials(existingRow.CredentialsEncrypted); decErr == nil {
+		if stored, decErr := s.decryptCredentials(existingRow.CredentialsEncrypted.String); decErr == nil {
 			for _, f := range desc.SecretFields() {
 				if v, ok := stored[f.Key]; ok {
 					merged[f.Key] = v
@@ -359,7 +359,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, desc providers
 		// with the secret sitting right there in the row.
 		provisionCreds := creds
 		if len(provisionCreds) == 0 && exists {
-			if stored, decErr := s.decryptCredentials(existingRow.CredentialsEncrypted); decErr == nil {
+			if stored, decErr := s.decryptCredentials(existingRow.CredentialsEncrypted.String); decErr == nil {
 				provisionCreds = stored
 			}
 		}
