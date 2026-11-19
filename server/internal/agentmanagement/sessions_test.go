@@ -111,7 +111,7 @@ func liveUserSession(ctx context.Context, db *pgxpool.Pool, orgID string, sessio
 
 // seedManagedUpstreamWith seeds a minimal upstream cascade fixture. The
 // ciphertext is never decrypted by the cascade tests.
-func seedManagedUpstreamWith(t *testing.T, db *pgxpool.Pool, orgID string, issuerID uuid.UUID, subject string, customize func(*remoterepo.UpsertRemoteSessionParams)) remoterepo.RemoteSession {
+func seedManagedUpstreamWith(t *testing.T, db *pgxpool.Pool, orgID string, issuerID uuid.UUID, subject string, customize func(*remoterepo.UpsertRemoteSessionFixtureParams)) remoterepo.RemoteSession {
 	t.Helper()
 	q := remoterepo.New(db)
 	slug := "remote-" + uuid.NewString()
@@ -135,7 +135,7 @@ func seedManagedUpstreamWith(t *testing.T, db *pgxpool.Pool, orgID string, issue
 	require.NoError(t, err)
 	sessionSubject, err := urn.ParseSessionSubject(subject)
 	require.NoError(t, err)
-	params := remoterepo.UpsertRemoteSessionParams{
+	params := remoterepo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            sessionSubject,
 		UserSessionIssuerID:   issuerID,
 		RemoteSessionClientID: client.ID,
@@ -146,7 +146,7 @@ func seedManagedUpstreamWith(t *testing.T, db *pgxpool.Pool, orgID string, issue
 	if customize != nil {
 		customize(&params)
 	}
-	session, err := q.UpsertRemoteSession(t.Context(), params)
+	session, err := q.UpsertRemoteSessionFixture(t.Context(), params)
 	require.NoError(t, err)
 	return session
 }
@@ -264,7 +264,7 @@ func TestAgentSessionRevocationFailureOrderingAndRetry(t *testing.T) {
 	seededSession, err := liveUserSession(t.Context(), db, "org-a", session)
 	require.NoError(t, err)
 	// Identity fields exercise identity cleanup on retryable tombstones.
-	seededUpstream := seedManagedUpstreamWith(t, db, "org-a", issuer, "agent:"+agent.ID.String(), func(params *remoterepo.UpsertRemoteSessionParams) {
+	seededUpstream := seedManagedUpstreamWith(t, db, "org-a", issuer, "agent:"+agent.ID.String(), func(params *remoterepo.UpsertRemoteSessionFixtureParams) {
 		params.UpstreamSubject = conv.ToPGText("fixture-subject")
 		params.UpstreamEmail = conv.ToPGText("fixture@example.test")
 		params.UpstreamDisplayName = conv.ToPGText("Fixture")
@@ -291,7 +291,7 @@ func TestAgentSessionRevocationFailureOrderingAndRetry(t *testing.T) {
 	freshSession := createManagedUserSession(t, db, issuer, "agent:"+agent.ID.String(), "fresh-jti", "fresh-hash")
 	// Same subject and client, but fresh live credentials. The original row is
 	// a committed tombstone, so this inserts a new live row beside it.
-	fresh, err := remoterepo.New(db).UpsertRemoteSession(ctx, remoterepo.UpsertRemoteSessionParams{
+	fresh, err := remoterepo.New(db).UpsertRemoteSessionFixture(ctx, remoterepo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            seededUpstream.SubjectUrn,
 		UserSessionIssuerID:   seededUpstream.UserSessionIssuerID,
 		RemoteSessionClientID: seededUpstream.RemoteSessionClientID,
@@ -313,8 +313,8 @@ func TestAgentSessionRevocationFailureOrderingAndRetry(t *testing.T) {
 	revoker.events = nil
 	require.NoError(t, service.RevokeSession(ctx, payload))
 	require.Len(t, revoker.lastCredentials, 1)
-	require.Equal(t, "fixture-not-a-token", revoker.lastCredentials[0].AccessTokenEncrypted)
-	require.Equal(t, "fixture-refresh", revoker.lastCredentials[0].RefreshTokenEncrypted.String)
+	require.Equal(t, "fixture-not-a-token", revoker.lastCredentials[0].AccessToken.Platform.String)
+	require.Equal(t, "fixture-refresh", revoker.lastCredentials[0].RefreshToken.Platform.String)
 	require.Equal(t, []string{seededSession.Jti, seededSession.Jti}, revoker.revokedJTIs)
 	freshPreserved, err := testrepo.New(db).RemoteSessionHasLiveCredentialsFixture(ctx, testrepo.RemoteSessionHasLiveCredentialsFixtureParams{
 		AccessTokenEncrypted: "fresh-access", RefreshTokenEncrypted: "fresh-refresh", UpstreamSubject: "fresh-identity", ID: freshUpstream,

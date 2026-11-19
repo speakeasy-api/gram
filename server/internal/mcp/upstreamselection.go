@@ -869,7 +869,7 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 				continue
 			}
 			issuerID := c.selector.userSessionIssuerID
-			if c.onlyChosen {
+			if c.onlyChosen && issuerID == uuid.Nil {
 				var issuerErr error
 				issuerID, issuerErr = c.selector.service.agentKeyMemberIssuer(ctx, id, projects[id])
 				if issuerErr != nil {
@@ -1329,7 +1329,7 @@ func memberNeedsSignIn(member metaMember) bool {
 // up with a credential for through that credential, where typed auth client
 // resolution is enforced. It is nil for any other caller, before enforcement,
 // and for a key with no choices, so the gateway keeps its path.
-func (s *Service) agentKeyMemberChoices(ctx context.Context, organizationID string, agentID uuid.UUID, attribution remotesessions.RefreshAttribution) (*memberChoices, error) {
+func (s *Service) agentKeyMemberChoices(ctx context.Context, organizationID string, agentID, gatewayIssuerID uuid.UUID, attribution remotesessions.RefreshAttribution) (*memberChoices, error) {
 	mode, byKey := contextvalues.APIKeyAuthorization(ctx)
 	authCtx, hasAuth := contextvalues.GetAuthContext(ctx)
 	if !byKey || mode != contextvalues.APIKeyAuthorizationModePrincipal || !hasAuth || authCtx == nil || authCtx.ActiveOrganizationID != organizationID {
@@ -1348,7 +1348,7 @@ func (s *Service) agentKeyMemberChoices(ctx context.Context, organizationID stri
 	}
 	subject := urn.NewAgentSubject(agentID)
 	return &memberChoices{
-		selector:     &upstreamSelector{service: s, organizationID: organizationID, userSessionIssuerID: uuid.Nil, credentialKind: upstreamclients.CredentialKindAPIKey, credentialID: keyID},
+		selector:     &upstreamSelector{service: s, organizationID: organizationID, userSessionIssuerID: gatewayIssuerID, credentialKind: upstreamclients.CredentialKindAPIKey, credentialID: keyID},
 		subject:      subject,
 		enforced:     true,
 		profile:      false,

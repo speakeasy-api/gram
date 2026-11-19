@@ -11,7 +11,7 @@ import { useToolLogsAccess } from "@/components/observe/toolLogsAccess";
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { Page } from "@/components/page-layout";
 import { useRoutes } from "@/routes";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import type { Column } from "@/components/ui/Table";
 import { Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";

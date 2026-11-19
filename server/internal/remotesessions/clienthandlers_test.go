@@ -967,7 +967,7 @@ func TestDeleteRemoteSessionClient(t *testing.T) {
 	userIssuerUUID, err := uuid.Parse(userIssuerID)
 	require.NoError(t, err)
 
-	_, err = repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	_, err = repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            urn.NewUserSubject("test-principal"),
 		UserSessionIssuerID:   userIssuerUUID,
 		RemoteSessionClientID: clientUUID,

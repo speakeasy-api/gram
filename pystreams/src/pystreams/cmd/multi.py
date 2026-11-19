@@ -43,7 +43,7 @@ from pystreams.risk.fingerprint import parse_pepper_keyring
 from pystreams.risk.handler import PresidioHandler
 from pystreams.risk.metering import METER_PUBLISH_TIMEOUT_SECONDS
 from pystreams.risk.presidio_enforce_handler import PresidioEnforceHandler
-from pystreams.risk.redisswitch import DEFAULT_ROLE, RedisSwitch, client_name
+from pystreams.risk.redisswitch import RedisSwitch
 from pystreams.risk.replywriter import ReplyWriter
 
 from . import (
@@ -310,9 +310,10 @@ def _enforce_redis_client(
 ) -> redis_asyncio.Redis:
     """Build the reply-inbox client for a host:port address.
 
-    An armed client follows the Redis instance switch: its connections are
-    named so the operator's job can recognise them, and it never retries, so a
-    write interrupted by the move is not replayed on the other instance.
+    An armed client follows the Redis instance switch: it never retries, so a
+    write interrupted by the move is not replayed on the other instance. It
+    does not name its connections: an instance may reject the CLIENT command,
+    and a named client then cannot connect to it.
     """
     host, sep, port = addr.rpartition(":")
     if not sep or "]" in port or (":" in host and "[" not in host):
@@ -336,7 +337,6 @@ def _enforce_redis_client(
         password=password or None,
         socket_connect_timeout=1.0,
         socket_timeout=2.0,
-        client_name=client_name(DEFAULT_ROLE),
         retry=RedisRetry(NoBackoff(), 0),
     )
 

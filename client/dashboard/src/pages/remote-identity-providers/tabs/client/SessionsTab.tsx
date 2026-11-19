@@ -11,7 +11,7 @@ import { IdentityLink } from "@/components/identity-link";
 import { RequireScope } from "@/components/require-scope";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { Table, type Column } from "@/components/ui/Table";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { MoreActions, type Action } from "@/components/ui/MoreActions";
 import { Text } from "@/components/ui/Text";

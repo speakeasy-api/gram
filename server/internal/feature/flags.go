@@ -69,6 +69,9 @@ const (
 	// only links an administrator made redirect, as before. Removed once
 	// automatic links are GA.
 	FlagShadowMCPAutoLink Flag = "shadow-mcp-auto-link"
+	// FlagStoredGatewayMachineAccess lets admitted agents and workloads use
+	// stored gateways. The server evaluates it per organization and fails closed.
+	FlagStoredGatewayMachineAccess Flag = "stored-gateway-machine-access"
 	// FlagPlatformMCPAccessRoleMutations is the exact-project kill switch for
 	// creating and updating custom MCP-only access roles through Platform MCP.
 	// It is evaluated at invocation time and fails closed.

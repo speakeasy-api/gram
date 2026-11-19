@@ -729,6 +729,7 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 		if err != nil {
 			return ctx, nil, nil, false, err
 		}
+		newCtx = withWorkloadSessionReach(newCtx, reach)
 	}
 	if subject.Kind == urn.SessionSubjectKindWorkload {
 		agentID, ok := authz.AdmittedWorkloadAgent(newCtx)

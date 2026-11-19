@@ -408,6 +408,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	// service and transactional owner authorizer as gram start, without mounting
 	// its dashboard RPC routes or introducing a Temporal client.
 	clientSecrets := orgEncryption.ClientSecrets(logger, enc)
+	upstreamTokens := orgEncryption.UpstreamTokens(logger, enc)
 	identityCommitter := remotesessions.NewIdentityCommitter(logger, db, enc, clientSecrets, auditLogger, serverURL, guardianPolicy, tunnelHTTPClient, oauthregistration.NewMetrics(logger, meterProvider))
 	identityCommitter.SetCallbackOrigins(callbackOrigins)
 	remoteSessionsRefresher := remotesessions.NewRefreshService(logger, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, cacheImpl,
@@ -417,7 +418,8 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner),
 		remotesessions.WithRefreshConnectionRecorder(connectionRecorder),
 		remotesessions.WithRefreshFeatureFlags(featureFlags),
-		remotesessions.WithRefreshClientSecrets(clientSecrets))
+		remotesessions.WithRefreshClientSecrets(clientSecrets),
+		remotesessions.WithRefreshUpstreamTokens(upstreamTokens))
 	remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, enc, clientSecrets, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, identityCommitter, remoteSessionsRefresher, productFeatures, protectedResources)
 	remoteSessionsService.SetCallbackOrigins(callbackOrigins)
 	remoteSessionsService.SetFeatureFlags(featureFlags)

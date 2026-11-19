@@ -186,8 +186,9 @@ export function SettingsLayout({
       >
         <nav
           aria-label="Settings sections"
-          // Sticks inside the tab's scroll container, level with its top padding.
-          className="sticky top-8 hidden self-start lg:block"
+          // Sticks inside the tab's scroll container, level with its top
+          // padding, below the frame's sticky tab strip.
+          className="sticky top-[calc(var(--detail-strip,0px)+2rem)] hidden self-start lg:block"
         >
           {/* One flat list of section links: area names live on the page,
               not in the index, so nothing here is a heading or a gap. */}
@@ -295,7 +296,10 @@ function useActiveSection(links: IndexLink[]): {
     // A pixel of slack: a section scrolled to its anchor sits exactly on the
     // line, and subpixel layout can leave it a fraction below.
     const line =
-      scroller.getBoundingClientRect().top + SECTION_SCROLL_MARGIN + 1;
+      scroller.getBoundingClientRect().top +
+      (parseFloat(getComputedStyle(scroller).scrollPaddingTop) || 0) +
+      SECTION_SCROLL_MARGIN +
+      1;
     let current = targets[0]!;
     for (const target of targets) {
       if (target.element.getBoundingClientRect().top <= line) current = target;

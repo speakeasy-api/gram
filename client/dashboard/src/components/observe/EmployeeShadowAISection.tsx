@@ -1,7 +1,7 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { DETECTION_EVIDENCE_COLUMNS } from "@/components/shadow-ai/detectionColumns";
 import { ErrorAlert } from "@/components/ui/Alert";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { categoryLabel } from "@/pages/device-agent/ai-scan-target-draft";

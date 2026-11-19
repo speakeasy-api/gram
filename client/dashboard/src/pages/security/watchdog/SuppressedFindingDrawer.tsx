@@ -11,7 +11,7 @@ import {
 import { Text } from "@/components/ui/Text";
 import type { RiskExclusion } from "@gram/client/models/components/riskexclusion.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 import type { ReactNode } from "react";
 import { MCPFindingContext } from "../MCPFindingContext";
 import { isMCPFinding, type MCPFindingNames } from "../mcp-finding-context";
