@@ -1,4 +1,4 @@
-h1:Fjzhz83idE/LVlkKBAoxtsdzYvfuxnGS+pPGJgCb54U=
+h1:7qIO+ov5xnCl/HvKHZh5PXAAE5bVDz4aRowldu+viY0=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -550,3 +550,4 @@ h1:Fjzhz83idE/LVlkKBAoxtsdzYvfuxnGS+pPGJgCb54U=
 20261118143218_plugins-auto-add-servers-enabled.sql h1:CA3UfIPIXI5Zr5gbrvq9LiW4UtucA6jRoMUIgpjVkr0=
 20261118202235_binding-session-fk-any-issuer.sql h1:qmj+sBFXP3meXpljlvX6SeZdhSLxTzUiwwJ9n2GG6HM=
 20261119103854_drop-external-oauth-tables.sql h1:xPGduCyXFiqt55pmfQLCMU3p93SInfs4rPeDvbPk8iw=
+20261119105934_chat-messages-drop-redundant-indexes.sql h1:AFFX+uJXYJ3cZ9ADBJV0MBPqmNpzfBCpAuFlVLwxoqc=
