@@ -150,23 +150,33 @@ export function EditShadowMCPPolicyDialog({
   const promoteRequest = usePromoteMcpApprovalRequestMutation();
   const decide = useRecordMcpApprovalDecisionMutation();
 
+  // The policy as it was when the dialog opened. Saving refreshes the live
+  // policy before the dialog finishes closing, and comparing against that
+  // would flash the wrong step copy during the close.
+  const [baseline, setBaseline] = useState<ShadowMCPModeState>(state);
   const currentPrincipals =
-    state.policy?.audienceType === "targeted"
-      ? state.policy.audiencePrincipalUrns
+    baseline.policy?.audienceType === "targeted"
+      ? baseline.policy.audiencePrincipalUrns
       : [];
   const [step, setStep] = useState<Step>("choose");
-  const [target, setTarget] = useState<ShadowMCPMode>(state.mode);
+  const [target, setTarget] = useState<ShadowMCPMode>(baseline.mode);
   const [principals, setPrincipals] = useState<string[]>(currentPrincipals);
   const [keep, setKeep] = useState<Set<string>>(new Set());
-  const [rationale, setRationale] = useState(KEEP_RATIONALE[state.mode]);
+  const [rationale, setRationale] = useState(KEEP_RATIONALE[baseline.mode]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
+    const principalsNow =
+      state.policy?.audienceType === "targeted"
+        ? state.policy.audiencePrincipalUrns
+        : [];
+    setBaseline(state);
     setStep("choose");
     setTarget(state.mode);
-    setPrincipals(currentPrincipals);
+    setPrincipals(principalsNow);
+    setRationale(KEEP_RATIONALE[state.mode]);
     setKeep(new Set());
     setError(null);
     setSaving(false);
@@ -175,7 +185,7 @@ export function EditShadowMCPPolicyDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const flips = target !== state.mode;
+  const flips = target !== baseline.mode;
   const audienceChanged =
     target === "blocked" && !flips && !sameSet(principals, currentPrincipals);
   // A new audience moves the block between people, so it is reviewed too.
@@ -187,10 +197,10 @@ export function EditShadowMCPPolicyDialog({
       // added or removed, which is the same set a flip would list.
       serversChangedByPolicy(
         inventory.data?.servers ?? [],
-        flips ? state.mode : "allowed",
+        flips ? baseline.mode : "allowed",
         flips ? target : "blocked",
       ),
-    [inventory.data?.servers, flips, state.mode, target],
+    [inventory.data?.servers, flips, baseline.mode, target],
   );
   const groups = audienceGroups(
     membersQuery.data?.members ?? [],
@@ -280,13 +290,13 @@ export function EditShadowMCPPolicyDialog({
       });
       return;
     }
-    if (target === "blocked" && state.policy) {
+    if (target === "blocked" && baseline.policy) {
       await updatePolicy.mutateAsync({
         request: {
           updateRiskPolicyRequestBody: {
-            id: state.policy.id,
-            name: state.policy.name,
-            sources: state.policy.sources,
+            id: baseline.policy.id,
+            name: baseline.policy.name,
+            sources: baseline.policy.sources,
             action: "block",
             ...audience,
           },
@@ -294,8 +304,8 @@ export function EditShadowMCPPolicyDialog({
       });
       return;
     }
-    if (target === "allowed" && state.policy) {
-      await removePolicy.mutateAsync({ request: { id: state.policy.id } });
+    if (target === "allowed" && baseline.policy) {
+      await removePolicy.mutateAsync({ request: { id: baseline.policy.id } });
     }
   };
 
@@ -384,7 +394,7 @@ export function EditShadowMCPPolicyDialog({
 
         {step === "choose" ? (
           <ChooseStep
-            current={state.mode}
+            current={baseline.mode}
             target={target}
             onTarget={chooseTarget}
             groups={groups}
