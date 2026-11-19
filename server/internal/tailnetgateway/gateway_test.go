@@ -500,13 +500,16 @@ func TestGatewayResetsPartialStateAfterFailedRegistration(t *testing.T) {
 		row := f.slotRow(t, ingressID, orgID, 0)
 		assert.Equal(c, string(tailnetgateway.NodeStatusError), row.Status)
 		assert.False(c, row.AuthKeyEncrypted.Valid, "a consumed one-shot key is cleared so the reconciler mints another")
+		// The wake is enqueued after the heartbeat row is written, so it is
+		// polled for alongside the row rather than read once afterwards.
+		messages, err := nirepo.New(f.db).ListNetworkIngressReconcileRequests(ctx, orgID)
+		if assert.NoError(c, err) {
+			assert.Len(c, messages, 1, "the reconciler is woken to mint a new key")
+		}
 	}, 5*time.Second, 20*time.Millisecond)
 	store := newStateStore(t, f.db, ingressID, orgID, 0)
 	_, err := store.ReadState(ipn.MachineKeyStateKey)
 	require.ErrorIs(t, err, ipn.ErrStateNotExist, "partial state is reset")
-	messages, err := nirepo.New(f.db).ListNetworkIngressReconcileRequests(ctx, orgID)
-	require.NoError(t, err)
-	require.Len(t, messages, 1, "the reconciler is woken to mint a new key")
 }
 
 func TestGatewayRecordsStartFailures(t *testing.T) {
