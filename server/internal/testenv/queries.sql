@@ -1729,7 +1729,7 @@ SELECT grant_types FROM remote_session_clients WHERE id = @id AND project_id = @
 SELECT count(*) FROM remote_session_ema_bindings WHERE project_id = @project_id;
 
 -- name: SetPreparationFixtureClientSecret :exec
-UPDATE remote_session_clients SET token_endpoint_auth_method = 'client_secret_basic', client_secret_encrypted = @secret
+UPDATE remote_session_clients SET token_endpoint_auth_method = 'client_secret_basic', client_secret_encrypted = @secret, client_secret_org_encrypted = NULL, client_secret_generation = client_secret_generation + 1
 WHERE id = @id AND project_id = @project_id;
 
 -- name: SetPreparationFixtureClientSecretExpiry :exec
@@ -1741,7 +1741,7 @@ WHERE id = @id AND project_id = @project_id;
 UPDATE remote_session_issuers SET registration_endpoint = @endpoint, token_endpoint_auth_methods_supported=ARRAY['client_secret_basic'] WHERE id = @id AND project_id = @project_id;
 
 -- name: SetPreparationFixtureInteractiveClient :exec
-UPDATE remote_session_clients SET client_secret_encrypted='interactive-ciphertext', token_endpoint_auth_method='client_secret_basic', grant_types=ARRAY['authorization_code','refresh_token'], scope=ARRAY['openid'] WHERE id = @id AND project_id = @project_id;
+UPDATE remote_session_clients SET client_secret_encrypted='interactive-ciphertext', client_secret_org_encrypted = NULL, client_secret_generation = client_secret_generation + 1, token_endpoint_auth_method='client_secret_basic', grant_types=ARRAY['authorization_code','refresh_token'], scope=ARRAY['openid'] WHERE id = @id AND project_id = @project_id;
 
 -- name: AttachPreparationFixtureInteractiveClient :execrows
 INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id,user_session_issuer_id)
@@ -1936,7 +1936,7 @@ VALUES (@id, sqlc.narg('project_id')::uuid, sqlc.narg('organization_id')::text, 
 SELECT cardinality(pg_blocking_pids(@pid::integer)) > 0 AS blocked;
 
 -- name: SetPreparationFixtureTestClientSecret :exec
-UPDATE remote_session_clients SET token_endpoint_auth_method='client_secret_basic',client_secret_encrypted='test-ciphertext' WHERE id = @id AND project_id = @project_id;
+UPDATE remote_session_clients SET token_endpoint_auth_method='client_secret_basic',client_secret_encrypted='test-ciphertext', client_secret_org_encrypted = NULL, client_secret_generation = client_secret_generation + 1 WHERE id = @id AND project_id = @project_id;
 
 -- name: LockPreparationFixtureIssuer :one
 SELECT id FROM remote_session_issuers WHERE id = @id AND project_id = @project_id FOR UPDATE;
@@ -1951,7 +1951,7 @@ UPDATE remote_session_issuers SET metadata_last_error='discovery unavailable', m
 UPDATE remote_session_issuers SET client_id_metadata_document_supported = true, token_endpoint_auth_methods_supported = array_append(token_endpoint_auth_methods_supported, 'none') WHERE id = @id AND project_id = @project_id;
 
 -- name: SetPreparationFixtureCIMDURI :exec
-UPDATE remote_session_clients SET client_id_metadata_uri = 'https://gram.example.com/client.json', client_id = 'https://gram.example.com/client.json', client_secret_encrypted = NULL, token_endpoint_auth_method = 'none' WHERE id = @id AND project_id = @project_id;
+UPDATE remote_session_clients SET client_id_metadata_uri = 'https://gram.example.com/client.json', client_id = 'https://gram.example.com/client.json', client_secret_encrypted = NULL, client_secret_org_encrypted = NULL, client_secret_generation = client_secret_generation + 1, token_endpoint_auth_method = 'none' WHERE id = @id AND project_id = @project_id;
 
 -- name: SetPreparationFixtureConfidentialClient :execrows
 -- Identity chaining refuses public clients: make a fixture client authenticate
@@ -1963,7 +1963,7 @@ WITH issuer AS (
     RETURNING remote_session_issuers.id
 )
 UPDATE remote_session_clients
-SET token_endpoint_auth_method = 'private_key_jwt', json_web_key_set_id = @json_web_key_set_id, client_secret_encrypted = NULL,
+SET token_endpoint_auth_method = 'private_key_jwt', json_web_key_set_id = @json_web_key_set_id, client_secret_encrypted = NULL, client_secret_org_encrypted = NULL, client_secret_generation = client_secret_generation + 1,
     organization_id = @organization_id
 WHERE remote_session_clients.id = @id
   AND remote_session_clients.project_id = @project_id
