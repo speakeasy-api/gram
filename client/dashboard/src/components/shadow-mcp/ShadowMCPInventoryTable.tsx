@@ -78,20 +78,31 @@ type InventoryPage = {
 
 const EMPTY_INVENTORY_PAGES: InventoryPage[] = [];
 
+/** The later of the last call and the last time an agent listed it. */
+function lastActivity(server: ShadowMCPInventoryServer): number {
+  return Math.max(
+    server.lastCalled?.getTime() ?? 0,
+    observedDate(server.lastSeen)?.getTime() ?? 0,
+  );
+}
+
 function LastActivityCell({ server }: { server: ShadowMCPInventoryServer }) {
   const seen = observedDate(server.lastSeen);
   return (
     <div className="space-y-1">
-      <Text variant="small">{formatShortDate(server.lastCalled)}</Text>
+      <Text variant="small">
+        {server.lastCalled
+          ? `Called ${formatShortDate(server.lastCalled)}`
+          : "Never called"}
+      </Text>
       {seen && (
-        <Text
-          muted
-          small
-          className="text-xs"
-          title="Last seen in an agent's list of MCP servers"
-        >
-          Seen {formatShortDate(seen)}
-        </Text>
+        <SimpleTooltip tooltip="Last seen in an agent's list of MCP servers">
+          <span tabIndex={0} className="inline-flex cursor-help">
+            <Text muted small className="text-xs">
+              Seen {formatShortDate(seen)}
+            </Text>
+          </span>
+        </SimpleTooltip>
       )}
     </div>
   );
@@ -394,13 +405,13 @@ export function ShadowMCPInventoryTable({
       render: (server) => <ShadowMCPInventoryReviewCell server={server} />,
     },
     {
-      // When it was last seen in an agent's server list rides under the call
-      // date: it answers "is it still around?" for a server nobody calls,
-      // and a column of its own cost the table a second date to scan.
-      key: "lastCalled",
-      header: "Last called",
+      // One column for both dates: the last call, and under it when an agent
+      // last listed the server. It sorts by whichever is later, so a server
+      // agents stopped calling and listing sinks to the bottom either way.
+      key: "lastActive",
+      header: "Last active",
       sortable: true,
-      sortValue: (server) => server.lastCalled?.getTime() ?? 0,
+      sortValue: lastActivity,
       width: "0.9fr",
       render: (server) => <LastActivityCell server={server} />,
     },

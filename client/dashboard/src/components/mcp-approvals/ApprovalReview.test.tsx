@@ -64,17 +64,19 @@ function detail({
   status,
   requesters = [],
   decisions = [],
+  versionPinned = true,
 }: {
   status: string;
   requesters?: unknown[];
   decisions?: unknown[];
+  versionPinned?: boolean;
 }) {
   return {
     request: {
       id: "request-id",
       status,
       createdAt,
-      versionPinned: true,
+      versionPinned,
     },
     requesters,
     decisions,
@@ -197,5 +199,38 @@ describe("ApprovalReview collapsed evidence", () => {
     );
 
     expect(screen.queryByText("Evidence groups")).toBeNull();
+  });
+
+  it("keeps the unpinned-version caveat visible with the evidence closed", () => {
+    mocks.detail = detail({ status: "denied", versionPinned: false });
+
+    render(
+      <ApprovalReview
+        requestId="request-id"
+        title="Access review"
+        collapseEvidence
+      />,
+    );
+
+    expect(
+      screen.getAllByText(/No version is pinned, so what runs may differ\./),
+    ).toHaveLength(1);
+  });
+
+  it("keeps the evidence action while the review is still loading", () => {
+    mocks.detail = undefined;
+
+    render(
+      <ApprovalReview
+        requestId="request-id"
+        title="Access review"
+        collapseEvidence
+        evidenceAction={<button type="button">Refresh evidence</button>}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Refresh evidence" }),
+    ).toBeTruthy();
   });
 });

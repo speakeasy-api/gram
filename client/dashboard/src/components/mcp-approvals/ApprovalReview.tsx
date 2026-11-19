@@ -98,9 +98,17 @@ export function ApprovalReview({
 
   // A failed fetch must not read as "still loading" forever: name the
   // failure and offer a retry.
+  // The evidence action does not depend on this query, so it stays
+  // reachable while the review loads or after it fails to.
+  const fallbackAction =
+    collapseEvidence && evidenceAction ? (
+      <div className="flex justify-end">{evidenceAction}</div>
+    ) : null;
+
   if (detailQuery.error && !detail) {
     return (
       <div className="space-y-4">
+        {fallbackAction}
         <div className="bg-muted/20 flex min-h-24 flex-col items-center justify-center border border-dashed px-6 py-8 text-center">
           <p className="text-sm font-medium">The review could not be loaded</p>
           <p className="text-muted-foreground mt-1 max-w-md text-sm">
@@ -119,7 +127,12 @@ export function ApprovalReview({
   }
 
   if (!detail) {
-    return <SkeletonTable />;
+    return (
+      <div className="space-y-4">
+        {fallbackAction}
+        <SkeletonTable />
+      </div>
+    );
   }
 
   const unreviewed = detail.request.status === "unreviewed";
@@ -159,7 +172,7 @@ export function ApprovalReview({
       collectedAt={collapseEvidence ? undefined : detail.evidenceCollectedAt}
       status={detail.request.status}
       createdAt={asked ? detail.request.createdAt : undefined}
-      versionPinned={collapseEvidence || detail.request.versionPinned}
+      versionPinned={detail.request.versionPinned}
       notice={untouched ? "No one has asked for it yet." : undefined}
       boxed={!collapseEvidence}
     />
@@ -185,7 +198,6 @@ export function ApprovalReview({
       {collapseEvidence ? (
         <EvidenceDisclosure
           collectedAt={detail.evidenceCollectedAt}
-          versionPinned={detail.request.versionPinned}
           action={evidenceAction}
         >
           {evidence}
@@ -204,12 +216,10 @@ export function ApprovalReview({
  */
 function EvidenceDisclosure({
   collectedAt,
-  versionPinned,
   action,
   children,
 }: {
   collectedAt: Date | undefined;
-  versionPinned: boolean;
   action?: React.ReactNode;
   children: React.ReactNode;
 }): JSX.Element {
@@ -229,13 +239,11 @@ function EvidenceDisclosure({
       </div>
       <CollapsibleContent className="mt-3 space-y-4">
         {/* Where the evidence came from only applies once some was
-            gathered; the version caveat is about the request and always
-            applies. */}
-        {(collectedAt || !versionPinned) && (
+            gathered. */}
+        {collectedAt && (
           <Text muted small>
-            {collectedAt &&
-              "Declared by the server or its registry, or seen in this organization's traffic — nothing is verified behavior. "}
-            {!versionPinned && "No version is pinned, so what runs may differ."}
+            Declared by the server or its registry, or seen in this
+            organization's traffic — nothing is verified behavior.
           </Text>
         )}
         {children}
@@ -328,13 +336,10 @@ function ReviewHeader({
    *  section of a page that already frames it. */
   boxed?: boolean;
 }): JSX.Element {
-  // The badge rides the heading instead of a right-aligned cluster. Pushed
-  // right it floated against the page edge with nothing holding it, squeezed
-  // the subtitle into an orphaned second line, and put a second status
-  // treatment far from the summary strip's. Beside the title it reads as this
-  // section's own state, and the subtitle gets the full width to sit on.
-  // Boxed like every other section on the page, and centred in its own height
-  // so it sits level with the metric strip sharing its row.
+  // The badge rides the heading instead of a right-aligned cluster, so it
+  // reads as this section's own state and the subtitle gets the full width.
+  // Boxed where the review is the whole surface, such as the review sheet;
+  // plain where it is one section of a page that already frames it.
   return (
     <div
       className={cn(

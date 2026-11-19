@@ -500,7 +500,7 @@ describe("ShadowMCPInventoryTable", () => {
     expect(screen.getByText("Blocked")).toBeTruthy();
     expect(screen.getByText("42 calls")).toBeTruthy();
     expect(screen.getByText("3 users")).toBeTruthy();
-    expect(screen.getByText("Never")).toBeTruthy();
+    expect(screen.getByText("Never called")).toBeTruthy();
     expect(screen.getByText("https://unused.example.com/mcp")).toBeTruthy();
     expect(mocks.useShadowMCPInventory).toHaveBeenCalledWith(
       { projectId: "project-id-1", limit: 50 },
@@ -904,17 +904,26 @@ describe("ShadowMCPInventoryTable", () => {
       expect(screen.getByText("Beta MCP")).toBeTruthy();
     });
 
-    for (const header of ["Server", "Status", "Last called", "Usage"]) {
+    for (const header of ["Server", "Status", "Last active", "Usage"]) {
       expect(screen.getByRole("button", { name: header })).toBeTruthy();
     }
 
-    // Last seen rides under the call date rather than taking a column.
+    // Both dates share one column, which sorts by the later of the two.
     expect(screen.queryByRole("button", { name: "Last seen" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Last called" })).toBeNull();
 
     let rows = screen.getAllByRole("row").slice(1);
     expect(within(rows[0]!).getByText("Alpha MCP")).toBeTruthy();
     expect(within(rows[1]!).getByText("Beta MCP")).toBeTruthy();
     expect(within(rows[1]!).getByText(/^Seen /)).toBeTruthy();
+
+    // Beta was called earlier but listed later, so its activity is newer:
+    // oldest activity first puts Alpha on top, where sorting by the call
+    // date alone would put Beta there.
+    fireEvent.click(screen.getByRole("button", { name: "Last active" }));
+    rows = screen.getAllByRole("row").slice(1);
+    expect(within(rows[0]!).getByText("Alpha MCP")).toBeTruthy();
+    expect(within(rows[1]!).getByText("Beta MCP")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Usage" }));
 
