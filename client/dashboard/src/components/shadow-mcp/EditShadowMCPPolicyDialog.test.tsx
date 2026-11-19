@@ -24,6 +24,8 @@ const mocks = vi.hoisted(() => ({
   decide: vi.fn(),
   calls: [] as string[],
   toastSuccess: vi.fn(),
+  invalidatePolicies: vi.fn(),
+  invalidateInventory: vi.fn(),
 }));
 
 const { mutation } = vi.hoisted(() => ({
@@ -49,7 +51,7 @@ vi.mock("@gram/client/react-query/shadowMCPInventory.js", () => ({
     queryKey: ["inventory", request],
     queryFn: async () => ({ servers: mocks.servers }),
   }),
-  invalidateAllShadowMCPInventory: vi.fn(),
+  invalidateAllShadowMCPInventory: mocks.invalidateInventory,
 }));
 
 vi.mock("@gram/client/react-query/shadowMCPInventoryServer.js", () => ({
@@ -59,7 +61,7 @@ vi.mock("@gram/client/react-query/listMcpApprovalRequests.js", () => ({
   invalidateAllListMcpApprovalRequests: vi.fn(),
 }));
 vi.mock("@gram/client/react-query/riskListPolicies.js", () => ({
-  invalidateAllRiskListPolicies: vi.fn(),
+  invalidateAllRiskListPolicies: mocks.invalidatePolicies,
 }));
 vi.mock("@/components/shadow-mcp/useShadowMCPPolicyInventory", () => ({
   invalidateShadowMCPPolicyInventory: vi.fn(),
@@ -179,6 +181,8 @@ describe("EditShadowMCPPolicyDialog", () => {
     mocks.removePolicy.mockResolvedValue({});
     mocks.createRequest.mockResolvedValue({ id: "new-request" });
     mocks.decide.mockResolvedValue({});
+    mocks.invalidatePolicies.mockResolvedValue(undefined);
+    mocks.invalidateInventory.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -216,6 +220,44 @@ describe("EditShadowMCPPolicyDialog", () => {
     expect(mocks.toastSuccess).toHaveBeenCalledWith(
       "MCP servers are now blocked by default.",
     );
+  });
+
+  // In production the inventory refetch reads usage from analytics and takes
+  // seconds, so a dialog that waited for it stayed open after the save.
+  it("closes once saved without waiting for the inventory refetch", async () => {
+    mocks.invalidateInventory.mockReturnValue(new Promise(() => {}));
+    const onOpenChange = renderDialog();
+    chooseBlockAndReview();
+    await screen.findByText("busy");
+
+    fireEvent.click(screen.getByRole("button", { name: "Block by default" }));
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    expect(mocks.invalidateInventory).toHaveBeenCalled();
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(
+      "MCP servers are now blocked by default.",
+    );
+  });
+
+  it("keeps saving until the policy list has the new mode", async () => {
+    let refetched: () => void = () => {};
+    mocks.invalidatePolicies.mockReturnValue(
+      new Promise<void>((resolve) => {
+        refetched = resolve;
+      }),
+    );
+    const onOpenChange = renderDialog();
+    chooseBlockAndReview();
+    await screen.findByText("busy");
+
+    fireEvent.click(screen.getByRole("button", { name: "Block by default" }));
+
+    await waitFor(() => expect(mocks.calls).toEqual(["createPolicy"]));
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    expect(mocks.toastSuccess).not.toHaveBeenCalled();
+
+    refetched();
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
   });
 
   it("approves the kept servers before it blocks by default", async () => {

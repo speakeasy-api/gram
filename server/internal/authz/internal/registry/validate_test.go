@@ -13,17 +13,18 @@ func TestDefinitions_IsValid(t *testing.T) {
 
 func validTestPermission(action Action) Permission {
 	return Permission{
-		Action:      action,
-		LegacyScope: "",
-		Implies:     nil,
-		Exclusions:  nil,
-		Dimensions:  nil,
-		Source:      GrantSourceRoles,
-		Category:    "",
-		Label:       "Label",
-		Description: "Description.",
-		Sensitivity: SensitivityNone,
-		Agent:       AgentUnsafe(),
+		Action:        action,
+		LegacyScope:   "",
+		Implies:       nil,
+		Exclusions:    nil,
+		Dimensions:    nil,
+		Source:        GrantSourceRoles,
+		DimensionSets: nil,
+		Category:      "",
+		Label:         "Label",
+		Description:   "Description.",
+		Sensitivity:   SensitivityNone,
+		Agent:         AgentUnsafe(),
 	}
 }
 
@@ -54,12 +55,37 @@ func TestRegistryValidate_RejectsBrokenModels(t *testing.T) {
 	withAgent := func(p Permission, a AgentEligibility) Permission { p.Agent = a; return p }
 	withScope := func(p Permission, s Scope) Permission { p.LegacyScope = s; return p }
 	withExclusions := func(p Permission, x ...Exclusion) Permission { p.Exclusions = x; return p }
+	withSet := func(p Permission, method string, keys ...string) Permission {
+		p.DimensionSets = append(p.DimensionSets, DimensionSet{Method: method, Keys: keys})
+		return p
+	}
+	withDims := func(t ResourceType, keys ...string) ResourceType {
+		for _, key := range keys {
+			t.Dimensions = append(t.Dimensions, Dimension{Key: key, Values: nil, Required: false})
+		}
+		return t
+	}
 
 	cases := []struct {
 		name  string
 		model Registry
 		want  string
 	}{
+		{
+			name:  "dimension set with an undeclared key",
+			model: validTestRegistry(validTestType("thing", withSet(validTestPermission("read"), "ReadPart", "part"))),
+			want:  `thing.read: dimension set ReadPart uses "part", which is not a dimension of thing`,
+		},
+		{
+			name:  "dimension set reusing an action's method",
+			model: validTestRegistry(withDims(validTestType("thing", validTestPermission("write"), withSet(validTestPermission("read"), "Write", "part")), "part")),
+			want:  `thing.read: dimension set method "Write" clashes with another method on thing`,
+		},
+		{
+			name:  "dimension set without keys",
+			model: validTestRegistry(validTestType("thing", withSet(validTestPermission("read"), "ReadPart"))),
+			want:  `thing.read: a dimension set needs a method name and at least one key`,
+		},
 		{
 			name:  "duplicate action",
 			model: validTestRegistry(validTestType("thing", validTestPermission("read"), validTestPermission("read"))),
@@ -295,6 +321,29 @@ func TestResourceType_Scopes(t *testing.T) {
 func withTestScope(p Permission, s Scope) Permission {
 	p.LegacyScope = s
 	return p
+}
+
+// A loosely matched type inside a project must require project_id, so a check
+// cannot leave the project out and pass a grant bounded to another project.
+// Strictly matched types fail closed on a missing key and may leave it optional.
+func TestRegistryValidate_RequiresParentDimension(t *testing.T) {
+	t.Parallel()
+
+	inProject := func(match MatchMode, required bool) ResourceType {
+		thing := validTestType("thing", validTestPermission("read"))
+		thing.Parent = "project"
+		thing.Match = match
+		thing.Dimensions = []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: required}}
+		return thing
+	}
+	project := validTestType("project", validTestPermission("read"))
+
+	err := validTestRegistry(project, inProject(MatchLoose, false)).Validate()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `thing: dimension "project_id" names the parent project, so it must be Required`)
+
+	require.NoError(t, validTestRegistry(project, inProject(MatchLoose, true)).Validate())
+	require.NoError(t, validTestRegistry(project, inProject(MatchStrict, false)).Validate())
 }
 
 // The member role is seeded with a subset of the admin role.

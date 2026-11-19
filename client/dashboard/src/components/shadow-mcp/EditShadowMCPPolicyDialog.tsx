@@ -309,17 +309,20 @@ export function EditShadowMCPPolicyDialog({
     }
   };
 
-  const refresh = () =>
-    Promise.all([
-      invalidateAllRiskListPolicies(queryClient),
-      invalidateAllShadowMCPInventory(queryClient),
-      invalidateAllShadowMCPInventoryServer(queryClient),
-      invalidateAllListMcpApprovalRequests(queryClient),
-      invalidateShadowMCPPolicyInventory(queryClient, project.id),
-      queryClient.invalidateQueries({
-        queryKey: ["shadow-mcp-policy-change", project.id],
-      }),
-    ]);
+  // The inventory refetches read usage from analytics and take seconds on a
+  // large project, so the dialog never waits for them: the rows update in the
+  // background. The policy list is fast and decides the mode shown, so the
+  // dialog waits only for it.
+  const refresh = async () => {
+    void invalidateAllShadowMCPInventory(queryClient);
+    void invalidateAllShadowMCPInventoryServer(queryClient);
+    void invalidateAllListMcpApprovalRequests(queryClient);
+    void invalidateShadowMCPPolicyInventory(queryClient, project.id);
+    void queryClient.invalidateQueries({
+      queryKey: ["shadow-mcp-policy-change", project.id],
+    });
+    await invalidateAllRiskListPolicies(queryClient).catch(() => {});
+  };
 
   const save = async () => {
     setError(null);

@@ -138,6 +138,11 @@ func renderRefs(r registry.Registry) ([]byte, error) {
 
 	for _, t := range r.Types {
 		if _, ok := handWrittenRefs[t.Kind]; ok {
+			for _, p := range t.Permissions {
+				if len(p.DimensionSets) > 0 {
+					return nil, fmt.Errorf("%s:%s declares dimension sets, but %s refs are hand-written, so no method would be generated", t.Kind, p.Action, t.Kind)
+				}
+			}
 			continue
 		}
 		name := RefName(t.Kind)
@@ -212,6 +217,16 @@ func renderRefs(r registry.Registry) ([]byte, error) {
 			}
 			fmt.Fprintf(&b, "\treturn newRefCheck(%s, r.id, dimensions, %s)\n}\n\n", ScopeConstantName(t.ScopeFor(p)), match)
 		}
+		for _, p := range t.Permissions {
+			for _, set := range p.DimensionSets {
+				for _, key := range set.Keys {
+					if paramType(r, key) != "string" {
+						return nil, fmt.Errorf("%s:%s dimension set %s uses %q, which the ref already fills in from its constructor", t.Kind, p.Action, set.Method, key)
+					}
+				}
+				renderDimensionSet(&b, name, ScopeConstantName(t.ScopeFor(p)), match, set)
+			}
+		}
 	}
 
 	renderCollections(&b, r)
@@ -231,4 +246,22 @@ func renderRefs(r registry.Registry) ([]byte, error) {
 		return nil, fmt.Errorf("format refs_gen.go: %w\n%s", err, b.String())
 	}
 	return formatted, nil
+}
+
+// renderDimensionSet writes the ref method for one dimension set: the
+// permission's check plus the set's dimensions as arguments, an empty one left
+// out.
+func renderDimensionSet(b *strings.Builder, ref, scope, match string, set registry.DimensionSet) {
+	params := make([]string, 0, len(set.Keys))
+	for _, key := range set.Keys {
+		params = append(params, paramName(key))
+	}
+	fmt.Fprintf(b, "// %s requests %s with %s. An empty value is left out of the\n", set.Method, scope, strings.Join(set.Keys, " and "))
+	b.WriteString("// check.\n")
+	fmt.Fprintf(b, "func (r %sRef) %s(%s string) Check {\n", ref, set.Method, strings.Join(params, ", "))
+	b.WriteString("\tdimensions := r.dimensions()\n\tif dimensions == nil {\n\t\tdimensions = map[string]string{}\n\t}\n")
+	for i, key := range set.Keys {
+		fmt.Fprintf(b, "\tif %s != \"\" {\n\t\tdimensions[%q] = %s\n\t}\n", params[i], key, params[i])
+	}
+	fmt.Fprintf(b, "\treturn newRefCheck(%s, r.id, dimensions, %s)\n}\n\n", scope, match)
 }
