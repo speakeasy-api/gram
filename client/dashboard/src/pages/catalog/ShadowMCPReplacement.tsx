@@ -13,15 +13,18 @@ import type {
  *  today with the server being added. On by default; one row per match. */
 export function ShadowMCPReplacementOption({
   state,
+  questions,
 }: {
   state: ShadowMCPReplacementState;
+  /** The matches to ask about, from [shadowMCPReplacementQuestions]. */
+  questions: ShadowMCPReplacement[];
 }): JSX.Element | null {
-  if (state.candidates.length === 0) return null;
+  if (questions.length === 0) return null;
   return (
     <div className="space-y-2">
-      {state.candidates.map((candidate) => (
+      {questions.map((candidate) => (
         <ReplacementRow
-          key={candidate.remoteUrl}
+          key={candidate.shadowServerUrl}
           candidate={candidate}
           checked={state.isSelected(candidate)}
           onCheckedChange={(checked) => state.setSelected(candidate, checked)}

@@ -191,6 +191,11 @@ const SHADOW_REPLACEMENTS = [
   },
 ];
 const NO_SHADOW_REPLACEMENTS: typeof SHADOW_REPLACEMENTS = [];
+// Two endpoint spellings of one upstream match one Shadow MCP server.
+const DUPLICATE_SHADOW_REPLACEMENTS = [
+  SHADOW_REPLACEMENTS[0]!,
+  { ...SHADOW_REPLACEMENTS[0]!, remoteUrl: "https://mcp.example.com/mcp/" },
+];
 
 describe("useRemoteMcpInstallWorkflow", () => {
   beforeEach(() => {
@@ -1292,6 +1297,33 @@ describe("useRemoteMcpInstallWorkflow", () => {
         serverName: "Example Official",
       },
     ]);
+  });
+
+  it("links a Shadow MCP server once when several endpoints match it", async () => {
+    mockSetShadowMCPOfficialServer.mockResolvedValue(undefined);
+    const servers = [
+      makeServer({
+        remotes: [
+          remote("https://mcp.example.com/mcp"),
+          remote("https://mcp.example.com/mcp/"),
+        ],
+      }),
+    ];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({
+        servers,
+        autoSelectRemotes: true,
+        shadowMCPReplacements: DUPLICATE_SHADOW_REPLACEMENTS,
+      }),
+    );
+
+    await startInstall(result);
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+
+    expect(mockSetShadowMCPOfficialServer).toHaveBeenCalledOnce();
+    const state = result.current;
+    if (state.phase !== "complete") throw new Error("unexpected phase");
+    expect(state.shadowReplacements).toMatchObject([{ status: "replaced" }]);
   });
 
   it("adds the server only when the admin keeps the Shadow MCP server", async () => {

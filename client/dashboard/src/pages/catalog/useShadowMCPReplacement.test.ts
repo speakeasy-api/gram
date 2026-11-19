@@ -24,7 +24,10 @@ vi.mock("@gram/client/react-query/findShadowMCPInventoryServers.js", () => ({
   useFindShadowMCPInventoryServers: (...args: unknown[]) => mocks.find(...args),
 }));
 
-import { useShadowMCPReplacement } from "./useShadowMCPReplacement";
+import {
+  shadowMCPReplacementQuestions,
+  useShadowMCPReplacement,
+} from "./useShadowMCPReplacement";
 
 const SERVERS = [
   {
@@ -150,5 +153,39 @@ describe("useShadowMCPReplacement", () => {
     );
     expect(result.current.candidates).toEqual([]);
     expect(result.current.isLoading).toBe(false);
+  });
+});
+
+describe("shadowMCPReplacementQuestions", () => {
+  const candidate = {
+    projectId: "project-1",
+    remoteUrl: "https://tools.example.com/mcp",
+    shadowServerUrl: "https://tools.example.com/mcp",
+    shadowName: "tools",
+    shadowServerSlug: "tools-example-com-mcp-12345678",
+    userCount: 2,
+  };
+  const sameShadow = {
+    ...candidate,
+    remoteUrl: "https://tools.example.com/mcp/",
+  };
+
+  it("asks once per Shadow MCP server", () => {
+    expect(
+      shadowMCPReplacementQuestions(
+        [candidate, sameShadow],
+        new Set([candidate.remoteUrl, sameShadow.remoteUrl]),
+      ),
+    ).toEqual([candidate]);
+  });
+
+  it("asks only about endpoints the admin kept", () => {
+    expect(
+      shadowMCPReplacementQuestions(
+        [candidate, sameShadow],
+        new Set([sameShadow.remoteUrl]),
+      ),
+    ).toEqual([sameShadow]);
+    expect(shadowMCPReplacementQuestions([candidate], new Set())).toEqual([]);
   });
 });

@@ -1069,21 +1069,36 @@ export function useRemoteMcpInstallWorkflow({
       // Replacing a Shadow MCP server reuses the Shadow MCP page's link: the
       // added server becomes its official version, so direct use is blocked
       // and the block sends agents to it.
-      const replacements = shadowMCPReplacements ?? [];
+      // Several kept endpoints can match one Shadow MCP server; it is linked
+      // once, to the first of them that was added and is enabled.
+      const byShadowServer = new Map<string, ShadowMCPReplacement[]>();
+      for (const replacement of shadowMCPReplacements ?? []) {
+        const group = byShadowServer.get(replacement.shadowServerUrl) ?? [];
+        group.push(replacement);
+        byShadowServer.set(replacement.shadowServerUrl, group);
+      }
       const outcomes: ShadowMCPReplacementOutcome[] = [];
-      for (const replacement of replacements) {
-        const added = addedByRemoteUrl.get(replacement.remoteUrl);
+      for (const group of byShadowServer.values()) {
+        // Endpoints left out in the endpoint picker were never offered.
+        const kept = group.filter((replacement) =>
+          targets.some((target) => target.remote.url === replacement.remoteUrl),
+        );
+        const replacement = kept[0];
+        if (!replacement) continue;
+        const addedFor = kept.flatMap((candidate) => {
+          const added = addedByRemoteUrl.get(candidate.remoteUrl);
+          return added ? [added] : [];
+        });
+        const added =
+          addedFor.find((server) => !server.setupRequired) ?? addedFor[0];
         const shadow = {
           shadowName: replacement.shadowName,
           shadowServerSlug: replacement.shadowServerSlug,
           serverName: added?.name ?? "",
         };
         if (!added) {
-          // The endpoint was not selected, or its server failed to install.
-          const selected = targets.some(
-            (target) => target.remote.url === replacement.remoteUrl,
-          );
-          if (selected) outcomes.push({ ...shadow, status: "not-added" });
+          // The server failed to install, so there is nothing to link.
+          outcomes.push({ ...shadow, status: "not-added" });
           continue;
         }
         if (added.setupRequired) {

@@ -102,21 +102,25 @@ export function useShadowMCPReplacement({
     });
   }, [projectId, query.data, queryEnabled]);
 
-  // Switched-off candidates, by catalog endpoint URL, so a refetch keeps the
-  // admin's choice.
+  // Switched-off Shadow MCP servers, by their URL: several catalog
+  // endpoints can match one Shadow MCP server, and one answer covers them
+  // all. Kept across refetches.
   const [declined, setDeclined] = useState<ReadonlySet<string>>(new Set());
   const isSelected = (candidate: ShadowMCPReplacement) =>
-    !declined.has(candidate.remoteUrl);
+    !declined.has(candidate.shadowServerUrl);
   const setSelected = (candidate: ShadowMCPReplacement, selected: boolean) =>
     setDeclined((previous) => {
       const next = new Set(previous);
-      if (selected) next.delete(candidate.remoteUrl);
-      if (!selected) next.add(candidate.remoteUrl);
+      if (selected) next.delete(candidate.shadowServerUrl);
+      if (!selected) next.add(candidate.shadowServerUrl);
       return next;
     });
 
   const selected = useMemo(
-    () => candidates.filter((candidate) => !declined.has(candidate.remoteUrl)),
+    () =>
+      candidates.filter(
+        (candidate) => !declined.has(candidate.shadowServerUrl),
+      ),
     [candidates, declined],
   );
 
@@ -128,4 +132,22 @@ export function useShadowMCPReplacement({
     isLoading: queryEnabled && query.isLoading,
     reset: () => setDeclined(new Set()),
   };
+}
+
+/**
+ * The questions to ask: one per Shadow MCP server, among the matches for the
+ * endpoints the admin kept. An endpoint left out in the endpoint picker adds
+ * no server, so it can replace nothing.
+ */
+export function shadowMCPReplacementQuestions(
+  candidates: ShadowMCPReplacement[],
+  keptRemoteUrls: ReadonlySet<string>,
+): ShadowMCPReplacement[] {
+  const seen = new Set<string>();
+  return candidates.filter((candidate) => {
+    if (!keptRemoteUrls.has(candidate.remoteUrl)) return false;
+    if (seen.has(candidate.shadowServerUrl)) return false;
+    seen.add(candidate.shadowServerUrl);
+    return true;
+  });
 }

@@ -12,6 +12,7 @@ import {
 import { MemoryRouter } from "react-router";
 import { catalogPresetState } from "@/pages/security/server-guardrails/server-guardrail-policy";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useState } from "react";
 import { AddServerDialog, GuardrailOutcomeNotice } from "./AddServerDialog";
 
 const mocks = vi.hoisted(() => ({
@@ -29,7 +30,6 @@ const mocks = vi.hoisted(() => ({
   updateServerConfig: vi.fn(),
   workflow: vi.fn(),
   shadowReplacement: vi.fn(),
-  setShadowSelected: vi.fn(),
 }));
 
 vi.mock("sonner", () => ({
@@ -70,7 +70,8 @@ vi.mock("./useRemoteMcpInstallWorkflow", () => ({
   useRemoteMcpInstallWorkflow: (options: unknown) => mocks.workflow(options),
 }));
 
-vi.mock("./useShadowMCPReplacement", () => ({
+vi.mock("./useShadowMCPReplacement", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./useShadowMCPReplacement")>()),
   useShadowMCPReplacement: (options: unknown) =>
     mocks.shadowReplacement(options),
 }));
@@ -84,17 +85,22 @@ const shadowCandidate = {
   userCount: 4,
 };
 
+/** Stands in for the lookup with the hook's own choice state, so clicking
+ *  the checkbox changes what the install is told to replace. */
 function mockShadowReplacement(
   candidates: (typeof shadowCandidate)[] = [],
-  selected = true,
+  { isLoading = false }: { isLoading?: boolean } = {},
 ): void {
-  mocks.shadowReplacement.mockReturnValue({
-    candidates,
-    selected: selected ? candidates : [],
-    isSelected: () => selected,
-    setSelected: mocks.setShadowSelected,
-    isLoading: false,
-    reset: vi.fn(),
+  mocks.shadowReplacement.mockImplementation(() => {
+    const [replace, setReplace] = useState(true);
+    return {
+      candidates,
+      selected: replace ? candidates : [],
+      isSelected: () => replace,
+      setSelected: (_: unknown, selected: boolean) => setReplace(selected),
+      isLoading,
+      reset: vi.fn(),
+    };
   });
 }
 
@@ -917,7 +923,7 @@ describe("AddServerDialog Shadow MCP replacement", () => {
     );
   });
 
-  it("offers to replace a matching Shadow MCP server, on by default", async () => {
+  it("replaces a matching Shadow MCP server by default, and adds only when switched off", async () => {
     mockShadowReplacement([shadowCandidate]);
     renderDialog();
 
@@ -933,22 +939,53 @@ describe("AddServerDialog Shadow MCP replacement", () => {
     );
 
     fireEvent.click(option);
-    expect(mocks.setShadowSelected).toHaveBeenCalledWith(
-      shadowCandidate,
-      false,
+    await waitFor(() =>
+      expect(option.getAttribute("aria-checked")).toBe("false"),
+    );
+    expect(mocks.workflow).toHaveBeenLastCalledWith(
+      expect.objectContaining({ shadowMCPReplacements: [] }),
+    );
+
+    fireEvent.click(option);
+    await waitFor(() =>
+      expect(mocks.workflow).toHaveBeenLastCalledWith(
+        expect.objectContaining({ shadowMCPReplacements: [shadowCandidate] }),
+      ),
     );
   });
 
-  it("adds the server only when the admin turns the replacement off", async () => {
-    mockShadowReplacement([shadowCandidate], false);
+  it("asks nothing for an endpoint the admin left out", async () => {
+    mockShadowReplacement([
+      { ...shadowCandidate, remoteUrl: "https://other.example.test/mcp" },
+    ]);
     renderDialog();
+    await screen.findByRole("button", { name: "Add to Project" });
+    expect(screen.queryByText("Replace the Shadow MCP version")).toBeNull();
+  });
 
-    const option = await screen.findByRole("checkbox", {
-      name: "Replace the Shadow MCP version of Example Tools",
-    });
-    expect(option.getAttribute("aria-checked")).toBe("false");
-    expect(mocks.workflow).toHaveBeenLastCalledWith(
-      expect.objectContaining({ shadowMCPReplacements: [] }),
+  it("waits for the Shadow MCP lookup before adding", async () => {
+    mocks.hasScope.mockReturnValue(true);
+    mockShadowReplacement([], { isLoading: true });
+    renderDialog();
+    const add = await screen.findByRole("button", { name: "Add to Project" });
+    expect((add as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("leaves unproxied servers out of the lookup", () => {
+    const figma = {
+      ...server,
+      registrySpecifier: "com.figma.mcp/mcp",
+      remotes: [
+        {
+          url: "https://mcp.figma.com/mcp",
+          transportType: "streamable-http" as const,
+        },
+      ],
+    };
+    mockConfigureWorkflow(figma);
+    renderDialog(figma);
+    expect(mocks.shadowReplacement).toHaveBeenLastCalledWith(
+      expect.objectContaining({ servers: [] }),
     );
   });
 
