@@ -260,7 +260,7 @@ describe("AiScanTargetsSection", () => {
     expect(screen.getAllByText("Harnesses")).toHaveLength(2);
     expect(screen.getAllByText("Assistants")).toHaveLength(1);
     expect(screen.getAllByText("Open models")).toHaveLength(1);
-    expect(screen.getByText(/Library version 11/)).toBeDefined();
+    expect(screen.queryByText(/Library version/)).toBeNull();
   });
 
   // A match hidden under a collapsed heading is a search that found nothing
@@ -380,7 +380,7 @@ describe("AiScanTargetsSection", () => {
       });
     });
     expect(mocks.toastSuccess).toHaveBeenCalledWith(
-      expect.stringContaining("List version 12"),
+      "Saved chatgpt-desktop. Agents get the updated list the next time they check in.",
     );
     expect(mocks.invalidateList).toHaveBeenCalled();
   });

@@ -1,6 +1,5 @@
 import { CollapsibleSectionHeader } from "@/components/collapsible-section-header";
 import { AIToolIcon } from "@/components/ai-tools/AIToolIcon";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Heading } from "@/components/ui/Heading";
 import { Input } from "@/components/ui/Input";
@@ -76,7 +75,6 @@ type EditorState = { mode: EditorMode; draft: Draft } | null;
  */
 function OriginSection({
   title,
-  badge,
   emptyMessage,
   targetsByCategory,
   columns,
@@ -86,8 +84,6 @@ function OriginSection({
   searching,
 }: {
   title: string;
-  // Carries the served library version, a fact about Speakeasy's half only.
-  badge?: string;
   emptyMessage: string;
   targetsByCategory: Record<string, AiScanTarget[]>;
   columns: Column<AiScanTarget>[];
@@ -105,13 +101,8 @@ function OriginSection({
 
   return (
     <div>
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-3">
         <span className="text-eyebrow">{title}</span>
-        {badge === undefined ? null : (
-          <Badge variant="neutral">
-            <Badge.Text>{badge}</Badge.Text>
-          </Badge>
-        )}
       </div>
       {total === 0 ? (
         <div className="border-border bg-muted/20 border px-4 py-6">
@@ -175,7 +166,7 @@ function Library(): JSX.Element {
   const save = useUpsertAiScanTargetMutation({
     onSuccess: async (result) => {
       toast.success(
-        `Saved ${result.target.id}. List version ${result.listVersion} reaches agents on their next poll.`,
+        `Saved ${result.target.id}. Agents get the updated list the next time they check in.`,
       );
       setEditor(null);
       setEditorError(null);
@@ -365,7 +356,6 @@ function Library(): JSX.Element {
       />
       <OriginSection
         title="Built-in"
-        badge={`Library version ${list.data?.listVersion ?? 0}`}
         emptyMessage="No built-in targets are being served."
         targetsByCategory={grouped.builtin}
         columns={columns}

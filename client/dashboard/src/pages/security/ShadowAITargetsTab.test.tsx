@@ -63,7 +63,7 @@ describe("ShadowAITargetsTab", () => {
     expect(insights.getAttribute("data-title")).toBe(
       "Shadow AI target insights",
     );
-    expect(insights.textContent).toContain("Library version 7.");
+    expect(insights.textContent).toContain("Built-in targets: 0");
   });
 
   it("gates the library behind org:admin with the page-level notice", () => {
