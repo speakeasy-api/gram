@@ -3,6 +3,8 @@ import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useAgentToken } from "@/hooks/useAgentToken";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { downloadBlob } from "@/lib/download";
 import { useOrgRoutes } from "@/routes";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
@@ -27,11 +29,15 @@ export function IntunePackageDownload({
   version,
   msiUrl,
   autoUpdate,
+  lookupFailed,
 }: {
   version: string | null;
   msiUrl: string | null;
   autoUpdate: "automatic" | "notify";
-}): React.JSX.Element {
+  lookupFailed: boolean;
+}): React.JSX.Element | null {
+  const enabled =
+    useFeatureFlag(FEATURE_FLAGS.intunePackageDownload).status === "enabled";
   const { name: orgName, slug: orgSlug } = useOrganization();
   const apiKeysHref = useOrgRoutes().apiKeys.href();
   const { canGenerate, generateAsync } = useAgentToken({});
@@ -85,6 +91,8 @@ export function IntunePackageDownload({
     }
   };
 
+  if (!enabled) return null;
+
   return (
     <div className="bg-secondary/30 border-border flex flex-col gap-3 rounded-md border p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -104,7 +112,9 @@ export function IntunePackageDownload({
             !canGenerate
               ? "Building the Intune package mints an agent token, which requires the org:admin role."
               : !ready
-                ? "Looking up the latest agent version…"
+                ? lookupFailed
+                  ? "Couldn't look up the latest agent version. Reload the page to try again."
+                  : "Looking up the latest agent version…"
                 : undefined
           }
         >

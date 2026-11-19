@@ -1283,7 +1283,7 @@ launchctl print "gui/$(id -u)/com.speakeasy.daemon"
 // manual/MDM on-ramp), so the direct-download URL is built from the resolved
 // version rather than read off the manifest artifacts.
 function WinInstallStep() {
-  const { data } = useAgentReleases();
+  const { data, isError: releasesFailed } = useAgentReleases();
   const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
   // Without a stable link (a non-HTTPS server URL) the snippet builds the
   // versioned URL against the always-HTTPS release bucket instead.
@@ -1308,6 +1308,7 @@ msiexec /i speakeasy-agent.msi`;
               : null
           }
           autoUpdate={managedAutoUpdate("windows")}
+          lookupFailed={releasesFailed}
         />
         <InstallerDownload ext="msi" stablePath={STABLE_MSI_PATH} />
         <Text small muted>

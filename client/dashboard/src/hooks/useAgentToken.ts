@@ -86,12 +86,12 @@ export function useAgentToken(opts: {
     security: { sessionHeaderGramSession: "" },
     request: {
       createKeyForm: {
-        // Unique per mint (to the second): the (org, name) unique index would
-        // otherwise reject a second key minted the same day.
+        // The (org, name) unique index rejects a repeated name, so a short
+        // random suffix keeps two mints in the same second apart.
         name: `device-agent ${new Date()
           .toISOString()
           .slice(0, 19)
-          .replace("T", " ")}`,
+          .replace("T", " ")} ${crypto.randomUUID().slice(0, 4)}`,
         scopes: [AGENT_SCOPE],
       },
     },
