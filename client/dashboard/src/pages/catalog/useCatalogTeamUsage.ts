@@ -42,8 +42,8 @@ export function useCatalogTeamUsage(
 
   const refetchInventory = inventory.refetch;
   const refetch = useCallback(() => {
-    if (canSeeUsage) void refetchInventory();
-  }, [canSeeUsage, refetchInventory]);
+    if (canSeeUsage && catalogLoaded) void refetchInventory();
+  }, [canSeeUsage, catalogLoaded, refetchInventory]);
 
   return { usage, canSeeUsage, refetch };
 }
