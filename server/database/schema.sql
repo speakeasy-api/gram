@@ -1945,6 +1945,7 @@ CREATE TABLE IF NOT EXISTS ai_products (
   process_names TEXT[] NOT NULL DEFAULT '{}',
   version_plist_key TEXT,
   client_info_names TEXT[] NOT NULL DEFAULT '{}',
+  family TEXT,
 
   created_by TEXT,
   updated_by TEXT,
@@ -1976,6 +1977,8 @@ COMMENT ON COLUMN ai_products.version_plist_key IS 'Info.plist key read for the 
 @access: confidential';
 COMMENT ON COLUMN ai_products.client_info_names IS 'Names the product reports at MCP initialize. Attribution only, never enforcement: they are self-reported, so any client can claim any name.
 @access: opaque-confidential';
+COMMENT ON COLUMN ai_products.family IS 'Groups a vendor''s related products, e.g. claude for Claude Code, Claude and Cowork. Null means the product is a family of its own.
+@access: confidential';
 COMMENT ON COLUMN ai_products.created_by IS 'Subject URN of the staff member who created the row; null for seeded rows.
 @access: confidential-pii';
 COMMENT ON COLUMN ai_products.updated_by IS 'Subject URN of the staff member who last changed the row; null for seeded rows.
@@ -2042,6 +2045,50 @@ WHERE deleted IS FALSE;
 
 CREATE INDEX IF NOT EXISTS ai_product_cimd_documents_ai_product_id_idx
 ON ai_product_cimd_documents (ai_product_id);
+
+-- ai_product_aliases is one other name a product is reported under, such as a
+-- hook source or a telemetry surface, with the kind of client the name
+-- implies. Telemetry attribution resolves reported names through these rows.
+-- A live name belongs to exactly one product.
+CREATE TABLE IF NOT EXISTS ai_product_aliases (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  ai_product_id TEXT NOT NULL,
+  name TEXT NOT NULL CHECK (name <> ''),
+  client TEXT,
+
+  created_by TEXT,
+  updated_by TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT ai_product_aliases_pkey PRIMARY KEY (id),
+  CONSTRAINT ai_product_aliases_ai_product_id_fkey FOREIGN KEY (ai_product_id) REFERENCES ai_products (id) ON DELETE RESTRICT
+);
+
+COMMENT ON TABLE ai_product_aliases IS 'Other names each catalog product is reported under. Attribution only, never enforcement: the names are self-reported.';
+COMMENT ON COLUMN ai_product_aliases.id IS '@access: confidential';
+COMMENT ON COLUMN ai_product_aliases.ai_product_id IS '@access: confidential';
+COMMENT ON COLUMN ai_product_aliases.name IS 'The reported name. Stored as written; lookups fold case and treat spaces, underscores and hyphens alike in application code.
+@access: opaque-confidential';
+COMMENT ON COLUMN ai_product_aliases.client IS 'Kind of client the name implies (cli, ide, desktop, web, mobile, cloud, slack); null when the name implies none. Validated in application code.
+@access: confidential';
+COMMENT ON COLUMN ai_product_aliases.created_by IS 'Subject URN of the staff member who created the row; null for seeded rows.
+@access: confidential-pii';
+COMMENT ON COLUMN ai_product_aliases.updated_by IS 'Subject URN of the staff member who last changed the row; null for seeded rows.
+@access: confidential-pii';
+COMMENT ON COLUMN ai_product_aliases.created_at IS '@access: confidential';
+COMMENT ON COLUMN ai_product_aliases.updated_at IS '@access: confidential';
+COMMENT ON COLUMN ai_product_aliases.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN ai_product_aliases.deleted IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS ai_product_aliases_name_key
+ON ai_product_aliases (name)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS ai_product_aliases_ai_product_id_idx
+ON ai_product_aliases (ai_product_id);
 
 -- ai_scan_targets is an organization's overlay on the Shadow AI scan target
 -- catalog its device agents probe for. A row is whatever the organization has
