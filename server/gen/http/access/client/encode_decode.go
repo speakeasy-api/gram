@@ -11652,11 +11652,12 @@ func unmarshalShadowMCPOfficialServerResponseBodyToAccessShadowMCPOfficialServer
 		return nil
 	}
 	res := &access.ShadowMCPOfficialServer{
-		McpServerID: *v.McpServerID,
-		Name:        *v.Name,
-		Slug:        v.Slug,
-		URL:         v.URL,
-		GatewayName: v.GatewayName,
+		McpServerID:         *v.McpServerID,
+		Name:                *v.Name,
+		Slug:                v.Slug,
+		URL:                 v.URL,
+		GatewayName:         v.GatewayName,
+		DirectAccessAllowed: v.DirectAccessAllowed,
 	}
 
 	return res

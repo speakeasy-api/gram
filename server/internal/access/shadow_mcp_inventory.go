@@ -315,6 +315,8 @@ func (s *Service) attachShadowMCPOfficialServers(ctx context.Context, organizati
 			Slug:        conv.PtrEmpty(match.Slug),
 			URL:         conv.PtrEmpty(match.URL),
 			GatewayName: conv.PtrEmpty(match.GatewayName),
+			// Deprecated field, sent for older dashboards that require it.
+			DirectAccessAllowed: new(false),
 		}
 	}
 }

@@ -132330,6 +132330,9 @@ components:
         ShadowMCPOfficialServer:
             type: object
             properties:
+                direct_access_allowed:
+                    type: boolean
+                    description: 'Deprecated: links no longer have an on/off switch, so this is always false. Kept one release so older dashboards, which require it, keep rendering, then removed.'
                 gateway_name:
                     type: string
                     description: The gateway that serves the official server, when url is a gateway's address.

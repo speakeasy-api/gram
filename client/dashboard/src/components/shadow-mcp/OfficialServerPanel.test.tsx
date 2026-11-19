@@ -456,6 +456,24 @@ describe("OfficialServerPanel", () => {
         mcpServerId: undefined,
       }),
     );
+
+    await vi.waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalled());
+    const options = mocks.toastSuccess.mock.calls.at(-1)?.[1] as {
+      action: { label: string; onClick: () => void };
+    };
+    expect(options.action.label).toBe("Undo");
+    options.action.onClick();
+    await vi.waitFor(() =>
+      expect(mocks.save).toHaveBeenLastCalledWith({
+        serverUrl: "https://tracker.example.com/mcp",
+        mcpServerId: official.mcpServerId,
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(mocks.toastSuccess).toHaveBeenLastCalledWith(
+        "Link to “Tracker” restored",
+      ),
+    );
   });
 
   it("says so when undoing a removed link fails", async () => {
