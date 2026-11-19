@@ -291,7 +291,9 @@ setTimeout(() => {
   assert.equal(admin.fallback.className, linkClass);
   assert.equal(admin.fallback.textContent, 'Use your own Example account');
 
-  personal.switchAccount.listeners.click({ preventDefault() {} });
+  let firstPrevented = false;
+  personal.switchAccount.listeners.click({ preventDefault() { firstPrevented = true; } });
+  assert.equal(firstPrevented, false, 'the first click submits the form');
   assert.equal(personal.switchAccount.getAttribute('aria-disabled'), 'true', 'the first click marks the switch busy');
   let secondPrevented = false;
   personal.switchAccount.listeners.click({ preventDefault() { secondPrevented = true; } });

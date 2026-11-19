@@ -116,6 +116,7 @@ func authorizeCustomDomainPrivateChallenge(t *testing.T, switchOn bool) {
 	require.Len(t, cookies, 1, "the starting browser is bound on the consent page's host")
 	require.Equal(t, "__Host-speakeasy_consent_"+stored.FlowID, cookies[0].Name)
 	require.Empty(t, cookies[0].Domain)
+	require.Equal(t, "/", cookies[0].Path)
 	require.True(t, cookies[0].Secure)
 	require.True(t, cookies[0].HttpOnly)
 	require.Equal(t, http.SameSiteLaxMode, cookies[0].SameSite)
