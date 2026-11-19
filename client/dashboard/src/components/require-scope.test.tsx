@@ -78,9 +78,10 @@ const toast = vi.hoisted(() => ({
   info: vi.fn(),
 }));
 vi.mock("sonner", () => ({ toast }));
+const invalidateQueries = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-query")>()),
-  useQueryClient: () => ({ invalidateQueries: () => Promise.resolve() }),
+  useQueryClient: () => ({ invalidateQueries }),
 }));
 vi.mock("@gram/client/react-query/requestAccess.js", () => ({
   useRequestAccessMutation: () => ({ mutateAsync, isPending: false }),
@@ -102,6 +103,7 @@ afterEach(() => {
   toast.success.mockClear();
   toast.error.mockClear();
   toast.info.mockClear();
+  invalidateQueries.mockClear();
 });
 
 describe("RequireScope page level", () => {
@@ -224,5 +226,8 @@ describe("RequestScopeAccess", () => {
 
     expect(toast.success).toHaveBeenCalledTimes(1);
     expect(toast.success).toHaveBeenCalledWith("Access approved until 14:30.");
+    // Lists fetched before the approval were filtered, not refused, so every
+    // query refetches, not only the grants.
+    expect(invalidateQueries).toHaveBeenCalledWith();
   });
 });

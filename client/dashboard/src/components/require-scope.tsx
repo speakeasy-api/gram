@@ -4,7 +4,7 @@ import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { RequestAccessFormScope } from "@gram/client/models/components/requestaccessform.js";
 import { useRequestAccessMutation } from "@gram/client/react-query/requestAccess.js";
 import { useAccessRequests } from "@gram/client/react-query/accessRequests.js";
-import { useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { invalidateTemporaryAccess } from "./temporary-access-helpers";
@@ -633,7 +633,11 @@ function AccessRequestWatcher({
       !matching.some((request) => request.status === "pending")
     ) {
       // Decided before this page last looked: show the current state, no toast.
-      invalidateTemporaryAccess(queryClient);
+      if (matching.some((request) => request.status === "approved")) {
+        refetchWithNewAccess(queryClient);
+      } else {
+        invalidateTemporaryAccess(queryClient);
+      }
       onDecidedRef.current();
       return;
     }
@@ -644,7 +648,11 @@ function AccessRequestWatcher({
       }
       if (!seenPending.current.delete(request.id)) continue;
       // The request the viewer is waiting on was decided.
-      invalidateTemporaryAccess(queryClient);
+      if (request.status === "approved") {
+        refetchWithNewAccess(queryClient);
+      } else {
+        invalidateTemporaryAccess(queryClient);
+      }
       if (request.status === "approved") {
         toast.success(
           request.grantExpiresAt
@@ -661,6 +669,17 @@ function AccessRequestWatcher({
   }, [mine.data, scopesKey, resourceId, queryClient]);
 
   return null;
+}
+
+/**
+ * Refetches everything the page shows once an approval lands. Lists that
+ * loaded before it, such as Agent Sessions without chat:read, came back
+ * filtered to what the viewer could see then, not refused, so refreshing the
+ * grants alone leaves them stale until a reload. Only queries on screen
+ * refetch now; the rest refetch when next used.
+ */
+function refetchWithNewAccess(queryClient: QueryClient): void {
+  void queryClient.invalidateQueries();
 }
 
 /**
