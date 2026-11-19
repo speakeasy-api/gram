@@ -7,24 +7,37 @@ package repo
 
 import (
 	"context"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const listCatalogDocuments = `-- name: ListCatalogDocuments :many
-SELECT d.id, d.ai_product_id, d.url, d.display_name, d.enabled, d.is_pattern, d.verified_at, d.verification_error, d.created_by, d.updated_by, d.created_at, d.updated_at, d.deleted_at, d.deleted FROM ai_product_cimd_documents d
+SELECT d.id, d.ai_product_id, d.url, d.display_name, d.enabled, d.is_pattern
+FROM ai_product_cimd_documents d
 JOIN ai_products p ON p.id = d.ai_product_id
 WHERE d.deleted IS FALSE AND p.deleted IS FALSE
-ORDER BY d.url
+ORDER BY d.url COLLATE "C"
 `
 
-func (q *Queries) ListCatalogDocuments(ctx context.Context) ([]AiProductCimdDocument, error) {
+type ListCatalogDocumentsRow struct {
+	ID          uuid.UUID
+	AiProductID string
+	Url         string
+	DisplayName string
+	Enabled     bool
+	IsPattern   bool
+}
+
+func (q *Queries) ListCatalogDocuments(ctx context.Context) ([]ListCatalogDocumentsRow, error) {
 	rows, err := q.db.Query(ctx, listCatalogDocuments)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []AiProductCimdDocument
+	var items []ListCatalogDocumentsRow
 	for rows.Next() {
-		var i AiProductCimdDocument
+		var i ListCatalogDocumentsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.AiProductID,
@@ -32,14 +45,6 @@ func (q *Queries) ListCatalogDocuments(ctx context.Context) ([]AiProductCimdDocu
 			&i.DisplayName,
 			&i.Enabled,
 			&i.IsPattern,
-			&i.VerifiedAt,
-			&i.VerificationError,
-			&i.CreatedBy,
-			&i.UpdatedBy,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.Deleted,
 		); err != nil {
 			return nil, err
 		}
@@ -52,19 +57,37 @@ func (q *Queries) ListCatalogDocuments(ctx context.Context) ([]AiProductCimdDocu
 }
 
 const listCatalogProducts = `-- name: ListCatalogProducts :many
-SELECT id, vendor_key, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, client_info_names, created_by, updated_by, created_at, updated_at, deleted_at, deleted FROM ai_products WHERE deleted IS FALSE ORDER BY id
+SELECT id, vendor_key, display_name, category, bundle_ids, binaries, config_dirs,
+  process_names, version_plist_key, client_info_names
+FROM ai_products
+WHERE deleted IS FALSE
+ORDER BY id COLLATE "C"
 `
 
+type ListCatalogProductsRow struct {
+	ID              string
+	VendorKey       string
+	DisplayName     string
+	Category        pgtype.Text
+	BundleIds       []string
+	Binaries        []string
+	ConfigDirs      []string
+	ProcessNames    []string
+	VersionPlistKey pgtype.Text
+	ClientInfoNames []string
+}
+
 // Catalog products and documents are global reference data.
-func (q *Queries) ListCatalogProducts(ctx context.Context) ([]AiProduct, error) {
+// Byte-order sorting by id, then url, makes database snapshots deterministic.
+func (q *Queries) ListCatalogProducts(ctx context.Context) ([]ListCatalogProductsRow, error) {
 	rows, err := q.db.Query(ctx, listCatalogProducts)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []AiProduct
+	var items []ListCatalogProductsRow
 	for rows.Next() {
-		var i AiProduct
+		var i ListCatalogProductsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.VendorKey,
@@ -76,12 +99,6 @@ func (q *Queries) ListCatalogProducts(ctx context.Context) ([]AiProduct, error) 
 			&i.ProcessNames,
 			&i.VersionPlistKey,
 			&i.ClientInfoNames,
-			&i.CreatedBy,
-			&i.UpdatedBy,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.Deleted,
 		); err != nil {
 			return nil, err
 		}

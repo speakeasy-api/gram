@@ -23,9 +23,7 @@ compiled catalog readers; that transition belongs to AIM-449.
 The `ai-client-catalog` startup seed hashes the embedded file and its application
 revision. Workers apply each version through the existing startup workflow.
 Normal cost is one workflow start and one activity per version per task queue,
-plus retries during rollouts; there is no periodic schedule. Revision 2 runs
-the seed once more after revision 1 has rolled out everywhere, so the decision
-backfill also links decisions written by old replicas during that rollout.
+plus retries during rollouts; there is no periodic schedule.
 
 Products retain their stable text IDs. Documents get deterministic bootstrap
 IDs, so editing their URL, disabling them, or soft-deleting them survives a
@@ -45,11 +43,9 @@ surfaces through the startup seed activity's error.
 
 The seed fills only missing references on decision-only rows for the frozen
 scan library, and only to live products. It preserves definitions, existing
-references, decisions, rationales and timestamps. A reference to a product that
-is soft-deleted later stays as decision history; live catalog readers exclude
-soft-deleted products. Future built-in decision writes set the reference
-directly; while the product is missing or soft-deleted they return a retryable
-unavailable error.
+references, decisions, rationales and timestamps. Future built-in decision
+writes set the reference directly; while the product is missing or
+soft-deleted they return a retryable unavailable error.
 
 After all previous-version API replicas have stopped during the initial rolling
 deployment, run the deployed binary with its configured database URL and site
@@ -68,8 +64,6 @@ to database-backed classification in AIM-449.
 Demo provisioning calls `EnsureCatalog` before its tenant transaction. This
 inserts reference data without running the cross-organization backfill. Demo
 decisions reference the seeded products and postflight requires all five links.
-This checks reference integrity, not product liveness: staff deletions remain
-authoritative and must not make demo provisioning fail.
 Isolated demo tests seed the global catalog before taking their safety baseline.
 
 Platform MCP needs no new tool for this worker-owned initialization of global

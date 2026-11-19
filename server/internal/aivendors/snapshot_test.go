@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestSnapshotSpecificityAndExplicitPatternFlag(t *testing.T) {
+func TestSnapshotExactBeforePatternsAndExplicitPatternFlag(t *testing.T) {
 	t.Parallel()
 	products := []Product{
 		{ID: "broad", VendorKey: "shared", Documents: []Document{{URL: "https://example.com/*/*/client.json", Enabled: true, Pattern: true}}},
@@ -25,10 +25,54 @@ func TestSnapshotSpecificityAndExplicitPatternFlag(t *testing.T) {
 	require.False(t, got.IsPattern())
 	require.False(t, snapshot.BlockableVendorKey("shared"))
 	require.True(t, snapshot.BlockableVendorKey("exact"))
-	slices.Reverse(products)
 	require.Equal(t, snapshot.Fingerprint(), NewSnapshot(products).Fingerprint())
-	require.Equal(t, snapshot.Version(), NewSnapshot(products).Version())
 	require.Positive(t, snapshot.Version())
+}
+
+func TestSnapshotKeepsInputOrder(t *testing.T) {
+	t.Parallel()
+	products := []Product{
+		{ID: "broad", VendorKey: "broad", Documents: []Document{{URL: "https://example.com/*/*/client.json", Enabled: true, Pattern: true}}},
+		{ID: "specific", VendorKey: "specific", Documents: []Document{{URL: "https://example.com/oauth/*/client.json", Enabled: true, Pattern: true}}},
+	}
+	forward := NewSnapshot(products)
+	got, ok := forward.CatalogPreset("https://example.com/oauth/some-client/client.json")
+	require.True(t, ok)
+	require.Equal(t, "broad", got.ProductID, "the first matching pattern in input order wins")
+	slices.Reverse(products)
+	reversed := NewSnapshot(products)
+	got, ok = reversed.CatalogPreset("https://example.com/oauth/some-client/client.json")
+	require.True(t, ok)
+	require.Equal(t, "specific", got.ProductID)
+	require.Equal(t, "specific", reversed.Products()[0].ID)
+	require.Equal(t, "specific", reversed.Catalog()[0].ProductID)
+	require.NotEqual(t, forward.Fingerprint(), reversed.Fingerprint(), "order is content")
+}
+
+func TestSnapshotFingerprintTreatsNilAndEmptyAlike(t *testing.T) {
+	t.Parallel()
+	empty := Product{ID: "p", Signatures: Signatures{BundleIDs: []string{}, Binaries: []string{}, ConfigDirs: []string{}, ProcessNames: []string{}}, ClientInfoNames: []string{}, Aliases: []Alias{}, Documents: []Document{}}
+	require.Equal(t, NewSnapshot([]Product{{ID: "p"}}).Fingerprint(), NewSnapshot([]Product{empty}).Fingerprint())
+}
+
+func TestCompiledSnapshotMatchesRegistry(t *testing.T) {
+	t.Parallel()
+	snapshot := CompiledSnapshot()
+	want := Products()
+	for i := range want {
+		want[i].Family = ""
+		want[i].Aliases = nil
+	}
+	require.Equal(t, want, snapshot.Products())
+	var documents []Preset
+	for _, entry := range CIMDDocuments() {
+		documents = append(documents, Preset{ProductID: entry.Product.ID, VendorKey: entry.Product.VendorKey, DisplayName: entry.Document.DisplayName, URL: entry.Document.URL, Enabled: entry.Document.Enabled, Pattern: entry.Document.Pattern})
+	}
+	require.Equal(t, documents, snapshot.Catalog())
+	for _, p := range Products() {
+		require.Equal(t, GatewayMatchersFor(p), snapshot.GatewayMatchersFor(p), p.ID)
+		require.Equal(t, BlockableVendorKey(p.VendorKey), snapshot.BlockableVendorKey(p.VendorKey), p.ID)
+	}
 }
 
 func TestSnapshotOwnsAllMutableData(t *testing.T) {

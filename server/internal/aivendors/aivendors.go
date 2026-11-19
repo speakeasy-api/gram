@@ -25,12 +25,15 @@ const (
 type Document struct {
 	// Pattern marks a URL as a path-segment pattern, as stored in the database.
 	Pattern bool `json:"pattern"`
+
 	// URL is the client_id the vendor presents. Usually exact; may be a
 	// wildcard pattern where the client_id space cannot be enumerated.
 	URL string `json:"url"`
+
 	// DisplayName is how the admission catalog lists this document —
 	// per-document, since a vendor's connector and shared documents differ.
 	DisplayName string `json:"display_name"`
+
 	// Enabled gates the document without deleting it.
 	Enabled bool `json:"enabled"`
 }
@@ -40,10 +43,13 @@ type Document struct {
 type Signatures struct {
 	// BundleIDs are macOS CFBundleIdentifier values.
 	BundleIDs []string `json:"bundle_ids"`
+
 	// Binaries are bare command names resolved on the device PATH.
 	Binaries []string `json:"binaries"`
+
 	// ConfigDirs mark the tool installed by existing.
 	ConfigDirs []string `json:"config_dirs"`
+
 	// ProcessNames are checked for the running signal.
 	ProcessNames []string `json:"process_names"`
 }
@@ -61,31 +67,40 @@ type Product struct {
 	// ID is what scan reports key on and decisions are recorded against. Set
 	// even for unscanned products, so both projections agree on names.
 	ID string `json:"id"`
+
 	// VendorKey groups products by vendor. Not unique; stable.
 	VendorKey string `json:"vendor_key"`
+
 	// Family groups a vendor's related products, such as Claude Code, Claude and
 	// Cowork. Empty means the product is a family of its own. Families live in
 	// the compiled registry by design, so database snapshots leave them empty
 	// and omit them from the fingerprint.
-	Family      string `json:"family,omitempty"`
+	Family string `json:"family,omitempty"`
+
 	DisplayName string `json:"display_name"`
+
 	// Category is required when Signatures are set.
 	Category Category `json:"category"`
+
 	// Signatures are the on-device footprints, empty for a product Speakeasy knows
 	// only as an OAuth client.
 	Signatures Signatures `json:"signatures"`
+
 	// VersionPlistKey overrides the Info.plist key read on a bundle match;
 	// empty means CFBundleShortVersionString.
 	VersionPlistKey string `json:"version_plist_key"`
+
 	// ClientInfoNames are what the product reports at initialize. Attribution
 	// only — self-reported, so any client can claim any name.
 	ClientInfoNames []string `json:"client_info_names"`
+
 	// Aliases are the other names producers report for the product: hook
 	// sources and the surfaces telemetry dialects state, each with the client
 	// the name implies. Attribution only, like ClientInfoNames. They live in
 	// the compiled registry by design, so database snapshots leave them empty
 	// and omit them from the fingerprint.
 	Aliases []Alias `json:"aliases,omitempty"`
+
 	// Documents are the CIMD documents it publishes.
 	Documents []Document `json:"documents"`
 }

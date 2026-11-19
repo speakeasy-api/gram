@@ -27,8 +27,7 @@ var catalog []byte
 
 // applyRevision changes when the application logic needs to run again even
 // though the frozen bootstrap data is unchanged.
-// "2" reruns the decision backfill once after the seed PR has fully rolled out.
-const applyRevision = "2"
+const applyRevision = "1"
 
 // Version hashes both the frozen data and the revision of its application logic.
 func Version() string {

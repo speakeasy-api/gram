@@ -79,7 +79,6 @@ func Load(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, validate f
 		}
 		i, ok := byID[d.AiProductID]
 		if !ok {
-			logger.WarnContext(ctx, "skip AI catalog document without a live product", attr.SlogError(fmt.Errorf("document %s: product %s not loaded", d.ID, d.AiProductID)))
 			continue
 		}
 		products[i].Documents = append(products[i].Documents, Document{URL: d.Url, DisplayName: d.DisplayName, Enabled: d.Enabled, Pattern: d.IsPattern})

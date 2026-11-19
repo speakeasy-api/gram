@@ -2,6 +2,8 @@ package aivendors_test
 
 import (
 	"context"
+	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -193,4 +195,74 @@ func productByID(s *aivendors.Snapshot, id string) (aivendors.Product, bool) {
 		}
 	}
 	return aivendors.Product{}, false
+}
+
+func TestLoadedSnapshotMatchesCompiledSnapshot(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
+	loaded, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), acceptCatalog)
+	require.NoError(t, err)
+	compiled := aivendors.CompiledSnapshot()
+	ids := func(s *aivendors.Snapshot) []string {
+		var out []string
+		for _, p := range s.Products() {
+			out = append(out, p.ID)
+		}
+		return out
+	}
+	require.ElementsMatch(t, ids(compiled), ids(loaded))
+	var probes []string
+	for _, entry := range aivendors.CIMDDocuments() {
+		probes = append(probes, entry.Document.URL)
+		if entry.Document.Pattern {
+			for _, segment := range []string{"probe", "codex", "probe/extra"} {
+				probes = append(probes, strings.ReplaceAll(entry.Document.URL, "*", segment))
+			}
+		}
+	}
+	for _, probe := range probes {
+		want, wantOK := compiled.CatalogPreset(probe)
+		got, gotOK := loaded.CatalogPreset(probe)
+		require.Equal(t, wantOK, gotOK, probe)
+		require.Equal(t, want, got, probe)
+	}
+	// Fingerprints differ only by order: the database lists products by id and
+	// documents by URL in byte order, the registry by declaration.
+	require.NotEqual(t, compiled.Fingerprint(), loaded.Fingerprint())
+	reordered := compiled.Products()
+	slices.SortFunc(reordered, func(a, b aivendors.Product) int { return strings.Compare(a.ID, b.ID) })
+	for i := range reordered {
+		slices.SortFunc(reordered[i].Documents, func(a, b aivendors.Document) int { return strings.Compare(a.URL, b.URL) })
+	}
+	require.Equal(t, loaded.Fingerprint(), aivendors.NewSnapshot(reordered).Fingerprint())
+}
+
+func TestLoadRequiresValidator(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	snapshot, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), nil)
+	require.Error(t, err)
+	require.Nil(t, snapshot)
+}
+
+func TestRejectedCatalogIsNotPublished(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
+	logger := testenv.NewLogger(t)
+	errRejected := errors.New("rejected")
+	reject := func(*aivendors.Snapshot) error { return errRejected }
+	snapshot, err := aivendors.Load(t.Context(), db, logger, reject)
+	require.ErrorIs(t, err, errRejected)
+	require.Nil(t, snapshot)
+	initial, err := aivendors.Load(t.Context(), db, logger, acceptCatalog)
+	require.NoError(t, err)
+	store := aivendors.NewStore(initial)
+	require.NoError(t, testrepo.New(db).EditProductFixture(t.Context(), testrepo.EditProductFixtureParams{ID: "zed", DisplayName: "Zed Updated", DeletedAt: pgtype.Timestamptz{}}))
+	require.ErrorIs(t, store.Refresh(t.Context(), db, logger, reject), errRejected)
+	require.Same(t, initial, store.Snapshot())
 }
