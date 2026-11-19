@@ -15,7 +15,7 @@ import type {
 const MINUTE = 60_000;
 
 /** The fixtures' clock: today at 11:05 local, so the sample day reads as today. */
-export function fixtureNow(): Date {
+function fixtureNow(): Date {
   const now = new Date();
   const today = new Date(
     now.getFullYear(),

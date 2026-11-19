@@ -62,7 +62,7 @@ export function OutcomeLabel({
 }
 
 /** Who made the attempt and with which app; the network when no one is known. */
-export function AttemptWho({ row }: { row: AttemptRow }): JSX.Element {
+function AttemptWho({ row }: { row: AttemptRow }): JSX.Element {
   const name = personLabel(row);
   const detail = row.person
     ? appLabel(row.app)

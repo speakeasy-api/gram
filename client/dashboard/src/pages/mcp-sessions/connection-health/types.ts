@@ -10,9 +10,6 @@ export const ATTEMPT_OUTCOMES = [
 ] as const;
 export type Outcome = (typeof ATTEMPT_OUTCOMES)[number];
 
-/** Every outcome is a filter, In progress included. */
-export const FILTER_OUTCOMES: readonly Outcome[] = ATTEMPT_OUTCOMES;
-
 export const STEP_GROUPS = [
   "connect",
   "sign_in",
@@ -80,7 +77,7 @@ export interface ServerRef {
   name?: string;
 }
 
-export interface Network {
+interface Network {
   /** Opaque; the filter value. */
   key: string;
   /** First 4 hex characters, as shown. */

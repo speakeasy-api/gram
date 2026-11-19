@@ -49,7 +49,7 @@ import {
 } from "./filters";
 import { formatSince, OUTCOME_LABELS, plural, STEP_LABELS } from "./format";
 import {
-  FILTER_OUTCOMES,
+  ATTEMPT_OUTCOMES,
   FILTER_STEPS,
   type AttemptFacets,
   type AttemptFilters,
@@ -79,7 +79,7 @@ function facetOptions(values: FacetValue[] | undefined, unnamed?: string) {
 
 function optionsFrom(facets: AttemptFacets | undefined): OptionsById {
   return {
-    outcome: FILTER_OUTCOMES.map((o) => ({
+    outcome: ATTEMPT_OUTCOMES.map((o) => ({
       value: o,
       label: OUTCOME_LABELS[o],
     })),
