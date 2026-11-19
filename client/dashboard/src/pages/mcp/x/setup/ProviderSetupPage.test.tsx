@@ -601,6 +601,8 @@ describe("recorded setup completion", () => {
         "/overview",
       ),
     );
+    expect(mocks.markCompleted).toHaveBeenCalledTimes(1);
+    expect(mocks.invalidate).toHaveBeenCalledTimes(1);
   });
 
   it("holds Back and the step rail while completion saves", async () => {
