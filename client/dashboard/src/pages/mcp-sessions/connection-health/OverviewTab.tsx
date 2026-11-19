@@ -99,6 +99,13 @@ export function OverviewTab({
   const setParam = useSetSearchParam(SHEET_PARAMS);
 
   const problems = useSuspectedProblems(scope, "speakeasy");
+  // A problem link opens here only for a problem this page lists.
+  const problemParam = searchParams.get(PROBLEM_PARAM);
+  const listedProblemId = problems.data?.problems?.some(
+    (p) => p.id === problemParam,
+  )
+    ? problemParam
+    : null;
   const killswitches = useActiveKillswitches();
   const denied = useDeniedClients(scope, window);
   const activity = useConnectionAttempts(
@@ -266,7 +273,7 @@ export function OverviewTab({
         onClose={() => setParam(ATTEMPT_PARAM, null)}
       />
       <ProblemDetailSheet
-        id={showProblems ? searchParams.get(PROBLEM_PARAM) : null}
+        id={showProblems ? listedProblemId : null}
         providerId={providerId}
         now={now}
         onClose={() => setParam(PROBLEM_PARAM, null)}
