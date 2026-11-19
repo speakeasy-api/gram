@@ -1,0 +1,106 @@
+[
+  {
+    "name": "Anthropic (Claude Code)",
+    "client_id": "https://claude.ai/oauth/claude-code-client-metadata"
+  },
+  {
+    "name": "Anthropic (Claude)",
+    "client_id": "https://claude.ai/oauth/mcp-oauth-client-metadata"
+  },
+  {
+    "name": "Visual Studio Code",
+    "client_id": "https://vscode.dev/oauth/client-metadata.json"
+  },
+  {
+    "name": "Visual Studio Code (Insiders)",
+    "client_id": "https://insiders.vscode.dev/oauth/client-metadata.json"
+  },
+  {
+    "name": "Zed",
+    "client_id": "https://zed.dev/oauth/client-metadata.json"
+  },
+  {
+    "name": "Goose",
+    "client_id": "https://goose-docs.ai/oauth/client-metadata.json"
+  },
+  {
+    "name": "ChatGPT (connectors)",
+    "client_id": "https://chatgpt.com/oauth/*/client.json"
+  },
+  {
+    "name": "ChatGPT",
+    "client_id": "https://chatgpt.com/oauth/client.json"
+  },
+  {
+    "name": "Codex CLI",
+    "client_id": "https://chatgpt.com/oauth/codex/*/client.json"
+  },
+  {
+    "name": "Codex CLI (stable document)",
+    "client_id": "https://chatgpt.com/oauth/codex/client.json"
+  },
+  {
+    "name": "Notion",
+    "client_id": "https://www.notion.so/oauth/mcp-client-metadata.json"
+  },
+  {
+    "name": "Notion (app.notion.com)",
+    "client_id": "https://app.notion.com/oauth/mcp-client-metadata.json"
+  },
+  {
+    "name": "MCPJam Inspector",
+    "client_id": "https://www.mcpjam.com/.well-known/oauth/client-metadata.json"
+  },
+  {
+    "name": "Factory Droid",
+    "client_id": "https://api.factory.ai/mcp/oauth-client"
+  },
+  {
+    "name": "ToolHive",
+    "client_id": "https://toolhive.dev/oauth/client-metadata.json"
+  },
+  {
+    "name": "Hermes Agent",
+    "client_id": "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json"
+  },
+  {
+    "name": "Skydive",
+    "client_id": "https://www.skydive.com/api/v1/external-oauth/client-metadata"
+  },
+  {
+    "name": "opencode",
+    "client_id": "https://opencode.ai/oauth/opencode/client.json"
+  },
+  {
+    "name": "GitHub Copilot CLI",
+    "client_id": "https://github.com/copilot/cli/client-metadata.json"
+  },
+  {
+    "name": "Conductor",
+    "client_id": "https://api.conductor.build/oauth/client-metadata.json"
+  },
+  {
+    "name": "Vercel Connect (connectors)",
+    "client_id": "https://connect.vercel.com/connectors/*"
+  },
+  {
+    "name": "Linear",
+    "client_id": "https://linear.app/.well-known/oauth-client-metadata/mcp.json"
+  },
+  {
+    "name": "Lovable",
+    "client_id": "https://api.lovable.dev/.well-known/oauth-client"
+  },
+  {
+    "name": "Google Antigravity",
+    "client_id": "https://antigravity.google/oauth/client-metadata.json"
+  },
+  {
+    "name": "Pi",
+    "client_id": "https://pi.dev/oauth/client.json"
+  },
+  {
+    "name": "Pi (per-server document)",
+    "client_id": "https://pi.dev/oauth/*/client.json"
+  }
+]
