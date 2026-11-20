@@ -42,6 +42,8 @@ const mocks = vi.hoisted(() => ({
   permissionsLoading: false,
   getSkillIds: undefined as (() => string[]) | undefined,
   activeRoute: "detail" as "detail" | "new" | "home" | "page",
+  dockDismissed: false,
+  resumeDock: vi.fn(),
   assistantReady: true,
   composerSetText: vi.fn(),
   composerText: "",
@@ -219,7 +221,11 @@ vi.mock("@/lib/assistantEntityLinks", () => ({
 vi.mock("@/hooks/useInsightsDockCta", () => ({
   INSIGHTS_DOCK_CONTENT_VT_CLASS: "",
   INSIGHTS_DOCK_VT_CLASS: "",
-  useInsightsDockCta: () => ({ dismissed: false, dismiss: vi.fn() }),
+  useInsightsDockCta: () => ({
+    dismissed: mocks.dockDismissed,
+    dismiss: vi.fn(),
+    resume: mocks.resumeDock,
+  }),
 }));
 vi.mock("@/components/ui/hooks/useConfig", () => ({
   useConfig: () => ({ theme: "light" }),
@@ -600,6 +606,42 @@ describe("InsightsProvider", () => {
       expect(screen.getByLabelText("Project name")).toBe(input);
       expect(input).toHaveProperty("value", "half typed");
       expect(mounts).toBe(1);
+    });
+
+    describe("opening the panel", () => {
+      afterEach(() => {
+        mocks.dockDismissed = false;
+        mocks.resumeDock.mockClear();
+      });
+
+      function Opener(): JSX.Element {
+        const { setIsExpanded } = useInsightsState();
+        return <button onClick={() => setIsExpanded(true)}>Open</button>;
+      }
+
+      function open(): void {
+        render(
+          <InsightsProvider
+            mcpConfig={{ projectSlug: "project" } as never}
+            title="Assistant"
+            subtitle=""
+          >
+            <Opener />
+          </InsightsProvider>,
+        );
+        fireEvent.click(screen.getByText("Open"));
+      }
+
+      it("brings back a dismissed dock", () => {
+        mocks.dockDismissed = true;
+        open();
+        expect(mocks.resumeDock).toHaveBeenCalledTimes(1);
+      });
+
+      it("leaves a visible dock alone", () => {
+        open();
+        expect(mocks.resumeDock).not.toHaveBeenCalled();
+      });
     });
 
     it("exposes the runtime as ready only once it can be read", () => {
