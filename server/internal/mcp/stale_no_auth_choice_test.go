@@ -90,13 +90,23 @@ func (g *staleChoiceGateway) approve(t *testing.T, ctx context.Context) catalogC
 // attachSignIn gives the server a sign-in; typed also records it as an auth client.
 func (g *staleChoiceGateway) attachSignIn(t *testing.T, ctx context.Context, typed bool) uuid.UUID {
 	t.Helper()
-	registration := createConsentRemoteClient(t, ctx, g.ti.conn, g.project, g.org, "typed-"+uuid.NewString()[:8], "", []uuid.UUID{g.issuer})
+	registration, _ := g.attachSignInClient(t, ctx, typed)
+	return registration
+}
+
+func (g *staleChoiceGateway) attachSignInClient(t *testing.T, ctx context.Context, typed bool) (registration, client uuid.UUID) {
+	t.Helper()
+	registration = createConsentRemoteClient(t, ctx, g.ti.conn, g.project, g.org, "typed-"+uuid.NewString()[:8], "", []uuid.UUID{g.issuer})
 	_, err := upstreamclientsrepo.New(g.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: g.org, ProjectID: g.project, McpServerID: g.serverID, RemoteSessionClientID: registration})
 	require.NoError(t, err)
 	if typed {
-		seedTypedSessionClient(t, ctx, g.ti, g.org, g.project, g.serverID, registration, "remote_session", urn.NewUserSubject(mockidp.MockUserID))
+		fixtures := authclientfixtures.New(g.ti.conn)
+		id, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: g.org, ProjectID: uuid.NullUUID{UUID: g.project, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
+		require.NoError(t, err)
+		require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: g.project, OrganizationID: g.org, McpServerID: g.serverID, AuthClientID: id, Source: "admin"}))
+		client = id
 	}
-	return registration
+	return registration, client
 }
 
 func (g *staleChoiceGateway) call(t *testing.T, token, qualified string) *httptest.ResponseRecorder {
@@ -196,7 +206,10 @@ func TestStaleNoAuthChoiceReconnectsThroughConsent(t *testing.T) {
 					connection := g.approve(t, ctx)
 					requireExecuted(t, g.call(t, connection.token, "source--tool_000"))
 
-					registration := g.attachSignIn(t, ctx, typed)
+					registration, client := g.attachSignInClient(t, ctx, typed)
+					if typed {
+						seedPrincipalGrant(t, ctx, g.ti, g.org, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), authz.ScopeMCPAuth, client.String())
+					}
 					before := g.source.requests.Load()
 					requireStaleError(t, g.call(t, connection.token, "source--tool_000"), `This server's `+staleReconnectCopy)
 					require.Equal(t, before, g.source.requests.Load(), "refused before any upstream request")
