@@ -62,7 +62,8 @@ type lockedBuffer struct {
 func (b *lockedBuffer) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.buf.Write(p)
+	n, _ := b.buf.Write(p)
+	return n, nil
 }
 
 func (b *lockedBuffer) String() string {
