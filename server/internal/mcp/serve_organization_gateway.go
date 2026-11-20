@@ -539,7 +539,7 @@ func (s *Service) listEndpointClientsAndRegistrations(ctx context.Context, endpo
 		}
 		return typed, nil
 	}
-	if directProxiedConsent(endpoint) {
+	if directProxiedConsent(endpoint) && usesTypedConsentInventory(ctx) {
 		typed, err := loadTypedRegistrations()
 		if err != nil {
 			return nil, nil, err
@@ -576,7 +576,7 @@ func (s *Service) listSignInClients(ctx context.Context, endpoint *ResolvedMcpEn
 		}
 		reachable := make([]remotesessions.Client, 0, len(clients))
 		for _, client := range clients {
-			if clientServesHostedMember(client, members) {
+			if clientServesSignInMember(ctx, client, members) {
 				reachable = append(reachable, client)
 			}
 		}
@@ -593,12 +593,21 @@ func (s *Service) listSignInClients(ctx context.Context, endpoint *ResolvedMcpEn
 	// a proxied server only the clients configured for it, and a gateway only
 	// those of the members the subject reaches. A hosted server keeps serving
 	// from every client its issuer binds.
+	if directProxiedConsent(endpoint) && !usesTypedConsentInventory(ctx) {
+		associated, err := s.serverAssociatedClients(ctx, endpoint.OrganizationID, []uuid.UUID{endpoint.McpServerID.UUID})
+		if err != nil {
+			return nil, err
+		}
+		return slices.DeleteFunc(clients, func(client remotesessions.Client) bool {
+			return !associated[endpoint.McpServerID.UUID][client.ID]
+		}), nil
+	}
 	if endpoint.MetaMcpServerID.Valid {
 		members, err := loadMembers()
 		if err != nil {
 			return nil, err
 		}
-		return slices.DeleteFunc(clients, func(client remotesessions.Client) bool { return !clientServesHostedMember(client, members) }), nil
+		return slices.DeleteFunc(clients, func(client remotesessions.Client) bool { return !clientServesSignInMember(ctx, client, members) }), nil
 	}
 	return clients, nil
 }
@@ -635,9 +644,9 @@ func (s *Service) consentSubjectMembers(ctx context.Context, endpoint *ResolvedM
 	return members, nil
 }
 
-func clientServesHostedMember(client remotesessions.Client, members []metaMember) bool {
+func clientServesSignInMember(ctx context.Context, client remotesessions.Client, members []metaMember) bool {
 	return slices.ContainsFunc(members, func(member metaMember) bool {
-		return member.backend != metaMemberBackendProxied && memberUsesClient(member, client.ID, client.RemoteSessionIssuerID, client.ProjectID)
+		return (!usesTypedConsentInventory(ctx) || member.backend != metaMemberBackendProxied) && memberUsesClient(member, client.ID, client.RemoteSessionIssuerID, client.ProjectID)
 	})
 }
 
@@ -691,7 +700,7 @@ func (s *Service) clientTokenProjectIDs(ctx context.Context, endpoint *ResolvedM
 	rows, err := metamcprepo.New(s.db).ListOrganizationMCPServersForRemoteSessionClient(ctx, metamcprepo.ListOrganizationMCPServersForRemoteSessionClientParams{
 		OrganizationID:        endpoint.OrganizationID,
 		ProjectID:             uuid.NullUUID{UUID: endpoint.ProjectID, Valid: endpoint.ProjectID != uuid.Nil},
-		TypedOffers:           true,
+		TypedOffers:           usesTypedConsentInventory(ctx),
 		RemoteSessionClientID: client.ID,
 	})
 	if err != nil {

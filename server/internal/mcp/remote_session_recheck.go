@@ -402,7 +402,16 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 			AutoConnectDone:          false,
 			FocusServer:              "",
 		}
-		clients, offered, err := s.listEndpointClientsAndRegistrations(ctx, endpoint, state)
+		recheckCtx := ctx
+		enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+		if err != nil {
+			logger.ErrorContext(ctx, "read upstream auth enforcement for remote session re-check", attr.SlogError(err))
+			continue
+		}
+		if !enforced {
+			recheckCtx = context.WithValue(ctx, recheckLegacyInventoryKey{}, true)
+		}
+		clients, offered, err := s.listEndpointClientsAndRegistrations(recheckCtx, endpoint, state)
 		if err != nil {
 			logger.ErrorContext(ctx, "list clients for remote session re-check", attr.SlogError(err))
 			continue
@@ -414,7 +423,7 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 			continue
 		}
 		// The probe logs its own refusals; only a dialled probe ends the search.
-		err = s.probeRemoteSession(ctx, remotesessions.RefreshIn(connectionScope(endpoint, mcpconnectionattempts.AppBackground)), logger, mcpconnectionattempts.FromRequest(nil), endpoint, state, *client, offered, nil, remotesessionmetrics.ValidationTriggerKeepalive)
+		err = s.probeRemoteSession(recheckCtx, remotesessions.RefreshIn(connectionScope(endpoint, mcpconnectionattempts.AppBackground)), logger, mcpconnectionattempts.FromRequest(nil), endpoint, state, *client, offered, nil, remotesessionmetrics.ValidationTriggerKeepalive)
 		switch {
 		case errors.Is(err, errRemoteSessionRecheckRateLimited):
 			// Stay inside this probe's budget; a detached cleanup would extend the shutdown drain.

@@ -201,6 +201,8 @@ func TestTypedRemoteLoginConsentCallback(t *testing.T) {
 			case "tenant_mismatch":
 				state.TypedAuthorization.ProjectID = uuid.New()
 			case "legacy_unlinked", "legacy", "gateway_legacy":
+				// Simulate a provider callback issued by an old binary. This
+				// is separate from accepting a stale gateway approval preview.
 				state.TypedAuthorization = nil
 				if scenario == "gateway_legacy" {
 					state.ResourceMcpServerID = uuid.NullUUID{}

@@ -400,9 +400,8 @@ func (s *Service) buildRemoteConnectURL(
 		mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Provider(client.IssuerURL), mcpconnectionattempts.RemoteSessionClient(client.ID), mcpconnectionattempts.Subject(challengeState.Subject))
 	t.Attach(challengeState.connectionAttempt(endpoint))
 	defer t.Finish(ctx)
-	// An exact typed offer takes precedence and keeps endpoint.UpstreamResource.
-	// Otherwise, use it only when no other bound client can claim it: under
-	// multi-binding it may belong to a different client's upstream, while a
+	// Resolve a stored gateway member before choosing the login target. Hosted
+	// endpoints still derive their resource from the sign-in's bindings; a
 	// client shared by servers with different upstreams derives none on its
 	// own and would record a grant nothing routes to.
 	var clientResource string
@@ -480,6 +479,10 @@ func (s *Service) buildRemoteConnectURL(
 		clientResource, err = s.remoteChallengeMgr.ResourceForClientAtUpstream(ctx, endpoint.OrganizationID, client.ID, boundIDs, endpoint.UpstreamResource)
 	}
 	if err != nil {
+		if errors.Is(err, remotesessions.ErrTypedAuthorizationDenied) {
+			t.Refuse(ctx, remotesessions.TypedAuthorizationHappened(err))
+			return "", false, oops.E(oops.CodeForbidden, err, "connection changed; reload the consent page").LogWarn(ctx, logger)
+		}
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return "", false, oops.E(oops.CodeUnexpected, err, "derive client upstream resource").LogError(ctx, logger)
 	}

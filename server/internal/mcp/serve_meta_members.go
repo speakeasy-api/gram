@@ -235,7 +235,7 @@ func (s *Service) resolveEndpointMemberSnapshot(ctx context.Context, logger *slo
 	var members []metaMember
 	var err error
 	if endpoint.IsOrganizationGateway() {
-		if surface == mandatorySurfaceConsent {
+		if surface == mandatorySurfaceConsent && usesTypedConsentInventory(ctx) {
 			ctx = withTypedConsentAuth(ctx)
 		}
 		ctx, members, _, err = s.resolveOrganizationMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, true, endpoint.UserSessionIssuerID, endpoint.ProjectID)
@@ -246,7 +246,7 @@ func (s *Service) resolveEndpointMemberSnapshot(ctx context.Context, logger *slo
 		return ctx, nil, err
 	}
 	switch {
-	case surface == mandatorySurfaceConsent && !endpoint.IsOrganizationGateway():
+	case surface == mandatorySurfaceConsent && usesTypedConsentInventory(ctx) && !endpoint.IsOrganizationGateway():
 		if err := s.withTypedMemberRegistrations(ctx, endpoint.OrganizationID, members); err != nil {
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load gateway member offers").LogError(ctx, logger)
 		}
@@ -430,14 +430,14 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 
 	var clients []remotesessions.Client
 	if userSessionIssuerID != uuid.Nil {
-		if authzSurface == mandatorySurfaceConsent {
+		if authzSurface == mandatorySurfaceConsent && usesTypedConsentInventory(ctx) {
 			if err := s.withTypedMemberRegistrations(ctx, organizationID, members); err != nil {
 				return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "load gateway member offers").LogError(ctx, logger)
 			}
 		}
 		// The agent gateway signs nobody in, so its callers never read
 		// associations and its members keep the derived match.
-		if authzSurface != mandatorySurfaceConsent {
+		if authzSurface != mandatorySurfaceConsent || !usesTypedConsentInventory(ctx) {
 			if err := s.attachAssociatedClients(ctx, organizationID, members); err != nil {
 				return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "load gateway member clients").LogError(ctx, logger)
 			}
@@ -484,7 +484,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 			continue
 		}
 		if needsOAuth && userSessionIssuerID != uuid.Nil && !slices.ContainsFunc(clients, func(client remotesessions.Client) bool {
-			return (authzSurface != mandatorySurfaceConsent || member.backend != metaMemberBackendProxied) && memberUsesClient(member, client.ID, client.RemoteSessionIssuerID, client.ProjectID)
+			return (authzSurface != mandatorySurfaceConsent || !usesTypedConsentInventory(ctx) || member.backend != metaMemberBackendProxied) && memberUsesClient(member, client.ID, client.RemoteSessionIssuerID, client.ProjectID)
 		}) {
 			continue
 		}

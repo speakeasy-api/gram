@@ -111,7 +111,7 @@ func (s *Service) claimingMetaMembers(
 		organizationRows, err := metamcprepo.New(s.db).ListOrganizationMCPServersForRemoteSessionClient(ctx, metamcprepo.ListOrganizationMCPServersForRemoteSessionClientParams{
 			OrganizationID:        endpoint.OrganizationID,
 			ProjectID:             client.ProjectID,
-			TypedOffers:           true,
+			TypedOffers:           usesTypedConsentInventory(ctx),
 			RemoteSessionClientID: client.ID,
 		})
 		if err != nil {
@@ -132,7 +132,7 @@ func (s *Service) claimingMetaMembers(
 		storedRows, err := metamcprepo.New(s.db).ListMetaMCPMembersForRemoteSessionClient(ctx, metamcprepo.ListMetaMCPMembersForRemoteSessionClientParams{
 			MetaMcpServerID:       endpoint.MetaMcpServerID.UUID,
 			ProjectID:             endpoint.ProjectID,
-			TypedOffers:           true,
+			TypedOffers:           usesTypedConsentInventory(ctx),
 			RemoteSessionClientID: client.ID,
 		})
 		if err != nil {

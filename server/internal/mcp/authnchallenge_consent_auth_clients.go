@@ -437,6 +437,9 @@ func (s *Service) consentDirectAuthClientPick(ctx context.Context, endpoint *Res
 		return nil, nil
 	}
 	if !auth.Approvable() {
+		if picked == uuid.Nil && auth.Status == consentAuthChoose {
+			return nil, errConsentNoUsableConnection
+		}
 		return nil, errConsentConfigurationChanged
 	}
 	selected := auth.Selected()

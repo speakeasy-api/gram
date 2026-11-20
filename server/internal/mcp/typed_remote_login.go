@@ -82,6 +82,9 @@ func (s *Service) ValidateRemoteLoginTypedAuthorization(ctx context.Context, sta
 // than inferring a destination from the registration's other attachments.
 func (s *Service) typedLoginResource(ctx context.Context, authorization *remotesessions.TypedAuthorization) (string, error) {
 	server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: authorization.ServerID, OrganizationID: authorization.OrganizationID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", remotesessions.ErrTypedAuthorizationChanged
+	}
 	if err != nil {
 		return "", fmt.Errorf("load typed login resource server: %w", err)
 	}

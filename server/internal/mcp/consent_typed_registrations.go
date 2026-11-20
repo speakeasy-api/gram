@@ -60,6 +60,15 @@ func (s *Service) withTypedMemberRegistrations(ctx context.Context, organization
 	return nil
 }
 
+// recheckLegacyInventoryKey keeps AIM-1149's existing unenforced keepalive
+// behavior separate from browser consent. No browser path sets this key.
+type recheckLegacyInventoryKey struct{}
+
+func usesTypedConsentInventory(ctx context.Context) bool {
+	legacy, _ := ctx.Value(recheckLegacyInventoryKey{}).(bool)
+	return !legacy
+}
+
 func directProxiedConsent(endpoint *ResolvedMcpEndpoint) bool {
 	return endpoint.McpServerID.Valid && !endpoint.ToolsetID.Valid && !endpoint.MetaMcpServerID.Valid && !endpoint.IsOrganizationGateway()
 }
@@ -67,6 +76,9 @@ func directProxiedConsent(endpoint *ResolvedMcpEndpoint) bool {
 // typedConsentRegistrations maps each registration the endpoint offers to
 // the project that serves it. Hosted endpoints have no typed registrations.
 func (s *Service) typedConsentRegistrations(ctx context.Context, endpoint *ResolvedMcpEndpoint, loadMembers func() ([]metaMember, error)) (map[uuid.UUID]uuid.UUID, error) {
+	if !usesTypedConsentInventory(ctx) {
+		return nil, nil
+	}
 	if (!endpoint.McpServerID.Valid || endpoint.ToolsetID.Valid) && !endpoint.MetaMcpServerID.Valid && !endpoint.IsOrganizationGateway() {
 		return nil, nil
 	}
