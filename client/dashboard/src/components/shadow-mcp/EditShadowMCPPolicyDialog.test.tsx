@@ -49,7 +49,7 @@ vi.mock("@gram/client/react-query/_context.js", () => ({
 vi.mock("@gram/client/react-query/shadowMCPInventory.js", () => ({
   buildShadowMCPInventoryQuery: (_client: unknown, request: object) => ({
     queryKey: ["inventory", request],
-    queryFn: async () => ({ servers: mocks.servers }),
+    queryFn: async () => ({ result: { servers: mocks.servers } }),
   }),
   invalidateAllShadowMCPInventory: mocks.invalidateInventory,
 }));

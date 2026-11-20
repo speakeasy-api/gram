@@ -21,7 +21,7 @@ import { TextArea } from "@/components/ui/Textarea";
 import { useProject } from "@/contexts/Auth";
 import { cn } from "@/lib/utils";
 import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
-import type { ListShadowMCPInventoryResult } from "@gram/client/models/components/listshadowmcpinventoryresult.js";
+import type { ListShadowMCPInventoryResponse } from "@gram/client/models/operations/listshadowmcpinventory.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useCreateMcpApprovalRequestMutation } from "@gram/client/react-query/createMcpApprovalRequest.js";
@@ -103,7 +103,7 @@ function useWholeInventory(projectId: string, enabled: boolean) {
       const servers: ShadowMCPInventoryServer[] = [];
       let cursor: string | undefined = undefined;
       for (let page = 0; page < POLICY_CHANGE_MAX_PAGES; page++) {
-        const result: ListShadowMCPInventoryResult =
+        const { result }: ListShadowMCPInventoryResponse =
           await queryClient.fetchQuery({
             ...buildShadowMCPInventoryQuery(client, {
               projectId,
