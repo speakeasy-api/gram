@@ -31,6 +31,28 @@ func TestComplianceSourceFromUserAgentWeb(t *testing.T) {
 	require.Equal(t, "claude-chat-web", complianceSourceFromUserAgent(""))
 }
 
+func TestComplianceUserLabel(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		email           string
+		anthropicUserID string
+		want            string
+	}{
+		{name: "it prefers the normalized email", email: " Ada@Example.com ", anthropicUserID: "user_1", want: "ada@example.com"},
+		{name: "it falls back to the anthropic user id", email: "", anthropicUserID: "user_1", want: "user_1"},
+		{name: "it is empty without either", email: "", anthropicUserID: "", want: ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, tc.want, complianceUserLabel(tc.email, tc.anthropicUserID))
+		})
+	}
+}
+
 func TestChatsCursorStoredFormIgnoresActivityFeedToken(t *testing.T) {
 	t.Parallel()
 

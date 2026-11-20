@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 
@@ -125,7 +126,7 @@ func TestUpsertDiscoveredChatPreservesResolvedUserOnUnresolvedRevisit(t *testing
 	chatRow, err = chatrepo.New(svc.db).GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: projectID})
 	require.NoError(t, err)
 	require.Equal(t, userID, chatRow.UserID.String, "resolved user must survive an unresolved revisit")
-	require.Equal(t, "anthropic_user_1", chatRow.ExternalUserID.String, "external user id must survive an unresolved revisit")
+	require.Equal(t, "ada@example.com", chatRow.ExternalUserID.String, "external user id must survive an unresolved revisit")
 	require.Equal(t, "Renamed chat", chatRow.Title.String, "the list's title is authoritative")
 }
 
@@ -358,6 +359,66 @@ func TestImportDiscoveredChatsKeepsFeedClientForSameRunListRevisit(t *testing.T)
 		require.Equal(t, desktopUA, batch.rows[0].Params.UserAgent.String)
 		require.Equal(t, "203.0.113.9", batch.rows[0].Params.IpAddress.String)
 	}
+}
+
+func TestImportedChatOfNonMemberIsSearchableByOwnerEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, _, cfg, projectID, _ := complianceImportFixture(t)
+
+	page := complianceMessagesPage("chat_non_member", "Non-member chat", "msg_cur_1",
+		complianceMessage("msg_1", "user", "hello", "2026-07-14T09:01:00Z"),
+	)
+	page.User = anthropicapi.ChatUser{ID: "anthropic_user_2", EmailAddress: "Grace@Example.com"}
+	server := complianceMessagesServer(t, map[string]map[string]anthropicapi.ChatMessagesPage{
+		"chat_non_member": {"": page},
+	})
+	client := anthropicapi.New(svc.guardianPolicy, anthropicapi.WithBaseURL(server.URL), anthropicapi.WithAPIKey("anthropic-key"))
+
+	// The owner is a Claude user but not a member of the organization, so
+	// the email never resolves to a user id.
+	discovery := complianceFeedDiscovery("chat_non_member", "Mozilla/5.0")
+	discovery.userEmail = "grace@example.com"
+	discovery.externalUserID = "anthropic_user_2"
+	runComplianceImport(ctx, t, svc, client, cfg, discovery)
+
+	chatID := importedChatID(ctx, t, svc, cfg, "chat_non_member")
+	chatRow, err := chatrepo.New(svc.db).GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.False(t, chatRow.UserID.Valid)
+	require.Equal(t, "grace@example.com", chatRow.ExternalUserID.String)
+
+	messages, err := chatrepo.New(svc.db).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Len(t, messages, 1)
+	require.Equal(t, "grace@example.com", messages[0].ExternalUserID.String)
+
+	rows, err := chatrepo.New(svc.db).ListChats(ctx, chatrepo.ListChatsParams{
+		RiskFindingsClickhouse: false,
+		ProjectID:              projectID,
+		HasRiskFilter:          "",
+		MinRiskScore:           -1,
+		ChatID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ExternalUserID:         "",
+		UserID:                 "",
+		Pinned:                 "",
+		Search:                 "grace@example.com",
+		AssistantID:            "",
+		SourceKind:             "",
+		ExcludeSourceKind:      "",
+		RiskChatIds:            nil,
+		AccountType:            "",
+		Sources:                nil,
+		SortBy:                 "last_message_timestamp",
+		FromTime:               pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		ToTime:                 pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		SortOrder:              "desc",
+		PageOffset:             0,
+		PageLimit:              10,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, chatID, rows[0].ID)
 }
 
 func TestConnectedUserResolverMatchesMixedCaseStoredEmail(t *testing.T) {
