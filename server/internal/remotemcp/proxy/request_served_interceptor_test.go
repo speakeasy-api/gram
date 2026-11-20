@@ -29,6 +29,7 @@ func TestRunRequestServedInterceptors_OnlyARelayedAnswerToTheRequest(t *testing.
 		status int
 		msg    jsonrpc.Message
 		id     jsonrpc.ID
+		call   *ToolsCallRequest
 		want   int
 	}{
 		{name: "answered", status: http.StatusOK, msg: answer, id: id, want: 1},
@@ -36,13 +37,15 @@ func TestRunRequestServedInterceptors_OnlyARelayedAnswerToTheRequest(t *testing.
 		{name: "another request's answer", status: http.StatusOK, msg: &jsonrpc.Response{ID: other}, id: id, want: 0},
 		{name: "notification", status: http.StatusOK, msg: answer, id: jsonrpc.ID{}, want: 0},
 		{name: "no message", status: http.StatusOK, msg: nil, id: id, want: 0},
+		{name: "tools/call reply recognised", status: http.StatusOK, msg: answer, id: id, call: &ToolsCallRequest{Params: nil, UserRequest: nil, responded: true}, want: 1},
+		{name: "tools/call reply not recognised", status: http.StatusOK, msg: answer, id: id, call: &ToolsCallRequest{Params: nil, UserRequest: nil, responded: false}, want: 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			calls := 0
 			p := &Proxy{RequestServedInterceptors: []RequestServedInterceptor{countingServedInterceptor{calls: &calls}}}
-			p.runRequestServedInterceptors(t.Context(), tc.status, tc.msg, tc.id)
+			p.runRequestServedInterceptors(t.Context(), tc.status, tc.msg, tc.id, tc.call)
 			require.Equal(t, tc.want, calls)
 		})
 	}

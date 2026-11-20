@@ -86,6 +86,35 @@ func TestHealthyToolCallRecordsOneServedRow(t *testing.T) {
 	require.Empty(t, row.Reason)
 }
 
+// A notification is owed no answer, so it is not a served request, hosted or through a gateway.
+func TestNotificationRecordsNoServedRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx := requireProjectAuthContext(t, ctx)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	notification := []byte(`{"jsonrpc":"2.0","method":"notifications/initialized"}`)
+
+	var capturedAuth atomic.Value
+	upstream := newAuthorizationRecorder(t, &capturedAuth)
+	fixture := createIssuerGatedHTTPToolFixture(t, ctx, ti, authCtx, "notified", upstream.URL)
+	subject := urn.NewUserSubject("notified-user-" + uuid.NewString())
+	insertRemoteSessionAccessToken(t, ctx, ti, fixture.UserSessionIssuer.ID, fixture.RemoteSessionClient.ID, subject, "valid-upstream-token", time.Now().Add(time.Hour))
+	bearer := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, subject)
+	resp, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, notification, bearer, nil)
+	require.NoError(t, err)
+	require.Less(t, resp.Code, http.StatusMultipleChoices, resp.Body.String())
+
+	slug := "meta-" + uuid.NewString()
+	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	resp, err = servePublicHTTP(t, ctx, ti, slug, notification, "", nil)
+	require.NoError(t, err)
+	require.Less(t, resp.Code, http.StatusMultipleChoices, resp.Body.String())
+
+	rec.RequireNothing()
+}
+
 // An anonymous caller is nobody's connection, so serving it writes nothing.
 func TestAnonymousServedRequestRecordsNothing(t *testing.T) {
 	t.Parallel()
@@ -460,7 +489,7 @@ func TestGatewayMemberRows(t *testing.T) {
 func TestGatewayMemberRefreshOutageNamesTheProviderOnce(t *testing.T) {
 	t.Parallel()
 
-	rec := mcpconnectionattemptstest.New(t)
+	rec := mcpconnectionattemptstest.New(t).IgnoreServed()
 	ctx, ti := buildTestMCPService(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, nil, "", false, rec.Recorder)
 	ti.service.SetConnectionRecorder(rec.Recorder)
 	authCtx := requireProjectAuthContext(t, ctx)
@@ -737,7 +766,7 @@ func TestGatewayLocalUsageRefusalRecordsOnce(t *testing.T) {
 	usageFile := filepath.Join(usageDir, "billingusage-"+auth.ActiveOrganizationID+".local.json")
 	require.NoError(t, os.WriteFile(usageFile, []byte(`{"ToolCalls":2000,"IncludedToolCalls":1,"HasActiveSubscription":false}`), 0600))
 	t.Cleanup(func() { require.NoError(t, os.Remove(usageFile)) })
-	rec := mcpconnectionattemptstest.New(t)
+	rec := mcpconnectionattemptstest.New(t).IgnoreServed()
 	ti.service.SetConnectionRecorder(rec.Recorder)
 	slug := "meta-" + uuid.NewString()
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, uuid.Nil)
@@ -766,7 +795,7 @@ func TestGatewayToolErrorsRecordNothing(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestMCPService(t)
 			auth := requireProjectAuthContext(t, ctx)
-			rec := mcpconnectionattemptstest.New(t)
+			rec := mcpconnectionattemptstest.New(t).IgnoreServed()
 			ti.service.SetConnectionRecorder(rec.Recorder)
 			slug := "meta-" + uuid.NewString()
 			meta := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, uuid.Nil)
@@ -852,7 +881,7 @@ func TestGatewayUnknownCachedToolRecordsNothing(t *testing.T) {
 	t.Parallel()
 	ctx, g := newStaleChoiceGateway(t, toolfilter.CatalogModeCached, metamcp.DiscoveryModeProgressive)
 	connection := g.approve(t, ctx)
-	rec := mcpconnectionattemptstest.New(t)
+	rec := mcpconnectionattemptstest.New(t).IgnoreServed()
 	g.ti.service.SetConnectionRecorder(rec.Recorder)
 	for _, name := range []string{"source--does_not_exist", "nonexistent--tool_000"} {
 		response := g.call(t, connection.token, name)

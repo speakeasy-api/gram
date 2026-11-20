@@ -56,7 +56,9 @@ const attemptColumns = attemptEndingColumns + `,
 		groupUniqArray(remote_session_client_id))))) AS touched`
 
 // NotServedRow leaves out ResultServed rows. Each is a one-row attempt sampled per connection
-// per window, so counting it would turn requests into connected attempts.
+// per window, so counting it would turn requests into connected attempts. The 30-minute
+// mcp_connection_attempt_summaries table, filled by a view on these rows, holds them too, so its
+// readers must filter step_result != 'served'.
 const NotServedRow = `NOT (step = 'mcp_request' AND step_result = 'served')`
 
 // ExcludedOrganizations are left out of cross-organization reads: the demo organization's attempts are made up.

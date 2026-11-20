@@ -104,6 +104,23 @@ func TestRequestConnections_ServedRequestRecordsOnce(t *testing.T) {
 	require.Empty(t, row.MemberID)
 }
 
+// A 2xx tools/call reply that is not a tools/call result failed in the proxy, so it is not served.
+// Its status names no connection failure, so it writes no row at all.
+func TestRequestConnections_UnreadableToolsCallReplyIsNotServed(t *testing.T) {
+	t.Parallel()
+
+	rec := mcpconnectionattemptstest.New(t)
+	caller := urn.NewUserSubject("user-1")
+	connections := recordingConnections(rec, "token")
+	connections.Caller = &caller
+	connections.Details = []mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&caller)}
+	serveToolsCall(t.Context(), t, connections, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":7,"result":"not a tool result"}`))
+	}, continueCheckpoint())
+	rec.RequireNothing()
+}
+
 // No served row for an unnamed caller, a notification, or a request whose upstream refused it.
 func TestRequestConnections_ServedNeedsANamedCallerAndAnAnswer(t *testing.T) {
 	t.Parallel()

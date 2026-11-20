@@ -218,6 +218,11 @@ func (s *seeder) chConnectionEvents(ctx context.Context, ch driver.Conn) error {
 			msg:      "demo seed postflight: connection events must cover connected, failed, blocked and declined",
 		},
 		{
+			cond:     `(SELECT countIf(step = 'mcp_request' AND step_result = 'served') FROM mcp_connection_events WHERE organization_id = @org) = 0`,
+			settings: "",
+			msg:      "demo seed postflight: connection events must include served requests",
+		},
+		{
 			cond:     `(SELECT count() FROM mcp_connection_attempt_summaries WHERE organization_id = @org) = 0`,
 			settings: "",
 			msg:      "demo seed postflight: connection attempt rollup is empty",

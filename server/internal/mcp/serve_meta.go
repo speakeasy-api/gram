@@ -308,8 +308,8 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	// admission of its caller.
 	ctx = mcpconnectionattempts.WithFailureMark(withMandatoryAdmission(ctx))
 	body, err := s.handleMetaMCPRequest(ctx, logger, mcpEndpoint, metaServer, gate, &req, r.Header.Get(mcpversions.HTTPHeader))
-	if err == nil {
-		// Each member call records its own row; a failed one marks this request too.
+	if err == nil && req.ID.IsSet() {
+		// Each member call records its own row; a member's failure leaves the gateway's row alone.
 		s.recordServed(ctx, gate.connectionScope(ctx), uuid.Nil, gate.resolvedSubject(ctx), r, func() mcpconnectionattempts.Option {
 			return s.gatewayReportedClient(ctx, gate)
 		})

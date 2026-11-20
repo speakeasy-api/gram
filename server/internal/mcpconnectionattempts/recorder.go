@@ -99,7 +99,7 @@ const (
 	unknownTableCode = 60
 )
 
-// dropReason says why events were not written. rate_limited and queue_reserved apply only to Start and served rows.
+// dropReason says why events were not written. rate_limited and queue_reserved apply only to Start rows; served rows the limits hold back are sampling, not losses, and are not counted.
 type dropReason string
 
 const (
@@ -664,9 +664,6 @@ func (r *Recorder) Once(ctx context.Context, scope Scope, step Step, what Happen
 }
 
 func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what Happened, final bool, held limit, opts []Option) (accepted bool) {
-	if _, failed := what.(Code); failed {
-		MarkFailed(ctx)
-	}
 	if r == nil || attempt.IsZero() {
 		return false
 	}
@@ -686,6 +683,10 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		}
 	}()
 	row, err := RowAt(attempt, step, what, final, time.Now(), opts...)
+	if _, failed := what.(Code); failed {
+		markRecordedFailure(ctx, row.MemberID != "" || step == StepDiscoveryMember || step == StepDiscoveryListing)
+		r.observeFailure(row, time.Now())
+	}
 	if err != nil {
 		r.drop(ctx, dropInvalidEvent, 1, err)
 		return false
@@ -732,7 +733,6 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		if reason, _ := r.organizationAllowed(row.OrganizationID, r.cfg.logsCheckTimeout); reason == "" {
 			r.stampClient(&row)
 			r.capture(row)
-			r.forgetServed(step, what, row)
 			r.leaveReference(ctx, step, row.OrganizationID, row.AttemptID, what)
 			referenced = true
 			return true
@@ -744,7 +744,6 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		r.drop(ctx, reason, events(row), nil)
 		return false
 	}
-	r.forgetServed(step, what, row)
 	r.leaveReference(ctx, step, row.OrganizationID, row.AttemptID, what)
 	referenced = true
 	return true

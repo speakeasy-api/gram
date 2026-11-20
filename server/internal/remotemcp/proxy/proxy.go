@@ -1217,7 +1217,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		return err
 	}
 	observeResponse(ctx, msg)
-	p.runRequestServedInterceptors(ctx, upstreamStatus, msg, userReqID)
+	p.runRequestServedInterceptors(ctx, upstreamStatus, msg, userReqID, toolsCallReq)
 	return nil
 }
 
@@ -1665,7 +1665,7 @@ func (p *Proxy) relaySSEStream(
 			result.markResponseRelayed(p.Drain, upstreamResp.Body)
 		}
 		observeResponse(ctx, msg)
-		p.runRequestServedInterceptors(ctx, upstreamResp.StatusCode, msg, responseID)
+		p.runRequestServedInterceptors(ctx, upstreamResp.StatusCode, msg, responseID, toolsCallReq)
 		if flusher != nil {
 			flusher.Flush()
 		}
@@ -1935,10 +1935,11 @@ func (p *Proxy) runRequestFailureInterceptors(ctx context.Context, failure *Requ
 }
 
 // runRequestServedInterceptors invokes each configured RequestServedInterceptor
-// when msg, relayed with status, is the response to the request id. They
-// observe only, on every served request, so no span is started.
-func (p *Proxy) runRequestServedInterceptors(ctx context.Context, status int, msg jsonrpc.Message, id jsonrpc.ID) {
-	if len(p.RequestServedInterceptors) == 0 || status < 200 || status >= 300 || !isResponseTo(msg, id) {
+// when msg, relayed with status, is the response to the request id. A
+// tools/call reply the typed response chain did not recognise is a failure
+// instead. They observe only, on every served request, so no span is started.
+func (p *Proxy) runRequestServedInterceptors(ctx context.Context, status int, msg jsonrpc.Message, id jsonrpc.ID, toolsCall *ToolsCallRequest) {
+	if len(p.RequestServedInterceptors) == 0 || status < 200 || status >= 300 || !isResponseTo(msg, id) || (toolsCall != nil && !toolsCall.responded) {
 		return
 	}
 	for _, interceptor := range p.RequestServedInterceptors {

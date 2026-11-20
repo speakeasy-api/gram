@@ -30,6 +30,9 @@ type Recording struct {
 	t    *testing.T
 	mu   sync.Mutex
 	rows []mcpconnectionattempts.Row
+
+	// ignoreServed drops served rows, for a test about failures only.
+	ignoreServed bool
 }
 
 // New returns an empty recording for an organization with logs on.
@@ -48,14 +51,26 @@ func NewLogsOff(t *testing.T) *Recording {
 func newRecording(t *testing.T, logsEnabled func(context.Context, string) (bool, error)) *Recording {
 	t.Helper()
 
-	rec := &Recording{Recorder: nil, t: t, mu: sync.Mutex{}, rows: nil}
+	rec := &Recording{Recorder: nil, t: t, mu: sync.Mutex{}, rows: nil, ignoreServed: false}
 	rec.Recorder = mcpconnectionattempts.NewCapturing(func(row mcpconnectionattempts.Row) {
 		rec.mu.Lock()
 		defer rec.mu.Unlock()
+		if rec.ignoreServed && row.StepResult == mcpconnectionattempts.ResultServed.String() {
+			return
+		}
 		rec.rows = append(rec.rows, row)
 	}, logsEnabled)
 	t.Cleanup(rec.requireOneEndingPerAttempt)
 	return rec
+}
+
+// IgnoreServed keeps served rows out of the recording, for a test about failure rows only. A
+// gateway still serves a request whose member call failed, so it writes its own served row.
+func (r *Recording) IgnoreServed() *Recording {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.ignoreServed = true
+	return r
 }
 
 // Rows returns what was recorded, in order.

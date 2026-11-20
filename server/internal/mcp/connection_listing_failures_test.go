@@ -349,3 +349,35 @@ func happenedReason(what mcpconnectionattempts.Happened) string {
 	}
 	return ""
 }
+
+// A member's failure is that member's: a named caller's tools/list still writes the gateway's
+// served row while one member is down, and a call to that member writes no served row for it.
+func TestGatewayMemberFailureLeavesTheGatewayServed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := recordConnections(t, ti)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	slug := "gateway-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	healthy := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted tools", 2, mcpservers.VisibilityPublic, "alpha")
+	down := seedListingMember(t, ti, *authCtx.ProjectID, gateway.ID, listingCase{}, statusUpstream(t, http.StatusInternalServerError).URL)
+	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
+
+	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), healthy.slug+"--alpha")
+	rec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeProviderServerError)
+	served := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.ResultServed)
+	require.Empty(t, served.MemberID, "the gateway's own row")
+	require.NotEmpty(t, served.SubjectURN)
+
+	before := len(rec.Rows())
+	callMetaTool(t, ctx, ti, slug, down.Slug.String+"--ping", map[string]any{})
+	late := rec.Rows()[before:]
+	require.NotEmpty(t, late, "the member's failure is recorded")
+	for _, row := range late {
+		require.NotEqual(t, mcpconnectionattempts.ResultServed.String(), row.StepResult, "a failed member call writes no served row")
+	}
+}
