@@ -667,6 +667,7 @@ func workloadSessionIssuance(target workloadSessionTarget, subject urn.SessionSu
 		CredentialID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		UpstreamClientPicks:    nil,
 		AuthClientPicks:        nil,
+		DeferredServerIDs:      nil,
 		Catalog:                nil,
 		TypedOnly:              false,
 	}
@@ -812,7 +813,8 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 	}
 	if grant.choosesUpstream && grant.endpoint != nil {
 		caller := headlessCaller{clientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadIssuerID: uuid.NullUUID{UUID: grant.presented.issuerID, Valid: true}, workloadSubject: grant.presented.subject, connectsLater: false}
-		upstreamPicks, authClientPicks, err := s.headlessAuthClientPicks(authorizationCtx, grant.endpoint, subject, caller, grant.requestedAuthClients, grant.session.TypedOnly)
+		// A workload cannot connect later, so nothing is deferred.
+		upstreamPicks, authClientPicks, _, err := s.headlessAuthClientPicks(authorizationCtx, grant.endpoint, subject, caller, grant.requestedAuthClients, grant.session.TypedOnly)
 		if err != nil {
 			if _, ok := errors.AsType[*oops.OAuthError](err); ok {
 				// The workload was admitted, so naming why its choice failed

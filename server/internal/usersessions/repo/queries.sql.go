@@ -5975,6 +5975,8 @@ reachable AS (
     WHERE s.deleted IS FALSE
       AND ($5::uuid[] IS NULL
            OR s.id = ANY($5::uuid[]))
+      AND ($6::uuid[] IS NULL
+           OR NOT s.id = ANY($6::uuid[]))
       AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
       AND (
         s.user_session_issuer_id = si.id
@@ -5993,9 +5995,9 @@ reachable AS (
 ),
 picked AS (
     -- The consent page's pick for each server, as parallel arrays.
-    SELECT unnest($6::uuid[]) AS mcp_server_id,
-           unnest($7::uuid[]) AS remote_session_client_id,
-           NULLIF(unnest($8::uuid[]), '00000000-0000-0000-0000-000000000000'::uuid) AS auth_client_id
+    SELECT unnest($7::uuid[]) AS mcp_server_id,
+           unnest($8::uuid[]) AS remote_session_client_id,
+           NULLIF(unnest($9::uuid[]), '00000000-0000-0000-0000-000000000000'::uuid) AS auth_client_id
 ),
 eligible AS (
     SELECT a.mcp_server_id,
@@ -6010,7 +6012,7 @@ eligible AS (
       ON link.remote_session_client_id = a.remote_session_client_id
      AND link.user_session_issuer_id = $4
     WHERE a.deleted IS FALSE
-      AND NOT $9::boolean
+      AND NOT $10::boolean
     UNION ALL
     SELECT l.mcp_server_id,
            ac.remote_session_client_id
@@ -6035,7 +6037,7 @@ eligible AS (
      AND binding.user_session_issuer_id = $4
     WHERE l.deleted IS FALSE
       AND l.organization_id = (SELECT organization_id FROM session_issuer)
-      AND $9::boolean
+      AND $10::boolean
     GROUP BY l.mcp_server_id, ac.remote_session_client_id
     HAVING count(DISTINCT ac.id) = 1
 ),
@@ -6077,7 +6079,7 @@ decided AS (
                LIMIT 1
              )
            ) END AS remote_session_client_id,
-           CASE WHEN $9::boolean THEN NOT EXISTS (
+           CASE WHEN $10::boolean THEN NOT EXISTS (
              SELECT 1
              FROM mcp_server_auth_clients AS l
              JOIN mcp_auth_clients AS ac
@@ -6266,6 +6268,7 @@ type RecordUpstreamClientSelectionsParams struct {
 	Source              string
 	UserSessionIssuerID uuid.UUID
 	ScopeMcpServerIds   []uuid.UUID
+	ExcludeMcpServerIds []uuid.UUID
 	PickedMcpServerIds  []uuid.UUID
 	PickedClientIds     []uuid.UUID
 	PickedAuthClientIds []uuid.UUID
@@ -6275,7 +6278,10 @@ type RecordUpstreamClientSelectionsParams struct {
 // Records, for one inbound credential, the upstream OAuth client it uses for
 // every MCP server it can reach, or an explicit no-auth choice. A NULL
 // scope_mcp_server_ids keeps issuance-wide reach; a supplied array restricts
-// recording to those servers, and an empty array records nothing. An existing
+// recording to those servers, and an empty array records nothing.
+// exclude_mcp_server_ids leaves those servers without a row whatever else
+// would decide them, for servers issuance deferred until the person connects
+// them. An existing
 // client choice is never replaced. An existing no-auth choice is replaced
 // only once the server has an associated client and one is decided for the
 // credential: the no-auth choice is unusable by then, and recording the
@@ -6348,6 +6354,7 @@ func (q *Queries) RecordUpstreamClientSelections(ctx context.Context, arg Record
 		arg.Source,
 		arg.UserSessionIssuerID,
 		arg.ScopeMcpServerIds,
+		arg.ExcludeMcpServerIds,
 		arg.PickedMcpServerIds,
 		arg.PickedClientIds,
 		arg.PickedAuthClientIds,

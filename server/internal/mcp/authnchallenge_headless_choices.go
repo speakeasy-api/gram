@@ -7,9 +7,11 @@
 // named is an error, never the consent screen's preselection order, and so is
 // a named choice that does not validate. Nothing is recorded unless every
 // server's choice validates, except that a gateway session for a caller who
-// can connect later leaves out a member whose only problem is a missing or
-// unready connection: that member offers its connect page when called, as it
-// does for a browser sign-in that left it not connected.
+// can connect later defers a member whose only problem is a missing or unready
+// connection: the session records no choice for it, and the member offers its
+// connect page when called, as it does for a browser sign-in that left it not
+// connected. A member the request names is deferred only when the named
+// credential is valid and just not connected yet.
 
 package mcp
 
@@ -110,23 +112,24 @@ func parseRequestedAuthClients(values []string) (map[uuid.UUID]headlessChoice, e
 
 // headlessAuthClientPicks decides the choice of every server the session
 // targets and returns them as the issuance's picks: the registration a
-// choice authenticates through, keyed by server, and the typed client. It
+// choice authenticates through, keyed by server, and the typed client, along
+// with the servers it deferred, which the session must record no choice for. It
 // returns nil maps where typed auth client resolution is not enforced, where
 // the server's choice keeps being decided at recording, and for a session
 // that targets no one server. enforced is the organization's enforcement
 // state as the caller read it, which it records the session's choices under
 // too, so the picks and the recording never disagree.
-func (s *Service) headlessAuthClientPicks(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, caller headlessCaller, requested map[uuid.UUID]headlessChoice, enforced bool) (map[uuid.UUID]uuid.UUID, map[uuid.UUID]uuid.UUID, error) {
+func (s *Service) headlessAuthClientPicks(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, caller headlessCaller, requested map[uuid.UUID]headlessChoice, enforced bool) (map[uuid.UUID]uuid.UUID, map[uuid.UUID]uuid.UUID, []uuid.UUID, error) {
 	if !enforced {
 		if len(requested) > 0 {
-			return nil, nil, oops.NewOAuthError(http.StatusBadRequest, "invalid_request", tokenParamUpstreamAuthClient+" is not accepted for this organization yet", errChoiceNotAccepted)
+			return nil, nil, nil, oops.NewOAuthError(http.StatusBadRequest, "invalid_request", tokenParamUpstreamAuthClient+" is not accepted for this organization yet", errChoiceNotAccepted)
 		}
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 
 	servers, err := s.headlessTargetServers(ctx, endpoint, subject)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	inScope := make(map[uuid.UUID]bool, len(servers))
 	ids := make([]uuid.UUID, 0, len(servers))
@@ -136,40 +139,43 @@ func (s *Service) headlessAuthClientPicks(ctx context.Context, endpoint *Resolve
 	}
 	for serverID := range requested {
 		if !inScope[serverID] {
-			return nil, nil, oops.NewOAuthError(http.StatusBadRequest, "invalid_request", tokenParamUpstreamAuthClient+" names a server this token does not reach", errChoiceServerNotReached)
+			return nil, nil, nil, oops.NewOAuthError(http.StatusBadRequest, "invalid_request", tokenParamUpstreamAuthClient+" names a server this token does not reach", errChoiceServerNotReached)
 		}
 	}
 	if len(servers) == 0 {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 
 	configured, err := s.issuanceProfileChoices(ctx, endpoint, caller, ids)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// Every target server's options are read once, then decided per server.
 	options, err := s.consentAuthChoices(ctx, endpoint.OrganizationID, subject, servers, nil, nil, true)
 	if err != nil {
-		return nil, nil, fmt.Errorf("decide server credentials: %w", err)
+		return nil, nil, nil, fmt.Errorf("decide server credentials: %w", err)
 	}
 	// On a gateway, one member that is not connected yet leaves only itself
 	// out; a single server's session would be useless without its credential.
 	defers := endpoint.MetaMcpServerID.Valid && caller.connectsLater
 	upstreamPicks := map[uuid.UUID]uuid.UUID{}
 	authClientPicks := map[uuid.UUID]uuid.UUID{}
+	var deferred []uuid.UUID
 	for _, server := range servers {
+		choice, named := requested[server.id]
 		auth := options[server.id]
 		if auth == nil {
-			if defers {
+			err := setupRequired("a server's upstream sign-in is not set up", errChoiceNotSetUp)
+			if defers && awaitsConnection(err, named) {
+				deferred = append(deferred, server.id)
 				continue
 			}
-			return nil, nil, setupRequired("a server's upstream sign-in is not set up", errChoiceNotSetUp)
+			return nil, nil, nil, err
 		}
 		if err := s.headlessReadiness(ctx, endpoint, subject, server, auth); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
-		choice, named := requested[server.id]
 		var selected *consentAuthClientOption
 		if profileChoice, ok := configured[server.id]; ok && !named {
 			selected, err = decideHeadlessChoice(server, auth, profileChoice, true)
@@ -182,11 +188,12 @@ func (s *Service) headlessAuthClientPicks(ctx context.Context, endpoint *Resolve
 		} else {
 			selected, err = decideHeadlessChoice(server, auth, choice, named)
 		}
-		if err != nil && defers && awaitsConnection(err) {
+		if err != nil && defers && awaitsConnection(err, named) {
+			deferred = append(deferred, server.id)
 			continue
 		}
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		if selected == nil {
 			continue
@@ -196,7 +203,7 @@ func (s *Service) headlessAuthClientPicks(ctx context.Context, endpoint *Resolve
 			upstreamPicks[server.id] = selected.registrationID.UUID
 		}
 	}
-	return upstreamPicks, authClientPicks, nil
+	return upstreamPicks, authClientPicks, deferred, nil
 }
 
 // headlessTargetServers is the servers a session for endpoint reaches: its
@@ -342,10 +349,22 @@ func (s *Service) headlessReadiness(ctx context.Context, endpoint *ResolvedMcpEn
 
 // awaitsConnection reports a refusal that only a sign-in the person or an
 // administrator has yet to complete would clear, never a wrong or ambiguous
-// choice.
-func awaitsConnection(err error) bool {
+// choice. A server whose sign-in is not set up is checked before a named
+// credential is, so a request that names one keeps the refusal rather than
+// having an unchecked choice ignored.
+func awaitsConnection(err error, named bool) bool {
 	cause, ok := errors.AsType[headlessChoiceError](err)
-	return ok && (cause == errChoiceNotSetUp || cause == errChoiceNotReady || cause == errChoiceNoneReady)
+	if !ok {
+		return false
+	}
+	switch cause {
+	case errChoiceNotReady, errChoiceNoneReady:
+		return true
+	case errChoiceNotSetUp:
+		return !named
+	case errChoiceNotAccepted, errChoiceServerNotReached, errChoiceTakesNoCredential, errChoiceNeedsCredential, errChoiceDenied, errChoiceNoneAllowed, errChoiceNotNamed:
+	}
+	return false
 }
 
 func setupRequired(description string, cause headlessChoiceError) error {

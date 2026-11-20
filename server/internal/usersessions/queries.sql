@@ -2980,7 +2980,10 @@ ORDER BY tb.original_trigger_id;
 -- Records, for one inbound credential, the upstream OAuth client it uses for
 -- every MCP server it can reach, or an explicit no-auth choice. A NULL
 -- scope_mcp_server_ids keeps issuance-wide reach; a supplied array restricts
--- recording to those servers, and an empty array records nothing. An existing
+-- recording to those servers, and an empty array records nothing.
+-- exclude_mcp_server_ids leaves those servers without a row whatever else
+-- would decide them, for servers issuance deferred until the person connects
+-- them. An existing
 -- client choice is never replaced. An existing no-auth choice is replaced
 -- only once the server has an associated client and one is decided for the
 -- credential: the no-auth choice is unusable by then, and recording the
@@ -3052,6 +3055,8 @@ reachable AS (
     WHERE s.deleted IS FALSE
       AND (sqlc.narg('scope_mcp_server_ids')::uuid[] IS NULL
            OR s.id = ANY(sqlc.narg('scope_mcp_server_ids')::uuid[]))
+      AND (sqlc.narg('exclude_mcp_server_ids')::uuid[] IS NULL
+           OR NOT s.id = ANY(sqlc.narg('exclude_mcp_server_ids')::uuid[]))
       AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
       AND (
         s.user_session_issuer_id = si.id
