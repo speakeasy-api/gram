@@ -183,8 +183,7 @@ func TestCompiledSnapshotIsTheRegistryInDatabaseOrder(t *testing.T) {
 	for _, p := range Products() {
 		want, got := GatewayMatchersFor(p), snapshot.GatewayMatchersFor(p)
 		require.Equal(t, want.VendorKeys, got.VendorKeys, p.ID)
-		slices.Sort(want.ClientIDs)
-		require.Equal(t, want.ClientIDs, got.ClientIDs, p.ID)
+		require.Equal(t, want.ClientIDs, got.ClientIDs, p.ID, "matchers follow the given product's document order")
 		require.Equal(t, BlockableVendorKey(p.VendorKey), snapshot.BlockableVendorKey(p.VendorKey), p.ID)
 	}
 }
