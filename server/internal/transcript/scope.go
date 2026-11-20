@@ -18,6 +18,15 @@ func scoped(id NaturalID, root *Node) NaturalID {
 	return NaturalID{Kind: id.Kind, Value: id.Value + copySep + root.ID.String(), Block: id.Block}
 }
 
+// scopeAll scopes every ID to the tree rooted at root.
+func scopeAll(ids []NaturalID, root *Node) []NaturalID {
+	out := make([]NaturalID, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, scoped(id, root))
+	}
+	return out
+}
+
 // unscoped returns the original ID of a scoped one.
 func unscoped(id NaturalID) (NaturalID, bool) {
 	i := strings.LastIndex(id.Value, copySep)
