@@ -172,7 +172,9 @@ function ProviderPage(): JSX.Element {
         substitutions: {
           [issuerId]: provider?.slug,
           "mcp-sessions": "MCP Sessions",
-          ...(healthOn ? { connections: "Active Sessions" } : {}),
+          ...(healthOn
+            ? { connections: "Active Sessions", "mcp-servers": "MCP servers" }
+            : {}),
         },
         // Connection Logs and Active Sessions are views of the Connections tab.
         insertAfter:

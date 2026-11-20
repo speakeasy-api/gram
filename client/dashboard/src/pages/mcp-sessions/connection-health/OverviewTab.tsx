@@ -140,7 +140,7 @@ export function OverviewTab({
         )}
 
         <p className="text-muted-foreground text-sm">
-          Problems with a service show on that server&apos;s page, under{" "}
+          Problems with a service show on its server&apos;s page, under{" "}
           <Link
             to={routes.mcpSessions.provider.mcpServers.href(providerId)}
             className="text-foreground underline-offset-4 hover:underline"
