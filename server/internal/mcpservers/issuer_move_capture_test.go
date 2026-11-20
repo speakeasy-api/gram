@@ -9,6 +9,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	backfill "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
@@ -49,10 +50,14 @@ func TestUpdateMcpServer_IssuerMoveDoesNotInheritOffers(t *testing.T) {
 				return created.ID, remoteID
 			}
 			moved, movedBackend := create("moved", origin)
+			_, registration := seedRemoteRegistration(t, ctx, ti, orgID, projectID)
 			if tc.shared {
-				create("already there", target)
+				sibling, _ := create("already there", target)
+				require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, ti.conn, orgID, projectID, []uuid.UUID{uuid.MustParse(target)}, []uuid.UUID{registration}))
+				links, err := backfill.New(ti.conn).ListServerAuthClientsFixture(ctx, uuid.MustParse(sibling))
+				require.NoError(t, err)
+				require.Equal(t, []uuid.UUID{backfill.OAuthClientID(orgID, registration, backfill.TypeRemoteSession)}, links)
 			}
-			linkRemoteClientWithID(t, ctx, ti, orgID, projectID, target)
 
 			_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
 				ID: moved, RemoteMcpServerID: &movedBackend, UserSessionIssuerID: &target, Visibility: types.McpServerVisibility("disabled"),
