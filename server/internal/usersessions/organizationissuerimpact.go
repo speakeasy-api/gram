@@ -18,8 +18,7 @@ import (
 )
 
 // serverImpactSeverity ranks a server impact. A blocker stops the
-// consolidation, a warning needs confirming through the fingerprint, and info
-// only reports a pinned association.
+// consolidation and a warning needs confirming through the fingerprint.
 type serverImpactSeverity string
 
 const (
