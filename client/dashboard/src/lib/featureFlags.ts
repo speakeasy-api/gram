@@ -12,7 +12,6 @@ export const FEATURE_FLAGS = {
   // Gates saving a service's enabled identity provider list; Speakeasy vouching follows its issuer state.
   emaProviders: "ema-providers",
   explore: "gram-explore",
-  headlessModeSwitcher: "headless-mode-switcher",
   // UI-only rollout gate for the Intune package download on the Windows
   // device agent setup step.
   intunePackageDownload: "intune-package-download",
