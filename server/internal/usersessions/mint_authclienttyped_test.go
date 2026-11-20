@@ -107,8 +107,9 @@ func TestMintUserSessionRecordsTypedChoicesWithoutIssuerLinks(t *testing.T) {
 	fixtures := authclientbackfill.New(ti.conn)
 	// The offered server's typed client has no legacy association or issuer link.
 	registration := seedUpstream(t, ctx, ti.conn, uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, issuerID, urn.NewUserSubject(auth.UserID), "mint-offered.example.test")
-	_, err := remotesessionsrepo.New(ti.conn).DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx, remotesessionsrepo.DetachProjectRemoteSessionClientFromUserSessionIssuerParams{ProjectID: *auth.ProjectID, OrganizationID: orgID, RemoteSessionClientID: registration, UserSessionIssuerID: issuerID})
+	detachedCount, err := remotesessionsrepo.New(ti.conn).DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx, remotesessionsrepo.DetachProjectRemoteSessionClientFromUserSessionIssuerParams{ProjectID: *auth.ProjectID, OrganizationID: orgID, RemoteSessionClientID: registration, UserSessionIssuerID: issuerID})
 	require.NoError(t, err)
+	require.EqualValues(t, 1, detachedCount)
 	authClient, err := fixtures.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: authclientbackfill.TypeRemoteSession, Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
 	require.NoError(t, err)
 	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: orgID, McpServerID: offered.ID, AuthClientID: authClient, Source: "admin"}))

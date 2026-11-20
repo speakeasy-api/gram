@@ -5982,10 +5982,11 @@ reachable AS (
 picked AS (
     SELECT unnest($6::uuid[]) AS mcp_server_id,
            NULLIF(unnest($7::uuid[]), '00000000-0000-0000-0000-000000000000'::uuid) AS auth_client_id,
-           NULLIF(unnest($8::uuid[]), '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id
+           NULLIF(unnest($8::uuid[]), '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
+           unnest($9::boolean[]) AS explicitly_chosen
 ),
 offered AS (
-    SELECT r.id AS mcp_server_id, ac.id, ac.attachment_scope,
+    SELECT r.id AS mcp_server_id, ac.id, ac.attachment_scope, ac.client_type,
            ac.remote_session_client_id, reg.attachment_scope AS registration_scope,
            (reg.id IS NOT NULL AND rsi.id IS NOT NULL) AS registration_live,
            count(*) OVER (PARTITION BY r.id) AS offer_count
@@ -6011,8 +6012,9 @@ LEFT JOIN picked AS pick ON pick.mcp_server_id = r.id
 LEFT JOIN offered AS chosen ON chosen.mcp_server_id = r.id
   AND (chosen.remote_session_client_id IS NULL OR chosen.registration_live)
   AND (
-    (pick.auth_client_id = chosen.id AND pick.registration_id IS NOT DISTINCT FROM chosen.remote_session_client_id)
-    OR (pick.mcp_server_id IS NULL AND $2::boolean AND chosen.offer_count = 1)
+    (pick.auth_client_id = chosen.id AND pick.registration_id IS NOT DISTINCT FROM chosen.remote_session_client_id
+        AND (chosen.client_type <> 'ema' OR pick.explicitly_chosen))
+    OR (pick.mcp_server_id IS NULL AND $2::boolean AND chosen.offer_count = 1 AND chosen.client_type <> 'ema')
   )
 WHERE chosen.id IS NOT NULL
    OR ((pick.mcp_server_id IS NULL OR (pick.auth_client_id IS NULL AND pick.registration_id IS NULL))
@@ -6029,10 +6031,11 @@ type RecordIssuedAuthClientChoicesParams struct {
 	PickedMcpServerIds  []uuid.UUID
 	PickedAuthClientIds []uuid.UUID
 	PickedClientIds     []uuid.UUID
+	PickedExplicit      []bool
 }
 
 // Persist validated typed picks without inferring from issuer links. Dashboard
-// minting may select the sole offered typed client without an approval page;
+// minting may select the sole offered non-EMA client without an approval page;
 // the resolver still checks permission and readiness before releasing material.
 // An invalid pick never becomes a different choice or a no-auth choice. The
 // registration columns mirror the typed choice for storage compatibility.
@@ -6046,6 +6049,7 @@ func (q *Queries) RecordIssuedAuthClientChoices(ctx context.Context, arg RecordI
 		arg.PickedMcpServerIds,
 		arg.PickedAuthClientIds,
 		arg.PickedClientIds,
+		arg.PickedExplicit,
 	)
 	if err != nil {
 		return 0, err

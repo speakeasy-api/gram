@@ -228,6 +228,7 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		PickedMcpServerIds:  nil,
 		PickedClientIds:     nil,
 		PickedAuthClientIds: nil,
+		PickedExplicit:      nil,
 		ScopeMcpServerIds:   nil,
 		ExcludeMcpServerIds: nil,
 		AllowSoleOffer:      true,

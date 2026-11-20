@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
@@ -157,6 +158,18 @@ func TestHeadlessAuthClientPicks(t *testing.T) {
 		requireOAuthCode(t, err, tokenErrorSetupRequired, "upstream credentials with nothing offered")
 	})
 
+}
+
+func TestHeadlessChoiceRequiresExplicitEMA(t *testing.T) {
+	t.Parallel()
+	server := consentAuthServer{id: uuid.New()}
+	clientID := uuid.New()
+	auth := &consentServerAuth{Status: consentAuthChoose, Options: []consentAuthClientOption{{ID: clientID, Type: authz.AuthClientTypeEMA, State: consentClientReady}}}
+	_, err := decideHeadlessChoice(server, auth, headlessChoice{}, false)
+	requireOAuthCode(t, err, tokenErrorSelectionRequired, "sole EMA")
+	choice, err := decideHeadlessChoice(server, auth, headlessChoice{clientID: validUUID(clientID)}, true)
+	require.NoError(t, err)
+	require.Equal(t, clientID, choice.ID)
 }
 
 func requireOAuthCode(t *testing.T, err error, code, msg string) {

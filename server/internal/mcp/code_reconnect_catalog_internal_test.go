@@ -54,7 +54,7 @@ func TestFreezeConnectionCatalogRejectsInvalidDefinitions(t *testing.T) {
 				hash = consentEvidenceHash(definition)
 			}
 			inventory := &consentToolInventory{StateID: state.ID, Resource: endpointToolSelectionResource(endpoint), Complete: true, Tools: []consentInventoryTool{{Name: tc.tool, Definition: definition, DefinitionHash: hash}}}
-			_, err := service.freezeConnectionCatalog(t.Context(), endpoint, state, state.ClientID, inventory, nil, toolfilter.CatalogModeCached, nil, time.Now().Add(time.Hour))
+			_, err := service.freezeConnectionCatalog(t.Context(), endpoint, state, state.ClientID, inventory, nil, toolfilter.CatalogModeCached, nil, time.Now().Add(time.Hour), true)
 			require.ErrorContains(t, err, tc.want)
 		})
 	}
@@ -74,15 +74,13 @@ func TestReconnectRecordsOnlyReviewedTypedChoices(t *testing.T) {
 	client := f.adminClient(authClientTypeRemoteSession, validUUID(f.registration))
 	previous := &connectionCatalog{IssuerID: issuerID, OrganizationID: f.orgID}
 	next := &connectionCatalog{IssuerID: issuerID, OrganizationID: f.orgID, Members: map[string]connectionCatalogMember{
-		"source": {ServerID: f.serverID, ProjectID: f.projectID, Auth: &connectionCatalogAuth{ClientID: client, RegistrationID: validUUID(f.registration)}},
+		"source": {ServerID: f.serverID, ProjectID: f.projectID, Auth: &connectionCatalogAuth{ClientID: client, RegistrationID: validUUID(f.registration), ExplicitPick: false}},
 	}}
 	replace := func(previous, next *connectionCatalog) {
 		t.Helper()
-		tx, err := pool.Begin(ctx)
-		require.NoError(t, err)
-		defer func() { _ = tx.Rollback(ctx) }()
-		require.NoError(t, replaceReconnectUpstreamChoices(ctx, usersessionsrepo.New(tx), credentialID, previous, next))
-		require.NoError(t, tx.Commit(ctx))
+		require.NoError(t, pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
+			return replaceReconnectUpstreamChoices(ctx, usersessionsrepo.New(tx), credentialID, previous, next)
+		}))
 	}
 	params := authclientbackfill.GetSelectionFixtureParams{CredentialID: credentialID, McpServerID: f.serverID}
 	replace(previous, next)

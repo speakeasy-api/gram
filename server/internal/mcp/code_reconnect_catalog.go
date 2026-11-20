@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -140,6 +141,10 @@ func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, t
 		}
 		return s.finishCodeReconnectApproval(w, r, t, endpoint, state, jtis)
 	}
+	typedChoices, err := authenforcement.ReadEnforced(ctx, tx, endpoint.OrganizationID)
+	if err != nil {
+		return fail(err)
+	}
 	cards, err := s.buildRemoteSessionCards(ctx, endpoint, state, s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID))
 	if err != nil {
 		return fail(err)
@@ -148,7 +153,7 @@ func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, t
 	if err != nil {
 		return fail(err)
 	}
-	frozen, err := s.freezeConnectionCatalog(ctx, endpoint, state, state.CodeReconnect.ClientID, inventory, selection, mode, picks, previous.ExpiresAt)
+	frozen, err := s.freezeConnectionCatalog(ctx, endpoint, state, state.CodeReconnect.ClientID, inventory, selection, mode, picks, previous.ExpiresAt, typedChoices)
 	if err != nil {
 		return fail(err)
 	}
