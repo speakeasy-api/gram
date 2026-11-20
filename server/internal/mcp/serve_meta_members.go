@@ -565,6 +565,7 @@ func (s *Service) admitMetaMembers(
 	organizationID string,
 	candidates []metaMemberCandidate,
 ) (context.Context, []metaMember, []metaMember, error) {
+	shadow := s.newMandatoryShadow(ctx, organizationID)
 	fromAssociations := feature.UpstreamIssuerFromAssociations(ctx, s.features, organizationID)
 	members := make([]metaMember, 0, len(candidates))
 	var denied []metaMember
