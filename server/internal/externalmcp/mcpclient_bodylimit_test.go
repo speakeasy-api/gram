@@ -84,7 +84,8 @@ func listResult(toolName string) map[string]any {
 }
 
 // writeEndless answers with status and contentType, then streams prefix and
-// filler without a Content-Length until the client hangs up.
+// filler without a Content-Length until the client hangs up. written counts
+// filler bytes handed to the connection, not bytes the client has read.
 func writeEndless(w http.ResponseWriter, status int, contentType, prefix string, written *atomic.Int64) {
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Mcp-Session-Id", "limit-session")
@@ -95,9 +96,10 @@ func writeEndless(w http.ResponseWriter, status int, contentType, prefix string,
 	}
 	chunk := bytes.Repeat([]byte("a"), 32<<10)
 	for written.Load() < endlessBodyCap {
-		n, err := w.Write(chunk)
-		written.Add(int64(n))
-		if err != nil || rc.Flush() != nil {
+		// Count before writing: the client can read the chunk, reject the body,
+		// and assert on written while this Write is still returning.
+		written.Add(int64(len(chunk)))
+		if _, err := w.Write(chunk); err != nil || rc.Flush() != nil {
 			return
 		}
 	}
