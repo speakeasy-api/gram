@@ -631,16 +631,22 @@ func hostedMemberTokens(tokens map[uuid.UUID]remotesessions.UpstreamToken, membe
 	if len(member.associatedClients) != 1 || len(tokens) == 0 {
 		return nil, nil
 	}
+	var qualified map[uuid.UUID]remotesessions.UpstreamToken
 	for issuer, token := range tokens {
 		if !member.associatedClients[token.RemoteSessionClientID] || token.Resource != "" {
 			continue
 		}
+		if qualified != nil {
+			return nil, fmt.Errorf("hosted member %q resolved multiple credentials for its assigned registration", member.slug)
+		}
+		qualified = map[uuid.UUID]remotesessions.UpstreamToken{issuer: token}
+	}
+	for _, token := range qualified {
 		if token.ClientCredentialErr != nil {
 			return nil, metaMemberClientCredentialError(member, token.ClientCredentialErr)
 		}
-		return map[uuid.UUID]remotesessions.UpstreamToken{issuer: token}, nil
 	}
-	return nil, nil
+	return qualified, nil
 }
 
 // loadMemberToolset loads the member's toolset row, applying the member

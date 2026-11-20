@@ -927,6 +927,9 @@ func (m *ChallengeManager) resolveClientTokens(
 				attribution.skipped.Note(projectID, c.RemoteSessionIssuerID, c.ClientID, err)
 				continue
 			}
+			if i == len(clients)-1 {
+				return nil, err
+			}
 			// A refined failure can still be outranked by a later client that
 			// needs re-linking. Resolving the rest could cost one failing
 			// upstream refresh each, so their stored state decides instead.

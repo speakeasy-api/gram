@@ -8,11 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/attribute"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -107,35 +103,7 @@ func TestUpstreamIssuerFlag_TunneledGatewayMemberUnderEitherSource(t *testing.T)
 		"on, the member still receives its own token")
 }
 
-// upstreamIssuerParityPoints reads the mcp.upstream_issuer.parity counter
-// back, keyed by attribute set.
-func upstreamIssuerParityPoints(t *testing.T, reader *sdkmetric.ManualReader) map[attribute.Set]int64 {
-	t.Helper()
-
-	var rm metricdata.ResourceMetrics
-	require.NoError(t, reader.Collect(t.Context(), &rm))
-	points := map[attribute.Set]int64{}
-	for _, scope := range rm.ScopeMetrics {
-		for _, m := range scope.Metrics {
-			if m.Name != "mcp.upstream_issuer.parity" {
-				continue
-			}
-			sum, ok := m.Data.(metricdata.Sum[int64])
-			require.True(t, ok, "the parity instrument must be an int64 counter")
-			for _, dp := range sum.DataPoints {
-				points[dp.Attributes] = dp.Value
-			}
-		}
-	}
-	return points
-}
-
-// A hosted gateway member receives only the unqualified token keyed by its
-// upstream issuer, with no client choice to replace it, so the flag decides
-// which token it gets: its column names one provider and its association
-// another. Off, the column-keyed token connects it; on, the association-keyed
-// one does, and only once that provider holds a token. Each tool dispatch
-// counts the two sources as different under either setting.
+// A hosted member always uses its exact registration, independently of the issuer-source flag.
 func TestUpstreamIssuerFlag_HostedGatewayAlwaysUsesItsAssignment(t *testing.T) {
 	t.Parallel()
 

@@ -32,7 +32,7 @@ func TestHostedMemberTokens(t *testing.T) {
 	}
 
 	require.Nil(t, hosted(nil, member), "no tokens stays no tokens")
-	require.Nil(t, hosted(keyed(uuid.New(), entry(uuid.New(), "sibling", "")), member), "a sibling's token never reaches a hosted member")
+	require.Nil(t, hosted(keyed(issuerID, entry(uuid.New(), "sibling", "")), member), "a sibling's token never reaches a hosted member")
 	require.Nil(t, hosted(keyed(issuerID, entry(assigned, "a", "https://member-a.example.com/mcp")), member), "a member-qualified token never reaches a hosted member")
 	require.Nil(t, hosted(keyed(uuid.New(), entry(assigned, "a", "")), metaMember{slug: "m"}), "a member with no assigned registration gets no token")
 
@@ -41,6 +41,10 @@ func TestHostedMemberTokens(t *testing.T) {
 	got := hosted(m, member)
 	require.Len(t, got, 1, "the member's own unqualified token is the hosted credential")
 	require.Equal(t, "own", got[issuerID].Token)
+	_, err := hostedMemberTokens(map[uuid.UUID]remotesessions.UpstreamToken{
+		issuerID: entry(assigned, "own", ""), uuid.New(): entry(assigned, "duplicate", ""),
+	}, member)
+	require.ErrorContains(t, err, "multiple credentials")
 }
 
 func TestHostedMemberTokens_SelfCredential(t *testing.T) {
