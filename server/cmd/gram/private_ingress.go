@@ -83,7 +83,7 @@ func newNetworkIngressServerCommand() *cli.Command {
 			o11y.PullAppInfo(ctx).Command = "network-ingress-server"
 			slog.SetDefault(logger)
 			shutdown, err := o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
-				ServiceName: "gram-network-ingress-server", ServiceVersion: shortGitSHA(), GitSHA: GitSHA,
+				ServiceName: "gram-network-ingress-server", ServiceVersion: shortGitSHA(), GitSHA: GitSHA, Partition: PullPartition(ctx),
 				EnableTracing: c.Bool("with-otel-tracing"), EnableMetrics: c.Bool("with-otel-metrics"),
 			})
 			if err != nil {
