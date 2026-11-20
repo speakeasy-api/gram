@@ -1,4 +1,5 @@
-import { cleanup, renderHook, waitFor } from "@testing-library/react";
+import { waitForHookState as waitFor } from "@/test/waitForHookState";
+import { cleanup, renderHook } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { useGitHubAccountSearch } from "./useGitHubAccountSearch";
 

@@ -204,8 +204,8 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|get-server-metrics|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|get-stripe-checkout-status|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|get-organization-hook-fleet|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-project-redeploy-preview|redeploy-project|list-custom-domains|list-platform-external-credentials|get-gcp-iam-platform-credential|create-gcp-iam-platform-credential|update-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential|get-memory-eval-options|list-memory-eval-runs|get-memory-eval-run|start-memory-eval-run|list-assistant-organizations|repair-organization-assistant-agent-names|list-organization-assistants|migrate-organization-assistant-identities|migrate-organization-assistants-to-kit)",
-		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|get-organization-hook-fleet|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-project-redeploy-preview|redeploy-project|list-custom-domains|list-platform-external-credentials|get-gcp-iam-platform-credential|create-gcp-iam-platform-credential|update-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential|get-memory-eval-options|list-memory-eval-runs|get-memory-eval-run|start-memory-eval-run|list-assistant-organizations|repair-organization-assistant-agent-names|list-organization-assistants|migrate-organization-assistant-identities|migrate-organization-assistants-to-kit|get-hooks-rollout|set-hooks-rollout-default|get-organization-hooks-rollout|set-organization-hooks-rollout|clear-organization-hooks-rollout)",
+		"user-session-clients (create-user-session-client|update-user-session-client-redirect-ur-is|list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|get-attach-impact|delete-user-session-issuer)",
@@ -392,6 +392,7 @@ func ParseEndpoint(
 		agentsListFlags                = flag.NewFlagSet("list", flag.ExitOnError)
 		agentsListCursorFlag           = agentsListFlags.String("cursor", "", "")
 		agentsListLimitFlag            = agentsListFlags.String("limit", "50", "")
+		agentsListProjectIDFlag        = agentsListFlags.String("project-id", "", "")
 		agentsListSearchFlag           = agentsListFlags.String("search", "", "")
 		agentsListNameOrderFlag        = agentsListFlags.String("name-order", "asc", "")
 		agentsListLifecycleFlag        = agentsListFlags.String("lifecycle", "", "")
@@ -1760,6 +1761,9 @@ func ParseEndpoint(
 
 		keysListKeysFlags            = flag.NewFlagSet("list-keys", flag.ExitOnError)
 		keysListKeysAgentIDFlag      = keysListKeysFlags.String("agent-id", "", "")
+		keysListKeysCursorFlag       = keysListKeysFlags.String("cursor", "", "")
+		keysListKeysLimitFlag        = keysListKeysFlags.String("limit", "", "")
+		keysListKeysSearchFlag       = keysListKeysFlags.String("search", "", "")
 		keysListKeysSessionTokenFlag = keysListKeysFlags.String("session-token", "", "")
 
 		keysRevokeKeyFlags            = flag.NewFlagSet("revoke-key", flag.ExitOnError)
@@ -5042,7 +5046,38 @@ func ParseEndpoint(
 		adminMigrateOrganizationAssistantsToKitBodyFlag              = adminMigrateOrganizationAssistantsToKitFlags.String("body", "REQUIRED", "")
 		adminMigrateOrganizationAssistantsToKitAdminSessionTokenFlag = adminMigrateOrganizationAssistantsToKitFlags.String("admin-session-token", "", "")
 
+		adminGetHooksRolloutFlags                 = flag.NewFlagSet("get-hooks-rollout", flag.ExitOnError)
+		adminGetHooksRolloutAdminSessionTokenFlag = adminGetHooksRolloutFlags.String("admin-session-token", "", "")
+
+		adminSetHooksRolloutDefaultFlags                 = flag.NewFlagSet("set-hooks-rollout-default", flag.ExitOnError)
+		adminSetHooksRolloutDefaultBodyFlag              = adminSetHooksRolloutDefaultFlags.String("body", "REQUIRED", "")
+		adminSetHooksRolloutDefaultAdminSessionTokenFlag = adminSetHooksRolloutDefaultFlags.String("admin-session-token", "", "")
+
+		adminGetOrganizationHooksRolloutFlags                 = flag.NewFlagSet("get-organization-hooks-rollout", flag.ExitOnError)
+		adminGetOrganizationHooksRolloutOrganizationIDFlag    = adminGetOrganizationHooksRolloutFlags.String("organization-id", "REQUIRED", "")
+		adminGetOrganizationHooksRolloutAdminSessionTokenFlag = adminGetOrganizationHooksRolloutFlags.String("admin-session-token", "", "")
+
+		adminSetOrganizationHooksRolloutFlags                 = flag.NewFlagSet("set-organization-hooks-rollout", flag.ExitOnError)
+		adminSetOrganizationHooksRolloutBodyFlag              = adminSetOrganizationHooksRolloutFlags.String("body", "REQUIRED", "")
+		adminSetOrganizationHooksRolloutAdminSessionTokenFlag = adminSetOrganizationHooksRolloutFlags.String("admin-session-token", "", "")
+
+		adminClearOrganizationHooksRolloutFlags                 = flag.NewFlagSet("clear-organization-hooks-rollout", flag.ExitOnError)
+		adminClearOrganizationHooksRolloutBodyFlag              = adminClearOrganizationHooksRolloutFlags.String("body", "REQUIRED", "")
+		adminClearOrganizationHooksRolloutAdminSessionTokenFlag = adminClearOrganizationHooksRolloutFlags.String("admin-session-token", "", "")
+
 		userSessionClientsFlags = flag.NewFlagSet("user-session-clients", flag.ContinueOnError)
+
+		userSessionClientsCreateUserSessionClientFlags                = flag.NewFlagSet("create-user-session-client", flag.ExitOnError)
+		userSessionClientsCreateUserSessionClientBodyFlag             = userSessionClientsCreateUserSessionClientFlags.String("body", "REQUIRED", "")
+		userSessionClientsCreateUserSessionClientSessionTokenFlag     = userSessionClientsCreateUserSessionClientFlags.String("session-token", "", "")
+		userSessionClientsCreateUserSessionClientApikeyTokenFlag      = userSessionClientsCreateUserSessionClientFlags.String("apikey-token", "", "")
+		userSessionClientsCreateUserSessionClientProjectSlugInputFlag = userSessionClientsCreateUserSessionClientFlags.String("project-slug-input", "", "")
+
+		userSessionClientsUpdateUserSessionClientRedirectURIsFlags                = flag.NewFlagSet("update-user-session-client-redirect-ur-is", flag.ExitOnError)
+		userSessionClientsUpdateUserSessionClientRedirectURIsBodyFlag             = userSessionClientsUpdateUserSessionClientRedirectURIsFlags.String("body", "REQUIRED", "")
+		userSessionClientsUpdateUserSessionClientRedirectURIsSessionTokenFlag     = userSessionClientsUpdateUserSessionClientRedirectURIsFlags.String("session-token", "", "")
+		userSessionClientsUpdateUserSessionClientRedirectURIsApikeyTokenFlag      = userSessionClientsUpdateUserSessionClientRedirectURIsFlags.String("apikey-token", "", "")
+		userSessionClientsUpdateUserSessionClientRedirectURIsProjectSlugInputFlag = userSessionClientsUpdateUserSessionClientRedirectURIsFlags.String("project-slug-input", "", "")
 
 		userSessionClientsListUserSessionClientsFlags                   = flag.NewFlagSet("list-user-session-clients", flag.ExitOnError)
 		userSessionClientsListUserSessionClientsUserSessionIssuerIDFlag = userSessionClientsListUserSessionClientsFlags.String("user-session-issuer-id", "", "")
@@ -6729,8 +6764,15 @@ func ParseEndpoint(
 	adminListOrganizationAssistantsFlags.Usage = adminListOrganizationAssistantsUsage
 	adminMigrateOrganizationAssistantIdentitiesFlags.Usage = adminMigrateOrganizationAssistantIdentitiesUsage
 	adminMigrateOrganizationAssistantsToKitFlags.Usage = adminMigrateOrganizationAssistantsToKitUsage
+	adminGetHooksRolloutFlags.Usage = adminGetHooksRolloutUsage
+	adminSetHooksRolloutDefaultFlags.Usage = adminSetHooksRolloutDefaultUsage
+	adminGetOrganizationHooksRolloutFlags.Usage = adminGetOrganizationHooksRolloutUsage
+	adminSetOrganizationHooksRolloutFlags.Usage = adminSetOrganizationHooksRolloutUsage
+	adminClearOrganizationHooksRolloutFlags.Usage = adminClearOrganizationHooksRolloutUsage
 
 	userSessionClientsFlags.Usage = userSessionClientsUsage
+	userSessionClientsCreateUserSessionClientFlags.Usage = userSessionClientsCreateUserSessionClientUsage
+	userSessionClientsUpdateUserSessionClientRedirectURIsFlags.Usage = userSessionClientsUpdateUserSessionClientRedirectURIsUsage
 	userSessionClientsListUserSessionClientsFlags.Usage = userSessionClientsListUserSessionClientsUsage
 	userSessionClientsGetUserSessionClientFlags.Usage = userSessionClientsGetUserSessionClientUsage
 	userSessionClientsRefreshUserSessionClientCIMDFlags.Usage = userSessionClientsRefreshUserSessionClientCIMDUsage
@@ -10102,10 +10144,31 @@ func ParseEndpoint(
 			case "migrate-organization-assistants-to-kit":
 				epf = adminMigrateOrganizationAssistantsToKitFlags
 
+			case "get-hooks-rollout":
+				epf = adminGetHooksRolloutFlags
+
+			case "set-hooks-rollout-default":
+				epf = adminSetHooksRolloutDefaultFlags
+
+			case "get-organization-hooks-rollout":
+				epf = adminGetOrganizationHooksRolloutFlags
+
+			case "set-organization-hooks-rollout":
+				epf = adminSetOrganizationHooksRolloutFlags
+
+			case "clear-organization-hooks-rollout":
+				epf = adminClearOrganizationHooksRolloutFlags
+
 			}
 
 		case "user-session-clients":
 			switch epn {
+			case "create-user-session-client":
+				epf = userSessionClientsCreateUserSessionClientFlags
+
+			case "update-user-session-client-redirect-ur-is":
+				epf = userSessionClientsUpdateUserSessionClientRedirectURIsFlags
+
 			case "list-user-session-clients":
 				epf = userSessionClientsListUserSessionClientsFlags
 
@@ -10614,7 +10677,7 @@ func ParseEndpoint(
 				data, err = agentsc.BuildRevokeSessionPayload(*agentsRevokeSessionBodyFlag, *agentsRevokeSessionSessionTokenFlag)
 			case "list":
 				endpoint = c.List()
-				data, err = agentsc.BuildListPayload(*agentsListCursorFlag, *agentsListLimitFlag, *agentsListSearchFlag, *agentsListNameOrderFlag, *agentsListLifecycleFlag, *agentsListOwnerUserIdsFlag, *agentsListRegisteredAfterFlag, *agentsListRegisteredBeforeFlag, *agentsListSessionTokenFlag)
+				data, err = agentsc.BuildListPayload(*agentsListCursorFlag, *agentsListLimitFlag, *agentsListProjectIDFlag, *agentsListSearchFlag, *agentsListNameOrderFlag, *agentsListLifecycleFlag, *agentsListOwnerUserIdsFlag, *agentsListRegisteredAfterFlag, *agentsListRegisteredBeforeFlag, *agentsListSessionTokenFlag)
 			case "create":
 				endpoint = c.Create()
 				data, err = agentsc.BuildCreatePayload(*agentsCreateBodyFlag, *agentsCreateSessionTokenFlag)
@@ -11517,7 +11580,7 @@ func ParseEndpoint(
 				data, err = keysc.BuildExtendAgentKeysPayload(*keysExtendAgentKeysBodyFlag, *keysExtendAgentKeysSessionTokenFlag)
 			case "list-keys":
 				endpoint = c.ListKeys()
-				data, err = keysc.BuildListKeysPayload(*keysListKeysAgentIDFlag, *keysListKeysSessionTokenFlag)
+				data, err = keysc.BuildListKeysPayload(*keysListKeysAgentIDFlag, *keysListKeysCursorFlag, *keysListKeysLimitFlag, *keysListKeysSearchFlag, *keysListKeysSessionTokenFlag)
 			case "revoke-key":
 				endpoint = c.RevokeKey()
 				data, err = keysc.BuildRevokeKeyPayload(*keysRevokeKeyIDFlag, *keysRevokeKeySessionTokenFlag)
@@ -13548,10 +13611,31 @@ func ParseEndpoint(
 			case "migrate-organization-assistants-to-kit":
 				endpoint = c.MigrateOrganizationAssistantsToKit()
 				data, err = adminc.BuildMigrateOrganizationAssistantsToKitPayload(*adminMigrateOrganizationAssistantsToKitBodyFlag, *adminMigrateOrganizationAssistantsToKitAdminSessionTokenFlag)
+			case "get-hooks-rollout":
+				endpoint = c.GetHooksRollout()
+				data, err = adminc.BuildGetHooksRolloutPayload(*adminGetHooksRolloutAdminSessionTokenFlag)
+			case "set-hooks-rollout-default":
+				endpoint = c.SetHooksRolloutDefault()
+				data, err = adminc.BuildSetHooksRolloutDefaultPayload(*adminSetHooksRolloutDefaultBodyFlag, *adminSetHooksRolloutDefaultAdminSessionTokenFlag)
+			case "get-organization-hooks-rollout":
+				endpoint = c.GetOrganizationHooksRollout()
+				data, err = adminc.BuildGetOrganizationHooksRolloutPayload(*adminGetOrganizationHooksRolloutOrganizationIDFlag, *adminGetOrganizationHooksRolloutAdminSessionTokenFlag)
+			case "set-organization-hooks-rollout":
+				endpoint = c.SetOrganizationHooksRollout()
+				data, err = adminc.BuildSetOrganizationHooksRolloutPayload(*adminSetOrganizationHooksRolloutBodyFlag, *adminSetOrganizationHooksRolloutAdminSessionTokenFlag)
+			case "clear-organization-hooks-rollout":
+				endpoint = c.ClearOrganizationHooksRollout()
+				data, err = adminc.BuildClearOrganizationHooksRolloutPayload(*adminClearOrganizationHooksRolloutBodyFlag, *adminClearOrganizationHooksRolloutAdminSessionTokenFlag)
 			}
 		case "user-session-clients":
 			c := usersessionclientsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
+			case "create-user-session-client":
+				endpoint = c.CreateUserSessionClient()
+				data, err = usersessionclientsc.BuildCreateUserSessionClientPayload(*userSessionClientsCreateUserSessionClientBodyFlag, *userSessionClientsCreateUserSessionClientSessionTokenFlag, *userSessionClientsCreateUserSessionClientApikeyTokenFlag, *userSessionClientsCreateUserSessionClientProjectSlugInputFlag)
+			case "update-user-session-client-redirect-ur-is":
+				endpoint = c.UpdateUserSessionClientRedirectURIs()
+				data, err = usersessionclientsc.BuildUpdateUserSessionClientRedirectURIsPayload(*userSessionClientsUpdateUserSessionClientRedirectURIsBodyFlag, *userSessionClientsUpdateUserSessionClientRedirectURIsSessionTokenFlag, *userSessionClientsUpdateUserSessionClientRedirectURIsApikeyTokenFlag, *userSessionClientsUpdateUserSessionClientRedirectURIsProjectSlugInputFlag)
 			case "list-user-session-clients":
 				endpoint = c.ListUserSessionClients()
 				data, err = usersessionclientsc.BuildListUserSessionClientsPayload(*userSessionClientsListUserSessionClientsUserSessionIssuerIDFlag, *userSessionClientsListUserSessionClientsCursorFlag, *userSessionClientsListUserSessionClientsLimitFlag, *userSessionClientsListUserSessionClientsSessionTokenFlag, *userSessionClientsListUserSessionClientsApikeyTokenFlag, *userSessionClientsListUserSessionClientsProjectSlugInputFlag)
@@ -14675,6 +14759,7 @@ func agentsListUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] agents list", os.Args[0])
 	fmt.Fprint(os.Stderr, " -cursor STRING")
 	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -project-id STRING")
 	fmt.Fprint(os.Stderr, " -search STRING")
 	fmt.Fprint(os.Stderr, " -name-order STRING")
 	fmt.Fprint(os.Stderr, " -lifecycle JSON")
@@ -14691,6 +14776,7 @@ func agentsListUsage() {
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
 	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -search STRING: `)
 	fmt.Fprintln(os.Stderr, `    -name-order STRING: `)
 	fmt.Fprintln(os.Stderr, `    -lifecycle JSON: `)
@@ -14701,7 +14787,7 @@ func agentsListUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents list --cursor \"abc123\" --limit 2 --search \"abc123\" --name-order \"desc\" --lifecycle '[\n      \"suspended\"\n   ]' --owner-user-ids '[\n      \"abc123\"\n   ]' --registered-after \"1970-01-01T00:00:01Z\" --registered-before \"1970-01-01T00:00:01Z\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents list --cursor \"abc123\" --limit 2 --project-id \"550e8400-e29b-41d4-a716-446655440000\" --search \"abc123\" --name-order \"desc\" --lifecycle '[\n      \"suspended\"\n   ]' --owner-user-ids '[\n      \"abc123\"\n   ]' --registered-after \"1970-01-01T00:00:01Z\" --registered-before \"1970-01-01T00:00:01Z\" --session-token \"abc123\"")
 }
 
 func agentsCreateUsage() {
@@ -20795,7 +20881,7 @@ func keysUsage() {
 	fmt.Fprintln(os.Stderr, `    create-key: Create a new api key`)
 	fmt.Fprintln(os.Stderr, `    rotate-key: Rotate an API key. Agent-key rotation replaces immutable delegation and directly revokes the old row.`)
 	fmt.Fprintln(os.Stderr, `    extend-agent-keys: Add mcp:connect grants to every live key the caller issued for an agent, so servers the agent is given reach the keys it already runs with. Each key's new policy is checked like issuance: the agent, its owner and the caller must all allow it. Keys issued by someone else are left as they are. The result lists only the keys this call changed: keys that already held the grants, expired keys and other people's keys are not in it.`)
-	fmt.Fprintln(os.Stderr, `    list-keys: List all api keys for an organization`)
+	fmt.Fprintln(os.Stderr, `    list-keys: List an organization's api keys, newest first. Send limit to get one page at a time and follow next_cursor for the rest. Without limit, every matching key is returned in one response.`)
 	fmt.Fprintln(os.Stderr, `    revoke-key: Revoke a api key`)
 	fmt.Fprintln(os.Stderr, `    update-key-policy: Replace an ordinary key's own policy: the mcp:connect and mcp:auth grants, and their blocks, its server and auth client access is evaluated against. Agent keys keep their delegated grants. Requires org admin.`)
 	fmt.Fprintln(os.Stderr, `    verify-key: Verify an api key`)
@@ -20867,20 +20953,26 @@ func keysListKeysUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] keys list-keys", os.Args[0])
 	fmt.Fprint(os.Stderr, " -agent-id STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -search STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List all api keys for an organization`)
+	fmt.Fprintln(os.Stderr, `List an organization's api keys, newest first. Send limit to get one page at a time and follow next_cursor for the rest. Without limit, every matching key is returned in one response.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -agent-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -search STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "keys list-keys --agent-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "keys list-keys --agent-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"aaa\" --limit 2 --search \"aaa\" --session-token \"abc123\"")
 }
 
 func keysRevokeKeyUsage() {
@@ -33117,6 +33209,11 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    list-organization-assistants: Lists every live assistant of one organization with its identity state, runtime, and whether its creator is still a member.`)
 	fmt.Fprintln(os.Stderr, `    migrate-organization-assistant-identities: Gives every assistant of one organization that has no dedicated agent its own agent, owned by the assistant's creator, and binds its triggers to workload identities. The agent starts with access to every MCP server and skill in the assistant's project, administration of the assistant, and project inference only when the creator has it. Assistants whose creator is no longer a member are skipped and reported. Idempotent, so it is safe to run again.`)
 	fmt.Fprintln(os.Stderr, `    migrate-organization-assistants-to-kit: Moves assistants of one organization from the default runtime to Kit. Only an assistant with a usable dedicated agent, a shared user-session issuer in its project, no work in flight, and no runtime still inside its warm window is switched; its previous runtimes are retired and stopped by the runtime janitor. Every other assistant is left unchanged and reported. Idempotent, so it is safe to run again.`)
+	fmt.Fprintln(os.Stderr, `    get-hooks-rollout: Returns the platform-wide hooks version rollout state: the version this build publishes, the default pin, canary organizations, organization overrides and recent changes.`)
+	fmt.Fprintln(os.Stderr, `    set-hooks-rollout-default: Moves the default hooks rollout pin for every organization without an override. Customer organizations receive a hooks version on the next rollout sweep once the pin reaches it. Lowering the pin holds back later versions; it never downgrades a published hooks plugin.`)
+	fmt.Fprintln(os.Stderr, `    get-organization-hooks-rollout: Returns the hooks version rollout state for one organization.`)
+	fmt.Fprintln(os.Stderr, `    set-organization-hooks-rollout: Pins one organization to its own hooks version, regardless of the default pin.`)
+	fmt.Fprintln(os.Stderr, `    clear-organization-hooks-rollout: Removes an organization's hooks version override so it follows the default pin again.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin COMMAND --help\n", os.Args[0])
@@ -35661,12 +35758,112 @@ func adminMigrateOrganizationAssistantsToKitUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin migrate-organization-assistants-to-kit --body '{\n      \"assistant_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"organization_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
 }
 
+func adminGetHooksRolloutUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-hooks-rollout", os.Args[0])
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Returns the platform-wide hooks version rollout state: the version this build publishes, the default pin, canary organizations, organization overrides and recent changes.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-hooks-rollout --admin-session-token \"abc123\"")
+}
+
+func adminSetHooksRolloutDefaultUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin set-hooks-rollout-default", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Moves the default hooks rollout pin for every organization without an override. Customer organizations receive a hooks version on the next rollout sweep once the pin reaches it. Lowering the pin holds back later versions; it never downgrades a published hooks plugin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin set-hooks-rollout-default --body '{\n      \"version\": 2\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminGetOrganizationHooksRolloutUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-organization-hooks-rollout", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Returns the hooks version rollout state for one organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-organization-hooks-rollout --organization-id \"abc123\" --admin-session-token \"abc123\"")
+}
+
+func adminSetOrganizationHooksRolloutUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin set-organization-hooks-rollout", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Pins one organization to its own hooks version, regardless of the default pin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin set-organization-hooks-rollout --body '{\n      \"organization_id\": \"abc123\",\n      \"version\": 2\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminClearOrganizationHooksRolloutUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin clear-organization-hooks-rollout", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Removes an organization's hooks version override so it follows the default pin again.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin clear-organization-hooks-rollout --body '{\n      \"organization_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
 // userSessionClientsUsage displays the usage of the user-session-clients
 // command and its subcommands.
 func userSessionClientsUsage() {
-	fmt.Fprintln(os.Stderr, `Operator visibility into MCP clients registered against a user-session issuer (user_session_clients). Read + revoke. Registrations are written by /mcp/{slug}/register (RFC 7591 DCR) or resolved from a Client ID Metadata Document on /mcp/{slug}/authorize (CIMD); client_id_metadata_uri distinguishes the two.`)
+	fmt.Fprintln(os.Stderr, `Operator management of MCP clients registered against a user-session issuer (user_session_clients). Registrations are written by /mcp/{slug}/register (RFC 7591 DCR), resolved from a Client ID Metadata Document on /mcp/{slug}/authorize (CIMD), or created by an operator through createUserSessionClient; client_id_metadata_uri distinguishes CIMD clients from the rest.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] user-session-clients COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create-user-session-client: Register a confidential client against a user-session issuer on an operator's behalf, for a client that cannot register itself. Speakeasy mints the client_id and client_secret; the secret is returned once and only its hash is stored. Requires project:write on the issuer's project, or org:admin for an organization-owned issuer.`)
+	fmt.Fprintln(os.Stderr, `    update-user-session-client-redirect-ur-is: Replace a client's redirect URIs. Applies to the next /authorize; sessions already issued are unaffected. Rejected for CIMD clients, whose metadata document owns their redirect URIs. Requires project:write on the issuer's project, or org:admin for an organization-owned issuer.`)
 	fmt.Fprintln(os.Stderr, `    list-user-session-clients: List user_session_clients in the caller's project.`)
 	fmt.Fprintln(os.Stderr, `    get-user-session-client: Get a user_session_client by id.`)
 	fmt.Fprintln(os.Stderr, `    refresh-user-session-client-cimd: Force a CIMD client's metadata document to be re-read. Purges the stored cache state (expiry + ETag) before re-fetching, so the read is unconditional: a host answering 304 Not Modified cannot re-confirm the copy the operator is discarding. Rejected for DCR clients. Deliberately bypasses the document cache, so it carries a per-client cooldown: a refresh shortly after the last successful read returns rate_limit_exceeded.`)
@@ -35675,6 +35872,54 @@ func userSessionClientsUsage() {
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s user-session-clients COMMAND --help\n", os.Args[0])
 }
+func userSessionClientsCreateUserSessionClientUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] user-session-clients create-user-session-client", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Register a confidential client against a user-session issuer on an operator's behalf, for a client that cannot register itself. Speakeasy mints the client_id and client_secret; the secret is returned once and only its hash is stored. Requires project:write on the issuer's project, or org:admin for an organization-owned issuer.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-clients create-user-session-client --body '{\n      \"client_name\": \"aa\",\n      \"redirect_uris\": [\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func userSessionClientsUpdateUserSessionClientRedirectURIsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] user-session-clients update-user-session-client-redirect-ur-is", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace a client's redirect URIs. Applies to the next /authorize; sessions already issued are unaffected. Rejected for CIMD clients, whose metadata document owns their redirect URIs. Requires project:write on the issuer's project, or org:admin for an organization-owned issuer.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-clients update-user-session-client-redirect-ur-is --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"redirect_uris\": [\n         \"abc123\",\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 func userSessionClientsListUserSessionClientsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] user-session-clients list-user-session-clients", os.Args[0])

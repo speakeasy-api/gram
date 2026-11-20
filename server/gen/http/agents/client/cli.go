@@ -107,7 +107,7 @@ func BuildRevokeSessionPayload(agentsRevokeSessionBody string, agentsRevokeSessi
 
 // BuildListPayload builds the payload for the agents list endpoint from CLI
 // flags.
-func BuildListPayload(agentsListCursor string, agentsListLimit string, agentsListSearch string, agentsListNameOrder string, agentsListLifecycle string, agentsListOwnerUserIds string, agentsListRegisteredAfter string, agentsListRegisteredBefore string, agentsListSessionToken string) (*agents.ListPayload, error) {
+func BuildListPayload(agentsListCursor string, agentsListLimit string, agentsListProjectID string, agentsListSearch string, agentsListNameOrder string, agentsListLifecycle string, agentsListOwnerUserIds string, agentsListRegisteredAfter string, agentsListRegisteredBefore string, agentsListSessionToken string) (*agents.ListPayload, error) {
 	var err error
 	var cursor *string
 	{
@@ -130,6 +130,16 @@ func BuildListPayload(agentsListCursor string, agentsListLimit string, agentsLis
 			if limit > 200 {
 				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 200, false))
 			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var projectID *string
+	{
+		if agentsListProjectID != "" {
+			projectID = &agentsListProjectID
+			err = goa.MergeErrors(err, goa.ValidateFormat("project_id", *projectID, goa.FormatUUID))
 			if err != nil {
 				return nil, err
 			}
@@ -208,6 +218,7 @@ func BuildListPayload(agentsListCursor string, agentsListLimit string, agentsLis
 	v := &agents.ListPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
+	v.ProjectID = projectID
 	v.Search = search
 	v.NameOrder = nameOrder
 	v.Lifecycle = lifecycle

@@ -16,10 +16,12 @@ import (
 
 // Endpoints wraps the "userSessionClients" service endpoints.
 type Endpoints struct {
-	ListUserSessionClients       goa.Endpoint
-	GetUserSessionClient         goa.Endpoint
-	RefreshUserSessionClientCIMD goa.Endpoint
-	RevokeUserSessionClient      goa.Endpoint
+	CreateUserSessionClient             goa.Endpoint
+	UpdateUserSessionClientRedirectURIs goa.Endpoint
+	ListUserSessionClients              goa.Endpoint
+	GetUserSessionClient                goa.Endpoint
+	RefreshUserSessionClientCIMD        goa.Endpoint
+	RevokeUserSessionClient             goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "userSessionClients" service with
@@ -28,20 +30,143 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ListUserSessionClients:       NewListUserSessionClientsEndpoint(s, a.APIKeyAuth),
-		GetUserSessionClient:         NewGetUserSessionClientEndpoint(s, a.APIKeyAuth),
-		RefreshUserSessionClientCIMD: NewRefreshUserSessionClientCIMDEndpoint(s, a.APIKeyAuth),
-		RevokeUserSessionClient:      NewRevokeUserSessionClientEndpoint(s, a.APIKeyAuth),
+		CreateUserSessionClient:             NewCreateUserSessionClientEndpoint(s, a.APIKeyAuth),
+		UpdateUserSessionClientRedirectURIs: NewUpdateUserSessionClientRedirectURIsEndpoint(s, a.APIKeyAuth),
+		ListUserSessionClients:              NewListUserSessionClientsEndpoint(s, a.APIKeyAuth),
+		GetUserSessionClient:                NewGetUserSessionClientEndpoint(s, a.APIKeyAuth),
+		RefreshUserSessionClientCIMD:        NewRefreshUserSessionClientCIMDEndpoint(s, a.APIKeyAuth),
+		RevokeUserSessionClient:             NewRevokeUserSessionClientEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "userSessionClients" service
 // endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
+	e.CreateUserSessionClient = m(e.CreateUserSessionClient)
+	e.UpdateUserSessionClientRedirectURIs = m(e.UpdateUserSessionClientRedirectURIs)
 	e.ListUserSessionClients = m(e.ListUserSessionClients)
 	e.GetUserSessionClient = m(e.GetUserSessionClient)
 	e.RefreshUserSessionClientCIMD = m(e.RefreshUserSessionClientCIMD)
 	e.RevokeUserSessionClient = m(e.RevokeUserSessionClient)
+}
+
+// NewCreateUserSessionClientEndpoint returns an endpoint function that calls
+// the method "createUserSessionClient" of service "userSessionClients".
+func NewCreateUserSessionClientEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateUserSessionClientPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateUserSessionClient(ctx, p)
+	}
+}
+
+// NewUpdateUserSessionClientRedirectURIsEndpoint returns an endpoint function
+// that calls the method "updateUserSessionClientRedirectURIs" of service
+// "userSessionClients".
+func NewUpdateUserSessionClientRedirectURIsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateUserSessionClientRedirectURIsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdateUserSessionClientRedirectURIs(ctx, p)
+	}
 }
 
 // NewListUserSessionClientsEndpoint returns an endpoint function that calls

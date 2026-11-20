@@ -186,6 +186,31 @@ WHERE api_keys.organization_id = @organization_id
   )
 ORDER BY api_keys.created_at DESC;
 
+-- name: ListAPIKeysByOrganizationPage :many
+-- The keys.list page read: the same rows as ListAPIKeysByOrganization (and,
+-- like it, deliberately not joined to users), walked newest first by keyset.
+-- The page starts after (cursor_created_at, cursor_id). The first page passes
+-- 'infinity' and the largest UUID, so the comparison is always present and
+-- api_keys_organization_id_created_at_id_idx serves every page. A NULL
+-- page_limit means LIMIT ALL; a NULL name_pattern matches every name.
+SELECT api_keys.*
+FROM api_keys
+WHERE api_keys.organization_id = @organization_id
+  AND api_keys.deleted IS FALSE
+  AND api_keys.subject_urn IS NULL
+  AND (api_keys.created_at, api_keys.id) < (@cursor_created_at::timestamptz, @cursor_id::uuid)
+  AND (sqlc.narg(name_pattern)::text IS NULL OR api_keys.name ILIKE sqlc.narg(name_pattern)::text ESCAPE '\')
+  AND NOT EXISTS (
+    SELECT 1
+    FROM litellm_instances li
+    WHERE li.organization_id = api_keys.organization_id
+      AND li.project_id = api_keys.project_id
+      AND li.api_key_id = api_keys.id
+      AND li.deleted IS FALSE
+  )
+ORDER BY api_keys.created_at DESC, api_keys.id DESC
+LIMIT sqlc.narg(page_limit)::int;
+
 -- name: RepairOrphanedAPIKeyCreators :execrows
 -- Points API keys whose created_by_user_id is not a users.id (including the
 -- 'system' placeholder minted by the plugin rollout sweep) at the oldest

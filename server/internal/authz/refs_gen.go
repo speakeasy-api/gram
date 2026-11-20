@@ -175,7 +175,7 @@ func (r MCPServerRef) ToolCall(tool, disposition string) Check {
 	if disposition != "" {
 		dimensions["disposition"] = disposition
 	}
-	return newRefCheck(ScopeMCPConnect, r.id.String(), dimensions, MatchLoose)
+	return newRefCheck(ScopeMCPConnect, r.id.String(), dimensions, MatchLoose).asToolCall()
 }
 
 // EnvironmentRef names one environment resource for a request.

@@ -18,6 +18,10 @@ import (
 // from a role or user:all does not reject a check that a direct grant naming
 // the concrete resource satisfies.
 func (e *Engine) RequireAnyUnblocked(ctx context.Context, checks ...Check) error {
+	checks, refused := e.withoutOtherOrganization(ctx, checks)
+	if len(checks) == 0 && len(refused) > 0 {
+		return e.mapError(ctx, Denied(refused[0].Scope, refused[0].selector()))
+	}
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return err

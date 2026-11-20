@@ -52,7 +52,7 @@ describe("registeredAgentIdentity", () => {
 });
 
 describe("fetchRegisteredAgents", () => {
-  it("returns one server-decided page and forwards the abort signal", async () => {
+  it("returns one server-decided page and forwards the project filter and abort signal", async () => {
     const client = agentsClient();
     const list = page(client, { items: [agent], nextCursor: "next" });
     const signal = new AbortController().signal;
@@ -60,14 +60,26 @@ describe("fetchRegisteredAgents", () => {
     await expect(
       fetchRegisteredAgents(
         client,
-        { cursor: "here", limit: 25, search: "  bot  ", sortOrder: "desc" },
+        {
+          projectId: "project_current",
+          cursor: "here",
+          limit: 25,
+          search: "  bot  ",
+          sortOrder: "desc",
+        },
         signal,
       ),
     ).resolves.toEqual({ items: [agent], nextCursor: "next" });
     // The search is trimmed but not otherwise interpreted: matching is the
     // server's, so the browser must not narrow the page it asked for.
     expect(list).toHaveBeenCalledExactlyOnceWith(
-      { cursor: "here", limit: 25, search: "bot", nameOrder: "desc" },
+      {
+        projectId: "project_current",
+        cursor: "here",
+        limit: 25,
+        search: "bot",
+        nameOrder: "desc",
+      },
       undefined,
       { signal },
     );

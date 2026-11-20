@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   },
   sdk: { name: "sdk" },
   projectSlug: "project-one",
+  projectId: "project-one-id",
   routeProjectSlug: "project-one" as string | undefined,
   scopeOverride: null as string | null,
   search: "?range=30d&from=2025-01-01&to=2025-01-31&tab=ignored",
@@ -35,6 +36,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => mocks.organization,
+  useProject: () => ({ id: mocks.projectId, slug: mocks.projectSlug }),
   useSession: () => mocks.session,
 }));
 vi.mock("@/hooks/useRBACScopeOverride", () => ({
@@ -79,6 +81,7 @@ describe("useAgentIdentityCandidates", () => {
     mocks.session.user.id = "user-one";
     mocks.session.organizationOverride = false;
     mocks.session.impersonatorEmail = undefined;
+    mocks.projectId = "project-one-id";
     mocks.projectSlug = "project-one";
     mocks.routeProjectSlug = "project-one";
     mocks.scopeOverride = null;
@@ -110,6 +113,7 @@ describe("useAgentIdentityCandidates", () => {
         "[]",
         "",
         null,
+        "project-one-id",
       ],
       enabled: false,
       staleTime: 30_000,
@@ -126,7 +130,13 @@ describe("useAgentIdentityCandidates", () => {
     )({ signal, pageParam: "next-cursor" });
     expect(mocks.fetchRegisteredAgents).toHaveBeenCalledWith(
       mocks.sdk,
-      { cursor: "next-cursor", limit: 50, search: "", sortOrder: "asc" },
+      {
+        projectId: "project-one-id",
+        cursor: "next-cursor",
+        limit: 50,
+        search: "",
+        sortOrder: "asc",
+      },
       signal,
     );
     const getNextPage = mocks.queryOptions!.getNextPageParam as (page: {
@@ -135,6 +145,37 @@ describe("useAgentIdentityCandidates", () => {
     expect(getNextPage({ nextCursor: "next" })).toBe("next");
     expect(getNextPage({})).toBeUndefined();
     expect(mocks.fetchNextPage).not.toHaveBeenCalled();
+  });
+
+  it("separates project caches and keeps the org shell unscoped", async () => {
+    const { rerender } = renderHook(() =>
+      useAgentIdentityCandidates({ enabled: true }),
+    );
+    const key = () => mocks.queryOptions!.queryKey as unknown[];
+    expect(key().at(-1)).toBe("project-one-id");
+
+    mocks.routeProjectSlug = "project-two";
+    rerender();
+    expect(queryEnabled()).toBe(false);
+
+    mocks.projectSlug = "project-two";
+    mocks.projectId = "project-two-id";
+    rerender();
+    expect(queryEnabled()).toBe(true);
+    expect(key().at(-1)).toBe("project-two-id");
+
+    mocks.routeProjectSlug = undefined;
+    rerender();
+    expect(queryEnabled()).toBe(true);
+    expect(key().at(-1)).toBeUndefined();
+    await (
+      mocks.queryOptions!.queryFn as (context: object) => Promise<unknown>
+    )({});
+    expect(mocks.fetchRegisteredAgents).toHaveBeenLastCalledWith(
+      mocks.sdk,
+      expect.objectContaining({ projectId: undefined }),
+      undefined,
+    );
   });
 
   it.each([
@@ -185,7 +226,8 @@ describe("useAgentIdentityCandidates", () => {
   });
 
   it("maps names and canonical URNs without exposing them to intent ranking", () => {
-    // Links follow the request project, not the one in the URL.
+    // On org routes, links use the request project as a fallback.
+    mocks.routeProjectSlug = undefined;
     mocks.projectSlug = "request-project";
     mocks.queryData = {
       pages: [{ items: [{ id: "agent/one", name: "Release Agent" }] }],

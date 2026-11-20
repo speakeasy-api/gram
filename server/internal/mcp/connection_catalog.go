@@ -235,6 +235,7 @@ func (c *connectionCatalog) upstreamChoices(credentialID uuid.UUID, typedOnly bo
 		CredentialID:        credentialID,
 		Source:              upstreamclients.SelectionSourceIssuance,
 		ScopeMcpServerIds:   make([]uuid.UUID, 0, len(c.Members)),
+		ExcludeMcpServerIds: nil,
 		PickedMcpServerIds:  nil,
 		PickedClientIds:     nil,
 		PickedAuthClientIds: nil,
@@ -418,7 +419,7 @@ func (s *Service) rejectConnectionCatalog(ctx context.Context, endpoint *Resolve
 // describeCachedMember applies current tool permissions to stored definitions.
 // It never resolves upstream tokens or starts an MCP session.
 func (s *Service) describeCachedMember(ctx context.Context, gate *metaGateContext, member metaMember) (*memberCatalog, error) {
-	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false}
+	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false, instructions: ""}
 	checks := []authz.Check{}
 	var dispositions map[string]string
 	private := member.visibility != "public"

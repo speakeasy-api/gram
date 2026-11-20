@@ -510,6 +510,9 @@ func EncodeListRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 			values.Add("cursor", *p.Cursor)
 		}
 		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		if p.ProjectID != nil {
+			values.Add("project_id", *p.ProjectID)
+		}
 		if p.Search != nil {
 			values.Add("search", *p.Search)
 		}

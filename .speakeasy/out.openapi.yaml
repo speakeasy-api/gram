@@ -9375,6 +9375,14 @@ paths:
             minimum: 1
             type: integer
         - allowEmptyValue: true
+          description: Keep only agents assigned to this project in the active organization.
+          in: query
+          name: project_id
+          schema:
+            description: Keep only agents assigned to this project in the active organization.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
           description: Case-insensitive substring match on the agent name.
           in: query
           name: search
@@ -33519,16 +33527,42 @@ paths:
         name: ExtendAgentAPIKeys
   /rpc/keys.list:
     get:
-      description: List all api keys for an organization
+      description: List an organization's api keys, newest first. Send limit to get one page at a time and follow next_cursor for the rest. Without limit, every matching key is returned in one response.
       operationId: listAPIKeys
       parameters:
         - allowEmptyValue: true
-          description: When set, list keys for this first-class agent
+          description: When set, list keys for this first-class agent. Cannot be combined with cursor, limit or search.
           in: query
           name: agent_id
           schema:
-            description: When set, list keys for this first-class agent
+            description: When set, list keys for this first-class agent. Cannot be combined with cursor, limit or search.
             format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Opaque cursor from a previous response's next_cursor. Returns the keys after that page.
+          in: query
+          name: cursor
+          schema:
+            description: Opaque cursor from a previous response's next_cursor. Returns the keys after that page.
+            maxLength: 512
+            type: string
+        - allowEmptyValue: true
+          description: Page size. When omitted, every matching key is returned and next_cursor is never set.
+          in: query
+          name: limit
+          schema:
+            description: Page size. When omitted, every matching key is returned and next_cursor is never set.
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Only return keys whose name contains this text, ignoring case.
+          in: query
+          name: search
+          schema:
+            description: Only return keys whose name contains this text, ignoring case.
+            maxLength: 255
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -83620,6 +83654,111 @@ paths:
       x-speakeasy-name-override: setSpendCap
       x-speakeasy-react-hook:
         name: setSpendCap
+  /rpc/userSessionClients.create:
+    post:
+      description: Register a confidential client against a user-session issuer on an operator's behalf, for a client that cannot register itself. Speakeasy mints the client_id and client_secret; the secret is returned once and only its hash is stored. Requires project:write on the issuer's project, or org:admin for an organization-owned issuer.
+      operationId: createUserSessionClient
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserSessionClientRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateUserSessionClientResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: createUserSessionClient userSessionClients
+      tags:
+        - userSessionClients
+      x-speakeasy-name-override: create
+      x-speakeasy-react-hook:
+        name: CreateUserSessionClient
   /rpc/userSessionClients.get:
     get:
       description: Get a user_session_client by id.
@@ -84071,6 +84210,111 @@ paths:
       x-speakeasy-name-override: revoke
       x-speakeasy-react-hook:
         name: RevokeUserSessionClient
+  /rpc/userSessionClients.updateRedirectURIs:
+    post:
+      description: Replace a client's redirect URIs. Applies to the next /authorize; sessions already issued are unaffected. Rejected for CIMD clients, whose metadata document owns their redirect URIs. Requires project:write on the issuer's project, or org:admin for an organization-owned issuer.
+      operationId: updateUserSessionClientRedirectURIs
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserSessionClientRedirectURIsRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSessionClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: updateUserSessionClientRedirectURIs userSessionClients
+      tags:
+        - userSessionClients
+      x-speakeasy-name-override: updateRedirectURIs
+      x-speakeasy-react-hook:
+        name: UpdateUserSessionClientRedirectURIs
   /rpc/userSessionConsents.list:
     get:
       description: List consent records for the caller's project.
@@ -96181,6 +96425,48 @@ components:
       description: Form for creating a new unproxied MCP server
       required:
         - url
+    CreateUserSessionClientRequestBody:
+      type: object
+      properties:
+        client_name:
+          type: string
+          description: Display name shown in client listings and on the consent screen.
+          minLength: 1
+          maxLength: 255
+        redirect_uris:
+          type: array
+          items:
+            type: string
+          description: Redirect URIs validated on every /authorize. At least one is required.
+          minItems: 1
+          maxItems: 32
+        token_endpoint_auth_method:
+          type: string
+          description: How the client presents its secret at the token endpoint (RFC 7591).
+          default: client_secret_basic
+          enum:
+            - client_secret_basic
+            - client_secret_post
+        user_session_issuer_id:
+          type: string
+          description: The issuer the client signs in through.
+          format: uuid
+      required:
+        - user_session_issuer_id
+        - client_name
+        - redirect_uris
+    CreateUserSessionClientResult:
+      type: object
+      properties:
+        client:
+          $ref: '#/components/schemas/UserSessionClient'
+        client_secret:
+          type: string
+          description: The minted client secret. Not retrievable again.
+      description: A newly registered client and its secret. The secret is returned only here.
+      required:
+        - client
+        - client_secret
     CreateUserSessionIssuerCimdClientForm:
       type: object
       properties:
@@ -104592,6 +104878,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Key'
+        next_cursor:
+          type: string
+          description: Cursor for the next page of keys.list. Absent on the last page and when no limit was sent.
       required:
         - keys
     ListMCPPlatformToolsetsResult:
@@ -124754,6 +125043,23 @@ components:
       description: Form for updating a tunneled MCP server source
       required:
         - id
+    UpdateUserSessionClientRedirectURIsRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The user_session_client id.
+          format: uuid
+        redirect_uris:
+          type: array
+          items:
+            type: string
+          description: The complete new list of redirect URIs. At least one is required.
+          minItems: 1
+          maxItems: 32
+      required:
+        - id
+        - redirect_uris
     UpdateUserSessionIssuerForm:
       type: object
       properties:
@@ -127229,7 +127535,7 @@ tags:
   - name: usage
     description: Read usage for gram.
   - name: userSessionClients
-    description: Operator visibility into MCP clients registered against a user-session issuer (user_session_clients). Read + revoke. Registrations are written by /mcp/{slug}/register (RFC 7591 DCR) or resolved from a Client ID Metadata Document on /mcp/{slug}/authorize (CIMD); client_id_metadata_uri distinguishes the two.
+    description: Operator management of MCP clients registered against a user-session issuer (user_session_clients). Registrations are written by /mcp/{slug}/register (RFC 7591 DCR), resolved from a Client ID Metadata Document on /mcp/{slug}/authorize (CIMD), or created by an operator through createUserSessionClient; client_id_metadata_uri distinguishes CIMD clients from the rest.
   - name: userSessionConsents
     description: Operator visibility into user_session_consents — persistent consent records per (subject, user_session_client). List + revoke.
   - name: userSessionIssuersCimdClients
