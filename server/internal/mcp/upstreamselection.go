@@ -993,8 +993,10 @@ func (s *Service) applyMemberAuthClient(ctx context.Context, member *metaMember,
 		return
 	case authClientGap:
 		credential := memberCredentialError{&metaMemberError{message: "This server's authentication needs setup or a new sign-in."}}
-		// Only a missing choice is fixed by connecting; any other gap is the
-		// administrator's to fix and links nothing.
+		// Only a missing choice is fixed by connecting the member on its own
+		// page. Other gaps link nothing: an ambiguous choice needs the person
+		// to reconnect the gateway and pick one, and the rest need an
+		// administrator.
 		if res.reason == authClientReasonMissingChoice {
 			member.upstreamUnavailable = memberChoiceGapError{credential}
 			return
