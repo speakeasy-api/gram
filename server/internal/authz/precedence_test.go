@@ -38,7 +38,7 @@ type principalPrecedenceCase struct {
 // principalPrecedenceCases are shared by the runtime and explanation tests, so
 // an explanation is checked against the same fixtures as enforcement.
 func principalPrecedenceCases() []principalPrecedenceCase {
-	serverCheck := MCPCheck(ScopeMCPConnect, "server-1", "project-1")
+	serverCheck := MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Connect()
 	return []principalPrecedenceCase{
 		{
 			name: "direct user grant outranks role block",
@@ -140,7 +140,7 @@ func principalPrecedenceCases() []principalPrecedenceCase {
 				heldBy(precedenceRole, NewGrant(ScopeMCPBlockedRead, "server-1")),
 				heldBy(precedenceUser, NewGrant(ScopeMCPConnect, "server-1")),
 			},
-			check:   MCPCheck(ScopeMCPRead, "server-1", "project-1"),
+			check:   MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Read(),
 			allowed: false,
 		},
 		{
@@ -225,15 +225,15 @@ func TestGrantsAuthorizeNarrowedDirectGrantOutranksRoleBlockOnlyAsFarAsItReaches
 		heldBy(precedenceUser, mcpToolGrant(ScopeMCPConnect, "server-1", "tool-a")),
 	}
 
-	allowed, err := GrantsAuthorize(grants, MCPCheck(ScopeMCPConnect, "server-1", "project-1"))
+	allowed, err := GrantsAuthorize(grants, MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Connect())
 	require.NoError(t, err)
 	require.True(t, allowed, "a tool-scoped direct grant proves server-level access")
 
-	allowed, err = GrantsAuthorize(grants, MCPToolCallCheck("server-1", MCPToolCallDimensions{Tool: "tool-a", Disposition: "", ProjectID: "project-1"}))
+	allowed, err = GrantsAuthorize(grants, MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).ToolCall("tool-a", ""))
 	require.NoError(t, err)
 	require.True(t, allowed)
 
-	allowed, err = GrantsAuthorize(grants, MCPToolCallCheck("server-1", MCPToolCallDimensions{Tool: "tool-b", Disposition: "", ProjectID: "project-1"}))
+	allowed, err = GrantsAuthorize(grants, MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).ToolCall("tool-b", ""))
 	require.NoError(t, err)
 	require.False(t, allowed, "tools outside the direct grant stay blocked")
 }
@@ -271,11 +271,11 @@ func TestGrantsAuthorizeDispositionDirectGrantReachesOnlyMatchingTools(t *testin
 		heldBy(precedenceUser, NewGrantWithSelector(ScopeMCPConnect, direct)),
 	}
 
-	allowed, err := GrantsAuthorize(grants, MCPToolCallCheck("server-1", MCPToolCallDimensions{Tool: "list", Disposition: DispositionReadOnly, ProjectID: "project-1"}))
+	allowed, err := GrantsAuthorize(grants, MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).ToolCall("list", DispositionReadOnly))
 	require.NoError(t, err)
 	require.True(t, allowed)
 
-	allowed, err = GrantsAuthorize(grants, MCPToolCallCheck("server-1", MCPToolCallDimensions{Tool: "unannotated", Disposition: "", ProjectID: "project-1"}))
+	allowed, err = GrantsAuthorize(grants, MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).ToolCall("unannotated", ""))
 	require.NoError(t, err)
 	require.False(t, allowed, "a tool with no derivable disposition is outside a disposition-scoped grant")
 }
@@ -292,9 +292,9 @@ func TestEngineFilterPrincipalPrecedence(t *testing.T) {
 	})
 
 	allowed, err := engine.Filter(ctx, []Check{
-		MCPCheck(ScopeMCPConnect, "server-1", testProjectID),
-		MCPCheck(ScopeMCPConnect, "server-2", testProjectID),
-		MCPCheck(ScopeMCPConnect, "server-3", testProjectID),
+		MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom(testProjectID)).Connect(),
+		MCPServer(MCPServerIDFrom("server-2"), ProjectIDFrom(testProjectID)).Connect(),
+		MCPServer(MCPServerIDFrom("server-3"), ProjectIDFrom(testProjectID)).Connect(),
 	})
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{"server-1", "server-3"}, allowed)
@@ -310,7 +310,7 @@ func TestEngineRequirePrincipalPrecedenceAppliesPerPolicy(t *testing.T) {
 		heldBy(precedenceRole, NewGrant(ScopeMCPConnect, WildcardResource)),
 		heldBy(precedenceRole, NewGrant(ScopeMCPBlockedConnect, "server-1")),
 	}
-	check := MCPCheck(ScopeMCPConnect, "server-1", "project-1")
+	check := MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Connect()
 
 	ctx := principalPolicyTestContext(t, credentialPolicy, agentPolicy, ownerPolicy)
 	var forbidden *oops.ShareableError

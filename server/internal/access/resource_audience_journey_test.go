@@ -67,12 +67,12 @@ func TestResourceAudience_AdministratorJourney(t *testing.T) {
 		return result
 	}
 
-	allows := func(principal urn.Principal, dims authz.MCPToolCallDimensions) bool {
+	allows := func(principal urn.Principal, tool, disposition string) bool {
 		t.Helper()
 		grants, err := authz.LoadGrants(ctx, ti.conn, authCtx.ActiveOrganizationID, []urn.Principal{principal})
 		require.NoError(t, err)
-		dims.ProjectID = mcpServerProjectID(t, ctx, ti.conn, authCtx.ActiveOrganizationID, serverID)
-		allowed, err := authz.GrantsAuthorize(grants, authz.MCPToolCallCheck(serverID, dims))
+		project := mcpServerProjectID(t, ctx, ti.conn, authCtx.ActiveOrganizationID, serverID)
+		allowed, err := authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDFrom(serverID), authz.ProjectIDFrom(project)).ToolCall(tool, disposition))
 		require.NoError(t, err)
 		return allowed
 	}
@@ -115,7 +115,7 @@ func TestResourceAudience_AdministratorJourney(t *testing.T) {
 	require.NotNil(t, rowFor(afterGrant, role, "use"))
 	require.NotNil(t, rowFor(afterGrant, me, "manage"))
 	require.NotEqual(t, start.Version, afterGrant.Version, "the version moves with the rules")
-	require.True(t, allows(role, authz.MCPToolCallDimensions{Tool: "search"}),
+	require.True(t, allows(role, "search", ""),
 		"the role can now call the server's tools")
 
 	// 4. Narrow the role to two tools. The row says so, and the engine agrees.
@@ -124,8 +124,8 @@ func TestResourceAudience_AdministratorJourney(t *testing.T) {
 		&gen.SetResourceAudienceEntry{PrincipalUrn: me.String(), Level: "manage"},
 	)
 	require.ElementsMatch(t, []string{"search", "lookup"}, rowFor(afterNarrowing, role, "use").Tools)
-	require.True(t, allows(role, authz.MCPToolCallDimensions{Tool: "search"}))
-	require.False(t, allows(role, authz.MCPToolCallDimensions{Tool: "purge"}),
+	require.True(t, allows(role, "search", ""))
+	require.False(t, allows(role, "purge", ""),
 		"a tool outside the rule is not reachable")
 
 	// 5. Narrow by annotation instead. The two are alternatives, so the tool
@@ -137,8 +137,8 @@ func TestResourceAudience_AdministratorJourney(t *testing.T) {
 	roleRow := rowFor(afterAnnotation, role, "use")
 	require.Empty(t, roleRow.Tools)
 	require.ElementsMatch(t, []string{"read_only"}, roleRow.Dispositions)
-	require.True(t, allows(role, authz.MCPToolCallDimensions{Tool: "search", Disposition: "read_only"}))
-	require.False(t, allows(role, authz.MCPToolCallDimensions{Tool: "purge", Disposition: "destructive"}))
+	require.True(t, allows(role, "search", "read_only"))
+	require.False(t, allows(role, "purge", "destructive"))
 
 	// 6. Block the role on this server. A block subtracts the whole family, so
 	//    what it had is gone.
@@ -147,7 +147,7 @@ func TestResourceAudience_AdministratorJourney(t *testing.T) {
 		&gen.SetResourceAudienceEntry{PrincipalUrn: me.String(), Level: "manage"},
 	)
 	require.NotNil(t, rowFor(afterBlock, role, "blocked"))
-	require.False(t, allows(role, authz.MCPToolCallDimensions{Tool: "search", Disposition: "read_only"}),
+	require.False(t, allows(role, "search", "read_only"),
 		"a block takes away what the earlier rule gave")
 
 	// 7. Take the role's rule away entirely, leaving the person's.
@@ -192,12 +192,12 @@ func TestResourceAudience_NarrowedBlockSubtractsByAnnotation(t *testing.T) {
 	})
 	role := seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "support")
 
-	allows := func(dims authz.MCPToolCallDimensions) bool {
+	allows := func(tool, disposition string) bool {
 		t.Helper()
 		grants, err := authz.LoadGrants(ctx, ti.conn, authCtx.ActiveOrganizationID, []urn.Principal{role})
 		require.NoError(t, err)
-		dims.ProjectID = mcpServerProjectID(t, ctx, ti.conn, authCtx.ActiveOrganizationID, serverID)
-		allowed, err := authz.GrantsAuthorize(grants, authz.MCPToolCallCheck(serverID, dims))
+		project := mcpServerProjectID(t, ctx, ti.conn, authCtx.ActiveOrganizationID, serverID)
+		allowed, err := authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDFrom(serverID), authz.ProjectIDFrom(project)).ToolCall(tool, disposition))
 		require.NoError(t, err)
 		return allowed
 	}
@@ -255,9 +255,9 @@ func TestResourceAudience_NarrowedBlockSubtractsByAnnotation(t *testing.T) {
 	require.NotNil(t, block, "so does the block")
 	require.ElementsMatch(t, []string{"destructive"}, block.Dispositions)
 
-	require.True(t, allows(authz.MCPToolCallDimensions{Tool: "search", Disposition: "read_only"}),
+	require.True(t, allows("search", "read_only"),
 		"the allow still covers the rest of the server")
-	require.False(t, allows(authz.MCPToolCallDimensions{Tool: "purge", Disposition: "destructive"}),
+	require.False(t, allows("purge", "destructive"),
 		"the narrowed block subtracts the annotation it names")
 }
 

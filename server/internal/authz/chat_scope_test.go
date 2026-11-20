@@ -14,10 +14,10 @@ func TestChatRead_RequiresUnrestrictedGrant(t *testing.T) {
 	t.Parallel()
 
 	admin := []Grant{NewGrant(ScopeChatRead, WildcardResource)}
-	got, _ := matchingGrant(admin, ChatReadCheck("chat_1").expand())
+	got, _ := matchingGrant(admin, Chat(ChatIDFrom("chat_1")).Read().expand())
 	require.NotNil(t, got, "admin chat:read satisfies the read check")
 
-	none, _ := matchingGrant(nil, ChatReadCheck("chat_1").expand())
+	none, _ := matchingGrant(nil, Chat(ChatIDFrom("chat_1")).Read().expand())
 	require.Nil(t, none, "no chat:read grant means no chat read access")
 }
 

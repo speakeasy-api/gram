@@ -42,9 +42,9 @@ func TestPrepareContext_demoOrgGetsEveryUserVisibleScope(t *testing.T) {
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeOrgRead, ResourceID: constants.DemoOrganizationID}))
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeChatRead, ResourceID: "chat_demo"}))
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeOrgAdmin, ResourceID: constants.DemoOrganizationID}))
-	require.NoError(t, engine.Require(ctx, EnvironmentCheck(ScopeEnvironmentRead, "env_demo", testProjectID)))
+	require.NoError(t, engine.Require(ctx, Environment(EnvironmentIDFrom("env_demo"), ProjectIDFrom(testProjectID)).Read()))
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectWrite, ResourceID: "project_demo"}))
-	require.NoError(t, engine.Require(ctx, MCPCheck(ScopeMCPWrite, "mcp_demo", testProjectID)))
+	require.NoError(t, engine.Require(ctx, MCPServer(MCPServerIDFrom("mcp_demo"), ProjectIDFrom(testProjectID)).Write()))
 
 	// Internal scopes stay internal: the demo set is the user-visible
 	// catalogue, not every scope the server declares.

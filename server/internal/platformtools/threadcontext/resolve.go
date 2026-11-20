@@ -43,11 +43,12 @@ func Resolve(ctx context.Context, db *pgxpool.Pool, authorizer *authz.Engine, th
 	if thread.OrganizationID != authCtx.ActiveOrganizationID {
 		return empty, "", oops.E(oops.CodeNotFound, nil, "assistant thread not found")
 	}
-	scope := authz.ScopeAssistantRead
+	assistant := authz.Assistant(authz.AssistantIDOf(thread.AssistantID), authz.ProjectIDOf(*authCtx.ProjectID))
+	check := assistant.Read()
 	if write {
-		scope = authz.ScopeAssistantWrite
+		check = assistant.Write()
 	}
-	if err := authorizer.Require(ctx, authz.AssistantCheck(scope, thread.AssistantID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := authorizer.Require(ctx, check); err != nil {
 		var denied *oops.ShareableError
 		if errors.As(err, &denied) && denied.Code == oops.CodeForbidden {
 			return empty, "", oops.E(oops.CodeNotFound, nil, "assistant thread not found")

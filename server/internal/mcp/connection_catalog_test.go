@@ -953,8 +953,8 @@ func TestConnectionCatalogProgressiveListsOnlySelectedServers(t *testing.T) {
 		require.NoError(t, json.Unmarshal(decodeRPCResponse(t, response)["result"], &result))
 		return result.Instructions
 	}
-	require.True(t, strings.HasPrefix(instructions(specific.token), `Tools from these servers: "Chosen".`+"\n\n"), "a connection names only the servers it approved")
-	require.True(t, strings.HasPrefix(instructions(all.token), `Tools from these servers: "Chosen", "Other".`+"\n\n"))
+	require.True(t, strings.HasPrefix(instructions(specific.token), `Tools from these servers: "Chosen".`+metamcp.ProgressiveMemberInstructionsHint+"\n\n"), "a connection names only the servers it approved")
+	require.True(t, strings.HasPrefix(instructions(all.token), `Tools from these servers: "Chosen", "Other".`+metamcp.ProgressiveMemberInstructionsHint+"\n\n"))
 }
 
 func TestConnectionCatalogConfigurationChangeStopsAdvertisingTools(t *testing.T) {

@@ -1,8 +1,5 @@
-import {
-  act,
-  renderHook as baseRenderHook,
-  waitFor,
-} from "@testing-library/react";
+import { waitForHookState as waitFor } from "@/test/waitForHookState";
+import { act, renderHook as baseRenderHook } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";

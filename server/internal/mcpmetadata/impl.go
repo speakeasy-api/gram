@@ -1131,7 +1131,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	var ic *installContext
 	var err error
 	if privateNetworkInstall {
-		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 			return err
 		}
 		ic, err = s.resolvePrivateInstallContext(ctx, mcpSlug, authCtx.ActiveOrganizationID)

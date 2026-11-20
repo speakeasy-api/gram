@@ -30,51 +30,79 @@ func RefName(kind registry.Kind) string {
 }
 
 // CollectionName is the Go name of the function that names every
-// resource of a kind in one project: environment becomes Environments.
+// resource of a kind in one parent: environment becomes Environments.
 func CollectionName(kind registry.Kind) string {
 	return RefName(kind) + "s"
 }
 
 // hasCollection reports whether a kind gets a generated collection: its
-// resources sit in a project and its ref takes that project and nothing else.
+// resources sit in a project or an organization, and its ref takes, besides
+// the id, that project or nothing at all. A kind that holds other kinds, the
+// project itself, gets none: a project resource is never named by its
+// organization's id.
 func hasCollection(r registry.Registry, t registry.ResourceType) bool {
-	if _, ok := handWrittenRefs[t.Kind]; ok || t.Parent != "project" {
+	if _, ok := handWrittenRefs[t.Kind]; ok {
 		return false
 	}
+	if slices.ContainsFunc(r.Types, func(other registry.ResourceType) bool { return other.Parent == t.Kind }) {
+		return false
+	}
+	keys := refDimensionKeys(r, t)
+	switch t.Parent {
+	case "project":
+		return len(keys) == 0 || (len(keys) == 1 && keys[0] == "project_id")
+	case "org":
+		return len(keys) == 0
+	default:
+		return false
+	}
+}
+
+// refDimensionKeys lists the dimension keys a kind's ref takes.
+func refDimensionKeys(r registry.Registry, t registry.ResourceType) []string {
 	var keys []string
 	for _, d := range t.Dimensions {
 		if refDimension(r, d) {
 			keys = append(keys, d.Key)
 		}
 	}
-	return len(keys) == 1 && keys[0] == "project_id"
+	return keys
 }
 
-// renderCollections writes, for every kind inside a project, a request for
-// all of the project's resources of that kind. It is the kind's permission
-// with the project id as the resource, which is how checks without a single
-// resource (listing, creating, a slug that did not resolve) have always been
-// stored, so existing grants keep matching.
+// renderCollections writes, for every kind inside a project or an
+// organization, a request for all of the parent's resources of that kind. It
+// is the kind's permission with the parent's id as the resource, which is how
+// checks without a single resource (listing, creating, a slug that did not
+// resolve) have always been stored, so existing grants keep matching.
 func renderCollections(b *strings.Builder, r registry.Registry) {
-	b.WriteString("// Collections name every resource of one kind inside a project, for requests\n")
-	b.WriteString("// with no single resource: listing, creating, or a lookup that found nothing.\n")
-	b.WriteString("// Each is the kind's permission with the project id as the resource.\n\n")
+	b.WriteString("// Collections name every resource of one kind inside a project or an\n")
+	b.WriteString("// organization, for requests with no single resource: listing, creating, or a\n")
+	b.WriteString("// lookup that found nothing. Each is the kind's permission with the parent's\n")
+	b.WriteString("// id as the resource.\n\n")
 	for _, t := range r.Types {
 		if !hasCollection(r, t) {
 			continue
 		}
 		name := RefName(t.Kind)
 		plural := CollectionName(t.Kind)
-		fmt.Fprintf(b, "// %sCollection names every %s resource of one project.\ntype %sCollection struct{ project ProjectID }\n\n", name, t.Kind, name)
-		fmt.Fprintf(b, "// %s names every %s resource of project.\n", plural, t.Kind)
-		fmt.Fprintf(b, "func %s(project ProjectID) %sCollection {\n\treturn %sCollection{project: project}\n}\n\n", plural, name, name)
+		parent, parentType, parentNoun := "project", "ProjectID", "project"
+		if t.Parent == "org" {
+			parent, parentType, parentNoun = "org", "OrgID", "organization"
+		}
+		extra := ""
+		if len(refDimensionKeys(r, t)) == 1 {
+			extra = ", c.project"
+		}
+		fmt.Fprintf(b, "// %sCollection names every %s resource of one %s.\ntype %sCollection struct{ %s %s }\n\n", name, t.Kind, parentNoun, name, parent, parentType)
+		fmt.Fprintf(b, "// %s names every %s resource of %s.\n", plural, t.Kind, parent)
+		fmt.Fprintf(b, "func %s(%s %s) %sCollection {\n\treturn %sCollection{%s: %s}\n}\n\n", plural, parent, parentType, name, name, parent, parent)
 		for _, p := range t.Permissions {
 			if slices.ContainsFunc(p.Dimensions, func(d registry.Dimension) bool { return refDimension(r, d) }) {
 				continue
 			}
 			method := ActionMethodName(p.Action)
-			fmt.Fprintf(b, "// %s requests %s on every %s resource of the project.\n", method, ScopeConstantName(t.ScopeFor(p)), t.Kind)
-			fmt.Fprintf(b, "func (c %sCollection) %s() Check {\n\treturn %s(%s{id: c.project.id}, c.project).%s()\n}\n\n", name, method, name, IDTypeName(t.Kind), method)
+			fmt.Fprintf(b, "// %s requests %s on every %s resource of the %s.\n", method, ScopeConstantName(t.ScopeFor(p)), t.Kind, parentNoun)
+			fmt.Fprintf(b, "func (c %sCollection) %s() Check {\n\treturn %s(%s{id: c.%s.id}%s).%s()\n}\n\n", name, method, name, IDTypeName(t.Kind), parent, extra, method)
 		}
 	}
 }
@@ -188,10 +216,6 @@ func renderRefs(r registry.Registry) ([]byte, error) {
 			b.WriteString("\t}\n}\n\n")
 		}
 
-		match := "MatchLoose"
-		if t.Match == registry.MatchStrict {
-			match = "MatchStrict"
-		}
 		for _, p := range t.Permissions {
 			method := ActionMethodName(p.Action)
 			var extra []registry.Dimension
@@ -206,15 +230,22 @@ func renderRefs(r registry.Registry) ([]byte, error) {
 				mparams = append(mparams, paramName(d.Key)+" "+paramType(r, d.Key))
 			}
 			fmt.Fprintf(&b, "func (r %sRef) %s(%s) Check {\n", name, method, strings.Join(mparams, ", "))
+			// A permission that opens keys on a connection has a plain form
+			// that leaves them out: connecting to a server names no tool.
+			// That form is stamped, so the matcher opens those keys.
+			stamp := ""
+			if slices.ContainsFunc(p.Open, func(o registry.OpenKeys) bool { return o.On == registry.OpenOnConnection }) {
+				stamp = ".asConnection()"
+			}
 			if len(extra) == 0 {
-				fmt.Fprintf(&b, "\treturn newRefCheck(%s, r.id.String(), r.dimensions(), %s)\n}\n\n", ScopeConstantName(t.ScopeFor(p)), match)
+				fmt.Fprintf(&b, "\treturn newRefCheck(%s, r.id.String(), r.dimensions())%s\n}\n\n", ScopeConstantName(t.ScopeFor(p)), stamp)
 				continue
 			}
 			b.WriteString("\tdimensions := r.dimensions()\n\tif dimensions == nil {\n\t\tdimensions = map[string]string{}\n\t}\n")
 			for _, d := range extra {
 				fmt.Fprintf(&b, "\tdimensions[%q] = %s.String()\n", d.Key, paramName(d.Key))
 			}
-			fmt.Fprintf(&b, "\treturn newRefCheck(%s, r.id.String(), dimensions, %s)\n}\n\n", ScopeConstantName(t.ScopeFor(p)), match)
+			fmt.Fprintf(&b, "\treturn newRefCheck(%s, r.id.String(), dimensions)%s\n}\n\n", ScopeConstantName(t.ScopeFor(p)), stamp)
 		}
 		for _, p := range t.Permissions {
 			for _, set := range p.DimensionSets {
@@ -223,7 +254,7 @@ func renderRefs(r registry.Registry) ([]byte, error) {
 						return nil, fmt.Errorf("%s:%s dimension set %s uses %q, which the ref already fills in from its constructor", t.Kind, p.Action, set.Method, key)
 					}
 				}
-				renderDimensionSet(&b, name, ScopeConstantName(t.ScopeFor(p)), match, set)
+				renderDimensionSet(&b, name, ScopeConstantName(t.ScopeFor(p)), set)
 			}
 		}
 	}
@@ -250,19 +281,20 @@ func renderRefs(r registry.Registry) ([]byte, error) {
 // renderDimensionSet writes the ref method for one dimension set: the
 // permission's check plus the set's dimensions as arguments, an empty one left
 // out.
-func renderDimensionSet(b *strings.Builder, ref, scope, match string, set registry.DimensionSet) {
+func renderDimensionSet(b *strings.Builder, ref, scope string, set registry.DimensionSet) {
 	params := make([]string, 0, len(set.Keys))
 	for _, key := range set.Keys {
 		params = append(params, paramName(key))
 	}
 	fmt.Fprintf(b, "// %s requests %s with %s. An empty value is left out of the\n", set.Method, scope, strings.Join(set.Keys, " and "))
-	b.WriteString("// check.\n")
+	b.WriteString("// check: a tool with no true hint is unannotated, and an empty disposition\n")
+	b.WriteString("// means the tool's annotations are unknown.\n")
 	fmt.Fprintf(b, "func (r %sRef) %s(%s string) Check {\n", ref, set.Method, strings.Join(params, ", "))
 	b.WriteString("\tdimensions := r.dimensions()\n\tif dimensions == nil {\n\t\tdimensions = map[string]string{}\n\t}\n")
 	for i, key := range set.Keys {
 		fmt.Fprintf(b, "\tif %s != \"\" {\n\t\tdimensions[%q] = %s\n\t}\n", params[i], key, params[i])
 	}
-	fmt.Fprintf(b, "\treturn newRefCheck(%s, r.id.String(), dimensions, %s)\n}\n\n", scope, match)
+	fmt.Fprintf(b, "\treturn newRefCheck(%s, r.id.String(), dimensions).asToolCall()\n}\n\n", scope)
 }
 
 // renderIDs writes one id type per kind that has a generated ref. Each can

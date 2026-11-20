@@ -241,3 +241,18 @@ func RenewTemporaryGrantAccessPath() string {
 func RevokeTemporaryGrantAccessPath() string {
 	return "/rpc/access.revokeTemporaryGrant"
 }
+
+// ListAccessRequestsAccessPath returns the URL path to the access service listAccessRequests HTTP endpoint.
+func ListAccessRequestsAccessPath() string {
+	return "/rpc/access.listAccessRequests"
+}
+
+// DecideAccessRequestAccessPath returns the URL path to the access service decideAccessRequest HTTP endpoint.
+func DecideAccessRequestAccessPath() string {
+	return "/rpc/access.decideAccessRequest"
+}
+
+// WithdrawAccessRequestAccessPath returns the URL path to the access service withdrawAccessRequest HTTP endpoint.
+func WithdrawAccessRequestAccessPath() string {
+	return "/rpc/access.withdrawAccessRequest"
+}

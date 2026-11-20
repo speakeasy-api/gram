@@ -149,6 +149,49 @@ func TestListAgentsKeepsLiveVisibilityWhileOverrideNarrowsPermissions(t *testing
 	require.True(t, listed.Items[1].Permissions.Write)
 }
 
+func TestListAgentsFiltersByProjectBeforePagination(t *testing.T) {
+	t.Parallel()
+	conn := newTestDB(t)
+	seedOrganization(t, conn, "org-a")
+	seedOrganizationUser(t, conn, "org-a", "caller")
+	project := seedProject(t, conn, "org-a", "current")
+	other := seedProject(t, conn, "org-a", "other")
+	for _, fixture := range []struct {
+		name      string
+		projectID uuid.UUID
+	}{
+		{"Alpha", other.ID},
+		{"Bravo", project.ID},
+		{"Charlie", uuid.Nil},
+		{"Delta", project.ID},
+	} {
+		_, err := agentsrepo.New(conn).CreateAgent(t.Context(), agentsrepo.CreateAgentParams{
+			OrganizationID: "org-a", OwnerUserID: "caller", Name: fixture.name,
+			ProjectID: uuid.NullUUID{UUID: fixture.projectID, Valid: fixture.projectID != uuid.Nil},
+		})
+		require.NoError(t, err)
+	}
+	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
+	ctx := validatedHumanContext(t, "org-a", "caller")
+	projectID := project.ID.String()
+
+	first, err := service.List(ctx, &gen.ListPayload{ProjectID: &projectID, Limit: 1})
+	require.NoError(t, err)
+	require.Len(t, first.Items, 1)
+	require.Equal(t, "Bravo", first.Items[0].Name)
+	require.NotNil(t, first.NextCursor)
+
+	second, err := service.List(ctx, &gen.ListPayload{ProjectID: &projectID, Limit: 1, Cursor: first.NextCursor})
+	require.NoError(t, err)
+	require.Len(t, second.Items, 1)
+	require.Equal(t, "Delta", second.Items[0].Name)
+	require.Nil(t, second.NextCursor)
+
+	all, err := service.List(ctx, &gen.ListPayload{})
+	require.NoError(t, err)
+	require.Len(t, all.Items, 4)
+}
+
 func TestListAgentsPagesByNameWithoutRepeatingOrSkipping(t *testing.T) {
 	t.Parallel()
 	conn := newTestDB(t)
