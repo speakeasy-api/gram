@@ -4357,6 +4357,8 @@ type NetworkIngress struct {
 	IdentityRequired bool
 	// @access: secret-restricted
 	CredentialsEncrypted pgtype.Text
+	// @access: secret-restricted
+	CredentialsOrgEncrypted pgtype.Text
 	// @access: confidential
 	AttestorNamespace string
 	// @access: confidential
