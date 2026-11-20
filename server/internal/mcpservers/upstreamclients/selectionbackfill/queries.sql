@@ -175,7 +175,13 @@ SELECT r.id AS mcp_server_id,
                JOIN remote_session_clients AS c
                  ON c.id = a.remote_session_client_id
                 AND c.deleted IS FALSE
+               JOIN remote_session_issuers AS provider
+                 ON provider.id = c.remote_session_issuer_id AND NOT provider.deleted
+               JOIN user_session_issuers AS sign_in
+                 ON sign_in.id = @user_session_issuer_id AND NOT sign_in.deleted
+                AND (sign_in.project_id = sel.project_id OR (sign_in.project_id IS NULL AND sign_in.organization_id = sel.organization_id))
                WHERE a.mcp_server_id = r.id
+                 AND a.project_id = sel.project_id AND a.organization_id = sel.organization_id
                  AND a.remote_session_client_id = sel.remote_session_client_id
                  AND a.deleted IS FALSE
              )

@@ -496,7 +496,7 @@ func TestServeConsentAction_ConnectDerivationErrorFailsClosed(t *testing.T) {
 		func(config *pgxpool.Config) {
 			config.ConnConfig.Tracer = queryFailureTracer("ListOrganizationMcpServersForClients")
 		}, mcp.MetaRuntimeConfig{})
-	ctx, fx := seedMultiClientConsentEndpointWithService(t, ctx, ti)
+	_, fx := seedMultiClientConsentEndpointWithService(t, ctx, ti)
 
 	form := url.Values{}
 	form.Set("state", fx.stateID)

@@ -598,7 +598,8 @@ func TestCommitServerIdentityConfigurationReplacesCurrentClientAtomically(t *tes
 		ID:             replacementClient.ID,
 	})
 	require.NoError(t, err)
-	require.NotContains(t, newClient.UserSessionIssuerIds, userIssuerID)
+	require.Contains(t, newClient.UserSessionIssuerIds, userIssuerID)
+	requireNoAttachmentParent(t, ctx, ti, replacementClient.ID, userIssuerID)
 	storedTarget, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
 		ID:        targetID,
 		ProjectID: projectIDFromContext(t, ctx),
@@ -1150,7 +1151,8 @@ func TestCommitServerIdentityConfigurationReplacesProjectClientOnOrgIssuer(t *te
 	})
 	require.NoError(t, err)
 	require.Equal(t, "project-specific", *result.ClientTier)
-	requireClientBound(t, ctx, ti, projectClientID, userIssuerID, true)
+	requireClientBound(t, ctx, ti, projectClientID, userIssuerID, false)
+	require.Equal(t, []uuid.UUID{uuid.MustParse(result.Client.ID)}, serverAssociatedClients(t, ctx, ti, targetID))
 
 	storedTarget, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
 		ID:        targetID,
@@ -1189,11 +1191,9 @@ func TestCommitServerIdentityConfigurationReplacesClientWhenServerIssuerColumnIs
 	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "stale-column-target")
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "stale-column-current", "", false, []string{"none"})
 	currentClientID := createServerIdentityClient(t, ctx, ti, "stale-column-current-client", currentProviderID, false)
-	// Bound without the restamp, so the server's denormalized column stays NULL.
-	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: currentClientID,
-		UserSessionIssuerID:   userIssuerID,
-	}))
+	// Associate without restamping, so the denormalized column stays NULL.
+	associateServerClient(t, ctx, ti, targetID, currentClientID)
+	recordTypedClients(t, ctx, ti.conn, activeOrganizationID(t, ctx), targetID)
 	require.Equal(t, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, storedIssuer(t, ctx, ti.conn, projectIDFromContext(t, ctx), targetID))
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "stale-column-next", "", false, []string{"none"})
 
@@ -1202,7 +1202,7 @@ func TestCommitServerIdentityConfigurationReplacesClientWhenServerIssuerColumnIs
 	nextClientID, err := uuid.Parse(result.Client.ID)
 	require.NoError(t, err)
 
-	requireClientBound(t, ctx, ti, currentClientID, userIssuerID, true)
+	require.Equal(t, []uuid.UUID{nextClientID}, serverAssociatedClients(t, ctx, ti, targetID))
 	requireNoAttachmentParent(t, ctx, ti, nextClientID, userIssuerID)
 	require.Equal(t, conv.ToNullUUID(nextProviderID), storedIssuer(t, ctx, ti.conn, projectIDFromContext(t, ctx), targetID))
 }
@@ -1246,7 +1246,8 @@ func TestCommitServerIdentityConfigurationReplacesClientForSameProvider(t *testi
 	nextClientID, err := uuid.Parse(result.Client.ID)
 	require.NoError(t, err)
 
-	requireClientBound(t, ctx, ti, currentClientID, userIssuerID, true)
+	requireClientBound(t, ctx, ti, currentClientID, userIssuerID, false)
+	require.Equal(t, []uuid.UUID{nextClientID}, serverAssociatedClients(t, ctx, ti, targetID))
 	requireNoAttachmentParent(t, ctx, ti, nextClientID, userIssuerID)
 	require.Equal(t, conv.ToNullUUID(providerID), storedIssuer(t, ctx, ti.conn, projectIDFromContext(t, ctx), targetID))
 }

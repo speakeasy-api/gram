@@ -294,9 +294,8 @@ func TestCommitAddingAServerIsNotBlockedByAnotherServersAgents(t *testing.T) {
 	requireLiveAgentBindings(t, ctx, ti, alphaClient, issuer)
 }
 
-// A server's callers need only the server's own clients: a sibling's client on
-// the issuer cannot refuse them, while a server with no association of its own
-// still needs every bound client, so it never calls upstream without one.
+// Sharing a sign-in does not make compatibility-only registrations or another
+// server's offers required by a server.
 func TestResolveServerAccessTokensRequiresOnlyTheServersOwnClients(t *testing.T) {
 	t.Parallel()
 
@@ -307,18 +306,16 @@ func TestResolveServerAccessTokensRequiresOnlyTheServersOwnClients(t *testing.T)
 	enc := testenv.NewEncryptionClient(t)
 	manager := newResolveManager(t, ti.conn, enc)
 	issuer := createUserSessionIssuer(t, ctx, ti.conn, "own-clients-issuer")
-	ownClient, ownProvider := seedActiveClient(t, ctx, ti.conn, projectID, issuer, organizationID, "own-clients-own")
-	siblingClient, siblingProvider := seedActiveClient(t, ctx, ti.conn, projectID, issuer, organizationID, "own-clients-sibling")
+	ownClient, ownProvider := seedActiveClient(t, ctx, ti.conn, projectID, uuid.Nil, organizationID, "own-clients-own")
+	siblingClient, siblingProvider := seedActiveClient(t, ctx, ti.conn, projectID, uuid.Nil, organizationID, "own-clients-sibling")
 	associated := createServerIdentityTargetOnIssuer(t, ctx, ti, "own-clients-associated", issuer)
 	unassociated := createServerIdentityTargetOnIssuer(t, ctx, ti, "own-clients-unassociated", issuer)
-	rows, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
-		OrganizationID:        organizationID,
-		RemoteSessionClientID: ownClient,
-		McpServerID:           associated,
-		ProjectID:             projectID,
-	})
-	require.NoError(t, err)
-	require.Equal(t, int64(1), rows)
+	associateClient(t, ctx, ti.conn, organizationID, projectID, associated, ownClient)
+	recordTypedClients(t, ctx, ti.conn, organizationID, associated)
+
+	// A leftover FK parent without a server placement is not an offer.
+	ensureAttachmentParent(t, ctx, ti.conn, siblingClient, issuer)
+	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, siblingClient, issuer))
 
 	// The caller connected the server's own client and never the sibling's.
 	subject := urn.NewUserSubject(auth.UserID)
@@ -341,23 +338,17 @@ func TestResolveServerAccessTokensRequiresOnlyTheServersOwnClients(t *testing.T)
 	require.NotContains(t, tokens, siblingProvider, "a sibling's client is never resolved for this server")
 	require.NoError(t, manager.CheckAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, issuer, subject, uuid.NullUUID{UUID: associated, Valid: true}))
 
-	// The sibling's client belongs to no server yet, so nothing says it is not
-	// this server's: it stays required rather than being skipped.
-	_, err = manager.ResolveServerAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, issuer, subject, unassociated, false)
-	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "a client nothing explains stays fail-closed")
-	require.ErrorIs(t, manager.CheckAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, issuer, subject, uuid.NullUUID{UUID: uuid.Nil, Valid: false}), remotesessions.ErrNoValidToken)
-
-	// Once another server claims it, this server has no upstream credential to
-	// require, as a server that turned off User Identity does not.
-	sibling := createServerIdentityTargetOnIssuer(t, ctx, ti, "own-clients-sibling", issuer)
-	rows, err = upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
-		OrganizationID:        organizationID,
-		RemoteSessionClientID: siblingClient,
-		McpServerID:           sibling,
-		ProjectID:             projectID,
-	})
+	resolved, err = manager.ResolveServerAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, issuer, subject, unassociated, false)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), rows)
+	require.Empty(t, resolved.Tokens, "a compatibility-only client is never resolved")
+	require.NoError(t, manager.CheckAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, issuer, subject, uuid.NullUUID{}))
+
+	// Placing the same client makes it required for that server only.
+	sibling := createServerIdentityTargetOnIssuer(t, ctx, ti, "own-clients-sibling", issuer)
+	associateClient(t, ctx, ti.conn, organizationID, projectID, sibling, siblingClient)
+	recordTypedClients(t, ctx, ti.conn, organizationID, sibling)
+	require.ErrorIs(t, manager.CheckAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, issuer, subject, conv.ToNullUUID(sibling)), remotesessions.ErrNoValidToken)
+	require.NoError(t, manager.CheckAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, issuer, subject, conv.ToNullUUID(associated)))
 	resolved, err = manager.ResolveServerAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, issuer, subject, unassociated, false)
 	require.NoError(t, err)
 	require.Empty(t, resolved.Tokens, "another server's credential is never resolved for this one")
@@ -426,6 +417,8 @@ func TestCommitAutomaticRegistrationNeverReusesAServiceAccountClient(t *testing.
 	require.NoError(t, err)
 	require.NotEqual(t, selfClient.String(), otherResult.Client.ID)
 	require.Equal(t, []uuid.UUID{selfClient}, serverAssociatedClients(t, ctx, ti, own))
+	otherOffers := offeredAuthClients(t, ctx, ti.conn, other)
+	require.Len(t, otherOffers, 1)
 
 	result, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(own, provider))
 	require.NoError(t, err)
@@ -433,6 +426,7 @@ func TestCommitAutomaticRegistrationNeverReusesAServiceAccountClient(t *testing.
 	require.Equal(t, int64(2), requests.Load())
 	require.NotEqual(t, selfClient.String(), result.Client.ID)
 	require.Equal(t, []uuid.UUID{uuid.MustParse(result.Client.ID)}, serverAssociatedClients(t, ctx, ti, own), "the new personal registration is the only placement")
+	require.Equal(t, otherOffers, offeredAuthClients(t, ctx, ti.conn, other), "the sibling server keeps its explicit offer")
 }
 
 // The preview tells a server leaving User Identity what to remove, and the

@@ -435,35 +435,39 @@ func TestResyncMCPServerRemoteSessionIssuers_Associations(t *testing.T) {
 	})
 }
 
-// The read DeleteRemoteSessionClient takes before its purge: the tenancy has
-// to live in the query, since an unowned client must yield nothing.
-func TestListUserSessionIssuersBoundToProjectClient_Scoping(t *testing.T) {
+// Client deletion resyncs places that actually offer the registration, not
+// sibling projects sharing a sign-in issuer or callers in another tenant.
+func TestListServerProjectsOnClientIssuers_Scoping(t *testing.T) {
 	t.Parallel()
-
 	ctx, ti := newTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
-	projectID := *authCtx.ProjectID
-	orgID := authCtx.ActiveOrganizationID
-
+	projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "usi-bindscope")
+	clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, uuid.Nil, orgID, "rsi-bindscope")
 	q := repo.New(ti.conn)
-
-	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-bindscope")
-	clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-bindscope")
-
-	owned, err := q.ListUserSessionIssuersBoundToProjectClient(ctx, repo.ListUserSessionIssuersBoundToProjectClientParams{
-		RemoteSessionClientID: clientID,
-		ProjectID:             conv.ToNullUUID(projectID),
-	})
-	require.NoError(t, err)
-	require.Equal(t, []uuid.UUID{userIssuerID}, owned, "the owning project sees the bindings its delete will purge")
-
+	server := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "bindscope-owner")
 	otherProjectID := createProject(t, ctx, ti.conn, "bindscope-other-project")
-	foreign, err := q.ListUserSessionIssuersBoundToProjectClient(ctx, repo.ListUserSessionIssuersBoundToProjectClientParams{
-		RemoteSessionClientID: clientID,
-		ProjectID:             conv.ToNullUUID(otherProjectID),
-	})
+	seedServerOnIssuer(t, ctx, ti.conn, otherProjectID, userIssuerID, "bindscope-sibling")
+	// An old parent must not give either server reachability on its own.
+	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: clientID, UserSessionIssuerID: userIssuerID,
+	}))
+	params := repo.ListServerProjectsOnClientIssuersParams{OrganizationID: conv.ToPGText(orgID), RemoteSessionClientID: clientID}
+	rows, err := q.ListServerProjectsOnClientIssuers(ctx, params)
 	require.NoError(t, err)
-	require.Empty(t, foreign, "a sibling project must not read another project's client's bindings")
+	require.Empty(t, rows)
+
+	associateClient(t, ctx, ti.conn, orgID, projectID, server, clientID)
+	rows, err = q.ListServerProjectsOnClientIssuers(ctx, params)
+	require.NoError(t, err)
+	require.Equal(t, []repo.ListServerProjectsOnClientIssuersRow{{
+		OrganizationID: orgID, ProjectID: projectID, UserSessionIssuerID: conv.ToNullUUID(userIssuerID),
+	}}, rows, "a sibling project must not inherit reachability from the shared issuer")
+
+	params.OrganizationID = conv.ToPGText(createOrganization(t, ctx, ti.conn, "bindscope-foreign"))
+	rows, err = q.ListServerProjectsOnClientIssuers(ctx, params)
+	require.NoError(t, err)
+	require.Empty(t, rows, "another organization must not learn which project offers this registration")
 }

@@ -698,6 +698,21 @@ func TestRecordUpstreamClientSelectionsFromTypedState(t *testing.T) {
 		f.recordPickedFrom(issuer, credential, nil, true)
 		require.Equal(t, map[uuid.UUID]uuid.UUID{server: registration}, f.selections(credential))
 		require.Equal(t, uuid.NullUUID{UUID: authClient, Valid: true}, f.namedAuthClient(credential, server).AuthClientID)
+
+		pickedCredential := f.session(issuer)
+		n, err := usersessionsrepo.New(f.pool).RecordUpstreamClientSelections(t.Context(), usersessionsrepo.RecordUpstreamClientSelectionsParams{
+			UserSessionIssuerID: issuer,
+			CredentialKind:      upstreamclients.CredentialKindUserSession,
+			CredentialID:        pickedCredential,
+			Source:              upstreamclients.SelectionSourceIssuance,
+			PickedMcpServerIds:  []uuid.UUID{server},
+			PickedClientIds:     []uuid.UUID{registration},
+			PickedAuthClientIds: []uuid.UUID{authClient},
+			TypedOnly:           true,
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, n)
+		require.Equal(t, uuid.NullUUID{UUID: authClient, Valid: true}, f.namedAuthClient(pickedCredential, server).AuthClientID)
 	})
 
 	t.Run("an issuer binding cannot disambiguate competing typed offers", func(t *testing.T) {
