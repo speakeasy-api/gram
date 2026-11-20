@@ -1,4 +1,8 @@
 export const FEATURE_FLAGS = {
+  // Stored access requests: the Access Requests tab, approving a request for
+  // a fixed window, and the pending state on blocked pages. The server
+  // enforces the same key on requestAccess and listAccessRequests.
+  accessRequests: "access-requests",
   inferenceWorkloadSetup: "inference-workload-setup",
   // UI-only visibility; saved runtime selection and backend authorization are independent.
   assistantKitRuntime: "assistant-kit-runtime",

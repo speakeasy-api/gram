@@ -6,6 +6,14 @@ const requestAccess = vi.hoisted(() => ({
   mutateAsync: vi.fn(() => Promise.resolve({ sentToCount: 1 })),
 }));
 
+// The request button looks up the viewer's pending access requests when the
+// rollout is on.
+vi.mock("@gram/client/react-query/accessRequests.js", () => ({
+  useAccessRequests: () => ({
+    data: { requests: [] },
+    refetch: () => Promise.resolve(),
+  }),
+}));
 vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: "project-1" }),
 }));
@@ -15,7 +23,11 @@ vi.mock("@/hooks/useRBAC", () => ({
 }));
 
 vi.mock("@/hooks/useScopeCatalogue", () => ({
-  useScopeCatalogue: () => ({ catalogue: new Map(), tasks: [] }),
+  // log:read can be given temporarily, so it can be requested.
+  useScopeCatalogue: () => ({
+    catalogue: new Map([["log:read", { temporaryGrantable: true }]]),
+    tasks: [],
+  }),
 }));
 
 vi.mock("@gram/client/react-query/requestAccess.js", () => ({
