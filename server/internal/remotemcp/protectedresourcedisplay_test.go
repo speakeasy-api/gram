@@ -21,6 +21,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -34,6 +36,7 @@ import (
 // remote MCP server: a registration bound to a user-session issuer, and one
 // client on an issuer bound to it, carrying the resource's display members.
 type attachedResource struct {
+	serverID            uuid.UUID
 	userSessionIssuerID uuid.UUID
 	issuer              remotesessionsrepo.RemoteSessionIssuer
 	client              remotesessionsrepo.RemoteSessionClient
@@ -59,6 +62,9 @@ func seedAttachedResource(t *testing.T, ctx context.Context, ti *testInstance, s
 	})
 	require.NoError(t, err)
 
+	slug := "catalogue-target-" + uuid.NewString()[:8]
+	target, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{ID: uuid.New(), ProjectID: projectID, Name: conv.ToPGText(slug), Slug: conv.ToPGText(slug), RemoteMcpServerID: conv.ToNullUUID(server.ID), UserSessionIssuerID: conv.ToNullUUID(usi.ID), Visibility: "private"})
+	require.NoError(t, err)
 	registrations := platformrepo.New(ti.conn)
 	registration, err := registrations.CreatePlatformMCPCatalogRegistration(ctx, platformrepo.CreatePlatformMCPCatalogRegistrationParams{
 		OrganizationID:       authCtx.ActiveOrganizationID,
@@ -79,7 +85,7 @@ func seedAttachedResource(t *testing.T, ctx context.Context, ti *testInstance, s
 		RemoteMcpServerOwned:   true,
 		UserSessionIssuerID:    conv.ToNullUUID(usi.ID),
 		UserSessionIssuerOwned: true,
-		McpServerID:            uuid.NullUUID{},
+		McpServerID:            conv.ToNullUUID(target.ID),
 		McpServerOwned:         false,
 		McpEndpointID:          uuid.NullUUID{},
 		McpEndpointOwned:       false,
@@ -108,7 +114,11 @@ func seedAttachedResource(t *testing.T, ctx context.Context, ti *testInstance, s
 	})
 	require.NoError(t, err)
 	client := seedIssuerClient(t, ctx, ti, issuer, usi.ID, resourceIdentifier)
-	return attachedResource{userSessionIssuerID: usi.ID, issuer: issuer, client: client}
+	offers := authclientbackfill.New(ti.conn)
+	authClientID, err := offers.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: conv.ToNullUUID(projectID), ClientType: authclientbackfill.TypeRemoteSession, Source: "admin", RemoteSessionClientID: conv.ToNullUUID(client.ID)})
+	require.NoError(t, err)
+	require.NoError(t, offers.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID, McpServerID: target.ID, AuthClientID: authClientID, Source: "admin"}))
+	return attachedResource{serverID: target.ID, userSessionIssuerID: usi.ID, issuer: issuer, client: client}
 }
 
 // seedIssuerClient registers one client on issuer, binds it to the
@@ -216,6 +226,9 @@ func TestUpdateServer_ReprobesResourceDisplayOnClientRegardlessOfIssuerSlug(t *t
 	server := seedRemoteMcpServerWithURL(t, ctx, ti, "https://old.example.test")
 	attached := seedAttachedResource(t, ctx, ti, server, "https://old.example.test")
 
+	// An equally scoped compatibility-only registration must not be renamed.
+	stale := seedIssuerClient(t, ctx, ti, attached.issuer, attached.userSessionIssuerID, server.Url)
+
 	beforeAudit, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientUpdate)
 	require.NoError(t, err)
 	updateServerURL(t, ctx, ti, server, upstream.URL)
@@ -226,6 +239,8 @@ func TestUpdateServer_ReprobesResourceDisplayOnClientRegardlessOfIssuerSlug(t *t
 	require.Equal(t, "https://docs.example.test/mcp", conv.FromPGTextOrEmpty[string](client.ResourceDocumentation))
 	require.False(t, client.ResourcePolicyUri.Valid, "a link the resource no longer advertises clears")
 	require.Equal(t, "https://example.test/tos", conv.FromPGTextOrEmpty[string](client.ResourceTosUri))
+
+	require.Equal(t, server.Url, loadClient(t, ctx, ti, stale).ResourceIdentifier.String)
 
 	issuer, err := remotesessionsrepo.New(ti.conn).GetRemoteSessionIssuerBySlug(ctx, remotesessionsrepo.GetRemoteSessionIssuerBySlugParams{Slug: attached.issuer.Slug, ProjectID: attached.issuer.ProjectID})
 	require.NoError(t, err)
@@ -719,8 +734,7 @@ func TestUpdateServer_ClientDeletedDuringClaimIsSkipped(t *testing.T) {
 	require.Equal(t, "https://b.example.test/tos", conv.FromPGTextOrEmpty[string](client.ResourceTosUri))
 }
 
-// An organization-scoped client (no project of its own) bound to the server's
-// registration is claimed and refreshed like a project one.
+// An organization-owned client explicitly offered on the target is also writable.
 func TestUpdateServer_ReprobesOrganizationScopedClient(t *testing.T) {
 	t.Parallel()
 
@@ -732,6 +746,12 @@ func TestUpdateServer_ReprobesOrganizationScopedClient(t *testing.T) {
 	attached := seedAttachedResource(t, ctx, ti, server, "https://a.example.test/mcp")
 	orgClient := seedScopedIssuerClient(t, ctx, ti, attached.issuer, uuid.NullUUID{}, attached.userSessionIssuerID, "https://a.example.test/mcp")
 	require.False(t, orgClient.ProjectID.Valid)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	offers := authclientbackfill.New(ti.conn)
+	authClientID, err := offers.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: uuid.NullUUID{}, ClientType: authclientbackfill.TypeRemoteSession, Source: "admin", RemoteSessionClientID: conv.ToNullUUID(orgClient.ID)})
+	require.NoError(t, err)
+	require.NoError(t, offers.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID, McpServerID: attached.serverID, AuthClientID: authClientID, Source: "admin"}))
 
 	updateServerURL(t, ctx, ti, server, upstream.URL)
 

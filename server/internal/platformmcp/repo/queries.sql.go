@@ -5492,40 +5492,46 @@ func (q *Queries) ListPlatformMCPAssignedPluginInventory(ctx context.Context, ar
 	return items, nil
 }
 
-const listPlatformMCPCatalogRegistrationsByRemoteMcpServer = `-- name: ListPlatformMCPCatalogRegistrationsByRemoteMcpServer :many
-SELECT id, user_session_issuer_id
-FROM platform_mcp_catalog_registrations
-WHERE remote_mcp_server_id = $1
-  AND organization_id = $2
-  AND project_id = $3
-  AND deleted IS FALSE
-ORDER BY id
+const listPlatformMCPCatalogOfferTargets = `-- name: ListPlatformMCPCatalogOfferTargets :many
+SELECT DISTINCT m.id
+FROM platform_mcp_catalog_registrations AS r
+JOIN mcp_servers AS m
+  ON m.id = r.mcp_server_id
+ AND m.project_id = r.project_id
+ AND m.remote_mcp_server_id = r.remote_mcp_server_id
+ AND m.user_session_issuer_id = r.user_session_issuer_id
+ AND m.deleted IS FALSE
+ AND m.visibility <> 'disabled'
+JOIN projects AS p ON p.id = m.project_id AND p.organization_id = r.organization_id AND p.deleted IS FALSE
+WHERE r.remote_mcp_server_id = $1
+  AND r.organization_id = $2
+  AND r.project_id = $3
+  AND r.status = 'registered'
+  AND r.deleted IS FALSE
+ORDER BY m.id
 `
 
-type ListPlatformMCPCatalogRegistrationsByRemoteMcpServerParams struct {
+type ListPlatformMCPCatalogOfferTargetsParams struct {
 	RemoteMcpServerID uuid.NullUUID
 	OrganizationID    string
 	ProjectID         uuid.UUID
 }
 
-type ListPlatformMCPCatalogRegistrationsByRemoteMcpServerRow struct {
-	ID                  uuid.UUID
-	UserSessionIssuerID uuid.NullUUID
-}
-
-func (q *Queries) ListPlatformMCPCatalogRegistrationsByRemoteMcpServer(ctx context.Context, arg ListPlatformMCPCatalogRegistrationsByRemoteMcpServerParams) ([]ListPlatformMCPCatalogRegistrationsByRemoteMcpServerRow, error) {
-	rows, err := q.db.Query(ctx, listPlatformMCPCatalogRegistrationsByRemoteMcpServer, arg.RemoteMcpServerID, arg.OrganizationID, arg.ProjectID)
+// A stale registration cannot claim a resource through a different MCP server
+// or a server that has moved to another source or sign-in.
+func (q *Queries) ListPlatformMCPCatalogOfferTargets(ctx context.Context, arg ListPlatformMCPCatalogOfferTargetsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPCatalogOfferTargets, arg.RemoteMcpServerID, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListPlatformMCPCatalogRegistrationsByRemoteMcpServerRow
+	var items []uuid.UUID
 	for rows.Next() {
-		var i ListPlatformMCPCatalogRegistrationsByRemoteMcpServerRow
-		if err := rows.Scan(&i.ID, &i.UserSessionIssuerID); err != nil {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
