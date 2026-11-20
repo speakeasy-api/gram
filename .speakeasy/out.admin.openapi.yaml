@@ -1352,6 +1352,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: getHooksReleaseProgress
   /admin/hooksRollout.setDefault:
     post:
       tags:
