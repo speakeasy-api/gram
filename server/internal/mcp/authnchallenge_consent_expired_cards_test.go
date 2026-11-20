@@ -559,6 +559,16 @@ func TestServeConsentAction_TypedRegistrationCardActionsWithoutASignInLink(t *te
 			requireProbe(t, fx.member.drain(), "typed-token", true, true)
 			require.Equal(t, "valid", storedSession(t, ctx, fx).ValidationStatus.String)
 
+			if tc.sibling {
+				// An old binding and saved grant cannot turn a registration into an offer.
+				form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"connect"}, "client_id": {linked.String()}}
+				req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				refused := httptest.NewRecorder()
+				require.ErrorContains(t, fx.ti.service.ServeConsentAction(refused, req, fx.endpoint), "unknown remote session client for this MCP server")
+				require.Empty(t, refused.Header().Get("Location"))
+			}
+
 			form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"disconnect"}, "client_id": {registration.String()}}
 			req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
