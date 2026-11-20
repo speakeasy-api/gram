@@ -5,6 +5,7 @@ import {
   fireEvent,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -88,20 +89,30 @@ async function open(extra?: React.ReactNode): Promise<void> {
   await screen.findByRole("dialog");
 }
 
+function dialogQueries(): ReturnType<typeof within> {
+  return within(screen.getByRole("dialog"));
+}
+
 function nameField(): HTMLInputElement {
-  return screen.getByLabelText("Company URL") as HTMLInputElement;
+  return dialogQueries().getByLabelText("Company URL") as HTMLInputElement;
 }
 
 function organizationNameField(): HTMLInputElement {
-  return screen.getByLabelText("Organization name") as HTMLInputElement;
+  return dialogQueries().getByLabelText(
+    "Organization name",
+  ) as HTMLInputElement;
 }
 
 function slugField(): HTMLInputElement {
-  return screen.getByLabelText("Organization slug") as HTMLInputElement;
+  return dialogQueries().getByLabelText(
+    "Organization slug",
+  ) as HTMLInputElement;
 }
 
 function submitButton(): HTMLButtonElement {
-  return screen.getByRole("button", { name: /^(Create|Creating\.\.\.)$/ });
+  return dialogQueries().getByRole("button", {
+    name: /^(Create|Creating\.\.\.)$/,
+  });
 }
 
 // The form rather than the button: Enter in the field submits it too, so this
@@ -117,7 +128,7 @@ function type(value: string): void {
 }
 
 function confirmOwnership(): void {
-  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(dialogQueries().getByRole("checkbox"));
 }
 
 function fillConfirmedURL(value = "example.com"): void {
@@ -369,7 +380,7 @@ describe("an empty URL", () => {
 describe("cancelling", () => {
   it("gives the keyboard back to the trigger", async () => {
     await open();
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(dialogQueries().getByRole("button", { name: "Cancel" }));
 
     // Radix restores through the trigger, which is why this dialog needs no
     // focus rescue of its own. Restoration runs on a timeout, so this waits.
@@ -383,7 +394,7 @@ describe("cancelling", () => {
   it("sends nothing", async () => {
     await open();
     fillConfirmedURL();
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(dialogQueries().getByRole("button", { name: "Cancel" }));
 
     await act(async () => {
       await Promise.resolve();
@@ -428,13 +439,15 @@ describe("a write in flight", () => {
       expect(submitButton().disabled).toBe(true);
     });
     expect(submitButton().textContent).toBe("Creating...");
-    const cancel = screen.getByRole("button", { name: "Cancel" });
+    const cancel = dialogQueries().getByRole("button", { name: "Cancel" });
     expect((cancel as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
     expect(nameField().disabled).toBe(true);
     expect(organizationNameField().disabled).toBe(true);
     expect(slugField().disabled).toBe(true);
-    expect(screen.getByRole("checkbox").hasAttribute("disabled")).toBe(true);
+    expect(dialogQueries().getByRole("checkbox").hasAttribute("disabled")).toBe(
+      true,
+    );
     expect(nameField().value).toBe("example.com");
 
     await act(async () => {
@@ -477,9 +490,9 @@ describe("a refusal", () => {
 
     expect((await screen.findByRole("alert")).textContent).toBe(reason);
     expect(nameField().value).toBe("https://example.com");
-    expect(screen.getByRole("checkbox").getAttribute("aria-checked")).toBe(
-      "true",
-    );
+    expect(
+      dialogQueries().getByRole("checkbox").getAttribute("aria-checked"),
+    ).toBe("true");
     expect(announce).not.toHaveBeenCalled();
     expect(mocks.createOrganization).toHaveBeenCalledTimes(1);
   });
@@ -573,7 +586,7 @@ describe("a refusal", () => {
     submitForm();
     await screen.findByRole("alert");
 
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(dialogQueries().getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     fireEvent.click(
       screen.getByRole("button", { name: "Create organization" }),
@@ -584,9 +597,9 @@ describe("a refusal", () => {
     expect(nameField().value).toBe("");
     expect(organizationNameField().value).toBe("");
     expect(slugField().value).toBe("");
-    expect(screen.getByRole("checkbox").getAttribute("aria-checked")).toBe(
-      "false",
-    );
+    expect(
+      dialogQueries().getByRole("checkbox").getAttribute("aria-checked"),
+    ).toBe("false");
   });
 });
 
@@ -618,9 +631,9 @@ describe("domain ownership", () => {
     fillConfirmedURL();
     expect(submitButton().disabled).toBe(false);
     type("other.example.com");
-    expect(screen.getByRole("checkbox").getAttribute("aria-checked")).toBe(
-      "false",
-    );
+    expect(
+      dialogQueries().getByRole("checkbox").getAttribute("aria-checked"),
+    ).toBe("false");
     expect(submitButton().disabled).toBe(true);
     submitForm();
     await act(async () => {
