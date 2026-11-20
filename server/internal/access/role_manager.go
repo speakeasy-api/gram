@@ -314,6 +314,26 @@ type RoleAuditActor struct {
 // Keep access service call sites concise while exposing the actor to other packages.
 type accessAuditActor = RoleAuditActor
 
+// validateRoleGrants checks a role write before anything is stored, so a bad
+// grant is a 400 rather than a failed write. For example, an mcp:write rule
+// limited to one tool is refused here: tools only limit mcp:connect.
+func validateRoleGrants(grants []*authz.RoleGrant) error {
+	if err := authz.ValidateGrantSource(authz.GrantSourceRoles, grants); err != nil {
+		return err
+	}
+	for _, grant := range grants {
+		if grant == nil {
+			continue
+		}
+		for _, sel := range grant.Selectors {
+			if err := authz.ValidateSelector(authz.Scope(grant.Scope), sel); err != nil {
+				return fmt.Errorf("invalid selector for scope %q: %w", grant.Scope, err)
+			}
+		}
+	}
+	return nil
+}
+
 // CreateRole creates the local role, grants, optional assignments, and audit
 // entry atomically, then best-effort syncs WorkOS after commit.
 func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID string, actor RoleAuditActor, payload *gen.CreateRolePayload) (RoleCreateResult, error) {
@@ -344,7 +364,7 @@ func (r *RoleManager) CreateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 	}
 	description := conv.PtrValOr(payload.Description, "")
 	grants := roleGrantPayloads(payload.Grants)
-	if err := authz.ValidateGrantSource(authz.GrantSourceRoles, grants); err != nil {
+	if err := validateRoleGrants(grants); err != nil {
 		return RoleCreateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, err, "invalid access role grant: %s", err).LogError(ctx, r.logger)
 	}
 
@@ -537,10 +557,10 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 	}
 	addGrants := roleGrantPayloads(payload.AddGrants)
 	removeGrants := roleGrantPayloads(payload.RemoveGrants)
-	if err := authz.ValidateGrantSource(authz.GrantSourceRoles, addGrants); err != nil {
+	if err := validateRoleGrants(addGrants); err != nil {
 		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, err, "invalid access role grant: %s", err).LogError(ctx, r.logger)
 	}
-	if err := authz.ValidateGrantSource(authz.GrantSourceRoles, removeGrants); err != nil {
+	if err := validateRoleGrants(removeGrants); err != nil {
 		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, err, "invalid access role grant: %s", err).LogError(ctx, r.logger)
 	}
 
