@@ -299,6 +299,8 @@ jobs:
         # Reruns that only update an existing pin PR produce no URL and stay
         # quiet; the channel hears about each release once.
         if: steps.pr.outputs.url
+        # A Slack outage must not stop the pin PR from being approved and merged.
+        continue-on-error: true
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_CHANNEL_ID: C0ARJG28X29
@@ -330,7 +332,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           BRANCH: ${{ steps.pr.outputs.branch }}
-        run: gh pr review "$BRANCH" --approve --body "Approved by the hooks release workflow. Customers stay at their admin rollout pin."
+        run: gh pr review "$BRANCH" --approve --body "Approved by the hooks release workflow. Canary organizations and first-time publishes use the current release; other customers stay at their admin rollout pin."
       - name: Merge the pin pull request when its checks pass
         env:
           GH_TOKEN: ${{ steps.bot-token.outputs.token }}
