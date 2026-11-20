@@ -373,18 +373,19 @@ func clientScopes(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID, or
 	}
 	out := make([]*gen.RemoteMcpServerClientScopes, 0, len(rows))
 	for _, r := range rows {
-		resolved := remotesessions.ClientConnectionScopes(remotesessions.ConnectionScopeInputFromClientRow(r), cached, owners[r.ClientID])
-		out = append(out, &gen.RemoteMcpServerClientScopes{
-			ClientID:                 r.ClientID.String(),
-			IssuerName:               conv.PtrEmpty(strings.TrimSpace(r.IssuerName.String)),
-			IssuerURL:                &r.IssuerUrl,
-			ScopeSource:              string(resolved.Source),
-			RequestedScopes:          conv.DefaultSlice(resolved.Scopes, []string{}),
-			UnadvertisedPinnedScopes: conv.DefaultSlice(resolved.Unadvertised, []string{}),
-			PinWouldDecide:           discover && owners[r.ClientID] && len(r.ClientScope) == 0 && len(cached.ChallengeScopes) == 0,
-		})
+		out = append(out, clientScopeView(remotesessions.ConnectionScopeInputFromClientRow(r), cached, owners[r.ClientID], r.IssuerName.String, r.IssuerUrl))
 	}
 	return out, nil
+}
+
+func clientScopeView(input remotesessions.ConnectionScopeInput, cached remotesessions.ResourceScopes, owns bool, issuerName, issuerURL string) *gen.RemoteMcpServerClientScopes {
+	resolved := remotesessions.ClientConnectionScopes(input, cached, owns)
+	return &gen.RemoteMcpServerClientScopes{
+		ClientID: input.ClientID.String(), IssuerName: conv.PtrEmpty(strings.TrimSpace(issuerName)), IssuerURL: &issuerURL,
+		ScopeSource: string(resolved.Source), RequestedScopes: conv.DefaultSlice(resolved.Scopes, []string{}),
+		UnadvertisedPinnedScopes: conv.DefaultSlice(resolved.Unadvertised, []string{}),
+		PinWouldDecide:           cached.UseDiscovered && owns && len(input.ClientScope) == 0 && len(cached.ChallengeScopes) == 0,
+	}
 }
 
 // normalizePinnedScopes trims, drops blanks and duplicates (keeping order), and
