@@ -743,7 +743,8 @@ func TestServeConsentAction_NonMetaEndpointKeepsPerClientDerivation(t *testing.T
 	require.Equal(t, consentUpstreamA, postConnectAction(t, fx, clientID).Query().Get("resource"))
 }
 
-// A real issuer resync does not create a native typed offer.
+// The issuer derived by resync cannot authorize login after its typed offers
+// are removed. Adding an exact offer makes that registration eligible again.
 func TestServeConsentAction_MetaMCPConnectRequiresATypedOfferAfterResync(t *testing.T) {
 	t.Parallel()
 
