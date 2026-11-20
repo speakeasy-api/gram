@@ -31,6 +31,12 @@ import {
   POLICIES_UNAVAILABLE_REASON,
 } from "@/components/mcp-approvals/DecideAccessSheet";
 import {
+  applicableDecision,
+  decisionActionLabel,
+  standingDecisionOf,
+} from "./shadowMCPPolicyChange";
+import {
+  ShadowMCPInventoryBlockedCell,
   ShadowMCPInventoryReviewCell,
   ShadowMCPInventoryServerCell,
   ShadowMCPInventoryUsageCell,
@@ -201,7 +207,8 @@ export function ShadowMCPInventoryTable({
   const [reviewSheetServer, setReviewSheetServer] =
     useState<ShadowMCPInventoryServer | null>(null);
   // The sheet words its form and picks its write path from the policy set's
-  // disposition; row rendering no longer touches it.
+  // disposition, and the row action's label names the action it makes
+  // applicable.
   const disposition = shadowMCPBlockingPolicyDisposition(shadowMCPPolicies);
   const { values, setValue, clearValue, clearAll } =
     useFilterState(INVENTORY_FILTERS);
@@ -257,6 +264,7 @@ export function ShadowMCPInventoryTable({
       // A pending legacy bypass request rides along so the sheet promotes it
       // into the review and the decision drains it too.
       pendingBypassRequestId: server.latestRequest?.id,
+      currentDecision: standingDecisionOf(server),
     });
   };
 
@@ -357,6 +365,14 @@ export function ShadowMCPInventoryTable({
       sortValue: (server) => server.observedUseCount,
       width: "0.5fr",
       render: (server) => <ShadowMCPInventoryUsageCell server={server} />,
+    },
+    {
+      key: "blocked",
+      header: "Blocked",
+      sortable: true,
+      sortValue: (server) => server.blockedCallCount,
+      width: "0.5fr",
+      render: (server) => <ShadowMCPInventoryBlockedCell server={server} />,
     },
   ];
 
@@ -501,7 +517,18 @@ export function ShadowMCPInventoryTable({
               key={row.canonicalServerUrl}
               actions={[
                 {
-                  label: "Decide access",
+                  // The action the policy makes applicable: block under
+                  // allow by default, approve under block by default.
+                  // With the policy list unavailable the disposition is
+                  // unknown, so the label stays neutral.
+                  label: policiesUnavailable
+                    ? "Decide access"
+                    : decisionActionLabel(
+                        applicableDecision(
+                          disposition,
+                          standingDecisionOf(row),
+                        ),
+                      ),
                   onClick: () => openDecide(row),
                   disabled: policiesUnavailable,
                   description: decideDisabledReason,

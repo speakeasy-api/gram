@@ -94,6 +94,8 @@ func TestWorkloadTokenTargetFor_NoWorkloadGrant(t *testing.T) {
 		base + "/mcp/" + slug,
 		base + "/mcp/does-not-exist-" + uuid.NewString()[:8],
 		base + "/x/mcp/" + slug,
+		base + "/mcp/gateway/org%2Fprojects%2Fproject",
+		base + "/mcp/gateway/org%2Fother/projects/project",
 		"https://unregistered.example.com/mcp/" + slug,
 	} {
 		target, ok, err := f.ti.service.WorkloadTokenTargetFor(t.Context(), mcpURL)

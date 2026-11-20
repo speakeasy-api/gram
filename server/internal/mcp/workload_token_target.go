@@ -32,12 +32,32 @@ func (s *Service) WorkloadTokenTargetFor(ctx context.Context, mcpURL string) (Wo
 	if err != nil {
 		return none, false, fmt.Errorf("parse MCP server URL: %w", err)
 	}
+	organizationGatewaySlug, isOrganizationGateway := strings.CutPrefix(u.EscapedPath(), "/mcp/gateway/")
 	slug, isSlugPath := strings.CutPrefix(u.EscapedPath(), "/mcp/")
-	if !isSlugPath || slug == "" || strings.Contains(slug, "/") {
+	switch {
+	case isOrganizationGateway:
+		escapedOrganization, escapedProject, scoped := strings.Cut(organizationGatewaySlug, "/projects/")
+		if !scoped || escapedOrganization == "" || escapedProject == "" || strings.Contains(escapedOrganization, "/") || strings.Contains(escapedProject, "/") {
+			return none, false, nil
+		}
+		organization, unescapeErr := url.PathUnescape(escapedOrganization)
+		if unescapeErr != nil {
+			return none, false, fmt.Errorf("unescape gateway organization slug: %w", unescapeErr)
+		}
+		project, unescapeErr := url.PathUnescape(escapedProject)
+		if unescapeErr != nil {
+			return none, false, fmt.Errorf("unescape gateway project slug: %w", unescapeErr)
+		}
+		if strings.Contains(organization, "/") || strings.Contains(project, "/") {
+			return none, false, nil
+		}
+		organizationGatewaySlug = organization + "/projects/" + project
+	case !isSlugPath || slug == "" || strings.Contains(slug, "/"):
 		return none, false, nil
-	}
-	if slug, err = url.PathUnescape(slug); err != nil {
-		return none, false, fmt.Errorf("unescape MCP server slug: %w", err)
+	default:
+		if slug, err = url.PathUnescape(slug); err != nil {
+			return none, false, fmt.Errorf("unescape MCP server slug: %w", err)
+		}
 	}
 
 	ctx, baseURL, ok, err := s.publicOriginContext(ctx, u.Host)
@@ -45,7 +65,16 @@ func (s *Service) WorkloadTokenTargetFor(ctx context.Context, mcpURL string) (Wo
 		return none, false, err
 	}
 
-	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, s.logger, slug, "mcp")
+	var endpoint *ResolvedMcpEndpoint
+	if isOrganizationGateway {
+		gateway, loadErr := s.loadOrganizationGateway(ctx, organizationGatewaySlug)
+		if loadErr == nil {
+			endpoint = gateway.resolved
+		}
+		err = loadErr
+	} else {
+		endpoint, err = s.LoadResolvedMcpEndpointBySlug(ctx, s.logger, slug, "mcp")
+	}
 	var oopsErr *oops.ShareableError
 	switch {
 	case errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeNotFound:
@@ -56,13 +85,32 @@ func (s *Service) WorkloadTokenTargetFor(ctx context.Context, mcpURL string) (Wo
 	if !s.workloadAssertionGrantAdvertised(endpoint) {
 		return none, false, nil
 	}
+	gateway, gatewayErr := gatewayTargetFromEndpoint(endpoint)
+	if gatewayErr == nil {
+		enabled, rolloutErr := s.gatewayMachineAccess(ctx, gateway)
+		if rolloutErr != nil {
+			return none, false, fmt.Errorf("check gateway machine access rollout: %w", rolloutErr)
+		}
+		if !enabled {
+			return none, false, nil
+		}
+	}
 
 	if shared := endpoint.sharedAuthorizationServer; shared != nil {
 		urls, err := shared.urls()
 		if err != nil {
 			return none, false, fmt.Errorf("build shared authorization server URLs: %w", err)
 		}
-		return WorkloadTokenTarget{TokenEndpoint: urls.Token, Audience: urls.Token, Resource: ""}, true, nil
+		resource := ""
+		if gatewayErr == nil {
+			if _, ok := gateway.authorizationTarget(endpoint.ProjectID); ok {
+				resource, err = endpoint.RootURL(baseURL)
+				if err != nil {
+					return none, false, fmt.Errorf("build gateway resource URL: %w", err)
+				}
+			}
+		}
+		return WorkloadTokenTarget{TokenEndpoint: urls.Token, Audience: urls.Token, Resource: resource}, true, nil
 	}
 
 	urls, err := s.requestAuthorizationServerURLs(ctx, endpoint, baseURL)

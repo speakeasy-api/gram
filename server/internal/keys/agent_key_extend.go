@@ -155,7 +155,7 @@ func (s *Service) ExtendAgentKeys(ctx context.Context, payload *gen.ExtendAgentK
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "save extended agent API keys").LogError(ctx, s.logger)
 	}
-	return &gen.ListKeysResult{Keys: extended}, nil
+	return &gen.ListKeysResult{Keys: extended, NextCursor: nil}, nil
 }
 
 // connectGrantsFromForms accepts only what the agent editor grants a server:

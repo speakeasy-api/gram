@@ -1,4 +1,5 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { waitForHookState as waitFor } from "@/test/waitForHookState";
+import { renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { useDrainSkillPages } from "./use-drain-skill-pages";
 

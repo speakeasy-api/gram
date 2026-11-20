@@ -72,6 +72,7 @@ func (q *Queries) GetLiveMCPServerForShadowMCPChoice(ctx context.Context, arg Ge
 const getShadowMCPOfficialServerChoice = `-- name: GetShadowMCPOfficialServerChoice :one
 SELECT
     c.server_url,
+    c.mcp_server_id AS link_mcp_server_id,
     m.id AS chosen_mcp_server_id,
     m.name AS chosen_mcp_server_name,
     m.slug AS chosen_mcp_server_slug
@@ -93,6 +94,7 @@ type GetShadowMCPOfficialServerChoiceParams struct {
 
 type GetShadowMCPOfficialServerChoiceRow struct {
 	ServerUrl           string
+	LinkMcpServerID     uuid.NullUUID
 	ChosenMcpServerID   uuid.NullUUID
 	ChosenMcpServerName pgtype.Text
 	ChosenMcpServerSlug pgtype.Text
@@ -104,6 +106,7 @@ func (q *Queries) GetShadowMCPOfficialServerChoice(ctx context.Context, arg GetS
 	var i GetShadowMCPOfficialServerChoiceRow
 	err := row.Scan(
 		&i.ServerUrl,
+		&i.LinkMcpServerID,
 		&i.ChosenMcpServerID,
 		&i.ChosenMcpServerName,
 		&i.ChosenMcpServerSlug,
@@ -178,6 +181,7 @@ func (q *Queries) ListBlockedShadowMCPServerURLs(ctx context.Context, arg ListBl
 const listShadowMCPOfficialServerChoices = `-- name: ListShadowMCPOfficialServerChoices :many
 SELECT
     c.server_url,
+    c.mcp_server_id AS link_mcp_server_id,
     m.id AS chosen_mcp_server_id,
     m.name AS chosen_mcp_server_name,
     m.slug AS chosen_mcp_server_slug
@@ -193,6 +197,7 @@ WHERE c.project_id = $1
 
 type ListShadowMCPOfficialServerChoicesRow struct {
 	ServerUrl           string
+	LinkMcpServerID     uuid.NullUUID
 	ChosenMcpServerID   uuid.NullUUID
 	ChosenMcpServerName pgtype.Text
 	ChosenMcpServerSlug pgtype.Text
@@ -200,7 +205,9 @@ type ListShadowMCPOfficialServerChoicesRow struct {
 
 // An administrator's choices about official servers in one project. The
 // chosen server comes back only while it is live and enabled, so a choice
-// whose server was removed falls back to the server found by URL.
+// whose server was removed falls back to the server found by URL. A choice
+// with no server (link_mcp_server_id NULL) keeps the Shadow MCP server in
+// direct use: nothing is linked, not even automatically.
 func (q *Queries) ListShadowMCPOfficialServerChoices(ctx context.Context, projectID uuid.UUID) ([]ListShadowMCPOfficialServerChoicesRow, error) {
 	rows, err := q.db.Query(ctx, listShadowMCPOfficialServerChoices, projectID)
 	if err != nil {
@@ -212,6 +219,7 @@ func (q *Queries) ListShadowMCPOfficialServerChoices(ctx context.Context, projec
 		var i ListShadowMCPOfficialServerChoicesRow
 		if err := rows.Scan(
 			&i.ServerUrl,
+			&i.LinkMcpServerID,
 			&i.ChosenMcpServerID,
 			&i.ChosenMcpServerName,
 			&i.ChosenMcpServerSlug,

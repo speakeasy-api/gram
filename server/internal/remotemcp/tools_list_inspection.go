@@ -90,8 +90,9 @@ func (i toolsListInspection) requested(list *proxy.ToolsListResponse) bool {
 // [authz.Engine.Evaluate] because being refused only means an ordinary listing;
 // recording a denial would ask admins to grant something nobody needed.
 func (i toolsListInspection) allowed(ctx context.Context) (bool, error) {
-	for _, scope := range []authz.Scope{authz.ScopeMCPRead, authz.ScopeMCPWrite} {
-		ok, err := i.authz.Evaluate(ctx, authz.MCPCheck(scope, i.mcpServerID, i.projectID))
+	server := authz.MCPServer(authz.MCPServerIDFrom(i.mcpServerID), authz.ProjectIDFrom(i.projectID))
+	for _, check := range []authz.Check{server.Read(), server.Write()} {
+		ok, err := i.authz.Evaluate(ctx, check)
 		if err != nil {
 			return false, fmt.Errorf("authorize tools/list inspection: %w", err)
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
@@ -11,6 +12,7 @@ import (
 type contextKey string
 
 type admissionBoundaryKey struct{}
+type withoutCredentialCeilingKey struct{}
 
 const (
 	grantsContextKey contextKey = "authz_grants"
@@ -123,6 +125,22 @@ func admittedPoliciesToContext(ctx context.Context, represented RepresentedUserP
 	return context.WithValue(ctx, admittedCeilingContextKey, cloneGrants(sets[0]))
 }
 
+// WithoutCredentialCeiling keeps live admitted policies but removes the
+// credential policy after it has authorized a gateway entry target. Member
+// authorization can then evaluate the live agent and owner policies without
+// treating the gateway identifier as a member-server grant.
+func WithoutCredentialCeiling(ctx context.Context) context.Context {
+	policies, ok := ctx.Value(admittedPoliciesContextKey).(grantAuthorization)
+	if !ok || len(policies.policies) == 0 {
+		return ctx
+	}
+	policies.legacyAuthCeiling = false
+	policies.policies = append([][]Grant{}, policies.policies[1:]...)
+	ctx = context.WithValue(ctx, admittedPoliciesContextKey, policies)
+	ctx = context.WithValue(ctx, admittedCeilingContextKey, []Grant{})
+	return context.WithValue(ctx, withoutCredentialCeilingKey{}, true)
+}
+
 // CredentialCeilingFromContext returns the immutable credential policy loaded
 // by the most recent principal or workload admission. Live agent and owner
 // policies are deliberately excluded.
@@ -215,6 +233,32 @@ func (a grantAuthorization) policiesFor(check Check) [][]Grant {
 		return a.policies
 	}
 	return append(append([][]Grant{}, a.policies...), a.representedPolicies...)
+}
+
+// keysMissingFrom lists the grant keys the check does not carry, where that
+// alone is why a grant of a scope that would satisfy the check was refused.
+// Only policies that refuse the check are read, since a policy that allows it
+// is not why it was refused. It explains a refusal and decides nothing.
+func (a grantAuthorization) keysMissingFrom(check Check) []string {
+	check = a.bind(check)
+	seen := map[string]bool{}
+	for _, policy := range a.policiesFor(check) {
+		if grant, _ := matchingGrant(policy, check.expand()); grant != nil {
+			continue
+		}
+		for _, grant := range policy {
+			for _, expanded := range check.expand() {
+				if grant.Scope != expanded.Scope {
+					continue
+				}
+				missing, _ := expanded.keysRefusingGrant(grant.Selector)
+				for _, key := range missing {
+					seen[key] = true
+				}
+			}
+		}
+	}
+	return slices.Sorted(maps.Keys(seen))
 }
 
 func (a grantAuthorization) grantCount() int {

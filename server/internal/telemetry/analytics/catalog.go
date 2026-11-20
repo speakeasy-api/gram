@@ -191,7 +191,7 @@ func (d *Dataset) AccessCheck(organizationID string) (check authz.Check, ok bool
 		var none authz.Check
 		return none, false
 	}
-	return authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}, true
+	return authz.Org(authz.OrgIDFrom(organizationID)).Admin(), true
 }
 
 // MaxTimeRangeDays is the longest window this dataset can answer honestly:

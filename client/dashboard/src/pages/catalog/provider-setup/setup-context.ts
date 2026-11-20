@@ -10,7 +10,6 @@ type SetupContextValue = {
     /** Records the finished setup, then completes it. */
     complete?: () => void;
     completing?: boolean;
-    completionError?: string | null;
   };
 };
 export const SetupContext = createContext<SetupContextValue | null>(null);

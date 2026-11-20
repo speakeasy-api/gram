@@ -95,7 +95,7 @@ func (s *Service) authorizeDiscovery(ctx context.Context, updated *string) error
 	if !ok || a == nil || a.ProjectID == nil || s.authz == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: a.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*a.ProjectID)).Read()); err != nil {
 		return err
 	}
 	if updated != nil {
