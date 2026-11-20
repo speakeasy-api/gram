@@ -175,7 +175,11 @@ func (s *Service) typedConsentAuth(ctx context.Context, organizationID string) (
 	if typed, _ := ctx.Value(typedConsentAuthKey{}).(bool); typed {
 		return true, nil
 	}
-	return s.authEnforcement.Enforced(ctx, organizationID)
+	typed, err := s.authEnforcement.Enforced(ctx, organizationID)
+	if err != nil {
+		return false, fmt.Errorf("read upstream auth enforcement: %w", err)
+	}
+	return typed, nil
 }
 
 // consentAuthChoicesEnforced reports whether the organization chooses

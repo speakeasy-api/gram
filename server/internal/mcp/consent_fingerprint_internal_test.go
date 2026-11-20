@@ -149,7 +149,6 @@ func TestValidateCatalogMemberComparesTypedFingerprintUnderEnforcement(t *testin
 
 func TestConsentInventoryFingerprintBindsTypedChoice(t *testing.T) {
 	t.Parallel()
-	//nolint:exhaustruct_v5 // Only the fingerprinted fields matter.
 	inventory := consentToolInventory{Complete: true, Resource: "test-resource", BackendHash: "test-backend"}
 	legacy := consentInventoryFingerprint(&inventory)
 	require.NotEmpty(t, legacy)

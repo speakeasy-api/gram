@@ -314,11 +314,7 @@ func (s *Service) connectionRecoveryTypedLogin(ctx context.Context, recovery con
 	if recovery.UpstreamResource != "" {
 		return authorization, recovery.UpstreamResource, nil
 	}
-	offered, err := s.typedOfferedRegistrations(ctx, recovery.OrganizationID, []uuid.UUID{recovery.McpServerID})
-	if err != nil {
-		return nil, "", err
-	}
-	resource, err := s.remoteChallengeMgr.ResourceForClientAtUpstream(ctx, recovery.OrganizationID, recovery.RegistrationID, offered[recovery.McpServerID], recovery.UpstreamResource)
+	resource, err := s.typedLoginResource(ctx, authorization)
 	if err != nil {
 		return nil, "", fmt.Errorf("derive connection resource: %w", err)
 	}

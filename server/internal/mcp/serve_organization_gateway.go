@@ -593,8 +593,7 @@ func (s *Service) listSignInClients(ctx context.Context, endpoint *ResolvedMcpEn
 	// a proxied server only the clients configured for it, and a gateway only
 	// those of the members the subject reaches. A hosted server keeps serving
 	// from every client its issuer binds.
-	switch {
-	case endpoint.MetaMcpServerID.Valid:
+	if endpoint.MetaMcpServerID.Valid {
 		members, err := loadMembers()
 		if err != nil {
 			return nil, err

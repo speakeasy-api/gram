@@ -436,13 +436,6 @@ func (s *Service) buildRemoteConnectURL(
 			return "", false, oops.E(oops.CodeBadRequest, nil, "this connection is not configured for any server this gateway serves").LogWarn(ctx, logger)
 		}
 	}
-	if rerr == nil && !claimedByMember {
-		boundIDs := make([]uuid.UUID, 0, len(bound))
-		for i := range bound {
-			boundIDs = append(boundIDs, bound[i].ID)
-		}
-		clientResource, rerr = s.remoteChallengeMgr.ResourceForClientAtUpstream(ctx, endpoint.OrganizationID, client.ID, boundIDs, endpoint.UpstreamResource)
-	}
 	if rerr != nil {
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return "", false, oops.E(oops.CodeUnexpected, rerr, "derive client upstream resource").LogError(ctx, logger)
@@ -472,14 +465,25 @@ func (s *Service) buildRemoteConnectURL(
 	}
 	if typedAuthorization != nil {
 		loginProjectID = typedAuthorization.ProjectID
-		// An exact typed offer authorizes this registration for this server.
-		// Alternative providers offering the same server are not competing
-		// resource owners; keep the selected server's concrete target. Legacy
-		// issuer bindings and ambiguous gateway members retain their derivation.
-		if !claimedByMember && endpoint.McpServerID.Valid && endpoint.UpstreamResource != "" && typedAuthorization.ServerID == endpoint.McpServerID.UUID {
-			clientResource = endpoint.UpstreamResource
+		if !claimedByMember {
+			clientResource, err = s.typedLoginResource(ctx, typedAuthorization)
+			if err == nil && !endpoint.McpServerID.Valid {
+				resourceMember = chosenMetaMember{serverID: uuid.NullUUID{UUID: typedAuthorization.ServerID, Valid: true}, projectID: loginProjectID}
+			}
 		}
+	} else if !claimedByMember {
+		// Hosted endpoints keep the existing issuer resource policy.
+		boundIDs := make([]uuid.UUID, 0, len(bound))
+		for i := range bound {
+			boundIDs = append(boundIDs, bound[i].ID)
+		}
+		clientResource, err = s.remoteChallengeMgr.ResourceForClientAtUpstream(ctx, endpoint.OrganizationID, client.ID, boundIDs, endpoint.UpstreamResource)
 	}
+	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+		return "", false, oops.E(oops.CodeUnexpected, err, "derive client upstream resource").LogError(ctx, logger)
+	}
+
 	parent := remotesessions.ParentChallenge{
 		TypedAuthorization:  typedAuthorization,
 		ConnectionPopup:     challengeState.FirstParty && (challengeState.BindingRefreshAttemptID != "" || challengeState.ReauthenticateClientID != uuid.Nil),

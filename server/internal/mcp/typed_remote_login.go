@@ -78,6 +78,19 @@ func (s *Service) ValidateRemoteLoginTypedAuthorization(ctx context.Context, sta
 	return nil
 }
 
+// typedLoginResource reads the target of the exact authorized server rather
+// than inferring a destination from the registration's other attachments.
+func (s *Service) typedLoginResource(ctx context.Context, authorization *remotesessions.TypedAuthorization) (string, error) {
+	server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: authorization.ServerID, OrganizationID: authorization.OrganizationID})
+	if err != nil {
+		return "", fmt.Errorf("load typed login resource server: %w", err)
+	}
+	if server.ProjectID != authorization.ProjectID || (!server.RemoteMcpServerID.Valid && !server.TunneledMcpServerID.Valid) {
+		return "", remotesessions.ErrTypedAuthorizationChanged
+	}
+	return s.resolveUpstreamResource(ctx, s.logger, authorization.ProjectID, &server)
+}
+
 func (s *Service) remoteLoginTypedAuthorization(ctx context.Context, endpoint *ResolvedMcpEndpoint, challenge AuthnChallengeState, client remotesessions.Client, member chosenMetaMember) (*remotesessions.TypedAuthorization, error) {
 	serverID, projectID := endpoint.McpServerID, endpoint.ProjectID
 	if member.serverID.Valid {
