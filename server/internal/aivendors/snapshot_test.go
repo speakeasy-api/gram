@@ -128,12 +128,22 @@ func TestSnapshotDisabledDocumentsDoNotShadow(t *testing.T) {
 		{ID: "exact", Documents: []Document{{URL: "https://example.com/oauth/exact/client.json", Enabled: false}}},
 	}
 	snapshot := NewSnapshot(products)
-	for _, clientID := range []string{"https://example.com/oauth/some-client/client.json", "https://example.com/oauth/exact/client.json"} {
-		got, ok := snapshot.CatalogPreset(clientID)
-		require.True(t, ok, clientID)
-		require.Equal(t, "broad", got.ProductID, clientID)
-	}
 	require.Len(t, snapshot.Catalog(), 3, "disabled documents are still listed")
+	cases := []struct {
+		name     string
+		clientID string
+	}{
+		{name: "disabled specific pattern", clientID: "https://example.com/oauth/some-client/client.json"},
+		{name: "disabled exact URL", clientID: "https://example.com/oauth/exact/client.json"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, ok := snapshot.CatalogPreset(tc.clientID)
+			require.True(t, ok)
+			require.Equal(t, "broad", got.ProductID)
+		})
+	}
 }
 
 func TestSnapshotFingerprintTreatsNilAndEmptyAlike(t *testing.T) {
