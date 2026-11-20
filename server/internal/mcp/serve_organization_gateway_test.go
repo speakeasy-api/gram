@@ -347,6 +347,8 @@ func TestServeConsentAction_OrganizationGatewayConnectsAnotherProjectsClient(t *
 	require.NoError(t, err)
 	client := createConsentRemoteClient(t, ctx, ti.conn, otherProject.ID, authCtx.ActiveOrganizationID, "orggw-"+uuid.NewString()[:8], "", []uuid.UUID{otherServer.UserSessionIssuerID.UUID, fx.issuerID})
 	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, authCtx.ActiveOrganizationID, otherProject.ID, []uuid.UUID{otherServer.UserSessionIssuerID.UUID}))
+	seedConsentAuthOffer(t, ctx, ti, authCtx.ActiveOrganizationID, otherProject.ID, otherServer.ID, client, "remote_session")
+	seedMetaMemberConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, otherServer.ID)
 
 	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(t.Context(), testenv.NewLogger(t), fx.organizationSlug, "mcp/gateway")
 	require.NoError(t, err)

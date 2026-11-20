@@ -644,7 +644,7 @@ func TestServeConsentAction_MetaMCPConnectLookupErrorFailsClosed(t *testing.T) {
 	_, err := fx.ti.conn.Exec(ctx, "ALTER TABLE meta_mcp_server_members RENAME TO meta_mcp_server_members_unavailable") //nolint:glint // notestingrawsql: deliberate DDL breakage to force a member-lookup DB error; not expressible as an SQLc query
 	require.NoError(t, err)
 
-	requireConnectActionFailsClosed(t, fx, clientID, oops.CodeUnexpected)
+	_ = requireConnectActionFailsClosed(t, fx, clientID, oops.CodeUnexpected)
 }
 
 // A tunneled member with no recorded resource identifier still claims its
