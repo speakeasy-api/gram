@@ -192,6 +192,9 @@ func (t *Transcript) LoadStartAliases(ids []NaturalID) {
 // one delivery.
 func (t *Transcript) Merge(d Delivery) (Result, error) {
 	res := Result{Added: nil, Seen: nil, Aliases: nil}
+	if err := checkIDs(d); err != nil {
+		return res, err
+	}
 	links := make(map[NaturalID]Link, len(d.Links))
 	for _, l := range d.Links {
 		links[l.ID] = l
@@ -205,13 +208,22 @@ func (t *Transcript) Merge(d Delivery) (Result, error) {
 		}
 
 		n, copied := t.find(parent, continues, e, explicit, d.Entries[i+1:])
+		// scope is the tree a repeated entry is copied into. find reports a
+		// copy only below a known tree root, so a nil scope here is a bug,
+		// never a reason to give a copy the original's IDs.
+		var scope *Node
+		if copied {
+			if scope = t.treeRoot(parent); scope == nil {
+				return Result{Added: nil, Seen: nil, Aliases: nil}, fmt.Errorf("transcript: copy of entry %d has no tree", i)
+			}
+		}
 		if n != nil {
 			ids := e.IDs
 			if copied {
 				// e repeats an older entry in a newer tree, and n is the entry
 				// another source already stored there: n takes the
 				// tree-scoped IDs, never the original's.
-				ids = scopeAll(e.IDs, t.treeRoot(n))
+				ids = scopeAll(e.IDs, scope)
 			}
 			seen := Seen{Index: i, Node: n, NewIDs: t.adopt(n, ids), Continues: nil, Synthetic: false}
 			if continues != nil && n.Continues == nil {
@@ -231,7 +243,7 @@ func (t *Transcript) Merge(d Delivery) (Result, error) {
 		if explicit && continues == nil {
 			at = t.placement(parent, e)
 		}
-		n, err = t.attach(at, continues, e, copied)
+		n, err = t.attach(at, continues, e, scope)
 		if err != nil {
 			return Result{Added: nil, Seen: nil, Aliases: nil}, err
 		}
@@ -442,7 +454,9 @@ func (t *Transcript) placement(parent *Node, e Entry) *Node {
 	return n
 }
 
-func (t *Transcript) attach(parent, continues *Node, e Entry, copied bool) (*Node, error) {
+// attach adds e as a new node under parent. A non-nil copyIn means e is a
+// copy in the tree rooted there, so it takes tree-scoped IDs.
+func (t *Transcript) attach(parent, continues *Node, e Entry, copyIn *Node) (*Node, error) {
 	id, err := t.newID()
 	if err != nil {
 		return nil, fmt.Errorf("transcript: new node id: %w", err)
@@ -458,8 +472,8 @@ func (t *Transcript) attach(parent, continues *Node, e Entry, copied bool) (*Nod
 	n.placeholder = false
 	parent.Children = append(parent.Children, n)
 	t.nodes[id] = n
-	if copied {
-		t.adopt(n, scopeAll(e.IDs, t.treeRoot(n)))
+	if copyIn != nil {
+		t.adopt(n, scopeAll(e.IDs, copyIn))
 		return n, nil
 	}
 	t.adopt(n, e.IDs)

@@ -485,6 +485,43 @@ func TestMerge_AliasesAreEmittedOnce(t *testing.T) {
 	require.Empty(t, res.Added)
 }
 
+func TestMerge_AMovedAliasIsEmittedWithItsNewTarget(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	_, err := tr.Merge(transcriptDelivery(
+		transcriptPrompt("u1", "", "p1", "read it"),
+		transcriptToolUse("u2", "u1", "toolu_1"),
+		transcriptToolUse("u3", "u2", "toolu_2"),
+	))
+	require.NoError(t, err)
+
+	res, err := tr.Merge(Delivery{Source: SourceClaudeTranscript, Links: []Link{{ID: line("att"), To: parentLine("u2")}}, Entries: nil})
+	require.NoError(t, err)
+	require.Equal(t, []Alias{{ID: line("att"), Node: mustNode(t, tr, line("u2"))}}, res.Aliases)
+
+	res, err = tr.Merge(Delivery{Source: SourceClaudeTranscript, Links: []Link{{ID: line("att"), To: parentLine("u3")}}, Entries: nil})
+	require.NoError(t, err)
+	require.Equal(t, []Alias{{ID: line("att"), Node: mustNode(t, tr, line("u3"))}}, res.Aliases, "a changed target is emitted, not only a new ID")
+}
+
+func TestMerge_RejectsDeliveredIDsWithTheCopySeparator(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	_, err := tr.Merge(transcriptDelivery(transcriptPrompt("u1"+copySep+"x", "", "p1", "hello")))
+	require.ErrorIs(t, err, ErrReservedID)
+
+	_, err = tr.Merge(Delivery{Source: SourceClaudeTranscript, Links: []Link{{ID: line("att"), To: parentLine("u1" + copySep + "x")}}, Entries: nil})
+	require.ErrorIs(t, err, ErrReservedID)
+}
+
+func TestCanonicalJSON_KeepsInputWithTrailingBytes(t *testing.T) {
+	t.Parallel()
+	require.JSONEq(t, `{"a":1,"b":[2]}`, canonicalJSON([]byte(` {"b": [2], "a": 1} `)))
+	require.Equal(t, `{"a":1}}`, canonicalJSON([]byte(`{"a":1}}`)), "a stray } is not dropped")
+	require.Equal(t, `{"a":1}]`, canonicalJSON([]byte(`{"a":1}]`)))
+	require.Equal(t, `{"a":1} 2`, canonicalJSON([]byte(`{"a":1} 2`)))
+}
+
 func TestMerge_AliasThroughAnotherLinkInAnyOrder(t *testing.T) {
 	t.Parallel()
 	tr := New(sequentialIDs())

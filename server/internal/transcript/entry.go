@@ -1,10 +1,12 @@
 // Package transcript stores an agent session as a tree of entries.
 //
 // Every capture source turns its own payload into a Delivery. Merge places
-// each entry in the tree exactly once, whatever the source and whatever order
-// the deliveries arrive in. A rewind becomes a branch; a compaction starts a
-// new tree that links back to where the old one ended. A trajectory, the path
-// the model actually saw, is read with Path.
+// each entry in the tree exactly once, whatever source delivers it and in
+// whatever order sources deliver the same history, as long as each parent an
+// entry names is already merged or loaded. An entry that names an unknown
+// parent makes Merge return UnknownParentError. A rewind becomes a branch; a
+// compaction starts a new tree that links back to where the old one ended. A
+// trajectory, the path the model actually saw, is read with Path.
 //
 // The package holds no database code. The chat writer loads the part of the
 // tree a delivery needs, calls Merge, and stores the Result.

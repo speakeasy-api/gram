@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
+	"io"
 	"regexp"
 	"strings"
 )
@@ -68,8 +70,12 @@ func normalize(s string, stripReminders bool) string {
 func canonicalJSON(raw []byte) string {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
-	var v any
-	if err := dec.Decode(&v); err != nil || dec.More() {
+	var v, extra any
+	if err := dec.Decode(&v); err != nil {
+		return strings.TrimSpace(string(raw))
+	}
+	// Anything after the value, even a stray } or ], is not one JSON value.
+	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
 		return strings.TrimSpace(string(raw))
 	}
 	out, err := json.Marshal(v)
