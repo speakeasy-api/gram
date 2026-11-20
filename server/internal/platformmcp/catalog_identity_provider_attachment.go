@@ -237,16 +237,6 @@ func (s *CatalogIdentityProviderAttachmentService) discoverSupportedIssuerMetada
 	return remotesessions.DiscoveredIssuerMetadata{}, ErrIdentityProviderAttachmentUnsupported
 }
 
-// associateExistingAttachment records the server's association with the
-// client its issuer already binds, for an attachment made before associations
-// were recorded or a retry after a partial one. The binding was read unlocked,
-// so under the server lock the server must still front the registered source
-// through the registered issuer, and that issuer must still bind the same
-// client, before the association is written in the same transaction. The
-// client's remote session issuer is locked after the server, the order
-// binding writers take, so no binding change commits between the reread and
-// the write. It runs only where typed auth clients do not choose upstream
-// authentication, so the reread uses the issuer's bindings.
 // checkExistingOffer validates the target under the same writer locks as the
 // final commit before accepting an existing offer or registering a new client.
 func (s *CatalogIdentityProviderAttachmentService) checkExistingOffer(ctx context.Context, principal Principal, project ResolvedProject, registration platformrepo.PlatformMcpCatalogRegistration, issuerURL string) (bool, error) {
