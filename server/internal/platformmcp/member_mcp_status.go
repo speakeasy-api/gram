@@ -203,7 +203,7 @@ func (s *PluginsService) memberConnectionStatus(ctx context.Context, principal P
 		output.NextAction = "use_mcp"
 		return output, nil
 	}
-	if target.userSessionIssuerID == uuid.Nil {
+	if !target.typed && target.userSessionIssuerID == uuid.Nil {
 		output.State = MCPConnectionStateSetupRequired
 		output.Reason = "authorization_status_unavailable"
 		output.NextAction = "ask_administrator"
@@ -213,9 +213,8 @@ func (s *PluginsService) memberConnectionStatus(ctx context.Context, principal P
 		return GetMyMCPConnectionStatusOutput{}, ErrUnavailable
 	}
 
-	// Where the auth client resolver serves the organization, a proxied
-	// server's registrations and the member's grants are read as the runtime
-	// reads them, without the sign-in link.
+	// For proxied servers, read offered registrations and member grants
+	// without the legacy sign-in link.
 	resolver := target.typed
 	clients, err := s.memberMCPConnectionClients(ctx, principal, target, resolver)
 	if err != nil {

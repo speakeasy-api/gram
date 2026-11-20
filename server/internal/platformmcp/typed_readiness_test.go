@@ -128,8 +128,9 @@ func TestRemoteMCPReadinessChoosesFirstUsableTypedOffer(t *testing.T) {
 	serverID := typedCatalogServer(t, ctx, conn, f, 2)
 	f.serverID = serverID
 	prober := NewRemoteMCPReadinessProber(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), f.policy, f.sessions)
-	clients, err := prober.offeredRegistrations(ctx, f.principal.OrganizationID, f.projectID, []uuid.UUID{serverID}, []string{authz.AuthClientTypeRemoteSession})
+	clients, incomplete, err := prober.offeredRegistrations(ctx, f.principal.OrganizationID, f.projectID, serverID, []string{authz.AuthClientTypeRemoteSession})
 	require.NoError(t, err)
+	require.False(t, incomplete)
 	require.Len(t, clients, 2)
 	chosen := clients[1]
 	token, err := testenv.NewEncryptionClient(t).Encrypt([]byte("usable-offer-token"))
@@ -158,4 +159,11 @@ func TestRemoteMCPReadinessChoosesFirstUsableTypedOffer(t *testing.T) {
 	require.Equal(t, chosen.RemoteSessionIssuerID, result.AuthorizationIdentity.RemoteSessionIssuerID)
 	require.Equal(t, chosen.ID, result.AuthorizationIdentity.RemoteSessionClientID)
 	require.Equal(t, session.ID, result.AuthorizationIdentity.RemoteSessionID)
+
+	// The same source and sign-in do not make the original offer available to
+	// a sibling. The protected upstream rejects this exact target's no-auth probe.
+	f.serverID = typedCatalogServer(t, ctx, conn, f, 0)
+	result = f.probe(t, conn, nil)
+	require.Equal(t, ReadinessNeedsConfiguration, result.State)
+	require.Equal(t, "upstream_identity_provider_not_configured", result.EvidenceCode)
 }

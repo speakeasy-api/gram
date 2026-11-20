@@ -734,15 +734,9 @@ func (s *Service) Confirm(ctx context.Context, payload *srv.ConfirmPayload) (*sr
 			return nil, oops.E(oops.CodeFailedPrecondition, nil, "the server has no resource indicator")
 		}
 		if !reloadedIssuers[server.IssuerID] {
-			clients, err := q.ListIssuerClients(ctx, repo.ListIssuerClientsParams{OrganizationID: authCtx.ActiveOrganizationID, IssuerIds: []uuid.UUID{server.IssuerID}})
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "reload issuer clients").LogError(ctx, logger)
+			if err := snap.reloadIssuer(ctx, q, logger, authCtx.ActiveOrganizationID, server.IssuerID); err != nil {
+				return nil, err
 			}
-			bindings, err := q.ListEMABindings(ctx, repo.ListEMABindingsParams{OrganizationID: authCtx.ActiveOrganizationID, IssuerIds: []uuid.UUID{server.IssuerID}})
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "reload identity chaining bindings").LogError(ctx, logger)
-			}
-			snap.clients[server.IssuerID], snap.bindings[server.IssuerID] = clients, bindings
 			reloadedIssuers[server.IssuerID] = true
 		}
 		if _, _, binding := resolveClient(server, resource, snap.documentResource(server), snap.clients[server.IssuerID], snap.bindings[server.IssuerID], snap.resourceScopes(server)); binding == ClientBindingMissing || binding == ClientBindingAmbiguous {
@@ -826,6 +820,22 @@ func resourceConnectionForUpdate(ctx context.Context, q *repo.Queries, organizat
 	return &record{OktaResourceConnection: rc, label: ""}, nil
 }
 
+// reloadIssuer updates the response and validation inputs after the write's
+// eligible server is read under the connection lock.
+func (snap *snapshot) reloadIssuer(ctx context.Context, q *repo.Queries, logger *slog.Logger, organizationID string, issuerID uuid.UUID) error {
+	issuerIDs := []uuid.UUID{issuerID}
+	clients, err := q.ListIssuerClients(ctx, repo.ListIssuerClientsParams{OrganizationID: organizationID, IssuerIds: issuerIDs})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "reload issuer clients").LogError(ctx, logger)
+	}
+	bindings, err := q.ListEMABindings(ctx, repo.ListEMABindingsParams{OrganizationID: organizationID, IssuerIds: issuerIDs})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "reload identity chaining bindings").LogError(ctx, logger)
+	}
+	snap.clients[issuerID], snap.bindings[issuerID] = clients, bindings
+	return nil
+}
+
 func (s *Service) Reset(ctx context.Context, payload *srv.ResetPayload) (*srv.OktaResourceConnectionServer, error) {
 	authCtx, logger, err := s.authorize(ctx, true)
 	if err != nil {
@@ -862,6 +872,9 @@ func (s *Service) Reset(ctx context.Context, payload *srv.ResetPayload) (*srv.Ok
 		return nil, err
 	} else if len(visible) == 0 {
 		return nil, oops.E(oops.CodeNotFound, nil, "server not found")
+	}
+	if err := snap.reloadIssuer(ctx, q, logger, authCtx.ActiveOrganizationID, server.IssuerID); err != nil {
+		return nil, err
 	}
 	resource := resourceIndicator(server)
 	before, err := resourceConnectionForUpdate(ctx, q, authCtx.ActiveOrganizationID, snap.connection.ID, server.IssuerID, resource)
