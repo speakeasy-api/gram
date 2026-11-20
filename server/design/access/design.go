@@ -1998,7 +1998,7 @@ var ShadowMCPOfficialServerModel = Type("ShadowMCPOfficialServer", func() {
 	Attribute("gateway_name", String, "The gateway that serves the official server, when url is a gateway's address.")
 	Attribute("automatic", Boolean, "True when the server was made official automatically because the server proxies to the Shadow MCP server's URL; false when an administrator chose it.")
 	Attribute("direct_access_allowed", Boolean, func() {
-		Description("Deprecated: links no longer have an on/off switch, so this is always false. Kept one release so older dashboards, which require it, keep rendering, then removed.")
+		Description("Deprecated: official servers no longer have an on/off switch, so this is always false. Kept one release so older dashboards, which require it, keep rendering, then removed.")
 	})
 })
 

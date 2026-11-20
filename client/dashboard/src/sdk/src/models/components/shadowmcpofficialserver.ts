@@ -17,7 +17,7 @@ export type ShadowMCPOfficialServer = {
    */
   automatic?: boolean | undefined;
   /**
-   * Deprecated: links no longer have an on/off switch, so this is always false. Kept one release so older dashboards, which require it, keep rendering, then removed.
+   * Deprecated: official servers no longer have an on/off switch, so this is always false. Kept one release so older dashboards, which require it, keep rendering, then removed.
    */
   directAccessAllowed?: boolean | undefined;
   /**

@@ -71,7 +71,7 @@ describe("AUDIT_ACTIONS", () => {
     ],
     [
       "shadow_mcp_official_server:set",
-      "changed the official server of Shadow MCP server",
+      "changed the official server choice of Shadow MCP server",
     ],
   ] as const)("describes official server action %s", (action, phrase) => {
     expect(isAuditAction(action)).toBe(true);

@@ -332,8 +332,9 @@ function LinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
       {autoLinks || automatic ? null : (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Text muted small className="max-w-xl">
-            Stop using this server as official to let direct connections follow
-            the usual rules again. You can make it official again at any time.
+            Stop using it as the official server to let direct connections
+            follow the usual rules again. You can make it official again at any
+            time.
           </Text>
           <Button
             variant="tertiary"
@@ -705,7 +706,7 @@ function UnlinkedPanel({
                 variant={isRecommended ? "primary" : "secondary"}
                 disabled={linking}
                 onClick={() => void linkSuggested()}
-                aria-label={`Make “${suggested.name}” official`}
+                aria-label={`Make official: “${suggested.name}”`}
               >
                 <Button.Text>
                   {linking ? "Making official" : "Make official"}
@@ -904,6 +905,9 @@ function LinkAnotherServer({
     })
     .sort((a, b) => a.label.localeCompare(b.label));
 
+  const chosenLabel = candidates.find(
+    (candidate) => candidate.id === selected,
+  )?.label;
   const onLink = async () => {
     const chosen = candidates.find((candidate) => candidate.id === selected);
     try {
@@ -946,7 +950,11 @@ function LinkAnotherServer({
           size="sm"
           disabled={selected === "" || isPending}
           onClick={() => void onLink()}
-          aria-label="Make the chosen server official"
+          aria-label={
+            chosenLabel
+              ? `Make official: “${chosenLabel}”`
+              : "Make official: chosen server"
+          }
         >
           <Button.Text>
             {isPending ? "Making official" : "Make official"}

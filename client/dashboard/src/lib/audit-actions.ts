@@ -1042,7 +1042,7 @@ export function staticActionPhrase(action: AuditAction): string {
     // Entries written before links lost their on/off switch: one action
     // covered every change, so the phrase names the link.
     case "shadow_mcp_official_server:set":
-      return "changed the official server of Shadow MCP server";
+      return "changed the official server choice of Shadow MCP server";
 
     case "risk_result:dismiss":
       return "dismissed risk finding";

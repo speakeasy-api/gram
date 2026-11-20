@@ -595,7 +595,7 @@ describe("OfficialServerPanel", () => {
 
     expect(screen.getByText("Direct connection kept")).toBeTruthy();
     fireEvent.click(
-      screen.getByRole("button", { name: "Make “Tracker Cloud” official" }),
+      screen.getByRole("button", { name: "Make official: “Tracker Cloud”" }),
     );
     await vi.waitFor(() =>
       expect(mocks.save).toHaveBeenCalledWith({
@@ -637,7 +637,7 @@ describe("OfficialServerPanel", () => {
     expect(screen.getByText("Use another server as official")).toBeTruthy();
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Make “Tracker Cloud” official" }),
+      screen.getByRole("button", { name: "Make official: “Tracker Cloud”" }),
     );
     await vi.waitFor(() =>
       expect(mocks.save).toHaveBeenCalledWith({
@@ -658,7 +658,7 @@ describe("OfficialServerPanel", () => {
     expect(
       (
         screen.getByRole("button", {
-          name: "Make the chosen server official",
+          name: "Make official: chosen server",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
@@ -681,7 +681,7 @@ describe("OfficialServerPanel", () => {
 
     fireEvent.change(select, { target: { value: "server-tools" } });
     fireEvent.click(
-      screen.getByRole("button", { name: "Make the chosen server official" }),
+      screen.getByRole("button", { name: "Make official: “Company Tools”" }),
     );
 
     await waitFor(() => {
