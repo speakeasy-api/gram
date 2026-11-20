@@ -3,8 +3,21 @@ name: Dependabot lockfile normalization
 # Restrict head checkout to same-repo Dependabot PRs and verify commit metadata
 # before executing repository tooling. Only the separate writer receives App
 # credentials; it consumes files as data and does not execute PR code.
-on: # zizmor: ignore[dangerous-triggers]
-  pull_request_target:
+#
+# SECURITY: keep the trigger as `pull_request`. Runs that Dependabot triggers
+# get a read-only GITHUB_TOKEN and only Dependabot secrets, never Actions
+# secrets, and fork PRs get no secrets at all. `pull_request_target` would run
+# in the base repository's context with every Actions secret available.
+#
+# One-time setup for the writer: a dedicated GitHub App installed only on this
+# repository, with Contents (read and write) and no ruleset bypass. Store its
+# Client ID and private key as repository Dependabot secrets (Settings >
+# Secrets and variables > Dependabot) named DEPENDABOT_NORMALIZER_CLIENT_ID
+# and DEPENDABOT_NORMALIZER_PRIVATE_KEY. Other Dependabot-triggered workflows
+# can reference those secrets too, so keep the App's installation and
+# permissions this narrow. Do not point them at gram-bot.
+on:
+  pull_request:
     types: [opened, reopened, synchronize]
     branches: [main]
     paths:
@@ -146,13 +159,27 @@ jobs:
             -c user.email='gram-bot[bot]@users.noreply.github.com' \
             commit -m 'chore(deps): normalize pnpm dependencies'
 
-      - name: Get the bot token so downstream PR CI runs
+      - name: Check writer app configuration
+        if: steps.current.outputs.eligible == 'true'
+        env:
+          CLIENT_ID: ${{ secrets.DEPENDABOT_NORMALIZER_CLIENT_ID }}
+          PRIVATE_KEY: ${{ secrets.DEPENDABOT_NORMALIZER_PRIVATE_KEY }}
+        run: |
+          missing=()
+          [[ -n "$CLIENT_ID" ]] || missing+=("DEPENDABOT_NORMALIZER_CLIENT_ID")
+          [[ -n "$PRIVATE_KEY" ]] || missing+=("DEPENDABOT_NORMALIZER_PRIVATE_KEY")
+          for m in "${missing[@]}"; do
+            echo "::error title=Writer app not configured::Dependabot secret ${m} is not set. See the setup notes at the top of dependabot-normalization.yaml."
+          done
+          (( ${#missing[@]} == 0 ))
+
+      - name: Get the writer token so downstream PR CI runs
         if: steps.current.outputs.eligible == 'true'
         id: bot-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          app-id: ${{ vars.GRAM_BOT_APP_ID }}
-          private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
+          client-id: ${{ secrets.DEPENDABOT_NORMALIZER_CLIENT_ID }}
+          private-key: ${{ secrets.DEPENDABOT_NORMALIZER_PRIVATE_KEY }}
           permission-contents: write
 
       - name: Push if the remote head has not moved
