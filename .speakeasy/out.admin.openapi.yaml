@@ -9886,7 +9886,7 @@ paths:
       x-speakeasy-name-override: startTrial
   /admin/upstreamOAuthMigration.disableEnforcement:
     post:
-      description: 'Disables upstream auth enforcement for one organization. This is its rollback: requests return to the upstream client choice within a minute. Safe to call when enforcement is already off.'
+      description: Retired. Older staff clients can still reach this endpoint, but requests are rejected. Upstream auth enforcement cannot be turned off.
       operationId: adminDisableUpstreamAuthEnforcement
       requestBody:
         content:

@@ -1,0 +1,20 @@
+# Close legacy upstream auth rollback
+
+AIM-1140 closes the staff rollback action without dropping data or stopping legacy mirror writes. The staff Upstream OAuth Migration page still shows enforcement, typed coverage, and repair actions. Older staff clients that call `POST /admin/upstreamOAuthMigration.disableEnforcement` receive an error and leave the organization unchanged.
+
+**Hold the closure release until production cutover evidence is reviewed.** A green CI run or an organization marked “Ready” in the staff page is not cutover evidence. Record the following in the internal rollout record linked from AIM-1140. Keep tenant-specific evidence out of the repository.
+
+## Before promoting the closure release
+
+1. **Enforcement:** Reconcile the complete active-organization inventory against the enforcement status. Confirm enforcement is on for every active organization, including organizations created during rollout. Confirm parity and cross-organization public-server denial communication under the existing rollout procedure.
+2. **Live credentials and grants:** On the Upstream OAuth Migration page, or via `getUpstreamOAuthMigrationStatus`, record coverage by credential class. Check that live credential choices have a usable typed mapping or explicit no-auth, and confirm required auth grants without restoring intentionally revoked permissions. Check mapping totals, gap totals (the displayed detail list is bounded), pending mappings, pending grants, unresolved associations, and failed phases. Resolve gaps through supported repair, configuration, or reconnection; do not infer ambiguous choices. Missing counts, an in-progress run, or a failed phase are not evidence of zero gaps.
+3. **Execution profiles:** Record assistant and trigger coverage, including each execution context. Check pending versions and profile/server gaps. Treat unexercised profiles separately from recorded versions: verify first-use typed issuance for those profiles rather than counting them as already covered.
+4. **Serving replica floor:** Record the agreed typed-compatible floor by immutable image digest and source revision for each relevant workload. Compare it to the actual running revisions in every serving region, including admin API, gateway, and serving or issuing workers as applicable. A deployment's desired revision alone does not establish the floor. Establish the exact images operators may restore and verify that each preserves typed authorization and selection. If inventory, floor, or compatibility is unknown, hold.
+
+Keep legacy mirror writes on while the closure release rolls out. Once every serving admin replica is on a revision with the rollback action disabled, confirm that stale staff clients receive a rejection and that enforcement and diagnostics still work. A mixed fleet can still accept the old operation on older replicas; do not treat the action as closed until all have drained.
+
+## Before stopping mirror writes
+
+Recheck enforcement and coverage after rollout. In the rollout record, name the rollback images and attach evidence that they serve and issue credentials correctly using typed state without relying on legacy data written after this point. Confirm that the staff rollback action remains disabled on those images. Hold the write contraction if any required evidence is absent or the rollback images still depend on fresh legacy data.
+
+After mirror writes stop, roll back application code only to a verified typed-compatible image at or above the recorded floor. Do not clear enforcement, restore a legacy resolver, or use stale mirror data. If no supported rollback image can serve correctly, stop the rollout and repair forward. This phase does not remove feature rows or make schema changes.
