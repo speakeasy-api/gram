@@ -97,4 +97,16 @@ func TestReconnectRecordsOnlyReviewedTypedChoices(t *testing.T) {
 	untouched, err := f.q.GetSelectionFixture(ctx, authclientbackfill.GetSelectionFixtureParams{CredentialID: credentialID, McpServerID: unrelated})
 	require.NoError(t, err)
 	require.True(t, untouched.NoAuth)
+
+	// The same reviewed client is writable only after an explicit EMA pick.
+	ema := f.adminClient(authClientTypeEMA, validUUID(f.registration))
+	next.Members["source"].Auth.ClientID = ema
+	replace(next, next)
+	_, err = f.q.GetSelectionFixture(ctx, params)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	next.Members["source"].Auth.ExplicitPick = true
+	replace(next, next)
+	choice, err = f.q.GetSelectionFixture(ctx, params)
+	require.NoError(t, err)
+	require.Equal(t, validUUID(ema), choice.AuthClientID)
 }
