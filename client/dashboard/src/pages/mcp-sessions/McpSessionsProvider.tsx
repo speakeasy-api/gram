@@ -13,6 +13,11 @@ import { InlineEmptyState } from "@/components/inline-empty-state";
 import { RequireScope } from "@/components/require-scope";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Text } from "@/components/ui/Text";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/Tooltip";
 import { useProject } from "@/contexts/Auth";
 import { useScrollToSettingsHash } from "@/hooks/useScrollToSettingsHash";
 import { useTabScrollReset } from "@/hooks/useTabScrollReset";
@@ -30,7 +35,7 @@ import { useRoutes } from "@/routes";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useOrganizationUserSessionIssuer } from "@gram/client/react-query/organizationUserSessionIssuer.js";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Info } from "lucide-react";
 import { useEffect } from "react";
 import {
   Link,
@@ -40,15 +45,23 @@ import {
   useParams,
 } from "react-router";
 import { ConnectionsTab } from "./ConnectionsTab";
+import { ConnectionsViews } from "./connection-health/ConnectionsViews";
+import { useConnectionHealthFlag } from "./connection-health/flag";
+import { OverviewTab } from "./connection-health/OverviewTab";
+import { SessionDurationControl } from "./connection-health/SessionDurationControl";
 import { ProviderPicker } from "./ProviderPicker";
 import {
+  clientAccessLabel,
+  HEALTH_PROVIDER_SEGMENTS,
   PROVIDER_TABS,
+  type HealthProviderSegment,
   useLastProvider,
   useProjectProviders,
   type ProviderTab,
 } from "./providers";
 
-const TAB_TITLES: Record<ProviderTab, string> = {
+const TAB_TITLES: Record<ProviderTab | "overview", string> = {
+  overview: "Overview",
   connections: "Connections",
   "mcp-servers": "MCP servers",
   settings: "Settings",
@@ -97,15 +110,24 @@ function ProviderPage(): JSX.Element {
   const { issuerId = "" } = useParams<{ issuerId: string }>();
   const { providers, isLoading } = useProjectProviders();
   const [, rememberProvider] = useLastProvider();
-  const activeTab = activeDetailTab(pathname, PROVIDER_TABS);
+  const health = useConnectionHealthFlag();
+  const healthOn = health === "on";
+  const segment = activeDetailTab(pathname, HEALTH_PROVIDER_SEGMENTS);
+  const isHealthSegment =
+    segment === "overview" || segment === "connection-logs";
+  const activeTab = segment === "connection-logs" ? "connections" : segment;
   const provider = providers.find((p) => p.id === issuerId);
   // The frame owns the scroll container; a tab change starts at the top.
-  const contentRef = useTabScrollReset(activeTab);
+  const contentRef = useTabScrollReset(segment);
 
-  const tabHref = (tab: ProviderTab, id: string = issuerId) => {
+  const tabHref = (tab: HealthProviderSegment, id: string = issuerId) => {
     switch (tab) {
+      case "overview":
+        return routes.mcpSessions.provider.overview.href(id);
       case "connections":
         return routes.mcpSessions.provider.connections.href(id);
+      case "connection-logs":
+        return routes.mcpSessions.provider.connectionLogs.href(id);
       case "mcp-servers":
         return routes.mcpSessions.provider.mcpServers.href(id);
       case "settings":
@@ -119,7 +141,16 @@ function ProviderPage(): JSX.Element {
     if (provider) rememberProvider(provider.id);
   }, [provider, rememberProvider]);
 
-  if (!activeTab)
+  // Wait for the flag before choosing where a bare or flagged URL lands.
+  if (health === "pending" && (!segment || isHealthSegment)) return <></>;
+  if (!segment)
+    return (
+      <Navigate
+        to={`${tabHref(healthOn && !search ? "overview" : "connections")}${search}`}
+        replace
+      />
+    );
+  if (isHealthSegment && !healthOn)
     return <Navigate to={`${tabHref("connections")}${search}`} replace />;
   // A provider this project can't use, or one since consolidated away:
   // the index picks another.
@@ -127,15 +158,35 @@ function ProviderPage(): JSX.Element {
     return <Navigate to={routes.mcpSessions.href()} replace />;
   }
 
-  const tabs: DetailFrameTab[] = PROVIDER_TABS.map((tab) => ({
+  const tabs: DetailFrameTab[] = (
+    healthOn ? (["overview", ...PROVIDER_TABS] as const) : PROVIDER_TABS
+  ).map((tab) => ({
     key: tab,
     title: TAB_TITLES[tab],
-    href: tabHref(tab),
+    href: tabHref(tab === "connections" && healthOn ? "connection-logs" : tab),
   }));
 
   return (
     <DetailFrame
-      breadcrumbs={{ substitutions: { [issuerId]: provider?.slug } }}
+      breadcrumbs={{
+        substitutions: {
+          [issuerId]: provider?.slug,
+          "mcp-sessions": "MCP Sessions",
+          ...(healthOn
+            ? { connections: "Active Sessions", "mcp-servers": "MCP servers" }
+            : {}),
+        },
+        // Connection Logs and Active Sessions are views of the Connections tab.
+        insertAfter:
+          segment === "connection-logs" ||
+          (healthOn && segment === "connections")
+            ? {
+                segment: issuerId,
+                display: "Connections",
+                url: routes.mcpSessions.provider.connections.href(issuerId),
+              }
+            : undefined,
+      }}
       tabsLabel="MCP Authentication Provider sections"
       tabs={tabs}
       activeTab={activeTab}
@@ -145,7 +196,7 @@ function ProviderPage(): JSX.Element {
           title={
             provider ? (
               <DetailHeaderTitle
-                eyebrow="MCP Authentication Provider"
+                eyebrow={healthOn ? <ProviderEyebrow /> : PROVIDER_EYEBROW}
                 name={
                   <ProviderPicker
                     current={provider}
@@ -153,7 +204,7 @@ function ProviderPage(): JSX.Element {
                     // Same tab, other provider; the query's filters (a
                     // person, a status) still apply.
                     onSelect={(next) =>
-                      void navigate(`${tabHref(activeTab, next.id)}${search}`)
+                      void navigate(`${tabHref(segment, next.id)}${search}`)
                     }
                   />
                 }
@@ -167,6 +218,7 @@ function ProviderPage(): JSX.Element {
               <ProviderHeaderControls
                 provider={provider}
                 settingsHref={tabHref("settings")}
+                healthOn={healthOn}
               />
             ) : null
           }
@@ -176,8 +228,20 @@ function ProviderPage(): JSX.Element {
       {/* Keyed, so switching project or provider starts each tab afresh:
           a search for one project's connections never carries over. */}
       <div key={`${project.id}:${issuerId}`} className="contents">
-        {activeTab === "connections" ? (
-          <ConnectionsTab providerId={issuerId} />
+        {segment === "overview" ? (
+          provider ? (
+            <OverviewTab provider={provider} />
+          ) : (
+            <SkeletonTable label="Loading Overview" />
+          )
+        ) : segment === "connection-logs" ? (
+          <ConnectionsViews view="logs" providerId={issuerId} />
+        ) : activeTab === "connections" ? (
+          healthOn ? (
+            <ConnectionsViews view="sessions" providerId={issuerId} />
+          ) : (
+            <ConnectionsTab providerId={issuerId} />
+          )
         ) : activeTab === "mcp-servers" ? (
           <ProviderMcpServersTab issuerId={issuerId} />
         ) : (
@@ -188,14 +252,59 @@ function ProviderPage(): JSX.Element {
   );
 }
 
+const PROVIDER_EYEBROW = "MCP Authentication Provider";
+
+/** The eyebrow, with a short answer to "what is this?" beside it. */
+function ProviderEyebrow(): JSX.Element {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {PROVIDER_EYEBROW}
+      <Tooltip>
+        <TooltipTrigger
+          aria-label="What is an MCP Authentication Provider?"
+          className="text-muted-foreground hover:text-foreground inline-flex cursor-help"
+        >
+          <Info className="size-3.5" aria-hidden />
+        </TooltipTrigger>
+        <TooltipContent side="bottom" align="start">
+          What AI apps sign in through to reach your MCP servers. It decides who
+          gets a session and how long it lasts.
+        </TooltipContent>
+      </Tooltip>
+    </span>
+  );
+}
+
 /** How sign-in through the provider is set up, each linking to its setting. */
 function ProviderHeaderControls({
   provider,
   settingsHref,
+  healthOn,
 }: {
   provider: UserSessionIssuer;
   settingsHref: string;
+  healthOn: boolean;
 }): JSX.Element {
+  if (healthOn) {
+    return (
+      <DetailHeaderControls
+        fitContent
+        rows={[
+          {
+            key: "session-duration",
+            label: "Session duration",
+            control: (
+              <SessionDurationControl
+                providerId={provider.id}
+                configuredHours={provider.sessionDurationHours}
+                href={`${settingsHref}#session-length`}
+              />
+            ),
+          },
+        ]}
+      />
+    );
+  }
   const duration = splitIntoUnit(provider.sessionDurationHours);
   const rows: DetailHeaderControlRow[] = [
     {
@@ -243,14 +352,6 @@ function HeaderSettingLink({
       <ChevronRight className="text-muted-foreground size-3.5 shrink-0" />
     </Link>
   );
-}
-
-/** The client access mode as Settings words it. */
-function clientAccessLabel(mode: string): string {
-  if (mode === "presets") return "Known clients";
-  // "reporting" is a legacy value that admits what "open" admits.
-  if (mode === "open" || mode === "reporting") return "Any client";
-  return "Off";
 }
 
 /**
@@ -323,6 +424,7 @@ function ProviderMcpServersTab({
 
 function ProviderMcpServers({ issuerId }: { issuerId: string }): JSX.Element {
   const { issuer, isPending, missing, error } = useProviderDetail(issuerId);
+  const health = useConnectionHealthFlag();
   if (isPending) return <SkeletonTable label="Loading MCP servers" />;
   if (missing || !issuer) return <ProviderUnavailable error={error} />;
   return (
@@ -331,7 +433,11 @@ function ProviderMcpServers({ issuerId }: { issuerId: string }): JSX.Element {
         Every MCP server and gateway that signs people in through this provider.
         Changes to its settings apply to all of them.
       </Text>
-      <McpServersSection issuer={issuer} titled={false} />
+      <McpServersSection
+        issuer={issuer}
+        titled={false}
+        linkRows={health === "on"}
+      />
     </div>
   );
 }

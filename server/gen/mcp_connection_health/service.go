@@ -352,7 +352,12 @@ type GetSessionActivityPayload struct {
 // service getSignInSummary method.
 type GetSignInSummaryPayload struct {
 	// Bucket size. Defaults to hour for ranges up to 48 hours, otherwise day.
-	Bucket           *string
+	Bucket *string
+	// Count only attempts that ended at these steps, as the Connection Logs step
+	// filter does. Absent: sign_in, service_sign_in, sign_in_renewal and
+	// service_renewal. Steps outside these four count nothing. In-progress
+	// attempts are never counted.
+	Steps            []ConnectionStepGroup
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string

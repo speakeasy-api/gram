@@ -49,6 +49,7 @@ export function DetailFrame({
   breadcrumbs: {
     substitutions: Record<string, string | undefined>;
     skipSegments?: string[];
+    insertAfter?: { segment: string; display: string; url: string };
   };
   /** The header band's contents, usually a `DetailHeaderLayout`. */
   header: ReactNode;
@@ -113,6 +114,7 @@ export function DetailFrame({
         <Page.Header.Breadcrumbs
           substitutions={breadcrumbs.substitutions}
           skipSegments={breadcrumbs.skipSegments}
+          insertAfter={breadcrumbs.insertAfter}
         />
       </Page.Header>
 
@@ -239,7 +241,7 @@ export function DetailHeaderTitle({
   below,
   compact = false,
 }: {
-  eyebrow: string;
+  eyebrow: ReactNode;
   name: ReactNode;
   icon?: ReactNode;
   below?: ReactNode;
@@ -308,10 +310,13 @@ export type DetailHeaderControlRow = {
 export function DetailHeaderControls({
   rows,
   compact = false,
+  fitContent = false,
 }: {
   rows: DetailHeaderControlRow[];
   /** Tighter rows on a short screen. */
   compact?: boolean;
+  /** Grows past the fixed width (up to 480px) so a long readout is not cut. */
+  fitContent?: boolean;
 }): JSX.Element | null {
   if (rows.length === 0) return null;
   return (
@@ -322,7 +327,10 @@ export function DetailHeaderControls({
         <div
           key={row.key}
           className={cn(
-            "flex w-full min-w-0 flex-col sm:w-[200px]",
+            "flex w-full min-w-0 flex-col",
+            fitContent
+              ? "sm:w-auto sm:max-w-[480px] sm:min-w-[200px]"
+              : "sm:w-[200px]",
             "gap-1.5",
             compact && "short:gap-1",
           )}

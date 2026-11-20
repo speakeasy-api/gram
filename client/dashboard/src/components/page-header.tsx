@@ -1,4 +1,5 @@
 // oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
+import { useConnectionHealthFlag } from "@/pages/mcp-sessions/connection-health/flag";
 import { CommandPaletteTrigger } from "./command-palette/CommandPaletteTrigger";
 import { useOrganization, useProject } from "@/contexts/Auth.tsx";
 import { useSlugs } from "@/contexts/Sdk.tsx";
@@ -233,6 +234,8 @@ function useShowBreadcrumbs(): boolean {
   const projectPage = pathname.match(
     /^\/[^/]+\/projects\/[^/]+\/([^/?#]+)/,
   )?.[1];
+  const health = useConnectionHealthFlag();
+  if (projectPage === "mcp-sessions") return health === "on";
   return !!projectPage && BREADCRUMB_PAGE_SLUGS.has(projectPage);
 }
 

@@ -115,6 +115,7 @@ var _ = Service("mcpConnectionHealth", func() {
 			Attribute("bucket", String, "Bucket size. Defaults to hour for ranges up to 48 hours, otherwise day.", func() {
 				Enum("hour", "six_hours", "day")
 			})
+			Attribute("steps", ArrayOf(StepGroup), "Count only attempts that ended at these steps, as the Connection Logs step filter does. Absent: sign_in, service_sign_in, sign_in_renewal and service_renewal. Steps outside these four count nothing. In-progress attempts are never counted.", func() { MaxLength(50) })
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
