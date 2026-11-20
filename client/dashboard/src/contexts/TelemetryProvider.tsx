@@ -84,6 +84,9 @@ export const TelemetryProvider = (props: {
           // PostHog otherwise collects the hardware model by default on
           // Chromium-based Android browsers.
           disableDeviceModel: true,
+          // Session recording is otherwise switched on remotely from the
+          // PostHog project settings. Keep it off regardless of that setting.
+          disable_session_recording: true,
           feature_flag_request_timeout_ms: 1000,
         },
         "speakeasy",
@@ -91,8 +94,8 @@ export const TelemetryProvider = (props: {
   setAnalyticsSessionIdSource(ph ? () => ph.get_session_id() : null);
 
   useEffect(() => {
-    // Never start RUM on the public share page — the session replay and
-    // resource entries would capture the share token in URLs.
+    // Never start RUM on the public share page — the resource entries would
+    // capture the share token in URLs.
     if (isPublicSharePath()) {
       return;
     }
@@ -111,7 +114,8 @@ export const TelemetryProvider = (props: {
         service: "gram",
         env: "prod",
         sessionSampleRate: 100,
-        sessionReplaySampleRate: 100,
+        // No session replay: recordings would show customer data on screen.
+        sessionReplaySampleRate: 0,
         trackUserInteractions: true,
         trackResources: true,
         defaultPrivacyLevel: "mask-user-input",
