@@ -77,6 +77,16 @@ pull_images() {
   mise exec -- docker compose -f compose.shared.yml -p gram-shared "${args[@]}"
 }
 
+# Compile the server once so the snapshot's Go build cache serves the first
+# `go build`, `go test`, or `mise run start`. A compile error on the branch must
+# not fail setup: the cache only saves time, and the error surfaces where the
+# code is built.
+warm_go_build_cache() {
+  if ! mise run build:server-cache; then
+    echo "⚠️ Server build failed; continuing without a warm build cache"
+  fi
+}
+
 export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
 export MISE_YES=1
 
@@ -86,4 +96,5 @@ step "Persisting mise PATH" persist_path
 step "Installing pinned tools" install_tools
 step "Installing Go, Node, and Python dependencies" mise run install
 step "Installing git hooks" mise run zero:hk --yes
+step "Warming Go build cache" warm_go_build_cache
 step "Pulling missing local stack images" pull_images
