@@ -123,11 +123,7 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 
 	checks := make([]authz.Check, len(tools))
 	for idx, t := range tools {
-		checks[idx] = authz.MCPToolCallCheck(i.mcpServerID, authz.MCPToolCallDimensions{
-			Tool:        strings.TrimSpace(t.Name),
-			Disposition: dispositions[strings.TrimSpace(t.Name)],
-			ProjectID:   i.projectID,
-		})
+		checks[idx] = authz.MCPServer(authz.MCPServerIDFrom(i.mcpServerID), authz.ProjectIDFrom(i.projectID)).ToolCall(strings.TrimSpace(t.Name), dispositions[strings.TrimSpace(t.Name)])
 	}
 
 	matched, err := i.authz.FindMatched(ctx, checks)
