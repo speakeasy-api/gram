@@ -1,6 +1,7 @@
 package aivendors
 
 import (
+	"cmp"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -157,7 +158,7 @@ func TestSnapshotFingerprintTreatsNilAndEmptyAlike(t *testing.T) {
 	require.Equal(t, NewSnapshot([]Product{{ID: "p"}}).Fingerprint(), NewSnapshot([]Product{empty}).Fingerprint())
 }
 
-func TestCompiledSnapshotMatchesRegistryIgnoringOrder(t *testing.T) {
+func TestCompiledSnapshotIsTheRegistryInDatabaseOrder(t *testing.T) {
 	t.Parallel()
 	snapshot := CompiledSnapshot()
 	require.Same(t, snapshot, CompiledSnapshot(), "every caller shares one compiled snapshot")
@@ -168,18 +169,22 @@ func TestCompiledSnapshotMatchesRegistryIgnoringOrder(t *testing.T) {
 		want[i].Aliases = nil
 		slices.SortFunc(want[i].Documents, byURL)
 	}
-	require.ElementsMatch(t, want, snapshot.Products())
-	require.True(t, slices.IsSortedFunc(snapshot.Products(), func(a, b Product) int { return strings.Compare(a.ID, b.ID) }))
+	slices.SortFunc(want, func(a, b Product) int { return strings.Compare(a.ID, b.ID) })
+	require.Equal(t, want, snapshot.Products())
 	var documents []Preset
 	for _, entry := range CIMDDocuments() {
 		require.Equal(t, strings.Contains(entry.Document.URL, "*"), entry.Document.Pattern, entry.Document.URL)
 		documents = append(documents, Preset{ProductID: entry.Product.ID, VendorKey: entry.Product.VendorKey, DisplayName: entry.Document.DisplayName, URL: entry.Document.URL, Enabled: entry.Document.Enabled, Pattern: entry.Document.Pattern})
 	}
-	require.ElementsMatch(t, documents, snapshot.Catalog())
+	slices.SortFunc(documents, func(a, b Preset) int {
+		return cmp.Or(strings.Compare(a.ProductID, b.ProductID), strings.Compare(a.URL, b.URL))
+	})
+	require.Equal(t, documents, snapshot.Catalog())
 	for _, p := range Products() {
 		want, got := GatewayMatchersFor(p), snapshot.GatewayMatchersFor(p)
 		require.Equal(t, want.VendorKeys, got.VendorKeys, p.ID)
-		require.ElementsMatch(t, want.ClientIDs, got.ClientIDs, p.ID)
+		slices.Sort(want.ClientIDs)
+		require.Equal(t, want.ClientIDs, got.ClientIDs, p.ID)
 		require.Equal(t, BlockableVendorKey(p.VendorKey), snapshot.BlockableVendorKey(p.VendorKey), p.ID)
 	}
 }

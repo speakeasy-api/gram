@@ -92,11 +92,22 @@ func TestValidateAllowsNarrowerAndUnrelatedPatterns(t *testing.T) {
 
 func TestPatternWithin(t *testing.T) {
 	t.Parallel()
-	require.True(t, patternWithin("https://example.com/oauth/*/client.json", "https://example.com/*/*/client.json"))
-	require.False(t, patternWithin("https://example.com/*/*/client.json", "https://example.com/oauth/*/client.json"))
-	require.True(t, patternWithin("https://example.com/oauth/*/client.json", "https://example.com/oauth/*/client.json"))
-	require.False(t, patternWithin("https://example.com/oauth/*/client.json", "https://example.com/*/fixed/client.json"))
-	require.False(t, patternWithin("https://example.com/oauth/*/client.json", "https://other.example.com/oauth/*/client.json"))
+	for _, tc := range []struct {
+		name   string
+		a, b   string
+		within bool
+	}{
+		{name: "narrower inside broader", a: "https://example.com/oauth/*/client.json", b: "https://example.com/*/*/client.json", within: true},
+		{name: "broader not inside narrower", a: "https://example.com/*/*/client.json", b: "https://example.com/oauth/*/client.json", within: false},
+		{name: "identical", a: "https://example.com/oauth/*/client.json", b: "https://example.com/oauth/*/client.json", within: true},
+		{name: "incomparable", a: "https://example.com/oauth/*/client.json", b: "https://example.com/*/fixed/client.json", within: false},
+		{name: "other host", a: "https://example.com/oauth/*/client.json", b: "https://other.example.com/oauth/*/client.json", within: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.within, patternWithin(tc.a, tc.b))
+		})
+	}
 }
 
 func TestValidateCapsEnabledPatterns(t *testing.T) {

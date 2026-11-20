@@ -75,5 +75,6 @@ Isolated demo tests seed the global catalog before taking their safety baseline.
 Platform MCP needs no new tool for this worker-owned initialization of global
 reference data or the decision backfill. The existing Shadow AI
 inventory/library and client admission tools retain their readers, permissions
-and result contracts. Catalog and decision integration tests verify persistence
+and result fields; `get_inbound_ema_trust` now lists `preset_clients` by product
+id, then URL. Catalog and decision integration tests verify persistence
 and refreshed reader behavior.
