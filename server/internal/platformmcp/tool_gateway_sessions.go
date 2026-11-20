@@ -35,7 +35,7 @@ type ListGatewaySessionsInput struct {
 	ProjectID string `json:"-"`
 	// Search is supplied by the caller, never inferred from returned identities.
 	Search *string `json:"search,omitempty" jsonschema:"literal identity name, email, or subject search; at most 200 Unicode characters; identities are omitted from results"`
-	// ServerID restricts configured upstream associations, not historical usage.
+	// ServerID restricts typed OAuth offers, not historical usage.
 	ServerID *string `json:"server_id,omitempty" jsonschema:"exact member server UUID"`
 	// ProviderID restricts the upstream provider.
 	ProviderID *string `json:"provider_id,omitempty" jsonschema:"exact upstream provider issuer UUID"`
@@ -70,7 +70,7 @@ type GatewaySessionSummary struct {
 	AccessExpiresAt string `json:"access_expires_at"`
 	// RevokedAt marks an explicitly revoked authorization.
 	RevokedAt *string `json:"revoked_at,omitempty"`
-	// UpstreamAccounts counts configured upstream accounts, not usage.
+	// UpstreamAccounts counts grants attributed to this sign-in or pinned agent, not usage.
 	UpstreamAccounts int `json:"upstream_accounts"`
 }
 

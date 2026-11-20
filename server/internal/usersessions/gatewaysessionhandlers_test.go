@@ -19,6 +19,7 @@ import (
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	endpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	metarepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -195,7 +196,15 @@ func TestGatewaySessionAssociationFilters(t *testing.T) {
 	require.NoError(t, err)
 	_, err = metarepo.New(ti.conn).CreateMetaMCPMember(ctx, metarepo.CreateMetaMCPMemberParams{ProjectID: *auth.ProjectID, MetaMcpServerID: gateway, McpServerID: member.ID})
 	require.NoError(t, err)
-	require.NoError(t, testrepo.New(ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: member.ID, RemoteSessionClientID: client}))
+	typed := authclientbackfill.New(ti.conn)
+	authClient, err := typed.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{
+		OrganizationID: auth.ActiveOrganizationID, ProjectID: conv.ToNullUUID(*auth.ProjectID),
+		ClientType: authclientbackfill.TypeRemoteSession, Source: "admin", RemoteSessionClientID: conv.ToNullUUID(client),
+	})
+	require.NoError(t, err)
+	require.NoError(t, typed.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{
+		OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, McpServerID: member.ID, AuthClientID: authClient, Source: "admin",
+	}))
 	facets, err := ti.service.ListGatewaySessionFacets(ctx, &gen.ListGatewaySessionFacetsPayload{GatewayID: new(gateway.String())})
 	require.NoError(t, err)
 	require.Len(t, facets.Servers, 1)

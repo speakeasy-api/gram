@@ -1042,9 +1042,9 @@ FROM user_sessions
 WHERE user_session_issuer_id = @user_session_issuer_id;
 
 -- name: AdminListIssuerRemoteSessionClients :many
--- Live remote session clients attached to the issuer, with their upstream
--- issuer. Only the columns the health report exposes: no secrets, JWKS bodies
--- or error text.
+-- Live registrations with consent provenance under this downstream issuer,
+-- or used directly for its trusted login. Offered clients are reported by the
+-- separate upstream authentication section. Never expose secrets or errors.
 SELECT
     c.id,
     (c.client_id_metadata_uri IS NOT NULL)::boolean AS is_cimd,
@@ -1070,17 +1070,23 @@ SELECT
     r.metadata_fetched_at AS issuer_metadata_fetched_at,
     r.metadata_last_error_at AS issuer_metadata_last_error_at,
     r.jwks_last_error_at AS issuer_jwks_last_error_at
-FROM remote_session_client_user_session_issuers a
-JOIN remote_session_clients c ON c.id = a.remote_session_client_id AND c.deleted IS FALSE
+FROM user_session_issuers AS usi
+JOIN remote_session_clients AS c ON c.deleted IS FALSE AND (
+  c.id = usi.trusted_remote_session_client_id OR EXISTS (
+    SELECT 1 FROM remote_sessions AS s
+    WHERE s.remote_session_client_id = c.id AND s.user_session_issuer_id = usi.id
+  )
+)
 JOIN remote_session_issuers r ON r.id = c.remote_session_issuer_id AND r.deleted IS FALSE
-WHERE a.user_session_issuer_id = @user_session_issuer_id
+WHERE usi.id = @user_session_issuer_id
+  AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
+  AND (r.project_id = @project_id::uuid OR (r.project_id IS NULL AND (r.organization_id IS NULL OR r.organization_id = @organization_id::text)))
 ORDER BY c.created_at, c.id;
 
 -- name: AdminRemoteSessionStats :many
 -- Per client: distinct users with a live upstream session, fresh
--- authorizations beyond each session's first, and the first link. Keyed on
--- the client alone: a session is one per (subject, client), and its
--- user_session_issuer_id records only which issuer first linked it.
+-- authorizations beyond each session's first, and the first link. Scope
+-- the stats to this downstream issuer's recorded consent provenance.
 SELECT
     remote_session_client_id,
     count(DISTINCT subject_urn) FILTER (WHERE deleted IS FALSE)::bigint AS linked_subjects,
@@ -1088,18 +1094,20 @@ SELECT
     min(created_at)::timestamptz AS first_linked_at
 FROM remote_sessions
 WHERE remote_session_client_id = ANY(@remote_session_client_ids::uuid[])
+  AND user_session_issuer_id = @user_session_issuer_id
 GROUP BY remote_session_client_id;
 
 -- name: AdminRemoteSessionValidationCounts :many
 -- Live sessions per client and last validation status. Sessions never
--- validated have a NULL status and are left out. Keyed on the client alone,
--- as AdminRemoteSessionStats is.
+-- validated have a NULL status and are left out. Use the same provenance
+-- scope as AdminRemoteSessionStats.
 SELECT
     remote_session_client_id,
     validation_status::text AS validation_status,
     count(*)::bigint AS sessions
 FROM remote_sessions
 WHERE remote_session_client_id = ANY(@remote_session_client_ids::uuid[])
+  AND user_session_issuer_id = @user_session_issuer_id
   AND deleted IS FALSE
   AND validation_status IS NOT NULL
 GROUP BY remote_session_client_id, validation_status;

@@ -3530,13 +3530,9 @@ WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE
 RETURNING *;
 
 -- name: ListOrganizationRemoteSessionClientsByIssuerID :many
--- Clients registered with a given issuer in the org, each with the list of
--- user_session_issuers it is attached to (from the join table), its count of
--- attached MCP servers, and its active remote_sessions. The mcp_server_count
--- counts DISTINCT mcp_servers reachable through the client's join-table
--- attachments. The active_session_count counts non-deleted remote_sessions
--- minted against the client, matching CountActiveRemoteSessionsByClientID and
--- the delete preflight.
+-- Clients registered with an issuer, with the servers that offer each
+-- registration and its active remote sessions. The issuer attachment IDs are
+-- retained for consumers of the legacy attachment contract, not reachability.
 --
 -- ORG REACHABILITY (this predicate is repeated across every org-admin client
 -- and session query; change them together):
@@ -3573,13 +3569,17 @@ SELECT
     )::uuid[] AS user_session_issuer_ids,
     (
         SELECT COUNT(DISTINCT m.id)
-        FROM mcp_servers AS m
-        WHERE m.deleted IS FALSE
-          AND m.user_session_issuer_id IN (
-              SELECT link.user_session_issuer_id
-              FROM remote_session_client_user_session_issuers AS link
-              WHERE link.remote_session_client_id = c.id
-          )
+        FROM mcp_auth_clients AS ac
+        JOIN mcp_server_auth_clients AS offer ON offer.auth_client_id = ac.id
+          AND offer.organization_id = ac.organization_id AND offer.deleted IS FALSE
+        JOIN mcp_servers AS m ON m.id = offer.mcp_server_id
+          AND m.project_id = offer.project_id AND m.deleted IS FALSE
+        JOIN projects AS p ON p.id = m.project_id
+          AND p.organization_id = offer.organization_id AND p.deleted IS FALSE
+        WHERE ac.remote_session_client_id = c.id
+          AND ac.organization_id = @organization_id
+          AND (ac.project_id IS NULL OR ac.project_id = offer.project_id)
+          AND ac.enabled AND ac.deleted IS FALSE
     )::bigint AS mcp_server_count,
     (
         SELECT COUNT(*)
@@ -3605,6 +3605,17 @@ WHERE c.remote_session_issuer_id = @remote_session_issuer_id
   AND (sqlc.narg('cursor')::uuid IS NULL OR c.id < sqlc.narg('cursor')::uuid)
 ORDER BY c.id DESC
 LIMIT sqlc.arg('limit_value');
+
+-- name: GetOrganizationRemoteSessionRegistration :one
+-- Apply the same registration tenancy as the legacy detail view without
+-- reading the issuer attachment IDs that only that view exposes.
+SELECT c.id
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+WHERE c.id = @id
+  AND (i.organization_id = @organization_id OR c.organization_id = @organization_id)
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE;
 
 -- name: GetOrganizationRemoteSessionClientByID :one
 -- A client in the org by id. See the ORG REACHABILITY note on
@@ -3700,6 +3711,41 @@ WHERE c.id = @id
       AND usi.deleted IS FALSE
   )
 RETURNING c.*;
+
+-- name: ListOrganizationMcpServersUsingRegistration :many
+-- Inventory describes live typed offers. Delete previews additionally include
+-- disabled offers and concrete server associations that deletion could prune.
+-- Neither derives server usage from a shared downstream sign-in issuer.
+WITH affected AS (
+    SELECT offer.mcp_server_id, offer.project_id
+    FROM mcp_auth_clients AS ac
+    JOIN remote_session_clients AS c ON c.id = ac.remote_session_client_id AND c.deleted IS FALSE
+    JOIN mcp_server_auth_clients AS offer ON offer.auth_client_id = ac.id
+      AND offer.organization_id = ac.organization_id AND offer.deleted IS FALSE
+    WHERE ac.organization_id = @organization_id::text AND ac.deleted IS FALSE
+      AND (ac.project_id IS NULL OR ac.project_id = offer.project_id)
+      AND (ac.enabled OR @include_delete_impact::boolean)
+      AND (sqlc.narg('client_id')::uuid IS NULL OR c.id = sqlc.narg('client_id'))
+      AND (sqlc.narg('issuer_id')::uuid IS NULL OR c.remote_session_issuer_id = sqlc.narg('issuer_id'))
+    UNION
+    SELECT a.mcp_server_id, a.project_id
+    FROM mcp_server_remote_session_clients AS a
+    JOIN remote_session_clients AS c ON c.id = a.remote_session_client_id AND c.deleted IS FALSE
+    WHERE @include_delete_impact::boolean AND a.organization_id = @organization_id::text
+      AND a.deleted IS FALSE
+      AND (sqlc.narg('client_id')::uuid IS NULL OR c.id = sqlc.narg('client_id'))
+      AND (sqlc.narg('issuer_id')::uuid IS NULL OR c.remote_session_issuer_id = sqlc.narg('issuer_id'))
+)
+SELECT m.id, m.project_id, p.slug AS project_slug, m.name, m.slug,
+       COALESCE(rms.url, '')::text AS url
+FROM affected
+JOIN mcp_servers AS m ON m.id = affected.mcp_server_id
+  AND m.project_id = affected.project_id AND m.deleted IS FALSE
+JOIN projects AS p ON p.id = m.project_id
+  AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
+LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id
+  AND rms.project_id = m.project_id AND rms.deleted IS FALSE
+ORDER BY m.id DESC;
 
 -- name: ListOrganizationMcpServersForClient :many
 -- MCP servers attached to a client through its user_session_issuer(s). Callers
