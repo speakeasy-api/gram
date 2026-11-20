@@ -208,6 +208,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # The workflow token approves the pin PR. gram-bot opens it and cannot
+      # approve its own pull request.
+      pull-requests: write
     steps:
       - name: Generate GitHub App Token for Speakeasy Bot
         id: bot-token
@@ -280,6 +283,7 @@ jobs:
 
           if gh pr list --head "$branch" --state open --json number --jq '.[].number' | grep -q .; then
             echo "Pin pull request for $branch already open; branch updated."
+            echo "branch=$branch" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           pr_url=$(gh pr create \
@@ -292,6 +296,7 @@ jobs:
             --head "$branch" \
             --base main)
           echo "url=$pr_url" >> "$GITHUB_OUTPUT"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
       - name: Announce the pin pull request in Slack
         # Reruns that only update an existing pin PR produce no URL and stay
         # quiet; the channel hears about each release once.
@@ -309,7 +314,7 @@ jobs:
           fi
           payload=$(jq -n \
             --arg channel "$SLACK_CHANNEL_ID" \
-            --arg text ":package: Hooks release \`hooks@${VERSION}\` published — pin pull request open: ${PR_URL}" \
+            --arg text ":package: Hooks release \`hooks@${VERSION}\` published — pin pull request merges once its checks pass: ${PR_URL}" \
             '{channel: $channel, text: $text, unfurl_links: false}')
           response=$(curl -sf -X POST https://slack.com/api/chat.postMessage \
             -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
@@ -319,3 +324,17 @@ jobs:
             echo "Slack API error: $(echo "$response" | jq -r '.error')"
             exit 1
           }
+      # Merging the pin moves only canary organizations and first-time hooks
+      # publishes. Every other organization stays at its rollout pin in the
+      # admin dashboard (docs/runbooks/hooks-version-rollout.md), so the pin PR
+      # can merge on its own once its checks pass.
+      - name: Approve the pin pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.pr.outputs.branch }}
+        run: gh pr review "$BRANCH" --approve --body "Approved by the hooks release workflow. Customers stay at their admin rollout pin."
+      - name: Merge the pin pull request when its checks pass
+        env:
+          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
+          BRANCH: ${{ steps.pr.outputs.branch }}
+        run: gh pr merge "$BRANCH" --auto --squash
