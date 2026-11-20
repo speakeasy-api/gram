@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -125,10 +126,7 @@ func attachmentTestClients(t *testing.T, conn *pgxpool.Pool, principal Principal
 		ProjectID: project.ID, OrganizationID: principal.OrganizationID, RemoteSessionClientIds: ids,
 	})
 	require.NoError(t, err)
-	var issuerLinks int
-	err = conn.QueryRow(t.Context(), `SELECT count(*)
-		FROM remote_session_client_user_session_issuers
-		WHERE user_session_issuer_id = $1`, userSessionIssuerID).Scan(&issuerLinks)
+	issuerLinks, err := testrepo.New(conn).CountUserSessionIssuerCompatibilityParentsFixture(t.Context(), userSessionIssuerID)
 	require.NoError(t, err)
 	require.Zero(t, issuerLinks, "catalog attachment offers the registration without writing issuer links")
 	return rows

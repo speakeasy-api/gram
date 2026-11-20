@@ -2705,6 +2705,11 @@ WHERE organization_id = @organization_id
 INSERT INTO mcp_servers (id, project_id, name, slug, builtin_backend, visibility)
 VALUES (@id, @project_id, 'Speakeasy Approvals', @slug, 'approvals', 'private');
 
+-- name: CountUserSessionIssuerCompatibilityParentsFixture :one
+SELECT count(*)
+FROM remote_session_client_user_session_issuers
+WHERE user_session_issuer_id = @user_session_issuer_id;
+
 -- name: CountRemoteSessionClientBindingsFixture :one
 -- Counts a client's user session issuer bindings, whether or not the client is
 -- deleted.

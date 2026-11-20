@@ -779,6 +779,19 @@ func (q *Queries) CountSkillScanRecords(ctx context.Context, arg CountSkillScanR
 	return count, err
 }
 
+const countUserSessionIssuerCompatibilityParentsFixture = `-- name: CountUserSessionIssuerCompatibilityParentsFixture :one
+SELECT count(*)
+FROM remote_session_client_user_session_issuers
+WHERE user_session_issuer_id = $1
+`
+
+func (q *Queries) CountUserSessionIssuerCompatibilityParentsFixture(ctx context.Context, userSessionIssuerID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countUserSessionIssuerCompatibilityParentsFixture, userSessionIssuerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countWaitingAdvisoryLocksFixture = `-- name: CountWaitingAdvisoryLocksFixture :one
 SELECT count(*)::bigint AS waiting FROM pg_catalog.pg_locks
 WHERE locktype = 'advisory' AND NOT granted
