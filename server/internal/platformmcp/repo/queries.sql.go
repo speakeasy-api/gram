@@ -2900,9 +2900,9 @@ const getPlatformMCPLifecycle = `-- name: GetPlatformMCPLifecycle :one
 WITH default_project AS (
     SELECT id
     FROM projects
-    WHERE organization_id = $1
-      AND slug = 'default'
-      AND deleted IS FALSE
+    WHERE projects.organization_id = $1
+      AND projects.slug = 'default'
+      AND projects.deleted IS FALSE
     LIMIT 1
 )
 SELECT
