@@ -228,14 +228,14 @@ func attachOrganizationGateway(mux goahttp.Muxer, service *Service, metadataServ
 // gateway's authorization server routes on the authentication host, which an
 // organization issuer that opts in to it announces as the gateway's
 // authorization server.
-func attachOrganizationGatewayAuthenticationHost(mount func(method, pattern string, handler http.HandlerFunc), service *Service) {
+func attachOrganizationGatewayAuthenticationHost(host *AuthenticationHost, service *Service) {
 	gatewayPost := oops.MCPErrHandle(service.logger, service.ServeOrganizationGateway)
 	for _, route := range service.shadowedEndpointPostRoutes() {
-		mount(http.MethodPost, "/"+mcproute.OrganizationGateway.String()+"/"+route.name, service.shadowedEndpointHandler(route.name, route.handler, gatewayPost))
+		host.Handle(http.MethodPost, "/"+mcproute.OrganizationGateway.String()+"/"+route.name, service.shadowedEndpointHandler(route.name, route.handler, gatewayPost))
 	}
 	for _, route := range service.organizationGatewayOAuthRoutes() {
 		if route.onAuthenticationHost {
-			mount(route.method, route.path, oauthRouteHandler(service.logger, route.method, route.path, service.withOrganizationGateway(route.serve, isOAuthTokenRoute(route.method, route.path))).ServeHTTP)
+			host.Handle(route.method, route.path, oauthRouteHandler(service.logger, route.method, route.path, service.withOrganizationGateway(route.serve, isOAuthTokenRoute(route.method, route.path))).ServeHTTP)
 		}
 	}
 }

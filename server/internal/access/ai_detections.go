@@ -67,7 +67,7 @@ func (s *Service) ListAIDetections(ctx context.Context, payload *gen.ListAIDetec
 		userEmails = emails
 	}
 
-	result, err := s.listAIDetectionModels(ctx, s.aiCatalog.Snapshot(), telemetryrepo.ListAIDetectionSummariesParams{
+	result, err := s.listAIDetectionModels(ctx, s.aiCatalog.SnapshotFor(ctx), telemetryrepo.ListAIDetectionSummariesParams{
 		OrganizationID:       ac.ActiveOrganizationID,
 		TargetID:             "",
 		Categories:           nil,
@@ -106,7 +106,7 @@ func (s *Service) ListEmployeeAIDetections(ctx context.Context, payload *gen.Lis
 		return nil, oops.E(oops.CodeBadRequest, nil, "employee email is required").LogError(ctx, s.logger)
 	}
 
-	result, err := s.listAIDetectionModels(ctx, s.aiCatalog.Snapshot(), telemetryrepo.ListAIDetectionSummariesParams{
+	result, err := s.listAIDetectionModels(ctx, s.aiCatalog.SnapshotFor(ctx), telemetryrepo.ListAIDetectionSummariesParams{
 		OrganizationID:       ac.ActiveOrganizationID,
 		TargetID:             "",
 		Categories:           nil,
@@ -157,7 +157,7 @@ func (s *Service) ListAIDetectionUsers(ctx context.Context, payload *gen.ListAID
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		var egErr error
-		summary, egErr = s.listAIDetectionModels(egCtx, s.aiCatalog.Snapshot(), telemetryrepo.ListAIDetectionSummariesParams{
+		summary, egErr = s.listAIDetectionModels(egCtx, s.aiCatalog.SnapshotFor(egCtx), telemetryrepo.ListAIDetectionSummariesParams{
 			OrganizationID:       ac.ActiveOrganizationID,
 			TargetID:             targetID,
 			Categories:           nil,

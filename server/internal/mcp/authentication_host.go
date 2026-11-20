@@ -169,11 +169,8 @@ func AttachAuthenticationHost(host *AuthenticationHost, service *Service) {
 	}
 	RecordAuthenticationHost(host, service)
 
-	mount := func(method, pattern string, handler http.HandlerFunc) {
-		host.Handle(method, pattern, pinAICatalog(service.aiCatalog, handler))
-	}
 	handle := func(method, pattern string, handler func(http.ResponseWriter, *http.Request) error) {
-		mount(method, pattern, oauthRouteHandler(service.logger, method, pattern, handler).ServeHTTP)
+		host.Handle(method, pattern, oauthRouteHandler(service.logger, method, pattern, handler).ServeHTTP)
 	}
 	handle(http.MethodGet, wellknown.OAuthAuthorizationServerPath+PublicServerRoute, service.HandleGetAuthorizationServer)
 	handle(http.MethodPost, PublicServerRoute+"/register", service.HandleRegister)
@@ -192,7 +189,7 @@ func AttachAuthenticationHost(host *AuthenticationHost, service *Service) {
 	for _, route := range service.sharedAuthorizationServerRoutes() {
 		handle(route.method, route.path, route.handler)
 	}
-	attachOrganizationGatewayAuthenticationHost(mount, service)
+	attachOrganizationGatewayAuthenticationHost(host, service)
 }
 
 // RecordAuthenticationHost records the authentication host on service without

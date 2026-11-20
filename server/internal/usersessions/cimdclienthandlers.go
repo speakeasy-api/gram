@@ -53,7 +53,7 @@ func (s *Service) ListPresets(ctx context.Context, payload *gen.ListPresetsPaylo
 		return nil, err
 	}
 
-	presets := s.aiCatalog.Snapshot().Catalog()
+	presets := s.aiCatalog.SnapshotFor(ctx).Catalog()
 	items := make([]*types.CimdClientPreset, 0, len(presets))
 	for _, preset := range presets {
 		items = append(items, &types.CimdClientPreset{

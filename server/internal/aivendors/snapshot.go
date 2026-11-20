@@ -6,6 +6,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"net/http"
 	"slices"
 	"strings"
 	"sync"
@@ -230,9 +232,13 @@ func Derived[T any](s *Snapshot, key any, compute func(*Snapshot) T) T {
 		if out, ok := v.(T); ok {
 			return out
 		}
+		panic(fmt.Sprintf("aivendors: derived value for key %T is %T, not the requested type", key, v))
 	}
 	v, _ := s.derived.LoadOrStore(key, compute(s))
-	out, _ := v.(T)
+	out, ok := v.(T)
+	if !ok {
+		panic(fmt.Sprintf("aivendors: derived value for key %T is %T, not the requested type", key, v))
+	}
 	return out
 }
 
@@ -276,4 +282,23 @@ func (s *Store) SnapshotFor(ctx context.Context) *Snapshot {
 		return snapshot
 	}
 	return s.Snapshot()
+}
+
+// Middleware pins one snapshot on each request so every reader in it sees the same revision.
+func (s *Store) Middleware(next http.Handler) http.Handler {
+	if s == nil {
+		panic("aivendors: catalog middleware registered without a store")
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r.WithContext(s.Pin(r.Context())))
+	})
+}
+
+// Publish replaces the current snapshot unless next has the same content.
+func (s *Store) Publish(next *Snapshot) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.snapshot.Fingerprint() != next.Fingerprint() {
+		s.snapshot = next
+	}
 }

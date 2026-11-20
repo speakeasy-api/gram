@@ -43,7 +43,7 @@ func (s *Service) requireOrganizationAdmin(ctx context.Context) (*contextvalues.
 }
 
 func (s *Service) ListAiScanTargets(ctx context.Context, _ *gen.ListAiScanTargetsPayload) (*gen.ListAiScanTargetsResult, error) {
-	catalog := s.aiCatalog.Snapshot()
+	catalog := s.aiCatalog.SnapshotFor(ctx)
 	authCtx, err := s.requireOrganizationAdmin(ctx)
 	if err != nil {
 		return nil, err
@@ -56,7 +56,7 @@ func (s *Service) ListAiScanTargets(ctx context.Context, _ *gen.ListAiScanTarget
 }
 
 func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiScanTargetPayload) (*gen.AiScanTargetMutationResult, error) {
-	catalog := s.aiCatalog.Snapshot()
+	catalog := s.aiCatalog.SnapshotFor(ctx)
 	authCtx, err := s.requireOrganizationAdmin(ctx)
 	if err != nil {
 		return nil, err
@@ -216,7 +216,7 @@ func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiS
 }
 
 func (s *Service) DeleteAiScanTarget(ctx context.Context, payload *gen.DeleteAiScanTargetPayload) (*gen.DeleteAiScanTargetResult, error) {
-	catalog := s.aiCatalog.Snapshot()
+	catalog := s.aiCatalog.SnapshotFor(ctx)
 	authCtx, err := s.requireOrganizationAdmin(ctx)
 	if err != nil {
 		return nil, err

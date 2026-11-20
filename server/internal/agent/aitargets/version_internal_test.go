@@ -2,6 +2,7 @@ package aitargets
 
 import (
 	"math"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -35,11 +36,17 @@ func TestWireVersionStaysInDeviceRange(t *testing.T) {
 func TestDefaultsAreSharedPerSnapshotButReturnedAsCopies(t *testing.T) {
 	t.Parallel()
 	catalog := aivendors.NewSnapshot(aivendors.Products())
+	want := projectDefaults(aivendors.NewSnapshot(aivendors.Products()))
 	first := Defaults(catalog)
-	require.NotEmpty(t, first)
-	want := Defaults(catalog)
-	first[0].DisplayName = "Mutated"
-	first[0].Signatures.Binaries = append(first[0].Signatures.Binaries, "mutated")
+	require.Equal(t, want, first)
+	i := slices.IndexFunc(first, func(target Target) bool { return len(target.Signatures.Binaries) > 0 })
+	require.GreaterOrEqual(t, i, 0)
+	first[i].DisplayName = "Mutated"
+	first[i].Signatures.Binaries[0] = "mutated"
+	require.Equal(t, want, Defaults(catalog))
+	builtin, ok := DefaultByID(catalog, want[i].ID)
+	require.True(t, ok)
+	builtin.Signatures.Binaries[0] = "mutated"
 	require.Equal(t, want, Defaults(catalog))
 	require.Equal(t, ListVersion(want), NewOrganizationList(catalog, nil).Snapshot.ListVersion)
 }

@@ -577,6 +577,9 @@ func NewService(aiCatalog *aivendors.Store,
 	codeExecutor codemode.Executor,
 	connections *mcpconnectionattempts.Recorder,
 ) (*Service, error) {
+	if aiCatalog == nil {
+		return nil, errors.New("mcp service requires an AI client catalog store")
+	}
 	if codeExecutor == nil {
 		codeExecutor = codemode.Disabled{}
 	}
@@ -843,7 +846,6 @@ const PublicServerRoute = "/mcp/{mcpSlug}"
 // a private network ingress. Deployment-global callbacks stay on the public
 // listener and resume private flows through their single-use state.
 func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
-	mux = aiCatalogMux{Muxer: mux, store: service.aiCatalog}
 	for _, route := range netingress.PrivateRoutes(netingress.RouteSurfaceMCP) {
 		var handler http.Handler
 		switch route.ID {
@@ -912,24 +914,7 @@ func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmeta
 	}
 }
 
-// aiCatalogMux pins one AI client catalog snapshot for each request it routes.
-type aiCatalogMux struct {
-	goahttp.Muxer
-	store *aivendors.Store
-}
-
-func (m aiCatalogMux) Handle(method, pattern string, handler http.HandlerFunc) {
-	m.Muxer.Handle(method, pattern, pinAICatalog(m.store, handler))
-}
-
-func pinAICatalog(store *aivendors.Store, handler http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		handler(w, r.WithContext(store.Pin(r.Context())))
-	}
-}
-
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
-	mux = aiCatalogMux{Muxer: mux, store: service.aiCatalog}
 	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.MCPErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", deviceagenttoken.TokenPathPattern, oops.OAuthErrHandle(service.logger, service.HandleDeviceAgentToken).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.BrowserErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
