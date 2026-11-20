@@ -51,7 +51,7 @@ func (s *Service) RunUpstreamOAuthMigration(ctx context.Context, _ *gen.RunUpstr
 	if !ok || auth == nil || auth.OIDCSubject == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	return nil, oops.E(oops.CodeNotImplemented, nil, "the upstream OAuth migration has been retired")
+	return nil, oops.E(oops.CodeNotImplemented, nil, "the upstream OAuth migration has been retired").LogWarn(ctx, s.logger)
 }
 
 // upstreamOAuthMigrationStatus retains the old response shape for staff

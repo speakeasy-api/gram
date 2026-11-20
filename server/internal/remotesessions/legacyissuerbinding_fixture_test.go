@@ -3,6 +3,8 @@ package remotesessions
 import (
 	"context"
 	"errors"
+	"fmt"
+
 	"log/slog"
 	"slices"
 
@@ -324,4 +326,18 @@ func (s *Service) commitLegacyClientAttachmentChangeForTest(
 	}
 
 	return afterView, nil
+}
+
+// lockAttachmentParentForUnlink protects active attachments while the legacy
+// link mutation API coexists with the composite FK. The caller must hold this
+// lock through the delete and commit in the same transaction.
+func lockAttachmentParentForUnlink(ctx context.Context, q *repo.Queries, orgID string, clientID, issuerID uuid.UUID) (bool, error) {
+	if err := q.LockRemoteSessionClientUserSessionIssuerLink(ctx, repo.LockRemoteSessionClientUserSessionIssuerLinkParams{RemoteSessionClientID: clientID, UserSessionIssuerID: issuerID, OrganizationID: orgID}); err != nil {
+		return false, fmt.Errorf("lock attachment parent: %w", err)
+	}
+	attached, err := q.HasLivePrincipalRemoteSessionBindingsForClientBinding(ctx, repo.HasLivePrincipalRemoteSessionBindingsForClientBindingParams{OrganizationID: orgID, RemoteSessionClientID: clientID, UserSessionIssuerID: issuerID})
+	if err != nil {
+		return false, fmt.Errorf("find active attachments for parent: %w", err)
+	}
+	return attached, nil
 }

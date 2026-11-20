@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -235,7 +236,7 @@ func seedCoveredMigrationFixture(t *testing.T, ctx context.Context, db *pgxpool.
 func TestUpstreamOAuthMigration_StaffCannotRunRetiredMigration(t *testing.T) {
 	t.Parallel()
 	ctx := contextvalues.SetAdminAuthContext(t.Context(), &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
-	_, err := (&Service{}).RunUpstreamOAuthMigration(ctx, &gen.RunUpstreamOAuthMigrationPayload{})
+	_, err := (&Service{logger: testenv.NewLogger(t)}).RunUpstreamOAuthMigration(ctx, &gen.RunUpstreamOAuthMigrationPayload{})
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)
 	require.Equal(t, oops.CodeNotImplemented, shareable.Code)

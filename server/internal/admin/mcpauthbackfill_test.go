@@ -8,11 +8,12 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestBackfillMcpAuthGrantsRetired(t *testing.T) {
 	t.Parallel()
-	svc := &Service{}
+	svc := &Service{logger: testenv.NewLogger(t)}
 	payload := &gen.BackfillMcpAuthGrantsPayload{}
 	_, err := svc.BackfillMcpAuthGrants(t.Context(), payload)
 	var shareable *oops.ShareableError
