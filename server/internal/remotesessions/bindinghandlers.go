@@ -175,7 +175,10 @@ func (op *bindingOperation) lockAttachmentRegistration(ctx context.Context, clie
 }
 
 func (op *bindingOperation) ensureAttachmentParent(ctx context.Context, clientID uuid.UUID) error {
-	return op.queries.EnsurePrincipalAttachmentParents(ctx, repo.EnsurePrincipalAttachmentParentsParams{ClientIds: []uuid.UUID{clientID}, UserSessionIssuerID: op.issuerID, OrganizationID: op.organizationID, ProjectID: conv.ToNullUUID(op.projectID)})
+	if err := op.queries.EnsurePrincipalAttachmentParents(ctx, repo.EnsurePrincipalAttachmentParentsParams{ClientIds: []uuid.UUID{clientID}, UserSessionIssuerID: op.issuerID, OrganizationID: op.organizationID, ProjectID: conv.ToNullUUID(op.projectID)}); err != nil {
+		return fmt.Errorf("ensure compatibility link for attachment: %w", err)
+	}
+	return nil
 }
 
 // lockAttachmentParentForUnlink protects active attachments while the legacy
@@ -183,9 +186,13 @@ func (op *bindingOperation) ensureAttachmentParent(ctx context.Context, clientID
 // lock through the delete and commit in the same transaction.
 func lockAttachmentParentForUnlink(ctx context.Context, q *repo.Queries, orgID string, clientID, issuerID uuid.UUID) (bool, error) {
 	if err := q.LockRemoteSessionClientUserSessionIssuerLink(ctx, repo.LockRemoteSessionClientUserSessionIssuerLinkParams{RemoteSessionClientID: clientID, UserSessionIssuerID: issuerID, OrganizationID: orgID}); err != nil {
-		return false, err
+		return false, fmt.Errorf("lock attachment parent: %w", err)
 	}
-	return q.HasLivePrincipalRemoteSessionBindingsForClientBinding(ctx, repo.HasLivePrincipalRemoteSessionBindingsForClientBindingParams{OrganizationID: orgID, RemoteSessionClientID: clientID, UserSessionIssuerID: issuerID})
+	attached, err := q.HasLivePrincipalRemoteSessionBindingsForClientBinding(ctx, repo.HasLivePrincipalRemoteSessionBindingsForClientBindingParams{OrganizationID: orgID, RemoteSessionClientID: clientID, UserSessionIssuerID: issuerID})
+	if err != nil {
+		return false, fmt.Errorf("find active attachments for parent: %w", err)
+	}
+	return attached, nil
 }
 
 func (s *Service) AttachBinding(ctx context.Context, payload *gen.AttachBindingPayload) (*gen.PrincipalRemoteSessionBinding, error) {

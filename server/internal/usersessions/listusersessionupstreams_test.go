@@ -257,10 +257,8 @@ func seedUpstream(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientP
 	return client.ID
 }
 
-// A remote_session is one shared upstream grant per (subject, client); its
-// user_session_issuer_id records only which surface minted it. A session under
-// a sibling issuer bound to the same client must therefore report the same
-// upstream, keyed by the sibling (requesting) issuer.
+// Inventory attributes the shared upstream grant to its minting issuer,
+// never to a sibling issuer merely linked to the same client.
 func TestListUserSessionsDoesNotAttributeUpstreamsThroughStaleSiblingLinks(t *testing.T) {
 	t.Parallel()
 

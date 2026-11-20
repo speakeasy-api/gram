@@ -345,7 +345,8 @@ func TestDescribeMcpServerHealth_IssuerIgnoresClientWithoutProvenance(t *testing
 
 	remoteIssuerID := f.seedGlobalRemoteSessionIssuer(t, "upstream-"+uuid.NewString()[:8])
 	dcrClient := f.seedRemoteSessionClient(t, remoteIssuerID, issuerID, "dcr-client", true)
-	f.seedRemoteSessionClient(t, remoteIssuerID, issuerID, "static-client", false)
+	staticClient := f.seedRemoteSessionClient(t, remoteIssuerID, issuerID, "static-client", false)
+	f.revokeRemoteSession(t, f.seedRemoteSession(t, issuerID, staticClient, "former-user", 1))
 
 	alice := f.seedRemoteSession(t, issuerID, dcrClient, "alice", 3)
 	f.validateRemoteSession(t, alice, "valid")
@@ -720,9 +721,8 @@ func TestDescribeMcpServerHealth_IssuerOutsideProjectIsIgnored(t *testing.T) {
 	require.Equal(t, "gram_private", *got.LegacyAuth)
 }
 
-// A remote session belongs to its subject and client; the issuer that first
-// linked it is provenance. A client shared by two issuers reports the same
-// sessions under both.
+// A stale client link cannot attribute another issuer's sessions to this one.
+// Downstream health shows only sessions with the issuer's own provenance.
 func TestDescribeMcpServerHealth_SharedClientCountsOnlyIssuerProvenance(t *testing.T) {
 	t.Parallel()
 

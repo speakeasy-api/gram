@@ -1075,6 +1075,7 @@ JOIN remote_session_clients AS c ON c.deleted IS FALSE AND (
   c.id = usi.trusted_remote_session_client_id OR EXISTS (
     SELECT 1 FROM remote_sessions AS s
     WHERE s.remote_session_client_id = c.id AND s.user_session_issuer_id = usi.id
+      AND s.deleted IS FALSE
   )
 )
 JOIN remote_session_issuers r ON r.id = c.remote_session_issuer_id AND r.deleted IS FALSE
