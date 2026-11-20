@@ -79,9 +79,9 @@ function renderField() {
         allowAdditionalProviders
         projectId="project"
         isLoading={false}
-        onAdd={vi.fn()}
-        onEdit={vi.fn()}
-        onDelete={vi.fn()}
+        onAdd={() => {}}
+        onEdit={() => {}}
+        onDelete={() => {}}
       />
     </MemoryRouter>,
   );
