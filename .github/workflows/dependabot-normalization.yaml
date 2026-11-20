@@ -1,21 +1,9 @@
 name: Dependabot lockfile normalization
 
-# Restrict head checkout to same-repo Dependabot PRs and verify commit metadata
-# before executing repository tooling. Only the separate writer receives App
-# credentials; it consumes files as data and does not execute PR code.
-#
-# SECURITY: keep the trigger as `pull_request`. Runs that Dependabot triggers
-# get a read-only GITHUB_TOKEN and only Dependabot secrets, never Actions
-# secrets, and fork PRs get no secrets at all. `pull_request_target` would run
-# in the base repository's context with every Actions secret available.
-#
-# One-time setup for the writer: a dedicated GitHub App installed only on this
-# repository, with Contents (read and write) and no ruleset bypass. Store its
-# Client ID and private key as repository Dependabot secrets (Settings >
-# Secrets and variables > Dependabot) named DEPENDABOT_NORMALIZER_CLIENT_ID
-# and DEPENDABOT_NORMALIZER_PRIVATE_KEY. Other Dependabot-triggered workflows
-# can reference those secrets too, so keep the App's installation and
-# permissions this narrow. Do not point them at gram-bot.
+# Keep pull_request so normalization does not run with Actions secrets.
+# Install a dedicated App on gram only: Contents write, no ruleset bypass.
+# Set DEPENDABOT_NORMALIZER_CLIENT_ID and DEPENDABOT_NORMALIZER_PRIVATE_KEY
+# as repository Dependabot secrets. Do not reuse gram-bot.
 on:
   pull_request:
     types: [opened, synchronize]
@@ -37,10 +25,7 @@ jobs:
     name: Normalize the lockfile
     outputs:
       changed: ${{ steps.normalize.outputs.changed }}
-    # Only events Dependabot itself sends, so the writer's own push never
-    # starts another run. A maintainer-triggered run would not get the
-    # Dependabot secrets the writer needs; to retry, comment
-    # `@dependabot recreate` so Dependabot pushes the branch again.
+    # Ignore the writer’s own push.
     if: >-
       github.event.sender.id == 49699333 &&
       github.event.pull_request.user.id == 49699333 &&
@@ -140,7 +125,7 @@ jobs:
           name: normalized-dependencies
           path: ${{ runner.temp }}/normalized-dependencies
 
-      - name: Commit only the lockfile and override edits
+      - name: Stage only the lockfile and override edits
         if: steps.current.outputs.eligible == 'true'
         run: |
           for file in pnpm-lock.yaml pnpm-workspace.yaml; do
@@ -156,9 +141,6 @@ jobs:
             echo 'No normalization changes to commit.' >&2
             exit 1
           fi
-          git -c core.hooksPath=/dev/null -c user.name='gram-bot[bot]' \
-            -c user.email='gram-bot[bot]@users.noreply.github.com' \
-            commit -m 'chore(deps): normalize pnpm dependencies'
 
       - name: Check writer app configuration
         if: steps.current.outputs.eligible == 'true'
@@ -183,6 +165,19 @@ jobs:
           private-key: ${{ secrets.DEPENDABOT_NORMALIZER_PRIVATE_KEY }}
           permission-contents: write
 
+      - name: Commit as the writer App
+        if: steps.current.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APP_SLUG: ${{ steps.bot-token.outputs.app-slug }}
+        run: |
+          bot="$APP_SLUG[bot]"
+          bot_id=$(gh api "users/${APP_SLUG}%5Bbot%5D" --jq .id)
+          [[ "$bot_id" =~ ^[0-9]+$ ]]
+          git -c core.hooksPath=/dev/null -c user.name="$bot" \
+            -c user.email="${bot_id}+${bot}@users.noreply.github.com" \
+            commit -m 'chore(deps): normalize pnpm dependencies'
+
       - name: Push if the remote head has not moved
         if: steps.current.outputs.eligible == 'true'
         env:
@@ -192,8 +187,7 @@ jobs:
         run: |
           ref="refs/heads/$PR_BRANCH"
           git check-ref-format "$ref"
-          # Require a single new commit on the exact evaluated head. The lease
-          # also rejects changes made after the preceding PR API check.
+          # Never overwrite a newer PR head.
           test "$(git rev-list --parents -n1 HEAD)" = "$(git rev-parse HEAD) $PR_HEAD"
           GIT_CONFIG_COUNT=1 \
             GIT_CONFIG_KEY_0='http.https://github.com/.extraheader' \
