@@ -238,6 +238,7 @@ func TestConsentConnect_OrganizationGatewayMemberIsRecorded(t *testing.T) {
 	client := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "orggw-"+uuid.NewString()[:8], "", []uuid.UUID{member.UserSessionIssuerID.UUID, gateway.issuerID})
 	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{member.UserSessionIssuerID.UUID}))
 	seedConsentAuthOffer(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, member.ID, client, "remote_session")
+	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, gateway.subject.ID, member.ID.String())
 
 	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, testenv.NewLogger(t), gateway.organizationSlug, "mcp/gateway")
 	require.NoError(t, err)

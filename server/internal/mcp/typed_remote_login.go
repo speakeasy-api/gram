@@ -46,6 +46,9 @@ func (s *Service) ValidateRemoteLoginTypedAuthorization(ctx context.Context, sta
 	if server.ProjectID != a.ProjectID {
 		return fmt.Errorf("%w: typed login project changed", remotesessions.ErrTypedAuthorizationChanged)
 	}
+	if server.Visibility != mcpservers.VisibilityPublic && server.Visibility != mcpservers.VisibilityPrivate {
+		return fmt.Errorf("%w: typed login server is no longer available", remotesessions.ErrTypedAuthorizationChanged)
+	}
 	// Only fields consumed by subject admission are needed here.
 	//nolint:exhaustruct_v5 // Callback subject admission does not resolve an endpoint.
 	endpoint := &ResolvedMcpEndpoint{OrganizationID: a.OrganizationID, ProjectID: a.ProjectID, McpServerID: uuid.NullUUID{UUID: a.ServerID, Valid: true}, UserSessionIssuerID: state.UserSessionIssuerID}

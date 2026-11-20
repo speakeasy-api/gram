@@ -314,7 +314,7 @@ func TestConnectionCatalogDirectProgressiveRechecksTypedExecution(t *testing.T) 
 	}
 }
 
-func TestGatewayConsentAmbiguousTypedClientRequiresSetup(t *testing.T) {
+func TestGatewayConsentDistinguishesTypedOffersOnOneRegistration(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
 	auth, _ := contextvalues.GetAuthContext(ctx)
@@ -327,18 +327,21 @@ func TestGatewayConsentAmbiguousTypedClientRequiresSetup(t *testing.T) {
 	_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, McpServerID: serverID, RemoteSessionClientID: registration})
 	require.NoError(t, err)
 	insertQualifiedRemoteSessionToken(t, ctx, ti, issuer.ID, registration, urn.NewUserSubject(mockidp.MockUserID), "fixture-token", upstream.url)
+	var offers []uuid.UUID
 	for range 2 {
-		seedConsentAuthOffer(t, ctx, ti, auth.ActiveOrganizationID, *auth.ProjectID, serverID, registration, "remote_session")
+		offers = append(offers, seedConsentAuthOffer(t, ctx, ti, auth.ActiveOrganizationID, *auth.ProjectID, serverID, registration, "remote_session"))
 	}
 	ti.service.manual = true
 	stateID, _ := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)
 	page := consentGetPageWithContext(t, ctx, ti, slug, stateID)
-	require.Contains(t, page, "No servers could be verified")
+	for _, id := range offers {
+		require.Contains(t, page, `value="`+id.String()+`"`)
+	}
 	outcomes := gatewayOutcomesFromPage(page)
 	require.Len(t, outcomes, 1)
 	require.Equal(t, "source", outcomes[0].Slug)
-	require.Equal(t, "not_set_up", outcomes[0].Status)
-	require.Zero(t, upstream.requests.Load(), "an ambiguous typed choice never reaches an upstream through legacy auth")
+	require.Equal(t, "connected", outcomes[0].Status)
+	require.Positive(t, upstream.requests.Load(), "the preview uses the selected typed offer rather than inferring a choice from registration alone")
 }
 
 func approveGatewayCatalog(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID, client usersessionsrepo.UserSessionClient, gatewayID uuid.UUID, slug string, mode toolfilter.CatalogMode, discovery metamcp.DiscoveryMode, tools []string, annotations ...string) catalogConnection {

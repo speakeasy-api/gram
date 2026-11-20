@@ -113,7 +113,7 @@ func createConsentRemoteClientWithCallback(t *testing.T, ctx context.Context, co
 func seedConsentAuthOffer(t *testing.T, ctx context.Context, ti *testInstance, orgID string, projectID, serverID, registrationID uuid.UUID, clientType string) uuid.UUID {
 	t.Helper()
 	fixtures := authclientfixtures.New(ti.conn)
-	id, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: conv.ToNullUUID(projectID), ClientType: clientType, Source: "admin", RemoteSessionClientID: conv.ToNullUUID(registrationID)})
+	id, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: conv.ToNullUUID(projectID), ClientType: clientType, Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registrationID, Valid: registrationID != uuid.Nil}})
 	require.NoError(t, err)
 	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{OrganizationID: orgID, ProjectID: projectID, McpServerID: serverID, AuthClientID: id, Source: "admin"}))
 	ti.service.SetAuthClientPermitted(true)

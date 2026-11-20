@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
@@ -49,6 +50,24 @@ func (s *Service) resolveMetaMemberResource(
 	candidates, claimed, err := s.claimingMetaMembers(ctx, endpoint, client)
 	if err != nil || !claimed {
 		return "", none, false, err
+	}
+	if usesTypedConsentInventory(ctx) {
+		admission, err := s.authz.PrepareMandatory(ctx)
+		if err != nil {
+			return "", none, true, fmt.Errorf("load login member permissions: %w", err)
+		}
+		allowed := candidates[:0]
+		for _, candidate := range candidates {
+			connect := authz.MCPCheck(authz.ScopeMCPConnect, candidate.McpServerID.String(), candidate.ProjectID.String())
+			decision, err := admission.DecideServerAdmission(endpoint.OrganizationID, mandatoryVisibility(candidate.McpServerVisibility == mcpservers.VisibilityPublic), connect)
+			if err != nil {
+				return "", none, true, fmt.Errorf("authorize login member: %w", err)
+			}
+			if decision.Allowed {
+				allowed = append(allowed, candidate)
+			}
+		}
+		candidates = allowed
 	}
 
 	// The resource is sent upstream verbatim: a provider may match it exactly

@@ -310,6 +310,12 @@ func personalReadiness(clientType string, registrationID uuid.NullUUID, cards []
 		if status == gatewayServerUnavailable && card.reconnectsDespiteOutage() {
 			status = gatewayServerReconnect
 		}
+		// A broken provider address needs administrator repair, not approval
+		// or another attempt by the person. Ordinary outages remain eligible
+		// while the connection itself is valid.
+		if card.SignInAddress {
+			return consentClientSetup, ""
+		}
 		if clientType == authz.AuthClientTypeEMA {
 			switch status {
 			case gatewayServerChained, gatewayServerChainPending, gatewayServerUnavailable:
@@ -411,10 +417,8 @@ func consentCardsApprovable(cards []remoteSessionCard) bool {
 
 // consentDirectAuthClientPick validates the credential posted with a direct
 // server's approval against the choices computed again now, and returns it as
-// the grant's typed pick. The registration it names replaces the card-derived
-// pick in upstreamPicks; a headers-only client removes it. A pick that is no
-// longer usable, or a missing one where a choice is required, is
-// errConsentConfigurationChanged. With no typed choice, cards decide a person's direct-server approval.
+// the grant's typed pick and its registration. Hosted endpoints retain the
+// card-based rule; proxied servers never infer a credential from their cards.
 func (s *Service) consentDirectAuthClientPick(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, posted string, upstreamPicks map[uuid.UUID]uuid.UUID, cards []remoteSessionCard) (map[uuid.UUID]uuid.UUID, error) {
 	picked := uuid.Nil
 	if posted != "" {
@@ -447,8 +451,14 @@ func (s *Service) consentDirectAuthClientPick(ctx context.Context, endpoint *Res
 		if picked != uuid.Nil {
 			return nil, errConsentConfigurationChanged
 		}
-		// No upstream authentication: nothing to pick, and no card's client
-		// is recorded for the server.
+		resolved, err := s.resolveNoAuthChoice(withTypedConsentAuth(ctx), endpoint.OrganizationID, endpoint.McpServerID.UUID)
+		if err != nil {
+			return nil, err
+		}
+		if enforcedCompatibility(resolved).outcome != authClientNoAuth {
+			return nil, errConsentNoUsableConnection
+		}
+		// No upstream authentication: no registration is recorded.
 		delete(upstreamPicks, endpoint.McpServerID.UUID)
 		return nil, nil
 	}

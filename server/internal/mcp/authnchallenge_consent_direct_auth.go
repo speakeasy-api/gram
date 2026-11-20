@@ -21,14 +21,8 @@ func (s *Service) consentDirectPreviewAuth(ctx context.Context, endpoint *Resolv
 		return nil, err
 	}
 	if len(picks) == 0 {
-		res, err := s.resolveNoAuthChoice(withTypedConsentAuth(ctx), endpoint.OrganizationID, endpoint.McpServerID.UUID)
-		if err != nil {
-			return nil, err
-		}
-		res = enforcedCompatibility(res)
-		if res.outcome != authClientNoAuth {
-			return nil, errConsentNoUsableConnection
-		}
+		res := gapResolution("")
+		res.outcome = authClientNoAuth
 		return &res, nil
 	}
 	ctx, err = s.contextForSessionSubject(ctx, endpoint, *state.Subject, "consent:"+state.ID, state.ClientID)
