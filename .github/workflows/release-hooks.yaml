@@ -208,9 +208,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # The workflow token approves the pin PR. gram-bot opens it and cannot
-      # approve its own pull request.
-      pull-requests: write
+      pull-requests: write # to approve the pin PR; gram-bot opens it and cannot approve its own
     steps:
       - name: Generate GitHub App Token for Speakeasy Bot
         id: bot-token
