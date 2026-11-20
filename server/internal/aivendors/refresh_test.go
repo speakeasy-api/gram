@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -19,8 +21,8 @@ func TestRefreshLoopPublishesOnNextMinuteAndStops(t *testing.T) {
 		store := NewStore(initial)
 		ctx, cancel := context.WithCancel(t.Context())
 		done := make(chan struct{})
-		calls := 0
-		var logs bytes.Buffer
+		var calls atomic.Int32
+		var logs lockedBuffer
 		logger := slog.New(slog.NewTextHandler(&logs, nil))
 		products := Products()
 		products[0].DisplayName = "Updated name"
@@ -28,8 +30,7 @@ func TestRefreshLoopPublishesOnNextMinuteAndStops(t *testing.T) {
 		go func() {
 			defer close(done)
 			store.run(ctx, logger, func(context.Context) error {
-				calls++
-				if calls == 1 {
+				if calls.Add(1) == 1 {
 					return errors.New("database unavailable")
 				}
 				store.mu.Lock()
@@ -42,13 +43,30 @@ func TestRefreshLoopPublishesOnNextMinuteAndStops(t *testing.T) {
 		<-time.After(RefreshInterval)
 		synctest.Wait()
 		require.Contains(t, logs.String(), "retaining last snapshot")
-		require.Equal(t, 1, calls)
+		require.Equal(t, int32(1), calls.Load())
 		require.Same(t, initial, store.Snapshot())
 		<-time.After(RefreshInterval)
 		synctest.Wait()
-		require.Equal(t, 2, calls)
+		require.Equal(t, int32(2), calls.Load())
 		require.Same(t, next, store.Snapshot())
 		cancel()
 		<-done
 	})
+}
+
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
