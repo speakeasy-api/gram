@@ -15,18 +15,45 @@ server:
 client:
   - ".github/**"
   - "client/**"
-  - "e2e/package.json"
-  - "e2e/registry-editor.config.ts"
-  - "e2e/tests/registry-editor.spec.ts"
+  - "e2e/**"
   - "package.json"
   - "pnpm-lock.yaml"
   - "pnpm-workspace.yaml"
+  - ".npmrc"
+  - "aube-workspace.yaml"
+  - "package-lock.json"
+  - "npm-shrinkwrap.json"
   - "tsconfig*.json"
   - "mise.toml"
   - ".node-version"
   - ".mise-tasks/lint/client.sh"
   - ".oxfmtrc.json"
   - "sdks/typescript/**"
+
+# Test jobs use app-specific paths plus these shared dependency/config inputs.
+client-test-shared:
+  - ".github/**"
+  - "client/*"
+  - "package.json"
+  - "pnpm-lock.yaml"
+  - "pnpm-workspace.yaml"
+  - ".npmrc"
+  - "aube-workspace.yaml"
+  - "package-lock.json"
+  - "npm-shrinkwrap.json"
+  - "tsconfig*.json"
+  - "mise.toml"
+  - ".node-version"
+  - ".mise-tasks/lint/client.sh"
+  - ".oxfmtrc.json"
+  - "sdks/typescript/**"
+
+client-test-dashboard:
+  - "client/dashboard/**"
+
+client-test-admin:
+  - "client/admin/**"
+  - "e2e/**"
 
 # Root tsconfig includes task sources and the dashboard's source SDK.
 tooling:

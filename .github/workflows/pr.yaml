@@ -34,6 +34,9 @@ jobs:
       verify: ${{ github.event_name != 'push' }}
       server: ${{ steps.gates.outputs.server }}
       client: ${{ steps.gates.outputs.client }}
+      client-test-shared: ${{ steps.filter.outputs.client-test-shared }}
+      client-test-dashboard: ${{ steps.filter.outputs.client-test-dashboard }}
+      client-test-admin: ${{ steps.filter.outputs.client-test-admin }}
       tooling: ${{ steps.gates.outputs.tooling }}
       cli: ${{ steps.gates.outputs.cli }}
       hooks: ${{ steps.gates.outputs.hooks }}
@@ -2633,7 +2636,14 @@ jobs:
     if: |
       !cancelled() &&
       needs.changes.outputs.verify == 'true' &&
-      needs.changes.outputs.client == 'true'
+      needs.changes.outputs.client == 'true' &&
+      (
+        needs.changes.outputs.client-test-dashboard == 'true' ||
+        needs.changes.outputs.client-test-shared == 'true' ||
+        github.event_name == 'merge_group' ||
+        contains(github.event.pull_request.labels.*.name, 'ci:full') ||
+        github.base_ref != 'main'
+      )
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
@@ -2683,7 +2693,14 @@ jobs:
     if: |
       !cancelled() &&
       needs.changes.outputs.verify == 'true' &&
-      needs.changes.outputs.client == 'true'
+      needs.changes.outputs.client == 'true' &&
+      (
+        needs.changes.outputs.client-test-admin == 'true' ||
+        needs.changes.outputs.client-test-shared == 'true' ||
+        github.event_name == 'merge_group' ||
+        contains(github.event.pull_request.labels.*.name, 'ci:full') ||
+        github.base_ref != 'main'
+      )
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
