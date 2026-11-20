@@ -782,6 +782,62 @@ func TestService_DirectoryRoleMapping_GrantsRoleToMatchingMember(t *testing.T) {
 	require.Equal(t, 1, role.MemberCount)
 }
 
+// LoadUserGrants, which loads several agent owners' grants at once, gives each
+// user the same roles as ResolveUserPrincipals, including a role a directory
+// mapping grants. For example, a member in the Sales department keeps the
+// Builder role's grants when that role comes only from a mapping on
+// department_name = Sales.
+func TestLoadUserGrants_IncludesDirectoryMappedRoles(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	seedMappingAdministrator(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	orgID := authCtx.ActiveOrganizationID
+
+	seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Builder", "builder", ""))
+	builder := seededRolePrincipal(t, ctx, ti.conn, orgID, "builder")
+	seedGrant(t, ctx, ti.conn, orgID, builder, authz.ScopeProjectRead, "proj_mapped")
+	seedConnectedUser(t, ctx, ti.conn, orgID, "local_sales_user", "sales@test.com", "Sales User", "user_sales", "membership_sales")
+	seedMappingDirectoryUser(t, ctx, ti.conn, orgID, "local_sales_user", "sales@test.com", `{"department_name":"Sales"}`)
+	seedConnectedUser(t, ctx, ti.conn, orgID, "local_support_user", "support@test.com", "Support User", "user_support", "membership_support")
+	seedMappingDirectoryUser(t, ctx, ti.conn, orgID, "local_support_user", "support@test.com", `{"department_name":"Support"}`)
+
+	key := "department_name"
+	value := "Sales"
+	_, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
+		SourceKind:     directoryRoleMappingSourceAttribute,
+		AttributeKey:   &key,
+		AttributeValue: &value,
+		RoleUrns:       []string{builder.String()},
+	})
+	require.NoError(t, err)
+
+	byUser, err := authz.LoadUserGrants(ctx, ti.conn, orgID, []string{"local_sales_user", "local_support_user"})
+	require.NoError(t, err)
+	for _, userID := range []string{"local_sales_user", "local_support_user"} {
+		t.Run(userID, func(t *testing.T) {
+			principals, err := authz.ResolveUserPrincipals(ctx, ti.conn, orgID, userID)
+			require.NoError(t, err)
+			want, err := authz.LoadGrants(ctx, ti.conn, orgID, principals)
+			require.NoError(t, err)
+			require.ElementsMatch(t, want, byUser[userID])
+		})
+	}
+	require.True(t, grantsFrom(byUser["local_sales_user"], builder), "the mapped role's grants reach the Sales member")
+	require.False(t, grantsFrom(byUser["local_support_user"], builder), "the mapping does not reach the Support member")
+}
+
+func grantsFrom(grants []authz.Grant, principal urn.Principal) bool {
+	for _, grant := range grants {
+		if grant.PrincipalUrn == principal.String() {
+			return true
+		}
+	}
+	return false
+}
+
 func TestService_SyncDirectoryGroups_KeepsDeletedAndNewerGroups(t *testing.T) {
 	t.Parallel()
 
