@@ -26,7 +26,7 @@ import {
   withoutRules,
   type AudienceRule,
 } from "./manageAccessState";
-import { LEVEL_VERB, narrowingLabel } from "./serverAudience";
+import { coversTool, LEVEL_VERB, narrowingLabel } from "./serverAudience";
 
 /**
  * What one click on the Access list writes. The endpoint replaces every rule
@@ -121,14 +121,14 @@ function reachMessage(row: AccessRow, server: string, reach: string): string {
   return `${row.displayName} can now ${reach} ${server}.`;
 }
 
-/** The catalogue's tools carrying any of these annotations. */
+/** The catalogue's tools whose annotation, as the server picks it, is one of these. */
 function toolsCarrying(
   catalog: ToolSelectionTool[],
   dispositions: string[],
 ): string[] {
-  const wanted = new Set(dispositions);
+  if (dispositions.length === 0) return [];
   return catalog
-    .filter((tool) => tool.annotations.some((a) => wanted.has(a)))
+    .filter((tool) => coversTool({ tools: [], dispositions }, tool))
     .map((tool) => tool.name);
 }
 
