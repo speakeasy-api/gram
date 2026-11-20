@@ -121,6 +121,56 @@ func TestRequestConnections_UnreadableToolsCallReplyIsNotServed(t *testing.T) {
 	rec.RequireNothing()
 }
 
+// Only a successful MCP result is served: a JSON-RPC error or an isError tool result writes no
+// row, as JSON or as a stream.
+func TestRequestConnections_ServedNeedsASuccessfulResult(t *testing.T) {
+	t.Parallel()
+
+	reply := func(sse bool, body string) http.HandlerFunc {
+		return func(w http.ResponseWriter, _ *http.Request) {
+			if sse {
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = w.Write([]byte("event: message\ndata: " + body + "\n\n"))
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(body))
+		}
+	}
+	for _, sse := range []bool{false, true} {
+		for _, tc := range []struct {
+			name   string
+			body   string
+			served bool
+		}{
+			{name: "json-rpc error", body: `{"jsonrpc":"2.0","id":7,"error":{"code":-32603,"message":"failed"}}`},
+			{name: "tool error", body: `{"jsonrpc":"2.0","id":7,"result":{"content":[],"isError":true}}`},
+			{name: "tool result", body: `{"jsonrpc":"2.0","id":7,"result":{"content":[]}}`, served: true},
+		} {
+			t.Run(fmt.Sprintf("%s/sse=%t", tc.name, sse), func(t *testing.T) {
+				t.Parallel()
+
+				rec := mcpconnectionattemptstest.New(t)
+				caller := urn.NewUserSubject("user-1")
+				connections := recordingConnections(rec, "token")
+				connections.Caller = &caller
+				serveToolsCall(t.Context(), t, connections, reply(sse, tc.body), continueCheckpoint())
+				served := 0
+				for _, row := range rec.Rows() {
+					if row.StepResult == mcpconnectionattempts.ResultServed.String() {
+						served++
+					}
+				}
+				if tc.served {
+					require.Equal(t, 1, served)
+					return
+				}
+				require.Zero(t, served)
+			})
+		}
+	}
+}
+
 // No served row for an unnamed caller, a notification, or a request whose upstream refused it.
 func TestRequestConnections_ServedNeedsANamedCallerAndAnAnswer(t *testing.T) {
 	t.Parallel()

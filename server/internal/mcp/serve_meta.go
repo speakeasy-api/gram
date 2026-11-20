@@ -308,12 +308,6 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	// admission of its caller.
 	ctx = mcpconnectionattempts.WithFailureMark(withMandatoryAdmission(ctx))
 	body, err := s.handleMetaMCPRequest(ctx, logger, mcpEndpoint, metaServer, gate, &req, r.Header.Get(mcpversions.HTTPHeader))
-	if err == nil && req.ID.IsSet() {
-		// Each member call records its own row; a member's failure leaves the gateway's row alone.
-		s.recordServed(ctx, gate.connectionScope(ctx), uuid.Nil, gate.resolvedSubject(ctx), r, func() mcpconnectionattempts.Option {
-			return s.gatewayReportedClient(ctx, gate)
-		})
-	}
 
 	switch {
 	case body == nil && err == nil:
@@ -326,6 +320,12 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	w.WriteHeader(http.StatusOK)
 	if _, writeErr := w.Write(body); writeErr != nil {
 		return oops.E(oops.CodeUnexpected, writeErr, "failed to write response body")
+	}
+	if req.ID.IsSet() {
+		// Each member call records its own row. A listing that left out a failed member still served this request.
+		s.recordServed(ctx, gate.connectionScope(ctx), uuid.Nil, gate.resolvedSubject(ctx), r, body, func() mcpconnectionattempts.Option {
+			return s.gatewayReportedClient(ctx, gate)
+		})
 	}
 	return nil
 }

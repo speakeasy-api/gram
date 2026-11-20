@@ -1012,7 +1012,7 @@ func TestConnectionCatalogConfigurationChangeStopsAdvertisingTools(t *testing.T)
 	status, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "connection_status", "arguments": map[string]any{}}), progressive.token, nil)
 	require.NoError(t, err)
 	require.Contains(t, status.Body.String(), "The settings for this server changed since you approved it.")
-	rec := mcpconnectionattemptstest.New(t).IgnoreServed()
+	rec := mcpconnectionattemptstest.New(t)
 	ti.service.SetConnectionRecorder(rec.Recorder)
 	beforeCode := strings.Count(logs.String(), "gateway consent validation failed")
 	require.NotContains(t, callGatewayTool(t, ti, slug, code.token, "execute", map[string]any{"code": "discover"}), `"isError":true`)
@@ -1020,9 +1020,18 @@ func TestConnectionCatalogConfigurationChangeStopsAdvertisingTools(t *testing.T)
 	require.NotContains(t, callGatewayTool(t, ti, slug, code.token, "execute", map[string]any{"code": "discover"}), `"isError":true`)
 	require.Equal(t, beforeCode+2, strings.Count(logs.String(), "gateway consent validation failed"), "a new execution has its own diagnostic scope")
 	require.True(t, codeChecked.Load())
-	// Each execution's refused call writes one row; describe writes none.
-	require.Len(t, rec.Rows(), 2)
+	// Each execution's refused call writes one row; describe writes none. The executions
+	// themselves succeeded, so the gateway's own served row may sit beside them, never the member's.
+	var refused []mcpconnectionattempts.Row
 	for _, row := range rec.Rows() {
+		if row.StepResult == mcpconnectionattempts.ResultServed.String() {
+			require.Empty(t, row.MemberID, "the refused member wrote no served row")
+			continue
+		}
+		refused = append(refused, row)
+	}
+	require.Len(t, refused, 2)
+	for _, row := range refused {
 		require.Equal(t, mcpconnectionattempts.CodeConsentNotApproved.String(), row.Reason)
 		require.Equal(t, "configuration_changed", row.SubReason)
 		require.Equal(t, memberID.String(), row.MemberID)
@@ -1049,7 +1058,7 @@ func TestConnectionCatalogTransportChangeRequiresConsent(t *testing.T) {
 	require.NotEqual(t, "sse", remote.TransportType)
 	_, err = remotemcprepo.New(ti.conn).UpdateServer(ctx, remotemcprepo.UpdateServerParams{ID: remote.ID, ProjectID: remote.ProjectID, Name: remote.Name, Slug: remote.Slug, TransportType: "sse", Url: remote.Url})
 	require.NoError(t, err)
-	rec := mcpconnectionattemptstest.New(t).IgnoreServed()
+	rec := mcpconnectionattemptstest.New(t)
 	ti.service.SetConnectionRecorder(rec.Recorder)
 	require.Contains(t, callGatewayTool(t, ti, slug, connection.token, "source--tool_000", map[string]any{}), `The settings for the \"source\" server changed since you approved it. Reconnect this gateway in your AI app and approve it again.`)
 	require.Zero(t, upstream.calls.Load())

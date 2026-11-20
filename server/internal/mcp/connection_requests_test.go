@@ -489,7 +489,7 @@ func TestGatewayMemberRows(t *testing.T) {
 func TestGatewayMemberRefreshOutageNamesTheProviderOnce(t *testing.T) {
 	t.Parallel()
 
-	rec := mcpconnectionattemptstest.New(t).IgnoreServed()
+	rec := mcpconnectionattemptstest.New(t)
 	ctx, ti := buildTestMCPService(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, nil, "", false, rec.Recorder)
 	ti.service.SetConnectionRecorder(rec.Recorder)
 	authCtx := requireProjectAuthContext(t, ctx)
@@ -766,7 +766,7 @@ func TestGatewayLocalUsageRefusalRecordsOnce(t *testing.T) {
 	usageFile := filepath.Join(usageDir, "billingusage-"+auth.ActiveOrganizationID+".local.json")
 	require.NoError(t, os.WriteFile(usageFile, []byte(`{"ToolCalls":2000,"IncludedToolCalls":1,"HasActiveSubscription":false}`), 0600))
 	t.Cleanup(func() { require.NoError(t, os.Remove(usageFile)) })
-	rec := mcpconnectionattemptstest.New(t).IgnoreServed()
+	rec := mcpconnectionattemptstest.New(t)
 	ti.service.SetConnectionRecorder(rec.Recorder)
 	slug := "meta-" + uuid.NewString()
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, uuid.Nil)
@@ -795,7 +795,7 @@ func TestGatewayToolErrorsRecordNothing(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestMCPService(t)
 			auth := requireProjectAuthContext(t, ctx)
-			rec := mcpconnectionattemptstest.New(t).IgnoreServed()
+			rec := mcpconnectionattemptstest.New(t)
 			ti.service.SetConnectionRecorder(rec.Recorder)
 			slug := "meta-" + uuid.NewString()
 			meta := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, uuid.Nil)
@@ -881,7 +881,7 @@ func TestGatewayUnknownCachedToolRecordsNothing(t *testing.T) {
 	t.Parallel()
 	ctx, g := newStaleChoiceGateway(t, toolfilter.CatalogModeCached, metamcp.DiscoveryModeProgressive)
 	connection := g.approve(t, ctx)
-	rec := mcpconnectionattemptstest.New(t).IgnoreServed()
+	rec := mcpconnectionattemptstest.New(t)
 	g.ti.service.SetConnectionRecorder(rec.Recorder)
 	for _, name := range []string{"source--does_not_exist", "nonexistent--tool_000"} {
 		response := g.call(t, connection.token, name)

@@ -350,8 +350,8 @@ func happenedReason(what mcpconnectionattempts.Happened) string {
 	return ""
 }
 
-// A member's failure is that member's: a named caller's tools/list still writes the gateway's
-// served row while one member is down, and a call to that member writes no served row for it.
+// A member's failure is that member's: a call to it writes no served row for the member or the
+// gateway, and a named caller's tools/list still writes the gateway's served row while it is down.
 func TestGatewayMemberFailureLeavesTheGatewayServed(t *testing.T) {
 	t.Parallel()
 
@@ -364,6 +364,13 @@ func TestGatewayMemberFailureLeavesTheGatewayServed(t *testing.T) {
 	down := seedListingMember(t, ti, *authCtx.ProjectID, gateway.ID, listingCase{}, statusUpstream(t, http.StatusInternalServerError).URL)
 	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
 
+	// Every window is open here, so nothing below is hidden by sampling.
+	callMetaTool(t, ctx, ti, slug, down.Slug.String+"--ping", map[string]any{})
+	require.NotEmpty(t, rec.Rows(), "the member's failure is recorded")
+	for _, row := range rec.Rows() {
+		require.NotEqual(t, mcpconnectionattempts.ResultServed.String(), row.StepResult, "a failed member call writes no served row")
+	}
+
 	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -372,12 +379,4 @@ func TestGatewayMemberFailureLeavesTheGatewayServed(t *testing.T) {
 	served := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.ResultServed)
 	require.Empty(t, served.MemberID, "the gateway's own row")
 	require.NotEmpty(t, served.SubjectURN)
-
-	before := len(rec.Rows())
-	callMetaTool(t, ctx, ti, slug, down.Slug.String+"--ping", map[string]any{})
-	late := rec.Rows()[before:]
-	require.NotEmpty(t, late, "the member's failure is recorded")
-	for _, row := range late {
-		require.NotEqual(t, mcpconnectionattempts.ResultServed.String(), row.StepResult, "a failed member call writes no served row")
-	}
 }

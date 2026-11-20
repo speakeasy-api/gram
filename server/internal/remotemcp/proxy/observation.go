@@ -61,21 +61,32 @@ func observeResponse(ctx context.Context, msg jsonrpc.Message) {
 		return
 	}
 	outcome := "success"
-	if response.Error != nil {
+	if !responseSucceeded(response, o.method == "tools/call") {
 		outcome = "error"
-	} else if o.method == "tools/call" {
-		var result struct {
-			IsError bool `json:"isError"`
-		}
-		if json.Unmarshal(response.Result, &result) != nil {
-			o.finish("error")
-			return
-		}
-		if result.IsError {
-			outcome = "error"
-		}
 	}
 	o.finish(outcome)
+}
+
+// responseSucceeded reports a response with no JSON-RPC error and, when result is checked, a result
+// object that does not set isError.
+func responseSucceeded(response *jsonrpc.Response, checkResult bool) bool {
+	if response.Error != nil {
+		return false
+	}
+	if !checkResult {
+		return true
+	}
+	var result struct {
+		IsError bool `json:"isError"`
+	}
+	return json.Unmarshal(response.Result, &result) == nil && !result.IsError
+}
+
+// ResponseSucceeded reports a response that is an MCP success for any method: no JSON-RPC error,
+// and a result object that does not set isError. It reads the whole result, so call it only when
+// the answer matters.
+func ResponseSucceeded(response *jsonrpc.Response) bool {
+	return responseSucceeded(response, true)
 }
 func beginObservation(ctx context.Context, record RequestObserver, sessions SessionClients, req *UserRequest, initialize *InitializeRequest) (context.Context, *requestObservation) {
 	if record == nil || len(req.JSONRPCMessages) != 1 {

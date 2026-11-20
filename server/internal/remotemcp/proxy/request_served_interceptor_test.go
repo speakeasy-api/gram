@@ -13,7 +13,9 @@ type countingServedInterceptor struct{ calls *int }
 
 func (countingServedInterceptor) Name() string { return "counting" }
 
-func (i countingServedInterceptor) InterceptRequestServed(context.Context) { *i.calls++ }
+func (i countingServedInterceptor) InterceptRequestServed(context.Context, *jsonrpc.Response) {
+	*i.calls++
+}
 
 func TestRunRequestServedInterceptors_OnlyARelayedAnswerToTheRequest(t *testing.T) {
 	t.Parallel()
@@ -47,6 +49,28 @@ func TestRunRequestServedInterceptors_OnlyARelayedAnswerToTheRequest(t *testing.
 			p := &Proxy{RequestServedInterceptors: []RequestServedInterceptor{countingServedInterceptor{calls: &calls}}}
 			p.runRequestServedInterceptors(t.Context(), tc.status, tc.msg, tc.id, tc.call)
 			require.Equal(t, tc.want, calls)
+		})
+	}
+}
+
+func TestResponseSucceeded(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		response *jsonrpc.Response
+		want     bool
+	}{
+		{name: "result", response: &jsonrpc.Response{Result: []byte(`{"tools":[]}`)}, want: true},
+		{name: "empty result", response: &jsonrpc.Response{Result: []byte(`{}`)}, want: true},
+		{name: "tool result", response: &jsonrpc.Response{Result: []byte(`{"content":[],"isError":false}`)}, want: true},
+		{name: "tool error", response: &jsonrpc.Response{Result: []byte(`{"content":[],"isError":true}`)}, want: false},
+		{name: "json-rpc error", response: &jsonrpc.Response{Error: &jsonrpc.Error{Code: -32601, Message: "method not found"}}, want: false},
+		{name: "not an object", response: &jsonrpc.Response{Result: []byte(`"text"`)}, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, ResponseSucceeded(tc.response))
 		})
 	}
 }

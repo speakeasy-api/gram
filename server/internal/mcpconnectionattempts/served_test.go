@@ -34,12 +34,14 @@ func servedRecording(t *testing.T, logsEnabled func(context.Context, string) (bo
 	}
 }
 
-func claudeCodeRequest(t *testing.T) func() []Option {
+func claudeCodeRequest(t *testing.T) func() ([]Option, bool) {
 	t.Helper()
 	r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", nil)
 	r.Header.Set("User-Agent", "claude-code/2.1.0")
-	return func() []Option { return []Option{FromRequest(r)} }
+	return func() ([]Option, bool) { return []Option{FromRequest(r)}, true }
 }
+
+func succeeded() ([]Option, bool) { return nil, true }
 
 func TestServed_OneRowPerConnectionPerWindow(t *testing.T) {
 	t.Parallel()
@@ -73,7 +75,7 @@ func TestServed_DetailsAreBuiltOnlyWhenARowIsDue(t *testing.T) {
 	scope := testScope()
 	person := urn.NewUserSubject("user-1")
 	calls := 0
-	details := func() []Option { calls++; return nil }
+	details := func() ([]Option, bool) { calls++; return nil, true }
 	for range 3 {
 		recorder.Served(t.Context(), scope, uuid.Nil, &person, details)
 	}
@@ -88,12 +90,12 @@ func TestServed_EachConnectionHasItsOwnWindow(t *testing.T) {
 	person, other := urn.NewUserSubject("user-1"), urn.NewUserSubject("user-2")
 	key := urn.NewAPIKeySubject(uuid.New())
 
-	require.True(t, recorder.Served(t.Context(), scope, uuid.Nil, &person, nil))
-	require.True(t, recorder.Served(t.Context(), scope, uuid.Nil, &other, nil))
-	require.True(t, recorder.Served(t.Context(), scope, uuid.Nil, &key, nil))
-	require.True(t, recorder.Served(t.Context(), scope, uuid.New(), &person, nil), "a gateway member is its own connection")
-	require.True(t, recorder.Served(t.Context(), ServerScope(scope.organizationID, scope.projectID, scope.serverID, AppFirstParty), uuid.Nil, &person, nil), "another app is its own connection")
-	require.True(t, recorder.Served(t.Context(), ServerScope(scope.organizationID, scope.projectID, uuid.New(), AppDCR), uuid.Nil, &person, nil), "another server is its own connection")
+	require.True(t, recorder.Served(t.Context(), scope, uuid.Nil, &person, succeeded))
+	require.True(t, recorder.Served(t.Context(), scope, uuid.Nil, &other, succeeded))
+	require.True(t, recorder.Served(t.Context(), scope, uuid.Nil, &key, succeeded))
+	require.True(t, recorder.Served(t.Context(), scope, uuid.New(), &person, succeeded), "a gateway member is its own connection")
+	require.True(t, recorder.Served(t.Context(), ServerScope(scope.organizationID, scope.projectID, scope.serverID, AppFirstParty), uuid.Nil, &person, succeeded), "another app is its own connection")
+	require.True(t, recorder.Served(t.Context(), ServerScope(scope.organizationID, scope.projectID, uuid.New(), AppDCR), uuid.Nil, &person, succeeded), "another server is its own connection")
 	require.Len(t, rows(), 6)
 }
 
@@ -107,7 +109,7 @@ func TestServed_ConcurrentRequestsWriteOneRow(t *testing.T) {
 	var wg sync.WaitGroup
 	for range 64 {
 		wg.Go(func() {
-			if recorder.Served(t.Context(), scope, uuid.Nil, &person, nil) {
+			if recorder.Served(t.Context(), scope, uuid.Nil, &person, succeeded) {
 				accepted.Add(1)
 			}
 		})
@@ -126,15 +128,15 @@ func TestServed_NothingAfterAFailureInTheSameRequest(t *testing.T) {
 
 	ctx := WithFailureMark(t.Context())
 	recorder.Once(ctx, scope, StepMCPRequest, CodeProviderServerError, Subject(&person))
-	require.False(t, recorder.Served(ctx, scope, uuid.Nil, &person, nil))
+	require.False(t, recorder.Served(ctx, scope, uuid.Nil, &person, succeeded))
 
 	ctx = WithFailureMark(t.Context())
 	MarkFailed(ctx)
-	require.False(t, recorder.Served(ctx, scope, uuid.Nil, &person, nil), "a failure that records no row still counts")
+	require.False(t, recorder.Served(ctx, scope, uuid.Nil, &person, succeeded), "a failure that records no row still counts")
 
 	ctx = WithFailureMark(t.Context())
 	recorder.Step(ctx, Begin(scope), StepProviderRefresh, CodeProviderServerError)
-	require.False(t, recorder.Served(ctx, scope, uuid.Nil, &person, nil), "a failure at any step of the request counts")
+	require.False(t, recorder.Served(ctx, scope, uuid.Nil, &person, succeeded), "a failure at any step of the request counts")
 
 	for _, row := range rows() {
 		require.NotEqual(t, ResultServed.String(), row.StepResult)
@@ -159,11 +161,11 @@ func TestServed_MemberFailureMarksOnlyItsCall(t *testing.T) {
 	recorder.Once(call, gateway, StepMCPRequest, CodeProviderServerError, Member(down), Subject(&person))
 	recorder.Step(call, Begin(gateway), StepProviderRefresh, CodeProviderServerError)
 	require.True(t, Failed(call))
-	require.False(t, recorder.Served(call, gateway, down, &person, nil), "the failed member call writes no row for its member")
+	require.False(t, recorder.Served(call, gateway, down, &person, succeeded), "the failed member call writes no row for its member")
 	require.False(t, Failed(request), "every failure inside a member call is that call's")
 
-	require.True(t, recorder.Served(WithCallFailureMark(request), gateway, healthy, &person, nil))
-	require.True(t, recorder.Served(request, gateway, uuid.Nil, &person, nil), "the gateway still served the request")
+	require.True(t, recorder.Served(WithCallFailureMark(request), gateway, healthy, &person, succeeded))
+	require.True(t, recorder.Served(request, gateway, uuid.Nil, &person, succeeded), "the gateway still served the request")
 
 	recorder.Once(request, gateway, StepMCPRequest, CodeInvalidBearerToken, Subject(&person))
 	require.True(t, Failed(request), "a failure of the request itself marks it")
@@ -175,9 +177,9 @@ func TestServed_UnnamedCallersWriteNothing(t *testing.T) {
 	recorder, rows := servedRecording(t, logsOn)
 	anonymous := urn.NewAnonymousSubject("mcp-session")
 	var zero urn.SessionSubject
-	require.False(t, recorder.Served(t.Context(), testScope(), uuid.Nil, nil, nil))
-	require.False(t, recorder.Served(t.Context(), testScope(), uuid.Nil, &zero, nil))
-	require.False(t, recorder.Served(t.Context(), testScope(), uuid.Nil, &anonymous, nil))
+	require.False(t, recorder.Served(t.Context(), testScope(), uuid.Nil, nil, succeeded))
+	require.False(t, recorder.Served(t.Context(), testScope(), uuid.Nil, &zero, succeeded))
+	require.False(t, recorder.Served(t.Context(), testScope(), uuid.Nil, &anonymous, succeeded))
 	require.Empty(t, rows())
 }
 
@@ -188,11 +190,13 @@ func TestServed_CallerThatLeftWritesNothing(t *testing.T) {
 	person := urn.NewUserSubject("user-1")
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	require.False(t, recorder.Served(ctx, testScope(), uuid.Nil, &person, nil))
+	require.False(t, recorder.Served(ctx, testScope(), uuid.Nil, &person, succeeded))
 	require.Empty(t, rows())
 }
 
-func TestServed_LogsOffWritesNothingAndLeavesTheWindowOpen(t *testing.T) {
+// The capturing recorder checks logs before it accepts a row, so its refusal releases the claim.
+// The real writer checks later and drops the row after the claim, which then holds for its window.
+func TestServed_CapturingRecorderLogsOffReleasesTheClaim(t *testing.T) {
 	t.Parallel()
 
 	var logs atomic.Bool
@@ -200,10 +204,10 @@ func TestServed_LogsOffWritesNothingAndLeavesTheWindowOpen(t *testing.T) {
 	scope := testScope()
 	person := urn.NewUserSubject("user-1")
 
-	require.False(t, recorder.Served(t.Context(), scope, uuid.Nil, &person, nil))
+	require.False(t, recorder.Served(t.Context(), scope, uuid.Nil, &person, succeeded))
 	require.Empty(t, rows())
 	logs.Store(true)
-	require.True(t, recorder.Served(t.Context(), scope, uuid.Nil, &person, nil), "a row not written releases its claim")
+	require.True(t, recorder.Served(t.Context(), scope, uuid.Nil, &person, succeeded), "a row not written releases its claim")
 	require.Len(t, rows(), 1)
 }
 
@@ -216,9 +220,10 @@ func TestServed_LogsOffOrganizationStoresNothing(t *testing.T) {
 	recorder := newTestRecorderWithLogs(t, conn, func(context.Context, string) (bool, error) { return false, nil }, testConfig())
 	person := urn.NewUserSubject("user-1")
 
-	require.True(t, recorder.Served(t.Context(), ServerScope(organizationID, uuid.New(), uuid.New(), AppDCR), uuid.Nil, &person, nil), "queued")
+	require.True(t, recorder.Served(t.Context(), ServerScope(organizationID, uuid.New(), uuid.New(), AppDCR), uuid.Nil, &person, succeeded), "queued")
 	require.NoError(t, recorder.Shutdown(t.Context()))
-	require.Equal(t, int64(1), recorder.dropped(t, dropLogsOff))
+	require.Zero(t, recorder.dropped(t, dropLogsOff), "a served row is a sample, not a lost event")
+	require.Zero(t, recorder.dropTotals[dropLogsOff].Load())
 	var stored uint64
 	require.NoError(t, conn.QueryRow(t.Context(), `SELECT count() FROM mcp_connection_events WHERE organization_id = ?`, organizationID).Scan(&stored))
 	require.Zero(t, stored)
@@ -233,7 +238,7 @@ func TestServed_RowNotQueuedReleasesTheClaim(t *testing.T) {
 	person := urn.NewUserSubject("user-1")
 	key := servedKey{organizationID: scope.organizationID, serverID: scope.serverID, memberID: uuid.Nil, subjectKind: person.Kind, subjectID: person.ID, appKey: AppDCR.String()}
 
-	require.False(t, recorder.Served(t.Context(), scope, uuid.Nil, &person, nil))
+	require.False(t, recorder.Served(t.Context(), scope, uuid.Nil, &person, succeeded))
 	require.Equal(t, claimed, recorder.served.claim(key, time.Now(), false, false), "a row that could not be queued leaves the window open")
 }
 
@@ -250,7 +255,7 @@ func TestServed_FailureMakesTheConnectionDueAgain(t *testing.T) {
 		person, other := urn.NewUserSubject("user-1"), urn.NewUserSubject("user-2")
 		member := uuid.New()
 		served := func(scope Scope, member uuid.UUID, subject urn.SessionSubject) bool {
-			return recorder.Served(t.Context(), scope, member, &subject, nil)
+			return recorder.Served(t.Context(), scope, member, &subject, succeeded)
 		}
 		later := func() { time.Sleep(servedRetryDelay) } //nolint:forbidigo // GG013: advances the synctest fake clock inside a synctest.Test bubble
 
@@ -266,11 +271,13 @@ func TestServed_FailureMakesTheConnectionDueAgain(t *testing.T) {
 		later()
 
 		recorder.Once(t.Context(), gateway, StepMCPRequest, CodeProviderServerError, Subject(&person), Member(member))
-		require.True(t, served(gateway, uuid.Nil, person), "a member's failure makes the gateway due")
+		require.False(t, served(gateway, uuid.Nil, person), "a member's failure leaves the gateway's window closed")
+		require.True(t, served(gateway, member, person), "and makes that member due")
 		later()
 
 		recorder.Once(t.Context(), ServerScope(org, project, gatewayID, AppFirstParty), StepInboundToken, CodeRefreshTokenUnknownOrAlreadyUsed, Subject(&person))
-		require.True(t, served(gateway, uuid.Nil, person), "a token failure under another app makes it due")
+		require.True(t, served(gateway, uuid.Nil, person), "a token failure under another app makes the gateway due")
+		require.True(t, served(gateway, member, person), "and its members")
 
 		before := len(rows())
 		writes := 0
@@ -303,12 +310,74 @@ func TestServed_HeldBackFailureMakesItDue(t *testing.T) {
 		for range onceKeyBurst {
 			require.True(t, fail())
 		}
-		require.True(t, recorder.Served(t.Context(), scope, uuid.Nil, &person, nil))
+		require.True(t, recorder.Served(t.Context(), scope, uuid.Nil, &person, succeeded))
 		time.Sleep(servedRetryDelay / 2) //nolint:forbidigo // GG013: advances the synctest fake clock inside a synctest.Test bubble
 		require.False(t, fail(), "held back, to be written later as a repeat")
 		time.Sleep(servedRetryDelay / 2) //nolint:forbidigo // GG013: advances the synctest fake clock inside a synctest.Test bubble
-		require.True(t, recorder.Served(t.Context(), scope, uuid.Nil, &person, nil), "the held-back failure made the connection due")
+		require.True(t, recorder.Served(t.Context(), scope, uuid.Nil, &person, succeeded), "the held-back failure made the connection due")
 	})
+}
+
+func TestServed_UnsuccessfulAnswerWritesNothing(t *testing.T) {
+	t.Parallel()
+
+	recorder, rows := servedRecording(t, logsOn)
+	scope := testScope()
+	person := urn.NewUserSubject("user-1")
+	failedAnswer := func() ([]Option, bool) { return nil, false }
+
+	require.False(t, recorder.Served(t.Context(), scope, uuid.Nil, &person, failedAnswer))
+	require.Empty(t, rows())
+	require.True(t, recorder.Served(t.Context(), scope, uuid.Nil, &person, succeeded), "the next success writes")
+	require.Len(t, rows(), 1)
+}
+
+// One member down for an hour re-arms only that member: the gateway writes one row that hour.
+func TestServed_MemberFailureReArmsOnlyThatMember(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		recorder, rows := servedRecording(t, logsOn)
+		recorder.limiter = newOnceLimiter()
+		recorder.queue = make(chan Row, 100)
+		gateway := GatewayScope("org-test", uuid.New(), uuid.New(), AppDCR)
+		person := urn.NewUserSubject("user-1")
+		down := uuid.New()
+		servedRows := func(member uuid.UUID) int {
+			n := 0
+			for _, row := range rows() {
+				if row.StepResult == ResultServed.String() && row.MemberID == idString(member) {
+					n++
+				}
+			}
+			return n
+		}
+
+		require.True(t, recorder.Served(t.Context(), gateway, down, &person, succeeded))
+		for range 59 * 6 {
+			recorder.Once(t.Context(), gateway, StepDiscoveryMember, CodeProviderServerError, Member(down), Subject(&person))
+			recorder.Served(t.Context(), gateway, uuid.Nil, &person, succeeded)
+			time.Sleep(10 * time.Second) //nolint:forbidigo // GG013: advances the synctest fake clock inside a synctest.Test bubble
+		}
+		require.Equal(t, 1, servedRows(uuid.Nil), "a healthy caller's listings write one gateway row while a member is down")
+		require.True(t, recorder.Served(t.Context(), gateway, down, &person, succeeded), "the member's recovery writes within the minute bound")
+		require.Equal(t, 2, servedRows(down))
+	})
+}
+
+func TestServedConnections_FailureTimeNeverMovesBack(t *testing.T) {
+	t.Parallel()
+
+	served := newServedConnections()
+	key := servedKey{organizationID: "org", serverID: uuid.New(), memberID: uuid.Nil, subjectKind: urn.SessionSubjectKindUser, subjectID: "1", appKey: "dcr"}
+	start := time.Now()
+	require.Equal(t, claimed, served.claim(key, start, false, false))
+	served.failed(key.failureKey(uuid.Nil), start.Add(2*time.Second))
+	served.failed(key.failureKey(uuid.Nil), start.Add(-time.Second))
+	stored, ok := served.failures.Peek(key.failureKey(uuid.Nil))
+	require.True(t, ok)
+	require.Equal(t, start.Add(2*time.Second), stored, "a slower concurrent failure keeps the newer time")
+	require.Equal(t, claimed, served.claim(key, start.Add(servedRetryDelay), false, false))
 }
 
 func TestServedConnections_ClaimReleaseAndRetry(t *testing.T) {
@@ -374,14 +443,14 @@ func TestServed_TakesItsOwnOrganizationCeiling(t *testing.T) {
 
 		for i := range servedOrgBurst + 10 {
 			person := urn.NewUserSubject("user-" + strconv.Itoa(i))
-			recorder.Served(t.Context(), scope, uuid.Nil, &person, nil)
+			recorder.Served(t.Context(), scope, uuid.Nil, &person, succeeded)
 		}
 		require.Len(t, rows(), onceOrgBurst+servedOrgBurst, "failures spent none of the served budget")
 
 		late := urn.NewUserSubject("user-" + strconv.Itoa(servedOrgBurst))
-		require.False(t, recorder.Served(t.Context(), scope, uuid.Nil, &late, nil), "a held-back connection waits")
+		require.False(t, recorder.Served(t.Context(), scope, uuid.Nil, &late, succeeded), "a held-back connection waits")
 		time.Sleep(servedRetryDelay) //nolint:forbidigo // GG013: advances the synctest fake clock inside a synctest.Test bubble
-		require.True(t, recorder.Served(t.Context(), scope, uuid.Nil, &late, nil), "and tries again after the delay")
+		require.True(t, recorder.Served(t.Context(), scope, uuid.Nil, &late, succeeded), "and tries again after the delay")
 	})
 }
 
@@ -393,7 +462,7 @@ func TestServed_DeferralIsNotADrop(t *testing.T) {
 	scope := testScope()
 	for i := range servedOrgBurst + 5 {
 		person := urn.NewUserSubject("user-" + strconv.Itoa(i))
-		recorder.Served(t.Context(), scope, uuid.Nil, &person, nil)
+		recorder.Served(t.Context(), scope, uuid.Nil, &person, succeeded)
 	}
 	require.Zero(t, recorder.dropped(t, dropRateLimited))
 	require.Zero(t, recorder.dropped(t, dropQueueReserve))
@@ -411,7 +480,7 @@ func TestServed_YieldsTheQueueFirst(t *testing.T) {
 	recorder.queue <- Row{}
 	person := urn.NewUserSubject("user-1")
 
-	require.False(t, recorder.Served(t.Context(), testScope(), uuid.Nil, &person, nil), "half a queue is kept for failures")
+	require.False(t, recorder.Served(t.Context(), testScope(), uuid.Nil, &person, succeeded), "half a queue is kept for failures")
 	require.Empty(t, rows())
 }
 

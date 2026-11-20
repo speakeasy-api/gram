@@ -1942,8 +1942,9 @@ func (p *Proxy) runRequestServedInterceptors(ctx context.Context, status int, ms
 	if len(p.RequestServedInterceptors) == 0 || status < 200 || status >= 300 || !isResponseTo(msg, id) || (toolsCall != nil && !toolsCall.responded) {
 		return
 	}
+	response, _ := msg.(*jsonrpc.Response)
 	for _, interceptor := range p.RequestServedInterceptors {
-		interceptor.InterceptRequestServed(ctx)
+		interceptor.InterceptRequestServed(ctx, response)
 	}
 }
 

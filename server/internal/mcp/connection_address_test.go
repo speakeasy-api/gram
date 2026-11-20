@@ -41,7 +41,7 @@ func callMemberAt(t *testing.T, memberURL string, guardianOpts ...func(*guardian
 
 	ctx, ti := newTestMCPServiceWithMeterProviderAndGuardianOptions(t, testenv.NewMeterProvider(t), guardianOpts...)
 	authCtx := requireProjectAuthContext(t, ctx)
-	rec := mcpconnectionattemptstest.New(t).IgnoreServed()
+	rec := mcpconnectionattemptstest.New(t)
 	ti.service.SetConnectionRecorder(rec.Recorder)
 	projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
 
@@ -119,7 +119,7 @@ func TestGatewayMemberSignInProviderAtBlockedAddress(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithMeterProviderAndGuardianOptions(t, testenv.NewMeterProvider(t), guardian.WithBlockedCIDRBlocks("192.0.2.0/24"))
-	rec := mcpconnectionattemptstest.New(t).IgnoreServed()
+	rec := mcpconnectionattemptstest.New(t)
 	ti.service.SetConnectionRecorder(rec.Recorder)
 	f := newMemberRefreshOutageFixture(t, ctx, ti, func(upstream string) string { return upstream })
 	rows, err := testrepo.New(ti.conn).ForceRemoteSessionIssuerTokenEndpointFixture(ctx, testrepo.ForceRemoteSessionIssuerTokenEndpointFixtureParams{

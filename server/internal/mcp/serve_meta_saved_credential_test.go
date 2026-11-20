@@ -198,7 +198,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_SavedKeyRefusedAsksAnAdmin(t *test
 			saveServerKey(t, ti, projectID, remoteID, "saved-key")
 			subject := createTestUser(t, ctx, ti, "meta-key-user-"+uuid.NewString())
 			token := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
-			rec := mcpconnectionattemptstest.New(t).IgnoreServed()
+			rec := mcpconnectionattemptstest.New(t)
 			ti.service.SetConnectionRecorder(rec.Recorder)
 
 			text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, token, "member--ping"))

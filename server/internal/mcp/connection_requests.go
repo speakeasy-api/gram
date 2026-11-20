@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -55,12 +56,29 @@ func (s *Service) recordRequestOutcome(ctx context.Context, scope mcpconnectiona
 	s.connections.Once(ctx, scope, mcpconnectionattempts.StepMCPRequest, code, append(opts, mcpconnectionattempts.FromRequest(r))...)
 }
 
-// recordServed writes a served row for a named caller, at most once a window per connection,
-// unless anything under ctx's failure mark failed. client is built only when a row is due.
-func (s *Service) recordServed(ctx context.Context, scope mcpconnectionattempts.Scope, member uuid.UUID, subject *urn.SessionSubject, r *http.Request, client func() mcpconnectionattempts.Option) {
-	s.connections.Served(ctx, scope, member, subject, func() []mcpconnectionattempts.Option {
-		return []mcpconnectionattempts.Option{mcpconnectionattempts.FromRequest(r), client()}
+// recordServed writes a served row for a named caller whose request with an id got a successful
+// MCP result in body, at most once a window per connection, unless anything under ctx's failure
+// mark failed. body is read and client built only when a row is due.
+func (s *Service) recordServed(ctx context.Context, scope mcpconnectionattempts.Scope, member uuid.UUID, subject *urn.SessionSubject, r *http.Request, body json.RawMessage, client func() mcpconnectionattempts.Option) {
+	s.connections.Served(ctx, scope, member, subject, func() ([]mcpconnectionattempts.Option, bool) {
+		return []mcpconnectionattempts.Option{mcpconnectionattempts.FromRequest(r), client()}, mcpResultSucceeded(body)
 	})
+}
+
+// mcpResultSucceeded reports a JSON-RPC response with no error and a result object that does not
+// set isError. Anything else, a batch included, is not a success.
+func mcpResultSucceeded(body json.RawMessage) bool {
+	var response struct {
+		Error  json.RawMessage `json:"error"`
+		Result json.RawMessage `json:"result"`
+	}
+	if json.Unmarshal(body, &response) != nil || (len(response.Error) > 0 && string(response.Error) != "null") {
+		return false
+	}
+	var result struct {
+		IsError bool `json:"isError"`
+	}
+	return json.Unmarshal(response.Result, &result) == nil && !result.IsError
 }
 
 // recordGateRejection attributes invalid bearers only when their signature proves a subject.

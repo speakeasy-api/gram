@@ -56,16 +56,18 @@ type servedKey struct {
 	appKey         string
 }
 
-// failureKey is a caller on one server, across its gateway members and apps.
+// failureKey is a caller on one server, across apps: one gateway member's failures, or with no
+// member, failures of the caller's connection to the server itself, which concern every member.
 type failureKey struct {
 	organizationID string
 	serverID       uuid.UUID
+	memberID       uuid.UUID
 	subjectKind    urn.SessionSubjectKind
 	subjectID      string
 }
 
-func (k servedKey) failureKey() failureKey {
-	return failureKey{organizationID: k.organizationID, serverID: k.serverID, subjectKind: k.subjectKind, subjectID: k.subjectID}
+func (k servedKey) failureKey(member uuid.UUID) failureKey {
+	return failureKey{organizationID: k.organizationID, serverID: k.serverID, memberID: member, subjectKind: k.subjectKind, subjectID: k.subjectID}
 }
 
 func storedAppKey(appKey string) string {
@@ -121,8 +123,17 @@ func (s *servedConnections) dueLocked(key servedKey, now time.Time) bool {
 	case now.Sub(entry.at) >= servedInterval:
 		return true
 	}
-	failed, ok := s.failures.Peek(key.failureKey())
-	return ok && failed.After(entry.at) && now.Sub(entry.at) >= servedRetryDelay
+	if now.Sub(entry.at) < servedRetryDelay {
+		return false
+	}
+	if failed, ok := s.failures.Peek(key.failureKey(uuid.Nil)); ok && failed.After(entry.at) {
+		return true
+	}
+	if key.memberID == uuid.Nil {
+		return false
+	}
+	failed, ok := s.failures.Peek(key.failureKey(key.memberID))
+	return ok && failed.After(entry.at)
 }
 
 // claim decides a served request under one lock. A due connection is claimed, so concurrent
@@ -153,11 +164,16 @@ func (s *servedConnections) release(key servedKey, claimedAt time.Time) {
 	}
 }
 
-// failed remembers a failure for a caller on a server, which makes its connections there due again.
+// failed remembers a failure, which makes the connections it concerns due again. The stored time
+// never moves back, so a slower concurrent failure cannot hide a newer one.
 func (s *servedConnections) failed(key failureKey, now time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if last, ok := s.failures.Peek(key); ok && last.After(now) {
+		s.failures.Get(key)
+		return
+	}
 	s.failures.Add(key, now)
 }
 
@@ -170,6 +186,10 @@ func (s *servedConnections) orgLocked(organizationID string) *rate.Limiter {
 	return org
 }
 
+func (row Row) isServed() bool {
+	return row.Step == StepMCPRequest.name && row.StepResult == ResultServed.name
+}
+
 // servedQueueReserved reports that the rest of the queue is kept for failures and real attempts.
 func (r *Recorder) servedQueueReserved() bool {
 	return len(r.queue)*servedQueueShareDenominator >= cap(r.queue)*servedQueueShareNumerator
@@ -177,11 +197,13 @@ func (r *Recorder) servedQueueReserved() bool {
 
 // Served records that a request was served for a named caller, as ResultServed at the request
 // step: at most one row per caller, server or gateway member, and app per servedInterval in this
-// process, and again after a failure on that server, at most once per servedRetryDelay. It writes
+// process, and again after a failure that re-arms it, at most once per servedRetryDelay. It writes
 // nothing for a missing or anonymous subject, for a ctx whose failure mark is set, or for a caller
-// that went away. When no row is due it takes one lock and returns, without calling details,
-// which supplies the row's other options, such as its app version.
-func (r *Recorder) Served(ctx context.Context, scope Scope, member uuid.UUID, subject *urn.SessionSubject, details func() []Option) (accepted bool) {
+// that went away. When no row is due it takes one lock and returns, without calling row. row
+// says whether the caller got a successful result, which may take reading the response, and
+// supplies the row's other options, such as its app version; a request that did not succeed
+// releases its claim, so the next success writes.
+func (r *Recorder) Served(ctx context.Context, scope Scope, member uuid.UUID, subject *urn.SessionSubject, row func() ([]Option, bool)) (accepted bool) {
 	if r == nil || r.served == nil || subject == nil || subject.IsZero() || subject.Kind == urn.SessionSubjectKindAnonymous ||
 		!scope.valid() || ctx.Err() != nil || Failed(ctx) {
 		return false
@@ -202,16 +224,17 @@ func (r *Recorder) Served(ctx context.Context, scope Scope, member uuid.UUID, su
 			r.served.release(key, now)
 		}
 	}()
-	var opts []Option
-	if details != nil {
-		opts = details()
+	opts, succeeded := row()
+	if !succeeded {
+		return false
 	}
 	opts = append(opts, Subject(subject), Member(member))
 	return r.record(ctx, Begin(scope), StepMCPRequest, ResultServed, true, limitNone, opts)
 }
 
-// observeFailure makes a named caller's connections on the row's server due again, whatever the
-// step, member or app, and before any limit decides whether the failure row is written.
+// observeFailure makes a named caller's connections due again before any limit decides whether the
+// failure row is written, whatever the step or app: on the row's gateway member only, or with no
+// member, on every connection to the row's server.
 func (r *Recorder) observeFailure(row Row, now time.Time) {
 	if r.served == nil || row.SubjectURN == "" || row.ServerID == "" {
 		return
@@ -224,5 +247,11 @@ func (r *Recorder) observeFailure(row Row, now time.Time) {
 	if err != nil {
 		return
 	}
-	r.served.failed(failureKey{organizationID: row.OrganizationID, serverID: server, subjectKind: urn.SessionSubjectKind(kind), subjectID: id}, now)
+	member := uuid.Nil
+	if row.MemberID != "" {
+		if member, err = uuid.Parse(row.MemberID); err != nil {
+			return
+		}
+	}
+	r.served.failed(failureKey{organizationID: row.OrganizationID, serverID: server, memberID: member, subjectKind: urn.SessionSubjectKind(kind), subjectID: id}, now)
 }

@@ -272,8 +272,8 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 	}
 	if err != nil || attempt.status != 0 {
 		mcpconnectionattempts.MarkFailed(callCtx)
-	} else if member := attempt.member; member != nil {
-		s.recordServed(callCtx, gate.connectionScope(ctx), member.serverID, gate.resolvedSubject(ctx), gate.request, func() mcpconnectionattempts.Option {
+	} else if member := attempt.member; member != nil && req.ID.IsSet() {
+		s.recordServed(callCtx, gate.connectionScope(ctx), member.serverID, gate.resolvedSubject(ctx), gate.request, body, func() mcpconnectionattempts.Option {
 			return s.gatewayReportedClient(ctx, gate)
 		})
 	}

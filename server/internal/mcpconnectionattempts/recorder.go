@@ -1068,7 +1068,10 @@ func (r *Recorder) run() {
 				}
 			}
 			if reason != "" {
-				r.drop(context.Background(), reason, events(row), nil)
+				// A served row is a sample, so an organization with logs off loses no event by it.
+				if reason != dropLogsOff || !row.isServed() {
+					r.drop(context.Background(), reason, events(row), nil)
+				}
 				return
 			}
 			r.stampClient(&row)

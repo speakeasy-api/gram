@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 
 	"github.com/google/uuid"
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
@@ -160,12 +161,12 @@ func (c *requestConnections) InterceptRequestFailure(ctx context.Context, failur
 }
 
 // InterceptRequestServed implements [proxy.RequestServedInterceptor].
-func (c *requestConnections) InterceptRequestServed(ctx context.Context) {
-	if c.failed.Load() {
+func (c *requestConnections) InterceptRequestServed(ctx context.Context, response *jsonrpc.Response) {
+	if c.failed.Load() || response == nil {
 		return
 	}
-	c.recorder.Served(ctx, c.Scope, uuid.Nil, c.Caller, func() []mcpconnectionattempts.Option {
-		return append([]mcpconnectionattempts.Option{mcpconnectionattempts.FromRequest(c.Request)}, c.Details...)
+	c.recorder.Served(ctx, c.Scope, uuid.Nil, c.Caller, func() ([]mcpconnectionattempts.Option, bool) {
+		return append([]mcpconnectionattempts.Option{mcpconnectionattempts.FromRequest(c.Request)}, c.Details...), proxy.ResponseSucceeded(response)
 	})
 }
 
