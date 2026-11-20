@@ -43,7 +43,7 @@ func (s *Service) configuredAuthOffers(ctx context.Context, organizationID strin
 // forPersonalRegistration restricts capability checks to the owned grant's
 // registration. A shared or sibling offer cannot authorize its bearer.
 func (o configuredAuthOffer) forPersonalRegistration(id uuid.UUID) configuredAuthOffer {
-	scoped := configuredAuthOffer{pending: o.pending}
+	scoped := configuredAuthOffer{clients: nil, pending: o.pending}
 	for _, client := range o.clients {
 		if client.RemoteSessionClientID.Valid && client.RemoteSessionClientID.UUID == id &&
 			(client.ClientType.String == authz.AuthClientTypeRemoteSession || client.ClientType.String == authz.AuthClientTypeEMA) {
