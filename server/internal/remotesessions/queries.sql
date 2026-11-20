@@ -4064,38 +4064,6 @@ LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id
   AND rms.project_id = m.project_id AND rms.deleted IS FALSE
 ORDER BY m.id DESC;
 
--- name: ListOrganizationMcpServersForClient :many
--- MCP servers attached to a client through its user_session_issuer(s). Callers
--- establish the client belongs to the org upstream
--- (GetOrganizationRemoteSessionClientByID).
---
--- A soft-deleted upstream must not contribute its URL: the derived RFC 8707
--- resource is sent to the authorization server and recorded on new grants.
---
--- Remote upstreams only. A tunneled server deliberately contributes nothing:
--- its credentials route by the server's own derived remote_session_issuer and
--- accept an unqualified grant, so stamping its identifier here would buy no
--- routing and would make an issuer that fronts both kinds read as ambiguous,
--- silently unqualifying a sibling remote server's grants. The member-scoped
--- meta MCP derivation stamps it instead, where one member is unambiguous.
-SELECT DISTINCT
-    m.id,
-    m.project_id,
-    p.slug AS project_slug,
-    m.name,
-    m.slug,
-    COALESCE(rms.url, '')::text AS url
-FROM mcp_servers AS m
-JOIN projects AS p ON p.id = m.project_id
-LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
-WHERE m.deleted IS FALSE
-  AND m.user_session_issuer_id IN (
-      SELECT link.user_session_issuer_id
-      FROM remote_session_client_user_session_issuers AS link
-      WHERE link.remote_session_client_id = @remote_session_client_id
-  )
-ORDER BY m.id DESC;
-
 -- name: GetUserSessionIssuerOrganizationID :one
 -- The organization a sign-in belongs to. A deleted sign-in still names the
 -- organization a grant was consented in.
@@ -4105,11 +4073,11 @@ LEFT JOIN projects AS p ON p.id = usi.project_id
 WHERE usi.id = @id;
 
 -- name: ListOrganizationMcpServersForClients :many
--- ListOrganizationMcpServersForClient for a set of clients in one round trip,
+-- Lists the servers for a set of clients in one round trip,
 -- each row tagged with the client it is attached through, so a consent page
 -- or a login decides every bound client's resource from one load. Same
--- liveness and remote-only rules as the single-client query, held to the
--- caller's organization so the client ids cannot read another tenant's servers.
+-- remote-only rule for associated registrations, held to the caller's
+-- organization so the client ids cannot read another tenant's servers.
 --
 -- Where the organization enforces typed auth clients, a server that offers a
 -- client through a live, enabled auth client is attached to it as well,
@@ -4136,9 +4104,10 @@ FROM (
     SELECT link.remote_session_client_id AS client_id,
            linked.id AS mcp_server_id,
            FALSE AS offered
-    FROM remote_session_client_user_session_issuers AS link
-    JOIN mcp_servers AS linked ON linked.user_session_issuer_id = link.user_session_issuer_id
+    FROM mcp_server_remote_session_clients AS link
+    JOIN mcp_servers AS linked ON linked.id = link.mcp_server_id AND linked.project_id = link.project_id
     WHERE link.remote_session_client_id = ANY(@remote_session_client_ids::uuid[])
+      AND link.organization_id = @organization_id::text AND NOT link.deleted
     UNION ALL
     SELECT ac.remote_session_client_id AS client_id,
            offering.id AS mcp_server_id,

@@ -30,10 +30,8 @@ func migrateUpstreamAuth(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 	return upstreamAuthReadiness(ctx, logger, db, organizationID)
 }
 
-// recordTypedUpstreamAuth records the typed auth clients, their server links,
-// header copies, mapped credential choices and default grants, and the
-// assistant execution profiles, with the backfills the admin migration runs,
-// in the same order.
+// recordTypedUpstreamAuth finishes header copies and grant provisioning. The
+// seed writes assistant execution profiles in the main transaction.
 func recordTypedUpstreamAuth(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organizationID string) error {
 	ctx = authz.WithUpstreamSelectorWriteGate(ctx, seededSelectorWrites(organizationID))
 	// The selection backfill reads the organization's enforcement state on its
@@ -49,15 +47,9 @@ func recordTypedUpstreamAuth(ctx context.Context, logger *slog.Logger, db *pgxpo
 	if len(clients.PhaseErrors) > 0 {
 		return fmt.Errorf("record typed auth clients: failed phases %s", phaseErrors(clients.PhaseErrors))
 	}
-	// Profiles decide from the typed auth clients, so they come after a run
-	// that recorded every auth client phase, as in the admin migration.
-	profiles, err := executionprofiles.Backfill(ctx, db, organizationID, true)
-	if err != nil {
-		return fmt.Errorf("record execution selection profiles: %w", err)
-	}
 	logger.InfoContext(ctx, fmt.Sprintf(
-		"demo seed recorded typed upstream auth: %d auth clients, %d links, %d header copies, %d choices mapped, %d grants, %d profile versions",
-		clients.ClientsWritten, clients.LinksWritten, clients.HeadersWritten, clients.SelectionsMapped, clients.GrantsWritten, profiles.VersionsWritten,
+		"demo seed recorded typed upstream auth: %d auth clients, %d links, %d header copies, %d choices mapped, %d grants",
+		clients.ClientsWritten, clients.LinksWritten, clients.HeadersWritten, clients.SelectionsMapped, clients.GrantsWritten,
 	), attr.SlogOrganizationID(organizationID))
 
 	return nil

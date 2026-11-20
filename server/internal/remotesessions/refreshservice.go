@@ -336,23 +336,11 @@ func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, 
 // persisted resource. organizationID is the client's organization; it selects
 // where the attachments come from and, for associations, scopes them.
 func (s *RefreshService) FallbackResourceForClient(ctx context.Context, organizationID string, clientID uuid.UUID) (string, error) {
-	if s.attachmentsFromAssociations(ctx, organizationID) {
-		attachments, err := attachmentsForClients(ctx, s.db, organizationID, []uuid.UUID{clientID}, true)
-		if err != nil {
-			return "", err
-		}
-		return clientUpstreamResource(attachments[clientID]), nil
-	}
-
-	rows, err := remotesessions_repo.New(s.db).ListOrganizationMcpServersForClient(ctx, clientID)
+	attachments, err := attachmentsForClients(ctx, s.db, organizationID, []uuid.UUID{clientID}, true)
 	if err != nil {
-		return "", fmt.Errorf("list mcp servers for client: %w", err)
+		return "", err
 	}
-	resources := make([]string, 0, len(rows))
-	for _, row := range rows {
-		resources = append(resources, row.Url)
-	}
-	return clientUpstreamResource(resources), nil
+	return clientUpstreamResource(attachments[clientID]), nil
 }
 
 // fallbackResourceForGrant derives the resource for a grant stored with none.
@@ -373,8 +361,7 @@ func (s *RefreshService) fallbackResourceForGrant(ctx context.Context, sess remo
 		return clientUpstreamResource(attachments[sess.RemoteSessionClientID]), nil
 	}
 	// A global sign-in has no organization, but its client still has a tenant.
-	// Use that tenant for the association flag and retain the legacy client-wide
-	// fallback when association-derived resources are not enabled.
+	// Use that tenant when resolving direct associations.
 	organizationID, err = q.GetRemoteSessionClientTenantOrganizationID(ctx, sess.RemoteSessionClientID)
 	if err != nil {
 		return "", fmt.Errorf("read client organization for fallback resource: %w", err)
