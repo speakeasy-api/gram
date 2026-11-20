@@ -31,12 +31,13 @@
     project_slug: default
     target_id: 5f1e2a00-0000-4000-8000-000000000011
 - id: gateway-member-upstream-sign-in
-  prompt: Which proxied servers behind the team gateway still need upstream sign-in setup? Just report their status.
+  prompt: Which proxied servers behind Acme Gateway still need upstream sign-in setup? Just report their status.
   expect: [get_mcp_connection_settings]
   allow: [find_mcp]
   args:
     project_slug: default
     target_kind: gateway
+    target_id: 7a9d0c00-0000-4000-8000-000000000031
 - id: mcp-set-address-linear-slug
   prompt: Change the Linear server's URL path so it ends in linear-tools instead.
   expect: [set_mcp_address]

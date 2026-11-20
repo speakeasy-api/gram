@@ -176,7 +176,8 @@ func (s *MCPConnectionSettingsService) gatewayMemberSignIn(ctx context.Context, 
 	if err != nil {
 		return nil, fmt.Errorf("list proxied gateway members: %w", err)
 	}
-	statuses := make([]MCPGatewayMemberSignIn, 0, len(members))
+	readable := make([]MCPGatewayMemberSignIn, 0, len(members))
+	ids := make([]uuid.UUID, 0, len(members))
 	for _, member := range members {
 		if member.McpServerToolsetID.Valid || member.McpServerUnproxiedMcpServerID.Valid || member.McpServerSlug.String == "" || (!member.McpServerRemoteMcpServerID.Valid && !member.McpServerTunneledMcpServerID.Valid) {
 			continue
@@ -188,23 +189,28 @@ func (s *MCPConnectionSettingsService) gatewayMemberSignIn(ctx context.Context, 
 		if !allowed {
 			continue
 		}
-		view, err := authclients.ReadServerAuthentication(ctx, s.db, principal.OrganizationID, member.McpServerID)
-		if errors.Is(err, pgx.ErrNoRows) {
-			continue
-		}
-		if err != nil {
-			return nil, fmt.Errorf("read gateway member sign-in status: %w", err)
-		}
-		if view.ProjectID != projectID.String() {
-			continue
-		}
 		name := member.McpServerName.String
 		if name == "" {
 			name = member.McpServerSlug.String
 		}
-		statuses = append(statuses, MCPGatewayMemberSignIn{MCPID: member.McpServerID.String(), Name: name, Status: view.Status})
+		ids = append(ids, member.McpServerID)
+		readable = append(readable, MCPGatewayMemberSignIn{MCPID: member.McpServerID.String(), Name: name, Status: ""})
 	}
-	return statuses, nil
+	if len(ids) == 0 {
+		return readable, nil
+	}
+	statuses, err := authclients.ReadServerAuthenticationStatuses(ctx, s.db, principal.OrganizationID, projectID, ids)
+	if err != nil {
+		return nil, fmt.Errorf("read gateway member sign-in statuses: %w", err)
+	}
+	result := make([]MCPGatewayMemberSignIn, 0, len(readable))
+	for i, member := range readable {
+		if status, ok := statuses[ids[i]]; ok {
+			member.Status = status
+			result = append(result, member)
+		}
+	}
+	return result, nil
 }
 
 // GetInTx returns the settings snapshot through the caller transaction. Version
