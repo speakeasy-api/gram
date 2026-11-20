@@ -13,7 +13,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type ShadowMCPOfficialServer = {
   /**
-   * True when the link was made automatically because the server proxies to the Shadow MCP server's URL; false when an administrator chose it.
+   * True when the server was made official automatically because the server proxies to the Shadow MCP server's URL; false when an administrator chose it.
    */
   automatic?: boolean | undefined;
   /**
