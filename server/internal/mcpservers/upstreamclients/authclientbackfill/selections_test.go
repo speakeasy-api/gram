@@ -687,9 +687,10 @@ type selectionMappingCounts struct {
 
 func (tx observeSelectionMapping) Query(ctx context.Context, query string, args ...any) (pgx.Rows, error) {
 	if strings.HasPrefix(query, "-- name: ListSelectionMappings ") {
-		onlyID, ok := args[6].(uuid.NullUUID)
+		// The generated ListSelectionMappings call passes OnlyID before PageSize.
+		onlyID, ok := args[5].(uuid.NullUUID)
 		if !ok {
-			return nil, fmt.Errorf("selection query only ID has unexpected type %T", args[6])
+			return nil, fmt.Errorf("selection query only ID has unexpected type %T", args[5])
 		}
 		if onlyID.Valid {
 			tx.counts.rereads++

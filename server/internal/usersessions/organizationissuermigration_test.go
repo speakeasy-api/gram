@@ -628,7 +628,7 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 	require.Equal(t, int64(2), emaBinding.Generation)
 	linkCount, err := remoteRepo.CountRemoteSessionClientUserSessionIssuerBindings(ctx, remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: remoteClient.ID, UserSessionIssuerID: targetID})
 	require.NoError(t, err)
-	require.Equal(t, int64(1), linkCount)
+	require.Zero(t, linkCount, "migration does not recreate a legacy link")
 	mcpServerAfter, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: mcpServerID, OrganizationID: authCtx.ActiveOrganizationID})
 	require.NoError(t, err)
 	require.Equal(t, targetID, mcpServerAfter.UserSessionIssuerID.UUID)
