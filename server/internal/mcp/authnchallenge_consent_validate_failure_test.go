@@ -64,8 +64,9 @@ func checkRows(rec *mcpconnectionattemptstest.Recording) []mcpconnectionattempts
 	return rows
 }
 
-// A token lookup that breaks on our side records internal_error, and the page says so without suggesting a retry.
-func TestServeConsentAction_ValidateTokenLookupFaultRecordsAndSaysNoRetry(t *testing.T) {
+// A malformed agent actor causes the typed token resolver to fail internally.
+// The page reports the fault without suggesting a retry.
+func TestServeConsentAction_ValidateMalformedActorRecordsAndSaysNoRetry(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx := seedMetaValidationFixture(t, "check-fault")

@@ -6,6 +6,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
+
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 )
 
@@ -31,6 +33,9 @@ func (s *Service) consentDirectPreviewAuth(ctx context.Context, endpoint *Resolv
 			return nil, err
 		}
 		if option := auth.Selected(); option != nil {
+			if option.Type == authz.AuthClientTypeEMA {
+				return nil, errConsentNoUsableConnection
+			}
 			selected = option.ID
 		} else {
 			if _, err := s.consentDirectAuthClientPick(ctx, endpoint, state, "", nil, cards); err != nil {

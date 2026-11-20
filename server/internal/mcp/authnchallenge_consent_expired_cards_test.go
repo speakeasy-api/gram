@@ -150,6 +150,8 @@ func TestConsentPost_TypedChoiceRefusesAnExpiredPersonalClient(t *testing.T) {
 	location, err := url.Parse(w.Header().Get("Location"))
 	require.NoError(t, err)
 	require.Empty(t, location.Query().Get("code"))
+	require.Equal(t, "/mcp/"+fx.endpoint.Slug+"/connect", location.Path)
+	require.Equal(t, fx.stateID, location.Query().Get("state"))
 }
 
 // A shared credential needs no connection, so an expired service card does not block it.

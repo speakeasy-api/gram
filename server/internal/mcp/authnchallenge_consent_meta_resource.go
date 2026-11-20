@@ -52,7 +52,7 @@ func (s *Service) resolveMetaMemberResource(
 		return "", none, false, err
 	}
 	if usesTypedConsentInventory(ctx) {
-		admission, err := s.authz.PrepareMandatory(ctx)
+		admission, err := s.admitMandatoryShadow(ctx)
 		if err != nil {
 			return "", none, true, fmt.Errorf("load login member permissions: %w", err)
 		}

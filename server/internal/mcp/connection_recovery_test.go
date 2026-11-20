@@ -383,6 +383,7 @@ func TestConnectionRecoveryRefusesAChangedResource(t *testing.T) {
 	require.NoError(t, err)
 	refused := f.open(t, path, f.userID)
 	require.Equal(t, http.StatusForbidden, refused.Code)
+	require.Contains(t, refused.Body.String(), "No access")
 	require.NotContains(t, refused.Body.String(), f.asBase)
 }
 
