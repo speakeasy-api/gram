@@ -27,12 +27,13 @@ func TestRunRequestServedInterceptors_OnlyARelayedAnswerToTheRequest(t *testing.
 	answer := &jsonrpc.Response{ID: id}
 
 	for _, tc := range []struct {
-		name   string
-		status int
-		msg    jsonrpc.Message
-		id     jsonrpc.ID
-		call   *ToolsCallRequest
-		want   int
+		name       string
+		status     int
+		msg        jsonrpc.Message
+		id         jsonrpc.ID
+		call       *ToolsCallRequest
+		initialize *InitializeRequest
+		want       int
 	}{
 		{name: "answered", status: http.StatusOK, msg: answer, id: id, want: 1},
 		{name: "error status", status: http.StatusInternalServerError, msg: answer, id: id, want: 0},
@@ -40,6 +41,7 @@ func TestRunRequestServedInterceptors_OnlyARelayedAnswerToTheRequest(t *testing.
 		{name: "notification", status: http.StatusOK, msg: answer, id: jsonrpc.ID{}, want: 0},
 		{name: "no message", status: http.StatusOK, msg: nil, id: id, want: 0},
 		{name: "tools/call reply recognised", status: http.StatusOK, msg: answer, id: id, call: &ToolsCallRequest{Params: nil, UserRequest: nil, responded: true}, want: 1},
+		{name: "initialize", status: http.StatusOK, msg: answer, id: id, initialize: &InitializeRequest{}, want: 0},
 		{name: "tools/call reply not recognised", status: http.StatusOK, msg: answer, id: id, call: &ToolsCallRequest{Params: nil, UserRequest: nil, responded: false}, want: 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -47,7 +49,7 @@ func TestRunRequestServedInterceptors_OnlyARelayedAnswerToTheRequest(t *testing.
 
 			calls := 0
 			p := &Proxy{RequestServedInterceptors: []RequestServedInterceptor{countingServedInterceptor{calls: &calls}}}
-			p.runRequestServedInterceptors(t.Context(), tc.status, tc.msg, tc.id, tc.call)
+			p.runRequestServedInterceptors(t.Context(), tc.status, tc.msg, tc.id, tc.call, tc.initialize)
 			require.Equal(t, tc.want, calls)
 		})
 	}

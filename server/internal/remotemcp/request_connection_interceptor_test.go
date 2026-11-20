@@ -2,9 +2,9 @@ package remotemcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -64,24 +64,22 @@ func answeringUpstream(t *testing.T) string {
 	t.Helper()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body strings.Builder
-		_, _ = io.Copy(&body, r.Body)
-		if !strings.Contains(body.String(), `"id"`) {
+		var rpc struct {
+			ID json.RawMessage `json:"id"`
+		}
+		if json.NewDecoder(r.Body).Decode(&rpc) != nil || len(rpc.ID) == 0 {
 			w.WriteHeader(http.StatusAccepted)
 			return
 		}
-		id := "7"
-		if strings.Contains(body.String(), `"id":1`) {
-			id = "1"
-		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":` + id + `,"result":{"content":[]}}`))
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":` + string(rpc.ID) + `,"result":{"tools":[]}}`))
 	}))
 	t.Cleanup(server.Close)
 	return server.URL
 }
 
-// A named caller's served requests write one served row a window, without the provider host.
+// A named caller's served requests write one served row a window, without the provider host. An
+// initialize writes none and leaves the window open.
 func TestRequestConnections_ServedRequestRecordsOnce(t *testing.T) {
 	t.Parallel()
 
@@ -89,12 +87,17 @@ func TestRequestConnections_ServedRequestRecordsOnce(t *testing.T) {
 	caller := urn.NewUserSubject("user-1")
 	upstream := answeringUpstream(t)
 	scope := mcpconnectionattempts.ServerScope("org", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified)
-	for range 2 {
+	attribution := func() connectionsUnderTest {
 		connections := recordingConnections(rec, "token")
 		connections.Scope = scope
 		connections.Caller = &caller
 		connections.Details = []mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&caller)}
-		serveRequest(t, connections, upstream, connectionInitialize)
+		return connections
+	}
+	serveRequest(t, attribution(), upstream, connectionInitialize)
+	rec.RequireNothing()
+	for range 2 {
+		serveRequest(t, attribution(), upstream, connectionToolsList)
 	}
 	rows := rec.Rows()
 	require.Len(t, rows, 1)
@@ -176,7 +179,7 @@ func TestRequestConnections_ServedNeedsANamedCallerAndAnAnswer(t *testing.T) {
 	t.Parallel()
 
 	rec := mcpconnectionattemptstest.New(t)
-	serveRequest(t, recordingConnections(rec, "token"), answeringUpstream(t), connectionInitialize)
+	serveRequest(t, recordingConnections(rec, "token"), answeringUpstream(t), connectionToolsList)
 	rec.RequireNothing()
 
 	caller := urn.NewUserSubject("user-1")

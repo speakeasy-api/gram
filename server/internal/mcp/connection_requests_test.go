@@ -131,7 +131,8 @@ func TestAnonymousServedRequestRecordsNothing(t *testing.T) {
 	rec.RequireNothing()
 }
 
-// A proxied server that answers writes a served row for the caller, once a window.
+// A proxied server that answers writes a served row for the caller, once a window. Its initialize
+// writes none and leaves the window to the session's next request.
 func TestProxiedServedRequestRecordsOnce(t *testing.T) {
 	t.Parallel()
 
@@ -142,13 +143,19 @@ func TestProxiedServedRequestRecordsOnce(t *testing.T) {
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var rpc struct {
-			ID json.RawMessage `json:"id"`
+			ID     json.RawMessage `json:"id"`
+			Method string          `json:"method"`
 		}
 		if json.NewDecoder(r.Body).Decode(&rpc) != nil || len(rpc.ID) == 0 {
 			w.WriteHeader(http.StatusAccepted)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
+		if rpc.Method == "initialize" {
+			w.Header().Set("Mcp-Session-Id", "upstream-session")
+			assert.NoError(t, json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": rpc.ID, "result": map[string]any{"protocolVersion": "2025-06-18", "capabilities": map[string]any{}, "serverInfo": map[string]any{"name": "upstream", "version": "1"}}}))
+			return
+		}
 		assert.NoError(t, json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": rpc.ID, "result": map[string]any{"content": []any{}}}))
 	}))
 	t.Cleanup(upstream.Close)
@@ -166,10 +173,16 @@ func TestProxiedServedRequestRecordsOnce(t *testing.T) {
 	require.NoError(t, err)
 	persistTestUserSession(t, ti, issuerID, subject, jti)
 
+	resp, err := servePublicHTTP(t, context.Background(), ti, slug, makeInitializeBodyWithClientInfo(t, "cursor-vscode", "1.2.3"), token, map[string]string{"User-Agent": "node"})
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	rec.RequireNothing()
+	session := resp.Header().Get("Mcp-Session-Id")
+
 	call, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": map[string]any{"name": "ping", "arguments": map[string]any{}}})
 	require.NoError(t, err)
 	for range 2 {
-		resp, err := servePublicHTTP(t, context.Background(), ti, slug, call, token, nil)
+		resp, err := servePublicHTTP(t, context.Background(), ti, slug, call, token, map[string]string{"User-Agent": "node", "Mcp-Session-Id": session})
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	}
@@ -179,6 +192,8 @@ func TestProxiedServedRequestRecordsOnce(t *testing.T) {
 	require.Equal(t, mcpServer.ID.String(), row.ServerID)
 	require.Equal(t, subject.String(), row.SubjectURN)
 	require.Empty(t, row.ProviderHost)
+	// A direct server keeps no session client record, so its rows read the User-Agent on every request.
+	require.Equal(t, mcpconnectionattempts.FamilyScript, row.ClientFamily)
 }
 
 // A client's first handshake carries no credentials. It is how sign-in starts.
@@ -613,11 +628,16 @@ func TestGatewayRowsReadTheReportedClient(t *testing.T) {
 			served = append(served, r)
 		}
 	}
-	require.Len(t, served, 1, "the handshake was served; the failed call writes no served row for the gateway or its member")
-	require.Empty(t, served[0].MemberID)
-	require.Equal(t, subject.String(), served[0].SubjectURN)
-	require.Equal(t, mcpconnectionattempts.FamilyScript, served[0].ClientFamily, "the handshake has no session record yet, so it reads the User-Agent as a failure there would")
-	require.Equal(t, "0.28.1", served[0].ClientVersion)
+	require.Empty(t, served, "the handshake writes no served row, and the failed call none for the gateway or its member")
+
+	ping := []byte(`{"jsonrpc":"2.0","id":3,"method":"ping"}`)
+	_, err = servePublicHTTP(t, context.Background(), ti, metaSlug, ping, bearer, map[string]string{"User-Agent": userAgent, "Mcp-Session-Id": sessionID})
+	require.NoError(t, err)
+	servedRow := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.ResultServed)
+	require.Empty(t, servedRow.MemberID)
+	require.Equal(t, subject.String(), servedRow.SubjectURN)
+	require.Equal(t, mcpconnectionattempts.FamilyCodexCLI, servedRow.ClientFamily, "a request after the handshake names the app the session reported")
+	require.Equal(t, "0.50.0", servedRow.ClientVersion)
 
 	// A session that reported an unknown name falls back, and so does none at all.
 	resp, err = servePublicHTTP(t, context.Background(), ti, metaSlug, makeInitializeBodyWithClientInfo(t, "acme-agent", "9.9"), bearer, map[string]string{"User-Agent": userAgent})

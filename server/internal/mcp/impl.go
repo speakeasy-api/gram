@@ -1634,7 +1634,8 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	if writeErr != nil {
 		return oops.E(oops.CodeUnexpected, writeErr, "failed to write response body")
 	}
-	if req.ID.IsSet() && mcpInputs.upstreamRejection == (mcpconnectionattempts.Code{}) {
+	// An initialize's session has no reported client yet, so the session's next request names the app.
+	if req.ID.IsSet() && req.Method != mcpversions.MethodInitialize && mcpInputs.upstreamRejection == (mcpconnectionattempts.Code{}) {
 		s.recordServed(ctx, hostedConnectionScope(ctx, toolset, cfg), uuid.Nil, resolvedCaller(ctx), r, body, func() mcpconnectionattempts.Option {
 			return s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug)
 		})

@@ -176,3 +176,49 @@ func TestIDLessMemberCallRecordsNothing(t *testing.T) {
 	}
 	rec.RequireNothing()
 }
+
+// An initialize writes no served row and leaves the window open; the session's next request writes
+// it with the client the session reported, not the generic User-Agent.
+func TestInitializeLeavesTheWindowToTheSessionsNextRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	authCtx := requireProjectAuthContext(t, ctx)
+	generic := map[string]string{"User-Agent": "node"}
+	initialize := makeInitializeBodyWithClientInfo(t, "cursor-vscode", "1.2.3")
+	requireReportedClient := func(row mcpconnectionattempts.Row) {
+		t.Helper()
+		require.Equal(t, mcpconnectionattempts.FamilyCursor, row.ClientFamily)
+		require.Equal(t, "1.2.3", row.ClientVersion)
+	}
+	withSession := func(id string) map[string]string {
+		return map[string]string{"User-Agent": "node", "Mcp-Session-Id": id}
+	}
+
+	slug, bearer, subject := hostedServedCaller(t, ctx, ti, newAuthorizationRecorder(t, new(atomic.Value)).URL)
+	resp, err := servePublicHTTP(t, context.Background(), ti, slug, initialize, bearer, generic)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	rec.RequireNothing()
+	resp, err = servePublicHTTP(t, context.Background(), ti, slug, []byte(servedPing), bearer, withSession(resp.Header().Get("Mcp-Session-Id")))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	hosted := servedRows(rec)
+	require.Len(t, hosted, 1, "the initialize left the window open")
+	require.Equal(t, subject.String(), hosted[0].SubjectURN)
+	requireReportedClient(hosted[0])
+
+	gateway := "meta-" + uuid.NewString()
+	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, gateway, uuid.Nil)
+	resp, err = servePublicHTTP(t, ctx, ti, gateway, initialize, "", generic)
+	require.NoError(t, err)
+	require.Len(t, servedRows(rec), 1)
+	resp, err = servePublicHTTP(t, ctx, ti, gateway, []byte(servedPing), "", withSession(resp.Header().Get("Mcp-Session-Id")))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	rows := servedRows(rec)
+	require.Len(t, rows, 2)
+	requireReportedClient(rows[1])
+}

@@ -12,9 +12,9 @@ import (
 // error, a JSON-RPC error or an isError result; [ResponseSucceeded] tells. It
 // only observes, and runs on the request's goroutine, so it must not block.
 //
-// It does not run for notifications, for requests refused or rejected on the
-// way, for a tools/call reply the typed response chain did not recognise, or
-// for replies that never reached the user.
+// It does not run for notifications, for initialize, for requests refused or
+// rejected on the way, for a tools/call reply the typed response chain did not
+// recognise, or for replies that never reached the user.
 type RequestServedInterceptor interface {
 	// InterceptRequestServed is called once the response is relayed.
 	InterceptRequestServed(ctx context.Context, response *jsonrpc.Response)

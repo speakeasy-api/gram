@@ -321,8 +321,9 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	if _, writeErr := w.Write(body); writeErr != nil {
 		return oops.E(oops.CodeUnexpected, writeErr, "failed to write response body")
 	}
-	if req.ID.IsSet() {
+	if req.ID.IsSet() && req.Method != mcpversions.MethodInitialize {
 		// Each member call records its own row. A listing that left out a failed member still served this request.
+		// An initialize's session has no reported client yet, so the session's next request names the app.
 		s.recordServed(ctx, gate.connectionScope(ctx), uuid.Nil, gate.resolvedSubject(ctx), r, body, func() mcpconnectionattempts.Option {
 			return s.gatewayReportedClient(ctx, gate)
 		})

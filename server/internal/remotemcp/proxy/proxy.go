@@ -1217,7 +1217,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		return err
 	}
 	observeResponse(ctx, msg)
-	p.runRequestServedInterceptors(ctx, upstreamStatus, msg, userReqID, toolsCallReq)
+	p.runRequestServedInterceptors(ctx, upstreamStatus, msg, userReqID, toolsCallReq, initializeReq)
 	return nil
 }
 
@@ -1665,7 +1665,7 @@ func (p *Proxy) relaySSEStream(
 			result.markResponseRelayed(p.Drain, upstreamResp.Body)
 		}
 		observeResponse(ctx, msg)
-		p.runRequestServedInterceptors(ctx, upstreamResp.StatusCode, msg, responseID, toolsCallReq)
+		p.runRequestServedInterceptors(ctx, upstreamResp.StatusCode, msg, responseID, toolsCallReq, initializeReq)
 		if flusher != nil {
 			flusher.Flush()
 		}
@@ -1937,9 +1937,11 @@ func (p *Proxy) runRequestFailureInterceptors(ctx context.Context, failure *Requ
 // runRequestServedInterceptors invokes each configured RequestServedInterceptor
 // when msg, relayed with status, is the response to the request id. A
 // tools/call reply the typed response chain did not recognise is a failure
-// instead. They observe only, on every served request, so no span is started.
-func (p *Proxy) runRequestServedInterceptors(ctx context.Context, status int, msg jsonrpc.Message, id jsonrpc.ID, toolsCall *ToolsCallRequest) {
-	if len(p.RequestServedInterceptors) == 0 || status < 200 || status >= 300 || !isResponseTo(msg, id) || (toolsCall != nil && !toolsCall.responded) {
+// instead. An initialize is skipped: its session has no reported client yet,
+// so the session's next request names the app. They observe only, on every
+// served request, so no span is started.
+func (p *Proxy) runRequestServedInterceptors(ctx context.Context, status int, msg jsonrpc.Message, id jsonrpc.ID, toolsCall *ToolsCallRequest, initialize *InitializeRequest) {
+	if len(p.RequestServedInterceptors) == 0 || initialize != nil || status < 200 || status >= 300 || !isResponseTo(msg, id) || (toolsCall != nil && !toolsCall.responded) {
 		return
 	}
 	response, _ := msg.(*jsonrpc.Response)
