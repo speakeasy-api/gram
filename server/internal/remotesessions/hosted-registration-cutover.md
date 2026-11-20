@@ -56,8 +56,9 @@ read token material or perform an OAuth refresh to generate this inventory.
 ### Direct hosted configuration check
 
 Run this only on an approved read-only snapshot, with `org` and `project`
-set as `psql` variables for one authorized organization and project. It reads
-no grants or secret columns, and returns only counts. A zero `scoped_projects`
+set as `psql` variables for one authorized organization and project. Run
+`psql` with `-v ON_ERROR_STOP=1` so errors cannot be mistaken for zero
+coverage. The query reads no grants or secret columns, and returns only counts. A zero `scoped_projects`
 count is an invalid scope, not a successful check. Use a restricted process and
 keep invocation inputs out of shared logs.
 
