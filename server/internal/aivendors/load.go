@@ -156,6 +156,9 @@ func (s *Store) Refresh(ctx context.Context, db *pgxpool.Pool, logger *slog.Logg
 		return err
 	}
 	s.confirmed.Store(time.Now().UnixNano())
+	if s.Snapshot().builtIn {
+		logger.InfoContext(ctx, "AI catalog loaded from the database; the built-in catalog is no longer served")
+	}
 	s.Publish(next)
 	return nil
 }
