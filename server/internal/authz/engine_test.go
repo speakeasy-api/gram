@@ -471,7 +471,10 @@ func TestEngineFilter_rejectsInvalidCheck(t *testing.T) {
 
 	// An MCP check without its project fails the whole batch rather than
 	// dropping out of it.
-	_, err := engine.Filter(ctx, []Check{mcpCheck(ScopeMCPWrite, "server-1", "")})
+	_, err := engine.Filter(ctx, []Check{
+		mcpCheck(ScopeMCPWrite, "server-1", "project-1"),
+		mcpCheck(ScopeMCPWrite, "server-2", ""),
+	})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
