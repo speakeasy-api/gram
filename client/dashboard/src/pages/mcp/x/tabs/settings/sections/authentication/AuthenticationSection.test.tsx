@@ -6,13 +6,13 @@ import type { AuthTarget } from "./authTarget";
 
 const {
   attachSheet,
-  useAllRemoteSessionClients,
+  useServerClientAssociations,
   useRemoteSessionIssuersByIds,
   useUserSessionIssuer,
   useEffectiveUserSessionIssuers,
 } = vi.hoisted(() => ({
   attachSheet: vi.fn(),
-  useAllRemoteSessionClients: vi.fn(),
+  useServerClientAssociations: vi.fn(),
   useRemoteSessionIssuersByIds: vi.fn(),
   useUserSessionIssuer: vi.fn(),
   useEffectiveUserSessionIssuers: vi.fn(),
@@ -44,9 +44,9 @@ vi.mock("./authTarget", () => ({
   useMcpServerAuthTarget: vi.fn(),
 }));
 
-vi.mock("@/lib/remote-identity/queries/useAllRemoteSessionClients", () => ({
-  useAllRemoteSessionClients: (...args: unknown[]) =>
-    useAllRemoteSessionClients(...args),
+vi.mock("@gram/client/react-query/serverClientAssociations.js", () => ({
+  useServerClientAssociations: (...args: unknown[]) =>
+    useServerClientAssociations(...args),
 }));
 
 vi.mock("@/lib/remote-identity/queries/useRemoteSessionIssuersByIds", () => ({
@@ -197,8 +197,8 @@ describe("AuthenticationSectionBody", () => {
       isLoading: false,
       isError: false,
     });
-    useAllRemoteSessionClients.mockReturnValue({
-      items: [],
+    useServerClientAssociations.mockReturnValue({
+      data: { associations: [] },
       isLoading: false,
     });
     render(
@@ -214,8 +214,15 @@ describe("AuthenticationSectionBody", () => {
   it("renders an attached provider the issuer listing does not contain", () => {
     // The listing mock above returns no issuers at all, standing in for an
     // attached issuer pushed past the first page by the platform catalog.
-    useAllRemoteSessionClients.mockReturnValue({
-      items: [{ id: "client-1", remoteSessionIssuerId: "issuer-far" }],
+    useServerClientAssociations.mockReturnValue({
+      data: {
+        associations: [
+          {
+            remoteSessionClientId: "client-1",
+            remoteSessionIssuerId: "issuer-far",
+          },
+        ],
+      },
       isLoading: false,
     });
     render(
@@ -230,8 +237,15 @@ describe("AuthenticationSectionBody", () => {
   });
 
   it("reports a failed provider lookup instead of an empty provider list", () => {
-    useAllRemoteSessionClients.mockReturnValue({
-      items: [{ id: "client-1", remoteSessionIssuerId: "issuer-gone" }],
+    useServerClientAssociations.mockReturnValue({
+      data: {
+        associations: [
+          {
+            remoteSessionClientId: "client-1",
+            remoteSessionIssuerId: "issuer-gone",
+          },
+        ],
+      },
       isLoading: false,
     });
     useRemoteSessionIssuersByIds.mockReturnValue({
@@ -257,8 +271,8 @@ describe("AuthenticationSectionBody", () => {
         isLoading: false,
         isError: false,
       });
-      useAllRemoteSessionClients.mockReturnValue({
-        items: [],
+      useServerClientAssociations.mockReturnValue({
+        data: { associations: [] },
         isLoading: false,
       });
       render(
@@ -279,7 +293,10 @@ describe("AuthenticationSectionBody", () => {
       isLoading: false,
       isError: false,
     });
-    useAllRemoteSessionClients.mockReturnValue({ items: [], isLoading: false });
+    useServerClientAssociations.mockReturnValue({
+      data: { associations: [] },
+      isLoading: false,
+    });
     render(
       <AuthenticationSectionBody target={standardTargetWithSessionIssuer} />,
     );
@@ -302,7 +319,10 @@ describe("AuthenticationSectionBody", () => {
       isLoading: false,
       isError: false,
     });
-    useAllRemoteSessionClients.mockReturnValue({ items: [], isLoading: false });
+    useServerClientAssociations.mockReturnValue({
+      data: { associations: [] },
+      isLoading: false,
+    });
     render(
       <AuthenticationSectionBody target={standardTargetWithSessionIssuer} />,
     );
@@ -323,8 +343,8 @@ describe("AuthenticationSectionBody", () => {
         isLoading: false,
         isError: false,
       });
-      useAllRemoteSessionClients.mockReturnValue({
-        items: [],
+      useServerClientAssociations.mockReturnValue({
+        data: { associations: [] },
         isLoading: false,
       });
       render(
@@ -342,6 +362,7 @@ const standardTargetWithSessionIssuer: AuthTarget = {
   slug: "standard-server",
   projectId: "project-1",
   permissionResourceId: "mcp-server-1",
+  mcpServerId: "mcp-server-1",
   attachImpactTarget: { mcpServerId: "mcp-server-1" },
   supportsOrganizationIssuers: true,
   userSessionIssuerId: "user-session-issuer",
