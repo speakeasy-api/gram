@@ -90,6 +90,7 @@ func connectMeta(t *testing.T, prefix string, count int) (context.Context, conne
 
 		upstream := fmt.Sprintf("https://%s.example.com/mcp", name)
 		seeded := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, name+"-member", upstream, issuerID, int32(i))
+		associateServerRegistration(t, ctx, fx.ti.conn, fx.orgID, fx.projectID, seeded.mcpServerID, clientID)
 		seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, seeded.mcpServerID, clientID, "remote_session")
 		seedMetaMemberConnectGrant(t, ctx, fx.ti.conn, fx.orgID, seeded.mcpServerID)
 		members = append(members, connectedMetaMember{

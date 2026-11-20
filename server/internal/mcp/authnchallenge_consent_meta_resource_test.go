@@ -742,7 +742,7 @@ func TestServeConsentAction_NonMetaEndpointKeepsPerClientDerivation(t *testing.T
 
 	shared := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 	memberIssuer := createUserSessionIssuer(t, ctx, ti.conn, projectID)
-	attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, memberIssuer, "aim87-plain-srv", consentUpstreamA)
+	server := attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, memberIssuer, "aim87-plain-srv", consentUpstreamA)
 
 	endpoint, stateID, subject := mintConsentEndpointState(t, ctx, ti, projectID, orgID, shared, "aim87-plain")
 	fx := consentActionFixture{
@@ -759,7 +759,9 @@ func TestServeConsentAction_NonMetaEndpointKeepsPerClientDerivation(t *testing.T
 		clientD:   uuid.Nil,
 	}
 
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "aim87-plain", "", []uuid.UUID{shared, memberIssuer})
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "aim87-plain", "", nil)
+	seedConsentSignInPlacement(t, ctx, ti, shared, clientID)
+	associateServerRegistration(t, ctx, ti.conn, orgID, projectID, server, clientID)
 	require.Equal(t, consentUpstreamA, postConnectAction(t, fx, clientID).Query().Get("resource"))
 }
 
@@ -775,7 +777,7 @@ func TestServeConsentAction_MetaMCPConnectRequiresATypedOfferAfterResync(t *test
 	member := createMetaMember(t, ctx, fx.ti.conn, projectID, metaServerID, "aim87-composed-member", "https://aim87-composed.example.com/mcp", uuid.NullUUID{}, 0)
 
 	// The meta MCP's connecting client, bound to the shared issuer.
-	gatewayClientID := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, "aim87-composed", "", []uuid.UUID{fx.shared})
+	gatewayClientID := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, "aim87-composed", "", nil)
 	rsiID := clientRemoteIssuerID(t, ctx, fx.ti.conn, projectID, orgID, gatewayClientID)
 
 	// The member's own identity-provider config: a client on the same
@@ -795,19 +797,17 @@ func TestServeConsentAction_MetaMCPConnectRequiresATypedOfferAfterResync(t *test
 		ClientID:              "aim87-composed-member-client",
 	})
 	require.NoError(t, err)
-	require.NoError(t, remotesessions_repo.New(fx.ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: memberClient.ID,
-		UserSessionIssuerID:   memberIssuerID,
-	}))
+	associateServerRegistration(t, ctx, fx.ti.conn, orgID, projectID, member.mcpServerID, memberClient.ID)
+	seedServerAuthOffer(t, ctx, fx.ti.conn, orgID, projectID, member.mcpServerID, memberClient.ID, "remote_session")
 
-	// The production write path can also reconcile typed offers.
+	// Derive routing from the member’s typed offer.
 	seedUserMCPConnectGrant(t, ctx, fx.ti.conn, orgID, fx.subject.ID, member.mcpServerID.String())
-	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, fx.ti.conn, orgID, projectID, []uuid.UUID{memberIssuerID}))
+	require.NoError(t, remotesessions.RestampMCPServerRemoteSessionIssuers(ctx, fx.ti.conn, orgID, projectID, []uuid.UUID{memberIssuerID}))
 
 	server, err := mcpservers_repo.New(fx.ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: member.mcpServerID, ProjectID: projectID})
 	require.NoError(t, err)
 	require.Equal(t, conv.ToNullUUID(rsiID), server.RemoteSessionIssuerID)
-	// Keep the derived issuer but remove the reconciled offers. The column
+	// Keep the derived issuer but remove the member’s offer. The column
 	// alone must not qualify the registration for browser consent.
 	require.NoError(t, authclientbackfill.New(fx.ti.conn).SoftDeleteServerAuthClientLinksFixture(ctx, member.mcpServerID))
 	err = requireConnectActionFailsClosed(t, fx, gatewayClientID, oops.CodeBadRequest)

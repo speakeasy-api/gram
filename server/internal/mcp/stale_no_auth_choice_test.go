@@ -83,6 +83,15 @@ func newStaleChoiceGateway(t *testing.T, mode toolfilter.CatalogMode, discovery 
 	return ctx, &staleChoiceGateway{router: router, ti: ti, slug: slug, issuer: issuer.ID, client: client, gateway: gateway.ID, source: source, other: other, serverID: serverID, project: *auth.ProjectID, org: auth.ActiveOrganizationID, mode: mode, disc: discovery}
 }
 
+// requireUnconfiguredHeader changes the source in a way the caller cannot repair during consent.
+func (g *staleChoiceGateway) requireUnconfiguredHeader(t *testing.T, ctx context.Context) {
+	t.Helper()
+	source, err := mcpserversrepo.New(g.ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: g.serverID, ProjectID: g.project})
+	require.NoError(t, err)
+	_, err = authclientfixtures.New(g.ti.conn).SeedRemoteHeaderFixture(ctx, authclientfixtures.SeedRemoteHeaderFixtureParams{RemoteMcpServerID: source.RemoteMcpServerID.UUID, Name: "X-Api-Key", IsSecret: true, Value: pgtype.Text{String: "sealed", Valid: true}})
+	require.NoError(t, err)
+}
+
 func (g *staleChoiceGateway) approve(t *testing.T, ctx context.Context) catalogConnection {
 	t.Helper()
 	return approveGatewayCatalog(t, ctx, g.ti, g.issuer, g.client, g.gateway, g.slug, g.mode, g.disc, nil)
@@ -97,7 +106,7 @@ func (g *staleChoiceGateway) attachSignIn(t *testing.T, ctx context.Context, typ
 
 func (g *staleChoiceGateway) attachSignInClient(t *testing.T, ctx context.Context, typed bool) (registration, client uuid.UUID) {
 	t.Helper()
-	registration = createConsentRemoteClient(t, ctx, g.ti.conn, g.project, g.org, "typed-"+uuid.NewString()[:8], "", []uuid.UUID{g.issuer})
+	registration = createConsentRemoteClient(t, ctx, g.ti.conn, g.project, g.org, "typed-"+uuid.NewString()[:8], "", nil)
 	_, err := upstreamclientsrepo.New(g.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: g.org, ProjectID: g.project, McpServerID: g.serverID, RemoteSessionClientID: registration})
 	require.NoError(t, err)
 	if typed {
@@ -258,18 +267,13 @@ func TestStaleNoAuthChoiceConsentCannotFix(t *testing.T) {
 		enforced bool
 		arrange  func(t *testing.T, ctx context.Context, g *staleChoiceGateway)
 	}{
-		"client not bound to the gateway's issuer": {arrange: func(t *testing.T, ctx context.Context, g *staleChoiceGateway) {
+		"every typed client is denied": {arrange: func(t *testing.T, ctx context.Context, g *staleChoiceGateway) {
 			t.Helper()
-			registration := createConsentRemoteClient(t, ctx, g.ti.conn, g.project, g.org, "unbound-"+uuid.NewString()[:8], "", nil)
-			_, err := upstreamclientsrepo.New(g.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: g.org, ProjectID: g.project, McpServerID: g.serverID, RemoteSessionClientID: registration})
-			require.NoError(t, err)
+			g.attachTypedOnly(t, ctx, nil)
 		}},
 		"pending on a secret header": {arrange: func(t *testing.T, ctx context.Context, g *staleChoiceGateway) {
 			t.Helper()
-			source, err := mcpserversrepo.New(g.ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: g.serverID, ProjectID: g.project})
-			require.NoError(t, err)
-			_, err = authclientfixtures.New(g.ti.conn).SeedRemoteHeaderFixture(ctx, authclientfixtures.SeedRemoteHeaderFixtureParams{RemoteMcpServerID: source.RemoteMcpServerID.UUID, Name: "X-Api-Key", IsSecret: true, Value: pgtype.Text{String: "sealed", Valid: true}})
-			require.NoError(t, err)
+			g.requireUnconfiguredHeader(t, ctx)
 		}},
 		"enforced with pending auth": {enforced: true, arrange: func(t *testing.T, ctx context.Context, g *staleChoiceGateway) {
 			t.Helper()
@@ -473,9 +477,7 @@ func TestStaleNoAuthCachedDescribeMatchesTheCall(t *testing.T) {
 	t.Parallel()
 	ctx, g := newStaleChoiceGateway(t, toolfilter.CatalogModeCached, metamcp.DiscoveryModeProgressive)
 	connection := g.approve(t, ctx)
-	registration := createConsentRemoteClient(t, ctx, g.ti.conn, g.project, g.org, "unbound-"+uuid.NewString()[:8], "", nil)
-	_, err := upstreamclientsrepo.New(g.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: g.org, ProjectID: g.project, McpServerID: g.serverID, RemoteSessionClientID: registration})
-	require.NoError(t, err)
+	g.requireUnconfiguredHeader(t, ctx)
 	before := g.source.requests.Load()
 	requireStaleError(t, g.post(t, connection.token, metamcp.ToolDescribeServer, map[string]any{"server": "source"}), staleAdminCopy)
 	described := g.post(t, connection.token, metamcp.ToolDescribeTools, map[string]any{"tools": []string{"source--tool_000"}})
@@ -504,9 +506,7 @@ func TestStaleNoAuthConnectionStatusMatchesTheCall(t *testing.T) {
 			if tc.bound {
 				g.attachSignIn(t, ctx, true)
 			} else {
-				registration := createConsentRemoteClient(t, ctx, g.ti.conn, g.project, g.org, "unbound-"+uuid.NewString()[:8], "", nil)
-				_, err := upstreamclientsrepo.New(g.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: g.org, ProjectID: g.project, McpServerID: g.serverID, RemoteSessionClientID: registration})
-				require.NoError(t, err)
+				g.requireUnconfiguredHeader(t, ctx)
 			}
 			w := g.post(t, connection.token, metamcp.ToolConnectionStatus, map[string]any{})
 			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
@@ -537,9 +537,7 @@ func TestStaleNoAuthCodeModeReachesTheProgram(t *testing.T) {
 				if tc.fixable {
 					g.attachSignIn(t, ctx, true)
 				} else {
-					registration := createConsentRemoteClient(t, ctx, g.ti.conn, g.project, g.org, "unbound-"+uuid.NewString()[:8], "", nil)
-					_, err := upstreamclientsrepo.New(g.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: g.org, ProjectID: g.project, McpServerID: g.serverID, RemoteSessionClientID: registration})
-					require.NoError(t, err)
+					g.requireUnconfiguredHeader(t, ctx)
 				}
 				requireRefusal := func(err error) {
 					t.Helper()
@@ -624,9 +622,7 @@ func TestStaleNoAuthCatalogRefusalRecordsSetupChanged(t *testing.T) {
 			if fixable {
 				g.attachSignIn(t, ctx, true)
 			} else {
-				registration := createConsentRemoteClient(t, ctx, g.ti.conn, g.project, g.org, "unbound-"+uuid.NewString()[:8], "", nil)
-				_, err := upstreamclientsrepo.New(g.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: g.org, ProjectID: g.project, McpServerID: g.serverID, RemoteSessionClientID: registration})
-				require.NoError(t, err)
+				g.requireUnconfiguredHeader(t, ctx)
 			}
 			rec := recordConnections(t, g.ti)
 			requireStaleError(t, g.call(t, connection.token, "source--tool_000"), map[bool]string{true: staleReconnectCopy, false: staleAdminCopy}[fixable])
@@ -651,9 +647,7 @@ func TestStaleNoAuthConnectRefusalBeatsAnEarlierLink(t *testing.T) {
 				first, err := host.Connect(runCtx, "source")
 				require.NoError(t, err)
 				require.NotEmpty(t, first.AuthorizationURL)
-				registration := createConsentRemoteClient(t, ctx, g.ti.conn, g.project, g.org, "unbound-"+uuid.NewString()[:8], "", nil)
-				_, err = upstreamclientsrepo.New(g.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: g.org, ProjectID: g.project, McpServerID: g.serverID, RemoteSessionClientID: registration})
-				require.NoError(t, err)
+				g.requireUnconfiguredHeader(t, ctx)
 				second, err := host.Connect(runCtx, "source")
 				require.Nil(t, second)
 				refused, ok := errors.AsType[*codemode.MemberRefusalError](err)

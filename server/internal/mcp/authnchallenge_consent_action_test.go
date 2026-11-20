@@ -59,7 +59,9 @@ const (
 )
 
 // createConsentRemoteClient mints a remote_session_issuer plus a client
-// attached to every given user_session_issuer. asBase "" uses fake AS
+// with optional compatibility rows for the principal attachment FK.
+// To configure sign-in behavior, seed server associations or typed offers.
+// asBase "" uses fake AS
 // endpoints (BuildAuthorizationUrl never contacts them); pass an httptest
 // base URL to run a real code exchange against it.
 func createConsentRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, organizationID, slug, asBase string, userSessionIssuerIDs []uuid.UUID) uuid.UUID {
@@ -100,10 +102,7 @@ func createConsentRemoteClientWithCallback(t *testing.T, ctx context.Context, co
 	})
 	require.NoError(t, err)
 	for _, usi := range userSessionIssuerIDs {
-		require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-			RemoteSessionClientID: rsc.ID,
-			UserSessionIssuerID:   usi,
-		}))
+		retainClientIssuerFK(t, ctx, conn, rsc.ID, usi)
 	}
 	return rsc.ID
 }
@@ -112,10 +111,7 @@ func createConsentRemoteClientWithCallback(t *testing.T, ctx context.Context, co
 // relying on the registration's sign-in links to select authentication.
 func seedConsentAuthOffer(t *testing.T, ctx context.Context, ti *testInstance, orgID string, projectID, serverID, registrationID uuid.UUID, clientType string) uuid.UUID {
 	t.Helper()
-	fixtures := authclientfixtures.New(ti.conn)
-	id, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: conv.ToNullUUID(projectID), ClientType: clientType, Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registrationID, Valid: registrationID != uuid.Nil}})
-	require.NoError(t, err)
-	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{OrganizationID: orgID, ProjectID: projectID, McpServerID: serverID, AuthClientID: id, Source: "admin"}))
+	id := seedServerAuthOffer(t, ctx, ti.conn, orgID, projectID, serverID, registrationID, clientType)
 	ti.service.SetAuthClientPermitted(true)
 	return id
 }
@@ -142,6 +138,19 @@ func attachConsentRemoteMcpServer(t *testing.T, ctx context.Context, conn *pgxpo
 	})
 	require.NoError(t, err)
 	return server.ID
+}
+
+// seedConsentSignInPlacement gives a synthetic issuer-only endpoint a placement
+// without adding an upstream resource to any of its registrations.
+func seedConsentSignInPlacement(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID, registrations ...uuid.UUID) {
+	t.Helper()
+	authCtx := requireProjectAuthContext(t, ctx)
+	slug := "signin-" + uuid.NewString()[:8]
+	toolset := createUnhostedToolset(t, ctx, ti, authCtx, slug)
+	server := hostToolset(t, ctx, ti, toolset, slug, "private", conv.ToNullUUID(issuerID))
+	for _, client := range registrations {
+		associateServerRegistration(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, server.ID, client)
+	}
 }
 
 // mintConsentEndpointState builds the resolved endpoint (with an endpoint-
@@ -204,13 +213,18 @@ func seedMultiClientConsentEndpoint(t *testing.T) (context.Context, consentActio
 	shared := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 	issuerA := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 	issuerB := createUserSessionIssuer(t, ctx, ti.conn, projectID)
-	attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, issuerA, "age3328-srv-a", consentUpstreamA+"/")
-	attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, issuerB, "age3328-srv-b", consentUpstreamB)
+	serverA := attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, issuerA, "age3328-srv-a", consentUpstreamA+"/")
+	serverB := attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, issuerB, "age3328-srv-b", consentUpstreamB)
 
-	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "age3328-a", "", []uuid.UUID{shared, issuerA})
-	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "age3328-b", "", []uuid.UUID{shared, issuerB})
-	clientC := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "age3328-c", "", []uuid.UUID{shared})
-	clientD := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "age3328-d", "", []uuid.UUID{shared, issuerA, issuerB})
+	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "age3328-a", "", nil)
+	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "age3328-b", "", nil)
+	clientC := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "age3328-c", "", nil)
+	clientD := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "age3328-d", "", nil)
+
+	seedConsentSignInPlacement(t, ctx, ti, shared, clientA, clientB, clientC, clientD)
+	for _, target := range []struct{ server, client uuid.UUID }{{serverA, clientA}, {serverB, clientB}, {serverA, clientD}, {serverB, clientD}} {
+		associateServerRegistration(t, ctx, ti.conn, orgID, projectID, target.server, target.client)
+	}
 
 	endpoint, stateID, subject := mintConsentEndpointState(t, ctx, ti, projectID, orgID, shared, "age3328-consent")
 
@@ -525,10 +539,7 @@ func TestServeConsentAction_ConnectWithoutAuthorizationEndpointIsBadRequest(t *t
 		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	})
 	require.NoError(t, err)
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: rsc.ID,
-		UserSessionIssuerID:   fx.shared,
-	}))
+	seedConsentSignInPlacement(t, ctx, fx.ti, fx.shared, rsc.ID)
 
 	form := url.Values{}
 	form.Set("state", fx.stateID)
@@ -607,14 +618,18 @@ func TestServeConsentAction_MultiBindingExchangePersistsPerClientResource(t *tes
 	shared := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 	issuerA := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 	issuerB := createUserSessionIssuer(t, ctx, ti.conn, projectID)
-	attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, issuerA, "age3328-x-srv-a", consentUpstreamA)
-	attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, issuerB, "age3328-x-srv-b", consentUpstreamB)
+	serverA := attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, issuerA, "age3328-x-srv-a", consentUpstreamA)
+	serverB := attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, issuerB, "age3328-x-srv-b", consentUpstreamB)
 
 	var postedA, postedB atomic.Value
 	asA := newConsentExchangeAS(t, &postedA, "exchanged-a")
 	asB := newConsentExchangeAS(t, &postedB, "exchanged-b")
-	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "age3328-xa", asA.URL, []uuid.UUID{shared, issuerA})
-	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "age3328-xb", asB.URL, []uuid.UUID{shared, issuerB})
+	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "age3328-xa", asA.URL, nil)
+	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "age3328-xb", asB.URL, nil)
+
+	seedConsentSignInPlacement(t, ctx, ti, shared, clientA, clientB)
+	associateServerRegistration(t, ctx, ti.conn, orgID, projectID, serverA, clientA)
+	associateServerRegistration(t, ctx, ti.conn, orgID, projectID, serverB, clientB)
 
 	endpoint, stateID, subject := mintConsentEndpointState(t, ctx, ti, projectID, orgID, shared, "age3328-exchange")
 	fx := consentActionFixture{
@@ -689,11 +704,12 @@ func TestServeConsentAction_ConnectSendsRegisteredResourceVerbatim(t *testing.T)
 			orgID := authCtx.ActiveOrganizationID
 
 			shared := createUserSessionIssuer(t, ctx, ti.conn, projectID)
-			attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, shared, tc.slug+"-srv", tc.resource)
+			server := attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, shared, tc.slug+"-srv", tc.resource)
 
 			var posted atomic.Value
 			as := newConsentExchangeAS(t, &posted, "exchanged-"+tc.slug)
-			clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, tc.slug, as.URL, []uuid.UUID{shared})
+			clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, tc.slug, as.URL, nil)
+			associateServerRegistration(t, ctx, ti.conn, orgID, projectID, server, clientID)
 
 			endpoint, stateID, subject := mintConsentEndpointState(t, ctx, ti, projectID, orgID, shared, tc.slug+"-consent")
 			fx := consentActionFixture{
