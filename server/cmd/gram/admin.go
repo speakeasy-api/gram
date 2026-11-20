@@ -495,7 +495,24 @@ func newAdminCommand() *cli.Command {
 			mux.Use(admin.SessionMiddleware)
 
 			adminWorkOSClient := newAdminWorkOSOrganizationCreator(ctx, logger, guardianPolicy, c)
-			adminOpenRouter := newAdminOpenRouter(ctx, logger, tracerProvider, guardianPolicy, db, redisClient, c)
+			// Admin reads OAuth credentials and AI provider keys, so organization
+			// encryption is built, and required, whenever an application
+			// encryption key is configured. Building it here stops admin at
+			// startup when it is misconfigured.
+			// TODO(AIM-1007): pass it to the admin service for organization
+			// encryption counts, backfills and finalization.
+			applicationEncryption, err := newAdminIssuerEncryption(c.String("encryption-key"))
+			if err != nil {
+				return err
+			}
+			gcpIdentity := newGCPIdentity(ctx, logger, c)
+			var orgEncryption orgEncryptionDeps
+			if applicationEncryption != nil {
+				if orgEncryption, err = newOrgEncryption(ctx, logger, c, db, gcpIdentity, audit.NewLogger()); err != nil {
+					return err
+				}
+			}
+			adminOpenRouter := newAdminOpenRouter(ctx, logger, tracerProvider, guardianPolicy, db, redisClient, orgEncryption, c)
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
 			authz.SetUpstreamSelectorWriteGate(newAdminUpstreamSelectorWriteGate(ctx, c, logger, posthogClient))
@@ -565,22 +582,7 @@ func newAdminCommand() *cli.Command {
 				return err
 			}
 			adminService.SetCustomDomainTargetSuffix(customDomainTargetSuffix)
-			applicationEncryption, err := newAdminIssuerEncryption(c.String("encryption-key"))
-			if err != nil {
-				return err
-			}
-			gcpIdentity := newGCPIdentity(ctx, logger, c)
 			if applicationEncryption != nil {
-				// Admin reads OAuth credentials only through the remote session
-				// service, so organization encryption is built, and required,
-				// alongside it. Building it here stops admin at startup when it
-				// is misconfigured.
-				// TODO(AIM-1007): pass it to the admin service for organization
-				// encryption counts, backfills and finalization.
-				orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, audit.NewLogger())
-				if err != nil {
-					return err
-				}
 				adminService.SetRemoteSessionService(remotesessions.NewGlobalService(logger, tracerProvider, meterProvider, db, applicationEncryption, orgEncryption.ClientSecrets(logger, applicationEncryption), guardianPolicy))
 			} else {
 				logger.WarnContext(ctx, "Admin issuers unavailable; no application encryption key configured")
