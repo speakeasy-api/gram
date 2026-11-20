@@ -57,6 +57,15 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 	// direction cannot be resumed in the other.
 	descending := payload != nil && payload.NameOrder == "desc"
 
+	var projectID uuid.NullUUID
+	if payload != nil && payload.ProjectID != nil {
+		id, err := uuid.Parse(*payload.ProjectID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid project_id")
+		}
+		projectID = uuid.NullUUID{UUID: id, Valid: true}
+	}
+
 	search := pgtype.Text{String: "", Valid: false}
 	if payload != nil && payload.Search != nil {
 		if trimmed := strings.TrimSpace(*payload.Search); trimmed != "" {
@@ -118,6 +127,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 	for len(readable) <= limit {
 		rows, err := queries.ListManagedAgents(ctx, repo.ListManagedAgentsParams{
 			OrganizationID:   human.Auth.ActiveOrganizationID,
+			ProjectID:        projectID,
 			Search:           search,
 			Lifecycles:       lifecycles,
 			OwnerUserIds:     owners,

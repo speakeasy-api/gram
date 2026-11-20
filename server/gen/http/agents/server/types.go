@@ -7860,10 +7860,11 @@ func NewRevokeSessionPayload(body *RevokeSessionRequestBody, sessionToken *strin
 }
 
 // NewListPayload builds a agents service list endpoint payload.
-func NewListPayload(cursor *string, limit int, search *string, nameOrder string, lifecycle []string, ownerUserIds []string, registeredAfter *string, registeredBefore *string, sessionToken *string) *agents.ListPayload {
+func NewListPayload(cursor *string, limit int, projectID *string, search *string, nameOrder string, lifecycle []string, ownerUserIds []string, registeredAfter *string, registeredBefore *string, sessionToken *string) *agents.ListPayload {
 	v := &agents.ListPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
+	v.ProjectID = projectID
 	v.Search = search
 	v.NameOrder = nameOrder
 	v.Lifecycle = lifecycle
