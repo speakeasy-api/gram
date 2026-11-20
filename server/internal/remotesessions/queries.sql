@@ -2382,8 +2382,8 @@ WHERE EXISTS (
     JOIN projects AS placement_project ON placement_project.id = placement.project_id
       AND placement_project.organization_id = association.organization_id AND NOT placement_project.deleted
     WHERE association.remote_session_client_id = c.id AND NOT association.deleted
-      AND association.organization_id = @organization_id::text
-      AND (placement.project_id = @project_id::uuid OR (@organization_wide::boolean AND usi.project_id IS NULL))
+      AND association.organization_id = sqlc.narg('organization_id')::text
+      AND (placement.project_id = sqlc.narg('project_id')::uuid OR (@organization_wide::boolean AND usi.project_id IS NULL))
       AND (
         placement.user_session_issuer_id = usi.id
         OR EXISTS (
@@ -2407,16 +2407,16 @@ WHERE EXISTS (
       )
   )
   AND (
-    c.project_id = @project_id
-    OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id))
+    c.project_id = sqlc.narg('project_id')::uuid
+    OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = sqlc.narg('organization_id')::text))
     OR (@organization_wide::boolean AND usi.project_id IS NULL AND c.project_id IN (
-      SELECT p.id FROM projects AS p WHERE p.organization_id = @organization_id::text AND p.deleted IS FALSE
+      SELECT p.id FROM projects AS p WHERE p.organization_id = sqlc.narg('organization_id')::text AND p.deleted IS FALSE
     ))
   )
-  AND (usi.project_id = @project_id OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
+  AND (usi.project_id = sqlc.narg('project_id')::uuid OR (usi.project_id IS NULL AND usi.organization_id = sqlc.narg('organization_id')::text))
   AND (
-    i.project_id = @project_id
-    OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = @organization_id))
+    i.project_id = sqlc.narg('project_id')::uuid
+    OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = sqlc.narg('organization_id')::text))
     OR (@organization_wide::boolean AND usi.project_id IS NULL AND i.project_id = c.project_id)
   )
   AND c.deleted IS FALSE
@@ -3998,7 +3998,7 @@ RETURNING *;
 -- ORG REACHABILITY (this predicate is repeated across every org-admin client
 -- and session query; change them together):
 --
---   (i.organization_id = sqlc.narg('organization_id')::text OR c.organization_id = sqlc.narg('organization_id')::text)
+--   (i.organization_id = @organization_id::text OR c.organization_id = @organization_id::text)
 --
 -- Reaching the org through the ISSUER alone was sufficient while every issuer a
 -- tenant could attach to carried an organization_id. Platform issuers do not —
@@ -4032,7 +4032,7 @@ SELECT
           AND associated_project.organization_id = link.organization_id AND NOT associated_project.deleted
         JOIN user_session_issuers AS usi ON usi.id = associated.user_session_issuer_id AND NOT usi.deleted
         WHERE link.remote_session_client_id = c.id AND NOT link.deleted
-          AND link.organization_id = sqlc.narg('organization_id')::text
+          AND link.organization_id = @organization_id::text
           AND (usi.project_id = associated_project.id OR (usi.project_id IS NULL AND usi.organization_id = associated_project.organization_id))
     )::uuid[] AS user_session_issuer_ids,
     (
@@ -4045,7 +4045,7 @@ SELECT
         JOIN projects AS p ON p.id = m.project_id
           AND p.organization_id = offer.organization_id AND p.deleted IS FALSE
         WHERE ac.remote_session_client_id = c.id
-          AND ac.organization_id = sqlc.narg('organization_id')::text
+          AND ac.organization_id = @organization_id::text
           AND (ac.project_id IS NULL OR ac.project_id = offer.project_id)
           AND ac.enabled AND ac.deleted IS FALSE
     )::bigint AS mcp_server_count,
@@ -4058,7 +4058,7 @@ SELECT
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.remote_session_issuer_id = @remote_session_issuer_id
-  AND (i.organization_id = sqlc.narg('organization_id')::text OR c.organization_id = sqlc.narg('organization_id')::text)
+  AND (i.organization_id = @organization_id::text OR c.organization_id = @organization_id::text)
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
   -- Clients left behind by a tombstoned identity provider connection are
@@ -7121,7 +7121,7 @@ JOIN projects AS project ON project.id = server.project_id
   AND project.organization_id = association.organization_id AND NOT project.deleted
 JOIN remote_session_clients AS c ON c.id = association.remote_session_client_id AND NOT c.deleted
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
-WHERE server.user_session_issuer_id = @user_session_issuer_id
+WHERE server.user_session_issuer_id = @user_session_issuer_id::uuid
   AND association.organization_id = @organization_id::text AND NOT association.deleted
 ORDER BY c.id;
 

@@ -9821,13 +9821,13 @@ JOIN projects AS project ON project.id = server.project_id
   AND project.organization_id = association.organization_id AND NOT project.deleted
 JOIN remote_session_clients AS c ON c.id = association.remote_session_client_id AND NOT c.deleted
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
-WHERE server.user_session_issuer_id = $1
+WHERE server.user_session_issuer_id = $1::uuid
   AND association.organization_id = $2::text AND NOT association.deleted
 ORDER BY c.id
 `
 
 type ListOrganizationClientsForUserSessionIssuerParams struct {
-	UserSessionIssuerID uuid.NullUUID
+	UserSessionIssuerID uuid.UUID
 	OrganizationID      string
 }
 
@@ -10335,7 +10335,7 @@ LIMIT $4
 `
 
 type ListOrganizationRemoteSessionClientsByIssuerIDParams struct {
-	OrganizationID        pgtype.Text
+	OrganizationID        string
 	RemoteSessionIssuerID uuid.UUID
 	Cursor                uuid.NullUUID
 	LimitValue            int32
@@ -10355,7 +10355,7 @@ type ListOrganizationRemoteSessionClientsByIssuerIDRow struct {
 // ORG REACHABILITY (this predicate is repeated across every org-admin client
 // and session query; change them together):
 //
-//	(i.organization_id = sqlc.narg('organization_id')::text OR c.organization_id = sqlc.narg('organization_id')::text)
+//	(i.organization_id = @organization_id::text OR c.organization_id = @organization_id::text)
 //
 // Reaching the org through the ISSUER alone was sufficient while every issuer a
 // tenant could attach to carried an organization_id. Platform issuers do not —
@@ -11906,16 +11906,16 @@ WHERE EXISTS (
       )
   )
   AND (
-    c.project_id = $3
-    OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $2))
+    c.project_id = $3::uuid
+    OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $2::text))
     OR ($4::boolean AND usi.project_id IS NULL AND c.project_id IN (
       SELECT p.id FROM projects AS p WHERE p.organization_id = $2::text AND p.deleted IS FALSE
     ))
   )
-  AND (usi.project_id = $3 OR (usi.project_id IS NULL AND usi.organization_id = $2::text))
+  AND (usi.project_id = $3::uuid OR (usi.project_id IS NULL AND usi.organization_id = $2::text))
   AND (
-    i.project_id = $3
-    OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = $2))
+    i.project_id = $3::uuid
+    OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = $2::text))
     OR ($4::boolean AND usi.project_id IS NULL AND i.project_id = c.project_id)
   )
   AND c.deleted IS FALSE
@@ -11926,8 +11926,8 @@ ORDER BY c.id ASC
 
 type ListRemoteSessionClientsForUserSessionIssuerParams struct {
 	UserSessionIssuerID uuid.UUID
-	OrganizationID      string
-	ProjectID           uuid.UUID
+	OrganizationID      pgtype.Text
+	ProjectID           uuid.NullUUID
 	OrganizationWide    bool
 }
 
