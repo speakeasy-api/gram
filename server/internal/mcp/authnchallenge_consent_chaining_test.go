@@ -16,7 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
-	t "github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const (
@@ -109,6 +109,7 @@ func seedChainedConsentEndpoint(t *testing.T, tag string) (context.Context, cons
 	})
 	fx.clientA = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, tag, "", []uuid.UUID{fx.shared})
 	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, fx.clientA, authz.AuthClientTypeEMA)
+	seedPrincipalMCPConnectGrant(t, ctx, fx.ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeUser, fx.subject.ID), fx.endpoint.McpServerID.UUID)
 	return ctx, fx, clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.clientA)
 }
 
