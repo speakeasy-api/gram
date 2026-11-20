@@ -128,3 +128,6 @@ storybook-static/
 
 # Compiled one-off backfill binary; build with `go build ./cmd/workos-backfill`.
 /server/workos-backfill
+
+# Amp orb portal registrations
+.amp/portals/*

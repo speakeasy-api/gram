@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Prepares a fresh Amp orb with the repository's pinned toolchain and
+# dependencies. Amp snapshots the result, so it must be non-interactive,
+# idempotent, and fast when the tools are already installed.
+#
+# The local stack (Docker infra, migrations, daemons) is left to `./zero --agent`,
+# which tasks that need it run themselves.
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+step() {
+  local label=$1
+  shift
+  echo "⏳ $label"
+  local start=$SECONDS
+  "$@"
+  echo "✅ $label ($((SECONDS - start))s)"
+}
+
+# The orb image ships Docker Engine without Compose, which `mise infra:start`
+# needs.
+install_compose() {
+  if docker compose version >/dev/null 2>&1; then
+    return
+  fi
+  sudo apt-get update -qq
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker-compose-plugin
+}
+
+install_mise() {
+  if [ ! -x "$HOME/.local/bin/mise" ]; then
+    curl -fsSL https://mise.run | sh
+  fi
+}
+
+# Put mise and its shims on PATH for the non-interactive login shells Amp and
+# supervised orb services run in.
+persist_path() {
+  local marker="# speakeasy: mise toolchain"
+  local profile
+  for profile in "$HOME/.bash_profile" "$HOME/.profile"; do
+    # Creating ~/.bash_profile would make bash skip ~/.profile.
+    if [ "$profile" = "$HOME/.bash_profile" ] && [ ! -f "$profile" ]; then
+      continue
+    fi
+    if [ -f "$profile" ] && grep -Fqx "$marker" "$profile"; then
+      continue
+    fi
+    cat >>"$profile" <<'EOF'
+
+# speakeasy: mise toolchain
+case ":$PATH:" in
+  *":$HOME/.local/share/mise/shims:"*) ;;
+  *) export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH" ;;
+esac
+EOF
+  done
+}
+
+install_tools() {
+  mise trust --quiet
+  mise install --yes
+}
+
+# Pull only images the snapshot lacks, so `./zero --agent` starts the stack
+# without downloading them. Compose needs the mise environment for its
+# variables.
+pull_images() {
+  if ! docker info >/dev/null 2>&1; then
+    echo "Docker daemon is not running; skipping"
+    return
+  fi
+  # Missing images only cost time later, so a registry error must not fail setup.
+  local args=(pull --policy missing --ignore-buildable --ignore-pull-failures --quiet)
+  mise exec -- docker compose "${args[@]}"
+  mise exec -- docker compose -f compose.shared.yml -p gram-shared "${args[@]}"
+}
+
+export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
+export MISE_YES=1
+
+step "Installing Docker Compose" install_compose
+step "Installing mise" install_mise
+step "Persisting mise PATH" persist_path
+step "Installing pinned tools" install_tools
+step "Installing Go, Node, and Python dependencies" mise run install
+step "Installing git hooks" mise run zero:hk --yes
+step "Pulling missing local stack images" pull_images
