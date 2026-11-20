@@ -1188,10 +1188,6 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 
 	// Lock the projects and registration gates of actual association/offer
 	// writers, before locking the registration and checking for scope growth.
-	stamps, err := ReadClientBindingServers(ctx, dbtx, authCtx.ActiveOrganizationID, clientID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "read registration server scope").LogError(ctx, logger)
-	}
 	associationScope, err := upstreamclients.LockClientAssociationScope(ctx, dbtx, authCtx.ActiveOrganizationID, clientID, []uuid.UUID{*authCtx.ProjectID})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock client deletion writer scope").LogError(ctx, logger)
@@ -1209,6 +1205,10 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 		return oops.E(oops.CodeUnexpected, err, "lock project remote session client").LogError(ctx, logger)
 	}
 
+	stamps, err := ReadClientBindingServers(ctx, dbtx, authCtx.ActiveOrganizationID, clientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "read registration server scope").LogError(ctx, logger)
+	}
 	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, clientID); err != nil {
 		return err
 	}

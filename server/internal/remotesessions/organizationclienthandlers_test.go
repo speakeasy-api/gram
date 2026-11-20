@@ -162,7 +162,7 @@ func TestDeleteClient(t *testing.T) {
 
 // A server that took its upstream issuer from the deleted client no longer
 // names it once the delete commits.
-func TestDeleteClient_RederivesServersOnItsIssuers(t *testing.T) {
+func TestDeleteClient_RederivesServersWithActualAssociation(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -172,6 +172,7 @@ func TestDeleteClient_RederivesServersOnItsIssuers(t *testing.T) {
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "admin-derive-usi")
 	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "admin-derive-server")
 	clientID := createRemoteClient(t, ctx, ti, issuerID, userIssuerID.String(), "admin-derive-client")
+	associate(t, ctx, ti.conn, activeOrganizationID(t, ctx), projectID, serverID, uuid.MustParse(clientID))
 	stampIssuer(t, ctx, ti.conn, projectID, serverID, uuid.MustParse(issuerID))
 
 	require.NoError(t, ti.service.DeleteClient(ctx, &orgclientsgen.DeleteClientPayload{

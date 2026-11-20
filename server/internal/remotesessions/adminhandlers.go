@@ -1321,7 +1321,7 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 		if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, organizationID, projects); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "lock auth client writer scope").LogError(ctx, logger)
 		}
-		if err := authclientbackfill.PreflightServerAssociations(ctx, dbtx, organizationID, scope.servers...); err != nil {
+		if err := authclientbackfill.PreflightServerAssociationsWithRegistrations(ctx, dbtx, organizationID, scope.servers, []uuid.UUID{clientID}); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "lock auth client scope of the affected servers").LogError(ctx, logger)
 		}
 	}

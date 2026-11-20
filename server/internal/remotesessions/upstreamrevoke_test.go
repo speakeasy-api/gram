@@ -30,6 +30,8 @@ import (
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	issuersgen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authclients"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -728,6 +730,36 @@ func TestDeleteRemoteSessionClient_RevokesCascadedSessionsUpstream(t *testing.T)
 	for _, fx := range fixtures {
 		requireSessionRevoked(t, ctx, ti, fx)
 	}
+}
+
+func TestAttachTypedOffer_RejectsConcurrentRegistrationDeletion(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	fx := seedRevocableSession(t, ctx, ti, "offer-delete-race", "", "secret", true)
+	first := seedRemoteMcpServerForLogin(t, ctx, ti.conn, fx.projectID, fx.userIssuerID, "offer-first", "https://registration.example.com/first")
+	second := seedRemoteMcpServerForLogin(t, ctx, ti.conn, fx.projectID, fx.userIssuerID, "offer-second", "https://registration.example.com/second")
+	typed := offerRegistration(t, ctx, ti.conn, fx.organizationID, fx.projectID, first, fx.clientID)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	q := repo.New(tx)
+	_, err := q.LockRemoteSessionClientForSessionWrite(ctx, fx.clientID)
+	require.NoError(t, err)
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := authclients.AttachToServer(ctx, ti.conn, audit.NewLogger(), fx.organizationID,
+			urn.NewPrincipal(urn.PrincipalTypeUser, "test-actor"), nil, typed, second)
+		done <- err
+	}()
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), 1)
+	_, err = q.DeleteRemoteSessionClient(ctx, repo.DeleteRemoteSessionClientParams{ID: fx.clientID, ProjectID: conv.ToNullUUID(fx.projectID)})
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+	require.ErrorContains(t, <-done, "OAuth registration is no longer available")
+	offers, err := authclientbackfill.New(ti.conn).ListServerAuthClientsFixture(ctx, second)
+	require.NoError(t, err)
+	require.Empty(t, offers)
 }
 
 // newDisconnectChallengeManager builds the manager behind the consent screen
