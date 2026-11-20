@@ -313,3 +313,19 @@ func TestDerivedRefusesAKeyReusedForAnotherType(t *testing.T) {
 	require.Equal(t, 1, Derived(snapshot, key{}, func(*Snapshot) int { return 1 }))
 	require.Panics(t, func() { Derived(snapshot, key{}, func(*Snapshot) string { return "" }) })
 }
+
+func TestPublishReplacesTheBuiltInCatalogWithoutCarryingDerivedValues(t *testing.T) {
+	t.Parallel()
+	store := NewStore(newCompiledSnapshot())
+	type key struct{}
+	computed := 0
+	count := func(*Snapshot) int { computed++; return computed }
+	require.Equal(t, 1, Derived(store.Snapshot(), key{}, count))
+	equal := NewSnapshot(store.Snapshot().Products())
+	require.Equal(t, store.Snapshot().Fingerprint(), equal.Fingerprint())
+	store.Publish(equal)
+	require.Same(t, equal, store.Snapshot(), "a database snapshot replaces the built-in one even with equal content")
+	require.Equal(t, 2, Derived(store.Snapshot(), key{}, count), "derived values belong to the snapshot that computed them")
+	store.Publish(NewSnapshot(store.Snapshot().Products()))
+	require.Same(t, equal, store.Snapshot(), "an equal database snapshot is not republished")
+}
