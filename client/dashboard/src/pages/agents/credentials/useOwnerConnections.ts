@@ -162,7 +162,10 @@ export function useOwnerConnections(
     if (usesTypedOwnerConnections(server)) {
       const data = authRead?.data && serverSignIns(authRead.data);
       return {
-        data,
+        data: data?.map((signIn) => ({
+          ...signIn,
+          name: signInNames.get(signIn.id) === null ? undefined : signIn.name,
+        })),
         isError: !!authRead?.isError,
         anyOne: true,
       };

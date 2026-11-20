@@ -1,6 +1,9 @@
 import { findPassThroughAuthorizationHeader } from "@/lib/remote-identity/model/headers";
 import { useRemoteMcpServerHeaders } from "@gram/client/react-query/remoteMcpServerHeaders.js";
-import { useUpstreamProbe } from "@/lib/remote-identity";
+import {
+  useAllRemoteSessionClients,
+  useUpstreamProbe,
+} from "@/lib/remote-identity";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useMcpServerAuthentication } from "@gram/client/react-query/mcpServerAuthentication.js";
 
@@ -23,6 +26,20 @@ export function useMcpServerAuthenticationReadiness(
   const remote = remoteMcpServerId !== "";
   const tunneled = !!mcpServer?.tunneledMcpServerId;
   const unproxied = !!mcpServer?.unproxiedMcpServerId;
+  const hosted = !!mcpServer && !remote && !tunneled && !unproxied;
+  const userSessionIssuerId = mcpServer?.userSessionIssuerId;
+  // This remains a downstream sign-in read for hosted servers only.
+  const hostedSignIn = useAllRemoteSessionClients(
+    { userSessionIssuerId },
+    {
+      enabled: hosted && !!userSessionIssuerId,
+    },
+  );
+  const hostedReady =
+    hosted &&
+    !!userSessionIssuerId &&
+    !hostedSignIn.isError &&
+    hostedSignIn.items.length > 0;
   const upstreamAuthQuery = useMcpServerAuthentication(
     { mcpServerId: mcpServer?.id ?? "" },
     undefined,
@@ -71,6 +88,8 @@ export function useMcpServerAuthenticationReadiness(
       : acceptsAnonymous
         ? "The upstream service accepts requests without credentials."
         : "Add a credential so Speakeasy can sign in to the upstream service.";
+  } else if (hostedReady) {
+    description = "An authorization server is attached to this server.";
   } else if (tunneled) {
     description =
       "Speakeasy authentication is configured; upstream authorization servers are optional.";
@@ -79,6 +98,7 @@ export function useMcpServerAuthenticationReadiness(
   return {
     ready:
       unproxied ||
+      hostedReady ||
       (remote && (configured || acceptsAnonymous)) ||
       (tunneled && !!mcpServer?.userSessionIssuerId),
     loading:

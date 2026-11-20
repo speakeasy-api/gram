@@ -3,7 +3,6 @@ package remotemcp
 import (
 	"context"
 	"log/slog"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -11,7 +10,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/remote_mcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -78,16 +76,11 @@ func staffServerScopes(ctx context.Context, db *pgxpool.Pool, logger *slog.Logge
 	}
 	clients := make([]*gen.RemoteMcpServerClientScopes, 0, len(rows))
 	for _, row := range rows {
-		resolved := remotesessions.ClientConnectionScopes(remotesessions.ConnectionScopeInput{
+		input := remotesessions.ConnectionScopeInput{
 			ClientID: row.ID, ClientScope: row.Scope, IssuerScopesSupported: row.ScopesSupported,
 			IssuerScopeOverride: row.ScopeOverride, IssuerOmitScopeFallback: row.OmitScopeFallback.Valid && row.OmitScopeFallback.Bool,
-		}, cached, true)
-		clients = append(clients, &gen.RemoteMcpServerClientScopes{
-			ClientID: row.ID.String(), IssuerName: conv.PtrEmpty(strings.TrimSpace(row.IssuerName.String)), IssuerURL: &row.IssuerUrl,
-			ScopeSource: string(resolved.Source), RequestedScopes: conv.DefaultSlice(resolved.Scopes, []string{}),
-			UnadvertisedPinnedScopes: conv.DefaultSlice(resolved.Unadvertised, []string{}),
-			PinWouldDecide:           cached.UseDiscovered && len(row.Scope) == 0 && len(cached.ChallengeScopes) == 0,
-		})
+		}
+		clients = append(clients, clientScopeView(input, cached, true, row.IssuerName.String, row.IssuerUrl))
 	}
 	return serverScopeView(server.resourceURL, cached, clients, sharedServers, true), nil
 }

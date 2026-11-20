@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   probe: "idle",
   probed: vi.fn(),
   admin: true,
+  read: "success" as "success" | "loading" | "error",
+  refetch: vi.fn(),
   authentication: {
     status: "no_auth_required",
     requiresUpstreamAuth: false,
@@ -30,9 +32,10 @@ vi.mock("@/lib/remote-identity", () => ({
 
 vi.mock("@gram/client/react-query/mcpServerAuthentication.js", () => ({
   useMcpServerAuthentication: () => ({
-    isLoading: false,
-    isError: false,
-    data: mocks.authentication,
+    isLoading: mocks.read === "loading",
+    isError: mocks.read === "error",
+    data: mocks.read === "loading" ? undefined : mocks.authentication,
+    refetch: mocks.refetch,
   }),
 }));
 
@@ -65,6 +68,7 @@ afterEach(() => {
   vi.clearAllMocks();
   mocks.probe = "idle";
   mocks.admin = true;
+  mocks.read = "success";
   mocks.authentication = {
     status: "no_auth_required",
     requiresUpstreamAuth: false,
@@ -130,6 +134,24 @@ describe("UpstreamCredentialsSection", () => {
         "/settings?setup=credentials#authentication",
       );
       expect(!!screen.queryByTestId("add-credential-sheet")).toBe(admin);
+    },
+  );
+
+  it.each([
+    ["loading", "Loading…"],
+    ["error", "The upstream credentials could not be loaded."],
+  ] as const)(
+    "does not expose repair actions while typed credentials are %s",
+    (read, message) => {
+      mocks.read = read;
+      renderSection(
+        { remoteMcpServerId: "remote-1" },
+        "/settings?setup=credentials#authentication",
+      );
+      expect(screen.getByText(message)).toBeTruthy();
+      expect(screen.queryByText("Add credential")).toBeNull();
+      expect(screen.queryByTestId("add-credential-sheet")).toBeNull();
+      expect(screen.queryByText("No authentication")).toBeNull();
     },
   );
 

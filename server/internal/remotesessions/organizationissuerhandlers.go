@@ -351,7 +351,7 @@ func (s *Service) GetIssuerDeletePreflight(ctx context.Context, payload *orgissu
 	nameRows, err := r.ListOrganizationMcpServersUsingRegistration(ctx, repo.ListOrganizationMcpServersUsingRegistrationParams{
 		OrganizationID:      authCtx.ActiveOrganizationID,
 		IssuerID:            conv.ToNullUUID(issuerID),
-		ClientID:            uuid.NullUUID{},
+		ClientID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		IncludeDeleteImpact: true,
 	})
 	if err != nil {

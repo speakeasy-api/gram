@@ -334,10 +334,10 @@ describe("IdentityChainingSection", () => {
     expect(control.textContent).toContain('"onlyWhenOn":true');
   });
 
-  it("ignores a disabled per-person credential that names no registration", () => {
+  it("ignores disabled per-person offers, including ones naming a registration", () => {
     // The organization-wide sign-in binds another server's registration.
     state.linked = [{ id: "other-server" }];
-    state.registrations = [{ id: "own" }];
+    state.registrations = [{ id: "own" }, { id: "disabled" }];
     state.credentials = [
       {
         clientType: "remote_session",
@@ -345,6 +345,11 @@ describe("IdentityChainingSection", () => {
         remoteSessionClientId: "own",
       },
       { clientType: "remote_session", enabled: false },
+      {
+        clientType: "remote_session",
+        enabled: false,
+        remoteSessionClientId: "disabled",
+      },
     ];
     render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
     expect(
@@ -352,6 +357,9 @@ describe("IdentityChainingSection", () => {
         .getByTestId("identity-chaining")
         .getAttribute("data-linked-clients"),
     ).toBe("own");
+    expect(
+      screen.queryByText(/Finish configuring the upstream credentials/),
+    ).toBeNull();
     expect(state.clientFilters).not.toContainEqual({
       userSessionIssuerId: "issuer",
     });
