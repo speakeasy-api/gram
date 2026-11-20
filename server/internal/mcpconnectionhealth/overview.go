@@ -97,7 +97,7 @@ func (s *Service) GetSessionActivity(ctx context.Context, payload *gen.GetSessio
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Project(c.projectID).Read()); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(c.projectID)).Read()); err != nil {
 		return nil, err
 	}
 	now := s.now()

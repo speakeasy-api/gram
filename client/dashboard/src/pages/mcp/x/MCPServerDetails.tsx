@@ -246,7 +246,10 @@ export default function MCPServerDetails(): JSX.Element | null {
         return (
           hostedToolset && (
             <DetailBody spacing="none" className="px-0 pt-0">
-              <HostedToolsTab toolset={hostedToolset} />
+              <HostedToolsTab
+                toolset={hostedToolset}
+                inspectHref={mcpServerTabHref(routes, idOrSlug, "inspect")}
+              />
             </DetailBody>
           )
         );

@@ -177,7 +177,7 @@ describe("useProjectNavRoutes", () => {
       routes.mcpSessions.href(),
       routes.remoteIdentityProviders.href(),
     ]);
-    expect(navRoutes.indexOf(routes.playground.href())).toBeLessThan(
+    expect(navRoutes.indexOf(routes.mcp.href())).toBeLessThan(
       navRoutes.indexOf(routes.riskEvents.href()),
     );
     expect(navRoutes.indexOf(routes.policyCenter.href())).toBeLessThan(

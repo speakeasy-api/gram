@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -112,7 +113,7 @@ func TestGovernor_RefreshDecisionSpeakeasyUnavailability(t *testing.T) {
 			f := newChainStoreFixture(t)
 			useSpeakeasySignIn(t, f.db, f.req)
 			f.saveOrder(t, speakeasy(f.seedSpeakeasyIssuer(t)))
-			g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
+			g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.tokens, f.chainer.delegation)
 			speakeasyAnswers(g, unavailableBecause(tc.reason))
 			verdict := g.RefreshDecision(t.Context(), f.req)
 			require.Equal(t, tc.want, verdict.Decision)
@@ -130,14 +131,14 @@ func TestGovernor_RefreshDecisionFollowsTheProviderOrder(t *testing.T) {
 		f := newChainStoreFixture(t)
 		f.retainRefreshableDelegation(t, "durable_credential_present")
 		f.saveOrder(t, speakeasy(f.seedSpeakeasyIssuer(t)), policyRow{remoteIssuer: f.sel.trustedIssuerID, internalIssuer: uuid.Nil})
-		g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
+		g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.tokens, f.chainer.delegation)
 		require.Equal(t, RefreshVerdict{Decision: RefreshServed, RemoteSessionIssuerID: f.sel.remoteIssuerID, Provider: externalKind, Reason: ReasonSuccess}, g.RefreshDecision(t.Context(), f.req))
 	})
 	t.Run("serving speakeasy on a federated sign-in", func(t *testing.T) {
 		t.Parallel()
 		f := newChainStoreFixture(t)
 		f.saveOrder(t, speakeasy(f.seedSpeakeasyIssuer(t)), policyRow{remoteIssuer: f.sel.trustedIssuerID, internalIssuer: uuid.Nil})
-		g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
+		g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.tokens, f.chainer.delegation)
 		speakeasyAnswers(g, success)
 		require.Equal(t, externalKind, g.RefreshDecision(t.Context(), f.req).Provider, "Speakeasy never vouches for a federated sign-in")
 	})
@@ -146,7 +147,7 @@ func TestGovernor_RefreshDecisionFollowsTheProviderOrder(t *testing.T) {
 		f := newChainStoreFixture(t)
 		f.retainRefreshableDelegation(t, "durable_credential_present")
 		f.saveOrder(t, policyRow{remoteIssuer: f.sel.trustedIssuerID, internalIssuer: uuid.Nil}, speakeasy(f.seedSpeakeasyIssuer(t)))
-		g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
+		g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.tokens, f.chainer.delegation)
 		speakeasyAnswers(g, success)
 		require.Equal(t, externalKind, g.RefreshDecision(t.Context(), f.req).Provider, "the first provider that serves decides")
 	})
@@ -154,7 +155,7 @@ func TestGovernor_RefreshDecisionFollowsTheProviderOrder(t *testing.T) {
 		t.Parallel()
 		f := newChainStoreFixture(t)
 		f.saveOrder(t, policyRow{remoteIssuer: f.sel.trustedIssuerID, internalIssuer: uuid.Nil}, speakeasy(f.seedSpeakeasyIssuer(t)))
-		g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
+		g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.tokens, f.chainer.delegation)
 		speakeasyAnswers(g, success)
 		verdict := g.RefreshDecision(t.Context(), f.req)
 		require.Equal(t, RefreshReauthenticate, verdict.Decision)
@@ -165,7 +166,7 @@ func TestGovernor_RefreshDecisionFollowsTheProviderOrder(t *testing.T) {
 		f := newChainStoreFixture(t)
 		useSpeakeasySignIn(t, f.db, f.req)
 		f.saveOrder(t, policyRow{remoteIssuer: f.sel.trustedIssuerID, internalIssuer: uuid.Nil}, speakeasy(f.seedSpeakeasyIssuer(t)))
-		g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
+		g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.tokens, f.chainer.delegation)
 		speakeasyAnswers(g, success)
 		verdict := g.RefreshDecision(t.Context(), f.req)
 		require.Equal(t, RefreshServed, verdict.Decision)
@@ -178,12 +179,12 @@ func TestGovernor_RefreshDecisionStoredCredentialMustDecrypt(t *testing.T) {
 	f := newChainStoreFixture(t)
 	f.retainRefreshableDelegation(t, "assertion_only")
 	require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("downstream-token")))
-	healthy := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
+	healthy := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.tokens, f.chainer.delegation)
 	require.Equal(t, RefreshServed, healthy.RefreshDecision(t.Context(), f.req).Decision, "a usable stored credential serves after the assertion expires")
 
 	rotated, err := encryption.NewWithBytes(bytes.Repeat([]byte{0x24}, 32))
 	require.NoError(t, err)
-	g := NewGovernor(testenv.NewLogger(t), f.db, rotated, f.chainer.delegation)
+	g := NewGovernor(testenv.NewLogger(t), f.db, upstreamtokens.WithoutOrganizationEncryption(testenv.NewLogger(t), f.db, rotated), f.chainer.delegation)
 	verdict := g.RefreshDecision(t.Context(), f.req)
 	require.Equal(t, RefreshReauthenticate, verdict.Decision, "a stored credential the runtime cannot decrypt does not stand in for the expired assertion")
 	require.Equal(t, ReasonReauthenticationRequired, verdict.Reason)
@@ -194,7 +195,7 @@ func TestGovernor_RefreshDecisionEmptyStoredCredential(t *testing.T) {
 	f := newChainStoreFixture(t)
 	f.retainRefreshableDelegation(t, "assertion_only")
 	require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("")))
-	g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
+	g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.tokens, f.chainer.delegation)
 	require.Equal(t, RefreshReauthenticate, g.RefreshDecision(t.Context(), f.req).Decision, "an empty stored credential is unusable")
 }
 
@@ -202,7 +203,7 @@ func TestChainer_RefreshDecisionAfterARecentRefusal(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
 	f.retainRefreshableDelegation(t, "durable_credential_present")
-	c := New(testenv.NewLogger(t), f.db, f.chainer.enc, nil, f.chainer.delegation, nil, testenv.NewMemoryCache())
+	c := New(testenv.NewLogger(t), f.db, f.chainer.tokens, nil, f.chainer.delegation, nil, testenv.NewMemoryCache())
 	require.Equal(t, RefreshServed, c.RefreshDecision(t.Context(), f.req).Decision)
 
 	refused := newOutcome(StageExchange, ReasonAccessDenied, ConfidenceVerified, false)

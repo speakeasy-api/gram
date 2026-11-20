@@ -15,7 +15,6 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { useOrganization, useProject } from "@/contexts/Auth";
@@ -34,7 +33,7 @@ import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useProbeRemoteMcpURLMutation } from "@gram/client/react-query/probeRemoteMcpURL.js";
 import { ExternalLink } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { CatalogOfficialSheet } from "./CatalogOfficialSheet";
 import { MakeOfficialSheet } from "./MakeOfficialSheet";
@@ -46,6 +45,7 @@ import {
   recommendedOnboardOption,
   shadowMCPCatalogMatch,
   shadowMCPOfficialServerDescription,
+  shadowMCPSetUpHref,
 } from "./shadowMCPOfficialServer";
 import { useSaveShadowMCPOfficialServer } from "./useSaveShadowMCPOfficialServer";
 
@@ -85,8 +85,8 @@ function CreateServerGate({
  * How a Shadow MCP server is linked to the version the organization serves
  * itself.
  *
- * One slot, three states: it is linked (switch the link off and on, open
- * the official server, or remove the link), the project already serves the
+ * One slot, three states: it is linked (open the official server, or remove
+ * the link), the project already serves the
  * same URL (link it), or neither (check it, then make it official in a
  * sheet, or say what is in the way).
  */
@@ -172,6 +172,37 @@ function PanelHeading({
   );
 }
 
+/**
+ * Opens the usual way to add a remote MCP server, filled in with this
+ * server's URL and name. Saving there brings the admin back to this page,
+ * where the new server is offered as the one to link.
+ */
+function SetUpMyselfButton({
+  server,
+  allowed,
+}: {
+  server: ShadowMCPInventoryServer;
+  allowed: boolean;
+}) {
+  const routes = useRoutes();
+  if (!allowed) {
+    return (
+      <CreateServerGate allowed={false}>
+        <Button variant="tertiary" size="sm" disabled>
+          <Button.Text>Set it up myself</Button.Text>
+        </Button>
+      </CreateServerGate>
+    );
+  }
+  return (
+    <Button variant="tertiary" size="sm" asChild>
+      <Link to={shadowMCPSetUpHref(routes.mcp.add.remote.href(), server)}>
+        <Button.Text>Set it up myself</Button.Text>
+      </Link>
+    </Button>
+  );
+}
+
 /** Opens an MCP server's own page in a new tab, to inspect and try it. */
 function OpenServerButton({
   mcpServerId,
@@ -205,31 +236,11 @@ function LinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
   const { save, isPending } = useSaveShadowMCPOfficialServer();
   const official = server.officialServer;
   if (!official) return null;
-  const linked = !official.directAccessAllowed;
-
-  const setLinked = async (next: boolean) => {
-    try {
-      await save({
-        serverUrl: server.canonicalServerUrl,
-        mcpServerId: official.mcpServerId,
-        allowDirectAccess: !next,
-      });
-      toast.success(
-        next
-          ? "Linked. Direct connections are blocked again."
-          : "Link off. Direct connections follow the usual rules.",
-      );
-    } catch {
-      toast.error("Could not change the link. Try again.");
-    }
-  };
-
   const restoreLink = async () => {
     try {
       await save({
         serverUrl: server.canonicalServerUrl,
         mcpServerId: official.mcpServerId,
-        allowDirectAccess: official.directAccessAllowed,
       });
       toast.success(`Link to “${official.name}” restored`);
     } catch {
@@ -242,7 +253,6 @@ function LinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
       await save({
         serverUrl: server.canonicalServerUrl,
         mcpServerId: undefined,
-        allowDirectAccess: false,
       });
       toast.success(`Link to “${official.name}” removed`, {
         action: { label: "Undo", onClick: () => void restoreLink() },
@@ -258,10 +268,8 @@ function LinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
         title="Official server"
         description={shadowMCPOfficialServerDescription(server)}
         badge={
-          <Badge variant={linked ? "success" : "neutral"} size="sm">
-            <Badge.Text>
-              {linked ? SHADOW_MCP_OFFICIAL_STATE_LABEL.onboarded : "Link off"}
-            </Badge.Text>
+          <Badge variant="success" size="sm">
+            <Badge.Text>{SHADOW_MCP_OFFICIAL_STATE_LABEL.onboarded}</Badge.Text>
           </Badge>
         }
       />
@@ -293,28 +301,16 @@ function LinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
             )}
           </div>
         </div>
-        <div className="flex items-center gap-4">
-          <label className="flex items-center gap-2 text-sm">
-            <Switch
-              checked={linked}
-              disabled={isPending}
-              onCheckedChange={(next) => void setLinked(next)}
-              aria-label="Linked"
-            />
-            Linked
-          </label>
-          <OpenServerButton
-            mcpServerId={official.mcpServerId}
-            slug={official.slug}
-          />
-        </div>
+        <OpenServerButton
+          mcpServerId={official.mcpServerId}
+          slug={official.slug}
+        />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Text muted small className="max-w-xl">
-          {linked
-            ? "Switch the link off to let direct connections work while you test the official server."
-            : "Switch the link on when the official server is ready."}
+          Remove the link to let direct connections follow the usual rules
+          again. You can add it back at any time.
         </Text>
         <Button
           variant="tertiary"
@@ -544,7 +540,6 @@ function UnlinkedPanel({
       await save({
         serverUrl: url,
         mcpServerId: suggested.mcpServerId,
-        allowDirectAccess: false,
       });
       toast.success(`Linked to “${suggested.name}”`);
     } catch {
@@ -668,16 +663,7 @@ function UnlinkedPanel({
         actions={
           recommended === "manual" && isRecommended ? (
             <>
-              <CreateServerGate allowed={canCreateServer}>
-                <Button
-                  variant="tertiary"
-                  size="sm"
-                  disabled={!canCreateServer || checking}
-                  onClick={() => onMakeOfficial(result)}
-                >
-                  <Button.Text>Set it up myself</Button.Text>
-                </Button>
-              </CreateServerGate>
+              <SetUpMyselfButton server={server} allowed={canCreateServer} />
               <Button
                 variant="secondary"
                 size="sm"
@@ -792,7 +778,6 @@ function LinkAnotherServer({
       await save({
         serverUrl: server.canonicalServerUrl,
         mcpServerId: selected,
-        allowDirectAccess: false,
       });
       toast.success(`Linked to “${chosen?.label ?? "the server"}”`);
     } catch {

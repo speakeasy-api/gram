@@ -1141,7 +1141,9 @@ func TestPluginsService_DownloadObservabilityPluginVibeGateFailures(t *testing.T
 		require.Contains(t, err.Error(), msgPart)
 	}
 
-	// Shape 1: the pinned release does not carry the vibe provider.
+	// Shape 1: the pinned release does not carry the vibe provider. The test
+	// closes the gate itself, so it holds whatever the checked-in pin carries.
+	plugins.SetReleasedHooksProvidersForTest(t, []string{"pi"})
 	before := countKeys()
 	_, _, err := ti.service.DownloadObservabilityPlugin(ctx, &gen.DownloadObservabilityPluginPayload{Platform: "vibe"})
 	requireOopsCode(err, oops.CodeFailedPrecondition, "does not carry the vibe provider")

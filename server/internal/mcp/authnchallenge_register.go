@@ -6,8 +6,6 @@ package mcp
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,7 +18,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"golang.org/x/crypto/bcrypt"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -154,16 +151,12 @@ func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *
 	var clientSecretHash pgtype.Text
 	switch req.TokenEndpointAuthMethod {
 	case oauthwire.AuthMethodClientSecretBasic, oauthwire.AuthMethodClientSecretPost:
-		var err error
-		clientSecret, err = generateClientSecret()
+		secret, hashed, err := usersessions.MintClientSecret()
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to generate client secret").LogError(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to mint client secret").LogError(ctx, logger)
 		}
-		hashed, hashErr := bcrypt.GenerateFromPassword([]byte(clientSecret), bcrypt.DefaultCost)
-		if hashErr != nil {
-			return oops.E(oops.CodeUnexpected, hashErr, "failed to hash client secret").LogError(ctx, logger)
-		}
-		clientSecretHash = pgtype.Text{String: string(hashed), Valid: true}
+		clientSecret = secret
+		clientSecretHash = pgtype.Text{String: hashed, Valid: true}
 	case oauthwire.AuthMethodNone, oauthwire.AuthMethodPrivateKeyJWT:
 		// Public clients prove PKCE possession; asymmetric clients prove
 		// possession of a key the server never holds. Neither gets a secret.
@@ -267,14 +260,4 @@ func writeDCRError(ctx context.Context, w http.ResponseWriter, logger *slog.Logg
 		return oops.E(oops.CodeUnexpected, werr, "failed to write DCR error body").LogError(ctx, logger)
 	}
 	return nil
-}
-
-// generateClientSecret produces 32 bytes of cryptographically random data
-// and base64url-encodes them.
-func generateClientSecret() (string, error) {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("read random bytes: %w", err)
-	}
-	return base64.RawURLEncoding.EncodeToString(b), nil
 }

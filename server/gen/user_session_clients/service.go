@@ -15,12 +15,24 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Operator visibility into MCP clients registered against a user-session
-// issuer (user_session_clients). Read + revoke. Registrations are written by
-// /mcp/{slug}/register (RFC 7591 DCR) or resolved from a Client ID Metadata
-// Document on /mcp/{slug}/authorize (CIMD); client_id_metadata_uri
-// distinguishes the two.
+// Operator management of MCP clients registered against a user-session issuer
+// (user_session_clients). Registrations are written by /mcp/{slug}/register
+// (RFC 7591 DCR), resolved from a Client ID Metadata Document on
+// /mcp/{slug}/authorize (CIMD), or created by an operator through
+// createUserSessionClient; client_id_metadata_uri distinguishes CIMD clients
+// from the rest.
 type Service interface {
+	// Register a confidential client against a user-session issuer on an
+	// operator's behalf, for a client that cannot register itself. Speakeasy mints
+	// the client_id and client_secret; the secret is returned once and only its
+	// hash is stored. Requires project:write on the issuer's project, or org:admin
+	// for an organization-owned issuer.
+	CreateUserSessionClient(context.Context, *CreateUserSessionClientPayload) (res *CreateUserSessionClientResult, err error)
+	// Replace a client's redirect URIs. Applies to the next /authorize; sessions
+	// already issued are unaffected. Rejected for CIMD clients, whose metadata
+	// document owns their redirect URIs. Requires project:write on the issuer's
+	// project, or org:admin for an organization-owned issuer.
+	UpdateUserSessionClientRedirectURIs(context.Context, *UpdateUserSessionClientRedirectURIsPayload) (res *types.UserSessionClient, err error)
 	// List user_session_clients in the caller's project.
 	ListUserSessionClients(context.Context, *ListUserSessionClientsPayload) (res *ListUserSessionClientsResult, err error)
 	// Get a user_session_client by id.
@@ -60,7 +72,31 @@ const ServiceName = "userSessionClients"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"listUserSessionClients", "getUserSessionClient", "refreshUserSessionClientCIMD", "revokeUserSessionClient"}
+var MethodNames = [6]string{"createUserSessionClient", "updateUserSessionClientRedirectURIs", "listUserSessionClients", "getUserSessionClient", "refreshUserSessionClientCIMD", "revokeUserSessionClient"}
+
+// CreateUserSessionClientPayload is the payload type of the userSessionClients
+// service createUserSessionClient method.
+type CreateUserSessionClientPayload struct {
+	// The issuer the client signs in through.
+	UserSessionIssuerID string
+	// Display name shown in client listings and on the consent screen.
+	ClientName string
+	// Redirect URIs validated on every /authorize. At least one is required.
+	RedirectUris []string
+	// How the client presents its secret at the token endpoint (RFC 7591).
+	TokenEndpointAuthMethod string
+	SessionToken            *string
+	ApikeyToken             *string
+	ProjectSlugInput        *string
+}
+
+// CreateUserSessionClientResult is the result type of the userSessionClients
+// service createUserSessionClient method.
+type CreateUserSessionClientResult struct {
+	Client *types.UserSessionClient
+	// The minted client secret. Not retrievable again.
+	ClientSecret string
+}
 
 // GetUserSessionClientPayload is the payload type of the userSessionClients
 // service getUserSessionClient method.
@@ -109,6 +145,18 @@ type RefreshUserSessionClientCIMDPayload struct {
 type RevokeUserSessionClientPayload struct {
 	// The user_session_client id.
 	ID               string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// UpdateUserSessionClientRedirectURIsPayload is the payload type of the
+// userSessionClients service updateUserSessionClientRedirectURIs method.
+type UpdateUserSessionClientRedirectURIsPayload struct {
+	// The user_session_client id.
+	ID string
+	// The complete new list of redirect URIs. At least one is required.
+	RedirectUris     []string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string

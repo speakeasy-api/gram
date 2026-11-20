@@ -796,9 +796,9 @@ func (m *ChallengeManager) EnrichRemoteSession(ctx context.Context, ref RemoteSe
 	if sess.IdentitySource.Valid && !slices.Contains(overwritableIdentitySources(IdentitySourceUserinfo), sess.IdentitySource.String) {
 		target.userinfoEndpoint = ""
 	}
-	accessToken, err := m.enc.Decrypt(sess.AccessTokenEncrypted.String)
+	accessToken, err := openAccessToken(ctx, m.tokens, sess)
 	if err != nil {
-		return none, fmt.Errorf("decrypt access token for enrichment: %w", err)
+		return none, fmt.Errorf("open access token for enrichment: %w", err)
 	}
 	attrs := []slog.Attr{
 		attr.SlogOAuthIssuer(client.IssuerUrl),
@@ -947,7 +947,7 @@ func (m *ChallengeManager) backfillRefreshDeadline(ctx context.Context, q *remot
 	if prior, asked := storedInterfaceRecords(sess.Enrichment)[interfaceRefreshIntrospection]; asked && (prior.Status == interfaceStatusOK || prior.Reason == interfaceReasonNoExp || prior.Reason == interfaceReasonExpPassed) {
 		return nil
 	}
-	refreshToken, err := m.enc.Decrypt(sess.RefreshTokenEncrypted.String)
+	refreshToken, err := openRefreshToken(ctx, m.tokens, sess)
 	if err != nil {
 		return nil
 	}

@@ -23,12 +23,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -99,7 +99,7 @@ type AgentAuthorizationChecks interface {
 // AgentIdentityReadService backs the agent identity read tools.
 type AgentIdentityReadService struct {
 	db     *pgxpool.Pool
-	enc    *encryption.Client
+	tokens *upstreamtokens.Tokens
 	engine deviceCoverageAuthorizer
 	roles  *access.RoleManager
 	checks AgentAuthorizationChecks
@@ -109,9 +109,9 @@ type AgentIdentityReadService struct {
 
 // NewAgentIdentityReadService reads agent policy and connection assignments
 // from Postgres and authorization checks through checks.
-func NewAgentIdentityReadService(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, engine *authz.Engine, checks AgentAuthorizationChecks, budget OperationBudget) *AgentIdentityReadService {
+func NewAgentIdentityReadService(logger *slog.Logger, db *pgxpool.Pool, tokens *upstreamtokens.Tokens, engine *authz.Engine, checks AgentAuthorizationChecks, budget OperationBudget) *AgentIdentityReadService {
 	if logger == nil {
-		return &AgentIdentityReadService{db: nil, enc: nil, engine: nil, roles: nil, checks: nil, budget: OperationBudget{Connection: nil, Organization: nil}, now: nil}
+		return &AgentIdentityReadService{db: nil, tokens: nil, engine: nil, roles: nil, checks: nil, budget: OperationBudget{Connection: nil, Organization: nil}, now: nil}
 	}
 	// A nil engine must stay a nil interface, so the service reports itself
 	// unavailable.
@@ -121,7 +121,7 @@ func NewAgentIdentityReadService(logger *slog.Logger, db *pgxpool.Pool, enc *enc
 	}
 	return &AgentIdentityReadService{
 		db:     db,
-		enc:    enc,
+		tokens: tokens,
 		engine: authorizer,
 		roles:  access.NewRoleManager(logger, db, nil, nil, plugins.PublicationRequests{Enabled: false}, nil),
 		checks: checks,
@@ -131,7 +131,7 @@ func NewAgentIdentityReadService(logger *slog.Logger, db *pgxpool.Pool, enc *enc
 }
 
 func (s *AgentIdentityReadService) valid() bool {
-	return s != nil && s.db != nil && s.enc != nil && s.engine != nil && s.roles != nil && s.checks != nil && s.budget.valid() && s.now != nil
+	return s != nil && s.db != nil && s.tokens != nil && s.engine != nil && s.roles != nil && s.checks != nil && s.budget.valid() && s.now != nil
 }
 
 // AgentIdentityInput names one agent.
@@ -321,7 +321,7 @@ func (s *AgentIdentityReadService) MCPAccess(ctx context.Context, principal Prin
 		output.MissingServerGrants = missingServerGrants(grants, agentPrincipal.String(), servers)
 	}
 
-	credentials := newAgentCredentialReader(s.db, s.enc, principal.OrganizationID, agent.ID, s.now())
+	credentials := newAgentCredentialReader(s.db, s.tokens, principal.OrganizationID, agent.ID, s.now())
 	for _, server := range servers {
 		if !server.access.CanConnect {
 			continue
@@ -541,7 +541,7 @@ func (s *AgentIdentityReadService) mcpNames(ctx context.Context, organizationID 
 // project and user session issuer, which servers can share.
 type agentCredentialReader struct {
 	db             *pgxpool.Pool
-	enc            *encryption.Client
+	tokens         *upstreamtokens.Tokens
 	organizationID string
 	agentID        uuid.UUID
 	now            time.Time
@@ -554,8 +554,8 @@ type agentAssignments struct {
 	unusable int
 }
 
-func newAgentCredentialReader(db *pgxpool.Pool, enc *encryption.Client, organizationID string, agentID uuid.UUID, now time.Time) *agentCredentialReader {
-	return &agentCredentialReader{db: db, enc: enc, organizationID: organizationID, agentID: agentID, now: now, assignments: make(map[string]agentAssignments)}
+func newAgentCredentialReader(db *pgxpool.Pool, tokens *upstreamtokens.Tokens, organizationID string, agentID uuid.UUID, now time.Time) *agentCredentialReader {
+	return &agentCredentialReader{db: db, tokens: tokens, organizationID: organizationID, agentID: agentID, now: now, assignments: make(map[string]agentAssignments)}
 }
 
 // describe sets entry's credential mode, as the dashboard's "Acting on behalf
@@ -616,7 +616,7 @@ func (r *agentCredentialReader) read(ctx context.Context, projectID, issuerID uu
 			assigned.unusable++
 			continue
 		}
-		expired := !remotesessions.StoredSignInUsable(r.enc, source, r.now)
+		expired := !remotesessions.StoredSignInUsable(ctx, r.tokens, source, r.now)
 		if at, ok := index[source.SubjectUrn.ID]; ok {
 			assigned.people[at].ConnectionExpired = assigned.people[at].ConnectionExpired || expired
 			continue

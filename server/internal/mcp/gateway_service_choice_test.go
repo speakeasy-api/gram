@@ -185,7 +185,7 @@ func TestGatewayConsentOffersAServiceInAnOutage(t *testing.T) {
 	require.NoError(t, err)
 	refresh, err := fx.ti.enc.Encrypt([]byte("live-refresh"))
 	require.NoError(t, err)
-	_, err = remotesessionsrepo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+	_, err = remotesessionsrepo.New(fx.ti.conn).UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn: urn.NewUserSubject(mockidp.MockUserID), UserSessionIssuerID: fx.issuerID, RemoteSessionClientID: outage,
 		AccessTokenEncrypted: access, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true, InfinityModifier: pgtype.Finite},
 		RefreshTokenEncrypted: conv.ToPGText(refresh), Scopes: []string{}, Resource: pgtype.Text{String: fx.upstream, Valid: true},

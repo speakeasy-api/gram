@@ -4,7 +4,7 @@ import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Button } from "@/components/ui/Button";
 import { MoreActions } from "@/components/ui/MoreActions";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Stack } from "@/components/ui/Stack";
 import { Table, type Column } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";

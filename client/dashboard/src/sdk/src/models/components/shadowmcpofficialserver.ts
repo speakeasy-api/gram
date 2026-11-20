@@ -13,9 +13,9 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type ShadowMCPOfficialServer = {
   /**
-   * True while the link is switched off: direct connections to the Shadow MCP server follow the ordinary Shadow MCP rules instead of being blocked.
+   * Deprecated: links no longer have an on/off switch, so this is always false. Kept one release so older dashboards, which require it, keep rendering, then removed.
    */
-  directAccessAllowed: boolean;
+  directAccessAllowed?: boolean | undefined;
   /**
    * The gateway that serves the official server, when url is a gateway's address.
    */
@@ -41,7 +41,7 @@ export const ShadowMCPOfficialServer$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    direct_access_allowed: z.boolean(),
+    direct_access_allowed: z.optional(z.boolean()),
     gateway_name: z.optional(z.string()),
     mcp_server_id: z.string(),
     name: z.string(),
