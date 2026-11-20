@@ -1853,13 +1853,18 @@ SELECT sel.id,
          JOIN remote_session_issuers AS rsi
            ON rsi.id = c.remote_session_issuer_id
           AND rsi.deleted IS FALSE
+         JOIN projects AS project ON project.id = sel.project_id
+           AND project.organization_id = sel.organization_id AND NOT project.deleted
          WHERE c.id = sel.remote_session_client_id
+           AND (c.project_id = project.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = project.organization_id)))
+           AND (rsi.project_id = project.id OR (rsi.project_id IS NULL AND (rsi.organization_id IS NULL OR rsi.organization_id = project.organization_id)))
            AND c.deleted IS FALSE
        )::boolean AS registration_live,
        ARRAY(
          SELECT link.user_session_issuer_id
          FROM remote_session_client_user_session_issuers AS link
-         WHERE link.remote_session_client_id = sel.remote_session_client_id
+         WHERE NOT @typed_offer_repair::boolean
+           AND link.remote_session_client_id = sel.remote_session_client_id
          ORDER BY link.user_session_issuer_id
        )::uuid[] AS registration_issuer_ids,
        ARRAY(

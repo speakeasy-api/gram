@@ -66,6 +66,7 @@ func TestOrganizationUserSessionIssuerMigrateReconcilesCredentialChoices(t *test
 				}
 				sourceID := seedIssuerInProject(t, ctx, ti.conn, projectID, fmt.Sprintf("selection-source-%d", i))
 				serverID, clientID := seedIssuerMigrationOAuthServer(t, ctx, ti, projectID, sourceID)
+				seedMigrationTypedOffer(t, ctx, ti, projectID, serverID, clientID)
 				moved, err := seedUserSession(t, ctx, ti.conn, sourceID, urn.NewUserSubject(fmt.Sprintf("moved-%d", i)))
 				require.NoError(t, err)
 				// A choice recorded before typed clients existed must keep its row
@@ -192,7 +193,8 @@ func TestOrganizationUserSessionIssuerMigrateScopesExistingTargetButNotMovedCred
 	second, _ := seedIssuerMigrationOAuthServer(t, ctx, ti, *auth.ProjectID, targetID)
 	syncIssuerMigrationTestServers(t, ctx, ti, first, second)
 	sourceID := seedIssuer(t, ctx, ti, "bounded-source")
-	impact, _ := seedIssuerMigrationOAuthServer(t, ctx, ti, *auth.ProjectID, sourceID)
+	impact, registration := seedIssuerMigrationOAuthServer(t, ctx, ti, *auth.ProjectID, sourceID)
+	seedMigrationTypedOffer(t, ctx, ti, *auth.ProjectID, impact, registration)
 	existing, err := seedUserSession(t, ctx, ti.conn, targetID, urn.NewUserSubject("bounded-existing"))
 	require.NoError(t, err)
 	moved, err := seedUserSession(t, ctx, ti.conn, sourceID, urn.NewUserSubject("bounded-moved"))

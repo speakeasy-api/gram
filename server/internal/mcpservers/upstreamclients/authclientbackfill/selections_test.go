@@ -525,7 +525,7 @@ func TestDecideSelectionIgnoresAssociationsWhenTypedOnly(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			got, mapped := decideSelection(tc.row, issuer, tc.typedOnly)
+			got, mapped := decideSelection(tc.row, issuer, tc.typedOnly, false)
 			require.Equal(t, tc.want, got)
 			if got == SelectionMap {
 				require.Equal(t, candidate, mapped, "the candidate is the client recorded")
@@ -569,7 +569,7 @@ func TestListSelectionMappingsScopedLiveCredentialsRespectTenant(t *testing.T) {
 			legacy := seed(issuerID, pgtype.Text{Valid: false})
 			foreignSessionTenant := seed(issuerID, pgtype.Text{String: other.orgID, Valid: true})
 			seed(foreignIssuerID, pgtype.Text{Valid: false})
-			params := ListSelectionMappingsParams{
+			params := ListSelectionMappingsParams{TypedOfferRepair: false,
 				OrganizationID: f.orgID, PageSize: 200, OnlyUnmapped: true,
 				ScopeUserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 			}
@@ -601,7 +601,7 @@ func TestListSelectionMappingsScopedLiveCredentialsPagination(t *testing.T) {
 	for range defaultPageSize + 5 {
 		f.noAuthSelection(f.interactiveCredential(), server)
 	}
-	params := ListSelectionMappingsParams{
+	params := ListSelectionMappingsParams{TypedOfferRepair: false,
 		OrganizationID: f.orgID, PageSize: defaultPageSize, OnlyUnmapped: true,
 		ScopeUserSessionIssuerID: uuid.NullUUID{UUID: f.sessionIssuer(), Valid: true},
 	}
@@ -640,7 +640,7 @@ func TestListSelectionMappingsIssuerScopeDoesNotImplyUnmapped(t *testing.T) {
 	f.oauthSelection(credential, server, registration)
 	f.run(true)
 	require.True(t, f.selection(credential, server).AuthClientID.Valid)
-	params := ListSelectionMappingsParams{
+	params := ListSelectionMappingsParams{TypedOfferRepair: false,
 		OrganizationID: f.orgID, PageSize: defaultPageSize, OnlyUnmapped: false,
 		Cursor: uuid.Nil, OnlyID: uuid.NullUUID{}, ScopeUserSessionIssuerID: uuid.NullUUID{UUID: f.sessionIssuer(), Valid: true},
 	}
@@ -785,7 +785,7 @@ func TestReconcileUserSessionSelectionsGroupsAcrossPages(t *testing.T) {
 
 func selectionMappingID(t *testing.T, f *fixture, credentialID, serverID uuid.UUID) uuid.UUID {
 	t.Helper()
-	rows, err := f.q.ListSelectionMappings(t.Context(), ListSelectionMappingsParams{
+	rows, err := f.q.ListSelectionMappings(t.Context(), ListSelectionMappingsParams{TypedOfferRepair: false,
 		OrganizationID: f.orgID, OnlyUnmapped: true, ScopeUserSessionIssuerID: uuid.NullUUID{UUID: f.sessionIssuer(), Valid: true},
 		Cursor: uuid.Nil, OnlyID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, PageSize: defaultPageSize,
 	})
@@ -848,7 +848,7 @@ func TestReconcileUserSessionSelectionsDoesNotInferEMA(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, f.q.SeedAuthClientEMAFixture(ctx, SeedAuthClientEMAFixtureParams{AuthClientID: ema, Resource: "https://upstream.example.com/resource"}))
 	require.NoError(t, f.q.SeedServerAuthClientLinkFixture(ctx, SeedServerAuthClientLinkFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: server, AuthClientID: ema, Source: "admin"}))
-	rows, err := f.q.ListSelectionMappings(ctx, ListSelectionMappingsParams{OrganizationID: f.orgID, Cursor: uuid.Nil, PageSize: 10, OnlyID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ScopeUserSessionIssuerID: uuid.NullUUID{UUID: f.sessionIssuer(), Valid: true}, OnlyUnmapped: true})
+	rows, err := f.q.ListSelectionMappings(ctx, ListSelectionMappingsParams{TypedOfferRepair: false, OrganizationID: f.orgID, Cursor: uuid.Nil, PageSize: 10, OnlyID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ScopeUserSessionIssuerID: uuid.NullUUID{UUID: f.sessionIssuer(), Valid: true}, OnlyUnmapped: true})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Empty(t, rows[0].CandidateIds)

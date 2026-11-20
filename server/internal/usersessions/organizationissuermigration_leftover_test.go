@@ -1,10 +1,8 @@
 package usersessions_test
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -95,14 +93,8 @@ func TestOrganizationUserSessionIssuerMigrateLeavesLeftoverSourceBindingBehind(t
 				require.NoError(t, err)
 				require.True(t, preflight.ImpactPreviewed)
 				assert.Empty(t, preflight.ServerImpacts, "the target's server keeps the client it uses")
-				if leftover {
-					require.Len(t, preflight.DroppedClientLinks, 1)
-					assert.Equal(t, stale.String(), preflight.DroppedClientLinks[0].RemoteSessionClientID)
-					assert.NotEmpty(t, preflight.WarningsFingerprint, "a dropped link needs confirming")
-				} else {
-					assert.Empty(t, preflight.DroppedClientLinks)
-					assert.Empty(t, preflight.WarningsFingerprint)
-				}
+				assert.Empty(t, preflight.DroppedClientLinks)
+				assert.Empty(t, preflight.WarningsFingerprint)
 
 				result, err := ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: targetID.String(), ConfirmedWarningsFingerprint: new(preflight.WarningsFingerprint)})
 				require.NoError(t, err)
@@ -152,9 +144,8 @@ func TestOrganizationUserSessionIssuerMigrateLeavesLeftoverSourceBindingBehind(t
 	}
 }
 
-// A server that moves onto a target with no other consumer offers the clients
-// the target bound, as the move configures. A binding only the source held for
-// another server stays out of it.
+// A server that moves onto a target with no other consumer keeps its offers.
+// It does not inherit either issuer's compatibility parents.
 func TestOrganizationUserSessionIssuerMigrateMovedSoleConsumerSkipsLeftoverSourceBinding(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -165,14 +156,13 @@ func TestOrganizationUserSessionIssuerMigrateMovedSoleConsumerSkipsLeftoverSourc
 	sourceID := seedIssuer(t, ctx, ti, "moved-leftover-source")
 	movedServer, ownRegistration := leftoverSeedServer(t, ctx, ti, sourceID)
 	leftoverSyncServers(t, ctx, ti, movedServer)
-	targetRegistration := leftoverSeedBoundRegistration(t, ctx, ti, targetID)
+	leftoverSeedBoundRegistration(t, ctx, ti, targetID)
 	leftoverSeedBoundRegistration(t, ctx, ti, sourceID)
 
 	_, err := ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, sourceID.String(), targetID.String()))
 	require.NoError(t, err)
 
-	want := []uuid.UUID{ownRegistration, targetRegistration}
-	slices.SortFunc(want, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
+	want := []uuid.UUID{ownRegistration}
 	registrations, err := authclientbackfill.New(ti.conn).ListOAuthClientsOfServers(ctx, authclientbackfill.ListOAuthClientsOfServersParams{OrganizationID: auth.ActiveOrganizationID, McpServerIds: []uuid.UUID{movedServer}})
 	require.NoError(t, err)
 	assert.Equal(t, want, registrations)

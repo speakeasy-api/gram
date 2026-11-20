@@ -13,11 +13,7 @@ import (
 
 	orggen "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/associationbackfill"
-	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -56,10 +52,6 @@ const (
 
 	// impactChangesClients: the same providers, different clients.
 	impactChangesClients serverImpactReason = "changes_clients"
-
-	// impactPinned: consolidation associates the server with the clients its
-	// current configuration proves it uses.
-	impactPinned serverImpactReason = "pinned"
 )
 
 // serverClientSnapshot is what a set of MCP servers looks like at one point
@@ -71,26 +63,14 @@ type serverClientSnapshot struct {
 
 	// clients holds the clients each server uses, sorted, keyed by server id.
 	clients map[uuid.UUID][]uuid.UUID
-
-	// enforced reports that the organization enforces upstream auth, so each
-	// server's clients are its auth clients' offers.
-	enforced bool
 }
 
 // snapshotServerClients reads, through tx, the upstream OAuth clients each of
 // serverIDs uses, so it sees the consolidation's own uncommitted writes.
-//
-// The clients a server uses are the ones its callers must have connected: on
-// an organization enforcing upstream auth, the clients its auth clients offer;
-// otherwise, for a hosted server on a user session issuer, every client the
-// issuer binds; for a proxied one, the clients serving requires of it
-// (remotesessions.RequiredServerClients); and for any other server, such as
-// one reached only as a gateway member, its associated clients.
 func snapshotServerClients(ctx context.Context, tx pgx.Tx, organizationID string, serverIDs []uuid.UUID) (serverClientSnapshot, error) {
 	snapshot := serverClientSnapshot{
-		servers:  make(map[uuid.UUID]repo.ListUserSessionIssuerMigrationImpactServersRow, len(serverIDs)),
-		clients:  make(map[uuid.UUID][]uuid.UUID, len(serverIDs)),
-		enforced: false,
+		servers: make(map[uuid.UUID]repo.ListUserSessionIssuerMigrationImpactServersRow, len(serverIDs)),
+		clients: make(map[uuid.UUID][]uuid.UUID, len(serverIDs)),
 	}
 	if len(serverIDs) == 0 {
 		return snapshot, nil
@@ -108,68 +88,14 @@ func snapshotServerClients(ctx context.Context, tx pgx.Tx, organizationID string
 		snapshot.clients[server.ID] = nil
 	}
 
-	enforced, err := authenforcement.ReadEnforced(ctx, tx, organizationID)
-	if err != nil {
-		return snapshot, fmt.Errorf("read upstream auth enforcement: %w", err)
-	}
-	snapshot.enforced = enforced
-	if enforced {
-		offers, err := upstreamclientsrepo.New(tx).ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{
-			OrganizationID: organizationID,
-			McpServerIds:   serverIDs,
-		})
-		if err != nil {
-			return snapshot, fmt.Errorf("list offered auth clients: %w", err)
-		}
-		for _, offer := range offers {
-			if _, live := snapshot.servers[offer.McpServerID]; !live || !offer.RemoteSessionClientID.Valid {
-				continue
-			}
-			snapshot.clients[offer.McpServerID] = append(snapshot.clients[offer.McpServerID], offer.RemoteSessionClientID.UUID)
-		}
-		return snapshot.sorted(), nil
-	}
-
-	associations, err := repo.New(tx).ListUserSessionIssuerMigrationImpactAssociations(ctx, repo.ListUserSessionIssuerMigrationImpactAssociationsParams{
-		McpServerIds:   serverIDs,
-		OrganizationID: organizationID,
+	offers, err := repo.New(tx).ListIssuerMigrationOAuthOffers(ctx, repo.ListIssuerMigrationOAuthOffersParams{
+		OrganizationID: organizationID, ServerIds: serverIDs,
 	})
 	if err != nil {
-		return snapshot, fmt.Errorf("list impact associations: %w", err)
+		return snapshot, fmt.Errorf("list issuer migration offers: %w", err)
 	}
-	associated := make(map[uuid.UUID][]uuid.UUID)
-	for _, association := range associations {
-		associated[association.McpServerID] = append(associated[association.McpServerID], association.RemoteSessionClientID)
-	}
-	// Servers of one project on one issuer see the same bound clients, so
-	// each pair is read once per snapshot.
-	type issuerProject struct{ issuerID, projectID uuid.UUID }
-	bound := make(map[issuerProject][]uuid.UUID)
-	for _, server := range servers {
-		if !server.UserSessionIssuerID.Valid {
-			snapshot.clients[server.ID] = associated[server.ID]
-			continue
-		}
-		key := issuerProject{issuerID: server.UserSessionIssuerID.UUID, projectID: server.ProjectID}
-		clientIDs, ok := bound[key]
-		if !ok {
-			clientIDs, err = remotesessions.BoundUserSessionIssuerClients(ctx, tx, organizationID, server.ProjectID, key.issuerID)
-			if err != nil {
-				return snapshot, fmt.Errorf("bound clients of server %s: %w", server.ID, err)
-			}
-			bound[key] = clientIDs
-		}
-		// A hosted server resolves every client its issuer binds; only a
-		// proxied one narrows them to the clients it requires.
-		if server.Hosted {
-			snapshot.clients[server.ID] = slices.Clone(clientIDs)
-			continue
-		}
-		required, err := remotesessions.RequiredServerClients(ctx, tx, organizationID, key.issuerID, server.ID, clientIDs)
-		if err != nil {
-			return snapshot, fmt.Errorf("required clients of server %s: %w", server.ID, err)
-		}
-		snapshot.clients[server.ID] = required
+	for _, offer := range offers {
+		snapshot.clients[offer.McpServerID] = append(snapshot.clients[offer.McpServerID], offer.RemoteSessionClientID)
 	}
 	return snapshot.sorted(), nil
 }
@@ -182,32 +108,6 @@ func (s serverClientSnapshot) sorted() serverClientSnapshot {
 		s.clients[id] = slices.Compact(clients)
 	}
 	return s
-}
-
-// clientsOfServersOn returns the clients the snapshot's servers on issuerID
-// use, sorted and deduplicated.
-func (s serverClientSnapshot) clientsOfServersOn(issuerID uuid.UUID) []uuid.UUID {
-	var ids []uuid.UUID
-	for id, server := range s.servers {
-		if server.UserSessionIssuerID.Valid && server.UserSessionIssuerID.UUID == issuerID {
-			ids = append(ids, s.clients[id]...)
-		}
-	}
-	slices.SortFunc(ids, compareUUIDs)
-	return slices.Compact(ids)
-}
-
-// serversOn returns the ids of the snapshot's servers whose own user session
-// issuer is one of issuerIDs, sorted.
-func (s serverClientSnapshot) serversOn(issuerIDs ...uuid.UUID) []uuid.UUID {
-	var ids []uuid.UUID
-	for id, server := range s.servers {
-		if server.UserSessionIssuerID.Valid && slices.Contains(issuerIDs, server.UserSessionIssuerID.UUID) {
-			ids = append(ids, id)
-		}
-	}
-	slices.SortFunc(ids, compareUUIDs)
-	return ids
 }
 
 // migrationClient is an upstream OAuth client as a consolidation preview
@@ -242,27 +142,13 @@ type serverImpact struct {
 
 	// after are the clients the server uses, sorted.
 	after []migrationClient
-
-	// pinned are the clients consolidation associated with the server, sorted.
-	pinned []uuid.UUID
-
-	// bindingResolved reports that the server uses every client its issuer
-	// binds: a hosted server on an organization not enforcing upstream auth.
-	bindingResolved bool
 }
 
-// classifyServerImpacts compares each server's clients before and after the
-// consolidation and lists the servers whose clients change or that were
-// pinned, ordered by server id.
-func classifyServerImpacts(ctx context.Context, tx pgx.Tx, organizationID string, before, after serverClientSnapshot, pins []associationbackfill.Pin) ([]serverImpact, error) {
-	pinned := make(map[uuid.UUID][]uuid.UUID)
-	for _, pin := range pins {
-		pinned[pin.MCPServerID] = append(pinned[pin.MCPServerID], pin.RemoteSessionClientID)
-	}
-
+// classifyServerImpacts compares the configured offers before and after a move.
+func classifyServerImpacts(ctx context.Context, tx pgx.Tx, organizationID string, before, after serverClientSnapshot) ([]serverImpact, error) {
 	var changedIDs, clientIDs []uuid.UUID
 	for id := range after.servers {
-		if slices.Equal(before.clients[id], after.clients[id]) && len(pinned[id]) == 0 {
+		if slices.Equal(before.clients[id], after.clients[id]) {
 			continue
 		}
 		changedIDs = append(changedIDs, id)
@@ -281,17 +167,12 @@ func classifyServerImpacts(ctx context.Context, tx pgx.Tx, organizationID string
 
 	impacts := make([]serverImpact, 0, len(changedIDs))
 	for _, id := range changedIDs {
-		serverPins := pinned[id]
-		slices.SortFunc(serverPins, compareUUIDs)
 		impact := serverImpact{
 			server:   after.servers[id],
 			severity: serverImpactInfo,
 			reasons:  nil,
 			before:   labelled(labels, before.clients[id]),
 			after:    labelled(labels, after.clients[id]),
-			pinned:   serverPins,
-
-			bindingResolved: after.servers[id].Hosted && !after.enforced,
 		}
 		impact.reasons = impactReasons(impact)
 		impact.severity = impactSeverity(impact.reasons)
@@ -340,9 +221,6 @@ func impactReasons(impact serverImpact) []serverImpactReason {
 		reasons = append(reasons, impactChangesClients)
 	}
 
-	if len(impact.pinned) > 0 {
-		reasons = append(reasons, impactPinned)
-	}
 	return reasons
 }
 
@@ -355,7 +233,6 @@ func impactSeverity(reasons []serverImpactReason) serverImpactSeverity {
 			return serverImpactBlocker
 		case impactGainsClient, impactLosesClient, impactChangesProvider, impactChangesClients:
 			severity = serverImpactWarning
-		case impactPinned:
 		}
 	}
 	return severity
@@ -452,15 +329,13 @@ func hasBlocker(impacts []serverImpact) bool {
 }
 
 // userSessionMigrationFingerprint fingerprints what an administrator confirms
-// before a consolidation: the setting differences, the server impacts, and
-// the dropped client links. It covers only ids, severities and reasons, never
+// before a consolidation: the setting differences and the server impacts.
+// It covers only ids, severities and reasons, never
 // counts or timestamps, so it changes only when the consolidation would do
 // something different. It is empty when there is nothing to confirm.
-func userSessionMigrationFingerprint(sourceID, targetID uuid.UUID, warnings []*orggen.UserSessionIssuerFieldMismatch, impacts []serverImpact, dropped []migrationClient) string {
-	// An info impact only reports a pinned association that leaves the
-	// server's clients as they are, so there is nothing to decide about it.
+func userSessionMigrationFingerprint(sourceID, targetID uuid.UUID, warnings []*orggen.UserSessionIssuerFieldMismatch, impacts []serverImpact) string {
 	impacts = slices.DeleteFunc(slices.Clone(impacts), func(impact serverImpact) bool { return impact.severity == serverImpactInfo })
-	if len(warnings) == 0 && len(impacts) == 0 && len(dropped) == 0 {
+	if len(warnings) == 0 && len(impacts) == 0 {
 		return ""
 	}
 
@@ -486,12 +361,6 @@ func userSessionMigrationFingerprint(sourceID, targetID uuid.UUID, warnings []*o
 		for _, client := range impact.after {
 			write("after", client.id.String())
 		}
-		for _, id := range impact.pinned {
-			write("pinned", id.String())
-		}
-	}
-	for _, client := range dropped {
-		write("dropped", client.id.String())
 	}
 	return hex.EncodeToString(hash.Sum(nil))
 }
@@ -515,10 +384,6 @@ func serverImpactViews(impacts []serverImpact) []*orggen.UserSessionIssuerMigrat
 		for _, reason := range impact.reasons {
 			reasons = append(reasons, orggen.UserSessionIssuerMigrationImpactReason(reason))
 		}
-		pinned := make([]string, 0, len(impact.pinned))
-		for _, id := range impact.pinned {
-			pinned = append(pinned, id.String())
-		}
 		views = append(views, &orggen.UserSessionIssuerMigrationServerImpact{
 			McpServerID:     impact.server.ID.String(),
 			McpServerName:   conv.FromPGTextOrEmpty[string](impact.server.Name),
@@ -529,8 +394,8 @@ func serverImpactViews(impacts []serverImpact) []*orggen.UserSessionIssuerMigrat
 			Reasons:         reasons,
 			ClientsBefore:   migrationClientViews(impact.before),
 			ClientsAfter:    migrationClientViews(impact.after),
-			PinnedClientIds: pinned,
-			Hosted:          impact.bindingResolved,
+			PinnedClientIds: []string{},
+			Hosted:          impact.server.Hosted,
 		})
 	}
 	return views
@@ -552,12 +417,4 @@ func auditServerImpacts(impacts []serverImpact) []audit.UserSessionIssuerMigrati
 		})
 	}
 	return summaries
-}
-
-func auditPins(pins []associationbackfill.Pin) []audit.UserSessionIssuerMigrationPin {
-	recorded := make([]audit.UserSessionIssuerMigrationPin, 0, len(pins))
-	for _, pin := range pins {
-		recorded = append(recorded, audit.UserSessionIssuerMigrationPin{MCPServerID: pin.MCPServerID, RemoteSessionClientID: pin.RemoteSessionClientID})
-	}
-	return recorded
 }
