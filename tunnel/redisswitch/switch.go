@@ -76,10 +76,12 @@ const (
 	// startTimeout bounds the first read of the keys at startup.
 	startTimeout = 5 * time.Second
 
-	// maxWait is the longest a command waits for a hold to end. The operator's
-	// hold expires well inside it, so only an instance that stays unreadable
-	// reaches it; the command then fails instead of waiting for ever.
-	maxWait = 60 * time.Second
+	// maxWait is the longest a command waits for a hold to end. It is longer
+	// than the longest hold the operator's job sets (120 s in prod), so a held
+	// command waits for the hold to end rather than failing; only an instance
+	// that stays unreadable reaches it, and the command then fails instead of
+	// waiting for ever. A request's own context can end the wait sooner.
+	maxWait = 150 * time.Second
 
 	// keepAlive matches the go-redis default dialer.
 	keepAlive = 5 * time.Minute
