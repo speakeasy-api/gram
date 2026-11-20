@@ -578,6 +578,123 @@ func TestContentKey_Normalization(t *testing.T) {
 	})
 }
 
+func TestMerge_InferenceAfterARewindJoinsTheBranchThatKeepsMatching(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	_, err := tr.Merge(transcriptDelivery(
+		transcriptPrompt("u1", "", "p1", "hi"),
+		transcriptReply("u2", "u1", "hello"),
+		transcriptPrompt("u3", "u2", "p2", "yes"),
+		transcriptReply("u4", "u3", "ok"),
+		transcriptPrompt("u5", "u2", "p3", "yes"),
+		transcriptReply("u6", "u5", "sure"),
+	))
+	require.NoError(t, err)
+
+	// A late frame from the first branch: its "yes" must join u3, not the newer u5.
+	res, err := tr.Merge(inferenceFrame(user("hi"), assistant("hello"), user("yes"), assistant("ok")))
+	require.NoError(t, err)
+	require.Empty(t, res.Added)
+	require.Equal(t, mustNode(t, tr, line("u3")), res.Seen[2].Node)
+	require.Equal(t, mustNode(t, tr, line("u4")), res.Seen[3].Node)
+}
+
+func TestMerge_SummaryStoredByInferenceFirstBecomesSynthetic(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	_, err := tr.Merge(transcriptDelivery(
+		transcriptPrompt("u1", "", "p1", "hi"),
+		transcriptReply("u2", "u1", "hello"),
+	))
+	require.NoError(t, err)
+	res, err := tr.Merge(inferenceFrame(user("summary of the chat")))
+	require.NoError(t, err)
+	root := res.Added[0]
+	require.False(t, root.Entry.Synthetic, "inference cannot tell a summary from a prompt")
+
+	summary := Entry{Role: RoleUser, Text: "summary of the chat", Synthetic: true, IDs: []NaturalID{line("s1")}, Parent: parentLine("b1")}
+	res, err = tr.Merge(Delivery{
+		Source:  SourceClaudeTranscript,
+		Links:   []Link{{ID: line("b1"), To: parentLine("u2"), Compaction: true}},
+		Entries: []Entry{summary},
+	})
+	require.NoError(t, err)
+	require.Len(t, res.Seen, 1)
+	require.True(t, res.Seen[0].Synthetic, "the writer is told to mark the row")
+	require.True(t, root.Entry.Synthetic)
+}
+
+func TestMerge_PartialCompactionCopiesKeptMessagesUnderTheSummary(t *testing.T) {
+	t.Parallel()
+	before := transcriptDelivery(
+		transcriptPrompt("u1", "", "p1", "first"),
+		transcriptReply("u2", "u1", "one"),
+		transcriptPrompt("u3", "u2", "p2", "second"),
+		transcriptReply("u4", "u3", "two"),
+	)
+	// Claude Code summarises u1..u2, then repeats the kept u3 and u4 after the
+	// summary, with their original IDs.
+	compaction := Delivery{
+		Source: SourceClaudeTranscript,
+		Links:  []Link{{ID: line("b1"), To: parentLine("u4"), Compaction: true}},
+		Entries: []Entry{
+			{Role: RoleUser, Text: "summary of first and one", Synthetic: true, IDs: []NaturalID{line("s1")}, Parent: parentLine("b1")},
+			transcriptPrompt("u3", "s1", "p2", "second"),
+			transcriptReply("u4", "u3", "two"),
+		},
+	}
+	next := transcriptDelivery(
+		transcriptPrompt("u5", "u4", "p5", "third"),
+		transcriptReply("u6", "u5", "three"),
+	)
+
+	tr := New(sequentialIDs())
+	for _, d := range []Delivery{before, compaction, next} {
+		_, err := tr.Merge(d)
+		require.NoError(t, err)
+	}
+
+	summary := mustNode(t, tr, line("s1"))
+	require.Len(t, summary.Children, 1, "the kept messages are copied under the summary")
+	copyOfU3 := summary.Children[0]
+	require.NotSame(t, mustNode(t, tr, line("u3")), copyOfU3, "a copy, not the original")
+
+	three := mustNode(t, tr, line("u6"))
+	require.Equal(t, []string{"summary of first and one", "second", "two", "third", "three"}, texts(Path(three)),
+		"the turns after the compaction follow the copies, in the new tree")
+	original := mustNode(t, tr, line("u4"))
+	require.Empty(t, original.Children, "the old tree ends where it ended")
+
+	// A full resend of the file adds nothing.
+	for _, d := range []Delivery{before, compaction, next} {
+		res, err := tr.Merge(d)
+		require.NoError(t, err)
+		require.Empty(t, res.Added)
+	}
+
+	// An inference frame after the compaction joins the new tree.
+	res, err := tr.Merge(inferenceFrame(user("summary of first and one"), user("second"), assistant("two"), user("third"), assistant("three")))
+	require.NoError(t, err)
+	require.Empty(t, res.Added)
+}
+
+func TestSplit_DropsEmptyAndReminderOnlyTextBlocks(t *testing.T) {
+	t.Parallel()
+	entries := Split(Message{Role: RoleUser, Blocks: []Block{
+		{Type: "text", Text: "<system-reminder>Today is Monday.</system-reminder>"},
+		{Type: "text", Text: "   "},
+		{Type: "text", Text: "fix the bug"},
+	}})
+	require.Len(t, entries, 1)
+	require.Equal(t, "fix the bug", entries[0].Text)
+
+	reply := Split(Message{Role: RoleAssistant, Blocks: []Block{
+		{Type: "text", Text: ""},
+		{Type: "text", Text: "<system-reminder>kept in model output</system-reminder>"},
+	}})
+	require.Len(t, reply, 1, "assistant text keeps a literal reminder tag")
+}
+
 func TestSplit_OneEntryPerBlock(t *testing.T) {
 	t.Parallel()
 	entries := Split(Message{Role: RoleAssistant, MessageID: "msg_1", Blocks: []Block{

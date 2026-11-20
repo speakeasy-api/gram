@@ -30,6 +30,13 @@ func Split(msg Message) []Entry {
 	for _, b := range msg.Blocks {
 		switch b.Type {
 		case "text":
+			// A block that is empty once client-injected reminders are removed
+			// (a reminder sent as its own block, an empty context block) says
+			// nothing the model's other sources would show, so it is not an
+			// entry.
+			if normalize(b.Text, msg.Role == RoleUser) == "" {
+				continue
+			}
 			out = append(out, newEntry(msg, msg.Role, b.Text, nil, nil, nil))
 		case "tool_use":
 			var ids []NaturalID
