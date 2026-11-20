@@ -389,6 +389,22 @@ func ReadServerAuthentication(ctx context.Context, db repo.DBTX, organizationID 
 	return serverAuthenticationView(ctx, queries, organizationID, server.ID, server.ProjectID, server.Visibility, server.UpstreamAuthPending)
 }
 
+// ReadServerAuthenticationStatuses derives the same typed status as an
+// individual server read, without fetching any credential metadata.
+func ReadServerAuthenticationStatuses(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, serverIDs []uuid.UUID) (map[uuid.UUID]string, error) {
+	rows, err := repo.New(db).ListOrganizationMCPServersByID(ctx, repo.ListOrganizationMCPServersByIDParams{
+		OrganizationID: organizationID, Ids: serverIDs, ProjectID: uuid.NullUUID{UUID: projectID, Valid: true},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list organization MCP server statuses: %w", err)
+	}
+	statuses := make(map[uuid.UUID]string, len(rows))
+	for _, row := range rows {
+		statuses[row.ID] = upstreamAuthStatus(row.OffersEnabledClient, row.UpstreamAuthPending)
+	}
+	return statuses, nil
+}
+
 // upstreamAuthStatus is a server's upstream authentication status: configured
 // when it offers an enabled auth client, setup_incomplete when it has upstream
 // credentials and no auth-client link has ever existed, live or detached, and
