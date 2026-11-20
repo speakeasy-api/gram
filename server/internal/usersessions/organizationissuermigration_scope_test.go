@@ -162,4 +162,7 @@ func TestOrganizationUserSessionIssuerMigratePreflightsGlobalRegistrations(t *te
 	require.NoError(t, err)
 	require.Len(t, offers, 1)
 	require.Equal(t, registration, offers[0].RemoteSessionClientID, "global registration scope follows the tenant's explicit offer")
+	foreignOffers, err := usersessionsrepo.New(ti.conn).ListIssuerMigrationOAuthOffers(ctx, usersessionsrepo.ListIssuerMigrationOAuthOffersParams{ServerIds: []uuid.UUID{server}, OrganizationID: uuid.NewString()})
+	require.NoError(t, err)
+	require.Empty(t, foreignOffers, "a globally scoped registration is not a globally scoped offer")
 }
