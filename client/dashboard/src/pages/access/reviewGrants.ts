@@ -6,6 +6,7 @@
 
 import type { Role } from "@gram/client/models/components/role.js";
 import type { RoleGrant as SdkRoleGrant } from "@gram/client/models/components/rolegrant.js";
+import type { Disposition } from "@gram/client/models/components/selector.js";
 
 import {
   isPresentableScope,
@@ -93,6 +94,64 @@ export function reviewNeedsConfirmation(
   return (
     added.some((p) => p.sensitive) || (newHolders?.sensitive.length ?? 0) > 0
   );
+}
+
+/**
+ * The tool kinds a save stops covering on MCP Connect, once each. A rule
+ * limited to read-only tools covers read-only tools added later, and a list
+ * of tool names that replaces it does not, so the review says so. A kind the
+ * saved grants still cover on that server is left out: moving a read-only
+ * rule from one server to every server removes nothing.
+ */
+export function removedToolKindRules(
+  removeGrants: readonly SdkRoleGrant[],
+  after: readonly SdkRoleGrant[],
+): Disposition[] {
+  const kinds = new Set<Disposition>();
+  for (const grant of removeGrants) {
+    if (grant.scope !== "mcp:connect") continue;
+    for (const selector of grant.selectors ?? []) {
+      if (!selector.disposition || namesOneTool(selector)) continue;
+      if (!connectStillCoversKind(after, selector)) {
+        kinds.add(selector.disposition);
+      }
+    }
+  }
+  return [...kinds];
+}
+
+/**
+ * Whether a selector is limited to one named tool. A tool of "*" matches
+ * every tool, so { disposition: "read_only", tool: "*" } is a kind rule.
+ */
+function namesOneTool(selector: Selector): boolean {
+  return !!selector.tool && selector.tool !== "*";
+}
+
+/**
+ * Whether an MCP Connect grant in `after` reaches every tool the removed kind
+ * selector reached: one with no selectors, or a selector with no tool name
+ * whose kind is unset or the same, on the same server or on every server of
+ * the same project.
+ */
+function connectStillCoversKind(
+  after: readonly SdkRoleGrant[],
+  removed: Selector,
+): boolean {
+  return after.some((grant) => {
+    if (grant.scope !== "mcp:connect") return false;
+    const selectors = grant.selectors ?? [];
+    if (selectors.length === 0) return true;
+    return selectors.some(
+      (selector) =>
+        !namesOneTool(selector) &&
+        (!selector.disposition ||
+          selector.disposition === removed.disposition) &&
+        (selector.resourceId === removed.resourceId ||
+          selector.resourceId === "*") &&
+        (!selector.projectId || selector.projectId === removed.projectId),
+    );
+  });
 }
 
 /**

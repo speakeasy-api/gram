@@ -51,7 +51,16 @@ export const DISPOSITION_COPY: Record<
 export type ToolLimit =
   | { kind: "all" }
   | { kind: "tools"; tools: string[] }
-  | { kind: "annotations"; dispositions: Disposition[] };
+  | {
+      kind: "annotations";
+      dispositions: Disposition[];
+      /**
+       * Tools named on top of the kinds, on one server. Read-only tools plus
+       * update_task reaches every read-only tool, including ones added
+       * later, and update_task whatever its kind.
+       */
+      tools?: string[];
+    };
 
 export type ToolLimitKind = ToolLimit["kind"];
 
@@ -84,6 +93,53 @@ export function toolDisposition(tool: ServerTool): Disposition {
   return "unannotated";
 }
 
+/** Whether Use limited this way reaches the tool. */
+export function toolLimitReaches(limit: ToolLimit, tool: ServerTool): boolean {
+  switch (limit.kind) {
+    case "all":
+      return true;
+    case "tools":
+      return limit.tools.includes(tool.name);
+    case "annotations":
+      return (
+        limit.dispositions.includes(toolDisposition(tool)) ||
+        (limit.tools ?? []).includes(tool.name)
+      );
+  }
+}
+
+/**
+ * The limit after a tool is ticked or unticked, given the tools that are then
+ * on. A rule limited to kinds keeps them: ticking update_task on read-only
+ * tools names update_task beside them, so read-only tools added later stay
+ * covered, and the rule never widens to every tool. Unticking a tool one of
+ * the kinds covers turns the rule into a list of the tools still on, since a
+ * kind cannot leave one tool out.
+ */
+export function limitAfterToggle(
+  limit: ToolLimit,
+  tools: ServerTool[],
+  name: string,
+  next: string[],
+): ToolLimit {
+  if (limit.kind !== "annotations") {
+    if (next.length === tools.length) return { kind: "all" };
+    return { kind: "tools", tools: next };
+  }
+  const named = limit.tools ?? [];
+  const tool = tools.find((candidate) => candidate.name === name);
+  const kindCovers =
+    tool !== undefined && limit.dispositions.includes(toolDisposition(tool));
+  if (next.includes(name)) {
+    if (kindCovers || named.includes(name)) return limit;
+    return { ...limit, tools: [...named, name] };
+  }
+  if (!kindCovers) {
+    return { ...limit, tools: named.filter((other) => other !== name) };
+  }
+  return { kind: "tools", tools: next };
+}
+
 /**
  * Move a limit to another kind, carrying access over where the tools allow:
  * a tool list keeps the tools the annotations covered, and annotations keep
@@ -103,7 +159,7 @@ export function convertToolLimit(
         .filter((tool) => {
           if (limit.kind === "all") return true;
           if (limit.kind !== "annotations") return false;
-          return limit.dispositions.includes(toolDisposition(tool));
+          return toolLimitReaches(limit, tool);
         })
         .map((tool) => tool.name);
       return { kind: "tools", tools: names };

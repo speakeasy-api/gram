@@ -530,7 +530,8 @@ describe("clearing a table", () => {
 describe("editing without losing rules", () => {
   const scoped = { resourceKind: "project", resourceId: "p2" } as Selector;
 
-  it("keeps annotation limits beside tool limits on one server", () => {
+  it("reads kinds and named tools on one server as one limit", () => {
+    // Read-only tools plus tool a: both rules are the cell, none is left over.
     const grants = load([
       {
         scope: "mcp:connect",
@@ -541,22 +542,56 @@ describe("editing without losing rules", () => {
       },
     ]);
     expect(mcpToolLimit(grants, github)).toEqual({
-      kind: "tools",
+      kind: "annotations",
+      dispositions: ["read_only"],
       tools: ["a"],
     });
-    expect(otherMcpRules(grants, [all, project, github])).toHaveLength(1);
+    expect(otherMcpRules(grants, [all, project, github])).toHaveLength(0);
+  });
+
+  it("stores a tool named beside kinds as its own rule", () => {
+    const grants = load([
+      {
+        scope: "mcp:connect",
+        selectors: [
+          mcp("gh", { disposition: "read_only" }),
+          mcp("gh", { disposition: "unannotated" }),
+        ],
+      },
+    ]);
     const after = setMcpToolLimit(grants, github, {
-      kind: "tools",
-      tools: ["b"],
+      kind: "annotations",
+      dispositions: ["read_only", "unannotated"],
+      tools: ["update_task"],
     });
     expect(save(after)).toEqual([
       {
         scope: "mcp:connect",
         selectors: [
           mcp("gh", { disposition: "read_only" }),
-          mcp("gh", { tool: "b" }),
+          mcp("gh", { disposition: "unannotated" }),
+          mcp("gh", { tool: "update_task" }),
         ],
       },
+    ]);
+  });
+
+  it("replaces kinds when the limit becomes a tool list", () => {
+    const grants = load([
+      {
+        scope: "mcp:connect",
+        selectors: [
+          mcp("gh", { tool: "a" }),
+          mcp("gh", { disposition: "read_only" }),
+        ],
+      },
+    ]);
+    const after = setMcpToolLimit(grants, github, {
+      kind: "tools",
+      tools: ["b"],
+    });
+    expect(save(after)).toEqual([
+      { scope: "mcp:connect", selectors: [mcp("gh", { tool: "b" })] },
     ]);
   });
 

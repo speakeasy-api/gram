@@ -17,7 +17,9 @@ import {
   dispositionCopy,
   fuzzyMatch,
   indexServers,
+  limitAfterToggle,
   toolDisposition,
+  toolLimitReaches,
   type ServerWithProject,
   type ToolLimit,
 } from "./mcpAccessModel";
@@ -247,8 +249,11 @@ function toolLimitText(limit: ToolLimit): string {
       const labels = [...ordered, ...selected].map(
         (d) => dispositionCopy(d).label,
       );
-      if (labels.length === 0) return "No tools";
-      return `${labels.join(", ")} tools`;
+      const named = limit.tools?.length ?? 0;
+      const namedText = named === 1 ? "1 tool" : `${named} tools`;
+      if (labels.length === 0) return named === 0 ? "No tools" : namedText;
+      const kinds = `${labels.join(", ")} tools`;
+      return named === 0 ? kinds : `${kinds} + ${namedText}`;
     }
   }
 }
@@ -1120,12 +1125,8 @@ function ServerToolRows({
   if (tools.length === 0) return note("This server has no tools.");
 
   const { limit } = access;
-  const allowed = (tool: (typeof tools)[number]) => {
-    if (access.connect === "none") return false;
-    if (limit.kind === "all") return true;
-    if (limit.kind === "tools") return limit.tools.includes(tool.name);
-    return limit.dispositions.includes(toolDisposition(tool));
-  };
+  const allowed = (tool: (typeof tools)[number]) =>
+    access.connect !== "none" && toolLimitReaches(limit, tool);
   const blocked = new Set(mcpBlockedTools(grants, row));
 
   const toggle = (name: string) => {
@@ -1133,12 +1134,15 @@ function ServerToolRows({
     const next = current.includes(name)
       ? current.filter((tool) => tool !== name)
       : [...current, name];
-    const nextLimit: ToolLimit =
-      next.length === tools.length
-        ? { kind: "all" }
-        : { kind: "tools", tools: next };
     onNoTools(next.length === 0);
-    onChange((prev) => limitMcpUse(prev, row, nextLimit, serverRows));
+    onChange((prev) =>
+      limitMcpUse(
+        prev,
+        row,
+        limitAfterToggle(limit, tools, name, next),
+        serverRows,
+      ),
+    );
   };
 
   return (
