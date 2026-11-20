@@ -405,7 +405,7 @@ func TestResyncMCPServerRemoteSessionIssuers_Associations(t *testing.T) {
 
 		userIssuerID, associated, _ := sharedIssuer(t, "assoc-pruned")
 		clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-assoc-pruned-a")
-		_, remaining := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-assoc-pruned-b")
+		seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-assoc-pruned-b")
 		associateClient(t, ctx, ti.conn, orgID, projectID, associated, clientID)
 		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 
@@ -415,7 +415,7 @@ func TestResyncMCPServerRemoteSessionIssuers_Associations(t *testing.T) {
 		}))
 		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 
-		require.Equal(t, conv.ToNullUUID(remaining), storedIssuer(t, ctx, ti.conn, projectID, associated), "the column is derived after the prune")
+		require.Equal(t, unset, storedIssuer(t, ctx, ti.conn, projectID, associated), "a remaining compatibility link cannot replace a pruned association")
 	})
 
 	t.Run("a detach clears the stamp", func(t *testing.T) {

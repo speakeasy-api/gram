@@ -287,7 +287,11 @@ func ReconcileTypedIssuerScopeInLockedTransaction(ctx context.Context, tx pgx.Tx
 	if err := RecordTypedIssuerScopeInLockedTransaction(ctx, tx, organizationID, issuerID, serverIDs, movedCredentialIDs); err != nil {
 		return 0, err
 	}
-	return authclientbackfill.ReconcileTypedUserSessionSelectionsForServersInLockedTransaction(ctx, tx, organizationID, issuerID, serverIDs)
+	skipped, err := authclientbackfill.ReconcileTypedUserSessionSelectionsForServersInLockedTransaction(ctx, tx, organizationID, issuerID, serverIDs)
+	if err != nil {
+		return skipped, fmt.Errorf("map typed issuer credential choices: %w", err)
+	}
+	return skipped, nil
 }
 
 // RecordTypedIssuerScopeInLockedTransaction uses only deliberate typed offers.

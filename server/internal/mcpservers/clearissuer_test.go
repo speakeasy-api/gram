@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remoterepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -249,12 +250,19 @@ func TestUpdateMcpServer_ClearSharedOrganizationIssuerKeepsOtherServer(t *testin
 		servers = append(servers, created.ID)
 		backends = append(backends, remoteID)
 	}
-	remoteIssuerID := linkRemoteClient(t, ctx, ti, authCtx.ActiveOrganizationID, projectID, issuer)
+	remoteIssuerID, registration := linkRemoteClientWithID(t, ctx, ti, authCtx.ActiveOrganizationID, projectID, issuer)
+	fixtures := authclientbackfill.New(ti.conn)
+	typed, err := fixtures.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: conv.ToNullUUID(projectID), ClientType: "remote_session", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(registration)})
+	require.NoError(t, err)
+	for _, id := range servers {
+		require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectID, McpServerID: uuid.MustParse(id), AuthClientID: typed, Source: "admin"}))
+	}
+	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, authCtx.ActiveOrganizationID, projectID, []uuid.UUID{uuid.MustParse(issuer)}))
 	for _, id := range servers {
 		require.Equal(t, uuid.NullUUID{UUID: remoteIssuerID, Valid: true}, storedServer(t, ctx, ti, projectID, id).RemoteSessionIssuerID, "the derived remote issuer starts populated")
 	}
 
-	_, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
 		ID: servers[0], RemoteMcpServerID: &backends[0], ClearUserSessionIssuer: new(true), Visibility: types.McpServerVisibility("disabled"),
 	})
 	require.NoError(t, err, "an organization-owned issuer can be detached")
