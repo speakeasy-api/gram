@@ -414,6 +414,7 @@ func TestRefreshSweep_SiblingIssuerKeepsCredentialEligible(t *testing.T) {
 	}))
 
 	sibling := bindSiblingIssuer(t, ctx, ti, clientUUID, "shared-sweep-usi-b")
+	seedSweepOffer(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, sibling, clientUUID, "shared-sweep-offer")
 	seedGramSession(t, ctx, ti, subject, sibling, "shared-sweep-b", 24*time.Hour)
 	enableOrgAutoRefreshFeature(t, ctx, ti, authCtx.ActiveOrganizationID, productfeatures.FeatureRemoteSessionAutoRefresh)
 
