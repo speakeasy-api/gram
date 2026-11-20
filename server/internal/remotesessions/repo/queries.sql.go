@@ -11012,39 +11012,60 @@ func (q *Queries) ListReachableRemoteSessionClients(ctx context.Context, arg Lis
 	return items, nil
 }
 
-const listRemoteServerURLsForUserSessionIssuer = `-- name: ListRemoteServerURLsForUserSessionIssuer :many
+const listRemoteServerURLsForOfferedClient = `-- name: ListRemoteServerURLsForOfferedClient :many
 SELECT rms.url, COALESCE(rpr.metadata->>'resource', '')::text AS document_resource
 FROM mcp_servers AS m
+JOIN projects AS p ON p.id = m.project_id AND p.organization_id = $1 AND p.deleted IS FALSE
 JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
-LEFT JOIN remote_protected_resources AS rpr ON rpr.project_id = m.project_id AND rpr.resource_identifier = rms.url AND rpr.deleted IS FALSE
-WHERE m.project_id = $1
-  AND m.user_session_issuer_id = $2
+LEFT JOIN remote_protected_resources AS rpr ON rpr.project_id = m.project_id AND rpr.organization_id = p.organization_id AND rpr.resource_identifier = rms.url AND rpr.deleted IS FALSE
+WHERE m.project_id = $2
+  AND m.user_session_issuer_id = $3
+  AND ($4::uuid IS NULL OR m.id = $4::uuid)
   AND m.deleted IS FALSE
+  AND m.visibility <> 'disabled'
+  AND EXISTS (
+    SELECT 1
+    FROM mcp_server_auth_clients AS offer
+    JOIN mcp_auth_clients AS ac ON ac.id = offer.auth_client_id
+      AND ac.organization_id = offer.organization_id
+      AND (ac.project_id IS NULL OR ac.project_id = offer.project_id)
+      AND ac.deleted IS FALSE AND ac.enabled AND ac.client_type IN ('remote_session', 'service_account', 'ema')
+    WHERE offer.mcp_server_id = m.id AND offer.project_id = m.project_id
+      AND offer.organization_id = p.organization_id AND offer.deleted IS FALSE
+      AND ac.remote_session_client_id = $5
+  )
 `
 
-type ListRemoteServerURLsForUserSessionIssuerParams struct {
-	ProjectID           uuid.UUID
-	UserSessionIssuerID uuid.NullUUID
+type ListRemoteServerURLsForOfferedClientParams struct {
+	OrganizationID        string
+	ProjectID             uuid.UUID
+	UserSessionIssuerID   uuid.NullUUID
+	McpServerID           uuid.NullUUID
+	RemoteSessionClientID uuid.NullUUID
 }
 
-type ListRemoteServerURLsForUserSessionIssuerRow struct {
+type ListRemoteServerURLsForOfferedClientRow struct {
 	Url              string
 	DocumentResource string
 }
 
-// The upstream URLs of the project's remote-backed MCP servers that sign in
-// through a user session issuer, each with the resource its cached protected
-// resource document names, or empty. Identity chaining finds a binding's server by
-// either value, then keys the resource row by the URL as logins do.
-func (q *Queries) ListRemoteServerURLsForUserSessionIssuer(ctx context.Context, arg ListRemoteServerURLsForUserSessionIssuerParams) ([]ListRemoteServerURLsForUserSessionIssuerRow, error) {
-	rows, err := q.db.Query(ctx, listRemoteServerURLsForUserSessionIssuer, arg.ProjectID, arg.UserSessionIssuerID)
+// Direct-login servers that actually offer the binding's registration. The
+// resource document is resolved from the target URL, not another offer's URL.
+func (q *Queries) ListRemoteServerURLsForOfferedClient(ctx context.Context, arg ListRemoteServerURLsForOfferedClientParams) ([]ListRemoteServerURLsForOfferedClientRow, error) {
+	rows, err := q.db.Query(ctx, listRemoteServerURLsForOfferedClient,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.McpServerID,
+		arg.RemoteSessionClientID,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListRemoteServerURLsForUserSessionIssuerRow
+	var items []ListRemoteServerURLsForOfferedClientRow
 	for rows.Next() {
-		var i ListRemoteServerURLsForUserSessionIssuerRow
+		var i ListRemoteServerURLsForOfferedClientRow
 		if err := rows.Scan(&i.Url, &i.DocumentResource); err != nil {
 			return nil, err
 		}

@@ -313,7 +313,7 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 		require.NoError(t, err)
 		_, err = testrepo.New(ti.conn).MakeAttachmentIssuerGlobalFixture(ctx, uuid.MustParse(issuer))
 		require.NoError(t, err)
-		candidates, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{PrincipalID: conv.PtrEmpty(agent.ID.String()), UserSessionIssuerID: conv.PtrEmpty(config.String())})
+		candidates, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{PrincipalID: conv.PtrEmpty(agent.ID.String()), UserSessionIssuerID: conv.PtrEmpty(config.String()), RemoteSessionClientID: conv.PtrEmpty(client)})
 		require.NoError(t, err)
 		candidateIDs := make([]string, 0, len(candidates.Items))
 		for _, candidate := range candidates.Items {
@@ -335,7 +335,7 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	// Reconnection must not silently move the binding to a different exact row.
 	_, err = repo.New(ti.conn).RevokeRemoteSession(ctx, repo.RevokeRemoteSessionParams{ID: mine.ID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID})
 	require.NoError(t, err)
-	candidates, err = ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{PrincipalID: conv.PtrEmpty(agent.ID.String()), UserSessionIssuerID: conv.PtrEmpty(config.String())})
+	candidates, err = ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{PrincipalID: conv.PtrEmpty(agent.ID.String()), UserSessionIssuerID: conv.PtrEmpty(config.String()), RemoteSessionClientID: conv.PtrEmpty(client)})
 	require.NoError(t, err)
 	for _, candidate := range candidates.Items {
 		require.NotEqual(t, mine.ID.String(), candidate.ID, "revoked upstream sessions are not attachment candidates")
