@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -111,10 +112,7 @@ func seedRemoteLoginInFlight(t *testing.T, slug string, spy *revocationSpy) (con
 		TokenEndpointAuthMethod: conv.ToPGText("client_secret_post"),
 	})
 	require.NoError(t, err)
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   userIssuer,
-	}))
+	placeClientForSignIn(t, ctx, ti.conn, client.ID, userIssuer)
 
 	clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuer)
 	require.NoError(t, err)
@@ -163,16 +161,11 @@ func TestHandleRemoteLoginCallback_RejectsStateWhoseIssuerWasDeleted(t *testing.
 	ctx, fx := seedRemoteLoginInFlight(t, "stale-cb", spy)
 
 	// The issuer dies while the user is off at the upstream provider. The
-	// binding row survives here (unlike the full delete handler) so the
-	// callback's rejection is provably keyed on issuer liveness, not on the
-	// link row's absence.
-	_, err := usersessionsrepo.New(fx.ti.conn).DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
-		ID:        fx.userIssuer,
-		ProjectID: fx.projectID,
-	})
-	require.NoError(t, err)
+	// server placement survives the forced soft delete, so the callback's
+	// rejection is keyed on issuer liveness, not removal of the placement.
+	require.NoError(t, testrepo.New(fx.ti.conn).ForceSoftDeleteUserSessionIssuer(ctx, testrepo.ForceSoftDeleteUserSessionIssuerParams{ID: fx.userIssuer, ProjectID: fx.projectID}))
 
-	err = fx.mgr.HandleRemoteLoginCallback(httptest.NewRecorder(), callbackRequest(ctx, fx, "stale-code"))
+	err := fx.mgr.HandleRemoteLoginCallback(httptest.NewRecorder(), callbackRequest(ctx, fx, "stale-code"))
 	require.ErrorContains(t, err, "no longer exists", "the stale callback is rejected instead of stored")
 	require.Equal(t, int64(1), fx.exchanges.Load(), "rejection happens at persist time, after the code exchange")
 
@@ -211,11 +204,7 @@ func TestHandleRemoteLoginCallback_ConcurrentIssuerDeleteRejectsFirstGrant(t *te
 
 	testenv.WaitForBackendsBlockedBy(t, ctx, fx.ti.conn, testenv.BackendPID(tx), 1)
 
-	_, err = txIssuers.DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
-		ID:        fx.userIssuer,
-		ProjectID: fx.projectID,
-	})
-	require.NoError(t, err)
+	require.NoError(t, testrepo.New(tx).ForceSoftDeleteUserSessionIssuer(ctx, testrepo.ForceSoftDeleteUserSessionIssuerParams{ID: fx.userIssuer, ProjectID: fx.projectID}))
 
 	revoker := newTestUpstreamRevoker(t, fx.ti)
 	creds, err := revoker.RetireDeletedUserSessionIssuer(ctx, tx, fx.userIssuer, fx.projectID, fx.organizationID)
@@ -266,11 +255,7 @@ func TestHandleRemoteLoginCallback_WaitsForIssuerMigrationThenRejectsRetiredIssu
 	testenv.WaitForBackendsBlockedBy(t, ctx, fx.ti.conn, testenv.BackendPID(tx), 1)
 
 	// The migration retires the source and commits.
-	_, err = txIssuers.DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
-		ID:        fx.userIssuer,
-		ProjectID: fx.projectID,
-	})
-	require.NoError(t, err)
+	require.NoError(t, testrepo.New(tx).ForceSoftDeleteUserSessionIssuer(ctx, testrepo.ForceSoftDeleteUserSessionIssuerParams{ID: fx.userIssuer, ProjectID: fx.projectID}))
 	require.NoError(t, tx.Commit(ctx))
 
 	require.Eventually(t, func() bool { return len(done) > 0 }, 5*time.Second, 10*time.Millisecond)

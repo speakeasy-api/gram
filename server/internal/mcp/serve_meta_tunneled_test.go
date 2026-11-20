@@ -123,12 +123,13 @@ func TestServePublic_MetaEndpoint_ExecuteTool_TunneledMemberRoutesOwnToken(t *te
 	// session can hold its credential) and to the member's own issuer (so the
 	// resync derives the mcp_servers.remote_session_issuer_id routing key).
 	client := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-a", "", []uuid.UUID{sharedIssuerID, memberIssuerID})
-	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{memberIssuerID}))
 	subject := createTestUser(t, ctx, ti, "meta-tunnel-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, client, subject, "token-tunnel", "")
 
 	member := tunneledFixtureMember(t, ctx, ti, projectID, meta.ID, "member-tunnel")
+	associateServerRegistration(t, ctx, ti.conn, orgID, projectID, member, client)
 	typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member, client, "remote_session", subject)
+	require.NoError(t, remotesessions.RestampMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{memberIssuerID}))
 	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject, metaServingChoice{organizationID: orgID, serverID: member, clientID: typed})
 
 	rpc := executeMetaTool(t, ti, metaSlug, bearer, "member-tunnel--ping")
@@ -181,12 +182,13 @@ func TestServePublic_MetaEndpoint_ExecuteTool_TunneledMemberRoutesIdentifierQual
 	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunnelID.String(), gatewayServer.URL, time.Hour))
 
 	client := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-rid", "", []uuid.UUID{sharedIssuerID, memberIssuerID})
-	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{memberIssuerID}))
 	subject := createTestUser(t, ctx, ti, "meta-tunnel-rid-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, client, subject, "token-qualified", identifier)
 
 	member := tunneledFixtureMember(t, ctx, ti, projectID, meta.ID, "member-tunnel")
+	associateServerRegistration(t, ctx, ti.conn, orgID, projectID, member, client)
 	typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member, client, "remote_session", subject)
+	require.NoError(t, remotesessions.RestampMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{memberIssuerID}))
 	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject, metaServingChoice{organizationID: orgID, serverID: member, clientID: typed})
 
 	rpc := executeMetaTool(t, ti, metaSlug, bearer, "member-tunnel--ping")
@@ -227,7 +229,6 @@ func TestServePublic_MetaEndpoint_ExecuteTool_TunneledIdentifierNeverHarvestsSib
 	// take, not about the member being unroutable. The subject never
 	// connected that provider, so the map holds no entry under it.
 	ownClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-own", "", []uuid.UUID{sharedIssuerID, memberIssuerID})
-	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{memberIssuerID}))
 
 	// The victim credential belongs to a different provider client, minted
 	// against the vendor's authorization server and correctly audienced to
@@ -237,7 +238,9 @@ func TestServePublic_MetaEndpoint_ExecuteTool_TunneledIdentifierNeverHarvestsSib
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, vendorClient, subject, "victim-vendor-token", vendorResource)
 
 	member := tunneledFixtureMember(t, ctx, ti, projectID, meta.ID, "member-tunnel")
+	associateServerRegistration(t, ctx, ti.conn, orgID, projectID, member, ownClient)
 	typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member, ownClient, "remote_session", subject)
+	require.NoError(t, remotesessions.RestampMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{memberIssuerID}))
 	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject, metaServingChoice{organizationID: orgID, serverID: member, clientID: typed})
 
 	rpc := executeMetaTool(t, ti, metaSlug, bearer, "member-tunnel--ping")
@@ -280,13 +283,17 @@ func TestServePublic_MetaEndpoint_ExecuteTool_TunneledMemberNeverBorrowsSiblingT
 	// connected only member A's — so the resolved map holds exactly one
 	// unqualified credential, and it is not member B's.
 	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-leak-a", "", []uuid.UUID{sharedIssuerID, memberAIssuerID})
-	createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-leak-b", "", []uuid.UUID{sharedIssuerID, memberBIssuerID})
-	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{memberAIssuerID, memberBIssuerID}))
+	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-leak-b", "", []uuid.UUID{sharedIssuerID, memberBIssuerID})
 	subject := createTestUser(t, ctx, ti, "meta-tunnel-leak-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientA, subject, "token-member-a", "")
 
 	member := tunneledFixtureMember(t, ctx, ti, projectID, meta.ID, "member-tunnel-a")
+	memberB := tunneledFixtureMember(t, ctx, ti, projectID, meta.ID, "member-tunnel-b")
+	associateServerRegistration(t, ctx, ti.conn, orgID, projectID, member, clientA)
+	associateServerRegistration(t, ctx, ti.conn, orgID, projectID, memberB, clientB)
 	typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member, clientA, "remote_session", subject)
+	seedServerAuthOffer(t, ctx, ti.conn, orgID, projectID, memberB, clientB, "remote_session")
+	require.NoError(t, remotesessions.RestampMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{memberAIssuerID, memberBIssuerID}))
 	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject, metaServingChoice{organizationID: orgID, serverID: member, clientID: typed})
 
 	rpc := executeMetaTool(t, ti, metaSlug, bearer, "member-tunnel-a--ping")

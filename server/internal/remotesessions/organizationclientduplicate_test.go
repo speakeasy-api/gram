@@ -169,6 +169,7 @@ func TestDuplicateClient_ProjectClientStaysInProject(t *testing.T) {
 	issuerID := createRemoteIssuer(t, ctx, ti, "dup-project-issuer", "")
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "dup-project-usi")
 	sourceID := createRemoteClient(t, ctx, ti, issuerID, userIssuerID.String(), "dup-project-client")
+	placeClientForSignIn(t, ctx, ti.conn, uuid.MustParse(sourceID), userIssuerID)
 
 	source, err := ti.service.GetClient(ctx, &orgclientsgen.GetClientPayload{ID: sourceID, SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)

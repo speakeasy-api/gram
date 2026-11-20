@@ -29,36 +29,14 @@ func (q *Queries) CountVisitorEMABindings(ctx context.Context, arg CountVisitorE
 	return count, err
 }
 
-const countVisitorEMABindingsWithoutAttachment = `-- name: CountVisitorEMABindingsWithoutAttachment :one
-SELECT count(*) FROM remote_session_ema_bindings b
-WHERE b.organization_id = $1 AND b.project_id = $2::text::uuid
-AND NOT EXISTS (
- SELECT 1 FROM remote_session_client_user_session_issuers link
- JOIN remote_session_clients c ON c.id = link.remote_session_client_id
- WHERE link.user_session_issuer_id = b.user_session_issuer_id
- AND c.remote_session_issuer_id = b.remote_session_issuer_id
- AND c.organization_id = b.organization_id AND c.project_id = b.project_id
-)
-`
-
-type CountVisitorEMABindingsWithoutAttachmentParams struct {
-	OrganizationID string
-	ProjectID      string
-}
-
-func (q *Queries) CountVisitorEMABindingsWithoutAttachment(ctx context.Context, arg CountVisitorEMABindingsWithoutAttachmentParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countVisitorEMABindingsWithoutAttachment, arg.OrganizationID, arg.ProjectID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const getVisitorEMAFixtureParents = `-- name: GetVisitorEMAFixtureParents :one
 SELECT c.id AS client_id, c.remote_session_issuer_id, u.id AS user_session_issuer_id
 FROM remote_session_clients c
-JOIN remote_session_client_user_session_issuers link ON link.remote_session_client_id = c.id
-JOIN user_session_issuers u ON u.id = link.user_session_issuer_id
-  AND u.organization_id = c.organization_id AND u.project_id = c.project_id
+JOIN remote_session_ema_bindings seed
+ ON seed.remote_session_client_id = c.id AND seed.remote_session_issuer_id = c.remote_session_issuer_id
+ AND seed.project_id = c.project_id AND seed.organization_id = c.organization_id
+ AND seed.state = 'ready' AND seed.resource NOT LIKE 'https://visitor.example.com/%'
+JOIN user_session_issuers u ON u.id = seed.user_session_issuer_id AND NOT u.deleted
 WHERE c.organization_id = $1 AND c.project_id = $2::text::uuid
 ORDER BY c.id, u.id LIMIT 1
 `
@@ -81,6 +59,44 @@ func (q *Queries) GetVisitorEMAFixtureParents(ctx context.Context, arg GetVisito
 	return i, err
 }
 
+const hasSeedPersonalOffer = `-- name: HasSeedPersonalOffer :one
+SELECT EXISTS (
+ SELECT 1
+ FROM mcp_server_auth_clients offer
+ JOIN mcp_auth_clients client
+   ON client.id = offer.auth_client_id
+  AND client.organization_id = offer.organization_id
+ JOIN remote_session_clients registration ON registration.id = client.remote_session_client_id
+ WHERE offer.organization_id = $1::text
+   AND offer.mcp_server_id = $2::text::uuid
+   AND offer.deleted IS FALSE
+   AND client.deleted IS FALSE AND client.enabled
+   AND registration.credential_owner = 'subject'
+   AND (client.client_type = 'remote_session'
+        OR (client.client_type = 'ema' AND EXISTS (
+            SELECT 1 FROM mcp_auth_client_emas details
+            WHERE details.auth_client_id = client.id
+              AND details.organization_id = client.organization_id
+              AND details.deleted IS FALSE
+        )))
+   AND registration.id = $3::text::uuid
+   AND registration.deleted IS FALSE
+)
+`
+
+type HasSeedPersonalOfferParams struct {
+	OrgID          string
+	ServerID       string
+	RegistrationID string
+}
+
+func (q *Queries) HasSeedPersonalOffer(ctx context.Context, arg HasSeedPersonalOfferParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasSeedPersonalOffer, arg.OrgID, arg.ServerID, arg.RegistrationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const plantVisitorEMABinding = `-- name: PlantVisitorEMABinding :execrows
 INSERT INTO remote_session_ema_bindings (
  organization_id, project_id, user_session_issuer_id,
@@ -95,9 +111,11 @@ SELECT c.organization_id, c.project_id, u.id,
  CASE WHEN $1::text = 'in_progress' THEN generate_uuidv7() END,
  CASE WHEN $1::text = 'in_progress' THEN clock_timestamp() END
 FROM remote_session_clients c
-JOIN remote_session_client_user_session_issuers link ON link.remote_session_client_id = c.id
-JOIN user_session_issuers u
- ON u.id = link.user_session_issuer_id AND u.project_id = c.project_id AND u.organization_id = c.organization_id
+JOIN remote_session_ema_bindings seed
+ ON seed.remote_session_client_id = c.id AND seed.remote_session_issuer_id = c.remote_session_issuer_id
+ AND seed.project_id = c.project_id AND seed.organization_id = c.organization_id
+ AND seed.state = 'ready' AND seed.resource NOT LIKE 'https://visitor.example.com/%'
+JOIN user_session_issuers u ON u.id = seed.user_session_issuer_id AND NOT u.deleted
 WHERE c.organization_id = $2 AND c.project_id = $3::text::uuid
 ORDER BY c.id, u.id
 LIMIT 1
@@ -109,7 +127,7 @@ type PlantVisitorEMABindingParams struct {
 	ProjectID      string
 }
 
-// The attachment is the issuer provenance; ordering only selects a valid pair.
+// A ready seed binding supplies the scoped parents for visitor fixtures.
 func (q *Queries) PlantVisitorEMABinding(ctx context.Context, arg PlantVisitorEMABindingParams) (int64, error) {
 	result, err := q.db.Exec(ctx, plantVisitorEMABinding, arg.State, arg.OrganizationID, arg.ProjectID)
 	if err != nil {

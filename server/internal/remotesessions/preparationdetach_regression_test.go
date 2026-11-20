@@ -44,6 +44,7 @@ func TestPreparationDetach_OnlyProtectsSelectedUserIssuer(t *testing.T) {
 					server, err := mcpserversrepo.New(ti.conn).GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{Slug: conv.ToPGText(slug), ProjectID: *auth.ProjectID})
 					require.NoError(t, err)
 					servers[issuerID] = server.ID
+					associateClient(t, ctx, ti.conn, auth.ActiveOrganizationID, server.ProjectID, server.ID, in.ClientID)
 				}
 			}
 			detach := func(issuerID uuid.UUID) error {
@@ -57,7 +58,11 @@ func TestPreparationDetach_OnlyProtectsSelectedUserIssuer(t *testing.T) {
 				return nil
 			}
 			require.NoError(t, detach(otherIssuer), "an active binding on A must not block detaching B")
-			require.Zero(t, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, in.ClientID, otherIssuer))
+			if organization {
+				require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, in.ClientID, otherIssuer), "per-server detach leaves the compatibility parent intact")
+			} else {
+				require.Zero(t, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, in.ClientID, otherIssuer))
+			}
 			requireOopsCode(t, detach(in.UserSessionIssuerID), oops.CodeConflict)
 			require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, in.ClientID, in.UserSessionIssuerID), "conflict rolls back the tentative removal")
 			// Client-wide deletion remains blocked by A after B has detached.

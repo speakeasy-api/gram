@@ -38,11 +38,6 @@ func TestReseedCleansVisitorEMABindings(t *testing.T) {
 		}
 	}
 	plantBindings(otherTenantSpec)
-	unattached, err := queries.CountVisitorEMABindingsWithoutAttachment(ctx, demoseedtest.CountVisitorEMABindingsWithoutAttachmentParams{
-		OrganizationID: otherTenantSpec.OrgID, ProjectID: otherTenantSpec.ProjectID(),
-	})
-	require.NoError(t, err)
-	require.Zero(t, unattached, "bindings must use an attached issuer, not the first tenant issuer")
 	before, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)
 

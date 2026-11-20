@@ -598,7 +598,8 @@ func TestCommitServerIdentityConfigurationReplacesCurrentClientAtomically(t *tes
 		ID:             replacementClient.ID,
 	})
 	require.NoError(t, err)
-	require.NotContains(t, newClient.UserSessionIssuerIds, userIssuerID)
+	require.Contains(t, newClient.UserSessionIssuerIds, userIssuerID)
+	requireNoAttachmentParent(t, ctx, ti, replacementClient.ID, userIssuerID)
 	storedTarget, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
 		ID:        targetID,
 		ProjectID: projectIDFromContext(t, ctx),
@@ -945,17 +946,15 @@ func TestCommitServerIdentityConfigurationLocksProviderBeforeCommitting(t *testi
 }
 
 // bindServerIdentityClient creates a client for providerID, owned by the
-// project or, when orgOwned, by the organization, binds it to userIssuerID and
-// restamps the project's MCP servers on that issuer.
-func bindServerIdentityClient(t *testing.T, ctx context.Context, ti *testInstance, clientID string, providerID, userIssuerID uuid.UUID, orgOwned bool) uuid.UUID {
+// project or, when orgOwned, by the organization, and configures the named
+// server to offer it.
+func bindServerIdentityClient(t *testing.T, ctx context.Context, ti *testInstance, clientID string, providerID, serverID uuid.UUID, orgOwned bool) uuid.UUID {
 	t.Helper()
 	projectID := projectIDFromContext(t, ctx)
+	orgID := activeOrganizationID(t, ctx)
 	client := createServerIdentityClient(t, ctx, ti, clientID, providerID, orgOwned)
-	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client,
-		UserSessionIssuerID:   userIssuerID,
-	}))
-	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, activeOrganizationID(t, ctx), projectID, []uuid.UUID{userIssuerID}))
+	associateClient(t, ctx, ti.conn, orgID, projectID, serverID, client)
+	recordTypedClients(t, ctx, ti.conn, orgID, serverID)
 	return client
 }
 
@@ -976,6 +975,11 @@ func createServerIdentityClient(t *testing.T, ctx context.Context, ti *testInsta
 	return client.ID
 }
 
+func requireNoAttachmentParent(t *testing.T, ctx context.Context, ti *testInstance, clientID, signInID uuid.UUID) {
+	t.Helper()
+	require.Zero(t, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientID, signInID), "server configuration must not write an attachment compatibility parent")
+}
+
 func requireClientBound(t *testing.T, ctx context.Context, ti *testInstance, clientID, userIssuerID uuid.UUID, bound bool) {
 	t.Helper()
 	client, err := repo.New(ti.conn).GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
@@ -994,7 +998,7 @@ func TestCommitServerIdentityConfigurationRefusesReplacingOrgClientOnOrgIssuerWi
 	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "org-replace-issuer")
 	targetID := createServerIdentityTargetOnIssuer(t, ctx, ti, "org-replace-target", userIssuerID)
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "org-replace-current", "", false, []string{"none"})
-	orgClientID := bindServerIdentityClient(t, ctx, ti, "org-replace-shared-client", currentProviderID, userIssuerID, true)
+	orgClientID := bindServerIdentityClient(t, ctx, ti, "org-replace-shared-client", currentProviderID, targetID, true)
 
 	var requests atomic.Int64
 	registrationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -1017,7 +1021,7 @@ func TestCommitServerIdentityConfigurationRefusesReplacingClientWithLiveAgentBin
 	ctx, ti := newTestService(t)
 	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "agent-replace-target")
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "agent-replace-current", "", false, []string{"none"})
-	currentClientID := bindServerIdentityClient(t, ctx, ti, "agent-replace-client", currentProviderID, userIssuerID, false)
+	currentClientID := bindServerIdentityClient(t, ctx, ti, "agent-replace-client", currentProviderID, targetID, false)
 	seedLiveAgentBinding(t, ctx, ti, currentClientID, userIssuerID)
 
 	var requests atomic.Int64
@@ -1048,7 +1052,7 @@ func TestCommitServerIdentityConfigurationOffersOrgClientWithoutChangingOrganiza
 	_, err := ti.service.CommitServerIdentityConfiguration(withoutOrganizationAdmin(t, ctx), existingServerIdentityPayload(targetID, providerID, orgClientID))
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{orgClientID}, serverAssociatedClients(t, ctx, ti, targetID))
-	requireClientBound(t, ctx, ti, orgClientID, userIssuerID, false)
+	requireNoAttachmentParent(t, ctx, ti, orgClientID, userIssuerID)
 }
 
 // An organization admin may link an organization-level client to an
@@ -1068,7 +1072,7 @@ func TestCommitServerIdentityConfigurationDoesNotRepublishOrgClientToOtherProjec
 	result, err := ti.service.CommitServerIdentityConfiguration(ctx, existingServerIdentityPayload(targetID, providerID, orgClientID))
 	require.NoError(t, err)
 	require.Equal(t, "linked", *result.Status)
-	requireClientBound(t, ctx, ti, orgClientID, userIssuerID, false)
+	requireNoAttachmentParent(t, ctx, ti, orgClientID, userIssuerID)
 
 	otherServer, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: otherServerID, ProjectID: otherProjectID})
 	require.NoError(t, err)
@@ -1082,16 +1086,12 @@ func TestCommitServerIdentityConfigurationRefusesReplacingOrgClientWithAgentBind
 	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "org-agent-replace-issuer")
 	targetID := createServerIdentityTargetOnIssuer(t, ctx, ti, "org-agent-replace-target", userIssuerID)
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "org-agent-replace-current", "", false, []string{"none"})
-	orgClientID := bindServerIdentityClient(t, ctx, ti, "org-agent-replace-client", currentProviderID, userIssuerID, true)
+	orgClientID := bindServerIdentityClient(t, ctx, ti, "org-agent-replace-client", currentProviderID, targetID, true)
 
-	// The agent is attached in another project, through the binding every
-	// project's servers on the issuer share.
+	// The historical attachment is in another project. The provider and
+	// its FK parent still come from the caller's project.
 	otherProjectID := createProject(t, ctx, ti.conn, "org-agent-replace-other")
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	otherAuth := *authCtx
-	otherAuth.ProjectID = &otherProjectID
-	seedLiveAgentBinding(t, contextvalues.SetAuthContext(ctx, &otherAuth), ti, orgClientID, userIssuerID)
+	seedLiveAgentBindingInProject(t, ctx, ti, orgClientID, userIssuerID, otherProjectID)
 
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "org-agent-replace-next", "", false, []string{"none"})
 	nextClientID := createServerIdentityClient(t, ctx, ti, "org-agent-replace-next-client", nextProviderID, true)
@@ -1109,7 +1109,7 @@ func TestCommitServerIdentityConfigurationKeepsAlreadyBoundOrgClientOnOrgIssuer(
 	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "org-keep-issuer")
 	targetID := createServerIdentityTargetOnIssuer(t, ctx, ti, "org-keep-target", userIssuerID)
 	providerID := createServerIdentityProvider(t, ctx, ti, "org-keep-provider", "", false, []string{"none"})
-	orgClientID := bindServerIdentityClient(t, ctx, ti, "org-keep-client", providerID, userIssuerID, true)
+	orgClientID := bindServerIdentityClient(t, ctx, ti, "org-keep-client", providerID, targetID, true)
 
 	result, err := ti.service.CommitServerIdentityConfiguration(ctx, existingServerIdentityPayload(targetID, providerID, orgClientID))
 	require.NoError(t, err)
@@ -1125,7 +1125,7 @@ func TestCommitServerIdentityConfigurationReplacesProjectClientOnOrgIssuer(t *te
 	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "org-project-issuer")
 	targetID := createServerIdentityTargetOnIssuer(t, ctx, ti, "org-project-target", userIssuerID)
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "org-project-current", "", false, []string{"none"})
-	projectClientID := bindServerIdentityClient(t, ctx, ti, "org-project-client", currentProviderID, userIssuerID, true)
+	projectClientID := bindServerIdentityClient(t, ctx, ti, "org-project-client", currentProviderID, targetID, true)
 
 	result, err := ti.service.CommitServerIdentityConfiguration(ctx, &gen.CommitServerIdentityConfigurationPayload{
 		SessionToken:       nil,
@@ -1147,7 +1147,8 @@ func TestCommitServerIdentityConfigurationReplacesProjectClientOnOrgIssuer(t *te
 	})
 	require.NoError(t, err)
 	require.Equal(t, "project-specific", *result.ClientTier)
-	requireClientBound(t, ctx, ti, projectClientID, userIssuerID, true)
+	requireClientBound(t, ctx, ti, projectClientID, userIssuerID, false)
+	require.Equal(t, []uuid.UUID{uuid.MustParse(result.Client.ID)}, serverAssociatedClients(t, ctx, ti, targetID))
 
 	storedTarget, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
 		ID:        targetID,
@@ -1186,11 +1187,9 @@ func TestCommitServerIdentityConfigurationReplacesClientWhenServerIssuerColumnIs
 	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "stale-column-target")
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "stale-column-current", "", false, []string{"none"})
 	currentClientID := createServerIdentityClient(t, ctx, ti, "stale-column-current-client", currentProviderID, false)
-	// Bound without the restamp, so the server's denormalized column stays NULL.
-	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: currentClientID,
-		UserSessionIssuerID:   userIssuerID,
-	}))
+	// Associate without restamping, so the denormalized column stays NULL.
+	associateServerClient(t, ctx, ti, targetID, currentClientID)
+	recordTypedClients(t, ctx, ti.conn, activeOrganizationID(t, ctx), targetID)
 	require.Equal(t, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, storedIssuer(t, ctx, ti.conn, projectIDFromContext(t, ctx), targetID))
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "stale-column-next", "", false, []string{"none"})
 
@@ -1199,8 +1198,8 @@ func TestCommitServerIdentityConfigurationReplacesClientWhenServerIssuerColumnIs
 	nextClientID, err := uuid.Parse(result.Client.ID)
 	require.NoError(t, err)
 
-	requireClientBound(t, ctx, ti, currentClientID, userIssuerID, true)
-	requireClientBound(t, ctx, ti, nextClientID, userIssuerID, false)
+	require.Equal(t, []uuid.UUID{nextClientID}, serverAssociatedClients(t, ctx, ti, targetID))
+	requireNoAttachmentParent(t, ctx, ti, nextClientID, userIssuerID)
 	require.Equal(t, conv.ToNullUUID(nextProviderID), storedIssuer(t, ctx, ti.conn, projectIDFromContext(t, ctx), targetID))
 }
 
@@ -1211,8 +1210,8 @@ func TestCommitServerIdentityConfigurationRefusesAmbiguousCurrentProviderBeforeD
 	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "ambiguous-target")
 	firstProviderID := createServerIdentityProvider(t, ctx, ti, "ambiguous-first", "", false, []string{"none"})
 	secondProviderID := createServerIdentityProvider(t, ctx, ti, "ambiguous-second", "", false, []string{"none"})
-	firstClientID := bindServerIdentityClient(t, ctx, ti, "ambiguous-first-client", firstProviderID, userIssuerID, false)
-	secondClientID := bindServerIdentityClient(t, ctx, ti, "ambiguous-second-client", secondProviderID, userIssuerID, false)
+	firstClientID := bindServerIdentityClient(t, ctx, ti, "ambiguous-first-client", firstProviderID, targetID, false)
+	secondClientID := bindServerIdentityClient(t, ctx, ti, "ambiguous-second-client", secondProviderID, targetID, false)
 
 	var requests atomic.Int64
 	registrationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -1236,15 +1235,16 @@ func TestCommitServerIdentityConfigurationReplacesClientForSameProvider(t *testi
 	ctx, ti := newTestService(t)
 	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "same-provider-target")
 	providerID := createServerIdentityProvider(t, ctx, ti, "same-provider", "", false, []string{"none"})
-	currentClientID := bindServerIdentityClient(t, ctx, ti, "same-provider-current-client", providerID, userIssuerID, true)
+	currentClientID := bindServerIdentityClient(t, ctx, ti, "same-provider-current-client", providerID, targetID, true)
 
 	result, err := ti.service.CommitServerIdentityConfiguration(ctx, manualExistingProviderIdentityPayload(targetID, providerID, "same-provider-next-client"))
 	require.NoError(t, err)
 	nextClientID, err := uuid.Parse(result.Client.ID)
 	require.NoError(t, err)
 
-	requireClientBound(t, ctx, ti, currentClientID, userIssuerID, true)
-	requireClientBound(t, ctx, ti, nextClientID, userIssuerID, false)
+	requireClientBound(t, ctx, ti, currentClientID, userIssuerID, false)
+	require.Equal(t, []uuid.UUID{nextClientID}, serverAssociatedClients(t, ctx, ti, targetID))
+	requireNoAttachmentParent(t, ctx, ti, nextClientID, userIssuerID)
 	require.Equal(t, conv.ToNullUUID(providerID), storedIssuer(t, ctx, ti.conn, projectIDFromContext(t, ctx), targetID))
 }
 

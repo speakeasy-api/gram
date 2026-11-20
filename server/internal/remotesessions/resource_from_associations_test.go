@@ -82,7 +82,7 @@ func newFlaggedResolveManager(t *testing.T, fx sharedIssuerFixture, enabled bool
 	)
 }
 
-func TestFallbackResourceForClient_SharedIssuerAmbiguousFromBindings(t *testing.T) {
+func TestFallbackResourceForClient_SharedIssuerUsesAssociationsWithoutFlag(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx := seedSharedIssuerFixture(t, "fallback-bindings")
@@ -90,7 +90,7 @@ func TestFallbackResourceForClient_SharedIssuerAmbiguousFromBindings(t *testing.
 
 	resource, err := mgr.FallbackResourceForClient(ctx, fx.organizationID, fx.clientID)
 	require.NoError(t, err)
-	require.Empty(t, resource, "every server on the shared issuer counts, so the client names two upstreams")
+	require.Equal(t, fx.ownURL, resource, "only the explicitly associated server counts")
 }
 
 func TestFallbackResourceForClient_SharedIssuerFromAssociations(t *testing.T) {
@@ -128,7 +128,7 @@ func TestResourceForClientAtUpstream_SharedIssuerUnqualifiedFromBindings(t *test
 
 	resource, err := mgr.ResourceForClientAtUpstream(ctx, fx.organizationID, fx.clientID, []uuid.UUID{fx.siblingID}, fx.ownURL)
 	require.NoError(t, err)
-	require.Empty(t, resource, "the sibling also serves the upstream through the shared issuer, so no client may claim it")
+	require.Equal(t, fx.ownURL, resource, "sharing an issuer does not make the sibling serve this upstream")
 }
 
 func TestResourceOwnersAmong_SharedIssuerFromAssociations(t *testing.T) {

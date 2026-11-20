@@ -36,8 +36,8 @@ func TestDeleteMcpServer_PrunesItsAssociations(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))
-	_, remoteClient := linkRemoteClientWithID(t, ctx, ti, auth.ActiveOrganizationID, *auth.ProjectID, issuer)
-	require.NoError(t, upstreamclients.Reconcile(ctx, ti.conn, auth.ActiveOrganizationID, *auth.ProjectID, []uuid.UUID{uuid.MustParse(issuer)}))
+	_, remoteClient := seedRemoteRegistration(t, ctx, ti, auth.ActiveOrganizationID, *auth.ProjectID)
+	require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, ti.conn, auth.ActiveOrganizationID, *auth.ProjectID, []uuid.UUID{uuid.MustParse(issuer)}, []uuid.UUID{remoteClient}))
 	associations := func() int {
 		rows, err := upstreamclientsrepo.New(ti.conn).ListMCPServerRemoteSessionClients(ctx, upstreamclientsrepo.ListMCPServerRemoteSessionClientsParams{McpServerID: server.ID, ProjectID: *auth.ProjectID})
 		require.NoError(t, err)

@@ -336,31 +336,6 @@ WHERE sqlc.narg('cursor')::uuid IS NULL OR attachment.id < sqlc.narg('cursor')::
 ORDER BY attachment.id DESC
 LIMIT sqlc.arg('limit_value');
 
--- name: ListUserSessionIssuerBoundRemoteSessionClients :many
--- The live remote session clients an issuer binds, with the authorization
--- server each one belongs to. Clients scoped to another organization, or to a
--- project outside it, are left out.
-SELECT
-    client.id,
-    client.client_id,
-    remote_issuer.id AS remote_session_issuer_id,
-    COALESCE(remote_issuer.name, remote_issuer.slug)::text AS remote_session_issuer_name,
-    remote_issuer.issuer AS remote_session_issuer_url
-FROM remote_session_client_user_session_issuers AS link
-JOIN remote_session_clients AS client ON client.id = link.remote_session_client_id
-JOIN remote_session_issuers AS remote_issuer ON remote_issuer.id = client.remote_session_issuer_id
-WHERE link.user_session_issuer_id = @user_session_issuer_id::uuid
-  AND client.deleted IS FALSE
-  AND remote_issuer.deleted IS FALSE
-  AND (client.organization_id IS NULL OR client.organization_id = @organization_id::text)
-  AND (client.project_id IS NULL OR EXISTS (
-    SELECT 1 FROM projects AS client_project
-    WHERE client_project.id = client.project_id
-      AND client_project.organization_id = @organization_id::text
-      AND client_project.deleted IS FALSE
-  ))
-ORDER BY client.id;
-
 -- name: ListUserSessionIssuerServerRemoteSessionClients :many
 -- The remote session clients associated with each live MCP server that uses
 -- an issuer in the organization, with the authorization server each client
@@ -2945,9 +2920,6 @@ eligible AS (
     JOIN remote_session_clients AS c
       ON c.id = a.remote_session_client_id
      AND c.deleted IS FALSE
-    JOIN remote_session_client_user_session_issuers AS link
-      ON link.remote_session_client_id = a.remote_session_client_id
-     AND link.user_session_issuer_id = @user_session_issuer_id
     WHERE a.deleted IS FALSE
       AND NOT @typed_only::boolean
     UNION ALL
@@ -2969,9 +2941,6 @@ eligible AS (
     JOIN remote_session_issuers AS rsi
       ON rsi.id = c.remote_session_issuer_id
      AND rsi.deleted IS FALSE
-    JOIN remote_session_client_user_session_issuers AS binding
-      ON binding.remote_session_client_id = ac.remote_session_client_id
-     AND binding.user_session_issuer_id = @user_session_issuer_id
     WHERE l.deleted IS FALSE
       AND l.organization_id = (SELECT organization_id FROM session_issuer)
       AND @typed_only::boolean
@@ -3332,9 +3301,6 @@ eligible AS (
     JOIN remote_session_clients AS c
       ON c.id = a.remote_session_client_id
      AND c.deleted IS FALSE
-    JOIN remote_session_client_user_session_issuers AS link
-      ON link.remote_session_client_id = a.remote_session_client_id
-     AND link.user_session_issuer_id = @user_session_issuer_id
     WHERE a.deleted IS FALSE
       AND NOT @typed_only::boolean
     UNION ALL
@@ -3362,11 +3328,6 @@ eligible AS (
       AND l.project_id = r.project_id
       AND (c.project_id = r.project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = l.organization_id)))
       AND (rsi.project_id = r.project_id OR (rsi.project_id IS NULL AND (rsi.organization_id IS NULL OR rsi.organization_id = l.organization_id)))
-      AND (@typed_offer_repair::boolean OR EXISTS (
-        SELECT 1 FROM remote_session_client_user_session_issuers AS binding
-        WHERE binding.remote_session_client_id = ac.remote_session_client_id
-          AND binding.user_session_issuer_id = @user_session_issuer_id
-      ))
     GROUP BY l.mcp_server_id, ac.remote_session_client_id,
              CASE WHEN @typed_offer_repair::boolean THEN ac.id END
     HAVING @typed_offer_repair::boolean OR count(DISTINCT ac.id) = 1
@@ -3612,8 +3573,8 @@ WHERE upstream_client_selections.no_auth
 
 -- name: GetUpstreamClientSelection :one
 -- One credential's choice for one MCP server, with whether it can still be
--- used: a chosen client must be live, still associated with the server, and
--- still bound to the credential's user session issuer, and a no-auth choice
+-- used: a chosen client and upstream must be live and still associated with
+-- the server, the sign-in must be in scope, and a no-auth choice
 -- holds only while the server has no associated client. A choice naming a
 -- static_credential or pass_through auth client reads as no-auth, as it did
 -- before the choice was mapped onto auth clients, whatever that client's
@@ -3640,11 +3601,14 @@ SELECT sel.remote_session_client_id,
              JOIN remote_session_clients AS c
                ON c.id = a.remote_session_client_id
               AND c.deleted IS FALSE
-             JOIN remote_session_client_user_session_issuers AS link
-               ON link.remote_session_client_id = a.remote_session_client_id
-              AND link.user_session_issuer_id = @user_session_issuer_id::uuid
+             JOIN remote_session_issuers AS provider
+               ON provider.id = c.remote_session_issuer_id AND NOT provider.deleted
+             JOIN user_session_issuers AS sign_in
+               ON sign_in.id = @user_session_issuer_id::uuid AND NOT sign_in.deleted
+              AND (sign_in.project_id = sel.project_id OR (sign_in.project_id IS NULL AND sign_in.organization_id = sel.organization_id))
              WHERE a.mcp_server_id = sel.mcp_server_id
                AND a.remote_session_client_id = sel.remote_session_client_id
+               AND a.project_id = sel.project_id AND a.organization_id = sel.organization_id
                AND a.deleted IS FALSE
            )
          END
@@ -3688,11 +3652,14 @@ SELECT sel.mcp_server_id,
              JOIN remote_session_clients AS c
                ON c.id = a.remote_session_client_id
               AND c.deleted IS FALSE
-             JOIN remote_session_client_user_session_issuers AS link
-               ON link.remote_session_client_id = a.remote_session_client_id
-              AND link.user_session_issuer_id = @user_session_issuer_id::uuid
+             JOIN remote_session_issuers AS provider
+               ON provider.id = c.remote_session_issuer_id AND NOT provider.deleted
+             JOIN user_session_issuers AS sign_in
+               ON sign_in.id = @user_session_issuer_id::uuid AND NOT sign_in.deleted
+              AND (sign_in.project_id = sel.project_id OR (sign_in.project_id IS NULL AND sign_in.organization_id = sel.organization_id))
              WHERE a.mcp_server_id = sel.mcp_server_id
                AND a.remote_session_client_id = sel.remote_session_client_id
+               AND a.project_id = sel.project_id AND a.organization_id = sel.organization_id
                AND a.deleted IS FALSE
            )
          END

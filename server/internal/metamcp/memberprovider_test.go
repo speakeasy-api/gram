@@ -1,317 +1,104 @@
 package metamcp_test
 
 import (
-	"bytes"
 	"context"
-	"log/slog"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/meta_mcp"
-	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
-	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
-// memberProviderFixture drives add, remove and issuer changes for one gateway.
-type memberProviderFixture struct {
-	ti              *testInstance
-	projectID       uuid.UUID
-	organizationID  string
-	metaID          string
-	metaName        string
-	gatewayIssuerID uuid.UUID
+func seedServableMember(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID) uuid.UUID {
+	t.Helper()
+	server, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: uuid.New(), ProjectID: projectID, Name: conv.ToPGText("servable member"), Slug: conv.ToPGText("servable-member-" + uuid.NewString()),
+		RemoteMcpServerID:   conv.ToNullUUID(seedRemoteBackend(t, ctx, ti.conn, projectID)),
+		UserSessionIssuerID: conv.ToNullUUID(seedUserSessionIssuer(t, ctx, ti.conn, projectID)), Visibility: "private",
+	})
+	require.NoError(t, err)
+	return server.ID
 }
 
-func newMemberProviderFixture(t *testing.T) (context.Context, memberProviderFixture) {
-	t.Helper()
+// Membership exposes exactly the registrations offered by that server;
+// neither a registration on the same provider nor a sibling's offer is inherited.
+func TestMemberProvider_UsesExplicitTypedOffers(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newTestService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	meta := seedMetaMcpServer(t, ctx, ti, "member provider gateway")
-	require.NotNil(t, meta.UserSessionIssuerID)
-	return ctx, memberProviderFixture{
-		ti:              ti,
-		projectID:       *authCtx.ProjectID,
-		organizationID:  authCtx.ActiveOrganizationID,
-		metaID:          meta.ID,
-		metaName:        meta.Name,
-		gatewayIssuerID: uuid.MustParse(*meta.UserSessionIssuerID),
+	projectID, orgID := *auth.ProjectID, auth.ActiveOrganizationID
+	meta := seedMetaMcpServer(t, ctx, ti, "typed offers gateway")
+	server := seedServableMember(t, ctx, ti, projectID)
+	sibling := seedServableMember(t, ctx, ti, projectID)
+	provider := seedRemoteSessionIssuer(t, ctx, ti.conn, projectID, orgID, "member-provider")
+	otherProvider := seedRemoteSessionIssuer(t, ctx, ti.conn, projectID, orgID, "other-provider")
+	first := createRemoteSessionClient(t, ctx, ti.conn, projectID, orgID, provider, "first-offer")
+	second := createRemoteSessionClient(t, ctx, ti.conn, projectID, orgID, provider, "second-offer")
+	third := createRemoteSessionClient(t, ctx, ti.conn, projectID, orgID, otherProvider, "third-offer")
+	unoffered := createRemoteSessionClient(t, ctx, ti.conn, projectID, orgID, provider, "not-offered")
+	firstOffer := seedMemberOffer(t, ctx, ti.conn, projectID, orgID, server, first)
+	q := authclientbackfill.New(ti.conn)
+	secondOffer, err := q.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{
+		OrganizationID: orgID, ProjectID: conv.ToNullUUID(projectID), ClientType: authclientbackfill.TypeEMA,
+		Source: "admin", RemoteSessionClientID: conv.ToNullUUID(second),
+	})
+	require.NoError(t, err)
+	require.NoError(t, q.SeedAuthClientEMAFixture(ctx, authclientbackfill.SeedAuthClientEMAFixtureParams{
+		AuthClientID: secondOffer, Resource: "https://test.example.com/mcp",
+	}))
+	require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{
+		OrganizationID: orgID, ProjectID: projectID, McpServerID: server, AuthClientID: secondOffer, Source: "admin",
+	}))
+	thirdOffer := seedMemberOffer(t, ctx, ti.conn, projectID, orgID, sibling, third)
+
+	eligibleMembers := func(registration uuid.UUID) []uuid.UUID {
+		rows, err := metamcprepo.New(ti.conn).ListMetaMCPMembersForRemoteSessionClient(ctx, metamcprepo.ListMetaMCPMembersForRemoteSessionClientParams{
+			MetaMcpServerID: uuid.MustParse(meta.ID), ProjectID: projectID, TypedOffers: true, RemoteSessionClientID: registration,
+		})
+		require.NoError(t, err)
+		ids := make([]uuid.UUID, 0, len(rows))
+		for _, row := range rows {
+			ids = append(ids, row.McpServerID)
+		}
+		return ids
 	}
-}
+	add := func(id uuid.UUID) string {
+		member, err := ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{MetaMcpServerID: meta.ID, McpServerID: id.String()})
+		require.NoError(t, err)
+		return member.ID
+	}
+	require.Empty(t, eligibleMembers(first), "the offer is not reachable before the server joins")
+	member := add(server)
+	add(sibling)
+	require.Equal(t, []uuid.UUID{server}, eligibleMembers(first))
+	require.Equal(t, []uuid.UUID{server}, eligibleMembers(second))
+	require.Equal(t, []uuid.UUID{sibling}, eligibleMembers(third))
+	require.Empty(t, eligibleMembers(unoffered), "sharing a provider does not make a registration eligible")
 
-// addProvider gives server a client of a new provider, through its issuer and
-// an association, and returns the provider.
-func (f memberProviderFixture) addProvider(t *testing.T, ctx context.Context, serverID uuid.UUID) uuid.UUID {
-	t.Helper()
-	provider := seedRemoteSessionIssuer(t, ctx, f.ti.conn, f.projectID, f.organizationID, "member-provider")
-	client := createRemoteSessionClient(t, ctx, f.ti.conn, f.projectID, f.organizationID, provider, "client-"+uuid.NewString()[:8])
-	stampAndWireMemberClient(t, ctx, f.ti.conn, f.projectID, f.organizationID, serverID, client)
-	return provider
-}
+	require.NoError(t, ti.service.RemoveMetaMcpMember(ctx, &gen.RemoveMetaMcpMemberPayload{ID: member}))
+	require.Empty(t, eligibleMembers(first))
+	require.Empty(t, eligibleMembers(second))
+	require.Equal(t, []uuid.UUID{sibling}, eligibleMembers(third))
+	requireMemberOffers(t, ctx, ti, server, firstOffer, secondOffer)
+	requireMemberOffers(t, ctx, ti, sibling, thirdOffer)
 
-// setColumn overwrites the server's denormalized provider, to prove readers no
-// longer follow it.
-func (f memberProviderFixture) setColumn(t *testing.T, ctx context.Context, serverID uuid.UUID, provider uuid.NullUUID) {
-	t.Helper()
-	stamped, err := testrepo.New(f.ti.conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{
-		RemoteSessionIssuerID: provider,
-		ID:                    serverID,
-		ProjectID:             f.projectID,
-	})
-	require.NoError(t, err)
-	require.Equal(t, int64(1), stamped)
-}
+	add(server)
+	require.Equal(t, []uuid.UUID{server}, eligibleMembers(first), "rejoining makes the original offer reachable again")
+	require.Equal(t, []uuid.UUID{server}, eligibleMembers(second))
+	requireMemberOffers(t, ctx, ti, server, firstOffer, secondOffer)
 
-func (f memberProviderFixture) add(t *testing.T, ctx context.Context, serverID uuid.UUID) string {
-	t.Helper()
-	member, err := f.ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
-		MetaMcpServerID: f.metaID,
-		McpServerID:     serverID.String(),
-	})
-	require.NoError(t, err)
-	return member.ID
-}
+	require.NoError(t, q.SetAuthClientEnabledFixture(ctx, authclientbackfill.SetAuthClientEnabledFixtureParams{ID: firstOffer, Enabled: false}))
+	require.Empty(t, eligibleMembers(first), "a disabled client cannot qualify its member")
+	require.Equal(t, []uuid.UUID{server}, eligibleMembers(second), "an enabled EMA offer still qualifies its member")
+	require.Equal(t, []uuid.UUID{sibling}, eligibleMembers(third), "the sibling remains eligible until its offer is deleted")
 
-func (f memberProviderFixture) remove(t *testing.T, ctx context.Context, memberID string) {
-	t.Helper()
-	require.NoError(t, f.ti.service.RemoveMetaMcpMember(ctx, &gen.RemoveMetaMcpMemberPayload{ID: memberID}))
-}
-
-func (f memberProviderFixture) bound(t *testing.T, ctx context.Context, issuerID, provider uuid.UUID) int {
-	t.Helper()
-	return countGatewayClientsForUpstream(t, ctx, f.ti.conn, f.projectID, f.organizationID, issuerID, provider)
-}
-
-func TestMemberProvider_AddAndRemoveFollowTheAssociationNotTheColumn(t *testing.T) {
-	t.Parallel()
-	ctx, f := newMemberProviderFixture(t)
-
-	server := seedMcpServer(t, ctx, f.ti.conn, f.projectID)
-	stale := seedRemoteSessionIssuer(t, ctx, f.ti.conn, f.projectID, f.organizationID, "stale-provider")
-	provider := f.addProvider(t, ctx, server)
-	f.setColumn(t, ctx, server, conv.ToNullUUID(stale))
-
-	member := f.add(t, ctx, server)
-	require.Zero(t, f.bound(t, ctx, f.gatewayIssuerID, provider))
-	require.Equal(t, 0, f.bound(t, ctx, f.gatewayIssuerID, stale), "add ignores the column")
-
-	f.remove(t, ctx, member)
-	require.Equal(t, 0, f.bound(t, ctx, f.gatewayIssuerID, provider), "remove unbinds the associated provider")
-}
-
-func TestMemberProvider_ColumnNullStillWiresConsent(t *testing.T) {
-	t.Parallel()
-	ctx, f := newMemberProviderFixture(t)
-
-	server := seedMcpServer(t, ctx, f.ti.conn, f.projectID)
-	provider := f.addProvider(t, ctx, server)
-	f.setColumn(t, ctx, server, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
-
-	f.add(t, ctx, server)
-	require.Zero(t, f.bound(t, ctx, f.gatewayIssuerID, provider))
-}
-
-func TestMemberProvider_SeveralProvidersWireNothing(t *testing.T) {
-	t.Parallel()
-	ctx, f := newMemberProviderFixture(t)
-
-	server := seedMcpServer(t, ctx, f.ti.conn, f.projectID)
-	first := f.addProvider(t, ctx, server)
-	second := f.addProvider(t, ctx, server)
-	f.setColumn(t, ctx, server, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
-
-	f.add(t, ctx, server)
-	require.Equal(t, 0, f.bound(t, ctx, f.gatewayIssuerID, first))
-	require.Equal(t, 0, f.bound(t, ctx, f.gatewayIssuerID, second))
-
-	newIssuer := seedUserSessionIssuer(t, ctx, f.ti.conn, f.projectID)
-	_, err := f.ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
-		ID:                  f.metaID,
-		Name:                f.metaName,
-		UserSessionIssuerID: conv.PtrEmpty(newIssuer.String()),
-	})
-	require.NoError(t, err)
-	require.Equal(t, 0, f.bound(t, ctx, newIssuer, first), "an issuer change skips a member with several providers")
-	require.Equal(t, 0, f.bound(t, ctx, newIssuer, second), "an issuer change skips a member with several providers")
-}
-
-func TestMemberProvider_IssuerChangeBindsTheAssociatedProvider(t *testing.T) {
-	t.Parallel()
-	ctx, f := newMemberProviderFixture(t)
-
-	server := seedMcpServer(t, ctx, f.ti.conn, f.projectID)
-	stale := seedRemoteSessionIssuer(t, ctx, f.ti.conn, f.projectID, f.organizationID, "stale-provider")
-	provider := f.addProvider(t, ctx, server)
-	f.add(t, ctx, server)
-	f.setColumn(t, ctx, server, conv.ToNullUUID(stale))
-
-	newIssuer := seedUserSessionIssuer(t, ctx, f.ti.conn, f.projectID)
-	_, err := f.ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
-		ID:                  f.metaID,
-		Name:                f.metaName,
-		UserSessionIssuerID: conv.PtrEmpty(newIssuer.String()),
-	})
-	require.NoError(t, err)
-	require.Zero(t, f.bound(t, ctx, newIssuer, provider))
-	require.Equal(t, 0, f.bound(t, ctx, newIssuer, stale))
-}
-
-func TestMemberProvider_RemoveKeepsBindingForAnAssociatedConsumer(t *testing.T) {
-	t.Parallel()
-	ctx, f := newMemberProviderFixture(t)
-
-	leaving := seedMcpServer(t, ctx, f.ti.conn, f.projectID)
-	provider := f.addProvider(t, ctx, leaving)
-	leavingMember := f.add(t, ctx, leaving)
-
-	staying := seedMcpServer(t, ctx, f.ti.conn, f.projectID)
-	client := createRemoteSessionClient(t, ctx, f.ti.conn, f.projectID, f.organizationID, provider, "staying-client")
-	stampAndWireMemberClient(t, ctx, f.ti.conn, f.projectID, f.organizationID, staying, client)
-	f.add(t, ctx, staying)
-	f.setColumn(t, ctx, staying, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
-
-	f.remove(t, ctx, leavingMember)
-	require.Zero(t, f.bound(t, ctx, f.gatewayIssuerID, provider))
-}
-
-func TestMemberProvider_RemoveIgnoresAConsumerNamedOnlyByTheColumn(t *testing.T) {
-	t.Parallel()
-	ctx, f := newMemberProviderFixture(t)
-
-	leaving := seedMcpServer(t, ctx, f.ti.conn, f.projectID)
-	provider := f.addProvider(t, ctx, leaving)
-	leavingMember := f.add(t, ctx, leaving)
-
-	staying := seedMcpServer(t, ctx, f.ti.conn, f.projectID)
-	f.add(t, ctx, staying)
-	f.setColumn(t, ctx, staying, conv.ToNullUUID(provider))
-
-	f.remove(t, ctx, leavingMember)
-	require.Equal(t, 0, f.bound(t, ctx, f.gatewayIssuerID, provider), "a stale column does not hold the binding")
-}
-
-func TestMemberProvider_AttachUsesTheAssociatedClientNotTheMemberIssuer(t *testing.T) {
-	t.Parallel()
-	ctx, f := newMemberProviderFixture(t)
-
-	server := seedMcpServer(t, ctx, f.ti.conn, f.projectID)
-	provider := seedRemoteSessionIssuer(t, ctx, f.ti.conn, f.projectID, f.organizationID, "member-provider")
-	associated := createRemoteSessionClient(t, ctx, f.ti.conn, f.projectID, f.organizationID, provider, "associated-client")
-	require.NoError(t, testrepo.New(f.ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
-		ProjectID:             f.projectID,
-		OrganizationID:        f.organizationID,
-		McpServerID:           server,
-		RemoteSessionClientID: associated,
-	}))
-
-	f.add(t, ctx, server)
-
-	rows, err := remotesessionsrepo.New(f.ti.conn).ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerParams{
-		UserSessionIssuerID: f.gatewayIssuerID,
-		ProjectID:           conv.ToNullUUID(f.projectID),
-		OrganizationID:      conv.ToPGText(f.organizationID),
-	})
-	require.NoError(t, err)
-	require.Empty(t, rows)
-}
-
-func TestMemberProvider_ClientOnMemberIssuerWithoutAssociationIsNotAttached(t *testing.T) {
-	t.Parallel()
-	ctx, f := newMemberProviderFixture(t)
-
-	server := seedMcpServer(t, ctx, f.ti.conn, f.projectID)
-	provider := f.addProvider(t, ctx, server)
-	other := createRemoteSessionClient(t, ctx, f.ti.conn, f.projectID, f.organizationID, provider, "unassociated-client")
-	member, err := mcpserversrepo.New(f.ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: server, ProjectID: f.projectID})
-	require.NoError(t, err)
-	require.NoError(t, remotesessionsrepo.New(f.ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: other,
-		UserSessionIssuerID:   member.UserSessionIssuerID.UUID,
-	}))
-
-	f.add(t, ctx, server)
-
-	rows, err := remotesessionsrepo.New(f.ti.conn).ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerParams{
-		UserSessionIssuerID: f.gatewayIssuerID,
-		ProjectID:           conv.ToNullUUID(f.projectID),
-		OrganizationID:      conv.ToPGText(f.organizationID),
-	})
-	require.NoError(t, err)
-	require.Empty(t, rows)
-}
-
-func TestMemberProvider_SeveralClientsOfOneProviderPreferTheMemberIssuer(t *testing.T) {
-	t.Parallel()
-	ctx, f := newMemberProviderFixture(t)
-
-	server := seedMcpServer(t, ctx, f.ti.conn, f.projectID)
-	provider := seedRemoteSessionIssuer(t, ctx, f.ti.conn, f.projectID, f.organizationID, "member-provider")
-	older := createRemoteSessionClient(t, ctx, f.ti.conn, f.projectID, f.organizationID, provider, "older-client")
-	require.NoError(t, testrepo.New(f.ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
-		ProjectID:             f.projectID,
-		OrganizationID:        f.organizationID,
-		McpServerID:           server,
-		RemoteSessionClientID: older,
-	}))
-	own := createRemoteSessionClient(t, ctx, f.ti.conn, f.projectID, f.organizationID, provider, "own-client")
-	stampAndWireMemberClient(t, ctx, f.ti.conn, f.projectID, f.organizationID, server, own)
-
-	f.add(t, ctx, server)
-
-	rows, err := remotesessionsrepo.New(f.ti.conn).ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerParams{
-		UserSessionIssuerID: f.gatewayIssuerID,
-		ProjectID:           conv.ToNullUUID(f.projectID),
-		OrganizationID:      conv.ToPGText(f.organizationID),
-	})
-	require.NoError(t, err)
-	require.Empty(t, rows)
-}
-
-func TestMemberProvider_RemoveKeepsBindingWhileAServerSharesTheGatewayIssuer(t *testing.T) {
-	t.Parallel()
-	ctx, f := newMemberProviderFixture(t)
-
-	leaving := seedMcpServer(t, ctx, f.ti.conn, f.projectID)
-	provider := f.addProvider(t, ctx, leaving)
-	memberID := uuid.MustParse(f.add(t, ctx, leaving))
-
-	outsiderID, err := uuid.NewV7()
-	require.NoError(t, err)
-	_, err = mcpserversrepo.New(f.ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID:                  outsiderID,
-		ProjectID:           f.projectID,
-		Name:                conv.ToPGText("outsider"),
-		Slug:                conv.ToPGText("outsider-" + uuid.NewString()),
-		RemoteMcpServerID:   conv.ToNullUUID(seedRemoteBackend(t, ctx, f.ti.conn, f.projectID)),
-		UserSessionIssuerID: conv.ToNullUUID(f.gatewayIssuerID),
-		Visibility:          "disabled",
-	})
-	require.NoError(t, err)
-
-	meta, err := metamcprepo.New(f.ti.conn).GetMetaMCPServer(ctx, metamcprepo.GetMetaMCPServerParams{
-		ID:             uuid.MustParse(f.metaID),
-		OrganizationID: f.organizationID,
-		ProjectID:      f.projectID,
-	})
-	require.NoError(t, err)
-
-	var logs bytes.Buffer
-	writer := metamcp.GatewayWriter{Logger: slog.New(slog.NewTextHandler(&logs, nil)), Audit: audit.NewLogger(), Authz: nil, Admission: nil}
-	tx, err := f.ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: GatewayWriter takes a caller-owned transaction; statements use generated queries.
-	require.NoError(t, err)
-	defer func() { _ = tx.Rollback(ctx) }()
-	_, err = writer.RemoveMember(ctx, tx, metamcp.Actor{OrganizationID: f.organizationID, ProjectID: f.projectID, UserID: "user", Email: nil}, meta, memberID)
-	require.NoError(t, err)
-	require.NoError(t, tx.Commit(ctx))
-
-	require.Zero(t, f.bound(t, ctx, f.gatewayIssuerID, provider))
-	require.Empty(t, logs.String(), "removal no longer attempts issuer unlink")
+	require.NoError(t, q.SoftDeleteServerAuthClientLinksFixture(ctx, sibling))
+	require.Empty(t, eligibleMembers(third), "a soft-deleted offer cannot qualify its member")
 }

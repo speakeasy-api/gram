@@ -29,12 +29,8 @@ import type { GetRegistryPromotionCandidateRequestBody } from "@gram/admin-clien
 import type { AdminInferenceKey } from "@gram/admin-client/models/components/admininferencekey";
 import { buildAdminGetUpstreamOAuthMigrationStatusQuery } from "@gram/admin-client/react-query/adminGetUpstreamOAuthMigrationStatus.core";
 import { buildAdminListUpstreamOAuthMigrationOrganizationsQuery } from "@gram/admin-client/react-query/adminListUpstreamOAuthMigrationOrganizations.core";
-import { buildAdminRunUpstreamOAuthMigrationMutation } from "@gram/admin-client/react-query/adminRunUpstreamOAuthMigration";
 import { buildAdminEnableUpstreamAuthEnforcementMutation } from "@gram/admin-client/react-query/adminEnableUpstreamAuthEnforcement";
-import { buildAdminBackfillMcpAuthGrantsMutation } from "@gram/admin-client/react-query/adminBackfillMcpAuthGrants";
-import type { AdminBackfillMCPAuthGrantsResult } from "@gram/admin-client/models/components/adminbackfillmcpauthgrantsresult";
 import type { AdminUpstreamOAuthMigrationOrganizations } from "@gram/admin-client/models/components/adminupstreamoauthmigrationorganizations";
-import type { AdminUpstreamOAuthMigrationRun } from "@gram/admin-client/models/components/adminupstreamoauthmigrationrun";
 import type { AdminUpstreamOAuthMigrationStatus } from "@gram/admin-client/models/components/adminupstreamoauthmigrationstatus";
 import { buildAdminGetInferenceKeysQuery } from "@gram/admin-client/react-query/adminGetInferenceKeys.core";
 import type { AdminInferenceKeyRepairResult } from "@gram/admin-client/models/components/admininferencekeyrepairresult";
@@ -1117,21 +1113,6 @@ export function upstreamOAuthMigrationStatusQuery(
   });
 }
 
-const generatedRunUpstreamOAuthMigrationMutation =
-  buildAdminRunUpstreamOAuthMigrationMutation(redirectingClient, {
-    retries: { strategy: "none" },
-  });
-
-export function runUpstreamOAuthMigration(
-  organizationID: string,
-): Promise<AdminUpstreamOAuthMigrationRun> {
-  return redirecting(
-    generatedRunUpstreamOAuthMigrationMutation.mutationFn({
-      request: { organizationId: organizationID },
-    }),
-  );
-}
-
 const generatedEnableUpstreamAuthEnforcementMutation =
   buildAdminEnableUpstreamAuthEnforcementMutation(redirectingClient, {
     retries: { strategy: "none" },
@@ -1235,13 +1216,4 @@ export function useCurateRegistryPromotionCandidateMutation(): UseMutationResult
     }),
     retry: false,
   });
-}
-
-const generatedBackfillMcpAuthGrantsMutation =
-  buildAdminBackfillMcpAuthGrantsMutation(redirectingClient, {
-    retries: { strategy: "none" },
-  });
-
-export function backfillMcpAuthGrants(): Promise<AdminBackfillMCPAuthGrantsResult> {
-  return redirecting(generatedBackfillMcpAuthGrantsMutation.mutationFn({}));
 }

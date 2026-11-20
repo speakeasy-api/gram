@@ -70,10 +70,14 @@ func TestLocalFixturesWithoutGrantEffect(t *testing.T) {
 func seedLocalPostgres(ctx context.Context, t *testing.T, db *pgxpool.Pool, spec Spec) {
 	t.Helper()
 
-	logger := testenv.NewLogger(t)
-	_, err := seedPostgres(ctx, logger, db, assetstest.NewTestBlobStore(t), testenv.NewEncryptionClient(t), testAssistantIssuerURL, testServerURL, spec)
+	seedNativePostgres(ctx, t, db, spec)
+	require.NoError(t, upstreamAuthReadiness(ctx, testenv.NewLogger(t), db, spec.OrgID))
+}
+
+func seedNativePostgres(ctx context.Context, t *testing.T, db *pgxpool.Pool, spec Spec) {
+	t.Helper()
+	_, err := seedPostgres(ctx, testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t), testenv.NewEncryptionClient(t), testAssistantIssuerURL, testServerURL, spec)
 	require.NoError(t, err)
-	require.NoError(t, migrateUpstreamAuth(ctx, logger, db, spec.OrgID))
 }
 
 // TestLocalFixturesAfterLogin covers the database a developer actually has

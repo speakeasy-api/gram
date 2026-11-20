@@ -174,7 +174,6 @@ func seedIssuerMigrationOAuthServer(t *testing.T, ctx context.Context, ti *testI
 	providerID, clientID, backendID, serverID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	require.NoError(t, fixtures.SeedRemoteSessionIssuerFixture(ctx, selectionbackfill.SeedRemoteSessionIssuerFixtureParams{ID: providerID, ProjectID: conv.ToNullUUID(projectID), Slug: "provider-" + providerID.String(), Issuer: "https://" + providerID.String() + ".example.com"}))
 	require.NoError(t, fixtures.SeedRemoteSessionClientFixture(ctx, selectionbackfill.SeedRemoteSessionClientFixtureParams{ID: clientID, ProjectID: conv.ToNullUUID(projectID), OrganizationID: conv.ToPGText(auth.ActiveOrganizationID), RemoteSessionIssuerID: providerID, ClientID: clientID.String()}))
-	require.NoError(t, fixtures.SeedClientBindingFixture(ctx, selectionbackfill.SeedClientBindingFixtureParams{RemoteSessionClientID: clientID, UserSessionIssuerID: issuerID}))
 	require.NoError(t, fixtures.SeedRemoteMCPServerFixture(ctx, selectionbackfill.SeedRemoteMCPServerFixtureParams{ID: backendID, ProjectID: projectID}))
 	require.NoError(t, fixtures.SeedMCPServerFixture(ctx, selectionbackfill.SeedMCPServerFixtureParams{ID: serverID, ProjectID: projectID, Slug: conv.ToPGText("server-" + serverID.String()), RemoteMcpServerID: conv.ToNullUUID(backendID), UserSessionIssuerID: conv.ToNullUUID(issuerID)}))
 	require.NoError(t, fixtures.SeedAssociationFixture(ctx, selectionbackfill.SeedAssociationFixtureParams{ProjectID: projectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, RemoteSessionClientID: clientID}))
@@ -229,7 +228,6 @@ func TestOrganizationUserSessionIssuerMigrateMaintainsMovedGatewayMembers(t *tes
 	direct, _ := seedIssuerMigrationOAuthServer(t, ctx, ti, *auth.ProjectID, targetID)
 	member, registration := seedIssuerMigrationOAuthServer(t, ctx, ti, *auth.ProjectID, otherID)
 	fixtures := selectionbackfill.New(ti.conn)
-	require.NoError(t, fixtures.SeedClientBindingFixture(ctx, selectionbackfill.SeedClientBindingFixtureParams{RemoteSessionClientID: registration, UserSessionIssuerID: targetID}))
 	syncIssuerMigrationTestServers(t, ctx, ti, direct, member)
 	gatewayID := uuid.New()
 	require.NoError(t, fixtures.SeedMetaMCPServerFixture(ctx, selectionbackfill.SeedMetaMCPServerFixtureParams{ID: gatewayID, OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, Name: "Moved gateway", UserSessionIssuerID: conv.ToNullUUID(sourceID)}))
@@ -251,6 +249,7 @@ func TestOrganizationUserSessionIssuerMigrateMaintainsMovedGatewayMembers(t *tes
 	require.NoError(t, err)
 	require.Len(t, existingChoices, 1)
 	require.Equal(t, member, existingChoices[0].McpServerID)
+	require.Equal(t, conv.ToNullUUID(registration), existingChoices[0].RemoteSessionClientID)
 	movedChoices, err := fixtures.ListSelectionsFixture(ctx, selectionbackfill.ListSelectionsFixtureParams{CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: migrationCredentialID(moved)})
 	require.NoError(t, err)
 	require.Len(t, movedChoices, 2)
@@ -294,10 +293,11 @@ func TestOrganizationUserSessionIssuerMigrateKeepsExistingTargetChoice(t *testin
 			existing, err := seedUserSession(t, ctx, ti.conn, targetID, urn.NewUserSubject("kept-existing"))
 			require.NoError(t, err)
 			credentialID := migrationCredentialID(existing)
-			_, err = usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{
-				UserSessionIssuerID: targetID, CredentialKind: upstreamclients.CredentialKindUserSession,
-				CredentialID: credentialID, Source: upstreamclients.SelectionSourceIssuance,
-				PickedMcpServerIds: []uuid.UUID{}, PickedClientIds: []uuid.UUID{},
+			_, err = usersessionsrepo.New(ti.conn).RecordIssuedAuthClientChoices(ctx, usersessionsrepo.RecordIssuedAuthClientChoicesParams{
+				UserSessionIssuerID: targetID, CredentialID: credentialID,
+				PickedMcpServerIds: []uuid.UUID{targetServer}, PickedClientIds: []uuid.UUID{targetRegistration},
+				PickedAuthClientIds: []uuid.UUID{authclientbackfill.OAuthClientID(auth.ActiveOrganizationID, targetRegistration, authclientbackfill.TypeRemoteSession)},
+				PickedExplicit:      []bool{true},
 			})
 			require.NoError(t, err)
 			list := selectionbackfill.ListSelectionsFixtureParams{CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: credentialID}

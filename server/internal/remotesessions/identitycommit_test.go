@@ -31,7 +31,7 @@ func TestIdentityCommitBindRefusesDetachingOrgClientOnOrgIssuer(t *testing.T) {
 	ctx, ti := newTestService(t)
 	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "identity-commit-detach-issuer")
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "identity-commit-detach-current", "", false, []string{"none"})
-	orgClientID := bindServerIdentityClient(t, ctx, ti, "identity-commit-detach-org-client", currentProviderID, userIssuerID, true)
+	orgClientID := createServerIdentityClient(t, ctx, ti, "identity-commit-detach-org-client", currentProviderID, true)
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "identity-commit-detach-next", "", false, []string{"none"})
 	nextClientID := createServerIdentityClient(t, ctx, ti, "identity-commit-detach-next-client", nextProviderID, false)
 
@@ -42,7 +42,7 @@ func TestIdentityCommitBindRefusesDetachingOrgClientOnOrgIssuer(t *testing.T) {
 	require.ErrorIs(t, commit.Bind(ctx, tx, reg), remotesessions.ErrIdentityOrgWideBinding)
 	require.NoError(t, tx.Rollback(ctx))
 	requireClientBound(t, ctx, ti, orgClientID, userIssuerID, true)
-	requireClientBound(t, ctx, ti, nextClientID, userIssuerID, false)
+	requireNoAttachmentParent(t, ctx, ti, nextClientID, userIssuerID)
 }
 
 func TestIdentityCommitBindOffersOrgRegistrationWithoutBinding(t *testing.T) {
@@ -58,7 +58,7 @@ func TestIdentityCommitBindOffersOrgRegistrationWithoutBinding(t *testing.T) {
 	require.NoError(t, commit.Bind(ctx, tx, reg))
 	_, err := commit.Commit(ctx, tx)
 	require.NoError(t, err)
-	requireClientBound(t, ctx, ti, orgClientID, userIssuerID, false)
+	requireNoAttachmentParent(t, ctx, ti, orgClientID, userIssuerID)
 	require.Equal(t, []uuid.UUID{orgClientID}, associatedClients(t, ctx, ti.conn, projectIDFromContext(t, ctx), plan.MCPServerID))
 }
 
@@ -68,7 +68,7 @@ func TestIdentityCommitBindRefusesDetachingClientWithLiveAgentBinding(t *testing
 	ctx, ti := newTestService(t)
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "identity-commit-agent-issuer")
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "identity-commit-agent-current", "", false, []string{"none"})
-	clientID := bindServerIdentityClient(t, ctx, ti, "identity-commit-agent-client", currentProviderID, userIssuerID, false)
+	clientID := createServerIdentityClient(t, ctx, ti, "identity-commit-agent-client", currentProviderID, false)
 	seedLiveAgentBinding(t, ctx, ti, clientID, userIssuerID)
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "identity-commit-agent-next", "", false, []string{"none"})
 	nextClientID := createServerIdentityClient(t, ctx, ti, "identity-commit-agent-next-client", nextProviderID, false)
@@ -98,7 +98,7 @@ func TestIdentityCommitBindRequiresLock(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { o11y.NoLogDefer(func() error { return tx.Rollback(context.Background()) }) })
 	require.ErrorIs(t, commit.Bind(ctx, tx, reg), remotesessions.ErrIdentityStepOrder)
-	requireClientBound(t, ctx, ti, clientID, userIssuerID, false)
+	requireNoAttachmentParent(t, ctx, ti, clientID, userIssuerID)
 }
 
 // A bound client ReuseBound keeps means registration would only leave a new
@@ -115,7 +115,7 @@ func TestIdentityCommitReuseBoundSkipsRegistrationForBoundClient(t *testing.T) {
 	t.Cleanup(registrationServer.Close)
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "identity-commit-reuse-issuer")
 	providerID := createServerIdentityProvider(t, ctx, ti, "identity-commit-reuse-provider", registrationServer.URL, false, []string{"client_secret_basic"})
-	clientID := bindServerIdentityClient(t, ctx, ti, "identity-commit-reuse-client", providerID, userIssuerID, false)
+	clientID := createServerIdentityClient(t, ctx, ti, "identity-commit-reuse-client", providerID, false)
 
 	plan := linkPlan(t, ctx, ti, userIssuerID, providerID, uuid.Nil)
 	associate(t, ctx, ti.conn, activeOrganizationID(t, ctx), projectIDFromContext(t, ctx), plan.MCPServerID, clientID)
@@ -144,6 +144,13 @@ func TestIdentityCommitReuseBoundSkipsRegistrationForBoundClient(t *testing.T) {
 // through clientID's binding to userIssuerID.
 func seedLiveAgentBinding(t *testing.T, ctx context.Context, ti *testInstance, clientID, userIssuerID uuid.UUID) {
 	t.Helper()
+	seedLiveAgentBindingInProject(t, ctx, ti, clientID, userIssuerID, projectIDFromContext(t, ctx))
+}
+
+// The caller's project supplies the FK parent scope for the provider; the
+// fixture can insert a historical attachment in a different project.
+func seedLiveAgentBindingInProject(t *testing.T, ctx context.Context, ti *testInstance, clientID, userIssuerID, attachmentProjectID uuid.UUID) {
+	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{
@@ -154,8 +161,9 @@ func seedLiveAgentBinding(t *testing.T, ctx context.Context, ti *testInstance, c
 	require.NoError(t, err)
 	subject := urn.NewUserSubject(authCtx.UserID)
 	session := insertRemoteSession(t, ctx, ti.conn, subject, userIssuerID.String(), clientID.String())
+	ensureAttachmentParent(t, ctx, ti.conn, clientID, userIssuerID)
 	_, err = testrepo.New(ti.conn).InsertPrincipalRemoteSessionBindingFixture(ctx, testrepo.InsertPrincipalRemoteSessionBindingFixtureParams{
-		ProjectID:             *authCtx.ProjectID,
+		ProjectID:             attachmentProjectID,
 		OrganizationID:        authCtx.ActiveOrganizationID,
 		PrincipalID:           agent.ID,
 		UserSessionIssuerID:   userIssuerID,

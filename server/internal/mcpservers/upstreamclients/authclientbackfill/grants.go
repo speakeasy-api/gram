@@ -125,6 +125,14 @@ func (p *grantPlan) want(kind GrantKind, principal urn.Principal, scope authz.Sc
 // allows what today's decisions allow: personal defaults always, shared client
 // grants with withShared, and legacy API key policies with withKeys, which
 // implies withShared. It only ever adds grants.
+// ProvisionFromTypedOffers grants defaults for a newly materialized, complete
+// set of typed offers. The caller owns the transaction that creates that set;
+// no rollout tasks or issuer-link repairs are run by this entry point.
+func ProvisionFromTypedOffers(ctx context.Context, tx pgx.Tx, organizationID string) error {
+	report := newReport(true)
+	return runGrants(ctx, tx, Options{OrganizationID: organizationID, Apply: true, PageSize: 0, TypedOnly: true}, &report, true, true)
+}
+
 func runGrants(ctx context.Context, tx pgx.Tx, opts Options, report *Report, withShared, withKeys bool) error {
 	q := New(tx)
 	plan := &grantPlan{existing: map[string]bool{}, provisioned: map[string]bool{}, history: map[string]int{}, taken: map[string]int{}, missing: map[urn.Principal][]*authz.RoleGrant{}, kinds: map[urn.Principal][]GrantKind{}, order: nil, counts: make(map[GrantKind]int)}

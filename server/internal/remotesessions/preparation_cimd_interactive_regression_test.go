@@ -18,7 +18,7 @@ import (
 func TestPreparationCIMDPreservesInteractiveGrants(t *testing.T) {
 	t.Parallel()
 	for _, legacy := range []bool{false, true} {
-		for _, mechanism := range []string{"cimd", "manual"} {
+		for _, mechanism := range []string{remotesessions.PreparationMechanismCIMD, remotesessions.PreparationMechanismManual} {
 			for _, tc := range []struct {
 				name      string
 				confirmed []string
@@ -40,6 +40,8 @@ func TestPreparationCIMDPreservesInteractiveGrants(t *testing.T) {
 					user := createUserSessionIssuer(t, ctx, ti.conn, "interactive-human")
 					client := createCimdClient(t, ctx, ti, issuer.String(), user.String(), []string{"openid"})
 					in := remotesessions.PreparationInput{UserSessionIssuerID: user, RemoteSessionIssuerID: issuer, ClientID: uuid.MustParse(client.ID), Resource: "https://resource.example.com/", Mechanism: mechanism, Scopes: []string{"openid"}, ConfirmGrants: tc.confirmed}
+					serverID := seedRemoteMCPServerForIssuer(t, ctx, ti, user, "interactive-ema", in.Resource)
+					associateClient(t, ctx, ti.conn, activeOrganizationID(t, ctx), projectIDFromContext(t, ctx), serverID, in.ClientID)
 					preparationConfidentialClient(t, ctx, ti, issuer, in.ClientID)
 					original := []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken}
 					if legacy {
@@ -64,6 +66,13 @@ func TestPreparationCIMDPreservesInteractiveGrants(t *testing.T) {
 					prepared, err := ti.service.PrepareIdentityChaining(ctx, in)
 					require.NoError(t, err)
 					require.ElementsMatch(t, combined, prepared.GrantTypes)
+					if mechanism == remotesessions.PreparationMechanismCIMD {
+						require.Equal(t, remotesessions.PreparationStatePublishedAcceptanceUnverified, prepared.State)
+						require.Equal(t, remotesessions.PreparationGrantSourceCIMDPublished, prepared.GrantSource)
+					} else {
+						require.Equal(t, remotesessions.PreparationStateReady, prepared.State)
+						require.Equal(t, remotesessions.PreparationGrantSourceAdministratorDeclared, prepared.GrantSource)
+					}
 					in.ExpectedGeneration = prepared.Generation
 					before, err := ti.service.ReadIdentityChaining(ctx, in)
 					require.NoError(t, err)
@@ -84,7 +93,13 @@ func TestPreparationCIMDPreservesInteractiveGrants(t *testing.T) {
 					require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &doc))
 					require.ElementsMatch(t, combined, doc.GrantTypes)
 					require.Equal(t, []string{oauthwire.ResponseTypeCode}, doc.ResponseTypes)
-					require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, in.ClientID, user))
+					offers := offeredAuthClients(t, ctx, ti.conn, serverID)
+					if mechanism == remotesessions.PreparationMechanismCIMD {
+						require.Empty(t, offers, "unverified CIMD publication does not create a typed offer")
+					} else {
+						require.Len(t, offers, 1, "a ready manual binding creates a typed offer")
+					}
+					require.Equal(t, []uuid.UUID{in.ClientID}, associatedClients(t, ctx, ti.conn, *auth.ProjectID, serverID), "the interactive placement survives")
 				})
 			}
 		}
