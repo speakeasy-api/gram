@@ -92,6 +92,16 @@ func consentInventoryFingerprint(inventory *consentToolInventory) string {
 		}
 		return 0
 	})
+	if inventory.DirectAuthClient != nil {
+		// A reusable approval must bind the exact typed choice. An older
+		// fingerprint cannot authorize a new selection just because its tools match.
+		return consentEvidenceHash(struct {
+			Resource   string
+			Backend    string
+			Tools      []consentInventoryTool
+			AuthClient uuid.UUID
+		}{Resource: inventory.Resource, Backend: inventory.BackendHash, Tools: tools, AuthClient: *inventory.DirectAuthClient})
+	}
 	return consentEvidenceHash(struct {
 		Resource string
 		Backend  string

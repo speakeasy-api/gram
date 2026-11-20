@@ -177,3 +177,22 @@ func TestValidateCatalogMemberComparesTypedFingerprintUnderEnforcement(t *testin
 		})
 	}
 }
+
+func TestConsentInventoryFingerprintBindsTypedChoice(t *testing.T) {
+	t.Parallel()
+	//nolint:exhaustruct_v5 // Only the fingerprinted fields matter.
+	inventory := consentToolInventory{Complete: true, Resource: "test-resource", BackendHash: "test-backend"}
+	legacy := consentInventoryFingerprint(&inventory)
+	require.NotEmpty(t, legacy)
+	noAuth := uuid.Nil
+	inventory.DirectAuthClient = &noAuth
+	anonymous := consentInventoryFingerprint(&inventory)
+	require.NotEqual(t, legacy, anonymous)
+	id := uuid.New()
+	inventory.DirectAuthClient = &id
+	selected := consentInventoryFingerprint(&inventory)
+	require.NotEqual(t, legacy, selected)
+	require.NotEqual(t, anonymous, selected)
+	id = uuid.New()
+	require.NotEqual(t, selected, consentInventoryFingerprint(&inventory))
+}
