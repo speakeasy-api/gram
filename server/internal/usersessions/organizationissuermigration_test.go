@@ -751,6 +751,10 @@ func TestOrganizationUserSessionIssuerMigrateMovesAttachmentOnLoginFromAnotherIs
 	gatewayID := seedIssuer(t, ctx, ti, "cross-issuer-migrate-gateway")
 	clientID := seedMigrationRemoteClient(t, ctx, ti, "cross-issuer-migrate-upstream", sourceID, gatewayID)
 	login, bindingIDs := seedMigrationAttachments(t, ctx, ti, "cross-issuer-migrate-user", gatewayID, clientID, sourceID)
+	// A second agent uses the same registration and same login. The fixture's
+	// reauthorization advances the grant on that login but preserves its ID.
+	secondLogin, secondBindings := seedMigrationAttachments(t, ctx, ti, "cross-issuer-migrate-second", gatewayID, clientID, sourceID)
+	require.Equal(t, login, secondLogin)
 
 	// A new generation on the same pinned row must still move. Only material
 	// publication uses the grant generation as a compare-and-swap fence.
@@ -768,6 +772,7 @@ func TestOrganizationUserSessionIssuerMigrateMovesAttachmentOnLoginFromAnotherIs
 	require.Equal(t, 0, result.RemoteSessionsMigrated, "the login was made through the gateway, not the source")
 
 	requireMigrationAttachment(t, ctx, ti, bindingIDs[sourceID], targetID, login)
+	requireMigrationAttachment(t, ctx, ti, secondBindings[sourceID], targetID, secondLogin)
 	parents, err = remoteRepo.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, parents)
