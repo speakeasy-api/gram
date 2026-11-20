@@ -20,11 +20,9 @@ import (
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
-// Migrating an issuer moves its servers onto the target, which configures
-// their sign-in there. Under upstream auth enforcement a moved server that is
-// the target's only consumer is associated with the clients bound to it, and
-// one that shares the target is associated with none.
-func TestOrganizationUserSessionIssuerMigrateAssociatesSoleConsumerClientsUnderEnforcement(t *testing.T) {
+// An enforced migration cannot infer an upstream offer from the target's
+// compatibility FK parents, even if the moved server is its only consumer.
+func TestOrganizationUserSessionIssuerMigrateDoesNotInheritTargetClientsUnderEnforcement(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -89,12 +87,7 @@ func TestOrganizationUserSessionIssuerMigrateAssociatesSoleConsumerClientsUnderE
 
 			associations, err := upstreamclientsrepo.New(ti.conn).ListMCPServerRemoteSessionClients(ctx, upstreamclientsrepo.ListMCPServerRemoteSessionClientsParams{McpServerID: moved, ProjectID: projectID})
 			require.NoError(t, err)
-			if tc.shared {
-				require.Empty(t, associations, "a target another server uses configures nothing for the moved server")
-				return
-			}
-			require.Len(t, associations, 1)
-			require.Equal(t, client.ID, associations[0].RemoteSessionClientID)
+			require.Empty(t, associations, "moving a downstream issuer must not configure a new upstream offer")
 		})
 	}
 }
