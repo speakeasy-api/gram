@@ -721,7 +721,7 @@ func (s *Service) serveTunneledPublicSession(
 		"",
 		nil,
 		remotemcp.WithHeaderPolicy(proxy.HeaderPolicyTunneled),
-		s.feedbackLocalTools(logger, organizationID, endpoint.ProjectID, mcpServer),
+		s.proxyLocalTools(logger, localToolServer{organizationID: organizationID, projectID: endpoint.ProjectID, mcpServerID: mcpServer.ID}, mcpServerClientInfoScope(mcpServer)),
 	)
 	// Redirects won't work across a tunnel boundary; disable.
 	p.DisableRedirects = true

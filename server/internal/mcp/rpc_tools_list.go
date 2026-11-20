@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
-	"github.com/speakeasy-api/gram/server/internal/mcpfeedback"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
@@ -58,7 +57,7 @@ func handleToolsList(
 	shadowMCPClient *shadowmcp.Client,
 	platformExtras []platformtools.ExternalTool,
 	clientInfoStore sessionClientInfoStore,
-	feedback *mcpfeedback.Recorder,
+	local hostedLocalTools,
 ) (json.RawMessage, error) {
 	projectID := mv.ProjectID(payload.projectID)
 
@@ -179,7 +178,9 @@ func handleToolsList(
 		}
 	}
 
-	tools = listHostedFeedbackTool(ctx, logger, feedback, payload, tools)
+	if local != nil {
+		tools = withLocalTools(tools, local(ctx, logger, toolset.OrganizationID, payload))
+	}
 
 	// An empty toolset must list [] rather than null: some clients reject a
 	// null tools array during startup.

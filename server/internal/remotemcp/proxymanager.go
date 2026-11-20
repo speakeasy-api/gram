@@ -549,6 +549,7 @@ func (f *ProxyManager) BuildTarget(
 		},
 		ToolsListResponseInterceptors: toolsListRespInterceptors,
 		LocalTools:                    options.localTools,
+		LocalToolResultObservers:      nil,
 		ResourcesReadRequestInterceptors: []proxy.ResourcesReadRequestInterceptor{
 			f.resourcesReadUsageLimitsInterceptor,
 		},

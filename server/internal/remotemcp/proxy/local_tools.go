@@ -129,6 +129,9 @@ func (p *Proxy) answerLocalToolCall(
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "encode local tool result").LogError(ctx, p.Logger)
 	}
+	for _, observer := range p.LocalToolResultObservers {
+		observer.ObserveLocalToolResult(ctx, call, response.Result)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -142,6 +145,13 @@ func (p *Proxy) answerLocalToolCall(
 	observeResponse(ctx, response)
 
 	return nil
+}
+
+// LocalToolResultObserver is told the result of a tools/call a local tool
+// answered, as the JSON-RPC result the client receives.
+type LocalToolResultObserver interface {
+	// ObserveLocalToolResult is called once the local tool has answered.
+	ObserveLocalToolResult(ctx context.Context, call *ToolsCallRequest, result json.RawMessage)
 }
 
 // marshalLocalToolResult produces the tools/call response carrying result,

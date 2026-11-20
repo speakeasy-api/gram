@@ -30,7 +30,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
-	"github.com/speakeasy-api/gram/server/internal/mcpfeedback"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -308,9 +307,9 @@ type Service struct {
 	// validationLimiter paces verifies per consent challenge; nil without Redis.
 	validationLimiter *ratelimit.Limiter
 
-	// feedback serves the feedback tool on the servers that offer it; nil
-	// serves it on none.
-	feedback *mcpfeedback.Recorder
+	// localToolSources offer the tools Speakeasy answers itself on the
+	// servers it serves, such as the feedback tool; none offers no such tool.
+	localToolSources []localToolSource
 	// autoVerifications admits and drains the probes a committed grant starts off the request path.
 	autoVerifications *autoVerifications
 	// remoteSessionRecheck sweeps idle grants with no refresh token; runs only where StartRemoteSessionRecheck is called.
@@ -757,7 +756,7 @@ func NewService(
 		attemptEndings:         newAttemptEndings(),
 		validationMetrics:      remotesessionmetrics.NewValidation(logger, meterProvider),
 		validationLimiter:      newValidationLimiter(redisClient, meterProvider),
-		feedback:               nil,
+		localToolSources:       nil,
 		autoVerifications:      newAutoVerifications(),
 		remoteSessionRecheck:   newRemoteSessionRecheck(metaRuntimeConfig.withDefaults().RecheckInterval, redisClient, meterProvider),
 		remoteProxyManager:     remoteProxyManager,
@@ -2041,10 +2040,10 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case mcpversions.MethodNotificationsInitialized, mcpversions.MethodNotificationsCancelled:
 		return nil, nil
 	case mcpversions.MethodToolsList:
-		return handleToolsList(ctx, s.logger, s.authz, s.db, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo, s.feedback)
+		return handleToolsList(ctx, s.logger, s.authz, s.db, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo, s.hostedLocalTools)
 	case mcpversions.MethodToolsCall:
 		recordToolsCallIdentityCoverage(ctx, s.identityCoverage, payload.organizationID, payload)
-		body, err := handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo, s.scanEvaluator, s.feedback)
+		body, err := handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo, s.scanEvaluator, s.hostedLocalTools)
 		s.recordHostedToolsCallOutcome(ctx, payload, err)
 		return body, err
 	case mcpversions.MethodPromptsList:
@@ -2278,7 +2277,7 @@ func (s *Service) HandleToolsList(
 		s.platformExtras,
 		s.sessionClientInfo,
 		// An internal caller is not an agent on the server's own endpoint, so
-		// it is not offered the feedback tool.
+		// it is offered no local tools.
 		nil,
 	)
 	if err != nil {
