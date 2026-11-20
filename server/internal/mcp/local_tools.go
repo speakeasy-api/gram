@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 
@@ -10,6 +11,7 @@ import (
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
@@ -237,9 +239,12 @@ func answerHostedLocalToolCall(
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "answer local tool call").LogError(ctx, logger)
 	}
+	if called == nil {
+		return nil, oops.E(oops.CodeUnexpected, errors.New("local tool returned no result"), "answer local tool call").LogError(ctx, logger)
+	}
 	// Counted as a served call when it succeeds, like the gateway's other own
 	// tools, although no backend answered it.
-	payload.resultSucceeded = called != nil && !called.IsError
+	payload.resultSucceeded = !called.IsError
 
 	content := make([]json.RawMessage, 0, len(called.Content))
 	for _, item := range called.Content {
