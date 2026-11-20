@@ -10,6 +10,7 @@ const testState = vi.hoisted(() => ({
   projectId: "project_a",
   orgMemoryEnabled: false,
   assistantsAvailable: true,
+  isPlatformAdmin: false,
   featureFlags: {} as Record<string, FeatureFlagResult>,
   productFeatures: {
     isSuccess: true,
@@ -28,6 +29,7 @@ vi.mock("@/hooks/useFeatureFlag", () => ({
 vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: testState.projectId }),
   useOrganization: () => ({ id: "organization_a" }),
+  useIsPlatformAdmin: () => testState.isPlatformAdmin,
 }));
 
 vi.mock("./useAssistantsAvailability", () => ({
@@ -50,6 +52,7 @@ function unavailableFeatureFlag(
 
 beforeEach(() => {
   testState.projectId = "project_a";
+  testState.isPlatformAdmin = false;
   testState.orgMemoryEnabled = false;
   testState.assistantsAvailable = true;
   testState.productFeatures = {
@@ -207,6 +210,18 @@ describe("useProjectNavRoutes", () => {
     expect(
       result.current.find((entry) => entry.route.title === "Shadow MCP")?.scope,
     ).toEqual(["org:admin"]);
+  });
+
+  it("lists Intent-based policies for platform admins only", () => {
+    expect(
+      renderNav().result.current.map((entry) => entry.route.title),
+    ).not.toContain("Intent-based policies");
+
+    testState.isPlatformAdmin = true;
+    const entry = renderNav().result.current.find(
+      (e) => e.route.title === "Intent-based policies",
+    );
+    expect(entry?.scope).toEqual([]);
   });
 
   it("leaves Approval Requests out of nav", () => {
