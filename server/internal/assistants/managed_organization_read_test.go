@@ -74,6 +74,27 @@ func TestManagedAssistantOrganizationReadCeiling(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, countOrgRead(), "existing managed assistants gain the org ceiling")
 	require.Equal(t, 1, countProjectRead(), "existing managed assistants gain the project ceiling")
+	// A lapsed temporary grant for the same target is no ceiling: enabling
+	// takes the row over and makes it permanent.
+	rows, err = agentrepo.New(db).ListAgentPolicyGrants(t.Context(), agentrepo.ListAgentPolicyGrantsParams{OrganizationID: "org-test", AgentID: agentID})
+	require.NoError(t, err)
+	for _, row := range rows {
+		if row.Scope != string(authz.ScopeProjectRead) {
+			continue
+		}
+		_, err = db.Exec(t.Context(), "UPDATE principal_grants SET expires_at = now() - interval '1 hour' WHERE id = $1", row.ID)
+		require.NoError(t, err)
+	}
+	_, err = core.EnableManagedAssistant(t.Context(), "org-test", project, "user-1", true)
+	require.NoError(t, err)
+	require.Equal(t, 1, countProjectRead(), "a lapsed temporary grant is replaced by the project ceiling")
+	rows, err = agentrepo.New(db).ListAgentPolicyGrants(t.Context(), agentrepo.ListAgentPolicyGrantsParams{OrganizationID: "org-test", AgentID: agentID})
+	require.NoError(t, err)
+	for _, row := range rows {
+		if row.Scope == string(authz.ScopeProjectRead) {
+			require.False(t, row.ExpiresAt.Valid, "the project ceiling is permanent")
+		}
+	}
 	err = pgx.BeginFunc(t.Context(), db, func(tx pgx.Tx) error {
 		return core.ensureManagedOrganizationRead(t.Context(), tx, "org-test", project, ordinary.ID, "user-1")
 	})
