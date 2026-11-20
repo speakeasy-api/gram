@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"time"
 
@@ -168,10 +169,13 @@ type DeliveryResult struct {
 //     once with a fresh load.
 //   - Only the part of the tree the merge needs is loaded, and never message
 //     text.
-//   - New entries become rows; entries stored before only add the natural IDs
-//     and continuations they bring. Only new rows that are not synthetic are
-//     metered, announced and left for risk analysis; synthetic rows (such as
-//     compaction summaries) are stored already analyzed.
+//   - New entries become rows, including the copies a partial compaction
+//     makes of kept messages, which carry tree-scoped natural IDs. Entries
+//     stored before only add the natural IDs and continuations they bring, and
+//     mark a row synthetic when they show it is generated history. Only new
+//     rows that are not synthetic are metered, announced and left for risk
+//     analysis; synthetic rows (such as compaction summaries) are stored, or
+//     marked, already analyzed.
 func (w *ChatMessageWriter) WriteDelivery(ctx context.Context, target DeliveryTarget, write DeliveryWrite) (DeliveryResult, error) {
 	if err := validateDelivery(target, write); err != nil {
 		return DeliveryResult{Added: nil, Seen: nil}, err
@@ -527,6 +531,11 @@ func loadTrajectory(ctx context.Context, queries *repo.Queries, target DeliveryT
 // findIDOwners resolves the natural IDs the delivered entries carry to the
 // stored entries of this chat that own them, keyed by entry index. IDs that
 // stand for the start of the chat come back separately.
+//
+// The owners include the copies a partial compaction made of an entry: an
+// inference frame after the compaction carries the plain IDs of the kept
+// messages, and without their copies loaded the merge would match the
+// originals in the old tree.
 func findIDOwners(ctx context.Context, queries *repo.Queries, target DeliveryTarget, entries []transcript.Entry) (map[int][]idOwner, []storedNaturalID, error) {
 	entriesByID := make(map[transcript.NaturalID][]int)
 	params := repo.FindChatNaturalIDOwnersParams{ChatID: target.ChatID, ProjectID: target.ProjectID, Kinds: nil, NaturalValues: nil, BlockIndexes: nil}
@@ -550,13 +559,16 @@ func findIDOwners(ctx context.Context, queries *repo.Queries, target DeliveryTar
 	owners := make(map[int][]idOwner)
 	var start []storedNaturalID
 	for _, r := range rows {
-		id := transcript.NaturalID{Kind: transcript.Kind(r.Kind), Value: r.Value, Block: int(r.BlockIndex)}
 		if !r.ChatMessageID.Valid {
-			start = append(start, storedNaturalID{messageID: r.ChatMessageID, id: id})
+			start = append(start, storedNaturalID{messageID: r.ChatMessageID, id: transcript.NaturalID{Kind: transcript.Kind(r.Kind), Value: r.Value, Block: int(r.BlockIndex)}})
 			continue
 		}
-		for _, i := range entriesByID[id] {
-			owners[i] = append(owners[i], idOwner{id: r.ChatMessageID.UUID, pathKey: r.PathKey})
+		// A copy that a partial compaction made answers for the ID it copies.
+		requested := transcript.NaturalID{Kind: transcript.Kind(r.Kind), Value: r.RequestedValue, Block: int(r.BlockIndex)}
+		for _, i := range entriesByID[requested] {
+			if !slices.ContainsFunc(owners[i], func(o idOwner) bool { return o.id == r.ChatMessageID.UUID }) {
+				owners[i] = append(owners[i], idOwner{id: r.ChatMessageID.UUID, pathKey: r.PathKey})
+			}
 		}
 	}
 	return owners, start, nil
@@ -629,6 +641,8 @@ type deliveryPlan struct {
 	cleared         []uuid.UUID
 	continued       []uuid.UUID
 	continuedLeaves []uuid.UUID
+	// synthetic are stored rows the delivery showed to be generated history.
+	synthetic []uuid.UUID
 }
 
 // planDelivery turns a merge result into rows and updates, after checking
@@ -644,6 +658,7 @@ func planDelivery(target DeliveryTarget, write DeliveryWrite, merged transcript.
 		cleared:         nil,
 		continued:       nil,
 		continuedLeaves: nil,
+		synthetic:       nil,
 	}
 
 	known := make(map[uuid.UUID]struct{}, len(loaded)+len(merged.Added))
@@ -695,9 +710,13 @@ func planDelivery(target DeliveryTarget, write DeliveryWrite, merged transcript.
 	}
 
 	for _, s := range merged.Seen {
-		// A node added by this merge is written with everything it gained.
+		// A node added by this merge is written with everything it gained,
+		// including a synthetic mark.
 		if _, ok := added[s.Node.ID]; ok {
 			continue
+		}
+		if s.Synthetic {
+			plan.synthetic = append(plan.synthetic, s.Node.ID)
 		}
 		for _, id := range s.NewIDs {
 			plan.ids.add(s.Node.ID, id)
@@ -925,6 +944,13 @@ func (w *ChatMessageWriter) storeDelivery(ctx context.Context, tx pgx.Tx, organi
 	if len(plan.continued) > 0 {
 		if err := queries.SetChatMessageContinues(ctx, repo.SetChatMessageContinuesParams{ChatID: target.ChatID, ProjectID: target.ProjectID, Ids: plan.continued, ContinuesMessageIds: plan.continuedLeaves}); err != nil {
 			return fmt.Errorf("link compaction roots: %w", err)
+		}
+	}
+	// A row marked synthetic now was metered and announced when it was
+	// stored; marking it changes nothing downstream.
+	if len(plan.synthetic) > 0 {
+		if err := queries.MarkChatMessagesSynthetic(ctx, repo.MarkChatMessagesSyntheticParams{ChatID: target.ChatID, ProjectID: target.ProjectID, Ids: plan.synthetic}); err != nil {
+			return fmt.Errorf("mark chat messages synthetic: %w", err)
 		}
 	}
 	// An alias never takes over an ID that names an entry; the upsert keeps

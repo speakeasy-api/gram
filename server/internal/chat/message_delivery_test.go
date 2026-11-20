@@ -481,3 +481,138 @@ func TestWriteDelivery_PartsAndRowFieldsFollowNewEntriesOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, listParts(), 1)
 }
+
+func TestWriteDelivery_TranscriptMarksASummaryInferenceStoredAsSynthetic(t *testing.T) {
+	t.Parallel()
+	env := newDeliveryEnv(t)
+	env.deliver(t, env.chatID, claudeDelivery(
+		claudePrompt("u1", "", "p1", "hi"),
+		claudeReply("u2", "u1", "hello"),
+	))
+	// After the compaction, inference sees the summary as a plain prompt.
+	inferred := env.deliver(t, env.chatID, inferenceFrame(userText("summary of the chat")))
+	require.Len(t, inferred.Added, 1)
+	root := rowByContent(t, listTreeRows(t, env, env.chatID), "summary of the chat")
+	require.False(t, root.CaptureKind.Valid)
+	require.False(t, root.RiskAnalyzed)
+	readings, events := len(chatReadings(t, env, env.chatID)), chatEvents(t, env, env.chatID)
+
+	summary := transcript.Entry{Role: transcript.RoleUser, Text: "summary of the chat", Synthetic: true, IDs: []transcript.NaturalID{claudeLine("s1")}, Parent: claudeParent("b1")}
+	res := env.deliver(t, env.chatID, transcript.Delivery{
+		Source:  transcript.SourceClaudeTranscript,
+		Links:   []transcript.Link{{ID: claudeLine("b1"), To: claudeParent("u2"), Compaction: true}},
+		Entries: []transcript.Entry{summary},
+	})
+	require.Empty(t, res.Added)
+	require.Equal(t, []chat.DeliveryEntry{{Index: 0, MessageID: root.ID}}, res.Seen)
+
+	rows := listTreeRows(t, env, env.chatID)
+	require.Len(t, rows, 3, "no new rows")
+	root = rowByContent(t, rows, "summary of the chat")
+	require.Equal(t, chat.CaptureSynthetic, root.CaptureKind.String)
+	require.True(t, root.RiskAnalyzed, "a row found to be synthetic is not left for risk analysis")
+	require.Equal(t, rowByContent(t, rows, "hello").ID, root.ContinuesMessageID.UUID)
+	require.Equal(t, []string{"claude_entry:s1"}, naturalIDsOf(t, env, env.chatID, root.ID))
+	require.Len(t, chatReadings(t, env, env.chatID), readings, "marking a row meters nothing")
+	require.Equal(t, events, chatEvents(t, env, env.chatID), "marking a row announces nothing")
+}
+
+func TestWriteDelivery_PartialCompactionCopiesKeptMessages(t *testing.T) {
+	t.Parallel()
+	env := newDeliveryEnv(t)
+	before := env.deliver(t, env.chatID, claudeDelivery(
+		claudePrompt("u1", "", "p1", "first"),
+		claudeReply("u2", "u1", "one"),
+		claudePrompt("u3", "u2", "p2", "second"),
+		claudeToolUse("u4", "u3", "toolu_kept"),
+		claudeToolResult("u5", "u4", "toolu_kept", "listing"),
+		claudeReply("u6", "u5", "two"),
+	))
+	require.Len(t, before.Added, 6)
+	oldTree := listTreeRows(t, env, env.chatID)
+
+	// Claude Code summarises the chat, then repeats the kept u3..u6 after the
+	// summary with their original IDs.
+	summary := transcript.Entry{Role: transcript.RoleUser, Text: "summary of first and one", Synthetic: true, IDs: []transcript.NaturalID{claudeLine("s1")}, Parent: claudeParent("b1")}
+	compaction := env.deliver(t, env.chatID, transcript.Delivery{
+		Source: transcript.SourceClaudeTranscript,
+		Links:  []transcript.Link{{ID: claudeLine("b1"), To: claudeParent("u6"), Compaction: true}},
+		Entries: []transcript.Entry{
+			summary,
+			claudePrompt("u3", "s1", "p2", "second"),
+			claudeToolUse("u4", "u3", "toolu_kept"),
+			claudeToolResult("u5", "u4", "toolu_kept", "listing"),
+			claudeReply("u6", "u5", "two"),
+		},
+	})
+	require.Len(t, compaction.Added, 5, "the summary and a copy of each kept message")
+	require.Empty(t, compaction.Seen)
+	summaryID := compaction.Added[0].MessageID
+	copies := []uuid.UUID{compaction.Added[1].MessageID, compaction.Added[2].MessageID, compaction.Added[3].MessageID, compaction.Added[4].MessageID}
+
+	next := env.deliver(t, env.chatID, claudeDelivery(
+		claudePrompt("u7", "u6", "p7", "third"),
+		claudeReply("u8", "u7", "three"),
+	))
+	require.Len(t, next.Added, 2)
+
+	rows := listTreeRows(t, env, env.chatID)
+	require.Len(t, rows, 13)
+	byID := make(map[uuid.UUID]treeRow, len(rows))
+	for _, r := range rows {
+		byID[r.ID] = r
+	}
+	inOldTree := make(map[uuid.UUID]bool, len(oldTree))
+	for i, r := range oldTree {
+		require.Equal(t, r, byID[r.ID], "old tree row %d is unchanged", i)
+		inOldTree[r.ID] = true
+	}
+	for _, r := range rows {
+		if !inOldTree[r.ID] {
+			require.False(t, inOldTree[r.ParentMessageID.UUID], "nothing new hangs off the old tree")
+		}
+	}
+	parent := summaryID
+	for _, id := range copies {
+		c := byID[id]
+		require.Equal(t, parent, c.ParentMessageID.UUID, "the copies chain under the summary")
+		require.False(t, c.HasSiblingKey, "copies carry natural IDs")
+		require.False(t, c.CaptureKind.Valid, "copies are new rows, not generated history")
+		require.False(t, c.RiskAnalyzed)
+		parent = id
+	}
+	require.Equal(t, copies[3], byID[next.Added[0].MessageID].ParentMessageID.UUID, "the next turn follows the copies")
+	require.Equal(t, next.Added[0].MessageID, byID[next.Added[1].MessageID].ParentMessageID.UUID)
+
+	scope := "#copy-in:" + summaryID.String()
+	require.Equal(t, []string{"claude_entry:u4" + scope, "tool_call:toolu_kept" + scope}, naturalIDsOf(t, env, env.chatID, copies[1]))
+	require.Equal(t, []string{"claude_entry:u4", "tool_call:toolu_kept"}, naturalIDsOf(t, env, env.chatID, oldTree[3].ID), "the original keeps its IDs")
+
+	readings := chatReadings(t, env, env.chatID)
+	require.Len(t, readings, 12, "copies are metered like new rows; the summary is not")
+	for _, id := range copies {
+		require.Contains(t, readings, "chat_message:"+id.String())
+	}
+	require.NotContains(t, readings, "chat_message:"+summaryID.String())
+	require.Equal(t, 12, chatEvents(t, env, env.chatID))
+
+	// An inference frame after the compaction joins the copies, not the
+	// originals in the old tree.
+	call := transcript.Block{Type: "tool_use", ID: "toolu_kept", Name: "Bash", Input: []byte(`{"command":"ls"}`)}
+	result := transcript.Block{Type: "tool_result", ToolUseID: "toolu_kept", Text: "listing"}
+	res := env.deliver(t, env.chatID, inferenceFrame(
+		userText("summary of first and one"),
+		userText("second"),
+		transcript.Message{Role: transcript.RoleAssistant, Blocks: []transcript.Block{call}},
+		transcript.Message{Role: transcript.RoleUser, Blocks: []transcript.Block{result}},
+		assistantText("two"),
+		userText("third"),
+		assistantText("three"),
+	))
+	require.Empty(t, res.Added)
+	require.Len(t, res.Seen, 7)
+	require.Equal(t, copies[1], res.Seen[2].MessageID, "the tool call joins its copy")
+	require.Equal(t, next.Added[1].MessageID, res.Seen[6].MessageID)
+	require.Len(t, listTreeRows(t, env, env.chatID), 13)
+	require.Len(t, chatReadings(t, env, env.chatID), 12)
+}

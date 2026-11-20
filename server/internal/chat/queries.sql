@@ -2560,21 +2560,65 @@ ORDER BY id;
 
 -- name: FindChatNaturalIDOwners :many
 -- Resolves natural IDs to the stored entries that own them, in one chat only:
--- an ID stored in another chat never matches. path_key is NULL for an ID that
--- stands for the start of the chat.
-SELECT n.chat_message_id, n.kind, n.value, n.block_index, m.path_key
+-- an ID stored in another chat never matches. Besides each ID itself, it
+-- returns the copies a partial compaction made of it: the ID scoped to a newer
+-- tree, stored as value || '#copy-in:' || tree root id. requested_value is the
+-- ID asked for. path_key is NULL for an ID that stands for the start of the
+-- chat.
+--
+-- The exact match uses the unique index. The copy match scans the chat's
+-- scoped IDs, which exist only after a partial compaction.
+WITH input AS (
+  SELECT input.kind, input.value, input.block_index
+  FROM ROWS FROM (
+      UNNEST(@kinds::text[])
+    , UNNEST(@natural_values::text[])
+    , UNNEST(@block_indexes::smallint[])
+  ) AS input(kind, value, block_index)
+)
+SELECT
+    n.chat_message_id
+  , n.kind
+  , n.value
+  , n.block_index
+  , input.value::text AS requested_value
+  , m.path_key
+FROM input
+JOIN chat_message_natural_ids n
+  ON n.chat_id = @chat_id
+  AND n.kind = input.kind
+  AND n.value = input.value
+  AND n.block_index = input.block_index
+LEFT JOIN chat_messages m ON m.id = n.chat_message_id AND m.chat_id = n.chat_id
+WHERE n.project_id = @project_id::uuid
+UNION ALL
+SELECT
+    n.chat_message_id
+  , n.kind
+  , n.value
+  , n.block_index
+  , input.value::text AS requested_value
+  , m.path_key
 FROM chat_message_natural_ids n
+JOIN input
+  ON n.kind = input.kind
+  AND n.block_index = input.block_index
+  AND split_part(n.value, '#copy-in:', 1) = input.value
 LEFT JOIN chat_messages m ON m.id = n.chat_message_id AND m.chat_id = n.chat_id
 WHERE n.chat_id = @chat_id
   AND n.project_id = @project_id::uuid
-  AND (n.kind, n.value, n.block_index) IN (
-    SELECT input.kind, input.value, input.block_index
-    FROM ROWS FROM (
-        UNNEST(@kinds::text[])
-      , UNNEST(@natural_values::text[])
-      , UNNEST(@block_indexes::smallint[])
-    ) AS input(kind, value, block_index)
-  );
+  AND strpos(n.value, '#copy-in:') > 0;
+
+-- name: MarkChatMessagesSynthetic :exec
+-- A later delivery showed that stored rows are generated history, such as a
+-- compaction summary that inference stored as a plain prompt. They were
+-- scanned when stored; an unscanned one is not scanned now.
+UPDATE chat_messages
+SET capture_kind = 'synthetic'
+  , risk_analyzed_at = COALESCE(risk_analyzed_at, clock_timestamp())
+WHERE chat_id = @chat_id
+  AND project_id = @project_id::uuid
+  AND id = ANY(@ids::uuid[]);
 
 -- name: CreateTranscriptChatMessage :copyfrom
 -- Stores new transcript entries. The transcript merge is the only writer of
