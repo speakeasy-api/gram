@@ -338,9 +338,11 @@ export function CatalogOfficialSheet({
             {stage.kind === "done"
               ? shadowMCPCreatedDescription(stage.created, shadowName)
               : stage.kind === "sign-in"
-                ? canManageCredentials
-                  ? `${entryTitle} is added but stays off until people can sign in. Add an upstream credential, then turn the server on.`
-                  : `${entryTitle} is added but needs an organization admin to add its upstream credential.`
+                ? rbacLoading
+                  ? "Checking who can finish sign-in setup."
+                  : canManageCredentials
+                    ? `${entryTitle} is added but stays off until people can sign in. Add an upstream credential, then turn the server on.`
+                    : `${entryTitle} is added but needs an organization admin to add its upstream credential.`
                 : `Speakeasy adds the catalog version of ${entryTitle} and links it as the official version of ${shadowName}.`}
           </SheetDescription>
         </SheetHeader>
@@ -355,7 +357,7 @@ export function CatalogOfficialSheet({
               <Alert variant="warning" dismissible={false}>
                 {stage.message}
               </Alert>
-              {!canManageCredentials && (
+              {!rbacLoading && !canManageCredentials && (
                 <Alert variant="warning" dismissible={false}>
                   Ask an organization admin to open this server’s Settings and
                   finish setup under Identity.

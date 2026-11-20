@@ -161,7 +161,7 @@ export function UpstreamCredentialsSection({
           onOpenChange={setAdding}
         />
       ) : null}
-      {openClient ? (
+      {!query.isError && openClient ? (
         <AuthClientSheet
           client={openClient}
           mcpServerId={mcpServer.id}
