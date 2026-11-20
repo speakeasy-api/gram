@@ -1,0 +1,613 @@
+package transcript
+
+import (
+	"bytes"
+	"fmt"
+	"slices"
+
+	"github.com/google/uuid"
+)
+
+// lookahead bounds how many later entries of a delivery are compared when an
+// entry without IDs matches more than one sibling.
+const lookahead = 64
+
+// Node is one stored entry in the tree.
+type Node struct {
+	ID uuid.UUID
+	// Parent is the entry before this one. For a tree root it is the
+	// transcript's hidden root; ParentID then reports no parent.
+	Parent *Node
+	// Continues is the old leaf a compaction root continues from.
+	Continues *Node
+	// Children are kept in the order they were added, oldest first.
+	Children []*Node
+	// Entry holds what the node says. A node loaded from storage carries only
+	// its role and natural IDs; its text stays in the database.
+	Entry      Entry
+	ContentKey []byte
+	PathKey    []byte
+
+	hidden bool
+	// placeholder marks a node known only by its ID: a parent or old leaf
+	// that a partial load did not include. Paths stop before it.
+	placeholder bool
+	// root caches the root of the tree the node belongs to.
+	root *Node
+}
+
+// ParentID is the parent to store in chat_messages.parent_message_id.
+func (n *Node) ParentID() uuid.NullUUID {
+	if n.Parent == nil || n.Parent.hidden {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	}
+	return uuid.NullUUID{UUID: n.Parent.ID, Valid: true}
+}
+
+// ContinuesID is the old leaf to store in chat_messages.continues_message_id.
+func (n *Node) ContinuesID() uuid.NullUUID {
+	if n.Continues == nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	}
+	return uuid.NullUUID{UUID: n.Continues.ID, Valid: true}
+}
+
+// Stored is a node as the chat writer loads it from the database.
+type Stored struct {
+	ID          uuid.UUID
+	ParentID    uuid.NullUUID
+	ContinuesID uuid.NullUUID
+	Role        Role
+	Synthetic   bool
+	ContentKey  []byte
+	PathKey     []byte
+	IDs         []NaturalID
+}
+
+// Seen is a delivered entry that was already stored.
+type Seen struct {
+	// Index is the entry's position in Delivery.Entries.
+	Index int
+	Node  *Node
+	// NewIDs are natural IDs the entry brought that the node did not have,
+	// for example a transcript line that matched an inference entry. The
+	// writer stores them; the node now has IDs, so its sibling_key clears.
+	NewIDs []NaturalID
+	// Continues is set when the entry linked a stored root to the old leaf it
+	// continues from, for example a transcript summary that matched a root an
+	// inference frame stored first. The writer stores it.
+	Continues *Node
+	// Synthetic is set when the entry showed that a stored node is generated
+	// history, for example a transcript summary that matched a root an
+	// inference frame stored as a plain prompt. The writer marks the row.
+	Synthetic bool
+}
+
+// Alias maps the ID of a dropped source line to the entry that stands for it.
+type Alias struct {
+	ID NaturalID
+	// Node is the entry the line stands for. Nil means the line stands for
+	// the start of the conversation.
+	Node *Node
+}
+
+// Result is what a Merge changed.
+type Result struct {
+	// Added are the new nodes, in the order they were placed. Only these go
+	// to risk scanning, metering and events.
+	Added []*Node
+	Seen  []Seen
+	// Aliases are links that are new or changed, for the writer to store so
+	// later deliveries can name them.
+	Aliases []Alias
+}
+
+// UnknownParentError reports a delivery that names a parent the transcript
+// does not have.
+type UnknownParentError struct {
+	ID NaturalID
+}
+
+func (e *UnknownParentError) Error() string {
+	return fmt.Sprintf("transcript: unknown parent %s:%s/%d", e.ID.Kind, e.ID.Value, e.ID.Block)
+}
+
+type idKey struct {
+	kind  Kind
+	value string
+}
+
+// Transcript is the tree of one session. It is not safe for concurrent use;
+// the writer serializes deliveries for one chat.
+type Transcript struct {
+	root      *Node
+	nodes     map[uuid.UUID]*Node
+	byID      map[NaturalID]*Node
+	lastBlock map[idKey]*Node
+	aliases   map[NaturalID]*Node
+	// latest is the newest copy that bears an ID, for IDs that a partial
+	// compaction repeated in a newer tree.
+	latest map[idKey]*Node
+	newID  func() (uuid.UUID, error)
+}
+
+// New returns an empty transcript. newID makes the ID of every added node.
+func New(newID func() (uuid.UUID, error)) *Transcript {
+	root := blankNode(uuid.Nil)
+	root.hidden = true
+	root.placeholder = false
+	return &Transcript{
+		root:      root,
+		nodes:     map[uuid.UUID]*Node{},
+		byID:      map[NaturalID]*Node{},
+		lastBlock: map[idKey]*Node{},
+		aliases:   map[NaturalID]*Node{},
+		latest:    map[idKey]*Node{},
+		newID:     newID,
+	}
+}
+
+// Load adds stored nodes, parents before children. It can be called more
+// than once: a node whose parent is not loaded yet hangs under a placeholder
+// with that ID, and a later Load of that parent fills the same placeholder,
+// so incremental loads stay connected.
+func (t *Transcript) Load(stored []Stored) {
+	for _, s := range stored {
+		n := t.node(s.ID)
+		if !n.placeholder {
+			continue // loaded before
+		}
+		n.placeholder = false
+		n.Entry.Role = s.Role
+		n.Entry.Synthetic = s.Synthetic
+		n.ContentKey = s.ContentKey
+		n.PathKey = s.PathKey
+		if s.ContinuesID.Valid {
+			n.Continues = t.node(s.ContinuesID.UUID)
+		}
+		parent := t.root
+		if s.ParentID.Valid {
+			parent = t.node(s.ParentID.UUID)
+		}
+		n.Parent = parent
+		parent.Children = append(parent.Children, n)
+		t.adopt(n, s.IDs)
+	}
+}
+
+// LoadStartAliases restores aliases stored for dropped lines that stand for
+// the start of the conversation (Alias.Node was nil when they were stored).
+func (t *Transcript) LoadStartAliases(ids []NaturalID) {
+	for _, id := range ids {
+		t.aliases[id] = t.root
+	}
+}
+
+// Merge places every entry of d in the tree and returns what changed.
+// Merging the same delivery twice adds nothing the second time. On error the
+// tree may hold part of the delivery, so the caller must discard it.
+//
+// A compaction link is resolved only inside the delivery that carries it:
+// the shipper must send a compaction boundary and the summary after it in
+// one delivery.
+func (t *Transcript) Merge(d Delivery) (Result, error) {
+	res := Result{Added: nil, Seen: nil, Aliases: nil}
+	if err := checkIDs(d); err != nil {
+		return res, err
+	}
+	links := make(map[NaturalID]Link, len(d.Links))
+	for _, l := range d.Links {
+		links[l.ID] = l
+	}
+
+	cursor := t.root
+	for i, e := range d.Entries {
+		parent, continues, explicit, err := t.start(cursor, e, links)
+		if err != nil {
+			return Result{Added: nil, Seen: nil, Aliases: nil}, err
+		}
+
+		n, copied := t.find(parent, continues, e, explicit, d.Entries[i+1:])
+		// scope is the tree a repeated entry is copied into. find reports a
+		// copy only below a known tree root, so a nil scope here is a bug,
+		// never a reason to give a copy the original's IDs.
+		var scope *Node
+		if copied {
+			if scope = t.treeRoot(parent); scope == nil {
+				return Result{Added: nil, Seen: nil, Aliases: nil}, fmt.Errorf("transcript: copy of entry %d has no tree", i)
+			}
+		}
+		if n != nil {
+			ids := e.IDs
+			if copied {
+				// e repeats an older entry in a newer tree, and n is the entry
+				// another source already stored there: n takes the
+				// tree-scoped IDs, never the original's.
+				ids = scopeAll(e.IDs, scope)
+			}
+			seen := Seen{Index: i, Node: n, NewIDs: t.adopt(n, ids), Continues: nil, Synthetic: false}
+			if continues != nil && n.Continues == nil {
+				n.Continues = continues
+				seen.Continues = continues
+			}
+			if e.Synthetic && !n.Entry.Synthetic {
+				n.Entry.Synthetic = true
+				seen.Synthetic = true
+			}
+			res.Seen = append(res.Seen, seen)
+			cursor = n
+			continue
+		}
+
+		at := parent
+		if explicit && continues == nil {
+			at = t.placement(parent, e)
+		}
+		n, err = t.attach(at, continues, e, scope)
+		if err != nil {
+			return Result{Added: nil, Seen: nil, Aliases: nil}, err
+		}
+		res.Added = append(res.Added, n)
+		cursor = n
+	}
+
+	for _, l := range d.Links {
+		if l.Compaction {
+			continue
+		}
+		target := t.root
+		if l.To != nil {
+			// Follow other links in this delivery, in any order. A link that
+			// leads through a compaction boundary is not stored: compaction
+			// links resolve only inside the delivery that carries them.
+			n, cont, err := t.resolve(*l.To, links, nil, 0)
+			if err != nil || cont != nil {
+				continue
+			}
+			target = n
+		}
+		if prev, ok := t.aliases[l.ID]; ok && prev == target {
+			continue
+		}
+		t.aliases[l.ID] = target
+		alias := Alias{ID: l.ID, Node: target}
+		if target.hidden {
+			alias.Node = nil
+		}
+		res.Aliases = append(res.Aliases, alias)
+	}
+	return res, nil
+}
+
+// start finds where an entry goes: under the previous entry, under the
+// parent it names, or at a new root after a compaction. explicit reports
+// that the entry named its parent.
+func (t *Transcript) start(cursor *Node, e Entry, links map[NaturalID]Link) (parent, continues *Node, explicit bool, err error) {
+	switch {
+	case e.Continues != nil:
+		old, ok := t.lookup(*e.Continues)
+		if !ok {
+			return nil, nil, false, &UnknownParentError{ID: *e.Continues}
+		}
+		return t.root, old, true, nil
+	case e.Parent != nil:
+		parent, continues, err := t.resolve(*e.Parent, links, t.treeRoot(cursor), 0)
+		return parent, continues, true, err
+	default:
+		return cursor, nil, false, nil
+	}
+}
+
+// resolve turns a parent reference into a node, following links for lines
+// that have no entry. A compaction link anywhere on the way makes the entry
+// a new tree root that continues from the link's target. When a partial
+// compaction repeated the referenced line in a newer tree, the copy in scope
+// (the tree of the entry before), or else the newest copy, is the parent.
+func (t *Transcript) resolve(ref NaturalID, links map[NaturalID]Link, scope *Node, depth int) (parent, continues *Node, err error) {
+	if n, ok := t.lookupCopy(ref, scope); ok {
+		return n, nil, nil
+	}
+	if n, ok := t.lookup(ref); ok {
+		return n, nil, nil
+	}
+	l, ok := links[ref]
+	if !ok && ref.Block == LastBlock {
+		whole := ref
+		whole.Block = 0
+		l, ok = links[whole]
+	}
+	if !ok || depth > len(links) {
+		return nil, nil, &UnknownParentError{ID: ref}
+	}
+	if l.To == nil {
+		return t.root, nil, nil
+	}
+	target, cont, err := t.resolve(*l.To, links, scope, depth+1)
+	if err != nil {
+		return nil, nil, err
+	}
+	if l.Compaction {
+		return t.root, target, nil
+	}
+	return target, cont, nil
+}
+
+// find returns the stored node that e already is. copied=true means e
+// repeats an entry of an older tree inside a newer one (a partial
+// compaction): e then matches an entry another source already stored in the
+// newer tree, or becomes a new node there, and either way carries
+// tree-scoped IDs.
+//
+// A natural ID match is certain: first a copy in the parent's tree, then the
+// entry itself anywhere in the transcript. Otherwise the content key is
+// matched among the children of parent. A child does not match when it and e
+// both have an ID of the same kind: two prompt IDs, or two transcript lines,
+// are two entries even with the same text (a rewind). When several children
+// match, the one whose line keeps matching the rest of the delivery wins,
+// then the newest. A new compaction root only matches a root that continues
+// from the same old leaf, or a root whose continuation is not known yet.
+//
+// An entry that does not name its parent continues the trajectory of the
+// delivery (an inference frame), and one trajectory never crosses trees. So
+// when such an entry's ID points into another tree, the entry repeats that
+// older entry in this tree: inference stores a summary as a plain root before
+// it can know it is one, and a kept message after it must stay in its tree.
+func (t *Transcript) find(parent, continues *Node, e Entry, explicit bool, rest []Entry) (n *Node, copied bool) {
+	scope := t.treeRoot(parent)
+	if scope != nil {
+		// A copy in this tree wins over the original, through any of the
+		// entry's IDs, and the entry's other IDs join it in scoped form.
+		for _, id := range e.IDs {
+			if c, ok := t.byID[scoped(id, scope)]; ok {
+				return c, true
+			}
+		}
+	}
+	for _, id := range e.IDs {
+		if found, ok := t.byID[id]; ok {
+			crossesTrees := !explicit && scope != nil && t.treeRoot(found) != nil && t.treeRoot(found) != scope
+			if crossesTrees || t.repeatsOlderTree(found, scope) {
+				// Inference may have stored this entry in the newer tree
+				// already, without IDs: look for it by content below.
+				copied = true
+				break
+			}
+			return found, false
+		}
+	}
+
+	key := ContentKey(e)
+	var best *Node
+	bestScore := -1
+	for _, c := range slices.Backward(parent.Children) {
+		if continues != nil && c.Continues != nil && c.Continues != continues {
+			continue
+		}
+		if !bytes.Equal(c.ContentKey, key) || sameKind(c.Entry.IDs, e.IDs) {
+			continue
+		}
+		score := t.followMatches(c, rest)
+		if score > bestScore {
+			best, bestScore = c, score
+		}
+	}
+	return best, copied
+}
+
+// followMatches counts how many of the next entries continue the newest
+// matching line below n, up to lookahead entries.
+func (t *Transcript) followMatches(n *Node, rest []Entry) int {
+	score := 0
+	for i, e := range rest {
+		if i == lookahead || e.Parent != nil || e.Continues != nil {
+			break
+		}
+		key := ContentKey(e)
+		var next *Node
+		for _, c := range slices.Backward(n.Children) {
+			if hasAnyID(c, e.IDs) || (bytes.Equal(c.ContentKey, key) && !sameKind(c.Entry.IDs, e.IDs)) {
+				next = c
+				break
+			}
+		}
+		if next == nil {
+			break
+		}
+		score++
+		n = next
+	}
+	return score
+}
+
+// repeatsOlderTree reports whether placing a repeat of found under a node of
+// tree scope means a partial compaction copied it: scope is a compaction
+// root whose continuation chain leads back to found's tree.
+func (t *Transcript) repeatsOlderTree(found, scope *Node) bool {
+	if scope == nil || scope.Continues == nil {
+		return false
+	}
+	foundRoot := t.treeRoot(found)
+	if foundRoot == nil || foundRoot == scope {
+		return false
+	}
+	for r, hops := scope, 0; r != nil && r.Continues != nil && hops <= len(t.nodes); hops++ {
+		r = t.treeRoot(r.Continues)
+		if r == foundRoot {
+			return true
+		}
+	}
+	return false
+}
+
+// placement keeps the side entries of one step on one line. When the parent
+// a line names already has children, a new prompt is a rewind and branches
+// there; anything else (a tool result, an attachment's follower, a parallel
+// tool call) continues the newest line under that parent.
+func (t *Transcript) placement(parent *Node, e Entry) *Node {
+	if parent.hidden || isTurn(e) {
+		return parent
+	}
+	n := parent
+	for len(n.Children) > 0 {
+		n = n.Children[len(n.Children)-1]
+	}
+	return n
+}
+
+// attach adds e as a new node under parent. A non-nil copyIn means e is a
+// copy in the tree rooted there, so it takes tree-scoped IDs.
+func (t *Transcript) attach(parent, continues *Node, e Entry, copyIn *Node) (*Node, error) {
+	id, err := t.newID()
+	if err != nil {
+		return nil, fmt.Errorf("transcript: new node id: %w", err)
+	}
+	key := ContentKey(e)
+	n := blankNode(id)
+	n.Parent = parent
+	n.Continues = continues
+	n.Entry = e
+	n.Entry.IDs = nil
+	n.ContentKey = key
+	n.PathKey = PathKey(parent.PathKey, key)
+	n.placeholder = false
+	parent.Children = append(parent.Children, n)
+	t.nodes[id] = n
+	if copyIn != nil {
+		t.adopt(n, scopeAll(e.IDs, copyIn))
+		return n, nil
+	}
+	t.adopt(n, e.IDs)
+	return n, nil
+}
+
+// adopt gives n the IDs it did not have yet and returns them.
+func (t *Transcript) adopt(n *Node, ids []NaturalID) []NaturalID {
+	var added []NaturalID
+	for _, id := range ids {
+		if _, ok := t.byID[id]; ok {
+			continue
+		}
+		added = append(added, id)
+		t.byID[id] = n
+		k := idKey{kind: id.Kind, value: id.Value}
+		if prev, ok := t.lastBlock[k]; !ok || id.Block >= blockOf(prev, k) {
+			t.lastBlock[k] = n
+		}
+		if raw, ok := unscoped(id); ok {
+			t.latest[idKey{kind: raw.Kind, value: raw.Value}] = n
+		}
+	}
+	n.Entry.IDs = append(n.Entry.IDs, added...)
+	return added
+}
+
+func (t *Transcript) lookup(ref NaturalID) (*Node, bool) {
+	if ref.Block == LastBlock {
+		n, ok := t.lastBlock[idKey{kind: ref.Kind, value: ref.Value}]
+		if ok {
+			return n, true
+		}
+		ref.Block = 0
+	}
+	if n, ok := t.byID[ref]; ok {
+		return n, true
+	}
+	n, ok := t.aliases[ref]
+	return n, ok
+}
+
+// lookupCopy finds the copy of ref that a partial compaction made: the one
+// in scope when there is one. The newest copy stands in only at the start of
+// a delivery or inside a compaction tree, so a resent line of an older tree
+// still resolves to the original.
+func (t *Transcript) lookupCopy(ref NaturalID, scope *Node) (*Node, bool) {
+	if scope != nil {
+		if n, ok := t.lookup(scoped(ref, scope)); ok {
+			return n, true
+		}
+	}
+	if scope != nil && scope.Continues == nil {
+		return nil, false
+	}
+	n, ok := t.latest[idKey{kind: ref.Kind, value: ref.Value}]
+	return n, ok
+}
+
+// treeRoot returns the root of the tree n belongs to, or nil for the hidden
+// root and for nodes below a parent that was not loaded.
+func (t *Transcript) treeRoot(n *Node) *Node {
+	if n == nil || n.hidden {
+		return nil
+	}
+	if n.root != nil {
+		return n.root
+	}
+	var root *Node
+	for p, hops := n, 0; p != nil && hops <= len(t.nodes)+1; p, hops = p.Parent, hops+1 {
+		if p.placeholder {
+			return nil
+		}
+		if p.Parent != nil && p.Parent.hidden {
+			root = p
+			break
+		}
+	}
+	n.root = root
+	return root
+}
+
+// node returns the node with this ID, creating a placeholder if the
+// transcript has not seen it yet.
+func (t *Transcript) node(id uuid.UUID) *Node {
+	if n, ok := t.nodes[id]; ok {
+		return n
+	}
+	n := blankNode(id)
+	t.nodes[id] = n
+	return n
+}
+
+func blankNode(id uuid.UUID) *Node {
+	return &Node{
+		ID:          id,
+		Parent:      nil,
+		Continues:   nil,
+		Children:    nil,
+		Entry:       Entry{IDs: nil, Parent: nil, Continues: nil, Synthetic: false, Role: "", Text: "", Call: nil, Result: nil, MessageID: "", At: zeroTime},
+		ContentKey:  nil,
+		PathKey:     nil,
+		hidden:      false,
+		placeholder: true,
+		root:        nil,
+	}
+}
+
+func blockOf(n *Node, k idKey) int {
+	block := -1
+	for _, id := range n.Entry.IDs {
+		if id.Kind == k.kind && id.Value == k.value && id.Block > block {
+			block = id.Block
+		}
+	}
+	return block
+}
+
+func sameKind(a, b []NaturalID) bool {
+	for _, x := range a {
+		for _, y := range b {
+			if x.Kind == y.Kind {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func hasAnyID(n *Node, ids []NaturalID) bool {
+	for _, id := range ids {
+		if slices.Contains(n.Entry.IDs, id) {
+			return true
+		}
+	}
+	return false
+}
