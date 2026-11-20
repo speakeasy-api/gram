@@ -57778,100 +57778,6 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: OrganizationUserSessionIssuerMcpServers
-    /rpc/organizationUserSessionIssuers.listRemoteSessionClientBindings:
-        get:
-            deprecated: true
-            description: |-
-                List the remote session clients a user_session_issuer in the caller's organization binds, and the remote session clients each of its live MCP servers is associated with, so the two can be compared. Requires org:read.
-
-                Deprecated: the remote session clients bound to a user_session_issuer are no longer authoritative, and readers are being migrated to the remote session clients associated with each MCP server. This endpoint exists only to surface drift between the two during that migration.
-            operationId: listOrganizationUserSessionIssuerRemoteSessionClientBindings
-            parameters:
-                - allowEmptyValue: true
-                  description: The user_session_issuer whose client bindings are listed.
-                  in: query
-                  name: user_session_issuer_id
-                  required: true
-                  schema:
-                    description: The user_session_issuer whose client bindings are listed.
-                    format: uuid
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/UserSessionIssuerRemoteSessionClientBindings'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - session_header_Gram-Session: []
-            summary: listRemoteSessionClientBindings organizationUserSessionIssuers
-            tags:
-                - organizationUserSessionIssuers
-            x-speakeasy-name-override: listRemoteSessionClientBindings
-            x-speakeasy-react-hook:
-                name: OrganizationUserSessionIssuerRemoteSessionClientBindings
     /rpc/organizationUserSessionIssuers.migrate:
         post:
             description: Consolidate a source user_session_issuer onto a target issuer, preserving clients, sessions, attachments, and remote-session credentials before soft-deleting the source. The target must be in the same project or a broader organization scope. Access tokens issued through the authorization_code and refresh_token grants are audience-bound to the issuer, so once a repointed MCP server verifies bearers against the target, outstanding access tokens minted under the source are rejected until the client refreshes. Migrated sessions and refresh tokens keep working, so the refresh succeeds without re-authorization. Tokens from the jwt-bearer (ID-JAG) grant are bound to the resource URL and are unaffected. Requires org:admin.
@@ -67197,111 +67103,6 @@ paths:
             x-speakeasy-name-override: attachKeySet
             x-speakeasy-react-hook:
                 name: AttachRemoteSessionClientKeySet
-    /rpc/remoteSessionClients.attachUserSessionIssuer:
-        post:
-            deprecated: true
-            description: Attach a user_session_issuer to a remote_session_client by recording the binding in the join table. Rejected when another client is already bound to the same user_session_issuer for this client's remote_session_issuer.
-            operationId: attachUserSessionIssuer
-            parameters:
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/AttachUserSessionIssuerForm'
-                required: true
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/RemoteSessionClient'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-            summary: attachUserSessionIssuer remoteSessionClients
-            tags:
-                - remoteSessionClients
-            x-speakeasy-name-override: attachUserSessionIssuer
-            x-speakeasy-react-hook:
-                name: AttachUserSessionIssuer
     /rpc/remoteSessionClients.create:
         post:
             description: 'Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer. With template_client_id, the new client instead reuses a stored client''s upstream registration: the server copies that client''s secret and callback into the new record, and neither is returned to the caller.'
@@ -67726,111 +67527,6 @@ paths:
             x-speakeasy-name-override: detachKeySet
             x-speakeasy-react-hook:
                 name: DetachRemoteSessionClientKeySet
-    /rpc/remoteSessionClients.detachUserSessionIssuer:
-        post:
-            deprecated: true
-            description: Detach a user_session_issuer from a remote_session_client by removing the binding from the join table. A no-op when the binding does not exist.
-            operationId: detachUserSessionIssuer
-            parameters:
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/AttachUserSessionIssuerForm'
-                required: true
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/RemoteSessionClient'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-            summary: detachUserSessionIssuer remoteSessionClients
-            tags:
-                - remoteSessionClients
-            x-speakeasy-name-override: detachUserSessionIssuer
-            x-speakeasy-react-hook:
-                name: DetachUserSessionIssuer
     /rpc/remoteSessionClients.get:
         get:
             description: Get a remote_session_client by id.
@@ -68481,7 +68177,7 @@ paths:
             x-speakeasy-name-override: unlinkEMA
     /rpc/remoteSessionClients.update:
         post:
-            description: Rotate the client_secret or change the non-issuer settings on an existing remote_session_client. Issuer attachments are managed via attachUserSessionIssuer / detachUserSessionIssuer.
+            description: Rotate the client_secret or change the non-issuer settings on an existing remote_session_client.
             operationId: updateRemoteSessionClient
             parameters:
                 - allowEmptyValue: true
@@ -69580,7 +69276,7 @@ paths:
             x-speakeasy-name-override: attachBinding
     /rpc/remoteSessions.attachServerClientAssociation:
         post:
-            description: Associate one MCP server with an upstream OAuth client, naming the client the server signs in through. The client must already be bound to the server's own user session issuer, or, for a server with none, to an issuer of a gateway fronting it. The client is also bound to the issuer of each gateway fronting the server, so its consent can offer the client. Refused when the server has another client, when another client of the provider holds a fronting gateway's issuer, or when the organization's organization-level issuer lacks the client. A per-user client is also refused when another proxied server uses it at a different upstream address, or would pick it up from a gateway's issuer. On a proxied server, a first association makes earlier no-auth choices unusable, so those people must reconnect, and other servers on the issuer stop falling back to the client. Attaching a client the server is already associated with refuses none of this and only completes the gateway bindings it can. Where upstream auth is enforced, attaching also restores the server's auth client link that detaching its own sign-in retired. Requires mcp:write on the server and on each gateway whose issuer gains the client.
+            description: Associate one MCP server with a reachable upstream OAuth client. The association identifies the server's exact registration without requiring or creating a user session issuer binding. A server may have only one registration, and a per-user client cannot be shared by proxied servers at different upstream addresses. Attaching to a hosted server records that upstream authentication is required. When upstream auth enforcement is on, attaching can restore the derived auth client link removed by a previous detach. Requires mcp:write on the server.
             operationId: attachServerClientAssociation
             parameters:
                 - allowEmptyValue: true
@@ -70170,7 +69866,7 @@ paths:
             x-speakeasy-name-override: detachBinding
     /rpc/remoteSessions.detachServerClientAssociation:
         post:
-            description: 'Remove one MCP server''s association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer''s client binding: with upstream auth enforcement off, detach returns a conflict (409) and you must turn off User Identity on the server instead; with enforcement on, detach retires only the backfill-derived typed auth-client link and keeps the association. In this sole-consumer case, repeating detach returns not found (404). For other servers, detach removes the association (or records an exclusion for an unclaimed client bound to the server''s issuer) and synchronizes the backfill-derived typed links. Removing an association also releases the client from a project-level issuer of a fronting gateway when the client stays bound to the server''s own issuer and nothing else on that gateway issuer signs in through it. Administrator-owned typed links are untouched. Requires mcp:write on the server.'
+            description: Remove one MCP server's association with an upstream OAuth client. The client, its issuer bindings, and its associations with other servers are untouched. Derived auth client links are synchronized; administrator-owned typed links are untouched. A hosted server that requires upstream authentication remains configured to require it and needs a replacement registration before it can use upstream OAuth. Requires mcp:write on the server.
             operationId: detachServerClientAssociation
             parameters:
                 - allowEmptyValue: true
@@ -70673,7 +70369,7 @@ paths:
             x-speakeasy-name-override: listBindings
     /rpc/remoteSessions.listServerClientAssociations:
         get:
-            description: 'List the upstream OAuth clients an MCP server is associated with. An association is a per-server configuration fact: one client can serve several servers, and server_count reports how many live servers share each client, since editing or rotating a shared client changes every one of them. Associations are recorded ahead of the serving path that will read them; until then the server keeps signing in through its user session issuer''s bindings. Requires mcp:read on the server.'
+            description: 'List the upstream OAuth clients an MCP server is associated with. An association is a per-server configuration fact: one client can serve several servers, and server_count reports how many live servers share each client, since editing or rotating a shared client changes every one of them. Hosted servers use this placement to select the upstream registration; a downstream sign-in issuer does not select a registration for a hosted server. Requires mcp:read on the server.'
             operationId: listServerClientAssociations
             parameters:
                 - allowEmptyValue: true
@@ -106146,21 +105842,6 @@ components:
             required:
                 - association
                 - bound_user_session_issuer_ids
-        AttachUserSessionIssuerForm:
-            type: object
-            properties:
-                id:
-                    type: string
-                    description: The remote_session_client id.
-                    format: uuid
-                user_session_issuer_id:
-                    type: string
-                    description: The user_session_issuer to attach.
-                    format: uuid
-            description: Form for attaching a user_session_issuer to a remote_session_client via the join table.
-            required:
-                - id
-                - user_session_issuer_id
         AudienceOption:
             type: object
             properties:
@@ -111959,21 +111640,6 @@ components:
                 - principal_id
                 - user_session_issuer_id
                 - id
-        DetachUserSessionIssuerForm:
-            type: object
-            properties:
-                id:
-                    type: string
-                    description: The remote_session_client id.
-                    format: uuid
-                user_session_issuer_id:
-                    type: string
-                    description: The user_session_issuer to detach.
-                    format: uuid
-            description: Form for detaching a user_session_issuer from a remote_session_client via the join table.
-            required:
-                - id
-                - user_session_issuer_id
         DeviceAgentConfiguration:
             type: object
             properties:
@@ -142602,76 +142268,6 @@ components:
                 - clients_after
                 - pinned_client_ids
                 - hosted
-        UserSessionIssuerRemoteSessionClient:
-            type: object
-            properties:
-                client_id:
-                    type: string
-                    description: The OAuth client id registered with the authorization server.
-                id:
-                    type: string
-                    description: The remote_session_client id.
-                    format: uuid
-                remote_session_issuer_id:
-                    type: string
-                    description: The authorization server (remote_session_issuer) id.
-                    format: uuid
-                remote_session_issuer_name:
-                    type: string
-                    description: The authorization server's name, or its slug when it has none.
-                remote_session_issuer_url:
-                    type: string
-                    description: The authorization server's issuer URL.
-            description: A live remote session client, named by the authorization server it belongs to.
-            required:
-                - id
-                - client_id
-                - remote_session_issuer_id
-                - remote_session_issuer_name
-                - remote_session_issuer_url
-        UserSessionIssuerRemoteSessionClientBindings:
-            type: object
-            properties:
-                bound_clients:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/UserSessionIssuerRemoteSessionClient'
-                    description: 'Remote session clients the user_session_issuer binds. Deprecated: these bindings are no longer authoritative; read the remote session clients associated with each MCP server instead.'
-                server_clients:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/UserSessionIssuerServerRemoteSessionClient'
-                    description: One entry per live MCP server and associated remote session client.
-            description: The remote session clients a user_session_issuer binds, and those its live MCP servers are associated with.
-            required:
-                - bound_clients
-                - server_clients
-        UserSessionIssuerServerRemoteSessionClient:
-            type: object
-            properties:
-                mcp_server_id:
-                    type: string
-                    description: The MCP server id.
-                    format: uuid
-                mcp_server_name:
-                    type: string
-                    description: The MCP server display name.
-                project_id:
-                    type: string
-                    description: The owning project id.
-                    format: uuid
-                project_name:
-                    type: string
-                    description: The owning project name.
-                remote_session_client:
-                    $ref: '#/components/schemas/UserSessionIssuerRemoteSessionClient'
-            description: One remote session client associated with a live MCP server attached to a user_session_issuer.
-            required:
-                - mcp_server_id
-                - mcp_server_name
-                - project_id
-                - project_name
-                - remote_session_client
         UserSessionUpstream:
             type: object
             properties:

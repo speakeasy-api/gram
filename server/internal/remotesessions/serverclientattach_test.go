@@ -509,8 +509,7 @@ func TestAttachServerClientAssociation_AllowsSelfClientAtAnotherAddress(t *testi
 	require.NoError(t, err)
 }
 
-// A hosted server routes by no upstream address, and it's recorded even though
-// it keeps serving from every client its issuer binds.
+// An unqualified hosted registration can be placed on more than one server.
 func TestAttachServerClientAssociation_HostedServersShareAClient(t *testing.T) {
 	t.Parallel()
 	ctx, f := newAttachFixture(t)
@@ -530,6 +529,31 @@ func TestAttachServerClientAssociation_HostedServersShareAClient(t *testing.T) {
 	resync(t, ctx, f.ti.conn, f.orgID, f.projectID, issuer)
 	require.Equal(t, []uuid.UUID{client}, associatedClients(t, ctx, f.ti.conn, f.projectID, first))
 	require.Equal(t, []uuid.UUID{client}, associatedClients(t, ctx, f.ti.conn, f.projectID, second))
+}
+
+func TestHostedServerAssociationDoesNotRequireOrCreateIssuerLink(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAttachFixture(t)
+	issuer := f.issuer(t, ctx, "hosted-exact-unlinked")
+	first := f.hostedServer(t, ctx, "hosted-exact-a", conv.ToNullUUID(issuer))
+	second := f.hostedServer(t, ctx, "hosted-exact-b", conv.ToNullUUID(issuer))
+	client, _ := f.client(t, ctx, "hosted-exact", issuer)
+	q := repo.New(f.ti.conn)
+	_, err := q.DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachProjectRemoteSessionClientFromUserSessionIssuerParams{
+		OrganizationID: f.orgID, ProjectID: f.projectID, RemoteSessionClientID: client, UserSessionIssuerID: issuer,
+	})
+	require.NoError(t, err)
+	for _, server := range []uuid.UUID{first, second} {
+		result, err := f.attach(ctx, server, client)
+		require.NoError(t, err)
+		require.Empty(t, result.BoundUserSessionIssuerIds)
+	}
+	require.NoError(t, detachServerClient(ctx, f.ti, first, client))
+	require.Empty(t, associatedClients(t, ctx, f.ti.conn, f.projectID, first))
+	require.Equal(t, []uuid.UUID{client}, associatedClients(t, ctx, f.ti.conn, f.projectID, second))
+	count, err := q.CountRemoteSessionClientUserSessionIssuerBindings(ctx, repo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: client, UserSessionIssuerID: issuer})
+	require.NoError(t, err)
+	require.Zero(t, count)
 }
 
 // A member with no issuer of its own reaches a client only through its gateway.

@@ -101,10 +101,10 @@ vi.mock("@/contexts/Fetcher", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     remoteSessionClients: {
-      attachUserSessionIssuer: mocks.attachClient,
       create: mocks.createClient,
       createCimd: mocks.createCimdClient,
     },
+    remoteSessions: { attachServerClientAssociation: mocks.attachClient },
     remoteSessionIssuers: { create: mocks.createProvider },
     userSessionIssuers: { create: mocks.createUserSessionIssuer },
   }),
@@ -155,6 +155,7 @@ function target(overrides: Partial<AuthTarget> = {}): AuthTarget {
     slug: "example-server",
     projectId: "project-1",
     permissionResourceId: "mcp-server-1",
+    mcpServerId: "mcp-server-1",
     attachImpactTarget: { mcpServerId: "mcp-server-1" },
     supportsOrganizationIssuers: true,
     userSessionIssuerId: null,
@@ -208,6 +209,7 @@ beforeEach(() => {
   mocks.createClient.mockResolvedValue({ id: "client-1" });
   mocks.invalidateTarget.mockResolvedValue(undefined);
   mocks.linkTarget.mockResolvedValue(undefined);
+  mocks.attachClient.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -217,7 +219,7 @@ afterEach(() => {
 });
 
 describe("AttachRemoteIdentityProviderSheet", () => {
-  it("keeps standard targets on the existing multi-call setup flow", async () => {
+  it("attaches the registration before creating and linking the downstream issuer", async () => {
     renderSheet();
 
     await submitManualClient();
@@ -228,6 +230,47 @@ describe("AttachRemoteIdentityProviderSheet", () => {
       expect(mocks.createClient).toHaveBeenCalled();
       expect(mocks.linkTarget).toHaveBeenCalledWith("user-session-issuer-1");
     });
+    expect(mocks.attachClient).toHaveBeenCalledBefore(
+      mocks.createUserSessionIssuer,
+    );
+    expect(mocks.attachClient).toHaveBeenCalledBefore(mocks.linkTarget);
+  });
+
+  it("retries a failed attach without recreating the registration or linking early", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.attachClient.mockRejectedValueOnce(
+      new Error("Upstream attach failed"),
+    );
+    renderSheet();
+    await submitManualClient();
+
+    expect(await screen.findByText(/Upstream attach failed/)).toBeTruthy();
+    expect(mocks.createUserSessionIssuer).not.toHaveBeenCalled();
+    expect(mocks.linkTarget).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Retry setup" }));
+
+    await waitFor(() => expect(mocks.linkTarget).toHaveBeenCalledOnce());
+    expect(mocks.createProvider).toHaveBeenCalledOnce();
+    expect(mocks.createClient).toHaveBeenCalledOnce();
+    expect(mocks.attachClient).toHaveBeenCalledTimes(2);
+    expect(mocks.attachClient.mock.calls[1]).toEqual(
+      mocks.attachClient.mock.calls[0],
+    );
+  });
+
+  it("retries a failed downstream link without replaying a successful attach", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.linkTarget.mockRejectedValueOnce(new Error("Downstream link failed"));
+    renderSheet();
+    await submitManualClient();
+
+    expect(await screen.findByText(/Downstream link failed/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry setup" }));
+
+    await waitFor(() => expect(mocks.onOpenChange).toHaveBeenCalledWith(false));
+    expect(mocks.attachClient).toHaveBeenCalledOnce();
+    expect(mocks.createUserSessionIssuer).toHaveBeenCalledOnce();
+    expect(mocks.linkTarget).toHaveBeenCalledTimes(2);
   });
 
   it("forwards discovered grant profiles on a new provider", async () => {
@@ -474,7 +517,6 @@ describe("AttachRemoteIdentityProviderSheet", () => {
       expect(mocks.createClient).toHaveBeenCalledWith({
         createRemoteSessionClientForm: {
           remoteSessionIssuerId: provider.id,
-          userSessionIssuerIds: ["user-session-issuer-1"],
           clientId: "stored-app",
           clientSecret: undefined,
           templateClientId: "stored-client",
@@ -483,7 +525,12 @@ describe("AttachRemoteIdentityProviderSheet", () => {
           audience: "https://api.example.test",
         },
       });
-      expect(mocks.attachClient).not.toHaveBeenCalled();
+      expect(mocks.attachClient).toHaveBeenCalledWith({
+        serverClientAssociationForm: {
+          mcpServerId: "mcp-server-1",
+          remoteSessionClientId: "client-1",
+        },
+      });
     });
 
     it("copies no secret once the client ID is changed", async () => {
@@ -511,7 +558,12 @@ describe("AttachRemoteIdentityProviderSheet", () => {
           templateClientId: undefined,
         }),
       });
-      expect(mocks.attachClient).not.toHaveBeenCalled();
+      expect(mocks.attachClient).toHaveBeenCalledWith({
+        serverClientAssociationForm: {
+          mcpServerId: "mcp-server-1",
+          remoteSessionClientId: "client-1",
+        },
+      });
     });
 
     it("clears a starting client's settings when the authorization server changes", async () => {

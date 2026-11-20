@@ -1099,6 +1099,61 @@ func (q *Queries) ListGatewayMembersAddedAfterIssuance(ctx context.Context, arg 
 	return items, nil
 }
 
+const listHostedUpstreamAssignments = `-- name: ListHostedUpstreamAssignments :many
+SELECT s.id AS server_id, s.project_id, s.requires_upstream_auth, s.user_session_issuer_id,
+       a.remote_session_client_id AS registration_id
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id AND NOT p.deleted
+JOIN organization_metadata AS org ON org.id = p.organization_id AND org.disabled_at IS NULL
+LEFT JOIN mcp_server_remote_session_clients AS a
+    ON a.mcp_server_id = s.id AND a.project_id = s.project_id
+   AND a.organization_id = org.id AND NOT a.deleted
+WHERE s.id = ANY($1::uuid[]) AND p.organization_id = $2::text
+  AND s.toolset_id IS NOT NULL AND NOT s.deleted
+ORDER BY s.id, a.remote_session_client_id
+`
+
+type ListHostedUpstreamAssignmentsParams struct {
+	ServerIds      []uuid.UUID
+	OrganizationID string
+}
+
+type ListHostedUpstreamAssignmentsRow struct {
+	ServerID             uuid.UUID
+	ProjectID            uuid.UUID
+	RequiresUpstreamAuth pgtype.Bool
+	UserSessionIssuerID  uuid.NullUUID
+	RegistrationID       uuid.NullUUID
+}
+
+// Preserve the server row even without a live placement so readers can
+// distinguish an explicit no-auth setting from missing configuration.
+func (q *Queries) ListHostedUpstreamAssignments(ctx context.Context, arg ListHostedUpstreamAssignmentsParams) ([]ListHostedUpstreamAssignmentsRow, error) {
+	rows, err := q.db.Query(ctx, listHostedUpstreamAssignments, arg.ServerIds, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListHostedUpstreamAssignmentsRow
+	for rows.Next() {
+		var i ListHostedUpstreamAssignmentsRow
+		if err := rows.Scan(
+			&i.ServerID,
+			&i.ProjectID,
+			&i.RequiresUpstreamAuth,
+			&i.UserSessionIssuerID,
+			&i.RegistrationID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMCPServerRemoteSessionClients = `-- name: ListMCPServerRemoteSessionClients :many
 SELECT
     a.remote_session_client_id,
@@ -1901,4 +1956,20 @@ func (q *Queries) RemoveGlobalClientAssociations(ctx context.Context, remoteSess
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const requireHostedUpstreamAssignment = `-- name: RequireHostedUpstreamAssignment :exec
+UPDATE mcp_servers
+SET requires_upstream_auth = TRUE
+WHERE id = $1 AND project_id = $2 AND toolset_id IS NOT NULL AND NOT deleted
+`
+
+type RequireHostedUpstreamAssignmentParams struct {
+	ServerID  uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) RequireHostedUpstreamAssignment(ctx context.Context, arg RequireHostedUpstreamAssignmentParams) error {
+	_, err := q.db.Exec(ctx, requireHostedUpstreamAssignment, arg.ServerID, arg.ProjectID)
+	return err
 }

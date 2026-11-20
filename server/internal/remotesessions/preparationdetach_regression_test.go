@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/stretchr/testify/require"
 )
@@ -49,7 +50,7 @@ func TestPreparationDetach_OnlyProtectsSelectedUserIssuer(t *testing.T) {
 				if organization {
 					return ti.service.RemoveClientFromMcpServer(ctx, &orgclientsgen.RemoveClientFromMcpServerPayload{ClientID: in.ClientID.String(), McpServerID: servers[issuerID].String()})
 				}
-				_, err := ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{ID: in.ClientID.String(), UserSessionIssuerID: issuerID.String()})
+				_, err := ti.service.DetachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{ID: in.ClientID.String(), UserSessionIssuerID: issuerID.String()})
 				if err != nil {
 					return fmt.Errorf("detach user session issuer: %w", err)
 				}

@@ -1,3 +1,4 @@
+import { invalidateAllServerClientAssociations } from "@gram/client/react-query/serverClientAssociations.js";
 import { AssetImageUploadField } from "@/components/asset-image-upload-field";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
@@ -315,11 +316,66 @@ export function AttachRemoteIdentityProviderSheet({
   const issuerResolved =
     mode === "select" ? !!selectedIssuerId : issuerUrl.trim().length > 0;
 
+  // Keep the prepared registration for retry; creating another one can repeat
+  // DCR upstream, and deleting the registration could affect another server.
+  const [preparedSetup, setPrepared] = useState<{
+    serverId: string;
+    registrationId: string;
+    unsupportedDcrAuthMethod: string | null;
+    attached?: boolean;
+    downstreamIssuerId?: string;
+  } | null>(null);
+  const serverId = target.mcpServerId ?? target.attachImpactTarget.toolsetId;
+  const prepared = preparedSetup?.serverId === serverId ? preparedSetup : null;
+
+  async function completeSetup(
+    setup: NonNullable<typeof prepared>,
+    linkIssuer: AuthTarget["linkUserSessionIssuer"],
+  ) {
+    setPrepared(setup);
+    if (!setup.attached) {
+      await client.remoteSessions.attachServerClientAssociation({
+        serverClientAssociationForm: {
+          mcpServerId: setup.serverId,
+          remoteSessionClientId: setup.registrationId,
+        },
+      });
+      setup = { ...setup, attached: true };
+      setPrepared(setup);
+    }
+
+    // The association does not require a downstream issuer. Link it last so
+    // the server cannot appear configured when the upstream attach failed.
+    if (!userSessionIssuer && linkIssuer) {
+      let downstreamIssuerId = setup.downstreamIssuerId;
+      if (!downstreamIssuerId) {
+        const created = await client.userSessionIssuers.create({
+          createUserSessionIssuerForm: {
+            slug: buildUserSessionResourceSlug(target.slug),
+            authnChallengeMode: "interactive",
+            sessionDurationHours: DEFAULT_USER_SESSION_DURATION_HOURS,
+          },
+        });
+        downstreamIssuerId = created.id;
+        setPrepared({ ...setup, downstreamIssuerId });
+      }
+      await linkIssuer(downstreamIssuerId);
+    }
+    return { unsupportedDcrAuthMethod: setup.unsupportedDcrAuthMethod };
+  }
+
   const attachMutation = useMutation({
     meta: CONFIG_WRITE_META,
-    mutationFn: async (): Promise<{
-      unsupportedDcrAuthMethod: string | null;
-    }> => {
+    mutationFn: async () => {
+      if (!serverId) {
+        throw new Error("Choose an MCP server to configure upstream sign-in.");
+      }
+      const linkIssuer = target.linkUserSessionIssuer;
+      if (!userSessionIssuer && !linkIssuer) {
+        throw new Error("This MCP server cannot configure User Identity here.");
+      }
+      if (prepared) return completeSetup(prepared, linkIssuer);
+
       const parsedScopes = parseScopes(scopeOverride);
       const trimmedAudience = audienceOverride.trim();
       let createProvider: CreateRemoteSessionIssuerForm | undefined;
@@ -369,22 +425,7 @@ export function AttachRemoteIdentityProviderSheet({
         };
       }
 
-      // Step 1: ensure a user_session_issuer exists. First-add auto-creates
-      // one with the conservative interactive challenge mode and a 2-week
-      // session lifetime.
-      let issuerId = userSessionIssuer?.id;
-      if (!issuerId) {
-        const created = await client.userSessionIssuers.create({
-          createUserSessionIssuerForm: {
-            slug: buildUserSessionResourceSlug(target.slug),
-            authnChallengeMode: "interactive",
-            sessionDurationHours: DEFAULT_USER_SESSION_DURATION_HOURS,
-          },
-        });
-        issuerId = created.id;
-      }
-
-      // Step 2: resolve the remote_session_issuer — pick existing or create a
+      // Resolve the remote_session_issuer — pick existing or create a
       // new one from the form fields. Empty endpoint inputs are omitted so
       // the backend can store them as null rather than empty strings.
       let resolvedIssuer: RemoteSessionIssuer | undefined;
@@ -400,8 +441,7 @@ export function AttachRemoteIdentityProviderSheet({
         resolvedIssuer = created;
       }
 
-      // Step 3: create a remote_session_client bound to the
-      // user_session_issuer: from scratch in the chosen mode (DCR / CIMD /
+      // Create a registration for this server: from scratch in the chosen mode (DCR / CIMD /
       // Manual), or from a stored client's reviewed settings. A stored client
       // is never bound here.
       // Tracks when DCR returns an auth method the SDK enum doesn't model
@@ -409,6 +449,7 @@ export function AttachRemoteIdentityProviderSheet({
       // but warn the operator after success so they understand why their
       // client may not behave as the upstream advertised.
       let unsupportedDcrAuthMethod: string | null = null;
+      let registrationId: string;
 
       if (effectiveClientMode === "select" && !selectedClient) {
         throw new Error("Choose the client to start from.");
@@ -425,32 +466,34 @@ export function AttachRemoteIdentityProviderSheet({
         // server copy the secret and callback; the secret never reaches the
         // browser. A different client ID is a different registration, so
         // nothing is copied for it.
-        await client.remoteSessionClients.create({
-          createRemoteSessionClientForm: {
-            remoteSessionIssuerId: remoteIssuerId,
-            userSessionIssuerIds: [issuerId],
-            clientId: clientId.trim(),
-            clientSecret: clientSecret.trim() || undefined,
-            templateClientId:
-              clientId.trim() === selectedClient.clientId
-                ? selectedClient.id
-                : undefined,
-            tokenEndpointAuthMethod: tokenEndpointAuthMethod || undefined,
-            scope: parsedScopes.length > 0 ? parsedScopes : undefined,
-            audience: trimmedAudience || undefined,
-          },
-        });
+        registrationId = (
+          await client.remoteSessionClients.create({
+            createRemoteSessionClientForm: {
+              remoteSessionIssuerId: remoteIssuerId,
+              clientId: clientId.trim(),
+              clientSecret: clientSecret.trim() || undefined,
+              templateClientId:
+                clientId.trim() === selectedClient.clientId
+                  ? selectedClient.id
+                  : undefined,
+              tokenEndpointAuthMethod: tokenEndpointAuthMethod || undefined,
+              scope: parsedScopes.length > 0 ? parsedScopes : undefined,
+              audience: trimmedAudience || undefined,
+            },
+          })
+        ).id;
       } else if (startsFromDocument || clientType === "cimd") {
         // CIMD: the platform generates the client_id and hosts the metadata
         // document, so there are no credentials to collect.
-        await client.remoteSessionClients.createCimd({
-          createCimdForm: {
-            remoteSessionIssuerId: remoteIssuerId,
-            userSessionIssuerIds: [issuerId],
-            scope: parsedScopes.length > 0 ? parsedScopes : undefined,
-            audience: trimmedAudience || undefined,
-          },
-        });
+        registrationId = (
+          await client.remoteSessionClients.createCimd({
+            createCimdForm: {
+              remoteSessionIssuerId: remoteIssuerId,
+              scope: parsedScopes.length > 0 ? parsedScopes : undefined,
+              audience: trimmedAudience || undefined,
+            },
+          })
+        ).id;
       } else {
         // DCR proxies a registration to the upstream issuer for a fresh
         // client_id / client_secret; Manual uses what the operator typed.
@@ -501,41 +544,39 @@ export function AttachRemoteIdentityProviderSheet({
           };
         }
 
-        // Create the remote_session_client binding the resolved issuer to the
-        // user_session_issuer. Scope/audience overrides are stored on the
-        // client and consumed at OAuth dance time.
-        await client.remoteSessionClients.create({
-          createRemoteSessionClientForm: {
-            remoteSessionIssuerId: remoteIssuerId,
-            userSessionIssuerIds: [issuerId],
-            clientId: clientCredentials.clientId,
-            clientSecret: clientCredentials.clientSecret,
-            tokenEndpointAuthMethod: clientCredentials.tokenEndpointAuthMethod,
-            scope: parsedScopes.length > 0 ? parsedScopes : undefined,
-            audience: trimmedAudience || undefined,
-            ...clientCredentials.provenance,
-          },
-        });
+        // Store scope and audience overrides on the registration.
+        registrationId = (
+          await client.remoteSessionClients.create({
+            createRemoteSessionClientForm: {
+              remoteSessionIssuerId: remoteIssuerId,
+              clientId: clientCredentials.clientId,
+              clientSecret: clientCredentials.clientSecret,
+              tokenEndpointAuthMethod:
+                clientCredentials.tokenEndpointAuthMethod,
+              scope: parsedScopes.length > 0 ? parsedScopes : undefined,
+              audience: trimmedAudience || undefined,
+              ...clientCredentials.provenance,
+            },
+          })
+        ).id;
       }
 
-      // Step 4: on first-add, link the target to the new issuer. How the link
-      // is stored (and side effects like flipping a server private) is the
-      // target's business.
-      if (!userSessionIssuer) {
-        await target.linkUserSessionIssuer?.(issuerId);
-      }
-
-      return { unsupportedDcrAuthMethod };
+      return completeSetup(
+        { serverId, registrationId, unsupportedDcrAuthMethod },
+        linkIssuer,
+      );
     },
     onSuccess: async ({ unsupportedDcrAuthMethod }) => {
       await Promise.all([
         invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionIssuers(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
+        invalidateAllServerClientAssociations(queryClient),
         invalidateSharedIssuerImpact(queryClient),
         target.invalidate(queryClient),
       ]);
 
+      setPrepared(null);
       toast.success("Authorization server attached");
       if (unsupportedDcrAuthMethod) {
         toast.warning(
@@ -748,7 +789,12 @@ export function AttachRemoteIdentityProviderSheet({
   }, [open]);
 
   const handleSubmit = () => {
-    if (!submittable || submitting || logoUploading) return;
+    if (submitting || logoUploading) return;
+    if (prepared) {
+      attachMutation.mutate();
+      return;
+    }
+    if (!submittable) return;
     if (needsSharedIssuerConfirm(sharedIssuerImpact)) {
       setConfirmRepointOpen(true);
       return;
@@ -844,7 +890,10 @@ export function AttachRemoteIdentityProviderSheet({
             </SheetTitle>
           </SheetHeader>
 
-          <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
+          <div
+            hidden={!!prepared}
+            className="flex-1 space-y-6 overflow-y-auto px-6 py-6"
+          >
             <Stack gap={4}>
               <SectionHeading
                 title="Authorization server"
@@ -998,10 +1047,25 @@ export function AttachRemoteIdentityProviderSheet({
               </Stack>
             )}
 
-            <IdentityProviderAttachmentErrorAlert
-              error={attachMutation.error}
-            />
+            {!prepared && (
+              <IdentityProviderAttachmentErrorAlert
+                error={attachMutation.error}
+              />
+            )}
           </div>
+
+          {prepared && (
+            <div className="flex-1 space-y-4 overflow-y-auto px-6 py-6">
+              <Text small>
+                {prepared.attached
+                  ? "The upstream registration is attached. Retry to finish setting up User Identity."
+                  : "The upstream registration is saved. Retry to attach that same registration to this MCP server."}
+              </Text>
+              <IdentityProviderAttachmentErrorAlert
+                error={attachMutation.error}
+              />
+            </div>
+          )}
 
           <SheetFooter className="flex-row items-center justify-end gap-2 border-t px-6 py-4">
             <Button
@@ -1009,20 +1073,23 @@ export function AttachRemoteIdentityProviderSheet({
               disabled={submitting}
               onClick={() => onOpenChange(false)}
             >
-              <Button.Text>Cancel</Button.Text>
+              <Button.Text>{prepared ? "Close" : "Cancel"}</Button.Text>
             </Button>
             <Button
               variant="primary"
               disabled={
-                !submittable ||
                 submitting ||
                 logoUploading ||
-                repointLookupPending
+                (!prepared && (!submittable || repointLookupPending))
               }
               onClick={handleSubmit}
             >
               <Button.Text>
-                {submitting ? "Attaching…" : "Attach Authorization Server"}
+                {submitting
+                  ? "Attaching…"
+                  : prepared
+                    ? "Retry setup"
+                    : "Attach Authorization Server"}
               </Button.Text>
             </Button>
           </SheetFooter>

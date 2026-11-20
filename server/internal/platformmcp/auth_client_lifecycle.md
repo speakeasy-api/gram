@@ -63,7 +63,10 @@ sharing keep working:
 - `authClients.attachToMcpServer`, and `authClients.create` with an existing
   `remote_session_client_id`.
 - `remoteSessions.commitServerIdentityConfiguration` with `client_mode`
-  `existing`, and `remoteSessionClients.attachUserSessionIssuer`.
+  `existing`. The hosted-server settings workflow uses the exact
+  `remoteSessions.attachServerClientAssociation` operation. This names the
+  hosted server and registration; hosted serving does not infer an assignment
+  from the downstream issuer’s linked clients.
 
 `offer_mcp_upstream_credential` is not changed to refuse personal sign-ins: the
 agent cannot create the separate registration the dashboard offers instead,

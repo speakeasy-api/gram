@@ -47,16 +47,8 @@ type Service interface {
 	// advertise client_id_metadata_document_supported.
 	CreateCimd(context.Context, *CreateCimdPayload) (res *types.RemoteSessionClient, err error)
 	// Rotate the client_secret or change the non-issuer settings on an existing
-	// remote_session_client. Issuer attachments are managed via
-	// attachUserSessionIssuer / detachUserSessionIssuer.
+	// remote_session_client.
 	UpdateRemoteSessionClient(context.Context, *UpdateRemoteSessionClientPayload) (res *types.RemoteSessionClient, err error)
-	// Attach a user_session_issuer to a remote_session_client by recording the
-	// binding in the join table. Rejected when another client is already bound to
-	// the same user_session_issuer for this client's remote_session_issuer.
-	AttachUserSessionIssuer(context.Context, *AttachUserSessionIssuerPayload) (res *types.RemoteSessionClient, err error)
-	// Detach a user_session_issuer from a remote_session_client by removing the
-	// binding from the join table. A no-op when the binding does not exist.
-	DetachUserSessionIssuer(context.Context, *DetachUserSessionIssuerPayload) (res *types.RemoteSessionClient, err error)
 	// Attach an organization JSON Web Key Set to a remote_session_client, opting
 	// it into signing private_key_jwt assertions. The set must belong to the
 	// client's organization. Requires the customer_managed_encryption_keys
@@ -98,7 +90,7 @@ const ServiceName = "remoteSessionClients"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [14]string{"prepareEMA", "readEMA", "unlinkEMA", "createRemoteSessionClient", "createCimd", "updateRemoteSessionClient", "attachUserSessionIssuer", "detachUserSessionIssuer", "attachKeySet", "detachKeySet", "listRemoteSessionClients", "getNewClientCallbackUrl", "getRemoteSessionClient", "deleteRemoteSessionClient"}
+var MethodNames = [12]string{"prepareEMA", "readEMA", "unlinkEMA", "createRemoteSessionClient", "createCimd", "updateRemoteSessionClient", "attachKeySet", "detachKeySet", "listRemoteSessionClients", "getNewClientCallbackUrl", "getRemoteSessionClient", "deleteRemoteSessionClient"}
 
 // AttachKeySetPayload is the payload type of the remoteSessionClients service
 // attachKeySet method.
@@ -111,18 +103,6 @@ type AttachKeySetPayload struct {
 	// The organization JSON Web Key Set to sign this client's private_key_jwt
 	// assertions with. Must belong to the client's organization.
 	JSONWebKeySetID string
-}
-
-// AttachUserSessionIssuerPayload is the payload type of the
-// remoteSessionClients service attachUserSessionIssuer method.
-type AttachUserSessionIssuerPayload struct {
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
-	// The remote_session_client id.
-	ID string
-	// The user_session_issuer to attach.
-	UserSessionIssuerID string
 }
 
 // CreateCimdPayload is the payload type of the remoteSessionClients service
@@ -224,18 +204,6 @@ type DetachKeySetPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
-}
-
-// DetachUserSessionIssuerPayload is the payload type of the
-// remoteSessionClients service detachUserSessionIssuer method.
-type DetachUserSessionIssuerPayload struct {
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
-	// The remote_session_client id.
-	ID string
-	// The user_session_issuer to detach.
-	UserSessionIssuerID string
 }
 
 // GetNewClientCallbackURLPayload is the payload type of the
