@@ -958,3 +958,34 @@ INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
                                      mcp_server_id, sort_order) VALUES
   (@id::uuid, @project_id::uuid, @meta_id::uuid, @mcp_server_id::uuid, @sort_order::integer)
 ON CONFLICT DO NOTHING;
+
+-- Support Tools: the Speakeasy-served version of the Customer Support server
+-- that people also call directly (the Shadow MCP inventory seeds its URL).
+-- It proxies the same URL, so the Shadow MCP page shows the two linked
+-- automatically and direct calls are sent here. Reserved example hosts keep
+-- it inert.
+-- name: ServersInsertShadowOfficialRemoteMCPServer :exec
+INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
+  (@id::uuid, @project_id::uuid, 'Support Tools', 'support-tools-official',
+   'streamable-http', 'https://support-tools.example.com/mcp');
+
+-- It has its own sign-in with no clients bound, so it owes no upstream
+-- client associations; on the shared workforce sign-in it would owe one for
+-- every client bound there.
+-- name: ServersInsertShadowOfficialUserSessionIssuer :exec
+INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                  authn_challenge_mode, session_duration,
+                                  authorization_server_mode) VALUES
+  (@id::uuid, @project_id::uuid, @org_id::text, 'support-tools-official',
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint');
+
+-- name: ServersInsertShadowOfficialMCPServer :exec
+INSERT INTO mcp_servers (id, project_id, name, slug,
+                         remote_mcp_server_id, user_session_issuer_id,
+                         visibility) VALUES
+  (@id::uuid, @project_id::uuid, 'Support Tools', 'support-tools-official',
+   @remote_id::uuid, @issuer_id::uuid, 'private');
+
+-- name: ServersInsertShadowOfficialEndpoint :exec
+INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, custom_domain_id, slug) VALUES
+  (@id::uuid, @project_id::uuid, @mcp_server_id::uuid, NULL, @slug::text);

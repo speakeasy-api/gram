@@ -1,4 +1,5 @@
-import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import { waitForHookState as waitFor } from "@/test/waitForHookState";
+import { act, cleanup, renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { type ReactNode } from "react";
 import { MemoryRouter } from "react-router";
@@ -10,6 +11,7 @@ const mocks = vi.hoisted(() => ({ fetchAgents: vi.fn() }));
 vi.mock("@/contexts/Auth", () => ({
   useIsPlatformAdmin: () => true,
   useOrganization: () => ({ id: "org-example", slug: "example" }),
+  useProject: () => ({ id: "project-id", slug: "project-example" }),
   useSession: () => ({ user: { id: "user-example" } }),
 }));
 vi.mock("@/contexts/Sdk", () => ({

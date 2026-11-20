@@ -46,8 +46,8 @@ type connectEquivalenceCase struct {
 }
 
 func connectEquivalenceCases() []connectEquivalenceCase {
-	server := MCPCheck(ScopeMCPConnect, "server-1", "project-1")
-	toolCall := MCPToolCallCheck("server-1", MCPToolCallDimensions{Tool: "tool-a", Disposition: "", ProjectID: "project-1"})
+	server := MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Connect()
+	toolCall := MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).ToolCall("tool-a", "")
 	projectRead := NewGrantWithSelector(ScopeMCPRead, Selector{
 		SelectorKeyResourceKind: ResourceKindMCP,
 		SelectorKeyResourceID:   WildcardResource,
@@ -196,11 +196,11 @@ func TestMCPReadAndWriteDoNotSatisfyConnect(t *testing.T) {
 		for _, principal := range []string{precedenceUser, precedenceRole, precedenceEveryone, precedenceAgent} {
 			grants := []Grant{heldBy(principal, NewGrant(scope, WildcardResource)), heldBy(principal, NewGrant(scope, "server-1"))}
 
-			allowed, err := GrantsAuthorize(grants, MCPCheck(ScopeMCPConnect, "server-1", "project-1"))
+			allowed, err := GrantsAuthorize(grants, MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Connect())
 			require.NoError(t, err)
 			require.False(t, allowed, "%s held by %s must not connect", scope, principal)
 
-			allowed, err = GrantsAuthorize(grants, MCPToolCallCheck("server-1", MCPToolCallDimensions{Tool: "tool-a", Disposition: "", ProjectID: "project-1"}))
+			allowed, err = GrantsAuthorize(grants, MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).ToolCall("tool-a", ""))
 			require.NoError(t, err)
 			require.False(t, allowed, "%s held by %s must not call tools", scope, principal)
 		}

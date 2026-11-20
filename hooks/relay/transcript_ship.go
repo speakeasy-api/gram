@@ -7,7 +7,8 @@ package relay
 // plugin runs there (inCoworkVM), the relay relays prompt and tool events as
 // it does everywhere else and, each time Stop fires, also uploads the
 // transcript lines written since the last successful upload to the dedicated
-// transcript endpoint.
+// transcript endpoint. A session that runs Claude Code only as a tool server
+// has no transcript, so its Stop sends the reply as an event instead (onStop).
 //
 // The transcript file is its own durable queue: a per-transcript byte offset
 // advances only once the server has settled a chunk, so a failed upload is
@@ -133,36 +134,42 @@ type transcriptWarning struct {
 
 // shipTranscript uploads the transcript lines added since the last settled
 // upload and returns the warnings the server raised on the shipped prompts.
-// Every failure is logged and swallowed: a missed upload is retried on the
-// next Stop, and the hook must never disturb the session.
-func (r *Relay) shipTranscript(ctx context.Context, e *agenthooks.StopEvent) []transcriptWarning {
+// noTranscript reports that the binary refuses the transcript path the hook
+// named (empty, missing, a symlink, outside the Claude root), so nothing
+// from it will ever ship: the caller sends the reply another way. Claude
+// writes the reply before Stop runs, so a missing file is not a race. An
+// empty or unreadable transcript at a valid path does not count: its lines
+// can still ship on a later Stop, and sending the reply now as well would
+// store it twice. Every failure is logged and swallowed: a missed upload is
+// retried on the next Stop, and the hook must never disturb the session.
+func (r *Relay) shipTranscript(ctx context.Context, e *agenthooks.StopEvent) (warnings []transcriptWarning, noTranscript bool) {
 	base := &e.Event
 	if base.Provider != agenthooks.ProviderClaudeCode || base.Kind != agenthooks.KindStop {
-		return nil
+		return nil, false
 	}
 	if r.cfg.ConfigError != "" {
 		r.debugf("transcript skipped: config error path=%s err=%s", r.cfg.ConfigPath, r.cfg.ConfigError)
-		return nil
+		return nil, false
 	}
 	if insecureServerURL(r.cfg.ServerURL) {
 		r.debugf("transcript skipped: insecure server url %s", r.cfg.ServerURL)
-		return nil
+		return nil, false
 	}
 	sessionID := strings.TrimSpace(base.Session.ID)
 	if sessionID == "" {
 		r.debugf("transcript skipped: no session id")
-		return nil
+		return nil, false
 	}
 	c, ok := resolveAuth(r.cfg)
 	if !ok {
 		r.debugf("transcript skipped: no credentials")
-		return nil
+		return nil, false
 	}
 	// The transcript endpoint authenticates hooks keys only, like the skill
 	// content upload; a device-agent token box has nothing it can send.
 	if c.Source == credToken {
 		r.debugf("transcript skipped: token credentials are not accepted")
-		return nil
+		return nil, false
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, transcriptShipBudget)
@@ -196,10 +203,9 @@ func (r *Relay) shipTranscript(ctx context.Context, e *agenthooks.StopEvent) []t
 	if err != nil {
 		r.debugf("transcript skipped: %v", err)
 		r.reportTranscriptSkip(ctx, client, c, upload, transcriptSkipPathInvalid, err.Error())
-		return nil
+		return nil, true
 	}
 
-	var warnings []transcriptWarning
 	marker := transcriptHighWaterPath(path)
 	// send uploads chunk and returns the offset to resume from, or false when
 	// the chunk stays queued for the next Stop.
@@ -258,16 +264,16 @@ func (r *Relay) shipTranscript(ctx context.Context, e *agenthooks.StopEvent) []t
 	}
 	if marker == "" {
 		ship()
-		return warnings
+		return warnings, false
 	}
 	if err := os.MkdirAll(filepath.Dir(marker), 0o700); err != nil {
 		ship()
-		return warnings
+		return warnings, false
 	}
 	// Stop and a concurrent Stop for the same transcript must not both ship
 	// the same range and race the offset.
 	withFileLock(marker, ship)
-	return warnings
+	return warnings, false
 }
 
 // reportTranscriptSkip tells the server why this Stop shipped nothing, so

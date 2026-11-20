@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   audienceIcon,
   blockingRules,
+  coversTool,
   effectiveReach,
   narrowingLabel,
 } from "./serverAudience";
@@ -383,5 +384,35 @@ describe("effectiveReach without an explicit connect rule", () => {
         expect(reach?.reachableTools).toEqual([]);
       }
     }
+  });
+});
+
+describe("coversTool", () => {
+  // The server matches a tool by one annotation, read-only first, so a tool
+  // that is both read-only and idempotent is a read-only tool.
+  const readOnlyAndIdempotent: ToolSelectionTool = {
+    name: "list",
+    annotations: ["idempotent", "read_only"],
+  };
+
+  it("matches a tool by the annotation the server picks for it", () => {
+    expect(
+      coversTool({ dispositions: ["read_only"] }, readOnlyAndIdempotent),
+    ).toBe(true);
+  });
+
+  it("does not match a tool by an annotation the server passes over", () => {
+    expect(
+      coversTool({ dispositions: ["idempotent"] }, readOnlyAndIdempotent),
+    ).toBe(false);
+  });
+
+  it("matches no tool without annotations by annotation", () => {
+    expect(
+      coversTool(
+        { dispositions: ["read_only"] },
+        { name: "create", annotations: [] },
+      ),
+    ).toBe(false);
   });
 });

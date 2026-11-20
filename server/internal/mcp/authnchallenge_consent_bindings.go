@@ -92,7 +92,7 @@ func (s *Service) serveConsentAgentConnections(w http.ResponseWriter, r *http.Re
 		if err != nil {
 			return fmt.Errorf("load attachment permissions: %w", err)
 		}
-		canManage := agent.OwnerUserID == human.userID || authz.GrantsSatisfy(human.grants, authz.Check{Scope: authz.ScopeAgentWrite, ResourceKind: authz.ResourceKindAgent, ResourceID: agent.ID.String(), Dimensions: nil})
+		canManage := agent.OwnerUserID == human.userID || authz.GrantsSatisfy(human.grants, authz.Agent(authz.AgentIDOf(agent.ID)).Write())
 		result = struct {
 			CanManageConnections bool                                 `json:"canManageConnections"`
 			Candidates           []*types.RemoteSession               `json:"candidates"`

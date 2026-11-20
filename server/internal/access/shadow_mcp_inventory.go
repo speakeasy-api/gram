@@ -86,7 +86,7 @@ func (s *Service) requireOrgAdmin(ctx context.Context) (*contextvalues.AuthConte
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 	return ac, nil
@@ -257,25 +257,30 @@ func (s *Service) ReadShadowMCPInventory(ctx context.Context, input ShadowMCPInv
 }
 
 // attachShadowMCPOfficialServers marks the rows linked to an official
-// server, and offers a project server that proxies to the same URL to the
-// rows without a link. Access and AccessSummary stay the policy verdict; the
+// server, automatically or by an administrator's choice, and offers a
+// project server that proxies to the same URL to the rows an administrator
+// keeps in direct use. Access and AccessSummary stay the policy verdict; the
 // dashboard reads OfficialServer to show an active link as onboarded, since
 // the link blocks direct calls whatever the policy allows. A failed lookup
 // leaves the rows unmarked rather than failing the inventory: the page still
 // lists what was observed, and only the onboarded state is missing.
 func (s *Service) attachShadowMCPOfficialServers(ctx context.Context, organizationID string, projectID uuid.UUID, servers []*gen.ShadowMCPInventoryServer) {
-	hasURLRow := false
+	// Only the URLs on this page are resolved.
+	keys := map[string]bool{}
 	for _, server := range servers {
-		if server != nil && conv.PtrValOr(server.TargetKind, shadowMCPTargetKindServerURL) == shadowMCPTargetKindServerURL {
-			hasURLRow = true
-			break
+		if server == nil || conv.PtrValOr(server.TargetKind, shadowMCPTargetKindServerURL) != shadowMCPTargetKindServerURL {
+			continue
+		}
+		if key, ok := shadowmcp.OfficialServerKey(server.CanonicalServerURL); ok {
+			keys[key] = true
 		}
 	}
-	if !hasURLRow {
+	if len(keys) == 0 {
 		return
 	}
 
-	official, err := shadowmcp.OfficialServers(ctx, s.db, organizationID, projectID, s.serverURL)
+	automatic := shadowmcp.AutoLinkEnabled(ctx, s.logger, riskrepo.New(s.db), s.features, organizationID, projectID)
+	links, err := shadowmcp.LoadOfficialServerLinks(ctx, s.db, organizationID, projectID, s.serverURL, keys, automatic)
 	if err != nil {
 		s.logger.WarnContext(ctx, "resolve official servers for shadow mcp inventory",
 			attr.SlogError(err),
@@ -284,39 +289,38 @@ func (s *Service) attachShadowMCPOfficialServers(ctx context.Context, organizati
 		)
 		return
 	}
-	suggested, err := shadowmcp.SuggestedOfficialServers(ctx, s.db, projectID)
-	if err != nil {
-		s.logger.WarnContext(ctx, "suggest official servers for shadow mcp inventory",
-			attr.SlogError(err),
-			attr.SlogOrganizationID(organizationID),
-			attr.SlogProjectID(projectID.String()),
-		)
-		suggested = nil
-	}
 	for _, server := range servers {
 		if server == nil || conv.PtrValOr(server.TargetKind, shadowMCPTargetKindServerURL) != shadowMCPTargetKindServerURL {
 			continue
 		}
-		match, ok := shadowmcp.OfficialServerFor(official, server.CanonicalServerURL)
-		if !ok {
-			key, keyOK := shadowmcp.OfficialServerKey(server.CanonicalServerURL)
-			if suggestion, found := suggested[key]; keyOK && found {
-				server.SuggestedOfficialServer = &gen.ShadowMCPSuggestedOfficialServer{
-					McpServerID: suggestion.MCPServerID.String(),
-					Name:        suggestion.Name,
-					Slug:        conv.PtrEmpty(suggestion.Slug),
-				}
+		match, ok := shadowmcp.OfficialServerFor(links.Linked, server.CanonicalServerURL)
+		if ok {
+			server.OfficialServer = &gen.ShadowMCPOfficialServer{
+				McpServerID: match.MCPServerID.String(),
+				Name:        match.Name,
+				Slug:        conv.PtrEmpty(match.Slug),
+				URL:         conv.PtrEmpty(match.URL),
+				GatewayName: conv.PtrEmpty(match.GatewayName),
+				Automatic:   &match.Automatic,
+				// Deprecated field, sent for older dashboards that require it.
+				DirectAccessAllowed: new(false),
 			}
 			continue
 		}
-		server.OfficialServer = &gen.ShadowMCPOfficialServer{
-			McpServerID: match.MCPServerID.String(),
-			Name:        match.Name,
-			Slug:        conv.PtrEmpty(match.Slug),
-			URL:         conv.PtrEmpty(match.URL),
-			GatewayName: conv.PtrEmpty(match.GatewayName),
-			// Deprecated field, sent for older dashboards that require it.
-			DirectAccessAllowed: new(false),
+		key, keyOK := shadowmcp.OfficialServerKey(server.CanonicalServerURL)
+		if !keyOK {
+			continue
+		}
+		if links.Automatic && links.Declined[key] {
+			declined := true
+			server.OfficialServerDeclined = &declined
+		}
+		if suggestion, found := links.Suggested[key]; found {
+			server.SuggestedOfficialServer = &gen.ShadowMCPSuggestedOfficialServer{
+				McpServerID: suggestion.MCPServerID.String(),
+				Name:        suggestion.Name,
+				Slug:        conv.PtrEmpty(suggestion.Slug),
+			}
 		}
 	}
 }
@@ -438,6 +442,7 @@ func buildShadowMCPRequestOnlyServer(request mcpapprovalrepo.ListApprovalRequest
 		FirstCalled:        nil,
 		LastCalled:         nil,
 		CallCount:          0,
+		BlockedCallCount:   0,
 		UserCount:          0,
 		TopUsers:           []string{},
 	}
@@ -1722,6 +1727,7 @@ func buildShadowMCPInventoryServer(row telemetryrepo.ShadowMCPInventoryURLRow, u
 		LastSeen:                formatTimeValue(row.LastSeen),
 		LastCalled:              formatTimePtrValue(usage.LastCalled),
 		ObservedUseCount:        shadowMCPInventoryCount(usage.CallCount),
+		BlockedCallCount:        shadowMCPInventoryCount(usage.BlockedCallCount),
 		UserCount:               shadowMCPInventoryCount(usage.UserCount),
 		TopUsers:                topUsers,
 		Access:                  rowState.Access,
@@ -1733,6 +1739,7 @@ func buildShadowMCPInventoryServer(row telemetryrepo.ShadowMCPInventoryURLRow, u
 		BlockedPolicyIds:        rowState.BlockedPolicyIDs,
 		OfficialServer:          nil,
 		SuggestedOfficialServer: nil,
+		OfficialServerDeclined:  nil,
 	}
 }
 

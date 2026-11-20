@@ -161,6 +161,19 @@ func TestArmedClientNeverRetriesAndDoesNotNameItsConnections(t *testing.T) {
 	require.Empty(t, f.client.Options().ClientName, "an instance that rejects CLIENT would refuse a named connection")
 }
 
+func TestArmedClientDropsACallersConnectionName(t *testing.T) {
+	t.Parallel()
+
+	current := miniredis.RunT(t)
+	require.NoError(t, current.Set(stateKey, valueCurrent))
+	next := miniredis.RunT(t)
+
+	client, err := NewClient(t.Context(), slog.New(slog.DiscardHandler), &redis.Options{Addr: current.Addr(), ClientName: "caller"}, DefaultRole, Target{Addr: next.Addr(), Password: ""})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close() })
+	require.Empty(t, client.Options().ClientName)
+}
+
 func TestCommandsUseTheCurrentInstanceByDefault(t *testing.T) {
 	t.Parallel()
 

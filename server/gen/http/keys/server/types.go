@@ -161,12 +161,18 @@ type RotateKeyResponseBody struct {
 // "extendAgentKeys" endpoint HTTP response body.
 type ExtendAgentKeysResponseBody struct {
 	Keys []*KeyResponseBody `form:"keys" json:"keys" xml:"keys"`
+	// Cursor for the next page of keys.list. Absent on the last page and when no
+	// limit was sent.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
 // ListKeysResponseBody is the type of the "keys" service "listKeys" endpoint
 // HTTP response body.
 type ListKeysResponseBody struct {
 	Keys []*KeyResponseBody `form:"keys" json:"keys" xml:"keys"`
+	// Cursor for the next page of keys.list. Absent on the last page and when no
+	// limit was sent.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
 // UpdateKeyPolicyResponseBody is the type of the "keys" service
@@ -1773,7 +1779,9 @@ func NewRotateKeyResponseBody(res *keys.Key) *RotateKeyResponseBody {
 // NewExtendAgentKeysResponseBody builds the HTTP response body from the result
 // of the "extendAgentKeys" endpoint of the "keys" service.
 func NewExtendAgentKeysResponseBody(res *keys.ListKeysResult) *ExtendAgentKeysResponseBody {
-	body := &ExtendAgentKeysResponseBody{}
+	body := &ExtendAgentKeysResponseBody{
+		NextCursor: res.NextCursor,
+	}
 	if res.Keys != nil {
 		body.Keys = make([]*KeyResponseBody, len(res.Keys))
 		for i, val := range res.Keys {
@@ -1792,7 +1800,9 @@ func NewExtendAgentKeysResponseBody(res *keys.ListKeysResult) *ExtendAgentKeysRe
 // NewListKeysResponseBody builds the HTTP response body from the result of the
 // "listKeys" endpoint of the "keys" service.
 func NewListKeysResponseBody(res *keys.ListKeysResult) *ListKeysResponseBody {
-	body := &ListKeysResponseBody{}
+	body := &ListKeysResponseBody{
+		NextCursor: res.NextCursor,
+	}
 	if res.Keys != nil {
 		body.Keys = make([]*KeyResponseBody, len(res.Keys))
 		for i, val := range res.Keys {
@@ -2967,9 +2977,12 @@ func NewExtendAgentKeysPayload(body *ExtendAgentKeysRequestBody, sessionToken *s
 }
 
 // NewListKeysPayload builds a keys service listKeys endpoint payload.
-func NewListKeysPayload(agentID *string, sessionToken *string) *keys.ListKeysPayload {
+func NewListKeysPayload(agentID *string, cursor *string, limit *int, search *string, sessionToken *string) *keys.ListKeysPayload {
 	v := &keys.ListKeysPayload{}
 	v.AgentID = agentID
+	v.Cursor = cursor
+	v.Limit = limit
+	v.Search = search
 	v.SessionToken = sessionToken
 
 	return v
@@ -3220,8 +3233,8 @@ func ValidateAgentPolicySelectorRequestBody(body *AgentPolicySelectorRequestBody
 		}
 	}
 	if body.Disposition != nil {
-		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"read_only", "destructive", "idempotent", "open_world"}))
+		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world" || *body.Disposition == "unannotated") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"read_only", "destructive", "idempotent", "open_world", "unannotated"}))
 		}
 	}
 	if body.ServerURL != nil {

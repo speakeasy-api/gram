@@ -21,8 +21,10 @@ import (
 var errManagedOrganizationReadTarget = errors.New("managed assistant org access target mismatch")
 
 // ensureManagedOrganizationRead supplies the built-in project assistant's org
-// directory ceiling. Live admission still intersects it with the agent owner's
-// and invoking user's permissions. Ordinary assistants never receive this grant.
+// directory ceiling and its own project's read ceiling, which the Platform
+// telemetry tools require. Live admission still intersects them with the agent
+// owner's and invoking user's permissions. Ordinary assistants never receive
+// these grants.
 // An assistant whose agent was deleted has nothing to repair.
 func (s *ServiceCore) ensureManagedOrganizationRead(ctx context.Context, tx pgx.Tx, organizationID string, projectID, assistantID uuid.UUID, actorUserID string) error {
 	managed, err := assistantrepo.New(tx).GetManagedAssistantByProject(ctx, projectID)
@@ -52,35 +54,49 @@ func (s *ServiceCore) ensureManagedOrganizationRead(ctx context.Context, tx pgx.
 	if err != nil {
 		return fmt.Errorf("read managed assistant policy: %w", err)
 	}
-	selector := authz.NewSelector(authz.ScopeOrgRead, organizationID)
-	for _, row := range grants {
-		if row.Scope != string(authz.ScopeOrgRead) {
+	ceilings := []authz.Grant{
+		authz.NewGrant(authz.ScopeOrgRead, organizationID),
+		authz.NewGrant(authz.ScopeProjectRead, projectID.String()),
+	}
+	for _, ceiling := range ceilings {
+		if hasManagedCeiling(grants, actorUserID, ceiling) {
 			continue
 		}
-		// Runtime policy loading drops selectors that fail validation, so such a
-		// grant is no ceiling and the canonical one is still created.
-		stored, err := authz.SelectorFromRow(row.Selectors)
-		if err != nil || authz.ValidateSelector(authz.ScopeOrgRead, stored) != nil {
-			continue
+		encoded, err := json.Marshal(ceiling.Selector)
+		if err != nil {
+			return fmt.Errorf("encode %s ceiling: %w", ceiling.Scope, err)
 		}
-		if authz.GrantsContainSelectorFor(actorUserID, []authz.Grant{authz.NewGrantWithSelector(authz.ScopeOrgRead, stored)}, authz.ScopeOrgRead, selector) {
-			return nil
+		row, err := agents.EnsurePermanentAgentPolicyGrant(ctx, agentrepo.EnsurePermanentAgentPolicyGrantParams{OrganizationID: organizationID, AgentID: binding.OriginalAgentID, Scope: string(ceiling.Scope), Selectors: encoded})
+		if err != nil {
+			return fmt.Errorf("grant managed assistant %s: %w", ceiling.Scope, err)
 		}
-	}
-	encoded, err := json.Marshal(selector)
-	if err != nil {
-		return fmt.Errorf("encode org read ceiling: %w", err)
-	}
-	row, err := agents.CreateAgentPolicyGrant(ctx, agentrepo.CreateAgentPolicyGrantParams{OrganizationID: organizationID, AgentID: binding.OriginalAgentID, Scope: string(authz.ScopeOrgRead), Selectors: encoded})
-	if err != nil {
-		return fmt.Errorf("grant managed assistant org read: %w", err)
-	}
-	if err := s.audit.LogAgentPolicyGrant(ctx, tx, audit.LogAgentPolicyGrantEvent{
-		OrganizationID: organizationID, AgentURN: urn.NewAgentIdentity(binding.OriginalAgentID.String()), Actor: urn.NewPrincipal(urn.PrincipalTypeUser, actorUserID), ActorDisplayName: nil,
-		Action: audit.ActionAgentPolicyGrantCreate, Name: agent.Name, Before: nil,
-		After: &audit.AgentPolicyGrantSnapshot{ID: row.ID, Scope: row.Scope, Effect: "allow", Selector: selector},
-	}); err != nil {
-		return fmt.Errorf("audit managed assistant org read: %w", err)
+		if err := s.audit.LogAgentPolicyGrant(ctx, tx, audit.LogAgentPolicyGrantEvent{
+			OrganizationID: organizationID, AgentURN: urn.NewAgentIdentity(binding.OriginalAgentID.String()), Actor: urn.NewPrincipal(urn.PrincipalTypeUser, actorUserID), ActorDisplayName: nil,
+			Action: audit.ActionAgentPolicyGrantCreate, Name: agent.Name, Before: nil,
+			After: &audit.AgentPolicyGrantSnapshot{ID: row.ID, Scope: row.Scope, Effect: "allow", Selector: ceiling.Selector},
+		}); err != nil {
+			return fmt.Errorf("audit managed assistant %s: %w", ceiling.Scope, err)
+		}
 	}
 	return nil
+}
+
+// hasManagedCeiling reports whether the agent policy already holds a valid,
+// permanent grant that covers ceiling. Runtime policy loading drops selectors
+// that fail validation, and a temporary grant lapses, so neither is a ceiling
+// and the canonical one is still created.
+func hasManagedCeiling(rows []agentrepo.ListAgentPolicyGrantsRow, actorUserID string, ceiling authz.Grant) bool {
+	for _, row := range rows {
+		if row.Scope != string(ceiling.Scope) || row.ExpiresAt.Valid {
+			continue
+		}
+		stored, err := authz.SelectorFromRow(row.Selectors)
+		if err != nil || authz.ValidateSelector(ceiling.Scope, stored) != nil {
+			continue
+		}
+		if authz.GrantsContainSelectorFor(actorUserID, []authz.Grant{authz.NewGrantWithSelector(ceiling.Scope, stored)}, ceiling.Scope, ceiling.Selector) {
+			return true
+		}
+	}
+	return false
 }

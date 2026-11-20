@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import type { IconName } from "@/components/ui/Icon/names";
@@ -11,7 +11,6 @@ import {
   isConnectionVerified,
   VERIFICATION_REASON_LABELS,
 } from "./connectionView";
-import { parseEmaReturn } from "./oktaEma";
 import { CONNECTION_SECTION_ID, oktaViewHref } from "./tabs";
 
 /** Which server gate the tab sits behind: the applications snapshot needs a clean verification, readiness accepts a degraded one. */
@@ -88,7 +87,7 @@ export function ConnectionGate({
   return <>{children}</>;
 }
 
-/** A link to Okta setup that keeps an Enterprise Managed Auth setup in progress. */
+/** A link to Okta setup. */
 function SetupLink({
   setupHref,
   sectionId,
@@ -99,16 +98,8 @@ function SetupLink({
   sectionId?: string;
   children: ReactNode;
 }): JSX.Element {
-  const [searchParams] = useSearchParams();
-  const emaReturn = parseEmaReturn(
-    searchParams.get("emaFor"),
-    searchParams.get("emaReturn"),
-  );
   return (
-    <Link
-      {...props}
-      to={setupHref(oktaViewHref("setup", sectionId, emaReturn))}
-    >
+    <Link {...props} to={setupHref(oktaViewHref("setup", sectionId))}>
       {children}
     </Link>
   );

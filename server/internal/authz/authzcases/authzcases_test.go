@@ -19,3 +19,16 @@ func TestCasesAreCurrent(t *testing.T) {
 	require.NoError(t, err, Path)
 	require.Equal(t, string(want), string(got), "%s is stale; run `mise run gen:authz`", Path)
 }
+
+// TestDispositionCasesAreCurrent fails when the dashboard's disposition cases
+// no longer match how the server classifies tools. `mise run gen:authz`
+// rewrites them.
+func TestDispositionCasesAreCurrent(t *testing.T) {
+	t.Parallel()
+
+	want, err := DispositionFile()
+	require.NoError(t, err)
+	got, err := os.ReadFile(filepath.Join("..", "..", "..", DispositionPath))
+	require.NoError(t, err, DispositionPath)
+	require.Equal(t, string(want), string(got), "%s is stale; run `mise run gen:authz`", DispositionPath)
+}
