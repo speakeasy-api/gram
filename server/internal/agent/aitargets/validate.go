@@ -59,7 +59,7 @@ func ValidateCatalog(catalog *aivendors.Snapshot) error {
 		if !preset.Enabled {
 			continue
 		}
-		if err := validateMetadataURL(preset.URL); err != nil {
+		if err := validateMetadataURL(preset.URL, ""); err != nil {
 			return fmt.Errorf("%w: product %q: document %w", ErrInvalidTarget, preset.ProductID, err)
 		}
 	}
@@ -212,7 +212,7 @@ func validateGatewayClient(catalog *aivendors.Snapshot, category Category, gatew
 	// all, so nobody can record a block that looks real and covers one
 	// laptop's registration.
 	for _, id := range gateway.OAuthClientIDs {
-		if err := validateMetadataURL(id); err != nil {
+		if err := validateMetadataURL(id, "; only CIMD-published clients can be blocked at the gateway"); err != nil {
 			return fail("%v", err)
 		}
 	}
@@ -227,8 +227,8 @@ func validateGatewayClient(catalog *aivendors.Snapshot, category Category, gatew
 	return nil
 }
 
-// validateMetadataURL holds a client ID metadata document URL, or a catalog pattern, to the CIMD client_id rules.
-func validateMetadataURL(id string) error {
+// validateMetadataURL holds a CIMD URL or catalog pattern to the client_id rules; httpsReason explains the https rule.
+func validateMetadataURL(id, httpsReason string) error {
 	switch {
 	case id == "":
 		return errors.New("client id metadata document url must not be empty")
@@ -237,7 +237,7 @@ func validateMetadataURL(id string) error {
 	case strings.ContainsFunc(id, isSpaceOrControl):
 		return fmt.Errorf("client id metadata document url %q must not contain whitespace or control characters", id)
 	case !strings.HasPrefix(id, "https://"):
-		return fmt.Errorf("client id metadata document url %q must be an https URL; only CIMD-published clients can be blocked at the gateway", id)
+		return fmt.Errorf("client id metadata document url %q must be an https URL%s", id, httpsReason)
 	}
 	if err := validateClientIDURLShape(id); err != nil {
 		return fmt.Errorf("client id metadata document url %q %w", id, err)
