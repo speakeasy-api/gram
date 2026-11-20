@@ -26605,6 +26605,199 @@ func EncodeGetHooksRolloutError(encoder func(context.Context, http.ResponseWrite
 	}
 }
 
+// EncodeGetHooksReleaseProgressResponse returns an encoder for responses
+// returned by the admin getHooksReleaseProgress endpoint.
+func EncodeGetHooksReleaseProgressResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*admin.AdminHooksReleaseProgress)
+		enc := encoder(ctx, w)
+		body := NewGetHooksReleaseProgressResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetHooksReleaseProgressRequest returns a decoder for requests sent to
+// the admin getHooksReleaseProgress endpoint.
+func DecodeGetHooksReleaseProgressRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*admin.GetHooksReleaseProgressPayload, error) {
+	return func(r *http.Request) (*admin.GetHooksReleaseProgressPayload, error) {
+		var payload *admin.GetHooksReleaseProgressPayload
+		var (
+			adminSessionToken *string
+		)
+		adminSessionTokenRaw := r.Header.Get("Authorization")
+		if adminSessionTokenRaw != "" {
+			adminSessionToken = &adminSessionTokenRaw
+		}
+		payload = NewGetHooksReleaseProgressPayload(adminSessionToken)
+		if payload.AdminSessionToken != nil {
+			if strings.Contains(*payload.AdminSessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.AdminSessionToken, " ", 2)[1]
+				payload.AdminSessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetHooksReleaseProgressError returns an encoder for errors returned by
+// the getHooksReleaseProgress admin endpoint.
+func EncodeGetHooksReleaseProgressError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHooksReleaseProgressUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHooksReleaseProgressForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHooksReleaseProgressBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHooksReleaseProgressNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHooksReleaseProgressConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHooksReleaseProgressUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHooksReleaseProgressInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHooksReleaseProgressInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHooksReleaseProgressUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHooksReleaseProgressGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeSetHooksRolloutDefaultResponse returns an encoder for responses
 // returned by the admin setHooksRolloutDefault endpoint.
 func EncodeSetHooksRolloutDefaultResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -29778,6 +29971,59 @@ func marshalAdminAdminHooksRolloutChangeToAdminHooksRolloutChangeResponseBody(v 
 		Version:          v.Version,
 		SetBy:            v.SetBy,
 		SetAt:            v.SetAt,
+	}
+
+	return res
+}
+
+// marshalAdminAdminHooksReleaseRepoVersionToAdminHooksReleaseRepoVersionResponseBody
+// builds a value of type *AdminHooksReleaseRepoVersionResponseBody from a
+// value of type *admin.AdminHooksReleaseRepoVersion.
+func marshalAdminAdminHooksReleaseRepoVersionToAdminHooksReleaseRepoVersionResponseBody(v *admin.AdminHooksReleaseRepoVersion) *AdminHooksReleaseRepoVersionResponseBody {
+	res := &AdminHooksReleaseRepoVersionResponseBody{
+		Version: v.Version,
+		Repos:   v.Repos,
+	}
+
+	return res
+}
+
+// marshalAdminAdminHooksReleaseFleetToAdminHooksReleaseFleetResponseBody
+// builds a value of type *AdminHooksReleaseFleetResponseBody from a value of
+// type *admin.AdminHooksReleaseFleet.
+func marshalAdminAdminHooksReleaseFleetToAdminHooksReleaseFleetResponseBody(v *admin.AdminHooksReleaseFleet) *AdminHooksReleaseFleetResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AdminHooksReleaseFleetResponseBody{
+		WindowDays:        v.WindowDays,
+		Installs:          v.Installs,
+		InstallsOnCurrent: v.InstallsOnCurrent,
+	}
+	if v.Versions != nil {
+		res.Versions = make([]*AdminHooksReleaseInstallVersionResponseBody, len(v.Versions))
+		for i, val := range v.Versions {
+			if val == nil {
+				res.Versions[i] = nil
+				continue
+			}
+			res.Versions[i] = marshalAdminAdminHooksReleaseInstallVersionToAdminHooksReleaseInstallVersionResponseBody(val)
+		}
+	} else {
+		res.Versions = []*AdminHooksReleaseInstallVersionResponseBody{}
+	}
+
+	return res
+}
+
+// marshalAdminAdminHooksReleaseInstallVersionToAdminHooksReleaseInstallVersionResponseBody
+// builds a value of type *AdminHooksReleaseInstallVersionResponseBody from a
+// value of type *admin.AdminHooksReleaseInstallVersion.
+func marshalAdminAdminHooksReleaseInstallVersionToAdminHooksReleaseInstallVersionResponseBody(v *admin.AdminHooksReleaseInstallVersion) *AdminHooksReleaseInstallVersionResponseBody {
+	res := &AdminHooksReleaseInstallVersionResponseBody{
+		Version:  v.Version,
+		Status:   v.Status,
+		Installs: v.Installs,
 	}
 
 	return res

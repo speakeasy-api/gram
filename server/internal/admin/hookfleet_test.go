@@ -22,11 +22,16 @@ type stubHookFleet struct {
 	org   string
 	since time.Time
 	limit int
+	mix   []telemetry.HookVersionMixRow
 }
 
 func (s *stubHookFleet) HookInstalls(_ context.Context, organizationID string, since time.Time, limit int) (telemetry.HookInstallPage, error) {
 	s.org, s.since, s.limit = organizationID, since, limit
 	return s.page, s.err
+}
+
+func (s *stubHookFleet) VersionMix(_ context.Context, _, _ time.Time) ([]telemetry.HookVersionMixRow, error) {
+	return s.mix, s.err
 }
 
 func hookFleetTestVersions(minimum string) hookversions.Policy {

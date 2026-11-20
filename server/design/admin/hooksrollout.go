@@ -70,11 +70,57 @@ var AdminOrganizationHooksRollout = Type("AdminOrganizationHooksRollout", func()
 	Attribute("eligible", Boolean, "Whether the organization's next publish moves its hooks plugin to current_version. Absent for legacy_flag, which the admin server cannot read.")
 })
 
-// MCP parity: get_hooks_rollout and get_organization_hooks_rollout expose the
-// reads to Staff Admin MCP. The writes are deliberately dashboard-only: moving
-// the default pin changes the hooks plugin of every customer organization at
-// once, which does not fit the Admin MCP proposal flow's single-organization
-// targeting, and a release step this consequential stays a human action.
+var AdminHooksReleaseRepoVersion = Type("AdminHooksReleaseRepoVersion", func() {
+	Description("Marketplace repositories whose last published hooks plugin carries one hooks generator version.")
+	Required("version", "repos")
+
+	Attribute("version", String, "The hooks generator version last published, or empty for repositories that have never published the hooks plugin.")
+	Attribute("repos", Int64, "Repositories on this version.")
+})
+
+var AdminHooksReleaseInstallVersion = Type("AdminHooksReleaseInstallVersion", func() {
+	Description("Hooks installs reporting one binary version.")
+	Required("version", "status", "installs")
+
+	Attribute("version", String, "The hooks binary version, or empty for installs that sent no version.")
+	Attribute("status", String, "How the version compares to the release Speakeasy ships.", func() {
+		Enum("current", "behind", "unsupported", "unknown")
+	})
+	Attribute("installs", Int64, "Installs whose latest version is this one.")
+})
+
+var AdminHooksReleaseFleet = Type("AdminHooksReleaseFleet", func() {
+	Description("Hooks installs across every organization, by binary version.")
+	Required("window_days", "installs", "installs_on_current", "versions")
+
+	Attribute("window_days", Int, "Installs count when they sent a hook in this many full UTC days.")
+	Attribute("installs", Int64, "Installs seen in the window.")
+	Attribute("installs_on_current", Int64, "Installs reporting the binary version this build ships.")
+	Attribute("versions", ArrayOf(AdminHooksReleaseInstallVersion), "Installs per binary version, newest first.")
+})
+
+var AdminHooksReleaseProgress = Type("AdminHooksReleaseProgress", func() {
+	Description("How far the current hooks release has reached: organizations cleared by the rollout pins, marketplace repositories republished with it, and installs running it.")
+	Required("current_version", "organizations", "organizations_cleared", "organizations_held", "organizations_on_legacy_flag", "repos", "repos_on_current", "repo_versions")
+
+	Attribute("current_version", Int, "The hooks generator version this server build publishes.")
+	Attribute("current_binary_version", String, "The hooks binary version this server build ships. Absent when unknown.")
+	Attribute("organizations", Int64, "Organizations with at least one marketplace repository.")
+	Attribute("organizations_cleared", Int64, "Of those, organizations whose next publish moves to current_version: canaries and organizations pinned at or above it.")
+	Attribute("organizations_held", Int64, "Organizations pinned below current_version.")
+	Attribute("organizations_on_legacy_flag", Int64, "Organizations with no pin, which follow the legacy hooks-rollout PostHog flag the admin server cannot read.")
+	Attribute("repos", Int64, "Marketplace repositories.")
+	Attribute("repos_on_current", Int64, "Repositories whose last published hooks plugin carries current_version.")
+	Attribute("repo_versions", ArrayOf(AdminHooksReleaseRepoVersion), "Repositories per published hooks generator version, newest first.")
+	Attribute("fleet", AdminHooksReleaseFleet, "Installs running the release. Absent when the hooks fleet is unavailable.")
+})
+
+// MCP parity: get_hooks_rollout, get_hooks_release_progress and
+// get_organization_hooks_rollout expose the reads to Staff Admin MCP. The
+// writes are deliberately dashboard-only: moving the default pin changes the
+// hooks plugin of every customer organization at once, which does not fit the
+// Admin MCP proposal flow's single-organization targeting, and a release step
+// this consequential stays a human action.
 func hooksRolloutMethods() {
 	Method("getHooksRollout", func() {
 		Description("Returns the platform-wide hooks version rollout state: the version this build publishes, the default pin, canary organizations, organization overrides and recent changes.")
@@ -87,6 +133,19 @@ func hooksRolloutMethods() {
 			Response(StatusOK)
 		})
 		Meta("openapi:operationId", "adminGetHooksRollout")
+	})
+
+	Method("getHooksReleaseProgress", func() {
+		Description("Returns how far the current hooks release has reached: organizations the rollout pins clear for it, marketplace repositories republished with it, and installs reporting its binary version.")
+		Payload(func() {
+			security.AdminAuthPayload()
+		})
+		Result(AdminHooksReleaseProgress)
+		HTTP(func() {
+			GET("/admin/hooksRollout.progress")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "adminGetHooksReleaseProgress")
 	})
 
 	Method("setHooksRolloutDefault", func() {
