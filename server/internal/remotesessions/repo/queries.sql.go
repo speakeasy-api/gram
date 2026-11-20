@@ -12732,35 +12732,6 @@ func (q *Queries) ListTrustedRemoteSessionClientsByIssuerID(ctx context.Context,
 	return items, nil
 }
 
-const listUserSessionIssuerIDsForRemoteSessionClient = `-- name: ListUserSessionIssuerIDsForRemoteSessionClient :many
-SELECT link.user_session_issuer_id
-FROM remote_session_client_user_session_issuers AS link
-WHERE link.remote_session_client_id = $1
-ORDER BY link.user_session_issuer_id
-`
-
-// Every user_session_issuer the client is attached to, for rendering the
-// client's API view outside a tenant-scoped handler.
-func (q *Queries) ListUserSessionIssuerIDsForRemoteSessionClient(ctx context.Context, remoteSessionClientID uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listUserSessionIssuerIDsForRemoteSessionClient, remoteSessionClientID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var user_session_issuer_id uuid.UUID
-		if err := rows.Scan(&user_session_issuer_id); err != nil {
-			return nil, err
-		}
-		items = append(items, user_session_issuer_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listUserSessionIssuersBoundToProjectClient = `-- name: ListUserSessionIssuersBoundToProjectClient :many
 SELECT link.user_session_issuer_id
 FROM remote_session_client_user_session_issuers AS link

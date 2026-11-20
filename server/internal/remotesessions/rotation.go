@@ -503,11 +503,7 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		return zero, fmt.Errorf("lock remote session issuer for client rotation: %w", err)
 	}
 
-	issuerIDs, err := txRepo.ListUserSessionIssuerIDsForRemoteSessionClient(ctx, current.ID)
-	if err != nil {
-		return zero, fmt.Errorf("list client issuer bindings for rotation audit: %w", err)
-	}
-	beforeView, err := mv.BuildRemoteSessionClientView(current, issuerIDs)
+	beforeView, err := mv.BuildRemoteSessionClientView(current, nil)
 	if err != nil {
 		return zero, fmt.Errorf("build client view before rotation: %w", err)
 	}
@@ -572,7 +568,7 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		return zero, fmt.Errorf("revoke remote sessions of the replaced client: %w", err)
 	}
 
-	afterView, err := mv.BuildRemoteSessionClientView(updated, issuerIDs)
+	afterView, err := mv.BuildRemoteSessionClientView(updated, nil)
 	if err != nil {
 		return zero, fmt.Errorf("build client view after rotation: %w", err)
 	}

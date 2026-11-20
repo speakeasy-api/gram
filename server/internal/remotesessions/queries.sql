@@ -861,14 +861,6 @@ WHERE id = @id
   AND deleted IS FALSE
   AND upstream_rejected_at IS NOT NULL;
 
--- name: ListUserSessionIssuerIDsForRemoteSessionClient :many
--- Every user_session_issuer the client is attached to, for rendering the
--- client's API view outside a tenant-scoped handler.
-SELECT link.user_session_issuer_id
-FROM remote_session_client_user_session_issuers AS link
-WHERE link.remote_session_client_id = @remote_session_client_id
-ORDER BY link.user_session_issuer_id;
-
 -- name: ReplaceRemoteSessionClientRegistration :one
 -- Swaps the row onto a freshly registered upstream client in place, so the
 -- issuer bindings, MCP server attachments, and key set links that reference

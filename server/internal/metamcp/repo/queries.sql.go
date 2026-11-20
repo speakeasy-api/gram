@@ -12,73 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const autoDetachMemberProviderClient = `-- name: AutoDetachMemberProviderClient :execrows
-DELETE FROM remote_session_client_user_session_issuers AS l
-USING remote_session_clients AS c
-WHERE l.remote_session_client_id = c.id
-  AND l.user_session_issuer_id = $1
-  AND c.remote_session_issuer_id = $2
-  -- This is mirror cleanup, not a principal attachment revocation.
-  AND NOT EXISTS (
-    SELECT 1 FROM principal_remote_session_bindings AS binding
-    WHERE binding.remote_session_client_id = l.remote_session_client_id
-      AND binding.user_session_issuer_id = l.user_session_issuer_id
-      AND binding.revoked_at IS NULL
-  )
-  AND NOT EXISTS (
-    -- All consumers of the gateway issuer live in its project (the issuer is
-    -- project-scoped), so scope the scan there — both for tenancy and to keep
-    -- the anti-join off a cross-tenant sequential scan.
-    SELECT 1
-    FROM mcp_servers AS s
-    JOIN mcp_server_remote_session_clients AS a
-      ON a.mcp_server_id = s.id
-     AND a.project_id = s.project_id
-     AND a.deleted IS FALSE
-    JOIN remote_session_clients AS consumer_client
-      ON consumer_client.id = a.remote_session_client_id
-     AND consumer_client.remote_session_issuer_id = $2
-     AND consumer_client.deleted IS FALSE
-    JOIN remote_session_issuers AS provider
-      ON provider.id = consumer_client.remote_session_issuer_id
-     AND provider.deleted IS FALSE
-    JOIN meta_mcp_server_members AS m
-      ON m.project_id = s.project_id
-     AND m.mcp_server_id = s.id
-     AND m.deleted IS FALSE
-    JOIN meta_mcp_servers AS mm
-      ON mm.project_id = m.project_id
-     AND mm.id = m.meta_mcp_server_id
-     AND mm.deleted IS FALSE
-    WHERE s.deleted IS FALSE
-      AND s.project_id = $3
-      AND mm.user_session_issuer_id = $1
-  )
-`
-
-type AutoDetachMemberProviderClientParams struct {
-	GatewayIssuerID uuid.UUID
-	RemoteIssuerID  uuid.UUID
-	ProjectID       uuid.UUID
-}
-
-// Unbind the gateway issuer's
-// client(s) for a removed member's upstream so the provider stops appearing on
-// the gateway's consent screen. The binding is scoped to the user_session_issuer,
-// so it must survive as long as ANY live member of a meta server on the issuer
-// (issuers can be shared across gateways) still fronts the upstream. Callers
-// must check CountServersOnGatewayIssuer first: a server directly on the issuer
-// has no association to prove which provider it uses.
-// Run after the member row is soft-deleted so the just-removed member is
-// already excluded by the deleted filter below.
-func (q *Queries) AutoDetachMemberProviderClient(ctx context.Context, arg AutoDetachMemberProviderClientParams) (int64, error) {
-	result, err := q.db.Exec(ctx, autoDetachMemberProviderClient, arg.GatewayIssuerID, arg.RemoteIssuerID, arg.ProjectID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const countMetaMCPMembersSharingBackend = `-- name: CountMetaMCPMembersSharingBackend :one
 SELECT count(*)
 FROM meta_mcp_server_members m
@@ -123,32 +56,6 @@ func (q *Queries) CountMetaMCPMembersSharingBackend(ctx context.Context, arg Cou
 		arg.ToolsetID,
 		arg.UnproxiedMcpServerID,
 	)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countServersOnGatewayIssuer = `-- name: CountServersOnGatewayIssuer :one
-SELECT count(*)
-FROM mcp_servers AS s
-JOIN projects AS p
-  ON p.id = s.project_id
- AND p.organization_id = $1
- AND p.deleted IS FALSE
-WHERE s.user_session_issuer_id = $2
-  AND s.deleted IS FALSE
-`
-
-type CountServersOnGatewayIssuerParams struct {
-	OrganizationID  string
-	GatewayIssuerID uuid.NullUUID
-}
-
-// Live servers signing in directly through a gateway's issuer, across the
-// organization because an issuer can be organization-level. A gateway's issuer
-// is expected to serve only gateways, so this should be zero.
-func (q *Queries) CountServersOnGatewayIssuer(ctx context.Context, arg CountServersOnGatewayIssuerParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countServersOnGatewayIssuer, arg.OrganizationID, arg.GatewayIssuerID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -1465,27 +1372,6 @@ func (q *Queries) ListServableMetaMCPMembers(ctx context.Context, arg ListServab
 		return nil, err
 	}
 	return items, nil
-}
-
-const lockMemberProviderClientParents = `-- name: LockMemberProviderClientParents :exec
-SELECT l.remote_session_client_id
-FROM remote_session_client_user_session_issuers AS l
-JOIN remote_session_clients AS c ON c.id = l.remote_session_client_id
-WHERE l.user_session_issuer_id = $1
-  AND c.remote_session_issuer_id = $2
-ORDER BY l.remote_session_client_id
-FOR UPDATE OF l
-`
-
-type LockMemberProviderClientParentsParams struct {
-	GatewayIssuerID uuid.UUID
-	RemoteIssuerID  uuid.UUID
-}
-
-// Lock parents before the attachment check in the delete's fresh snapshot.
-func (q *Queries) LockMemberProviderClientParents(ctx context.Context, arg LockMemberProviderClientParentsParams) error {
-	_, err := q.db.Exec(ctx, lockMemberProviderClientParents, arg.GatewayIssuerID, arg.RemoteIssuerID)
-	return err
 }
 
 const lockMetaMCPMember = `-- name: LockMetaMCPMember :one
