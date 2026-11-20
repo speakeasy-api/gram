@@ -148,7 +148,7 @@ func TestServePublic_MetaEndpoint_ConnectionStatus_HostedUsesAssignedGrant(t *te
 	statuses := callConnectionStatus(t, ti, context.Background(), slug, bearer).statuses
 	require.Equal(t, metamcp.SignInNotConnected, statuses[first.slug], "the legacy issuer link must not select the sibling's grant")
 	require.Equal(t, metamcp.SignInConnected, statuses[sibling.slug])
-	require.Equal(t, metamcp.SignInError, statuses[missing.slug], "a required but missing placement is not no-upstream")
+	require.NotContains(t, statuses, missing.slug, "a required but missing placement is not admitted to the gateway")
 	require.Equal(t, metamcp.SignInNotRequired, statuses[open.slug])
 
 	insertQualifiedRemoteSessionToken(t, ctx, ti, signIn, firstClient, subject, "assigned-token", "")
