@@ -114,8 +114,8 @@ importers:
         specifier: ^1.33.5
         version: 1.33.5(@tanstack/react-start@1.168.60(react@19.3.1)(react-dom@19.3.1(react@19.3.1))(vite@8.3.7(@types/node@24.13.3)(esbuild@0.28.1)(tsx@4.23.5)))(react@19.3.1)
       '@tanstack/react-hotkeys':
-        specifier: ^0.23.0
-        version: 0.23.0(react@19.3.1)(react-dom@19.3.1(react@19.3.1))
+        specifier: ^0.25.0
+        version: 0.25.0(react@19.3.1)(react-dom@19.3.1(react@19.3.1))
       '@tanstack/react-query':
         specifier: 'catalog:'
         version: 5.107.1(@types/react@19.3.0)(react@19.3.1)
@@ -3640,8 +3640,8 @@ packages:
     resolution: {integrity: sha512-w1+YvwmTkwt5n8yUqEH3IWZ9DsmorCZW/EQ3KYHnqEgIkOZpH54NvW6/Epq3Dzb8H0ifIeYX8PExvrNLIH5FIA==}
     engines: {node: '>=20.19'}
 
-  '@tanstack/hotkeys@0.27.0':
-    resolution: {integrity: sha512-nFg/Shd0MHECBgi+R2p8ct7qFrQVRW7+buIJgq63YrDdQpsetFwttKJOWhyesalJtBK9igEISRjk49N1q77fqw==}
+  '@tanstack/hotkeys@0.29.0':
+    resolution: {integrity: sha512-aRL4MICfFmvzVgz5pAC1JmFTeeJjd5KbFA4ZLAZuqAPoqsDUUtJfTZpx+WKKNDJGi3X/p9gO87CZ+alFHTd3Og==}
     engines: {node: '>=20'}
 
   '@tanstack/match-sorter-utils@9.2.6':
@@ -3664,8 +3664,8 @@ packages:
       '@tanstack/react-start':
         optional: true
 
-  '@tanstack/react-hotkeys@0.23.0':
-    resolution: {integrity: sha512-RfzJhJrzXLt/9l29Se5ZhEvANPSooF8IAymlFR/JKHdrf7+tWl2Vd3GpJt3PdIbztMAml4EbnjWVmwF/aqgfxg==}
+  '@tanstack/react-hotkeys@0.25.0':
+    resolution: {integrity: sha512-pVkW1du9rp7YA9InTbuwIQGCcS678wkxXy854nN+Q8crMP84+LwqAr20kvu2XY5keY4KdLI9LTv1DeiuZDT7NA==}
     engines: {node: '>=20'}
     peerDependencies:
       react: '>=18.0.0'
@@ -10446,7 +10446,7 @@ snapshots:
 
   '@tanstack/history@1.162.5': {}
 
-  '@tanstack/hotkeys@0.27.0': {}
+  '@tanstack/hotkeys@0.29.0': {}
 
   '@tanstack/match-sorter-utils@9.2.6':
     dependencies:
@@ -10472,9 +10472,9 @@ snapshots:
     optionalDependencies:
       '@tanstack/react-start': 1.169.5(react@19.3.1)(react-dom@19.3.1(react@19.3.1))(vite@8.3.7(@types/node@24.13.3)(esbuild@0.28.1)(tsx@4.23.5))
 
-  '@tanstack/react-hotkeys@0.23.0(react@19.3.1)(react-dom@19.3.1(react@19.3.1))':
+  '@tanstack/react-hotkeys@0.25.0(react@19.3.1)(react-dom@19.3.1(react@19.3.1))':
     dependencies:
-      '@tanstack/hotkeys': 0.27.0
+      '@tanstack/hotkeys': 0.29.0
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
 
