@@ -2,11 +2,12 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
 import { ToolNarrowingDialog } from "./ToolNarrowingDialog";
 
 afterEach(cleanup);
 
-const catalog = [
+const catalog: ToolSelectionTool[] = [
   { name: "read_records", disposition: "unannotated" },
   { name: "search_records", disposition: "unannotated" },
 ];

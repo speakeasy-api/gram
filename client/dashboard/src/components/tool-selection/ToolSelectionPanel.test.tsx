@@ -98,7 +98,9 @@ describe("ToolSelectionPanel annotation rows", () => {
       />,
     );
 
-    expect(screen.getByRole("checkbox", { name: /Read-only/ })).toBeTruthy();
+    expect(
+      screen.getByRole("checkbox", { name: /Read-only.*1 tools/ }),
+    ).toBeTruthy();
     expect(screen.queryByRole("checkbox", { name: /Idempotent/ })).toBeNull();
   });
 });

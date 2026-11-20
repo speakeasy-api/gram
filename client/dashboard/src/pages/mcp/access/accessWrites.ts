@@ -542,7 +542,9 @@ export function narrowingSeed(
         reachableTools(cell, [
           {
             name: "",
-            disposition: DISPOSITIONS.find((known) => known === disposition),
+            disposition: [...DISPOSITIONS, "unannotated" as const].find(
+              (known) => known === disposition,
+            ),
           },
         ]) ?? []
       ).length > 0,
