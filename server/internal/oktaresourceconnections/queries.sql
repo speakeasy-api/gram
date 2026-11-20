@@ -35,22 +35,16 @@ FOR UPDATE;
 
 -- Servers the organization owns (tenancy through projects, since mcp_servers
 -- has no organization column) with a live backend and an authorization server
--- the organization can see. The authorization server comes from the server's
--- live client associations; a server with none or several is left out. Whether
+-- the organization can see. A proxied server needs a live typed offer; an
+-- unproxied server retains its single derived authorization server. Whether
 -- Speakeasy fronts the user login does not matter: readiness is about the
 -- upstream authorization server. Undiscovered issuers are returned so the list
 -- can count them; whether the issuer advertises ID-JAG is decided in Go so the
 -- derivation stays pure.
 -- name: ListEligibleServers :many
--- Typed auth clients choose upstream authentication only for proxied servers.
--- Unproxied servers have no typed offers and retain their derived issuer and clients.
--- The enforced-and-proxied predicate appears four times in this file, twice per
--- query, and changes with them and with Go code that gates typed auth clients on
--- remote or tunneled backends.
--- Where typed auth clients apply (typed_auth_enforced),
--- a server's authorization server is the one its personal or identity-provider
--- auth clients offer: an identity-provider client's if it offers one, else the
--- first by id. Elsewhere it is the one its live client associations name.
+-- Only proxied servers use typed offers; unproxied servers retain their
+-- derived issuer and clients. Keep this predicate identical in both reads.
+-- Prefer a live, reachable EMA offer before personal registrations.
 SELECT
     ms.id
   , ms.project_id
@@ -59,7 +53,7 @@ SELECT
   , ms.name
   , ms.slug
   , i.id AS issuer_id
-  , (@typed_auth_enforced::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL))::boolean AS typed_auth_enforced
+  , (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS typed_auth_enforced
   , ARRAY(
       SELECT oc.id
       FROM mcp_server_auth_clients AS ol
@@ -68,12 +62,16 @@ SELECT
        AND oa.organization_id = ol.organization_id
        AND oa.deleted IS FALSE
        AND oa.enabled
+       AND (oa.project_id IS NULL OR oa.project_id = ms.project_id)
        AND oa.client_type IN ('ema', 'remote_session')
       JOIN remote_session_clients AS oc
         ON oc.id = oa.remote_session_client_id
        AND oc.deleted IS FALSE
+       AND (oc.project_id IS NULL OR oc.project_id = ms.project_id)
+       AND (oc.organization_id IS NULL OR oc.organization_id = p.organization_id)
       WHERE ol.mcp_server_id = ms.id
         AND ol.project_id = ms.project_id
+        AND ol.organization_id = p.organization_id
         AND ol.deleted IS FALSE
       ORDER BY oc.id
     )::uuid[] AS offered_client_ids
@@ -90,7 +88,7 @@ JOIN projects AS p
  AND p.organization_id = @organization_id
  AND p.deleted IS FALSE
 JOIN remote_session_issuers AS i
-  ON i.id = CASE WHEN @typed_auth_enforced::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL) THEN (
+  ON i.id = CASE WHEN ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL THEN (
        SELECT oc.remote_session_issuer_id
        FROM mcp_server_auth_clients AS ol
        JOIN mcp_auth_clients AS oa
@@ -98,12 +96,21 @@ JOIN remote_session_issuers AS i
         AND oa.organization_id = ol.organization_id
         AND oa.deleted IS FALSE
         AND oa.enabled
+       AND (oa.project_id IS NULL OR oa.project_id = ms.project_id)
         AND oa.client_type IN ('ema', 'remote_session')
        JOIN remote_session_clients AS oc
          ON oc.id = oa.remote_session_client_id
         AND oc.deleted IS FALSE
+       AND (oc.project_id IS NULL OR oc.project_id = ms.project_id)
+       AND (oc.organization_id IS NULL OR oc.organization_id = p.organization_id)
+       JOIN remote_session_issuers AS provider
+         ON provider.id = oc.remote_session_issuer_id
+        AND provider.deleted IS FALSE
+        AND (provider.project_id IS NULL OR provider.project_id = ms.project_id)
+        AND (provider.organization_id IS NULL OR provider.organization_id = p.organization_id)
        WHERE ol.mcp_server_id = ms.id
          AND ol.project_id = ms.project_id
+        AND ol.organization_id = p.organization_id
          AND ol.deleted IS FALSE
        ORDER BY (oa.client_type = 'ema') DESC, oc.id
        LIMIT 1
@@ -164,7 +171,7 @@ SELECT
   , ms.name
   , ms.slug
   , i.id AS issuer_id
-  , (@typed_auth_enforced::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL))::boolean AS typed_auth_enforced
+  , (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS typed_auth_enforced
   , ARRAY(
       SELECT oc.id
       FROM mcp_server_auth_clients AS ol
@@ -173,12 +180,16 @@ SELECT
        AND oa.organization_id = ol.organization_id
        AND oa.deleted IS FALSE
        AND oa.enabled
+       AND (oa.project_id IS NULL OR oa.project_id = ms.project_id)
        AND oa.client_type IN ('ema', 'remote_session')
       JOIN remote_session_clients AS oc
         ON oc.id = oa.remote_session_client_id
        AND oc.deleted IS FALSE
+       AND (oc.project_id IS NULL OR oc.project_id = ms.project_id)
+       AND (oc.organization_id IS NULL OR oc.organization_id = p.organization_id)
       WHERE ol.mcp_server_id = ms.id
         AND ol.project_id = ms.project_id
+        AND ol.organization_id = p.organization_id
         AND ol.deleted IS FALSE
       ORDER BY oc.id
     )::uuid[] AS offered_client_ids
@@ -195,7 +206,7 @@ JOIN projects AS p
  AND p.organization_id = @organization_id
  AND p.deleted IS FALSE
 JOIN remote_session_issuers AS i
-  ON i.id = CASE WHEN @typed_auth_enforced::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL) THEN (
+  ON i.id = CASE WHEN ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL THEN (
        SELECT oc.remote_session_issuer_id
        FROM mcp_server_auth_clients AS ol
        JOIN mcp_auth_clients AS oa
@@ -203,12 +214,21 @@ JOIN remote_session_issuers AS i
         AND oa.organization_id = ol.organization_id
         AND oa.deleted IS FALSE
         AND oa.enabled
+       AND (oa.project_id IS NULL OR oa.project_id = ms.project_id)
         AND oa.client_type IN ('ema', 'remote_session')
        JOIN remote_session_clients AS oc
          ON oc.id = oa.remote_session_client_id
         AND oc.deleted IS FALSE
+       AND (oc.project_id IS NULL OR oc.project_id = ms.project_id)
+       AND (oc.organization_id IS NULL OR oc.organization_id = p.organization_id)
+       JOIN remote_session_issuers AS provider
+         ON provider.id = oc.remote_session_issuer_id
+        AND provider.deleted IS FALSE
+        AND (provider.project_id IS NULL OR provider.project_id = ms.project_id)
+        AND (provider.organization_id IS NULL OR provider.organization_id = p.organization_id)
        WHERE ol.mcp_server_id = ms.id
          AND ol.project_id = ms.project_id
+        AND ol.organization_id = p.organization_id
          AND ol.deleted IS FALSE
        ORDER BY (oa.client_type = 'ema') DESC, oc.id
        LIMIT 1

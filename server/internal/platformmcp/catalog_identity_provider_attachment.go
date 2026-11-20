@@ -2,7 +2,6 @@
 package platformmcp
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -20,7 +19,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 
-	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -68,11 +66,6 @@ type CatalogIdentityProviderAttachmentService struct {
 	policy                *guardian.Policy
 	serverURL             *url.URL
 	registrationTelemetry oauthregistration.Recorder
-
-	// authEnforcement reads which organizations choose upstream
-	// authentication through typed auth clients, where an attachment is
-	// judged by what the server itself offers.
-	authEnforcement *authenforcement.Gate
 }
 
 func NewCatalogIdentityProviderAttachmentService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, identity *remotesessions.IdentityCommitter, policy *guardian.Policy, serverURL *url.URL) *CatalogIdentityProviderAttachmentService {
@@ -80,13 +73,13 @@ func NewCatalogIdentityProviderAttachmentService(logger *slog.Logger, meterProvi
 		return &CatalogIdentityProviderAttachmentService{}
 	}
 	serverURLCopy := *serverURL
-	return &CatalogIdentityProviderAttachmentService{db: db, identity: identity, policy: policy, serverURL: &serverURLCopy, registrationTelemetry: oauthregistration.NewMetrics(logger, meterProvider), authEnforcement: authenforcement.NewGate(db)}
+	return &CatalogIdentityProviderAttachmentService{db: db, identity: identity, policy: policy, serverURL: &serverURLCopy, registrationTelemetry: oauthregistration.NewMetrics(logger, meterProvider)}
 }
 
 // Attach discovers the exact provider advertised by the lifecycle-owned Remote
 // MCP source, creates a project-owned remote-session issuer/client when needed,
-// and binds it to the registration's existing user-session issuer. It is safe
-// to retry after a successful call: the existing matching binding is reused.
+// and offers it on the registered server. Retrying recognizes an existing
+// offer for the discovered provider on that exact server.
 func (s *CatalogIdentityProviderAttachmentService) Attach(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (CatalogIdentityProviderAttachmentResult, error) {
 	if s == nil || s.db == nil || s.identity == nil || s.policy == nil || s.serverURL == nil || principal.UserID == "" || principal.OrganizationID == "" || project.ID == uuid.Nil || registrationID == uuid.Nil {
 		return CatalogIdentityProviderAttachmentResult{}, ErrIdentityProviderAttachmentUnavailable
@@ -160,37 +153,12 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("lock identity-provider issuer attachment: %w", err)
 	}
 
-	enforced, err := s.authEnforcement.Enforced(ctx, principal.OrganizationID)
+	attached, err := s.checkExistingOffer(ctx, principal, project, registration, metadata.Issuer)
 	if err != nil {
-		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("read upstream auth enforcement: %w", err)
-	}
-	if attachedClient, attached, err := s.matchingAttachment(ctx, s.db, enforced, principal.OrganizationID, project, registration.McpServerID.UUID, registration.UserSessionIssuerID.UUID, metadata.Issuer); err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, err
-	} else if attached {
-		// An offered typed client is already attached. Legacy synchronization
-		// would create a second auth client for an administrator's offer.
-		if !enforced {
-			if err := s.associateExistingAttachment(ctx, principal, project, registration, metadata.Issuer, attachedClient); err != nil {
-				return CatalogIdentityProviderAttachmentResult{}, err
-			}
-		}
+	}
+	if attached {
 		return CatalogIdentityProviderAttachmentResult{Attached: true, ProviderURL: metadata.Issuer}, nil
-	}
-
-	// Checked before registering, which may create an upstream client with no
-	// delete path, and again under the server lock before binding it.
-	current, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
-		ID:        registration.McpServerID.UUID,
-		ProjectID: project.ID,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return CatalogIdentityProviderAttachmentResult{}, ErrRegistrationInvalid
-	}
-	if err != nil {
-		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("load registered mcp server: %w", err)
-	}
-	if current.RemoteMcpServerID != registration.RemoteMcpServerID || current.UserSessionIssuerID != registration.UserSessionIssuerID {
-		return CatalogIdentityProviderAttachmentResult{}, ErrIdentityProviderAttachmentConflict
 	}
 
 	// Resolved before registering so a provider this flow cannot serve costs no
@@ -228,20 +196,15 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 	defer func() { _ = tx.Rollback(ctx) }()
 	// The server row is locked ahead of the issuer, the order MCP server
 	// updates take, because the commit associates the server with its client.
-	locked, err := mcpserversrepo.New(tx.DB()).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{
-		ID:        registration.McpServerID.UUID,
-		ProjectID: project.ID,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return CatalogIdentityProviderAttachmentResult{}, ErrRegistrationInvalid
+	if err := lockCatalogOfferTarget(ctx, tx.DB(), principal, project.ID, registration); err != nil {
+		return CatalogIdentityProviderAttachmentResult{}, err
 	}
+	attached, err = s.matchingAttachment(ctx, tx.DB(), principal.OrganizationID, project, registration.McpServerID.UUID, metadata.Issuer)
 	if err != nil {
-		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("lock registered mcp server: %w", err)
+		return CatalogIdentityProviderAttachmentResult{}, err
 	}
-	// Discovery and registration ran unlocked, so the server must still
-	// front the same source through the same issuer they were decided for.
-	if locked.RemoteMcpServerID != registration.RemoteMcpServerID || locked.UserSessionIssuerID != registration.UserSessionIssuerID {
-		return CatalogIdentityProviderAttachmentResult{}, ErrIdentityProviderAttachmentConflict
+	if attached {
+		return CatalogIdentityProviderAttachmentResult{Attached: true, ProviderURL: metadata.Issuer}, nil
 	}
 	if err := commit.Lock(ctx, tx); err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, attachmentCommitError("lock identity-provider attachment", err)
@@ -284,128 +247,70 @@ func (s *CatalogIdentityProviderAttachmentService) discoverSupportedIssuerMetada
 // binding writers take, so no binding change commits between the reread and
 // the write. It runs only where typed auth clients do not choose upstream
 // authentication, so the reread uses the issuer's bindings.
-func (s *CatalogIdentityProviderAttachmentService) associateExistingAttachment(ctx context.Context, principal Principal, project ResolvedProject, registration platformrepo.PlatformMcpCatalogRegistration, issuerURL string, client remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerRow) error {
+// checkExistingOffer validates the target under the same writer locks as the
+// final commit before accepting an existing offer or registering a new client.
+func (s *CatalogIdentityProviderAttachmentService) checkExistingOffer(ctx context.Context, principal Principal, project ResolvedProject, registration platformrepo.PlatformMcpCatalogRegistration, issuerURL string) (bool, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("begin identity-provider association: %w", err)
+		return false, fmt.Errorf("begin identity-provider offer check: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if err := authclientbackfill.LockEMAWriterScope(ctx, tx, principal.OrganizationID, []uuid.UUID{project.ID}); err != nil {
-		return fmt.Errorf("lock identity-provider association scope: %w", err)
+		return false, fmt.Errorf("lock identity-provider offer scope: %w", err)
 	}
+	if err := lockCatalogOfferTarget(ctx, tx, principal, project.ID, registration); err != nil {
+		return false, err
+	}
+	return s.matchingAttachment(ctx, tx, principal.OrganizationID, project, registration.McpServerID.UUID, issuerURL)
+}
 
-	locked, err := mcpserversrepo.New(tx).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{
-		ID:        registration.McpServerID.UUID,
-		ProjectID: project.ID,
-	})
+func lockCatalogOfferTarget(ctx context.Context, tx pgx.Tx, principal Principal, projectID uuid.UUID, registration platformrepo.PlatformMcpCatalogRegistration) error {
+	current, err := lifecycleRegistration(ctx, platformrepo.New(tx), principal, projectID, registration.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrRegistrationInvalid
+	}
+	if err != nil {
+		return fmt.Errorf("reload registered mcp source: %w", err)
+	}
+	if current.Status != registrationStatusRegistered || current.McpServerID != registration.McpServerID || current.RemoteMcpServerID != registration.RemoteMcpServerID || current.UserSessionIssuerID != registration.UserSessionIssuerID || current.McpEndpointID != registration.McpEndpointID {
+		return ErrIdentityProviderAttachmentConflict
+	}
+	locked, err := mcpserversrepo.New(tx).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{ID: registration.McpServerID.UUID, ProjectID: projectID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrRegistrationInvalid
 	}
 	if err != nil {
 		return fmt.Errorf("lock registered mcp server: %w", err)
 	}
-	if locked.RemoteMcpServerID != registration.RemoteMcpServerID || locked.UserSessionIssuerID != registration.UserSessionIssuerID {
+	if locked.Visibility == "disabled" || locked.RemoteMcpServerID != registration.RemoteMcpServerID || locked.UserSessionIssuerID != registration.UserSessionIssuerID {
 		return ErrIdentityProviderAttachmentConflict
-	}
-	if err := remotesessionsrepo.New(tx).LockRemoteSessionIssuerForClientBinding(ctx, client.RemoteSessionIssuerID); err != nil {
-		return fmt.Errorf("lock identity-provider client binding: %w", err)
-	}
-	current, attached, err := s.matchingAttachment(ctx, tx, false, principal.OrganizationID, project, registration.McpServerID.UUID, registration.UserSessionIssuerID.UUID, issuerURL)
-	if err != nil {
-		return err
-	}
-	if !attached || current.ClientID != client.ClientID {
-		return ErrIdentityProviderAttachmentConflict
-	}
-	associated, err := upstreamclientsrepo.New(tx).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
-		OrganizationID:        principal.OrganizationID,
-		RemoteSessionClientID: client.ClientID,
-		McpServerID:           registration.McpServerID.UUID,
-		ProjectID:             project.ID,
-	})
-	if err != nil {
-		return fmt.Errorf("associate registered mcp server with its client: %w", err)
-	}
-	if associated == 0 {
-		return ErrRegistrationInvalid
-	}
-	// The association needs its typed auth client and server link, and this
-	// server may put the client on a second source, so the credential headers
-	// it copied from the first are no longer its to send. The complete writer
-	// scope was acquired before the server/issuer locks and association write;
-	// acquiring it at this synchronization step would invert that order.
-	if err := authclientbackfill.SyncServerAssociations(ctx, tx, principal.OrganizationID, registration.McpServerID.UUID); err != nil {
-		return fmt.Errorf("sync mcp server auth clients: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit identity-provider association: %w", err)
 	}
 	return nil
 }
 
-// matchingAttachment returns the client the user session issuer already binds
-// for issuerURL, reporting false when it binds none. Any other binding is a
-// conflict this flow does not resolve.
-//
-// Where typed auth clients choose upstream authentication, the server is
-// attached when it offers a registration for issuerURL through a personal auth
-// client, and what the user session issuer binds for its other servers is no
-// conflict.
-func (s *CatalogIdentityProviderAttachmentService) matchingAttachment(ctx context.Context, db remotesessionsrepo.DBTX, enforced bool, organizationID string, project ResolvedProject, mcpServerID, userSessionIssuerID uuid.UUID, issuerURL string) (remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerRow, bool, error) {
-	var none remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerRow
-	if enforced {
-		offered, err := upstreamclientsrepo.New(db).ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{OrganizationID: organizationID, McpServerIds: []uuid.UUID{mcpServerID}})
-		if err != nil {
-			return none, false, fmt.Errorf("list registered server auth clients: %w", err)
-		}
-		var ids []uuid.UUID
-		for _, client := range offered {
-			if client.ClientType.String == authz.AuthClientTypeRemoteSession && client.RemoteSessionClientID.Valid {
-				ids = append(ids, client.RemoteSessionClientID.UUID)
-			}
-		}
-		registrations, err := remotesessionsrepo.New(db).ListReachableRemoteSessionClients(ctx, remotesessionsrepo.ListReachableRemoteSessionClientsParams{ProjectID: project.ID, OrganizationID: organizationID, RemoteSessionClientIds: ids})
-		if err != nil {
-			return none, false, fmt.Errorf("list registered server identity providers: %w", err)
-		}
-		// The lowest id is chosen so the unlocked read and the locked reread
-		// agree when the server offers several registrations of one provider.
-		match, found := none, false
-		for _, registration := range registrations {
-			if registration.CredentialOwner != string(remotesessions.CredentialOwnerSubject) {
-				continue
-			}
-			if sameIssuerURL(registration.IssuerUrl, issuerURL) && (!found || bytes.Compare(registration.ClientID[:], match.ClientID[:]) < 0) {
-				match, found = remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerRow(registration), true
-			}
-		}
-		return match, found, nil
-	}
-	clients, err := remotesessionsrepo.New(db).ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerParams{
-		UserSessionIssuerID: userSessionIssuerID,
-		ProjectID:           conv.ToNullUUID(project.ID),
-		OrganizationID:      conv.ToPGText(organizationID),
-		OrganizationWide:    false,
-	})
+// matchingAttachment reports whether this server already offers a live personal
+// registration for the exact provider, without choosing one for login.
+func (s *CatalogIdentityProviderAttachmentService) matchingAttachment(ctx context.Context, db remotesessionsrepo.DBTX, organizationID string, project ResolvedProject, mcpServerID uuid.UUID, issuerURL string) (bool, error) {
+	offered, err := upstreamclientsrepo.New(db).ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{OrganizationID: organizationID, McpServerIds: []uuid.UUID{mcpServerID}})
 	if err != nil {
-		return none, false, fmt.Errorf("list registered identity providers: %w", err)
+		return false, fmt.Errorf("list offered identity providers: %w", err)
 	}
-	if len(clients) == 0 {
-		return none, false, nil
-	}
-	// An issuer keeps one client per provider, so several clients can still hold
-	// one match when servers sharing the issuer use different providers. Two
-	// matches would be a choice this flow cannot make.
-	var matches []remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerRow
-	for _, client := range clients {
-		if sameIssuerURL(client.IssuerUrl, issuerURL) {
-			matches = append(matches, client)
+	var ids []uuid.UUID
+	for _, client := range offered {
+		if client.ClientType.String == authz.AuthClientTypeRemoteSession && client.RemoteSessionClientID.Valid {
+			ids = append(ids, client.RemoteSessionClientID.UUID)
 		}
 	}
-	if len(matches) != 1 {
-		return none, false, ErrIdentityProviderAttachmentConflict
+	registrations, err := remotesessionsrepo.New(db).ListReachableRemoteSessionClients(ctx, remotesessionsrepo.ListReachableRemoteSessionClientsParams{ProjectID: project.ID, OrganizationID: organizationID, RemoteSessionClientIds: ids})
+	if err != nil {
+		return false, fmt.Errorf("list registered server identity providers: %w", err)
 	}
-	return matches[0], true, nil
+	for _, registration := range registrations {
+		if registration.CredentialOwner == string(remotesessions.CredentialOwnerSubject) && sameIssuerURL(registration.IssuerUrl, issuerURL) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // reusableIssuer resolves the project-owned issuer this attachment should reuse
@@ -485,7 +390,7 @@ func attachmentIdentityPlan(principal Principal, project ResolvedProject, regist
 			RequireClientSecret:     true,
 			AllowCIMD:               allowCIMD,
 		}),
-		Bound:           remotesessions.ReuseBound,
+		Bound:           remotesessions.OfferNewClient,
 		ResourceDisplay: &remotesessions.ResourceDisplay{ResourceURL: resourceURL, Metadata: resourceMetadata},
 	}
 }

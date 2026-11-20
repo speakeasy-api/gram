@@ -18,7 +18,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -28,8 +27,6 @@ import (
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
@@ -521,61 +518,7 @@ func TestAttachmentRegistersDiscoveredScopesWithoutStoringThem(t *testing.T) {
 // A retry that finds the registered issuer's client already bound records the
 // server's association only while the server still signs in through that
 // issuer; once it moved to another issuer the retry is a conflict.
-func TestExistingAttachmentAssociatesOnlyTheRegisteredServer(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_attachment_existing")
-	require.NoError(t, err)
-	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	service := attachmentTestService(t, conn)
-	metadata := attachmentTestIssuerMetadata("https://auth.example.test")
-	original := attachmentTestUserSessionIssuer(t, conn, project.ID)
-	serverID := attachmentTestMCPServer(t, conn, project.ID, original)
-	resource := attachmentTestResource("https://a.example.test/mcp", "Resource A", "")
-	require.NoError(t, attachmentTestCommit(t, service, principal, project, original, metadata, "client-a", resource.Resource, resource))
-	clients := attachmentTestClients(t, conn, principal, project, original)
-	require.Len(t, clients, 1)
-	server, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: project.ID})
-	require.NoError(t, err)
-	registration := platformrepo.PlatformMcpCatalogRegistration{
-		McpServerID:         conv.ToNullUUID(serverID),
-		RemoteMcpServerID:   server.RemoteMcpServerID,
-		UserSessionIssuerID: conv.ToNullUUID(original),
-	}
-	associations := func() int {
-		rows, err := upstreamclientsrepo.New(conn).ListMCPServerRemoteSessionClients(ctx, upstreamclientsrepo.ListMCPServerRemoteSessionClientsParams{McpServerID: serverID, ProjectID: project.ID})
-		require.NoError(t, err)
-		return len(rows)
-	}
-
-	require.NoError(t, service.associateExistingAttachment(ctx, principal, project, registration, metadata.Issuer, clients[0]))
-	require.Equal(t, 1, associations())
-
-	moved := attachmentTestUserSessionIssuer(t, conn, project.ID)
-	_, err = mcpserversrepo.New(conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{
-		Name:                server.Name,
-		Slug:                server.Slug,
-		UserSessionIssuerID: conv.ToNullUUID(moved),
-		RemoteMcpServerID:   server.RemoteMcpServerID,
-		Visibility:          server.Visibility,
-		ID:                  serverID,
-		ProjectID:           project.ID,
-	})
-	require.NoError(t, err)
-	_, err = upstreamclientsrepo.New(conn).DetachMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.DetachMCPServerRemoteSessionClientParams{McpServerID: serverID, RemoteSessionClientID: clients[0].ClientID, ProjectID: project.ID})
-	require.NoError(t, err)
-
-	err = service.associateExistingAttachment(ctx, principal, project, registration, metadata.Issuer, clients[0])
-	require.ErrorIs(t, err, ErrIdentityProviderAttachmentConflict)
-	require.Zero(t, associations(), "a retry must not associate the client of the issuer the server left")
-}
-
-// Another provider's client on a shared user session issuer is a conflict
-// only while the issuer's bindings decide what a server signs in through.
-// With upstream auth enforcement on, the server is attached when it offers a
-// registration of the provider itself, and the issuer's other bindings
-// neither attach it nor refuse it.
-func TestMatchingAttachmentFollowsTypedOffersUnderEnforcement(t *testing.T) {
+func TestMatchingAttachmentFollowsTypedOffers(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_attachment_typed")
@@ -614,17 +557,10 @@ func TestMatchingAttachmentFollowsTypedOffersUnderEnforcement(t *testing.T) {
 	service.policy, err = guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil, guardian.WithTLSRootCAs(roots))
 	require.NoError(t, err)
 
-	_, _, err = service.matchingAttachment(ctx, conn, false, principal.OrganizationID, project, serverID, shared, provider)
-	require.ErrorIs(t, err, ErrIdentityProviderAttachmentConflict, "the issuer's binding decides without enforcement")
-
-	_, err = productfeaturesrepo.New(conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: principal.OrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
-	require.NoError(t, err)
-	service.authEnforcement = authenforcement.NewGate(conn)
-
-	_, attached, err := service.matchingAttachment(ctx, conn, true, principal.OrganizationID, project, serverID, shared, provider)
+	attached, err := service.matchingAttachment(ctx, conn, principal.OrganizationID, project, serverID, provider)
 	require.NoError(t, err, "another server's provider on the shared issuer must not refuse the attachment")
 	require.False(t, attached)
-	_, attached, err = service.matchingAttachment(ctx, conn, true, principal.OrganizationID, project, serverID, shared, other.Issuer)
+	attached, err = service.matchingAttachment(ctx, conn, principal.OrganizationID, project, serverID, other.Issuer)
 	require.NoError(t, err)
 	require.False(t, attached, "a client the issuer binds is not this server's until the server offers it")
 
@@ -645,11 +581,9 @@ func TestMatchingAttachmentFollowsTypedOffersUnderEnforcement(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: project.ID, OrganizationID: principal.OrganizationID, McpServerID: serverID, AuthClientID: authClientID, Source: "admin"}))
 
-	match, attached, err := service.matchingAttachment(ctx, conn, true, principal.OrganizationID, project, serverID, shared, provider)
+	attached, err = service.matchingAttachment(ctx, conn, principal.OrganizationID, project, serverID, provider)
 	require.NoError(t, err)
 	require.True(t, attached, "the server offers a registration of the provider with no issuer binding")
-	require.Equal(t, registration.ID, match.ClientID)
-	require.Equal(t, issuer.ID, match.RemoteSessionIssuerID)
 
 	// Exercise the full already-attached path: neither legacy association nor
 	// a migration-derived duplicate of the administrator's auth client is needed.
