@@ -658,7 +658,17 @@ func (s *Service) metaValidationTarget(
 		return ctx, none, errRemoteSessionUnroutable
 	}
 
-	ctx, members, err := s.resolveEndpointMemberSnapshot(ctx, logger, mandatorySurfaceConsent, endpoint)
+	var members []metaMember
+	switch {
+	case scope == nil:
+		ctx, members, err = s.resolveEndpointMemberSnapshot(ctx, logger, mandatorySurfaceConsent, endpoint)
+	case endpoint.IsOrganizationGateway():
+		// The SQL placement already pins the issuer, tenant, and member.
+		// Use the authorized member snapshot without reading browser inventory.
+		ctx, members, _, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceConsent, endpoint.OrganizationID, true, uuid.Nil, scope.projectID)
+	default:
+		ctx, members, _, err = s.resolveMetaMemberSnapshot(ctx, logger, mandatorySurfaceConsent, endpoint.OrganizationID, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
+	}
 	if err != nil {
 		return ctx, none, fmt.Errorf("resolve meta MCP member snapshot: %w", err)
 	}

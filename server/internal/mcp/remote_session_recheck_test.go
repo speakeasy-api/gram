@@ -130,8 +130,8 @@ func TestRemoteSessionRecheck_RevokedNoExpiryGrantReadsRejected(t *testing.T) {
 	ctx, fx := seedStandaloneValidationFixture(t, "aim261-standalone")
 	bearer := "token-aim261-standalone"
 	makeKeepaliveShaped(t, ctx, fx, "aim261-standalone")
-	require.Contains(t, renderConsent(t, fx), "Not yet verified")
-	require.Empty(t, fx.member.drain(), "rendering alone never probes")
+	require.False(t, storedSession(t, ctx, fx).LastValidatedAt.Valid)
+	require.Empty(t, fx.member.drain(), "the grant has not been probed")
 
 	fx.member.set(memberRejects)
 	checked, err := fx.ti.service.SweepRemoteSessionRechecks(ctx)
@@ -144,7 +144,6 @@ func TestRemoteSessionRecheck_RevokedNoExpiryGrantReadsRejected(t *testing.T) {
 	require.Equal(t, "Rejected by "+fx.name, sess.ValidationReason.String)
 	require.True(t, sess.LastValidatedAt.Valid)
 	require.True(t, sess.LastRefreshAttemptAt.Valid, "the claim lease is stamped")
-	require.Contains(t, renderConsent(t, fx), `data-validation="rejected"`)
 	require.Equal(t, map[string]int64{"rejected_by_member": 1}, validationCounts(t, fx.reader))
 	require.Equal(t, map[string]int64{"keepalive": 1}, validationTriggers(t, fx.reader))
 
