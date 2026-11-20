@@ -200,7 +200,7 @@ func TestCaptureSoleConsumersRequiresExplicitInputWithoutEnforcement(t *testing.
 	target, _ := sourceBackedTarget(t, ctx, ti, "capture-off-target", userIssuerID)
 	providerID := createServerIdentityProvider(t, ctx, ti, "capture-off-provider", "", false, []string{"none"})
 	clientID := createServerIdentityClient(t, ctx, ti, "capture-off-client", providerID, false)
-	ensureAttachmentParent(t, ctx, ti.conn, clientID, userIssuerID)
+	seedLegacyIssuerClientLink(t, ctx, ti.conn, clientID, userIssuerID)
 	orgID := activeOrganizationID(t, ctx)
 	resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, target))

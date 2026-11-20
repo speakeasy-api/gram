@@ -179,25 +179,6 @@ func (q *Queries) ServersInsertAttachmentClient(ctx context.Context, arg Servers
 	return err
 }
 
-const serversInsertAttachmentParent = `-- name: ServersInsertAttachmentParent :exec
-INSERT INTO remote_session_client_user_session_issuers
-  (remote_session_client_id, user_session_issuer_id)
-VALUES
-  ($1::uuid,
-   $2::uuid)
-`
-
-type ServersInsertAttachmentParentParams struct {
-	RemoteSessionClientID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-}
-
-// The principal attachment FK requires this compatibility row.
-func (q *Queries) ServersInsertAttachmentParent(ctx context.Context, arg ServersInsertAttachmentParentParams) error {
-	_, err := q.db.Exec(ctx, serversInsertAttachmentParent, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
-	return err
-}
-
 const serversInsertAttachmentSession = `-- name: ServersInsertAttachmentSession :exec
 INSERT INTO remote_sessions
   (id, subject_urn, user_session_issuer_id, remote_session_client_id, organization_id,
