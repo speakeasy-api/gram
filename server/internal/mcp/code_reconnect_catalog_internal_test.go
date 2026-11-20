@@ -5,11 +5,15 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func TestReconnectCatalogChanges(t *testing.T) {
@@ -50,8 +54,59 @@ func TestFreezeConnectionCatalogRejectsInvalidDefinitions(t *testing.T) {
 				hash = consentEvidenceHash(definition)
 			}
 			inventory := &consentToolInventory{StateID: state.ID, Resource: endpointToolSelectionResource(endpoint), Complete: true, Tools: []consentInventoryTool{{Name: tc.tool, Definition: definition, DefinitionHash: hash}}}
-			_, err := service.freezeConnectionCatalog(t.Context(), endpoint, state, state.ClientID, inventory, nil, toolfilter.CatalogModeCached, nil, time.Now().Add(time.Hour))
+			_, err := service.freezeConnectionCatalog(t.Context(), endpoint, state, state.ClientID, inventory, nil, toolfilter.CatalogModeCached, nil, time.Now().Add(time.Hour), true)
 			require.ErrorContains(t, err, tc.want)
 		})
 	}
+}
+
+func TestReconnectRecordsOnlyReviewedTypedChoices(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	pool, err := TestInfra.CloneTestDatabase(t, "reconnect_typed_choices")
+	require.NoError(t, err)
+	f := newAuthClientFixture(t, pool)
+	issuerID := uuid.New()
+	require.NoError(t, selectionbackfill.New(pool).SeedUserSessionIssuerFixture(ctx, selectionbackfill.SeedUserSessionIssuerFixtureParams{ID: issuerID, ProjectID: uuid.NullUUID{}, OrganizationID: text(f.orgID), Slug: "typed-reconnect"}))
+	credentialID := uuid.New()
+	unrelated, _ := f.server()
+	require.NoError(t, f.q.SeedUpstreamSelectionFixture(ctx, authclientbackfill.SeedUpstreamSelectionFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, CredentialID: credentialID, McpServerID: unrelated, NoAuth: true}))
+	client := f.adminClient(authClientTypeRemoteSession, validUUID(f.registration))
+	previous := &connectionCatalog{IssuerID: issuerID, OrganizationID: f.orgID}
+	next := &connectionCatalog{IssuerID: issuerID, OrganizationID: f.orgID, Members: map[string]connectionCatalogMember{
+		"source": {ServerID: f.serverID, ProjectID: f.projectID, Auth: &connectionCatalogAuth{ClientID: client, RegistrationID: validUUID(f.registration), ExplicitPick: false}},
+	}}
+	replace := func(previous, next *connectionCatalog) {
+		t.Helper()
+		require.NoError(t, pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
+			return replaceReconnectUpstreamChoices(ctx, usersessionsrepo.New(tx), credentialID, previous, next)
+		}))
+	}
+	params := authclientbackfill.GetSelectionFixtureParams{CredentialID: credentialID, McpServerID: f.serverID}
+	replace(previous, next)
+	choice, err := f.q.GetSelectionFixture(ctx, params)
+	require.NoError(t, err)
+	require.Equal(t, validUUID(client), choice.AuthClientID)
+
+	// A retired pick never authorizes a substitute, even when only one remains.
+	require.NoError(t, f.q.SoftDeleteAuthClientFixture(ctx, client))
+	f.adminClient(authClientTypeRemoteSession, validUUID(f.registration))
+	replace(next, next)
+	_, err = f.q.GetSelectionFixture(ctx, params)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	untouched, err := f.q.GetSelectionFixture(ctx, authclientbackfill.GetSelectionFixtureParams{CredentialID: credentialID, McpServerID: unrelated})
+	require.NoError(t, err)
+	require.True(t, untouched.NoAuth)
+
+	// The same reviewed client is writable only after an explicit EMA pick.
+	ema := f.adminClient(authClientTypeEMA, validUUID(f.registration))
+	next.Members["source"].Auth.ClientID = ema
+	replace(next, next)
+	_, err = f.q.GetSelectionFixture(ctx, params)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	next.Members["source"].Auth.ExplicitPick = true
+	replace(next, next)
+	choice, err = f.q.GetSelectionFixture(ctx, params)
+	require.NoError(t, err)
+	require.Equal(t, validUUID(ema), choice.AuthClientID)
 }

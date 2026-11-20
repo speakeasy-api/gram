@@ -25,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -131,6 +130,7 @@ func (m connectionCatalogMember) approvedHash(typed bool) string {
 type connectionCatalogAuth struct {
 	ClientID       uuid.UUID     `json:"client_id"`
 	RegistrationID uuid.NullUUID `json:"registration_id"`
+	ExplicitPick   bool          `json:"explicit_pick,omitempty"`
 }
 
 // connectionCatalog freezes discovery for one approved OAuth connection.
@@ -191,7 +191,11 @@ func (s *Service) approveInitialConnectionCatalog(ctx context.Context, endpoint 
 	if durationHours > 0 {
 		lifetime = min(lifetime, time.Duration(durationHours)*time.Hour)
 	}
-	catalog, err := s.freezeConnectionCatalog(ctx, endpoint, state, state.ClientID, inventory, selection, mode, upstreamPicks, now.Add(lifetime+userSessionGrantTTL))
+	typedChoices, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	catalog, err := s.freezeConnectionCatalog(ctx, endpoint, state, state.ClientID, inventory, selection, mode, upstreamPicks, now.Add(lifetime+userSessionGrantTTL), typedChoices)
 	if err != nil {
 		return nil, err
 	}
@@ -228,23 +232,23 @@ func (s *Service) publishConnectionCatalog(ctx context.Context, catalog *connect
 
 // upstreamChoices records only reviewed members, even when their issuer also
 // serves other gateways. An empty scope must stay non-nil: nil means issuer-wide.
-func (c *connectionCatalog) upstreamChoices(credentialID uuid.UUID, typedOnly bool) usersessionsrepo.RecordUpstreamClientSelectionsParams {
-	picks := usersessionsrepo.RecordUpstreamClientSelectionsParams{
+func (c *connectionCatalog) upstreamChoices(credentialID uuid.UUID) usersessionsrepo.RecordIssuedAuthClientChoicesParams {
+	picks := usersessionsrepo.RecordIssuedAuthClientChoicesParams{
 		UserSessionIssuerID: c.IssuerID,
-		CredentialKind:      upstreamclients.CredentialKindUserSession,
 		CredentialID:        credentialID,
-		Source:              upstreamclients.SelectionSourceIssuance,
 		ScopeMcpServerIds:   make([]uuid.UUID, 0, len(c.Members)),
 		ExcludeMcpServerIds: nil,
+		PickedExplicit:      nil,
 		PickedMcpServerIds:  nil,
 		PickedClientIds:     nil,
 		PickedAuthClientIds: nil,
-		TypedOnly:           typedOnly,
+		AllowSoleOffer:      false,
 	}
 	for _, member := range c.Members {
 		picks.ScopeMcpServerIds = append(picks.ScopeMcpServerIds, member.ServerID)
 		if member.Auth != nil {
 			picks.PickedMcpServerIds = append(picks.PickedMcpServerIds, member.ServerID)
+			picks.PickedExplicit = append(picks.PickedExplicit, member.Auth.ExplicitPick)
 			picks.PickedClientIds = append(picks.PickedClientIds, member.Auth.RegistrationID.UUID)
 			picks.PickedAuthClientIds = append(picks.PickedAuthClientIds, member.Auth.ClientID)
 		}
@@ -254,7 +258,7 @@ func (c *connectionCatalog) upstreamChoices(credentialID uuid.UUID, typedOnly bo
 
 // freezeConnectionCatalog validates the captured routes, credentials and tool
 // definitions for both initial approval and a member's reconnect approval.
-func (s *Service) freezeConnectionCatalog(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, clientID string, inventory *consentToolInventory, selection *toolfilter.SessionSelection, mode toolfilter.CatalogMode, upstreamPicks map[uuid.UUID]uuid.UUID, expiresAt time.Time) (*connectionCatalog, error) {
+func (s *Service) freezeConnectionCatalog(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, clientID string, inventory *consentToolInventory, selection *toolfilter.SessionSelection, mode toolfilter.CatalogMode, upstreamPicks map[uuid.UUID]uuid.UUID, expiresAt time.Time, typedChoices bool) (*connectionCatalog, error) {
 	if inventory == nil || !inventory.Complete || inventory.StateID != state.ID || inventory.Resource != endpointToolSelectionResource(endpoint) {
 		return nil, fmt.Errorf("a completed gateway catalog is required; reload consent")
 	}
@@ -271,10 +275,6 @@ func (s *Service) freezeConnectionCatalog(ctx context.Context, endpoint *Resolve
 		ids = append(ids, member.ServerID)
 	}
 	hashes, otherHashes, err := s.catalogMemberConfigurations(ctx, endpoint.OrganizationID, ids)
-	if err != nil {
-		return nil, err
-	}
-	typedChoices, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
 	if err != nil {
 		return nil, err
 	}

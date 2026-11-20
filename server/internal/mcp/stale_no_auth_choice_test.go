@@ -216,6 +216,14 @@ func TestStaleNoAuthChoiceReconnectsThroughConsent(t *testing.T) {
 
 					insertQualifiedRemoteSessionToken(t, ctx, g.ti, g.issuer, registration, urn.NewUserSubject(mockidp.MockUserID), "fixture-token", g.source.url)
 					renewed := g.approve(t, ctx)
+					if !typed {
+						// The legacy picker still renders, but issuing against
+						// legacy-only setup must not persist a guessed choice.
+						beforeCall := g.source.requests.Load()
+						requireStaleError(t, g.call(t, renewed.token, "source--tool_000"), "has no sign-in set up yet")
+						require.Equal(t, beforeCall, g.source.requests.Load())
+						return
+					}
 					requireExecuted(t, g.call(t, renewed.token, "source--tool_000"))
 					require.Equal(t, "Bearer fixture-token", g.source.callAuthorization.Load())
 				})
