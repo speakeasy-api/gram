@@ -7,26 +7,23 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
-func TestUpstreamIssuerKeys_AuthoritativeFollowsTheFlag(t *testing.T) {
+func TestUpstreamIssuerKeys_AuthoritativeIsTheAssociations(t *testing.T) {
 	t.Parallel()
 
 	column := uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	association := uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	keys := upstreamIssuerKeys{column: column, association: associationUpstreamIssuer{Provider: association, Providers: 1}, known: true}
 
-	require.Equal(t, column, keys.authoritative(false))
-	require.Equal(t, association, keys.other(false))
-	require.Equal(t, association, keys.authoritative(true))
-	require.Equal(t, column, keys.other(true))
+	require.Equal(t, association, keys.authoritative())
+	require.Equal(t, column, keys.other())
 
 	unknown := upstreamIssuerKeys{column: column, association: associationUpstreamIssuer{Provider: uuid.NullUUID{}, Providers: 0}, known: false}
-	require.Equal(t, column, unknown.authoritative(true), "an unread association source never decides")
-	require.Equal(t, upstreamIssuerSourceColumn, upstreamIssuerSource(true, unknown))
-	require.Equal(t, upstreamIssuerSourceAssociations, upstreamIssuerSource(true, keys))
+	require.Equal(t, column, unknown.authoritative(), "an unread association source never decides")
+	require.Equal(t, upstreamIssuerSourceColumn, upstreamIssuerSource(unknown))
+	require.Equal(t, upstreamIssuerSourceAssociations, upstreamIssuerSource(keys))
 }
 
 func TestUpstreamIssuerKeys_Outcome(t *testing.T) {
@@ -86,13 +83,12 @@ func TestRecordUpstreamIssuerParity_LogsADisagreementOnce(t *testing.T) {
 
 	s := &Service{upstreamIssuerParityLog: newOnceLog()}
 	key := upstreamIssuerParity{
-		organizationID:   "org_a",
-		serverID:         uuid.New(),
-		surface:          upstreamIssuerSurfaceDirect,
-		site:             "route",
-		keys:             upstreamIssuerKeys{column: uuid.NullUUID{}, association: associationUpstreamIssuer{Provider: uuid.NullUUID{}, Providers: 0}, known: true},
-		outcome:          upstreamIssuerNoAssociation,
-		fromAssociations: false,
+		organizationID: "org_a",
+		serverID:       uuid.New(),
+		surface:        upstreamIssuerSurfaceDirect,
+		site:           "route",
+		keys:           upstreamIssuerKeys{column: uuid.NullUUID{}, association: associationUpstreamIssuer{Provider: uuid.NullUUID{}, Providers: 0}, known: true},
+		outcome:        upstreamIssuerNoAssociation,
 	}
 	s.recordUpstreamIssuerParity(t.Context(), discardLogger, key)
 	require.False(t, s.upstreamIssuerParityLog.first("org_a|"+key.serverID.String()+"|direct|route|no_association"),
@@ -128,17 +124,16 @@ func TestRecordUpstreamIssuerParity_CountsErrorsWithoutPanicking(t *testing.T) {
 
 	s := &Service{upstreamIssuerParityLog: newOnceLog()}
 	s.recordUpstreamIssuerParity(t.Context(), discardLogger, upstreamIssuerParity{
-		organizationID:   "org_a",
-		serverID:         uuid.New(),
-		surface:          upstreamIssuerSurfaceConsent,
-		site:             "fingerprint",
-		keys:             upstreamIssuerKeys{column: uuid.NullUUID{}, association: associationUpstreamIssuer{Provider: uuid.NullUUID{}, Providers: 0}, known: false},
-		outcome:          upstreamIssuerError,
-		fromAssociations: true,
+		organizationID: "org_a",
+		serverID:       uuid.New(),
+		surface:        upstreamIssuerSurfaceConsent,
+		site:           "fingerprint",
+		keys:           upstreamIssuerKeys{column: uuid.NullUUID{}, association: associationUpstreamIssuer{Provider: uuid.NullUUID{}, Providers: 0}, known: false},
+		outcome:        upstreamIssuerError,
 	})
 }
 
-func TestDirectUpstreamIssuer_RoutesBothSourcesAndFollowsTheFlag(t *testing.T) {
+func TestDirectUpstreamIssuer_RoutesBothSourcesAndTakesTheAssociations(t *testing.T) {
 	t.Parallel()
 
 	column := uuid.NullUUID{UUID: uuid.New(), Valid: true}
@@ -146,9 +141,9 @@ func TestDirectUpstreamIssuer_RoutesBothSourcesAndFollowsTheFlag(t *testing.T) {
 	tokens := map[uuid.UUID]remotesessions.UpstreamToken{
 		association.UUID: {Token: "association-token", RemoteSessionClientID: uuid.New(), RemoteSessionID: uuid.New()},
 	}
-	input := func(org string) directUpstreamIssuerInput {
+	input := func() directUpstreamIssuerInput {
 		return directUpstreamIssuerInput{
-			organizationID:   org,
+			organizationID:   "org_a",
 			serverID:         uuid.New(),
 			site:             upstreamIssuerSiteRoute,
 			tokens:           tokens,
@@ -159,22 +154,19 @@ func TestDirectUpstreamIssuer_RoutesBothSourcesAndFollowsTheFlag(t *testing.T) {
 			association:      &remotesessions.ServerAssociationIssuer{Known: true, Providers: 1, Provider: association},
 		}
 	}
-	flags := new(feature.InMemory)
-	flags.SetFlag(feature.FlagUpstreamIssuerFromAssociations, "org_on", true)
-	s := &Service{upstreamIssuerParityLog: newOnceLog(), features: flags}
+	s := &Service{upstreamIssuerParityLog: newOnceLog()}
 
-	require.Equal(t, column, s.directUpstreamIssuer(t.Context(), discardLogger, input("org_off")), "off, the column routes")
-	require.Equal(t, association, s.directUpstreamIssuer(t.Context(), discardLogger, input("org_on")), "on, the associations route")
+	require.Equal(t, association, s.directUpstreamIssuer(t.Context(), discardLogger, input()), "the associations route")
 
-	choice := input("org_on")
+	choice := input()
 	choice.choiceGoverns = true
 	require.Equal(t, column, s.directUpstreamIssuer(t.Context(), discardLogger, choice), "a governing choice is kept")
 
-	unread := input("org_on")
+	unread := input()
 	unread.association = nil
 	require.Equal(t, column, s.directUpstreamIssuer(t.Context(), discardLogger, unread), "unread associations never decide")
 
-	unbound := input("org_on")
+	unbound := input()
 	unbound.association = &remotesessions.ServerAssociationIssuer{Known: false, Providers: 0, Provider: uuid.NullUUID{}}
 	require.Equal(t, column, s.directUpstreamIssuer(t.Context(), discardLogger, unbound))
 }
@@ -200,16 +192,10 @@ func TestMemberUpstreamIssuer_OtherSourceAndGoverningChoice(t *testing.T) {
 	column := uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	association := uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	keys := upstreamIssuerKeys{column: column, association: associationUpstreamIssuer{Provider: association, Providers: 1}, known: true}
-	member := metaMember{remoteSessionIssuerID: column, upstreamIssuer: keys, upstreamIssuerFromAssociations: false, tunneledServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, slug: "member"}
+	member := metaMember{remoteSessionIssuerID: association, upstreamIssuer: keys, tunneledServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, slug: "member"}
 
 	require.False(t, memberChoiceGoverns(member))
-	require.Equal(t, association, memberWithOtherIssuer(member).remoteSessionIssuerID)
-
-	on := member
-	on.upstreamIssuerFromAssociations = true
-	on.remoteSessionIssuerID = association
-	require.False(t, memberChoiceGoverns(on))
-	require.Equal(t, column, memberWithOtherIssuer(on).remoteSessionIssuerID)
+	require.Equal(t, column, memberWithOtherIssuer(member).remoteSessionIssuerID)
 
 	chosen := member
 	chosen.chosenClientID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
@@ -223,11 +209,11 @@ func TestMemberUpstreamIssuer_OtherSourceAndGoverningChoice(t *testing.T) {
 	routed, routeErr := routeMetaMemberToken(tokens, member, "")
 	other, otherErr := routeMetaMemberToken(tokens, memberWithOtherIssuer(member), "")
 	require.Equal(t, upstreamIssuerDiffer, keys.outcome(sameRoutedUpstream(routed, routeErr, other, otherErr)),
-		"a tunneled member keyed by the column dials anonymously where its associations would send their credential")
+		"a tunneled member keyed by its associations sends their credential where the column would dial anonymously")
 
 	hosted, hostedErr := hostedMemberTokens(tokens, member)
 	otherHosted, otherHostedErr := hostedMemberTokens(tokens, memberWithOtherIssuer(member))
-	require.Empty(t, hosted)
-	require.Equal(t, "association-token", soleToken(otherHosted).Token)
+	require.Equal(t, "association-token", soleToken(hosted).Token)
+	require.Empty(t, otherHosted)
 	require.False(t, sameRoutedUpstream(soleToken(hosted), hostedErr, soleToken(otherHosted), otherHostedErr))
 }

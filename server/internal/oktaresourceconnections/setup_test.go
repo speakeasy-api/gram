@@ -22,7 +22,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
 	idprepo "github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
@@ -96,7 +95,7 @@ func newTestService(t *testing.T) (context.Context, *instance) {
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := oktaresourceconnections.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), &feature.InMemory{})
+	svc := oktaresourceconnections.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger())
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, orgID), authz.NewGrant(authz.ScopeMCPRead, authz.WildcardResource))
 
 	si := &instance{svc: svc, conn: conn, q: repo.New(conn), orgID: orgID, connectionID: uuid.Nil, oktaIssuerID: uuid.Nil, authCtx: authCtx}

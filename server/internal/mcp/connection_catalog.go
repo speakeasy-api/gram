@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -740,9 +739,8 @@ func (c memberConfiguration) forMode(typed bool) string {
 }
 
 // catalogMemberConfigurations returns each server's consent configuration
-// fingerprints with its upstream issuer from the source the organization's
-// flag makes authoritative, and the fingerprints from the other source for the
-// re-consent forecast.
+// fingerprints with its upstream issuer from its client associations, and the
+// fingerprints from the column for the re-consent forecast.
 func (s *Service) catalogMemberConfigurations(ctx context.Context, organizationID string, ids []uuid.UUID) (map[uuid.UUID]memberConfiguration, map[uuid.UUID]memberConfiguration, error) {
 	hashes := make(map[uuid.UUID]memberConfiguration, len(ids))
 	others := make(map[uuid.UUID]memberConfiguration, len(ids))
@@ -753,14 +751,9 @@ func (s *Service) catalogMemberConfigurations(ctx context.Context, organizationI
 	if err != nil {
 		return nil, nil, fmt.Errorf("read approved server configurations: %w", err)
 	}
-	fromAssociations := feature.UpstreamIssuerFromAssociations(ctx, s.features, organizationID)
 	for _, row := range rows {
-		column := memberConfiguration{hash: row.ConfigurationHash, typedHash: row.TypedConfigurationHash}
-		association := memberConfiguration{hash: row.AssociationConfigurationHash, typedHash: row.TypedAssociationConfigurationHash}
-		hashes[row.ID], others[row.ID] = column, association
-		if fromAssociations {
-			hashes[row.ID], others[row.ID] = association, column
-		}
+		hashes[row.ID] = memberConfiguration{hash: row.AssociationConfigurationHash, typedHash: row.TypedAssociationConfigurationHash}
+		others[row.ID] = memberConfiguration{hash: row.ConfigurationHash, typedHash: row.TypedConfigurationHash}
 	}
 	return hashes, others, nil
 }

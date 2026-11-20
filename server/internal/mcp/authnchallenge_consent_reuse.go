@@ -18,7 +18,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/consentpage"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -344,8 +343,8 @@ func (s *Service) consentReuseInventory(ctx context.Context, endpoint *ResolvedM
 // organization's enforcement mode with its upstream issuer from each source,
 // and in the other enforcement mode.
 type consentBackendHashes struct {
-	// decided is the fingerprint from the source the organization's flag
-	// makes authoritative. It is the one stored and checked.
+	// decided is the fingerprint with the upstream issuer from the server's
+	// client associations. It is the one stored and checked.
 	decided string
 
 	// other is the fingerprint from the other source, for the re-consent
@@ -385,11 +384,10 @@ func (s *Service) consentBackendFingerprint(ctx context.Context, endpoint *Resol
 // consentBackendConfigurations are an endpoint's consent backend fingerprints
 // in both enforcement modes, with the upstream issuer from each source.
 type consentBackendConfigurations struct {
-	// decided takes the upstream issuer from the source the organization's
-	// flag makes authoritative.
+	// decided takes the upstream issuer from the server's client associations.
 	decided memberConfiguration
 
-	// other takes it from the other source.
+	// other takes it from the column.
 	other memberConfiguration
 
 	// otherErr is why other could not be computed.
@@ -452,11 +450,8 @@ func (s *Service) consentBackendEvidence(ctx context.Context, endpoint *Resolved
 	}
 	column := withIssuer(server.RemoteSessionIssuerID)
 	association := withIssuer(remotesessions.AssociationIssuerFromProviders(providerIDs).Provider)
-	if feature.UpstreamIssuerFromAssociations(ctx, s.features, endpoint.OrganizationID) {
-		if associationErr != nil {
-			return none, fmt.Errorf("read consent backend associations: %w", associationErr)
-		}
-		return consentBackendConfigurations{decided: association, other: column, otherErr: nil}, nil
+	if associationErr != nil {
+		return none, fmt.Errorf("read consent backend associations: %w", associationErr)
 	}
-	return consentBackendConfigurations{decided: column, other: association, otherErr: associationErr}, nil
+	return consentBackendConfigurations{decided: association, other: column, otherErr: nil}, nil
 }

@@ -202,8 +202,8 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 // followed by routing, the behavior without identity chaining.
 //
 // backendIssuerID is the server's column value, or the issuer of the
-// credential's own choice when choiceGoverns. The organization's upstream
-// issuer flag decides whether the column or the server's associations route.
+// credential's own choice when choiceGoverns. The server's associations route
+// wherever they were read; the column routes otherwise.
 func (s *Service) resolveStrictUpstreamToken(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, authentication *issuerGateAuthentication, upstreamResource string, tunneled bool, backendIssuerID uuid.NullUUID, choiceGoverns bool) (remotesessions.UpstreamToken, error) {
 	var none remotesessions.UpstreamToken
 	tokens, err := s.resolveIssuerGateAccessTokens(ctx, w, authentication)

@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -56,7 +55,7 @@ func (s *Service) GetServerScopes(ctx context.Context, payload *gen.GetServerSco
 	if err != nil {
 		return nil, err
 	}
-	return readServerScopes(ctx, s.db, logger, authCtx.ActiveOrganizationID, *authCtx.ProjectID, target, sharing, s.canPin(ctx, logger, authCtx, target, sharing), feature.UpstreamIssuerFromAssociations(ctx, s.features, authCtx.ActiveOrganizationID))
+	return readServerScopes(ctx, s.db, logger, authCtx.ActiveOrganizationID, *authCtx.ProjectID, target, sharing, s.canPin(ctx, logger, authCtx, target, sharing))
 }
 
 func (s *Service) SetServerScopePin(ctx context.Context, payload *gen.SetServerScopePinPayload) (*gen.RemoteMcpServerScopes, error) {
@@ -85,7 +84,6 @@ func (s *Service) SetServerScopePin(ctx context.Context, payload *gen.SetServerS
 		target:           target,
 		authorized:       sharing,
 		scopes:           scopes,
-		fromAssociations: feature.UpstreamIssuerFromAssociations(ctx, s.features, authCtx.ActiveOrganizationID),
 	})
 }
 
@@ -100,10 +98,6 @@ type scopePinWrite struct {
 	// refuses if it changed before the lock was taken.
 	authorized []uuid.UUID
 	scopes     []string
-
-	// fromAssociations decides ownership of the resource in the returned view
-	// from each client's associated servers.
-	fromAssociations bool
 }
 
 // commitScopePin writes the pin in its own transaction and returns the view as
@@ -127,7 +121,7 @@ func commitScopePin(ctx context.Context, db *pgxpool.Pool, auditLogger *audit.Lo
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	return serverScopes(ctx, db, logger, w.organizationID, w.projectID, w.target, sharedServerCount(w.authorized, w.target), true, remotesessions.ResourceScopesFromRow(row, true), w.fromAssociations)
+	return serverScopes(ctx, db, logger, w.organizationID, w.projectID, w.target, sharedServerCount(w.authorized, w.target), true, remotesessions.ResourceScopesFromRow(row, true))
 }
 
 // writeScopePin runs only on dbtx: a second pool connection taken while holding
@@ -302,23 +296,23 @@ func loadPinnableServer(ctx context.Context, db *pgxpool.Pool, logger *slog.Logg
 }
 
 // readServerScopes reads the cached resource row and resolves the view from it.
-func readServerScopes(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, organizationID string, projectID uuid.UUID, target pinnableServer, sharing []uuid.UUID, canPin, fromAssociations bool) (*gen.RemoteMcpServerScopes, error) {
+func readServerScopes(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, organizationID string, projectID uuid.UUID, target pinnableServer, sharing []uuid.UUID, canPin bool) (*gen.RemoteMcpServerScopes, error) {
 	cached, _, err := remotesessions.CachedResourceScopes(ctx, db, projectID, target.resourceURL, true)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get protected resource").LogError(ctx, logger)
 	}
-	return serverScopes(ctx, db, logger, organizationID, projectID, target, sharedServerCount(sharing, target), canPin, cached, fromAssociations)
+	return serverScopes(ctx, db, logger, organizationID, projectID, target, sharedServerCount(sharing, target), canPin, cached)
 }
 
 // serverScopes resolves what a login through each bound client would request
 // now from the cached resource row, as the consent card does; it never probes.
-// fromAssociations decides ownership of the resource from each client's
-// associated servers, as logins do under the same flag.
-func serverScopes(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, organizationID string, projectID uuid.UUID, target pinnableServer, sharedServers int, canPin bool, cached remotesessions.ResourceScopes, fromAssociations bool) (*gen.RemoteMcpServerScopes, error) {
+// Ownership of the resource is decided from each client's associated servers,
+// as logins decide it.
+func serverScopes(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, organizationID string, projectID uuid.UUID, target pinnableServer, sharedServers int, canPin bool, cached remotesessions.ResourceScopes) (*gen.RemoteMcpServerScopes, error) {
 	clients := []*gen.RemoteMcpServerClientScopes{}
 	if target.server.UserSessionIssuerID.Valid {
 		var err error
-		clients, err = clientScopes(ctx, db, projectID, organizationID, target, cached, fromAssociations)
+		clients, err = clientScopes(ctx, db, projectID, organizationID, target, cached)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "resolve client scopes").LogError(ctx, logger)
 		}
@@ -337,7 +331,7 @@ func serverScopes(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, or
 	}, nil
 }
 
-func clientScopes(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID, orgID string, target pinnableServer, cached remotesessions.ResourceScopes, fromAssociations bool) ([]*gen.RemoteMcpServerClientScopes, error) {
+func clientScopes(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID, orgID string, target pinnableServer, cached remotesessions.ResourceScopes) ([]*gen.RemoteMcpServerClientScopes, error) {
 	discover := cached.UseDiscovered
 	issuerID := target.server.UserSessionIssuerID.UUID
 	rows, err := remotesessionsrepo.New(db).ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerParams{
@@ -355,7 +349,7 @@ func clientScopes(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID, or
 		for _, r := range rows {
 			clientIDs = append(clientIDs, r.ClientID)
 		}
-		owners, err = remotesessions.ResourceOwnersAmong(ctx, db, orgID, clientIDs, target.resourceURL, fromAssociations)
+		owners, err = remotesessions.ResourceOwnersAmong(ctx, db, orgID, clientIDs, target.resourceURL)
 		if err != nil {
 			return nil, fmt.Errorf("decide resource ownership: %w", err)
 		}

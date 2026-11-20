@@ -338,7 +338,6 @@ func NewActivities(
 				remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher),
 				remotesessions.WithRefreshTokenEndpointAssertionSigner(remoteSessionAssertionSigner),
 				remotesessions.WithRefreshConnectionRecorder(connections),
-				remotesessions.WithRefreshFeatureFlags(features),
 				remotesessions.WithRefreshClientSecrets(clientSecrets),
 				remotesessions.WithRefreshUpstreamTokens(upstreamTokens),
 			),

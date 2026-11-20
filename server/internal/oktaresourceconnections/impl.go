@@ -34,7 +34,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
@@ -61,13 +60,12 @@ var oktaOrgHostSuffixes = []string{"okta.com", "oktapreview.com", "okta-emea.com
 var oktaAppIDPattern = regexp.MustCompile(`^0oa[A-Za-z0-9]{10,40}$`)
 
 type Service struct {
-	tracer   trace.Tracer
-	logger   *slog.Logger
-	db       *pgxpool.Pool
-	auth     *auth.Auth
-	authz    *authz.Engine
-	audit    *audit.Logger
-	features feature.Provider
+	tracer trace.Tracer
+	logger *slog.Logger
+	db     *pgxpool.Pool
+	auth   *auth.Auth
+	authz  *authz.Engine
+	audit  *audit.Logger
 
 	// authEnforcement reads which organizations choose upstream
 	// authentication through typed auth clients, where a server's
@@ -87,7 +85,6 @@ func NewService(
 	sessionManager *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
-	features feature.Provider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("oktaresourceconnections"))
 	return &Service{
@@ -97,7 +94,6 @@ func NewService(
 		auth:            auth.New(logger, db, sessionManager, authzEngine),
 		authz:           authzEngine,
 		audit:           auditLogger,
-		features:        features,
 		authEnforcement: authenforcement.NewGate(db),
 	}
 }
@@ -413,7 +409,7 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID 
 			}
 			asks = append(asks, remotesessions.ResourceOwnerQuery{ServerID: sv.ID, ProjectID: sv.ProjectID, UserSessionIssuerID: sv.UserSessionIssuerID.UUID, Upstream: sv.RemoteUrl.String})
 		}
-		owners, err := remotesessions.ResourceOwnersForServers(ctx, s.db, organizationID, asks, feature.UpstreamIssuerFromAssociations(ctx, s.features, organizationID))
+		owners, err := remotesessions.ResourceOwnersForServers(ctx, s.db, organizationID, asks)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "decide protected resource ownership").LogError(ctx, logger)
 		}

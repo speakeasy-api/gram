@@ -31,7 +31,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -58,7 +57,6 @@ type Service struct {
 	audit                 *audit.Logger
 	provisioning          *RemoteMCPProvisioningService
 	distributionAdmission *admission.Guard
-	features              feature.Provider
 
 	// serverURL is the public Speakeasy origin that platform-domain MCP
 	// endpoint URLs resolve under; nil omits those URLs.
@@ -83,7 +81,6 @@ func NewService(
 	policy *guardian.Policy,
 	auditLogger *audit.Logger,
 	iconSetter mcpservers.DefaultServerIconSetter,
-	features feature.Provider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("remotemcp"))
 
@@ -98,7 +95,6 @@ func NewService(
 		audit:                 auditLogger,
 		provisioning:          NewRemoteMCPProvisioningService(db, policy, auditLogger, iconSetter),
 		distributionAdmission: admission.NewGuard(),
-		features:              features,
 		serverURL:             nil,
 		beforeClaim:           nil,
 		beforeScopePinLock:    nil,

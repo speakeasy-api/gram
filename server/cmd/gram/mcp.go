@@ -417,7 +417,6 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		remotesessions.WithRefreshSessionEnricher(remoteSessionDeps.Enricher),
 		remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner),
 		remotesessions.WithRefreshConnectionRecorder(connectionRecorder),
-		remotesessions.WithRefreshFeatureFlags(featureFlags),
 		remotesessions.WithRefreshClientSecrets(clientSecrets),
 		remotesessions.WithRefreshUpstreamTokens(upstreamTokens))
 	remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, enc, clientSecrets, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, identityCommitter, remoteSessionsRefresher, productFeatures, protectedResources)

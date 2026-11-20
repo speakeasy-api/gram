@@ -572,7 +572,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithCustomDomainTargetSuffix(config.CustomDomainTargetSuffix).
 		WithCodeModeAvailability(config.CodeModeAvailable).
 		WithFunctionsDisabled(config.FunctionsDisabled).
-		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
+		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithInternalSessionIssuer(config.IssuerGate).
 		WithInboundEMATrust(config.InboundEMAUserIssuers, config.InboundEMARemoteIssuers).
 		WithXAAIdentityChaining(chaining, config.OutboundCallbackOrigin).
@@ -1367,7 +1367,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithCustomDomainTargetSuffix(config.CustomDomainTargetSuffix).
 		WithCodeModeAvailability(config.CodeModeAvailable).
 		WithFunctionsDisabled(config.FunctionsDisabled).
-		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
+		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithInternalSessionIssuer(config.IssuerGate).
 		WithInboundEMATrust(config.InboundEMAUserIssuers, config.InboundEMARemoteIssuers).
 		WithXAAIdentityChaining(chaining, config.OutboundCallbackOrigin).

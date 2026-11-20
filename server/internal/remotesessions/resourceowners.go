@@ -22,11 +22,10 @@ type ResourceOwnerQuery struct {
 // issuer, whether a login through it is qualified to upstream's protected
 // resource: the same decision login and the consent card make, for surfaces
 // that hold only a database handle. A client missing from the map does not
-// own the resource. fromAssociations attaches each client to the servers it
-// is associated with instead of every server on its bound issuers; callers
-// pass feature.UpstreamIssuerFromAssociations for the organization.
-func ResourceOwners(ctx context.Context, db remotesessions_repo.DBTX, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, upstream string, fromAssociations bool) (map[uuid.UUID]bool, error) {
-	owners, err := ResourceOwnersForServers(ctx, db, organizationID, []ResourceOwnerQuery{{ServerID: uuid.Nil, ProjectID: projectID, UserSessionIssuerID: userSessionIssuerID, Upstream: upstream}}, fromAssociations)
+// own the resource. Each client is attached to the servers it is associated
+// with.
+func ResourceOwners(ctx context.Context, db remotesessions_repo.DBTX, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, upstream string) (map[uuid.UUID]bool, error) {
+	owners, err := ResourceOwnersForServers(ctx, db, organizationID, []ResourceOwnerQuery{{ServerID: uuid.Nil, ProjectID: projectID, UserSessionIssuerID: userSessionIssuerID, Upstream: upstream}})
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +35,7 @@ func ResourceOwners(ctx context.Context, db remotesessions_repo.DBTX, projectID 
 // ResourceOwnersForServers is ResourceOwners for many servers in two round
 // trips, keyed by ServerID: one sibling listing for every distinct issuer
 // and project, then one load of every sibling's attachments.
-func ResourceOwnersForServers(ctx context.Context, db remotesessions_repo.DBTX, organizationID string, queries []ResourceOwnerQuery, fromAssociations bool) (map[uuid.UUID]map[uuid.UUID]bool, error) {
+func ResourceOwnersForServers(ctx context.Context, db remotesessions_repo.DBTX, organizationID string, queries []ResourceOwnerQuery) (map[uuid.UUID]map[uuid.UUID]bool, error) {
 	type pairKey struct{ issuer, project uuid.UUID }
 	seen := map[pairKey]bool{}
 	var issuerIDs, projectIDs []uuid.UUID
@@ -71,7 +70,7 @@ func ResourceOwnersForServers(ctx context.Context, db remotesessions_repo.DBTX, 
 			allClients = append(allClients, r.ClientID)
 		}
 	}
-	attachments, err := attachmentsForClients(ctx, db, organizationID, allClients, fromAssociations)
+	attachments, err := attachmentsForClients(ctx, db, organizationID, allClients)
 	if err != nil {
 		return nil, err
 	}
@@ -84,11 +83,11 @@ func ResourceOwnersForServers(ctx context.Context, db remotesessions_repo.DBTX, 
 
 // ResourceOwnersAmong is ResourceOwners for a caller that already listed the
 // clients bound to the login's user session issuer, as clientIDs.
-func ResourceOwnersAmong(ctx context.Context, db remotesessions_repo.DBTX, organizationID string, clientIDs []uuid.UUID, upstream string, fromAssociations bool) (map[uuid.UUID]bool, error) {
+func ResourceOwnersAmong(ctx context.Context, db remotesessions_repo.DBTX, organizationID string, clientIDs []uuid.UUID, upstream string) (map[uuid.UUID]bool, error) {
 	if len(clientIDs) == 0 {
 		return map[uuid.UUID]bool{}, nil
 	}
-	attachments, err := attachmentsForClients(ctx, db, organizationID, clientIDs, fromAssociations)
+	attachments, err := attachmentsForClients(ctx, db, organizationID, clientIDs)
 	if err != nil {
 		return nil, err
 	}
