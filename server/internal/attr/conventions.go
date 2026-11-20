@@ -132,6 +132,8 @@ const (
 	MandatoryAuthzOutcomeKey = attribute.Key("gram.authz.mandatory.outcome")
 	// MandatoryAuthzSourceKey is the policy the mandatory check evaluated.
 	MandatoryAuthzSourceKey = attribute.Key("gram.authz.mandatory.source")
+	// AuthzMissingSelectorKeysKey lists the grant selector keys a refused check did not carry.
+	AuthzMissingSelectorKeysKey = attribute.Key("gram.authz.missing_selector_keys")
 	// MandatoryAuthzReasonKey is why the mandatory check denied.
 	MandatoryAuthzReasonKey = attribute.Key("gram.authz.mandatory.reason")
 
@@ -528,6 +530,7 @@ const (
 	CustomDomainHealthIssueKey          = attribute.Key("gram.custom_domain.health.issue")
 	CustomDomainDNSRoutingMethodKey     = attribute.Key("gram.custom_domain.dns.routing_method")
 	CustomDomainNotifyRecipientCountKey = attribute.Key("gram.custom_domain.notify.recipient_count")
+	AccessRequestIDKey                  = attribute.Key("gram.access_request.id")
 	AccessRequestScopeKey               = attribute.Key("gram.access_request.scope")
 	AccessRequestAdminCountKey          = attribute.Key("gram.access_request.admin_count")
 	AccessRequestSentCountKey           = attribute.Key("gram.access_request.sent_count")
@@ -1101,6 +1104,10 @@ const (
 	HookDeliveryFailedIdempotencyKeyKey = attribute.Key("gram.hook.delivery.failed_idempotency_key")
 	HookDeliverySessionIDKey            = attribute.Key("gram.hook.delivery.session_id")
 	HookDeliverySpoolDepthKey           = attribute.Key("gram.hook.delivery.spool_depth")
+	// HooksRolloutVersionKey is a hooks rollout pin: the highest hooks
+	// generator version an organization, or every organization without an
+	// override, is cleared to receive.
+	HooksRolloutVersionKey = attribute.Key("gram.hooks_rollout.version")
 	// Bootstrap install failure reports (client.install_failed): a plugin's
 	// bootstrap script could not install the hooks binary. Rows carrying
 	// these are diagnostic. The version the script tried to install is kept
@@ -2689,8 +2696,15 @@ func SlogCustomDomainNotifyRecipientCount(v int) slog.Attr {
 	return slog.Int(string(CustomDomainNotifyRecipientCountKey), v)
 }
 
+func AccessRequestID(v string) attribute.KeyValue { return AccessRequestIDKey.String(v) }
+func SlogAccessRequestID(v string) slog.Attr      { return slog.String(string(AccessRequestIDKey), v) }
+
 func AccessRequestScope(v string) attribute.KeyValue { return AccessRequestScopeKey.String(v) }
 func SlogAccessRequestScope(v string) slog.Attr      { return slog.String(string(AccessRequestScopeKey), v) }
+
+func SlogAuthzMissingSelectorKeys(v []string) slog.Attr {
+	return slog.Any(string(AuthzMissingSelectorKeysKey), v)
+}
 
 func AccessRequestAdminCount(v int) attribute.KeyValue { return AccessRequestAdminCountKey.Int(v) }
 func SlogAccessRequestAdminCount(v int) slog.Attr {
@@ -3784,6 +3798,10 @@ func SlogRiskFindingID(v string) slog.Attr      { return slog.String(string(Risk
 func RiskPolicyVersion(v int64) attribute.KeyValue { return RiskPolicyVersionKey.Int64(v) }
 func SlogRiskPolicyVersion(v int64) slog.Attr {
 	return slog.Int64(string(RiskPolicyVersionKey), v)
+}
+
+func SlogHooksRolloutVersion(v int) slog.Attr {
+	return slog.Int(string(HooksRolloutVersionKey), v)
 }
 
 func RiskConfidence(v float64) attribute.KeyValue { return RiskConfidenceKey.Float64(v) }

@@ -18,11 +18,13 @@ import (
 
 // Server lists the userSessionClients service endpoint HTTP handlers.
 type Server struct {
-	Mounts                       []*MountPoint
-	ListUserSessionClients       http.Handler
-	GetUserSessionClient         http.Handler
-	RefreshUserSessionClientCIMD http.Handler
-	RevokeUserSessionClient      http.Handler
+	Mounts                              []*MountPoint
+	CreateUserSessionClient             http.Handler
+	UpdateUserSessionClientRedirectURIs http.Handler
+	ListUserSessionClients              http.Handler
+	GetUserSessionClient                http.Handler
+	RefreshUserSessionClientCIMD        http.Handler
+	RevokeUserSessionClient             http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -52,15 +54,19 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
+			{"CreateUserSessionClient", "POST", "/rpc/userSessionClients.create"},
+			{"UpdateUserSessionClientRedirectURIs", "POST", "/rpc/userSessionClients.updateRedirectURIs"},
 			{"ListUserSessionClients", "GET", "/rpc/userSessionClients.list"},
 			{"GetUserSessionClient", "GET", "/rpc/userSessionClients.get"},
 			{"RefreshUserSessionClientCIMD", "POST", "/rpc/userSessionClients.refreshCIMD"},
 			{"RevokeUserSessionClient", "POST", "/rpc/userSessionClients.revoke"},
 		},
-		ListUserSessionClients:       NewListUserSessionClientsHandler(e.ListUserSessionClients, mux, decoder, encoder, errhandler, formatter),
-		GetUserSessionClient:         NewGetUserSessionClientHandler(e.GetUserSessionClient, mux, decoder, encoder, errhandler, formatter),
-		RefreshUserSessionClientCIMD: NewRefreshUserSessionClientCIMDHandler(e.RefreshUserSessionClientCIMD, mux, decoder, encoder, errhandler, formatter),
-		RevokeUserSessionClient:      NewRevokeUserSessionClientHandler(e.RevokeUserSessionClient, mux, decoder, encoder, errhandler, formatter),
+		CreateUserSessionClient:             NewCreateUserSessionClientHandler(e.CreateUserSessionClient, mux, decoder, encoder, errhandler, formatter),
+		UpdateUserSessionClientRedirectURIs: NewUpdateUserSessionClientRedirectURIsHandler(e.UpdateUserSessionClientRedirectURIs, mux, decoder, encoder, errhandler, formatter),
+		ListUserSessionClients:              NewListUserSessionClientsHandler(e.ListUserSessionClients, mux, decoder, encoder, errhandler, formatter),
+		GetUserSessionClient:                NewGetUserSessionClientHandler(e.GetUserSessionClient, mux, decoder, encoder, errhandler, formatter),
+		RefreshUserSessionClientCIMD:        NewRefreshUserSessionClientCIMDHandler(e.RefreshUserSessionClientCIMD, mux, decoder, encoder, errhandler, formatter),
+		RevokeUserSessionClient:             NewRevokeUserSessionClientHandler(e.RevokeUserSessionClient, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -69,6 +75,8 @@ func (s *Server) Service() string { return "userSessionClients" }
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
+	s.CreateUserSessionClient = m(s.CreateUserSessionClient)
+	s.UpdateUserSessionClientRedirectURIs = m(s.UpdateUserSessionClientRedirectURIs)
 	s.ListUserSessionClients = m(s.ListUserSessionClients)
 	s.GetUserSessionClient = m(s.GetUserSessionClient)
 	s.RefreshUserSessionClientCIMD = m(s.RefreshUserSessionClientCIMD)
@@ -80,6 +88,8 @@ func (s *Server) MethodNames() []string { return usersessionclients.MethodNames[
 
 // Mount configures the mux to serve the userSessionClients endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
+	MountCreateUserSessionClientHandler(mux, h.CreateUserSessionClient)
+	MountUpdateUserSessionClientRedirectURIsHandler(mux, h.UpdateUserSessionClientRedirectURIs)
 	MountListUserSessionClientsHandler(mux, h.ListUserSessionClients)
 	MountGetUserSessionClientHandler(mux, h.GetUserSessionClient)
 	MountRefreshUserSessionClientCIMDHandler(mux, h.RefreshUserSessionClientCIMD)
@@ -89,6 +99,115 @@ func Mount(mux goahttp.Muxer, h *Server) {
 // Mount configures the mux to serve the userSessionClients endpoints.
 func (s *Server) Mount(mux goahttp.Muxer) {
 	Mount(mux, s)
+}
+
+// MountCreateUserSessionClientHandler configures the mux to serve the
+// "userSessionClients" service "createUserSessionClient" endpoint.
+func MountCreateUserSessionClientHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/userSessionClients.create", f)
+}
+
+// NewCreateUserSessionClientHandler creates a HTTP handler which loads the
+// HTTP request and calls the "userSessionClients" service
+// "createUserSessionClient" endpoint.
+func NewCreateUserSessionClientHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateUserSessionClientRequest(mux, decoder)
+		encodeResponse = EncodeCreateUserSessionClientResponse(encoder)
+		encodeError    = EncodeCreateUserSessionClientError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createUserSessionClient")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "userSessionClients")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateUserSessionClientRedirectURIsHandler configures the mux to serve
+// the "userSessionClients" service "updateUserSessionClientRedirectURIs"
+// endpoint.
+func MountUpdateUserSessionClientRedirectURIsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/userSessionClients.updateRedirectURIs", f)
+}
+
+// NewUpdateUserSessionClientRedirectURIsHandler creates a HTTP handler which
+// loads the HTTP request and calls the "userSessionClients" service
+// "updateUserSessionClientRedirectURIs" endpoint.
+func NewUpdateUserSessionClientRedirectURIsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateUserSessionClientRedirectURIsRequest(mux, decoder)
+		encodeResponse = EncodeUpdateUserSessionClientRedirectURIsResponse(encoder)
+		encodeError    = EncodeUpdateUserSessionClientRedirectURIsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateUserSessionClientRedirectURIs")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "userSessionClients")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
 }
 
 // MountListUserSessionClientsHandler configures the mux to serve the

@@ -1,5 +1,6 @@
+import { waitForHookState as waitFor } from "@/test/waitForHookState";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useUserIdentityDraft } from "./useIdentityDraft";
 

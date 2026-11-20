@@ -101,7 +101,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 // authorizeOrganization returns the organization metadata row when it had to
 // read one to verify a cross-organization request, and nil for the active-org
 // path, so callers that need the row can skip a second lookup.
-func (s *Service) authorizeOrganization(ctx context.Context, organizationID string, scope authz.Scope) (*contextvalues.AuthContext, string, *orgrepo.OrganizationMetadatum, error) {
+func (s *Service) authorizeOrganization(ctx context.Context, organizationID string, permission func(authz.OrgRef) authz.Check) (*contextvalues.AuthContext, string, *orgrepo.OrganizationMetadatum, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, "", nil, oops.C(oops.CodeUnauthorized)
@@ -111,8 +111,9 @@ func (s *Service) authorizeOrganization(ctx context.Context, organizationID stri
 		return nil, "", nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	check := permission(authz.Org(authz.OrgIDFrom(organizationID)))
+	scope := check.Scope
 	if organizationID == authCtx.ActiveOrganizationID {
-		check := authz.Check{Scope: scope, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}
 		if err := s.authz.Require(ctx, check); err != nil {
 			return nil, "", nil, fmt.Errorf("require %s: %w", scope, err)
 		}
@@ -135,7 +136,7 @@ func (s *Service) authorizeOrganization(ctx context.Context, organizationID stri
 }
 
 func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProductFeaturePayload) error {
-	authCtx, orgID, _, err := s.authorizeOrganization(ctx, payload.OrganizationID, authz.ScopeOrgAdmin)
+	authCtx, orgID, _, err := s.authorizeOrganization(ctx, payload.OrganizationID, authz.OrgRef.Admin)
 	if err != nil {
 		return err
 	}
@@ -171,7 +172,7 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 }
 
 func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload *gen.SetRemoteSessionAutoRefreshPolicyPayload) error {
-	_, orgID, _, err := s.authorizeOrganization(ctx, payload.OrganizationID, authz.ScopeOrgAdmin)
+	_, orgID, _, err := s.authorizeOrganization(ctx, payload.OrganizationID, authz.OrgRef.Admin)
 	if err != nil {
 		return err
 	}
@@ -252,7 +253,7 @@ func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload
 }
 
 func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProductFeaturesPayload) (*gen.ProductFeatures, error) {
-	_, orgID, _, err := s.authorizeOrganization(ctx, payload.OrganizationID, authz.ScopeOrgRead)
+	_, orgID, _, err := s.authorizeOrganization(ctx, payload.OrganizationID, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}

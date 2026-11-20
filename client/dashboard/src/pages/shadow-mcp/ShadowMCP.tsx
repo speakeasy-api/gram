@@ -1,6 +1,6 @@
 import { useHideInsightsDock } from "@/components/insights-context";
 import { ResourceListPage } from "@/components/page-templates";
-import { ShadowMCPModeControl } from "@/components/shadow-mcp/ShadowMCPModeControl";
+import { ShadowMCPPolicySummary } from "@/components/shadow-mcp/ShadowMCPPolicySummary";
 import { MCPApprovalsTab } from "@/pages/security/MCPApprovalsTab";
 
 /**
@@ -9,9 +9,11 @@ import { MCPApprovalsTab } from "@/pages/security/MCPApprovalsTab";
  * it: Guardrails holds the policies that scan agent sessions for risk, while
  * this page is an inventory the admin decides on row by row.
  *
- * The header holds the one setting the page needs: whether a server nobody
- * decided on is allowed or blocked by default. Allowed is built in and needs
- * no policy; there is no Shadow MCP policy to set up in Guardrails.
+ * The policy summary at the top states the one setting the page needs:
+ * whether a server nobody decided on is allowed or blocked by default, with
+ * an "Edit policy" action that reviews which servers a change affects.
+ * Allowed is built in and needs no policy; there is no Shadow MCP policy to
+ * set up in Guardrails.
  *
  * The inventory reads and every decision require org:admin, so the page is
  * gated there, the same as Guardrails.
@@ -26,10 +28,12 @@ export default function ShadowMCP(): JSX.Element {
       scope="org:admin"
       title="Shadow MCP"
       description="Decide which MCP servers your team's agents may connect to."
-      primaryAction={<ShadowMCPModeControl />}
       hideToolbar
     >
-      <MCPApprovalsTab />
+      <div className="flex min-h-0 flex-1 flex-col gap-4">
+        <ShadowMCPPolicySummary />
+        <MCPApprovalsTab />
+      </div>
     </ResourceListPage>
   );
 }

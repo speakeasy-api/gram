@@ -133,12 +133,7 @@ func (s *Auth) requireResolvedProjectAccess(ctx context.Context) error {
 		return oops.E(oops.CodeUnauthorized, nil, "no session found")
 	}
 
-	return s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeProjectRead,
-		ResourceKind: "",
-		ResourceID:   authCtx.ProjectID.String(),
-		Dimensions:   nil,
-	})
+	return s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read())
 }
 
 func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, projectSlug string) (context.Context, error) {

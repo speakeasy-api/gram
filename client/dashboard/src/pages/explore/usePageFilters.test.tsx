@@ -1,6 +1,7 @@
+import { waitForHookState as waitFor } from "@/test/waitForHookState";
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import { act, cleanup, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";

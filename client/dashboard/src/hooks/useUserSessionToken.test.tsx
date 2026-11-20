@@ -1,3 +1,4 @@
+import { waitForHookState } from "@/test/waitForHookState";
 import {
   act,
   cleanup,
@@ -69,13 +70,15 @@ describe("useUserSessionToken error policy and retry", () => {
         { ...options, throwOnError: false },
         defaultValue,
       );
-      await waitFor(() => expect(result.current.isError).toBe(true));
+      await waitForHookState(() => expect(result.current.isError).toBe(true));
       expect(screen.queryByText("Boundary")).toBeNull();
       act(() => {
         result.current.refetch();
         result.current.refetch();
       });
-      await waitFor(() => expect(result.current.accessToken).toBe("token-S"));
+      await waitForHookState(() =>
+        expect(result.current.accessToken).toBe("token-S"),
+      );
       expect(mint).toHaveBeenCalledTimes(2);
       expect(result.current.isError).toBe(false);
     },
@@ -83,7 +86,7 @@ describe("useUserSessionToken error policy and retry", () => {
   it("preserves an inherited false default without an override", async () => {
     mint.mockRejectedValue(new Error("mint failed"));
     const { result } = mount(options, false);
-    await waitFor(() => expect(result.current.isError).toBe(true));
+    await waitForHookState(() => expect(result.current.isError).toBe(true));
     expect(screen.queryByText("Boundary")).toBeNull();
   });
   it.each([
@@ -105,21 +108,27 @@ describe("useUserSessionToken error policy and retry", () => {
   });
   it("reports failed refresh despite a cached token and recovers on retry", async () => {
     const { result } = mount({ ...options, throwOnError: false });
-    await waitFor(() => expect(result.current.accessToken).toBe("token-S"));
+    await waitForHookState(() =>
+      expect(result.current.accessToken).toBe("token-S"),
+    );
     mint.mockRejectedValueOnce(new Error("refresh failed"));
     act(() => result.current.refetch());
-    await waitFor(() => expect(result.current.isError).toBe(true));
+    await waitForHookState(() => expect(result.current.isError).toBe(true));
     expect(result.current.accessToken).toBe("token-S");
     mint.mockResolvedValue({ accessToken: "fresh-S" });
     act(() => result.current.refetch());
-    await waitFor(() => expect(result.current.accessToken).toBe("fresh-S"));
+    await waitForHookState(() =>
+      expect(result.current.accessToken).toBe("fresh-S"),
+    );
     expect(result.current.isError).toBe(false);
   });
 });
 
 it("does not mark a healthy cached token loading during background refresh", async () => {
   const { result, client } = mount();
-  await waitFor(() => expect(result.current.accessToken).toBe("token-S"));
+  await waitForHookState(() =>
+    expect(result.current.accessToken).toBe("token-S"),
+  );
   let finish!: (value: { accessToken: string }) => void;
   mint.mockImplementationOnce(
     () =>
@@ -131,10 +140,12 @@ it("does not mark a healthy cached token loading during background refresh", asy
     result.current.refetch();
     result.current.refetch();
   });
-  await waitFor(() => expect(client.isFetching()).toBe(1));
+  await waitForHookState(() => expect(client.isFetching()).toBe(1));
   expect(result.current.isLoading).toBe(false);
   expect(result.current.accessToken).toBe("token-S");
   expect(mint).toHaveBeenCalledTimes(2);
   await act(async () => finish({ accessToken: "fresh-S" }));
-  await waitFor(() => expect(result.current.accessToken).toBe("fresh-S"));
+  await waitForHookState(() =>
+    expect(result.current.accessToken).toBe("fresh-S"),
+  );
 });

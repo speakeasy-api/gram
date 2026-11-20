@@ -33,6 +33,15 @@ const (
 	// slug). Fails closed to the operator. Existing connections keep the
 	// runtime they were created with. Removed once the gateway is the default.
 	FlagPrivateNetworkGateway Flag = "private-network-gateway"
+	// FlagAccessRequests gates stored access requests: requestAccess records
+	// a request an admin can approve as a temporary grant or deny, from the
+	// dashboard or a Slack DM, and refuses scopes that cannot be given
+	// temporarily. Evaluated server-side in requestAccess and in the
+	// dashboard; targeted by PostHog organization group (org slug). Fails
+	// closed: requestAccess then only emails the admins, as before, and the
+	// request listing answers not found. Requests already stored stay
+	// decidable and withdrawable. Removed once access requests are GA.
+	FlagAccessRequests Flag = "access-requests"
 	// FlagRiskEnforcementPubsub routes applicable realtime scanner lanes over Pub/Sub.
 	FlagRiskEnforcementPubsub Flag = "risk-enforcement-pubsub"
 	// FlagRiskEnforcementMaxContentBytes overrides the realtime enforcement
@@ -61,6 +70,20 @@ const (
 	FlagPlatformMCPPluginAssignmentMutations Flag = "platform-mcp-plugin-assignment-mutations"
 	// FlagGatewayPluginMembership gates new gateway attachments to plugins.
 	FlagGatewayPluginMembership Flag = "gateway-plugin-membership"
+	// FlagShadowMCPAutoLink links a Shadow MCP server automatically to the
+	// project MCP server that proxies its URL, so direct calls are sent there
+	// without an administrator linking the two. Evaluated server-side by the
+	// hook guard and the Shadow MCP inventory; targeted by PostHog
+	// organization group (org slug) or project slug group. Fails closed: off,
+	// only links an administrator made redirect, as before. Removed once
+	// automatic links are GA.
+	FlagShadowMCPAutoLink Flag = "shadow-mcp-auto-link"
+	// FlagStoredGatewayMachineAccess lets admitted agents and workloads use
+	// stored gateways. The server evaluates it per organization and fails closed.
+	FlagStoredGatewayMachineAccess Flag = "stored-gateway-machine-access"
+	// FlagProjectGatewayMachineAccess lets admitted agents and workloads use
+	// project gateways. The server evaluates it per organization and fails closed.
+	FlagProjectGatewayMachineAccess Flag = "project-gateway-machine-access"
 	// FlagPlatformMCPAccessRoleMutations is the exact-project kill switch for
 	// creating and updating custom MCP-only access roles through Platform MCP.
 	// It is evaluated at invocation time and fails closed.
@@ -131,16 +154,15 @@ const (
 	// client support matures; removed once the extension is GA.
 	FlagSkillsOverMCP Flag = "skills-over-mcp"
 
-	// FlagHooksRollout gates the phased rollout of new observability (hooks)
-	// plugin generator versions. Unlike the other flags it is consulted via its
-	// PAYLOAD, not its boolean state: the flag carries a JSON payload
-	// {"version": N} naming the highest hooksGeneratorVersion the matched org is
-	// cleared to receive. An org gets a new hooks version only when its cleared
-	// version reaches it; a code-side version bump never touches the payload, so
-	// nothing auto-rolls — promoting a version is the deliberate act of raising
-	// the pin in PostHog. The always-immediate canary set lives in code (see
-	// plugins.canaryHooksOrgSlugs), independent of this flag, so a PostHog outage
-	// can't strand it on stale hooks.
+	// FlagHooksRollout is the legacy control for the phased rollout of new
+	// observability (hooks) plugin generator versions, superseded by the
+	// rollout pins staff set in the admin dashboard (package hooksrollout). It
+	// is consulted via its PAYLOAD, not its boolean state: JSON {"version": N}
+	// naming the highest hooksGeneratorVersion the matched org is cleared to
+	// receive. The plugin publisher reads it only for orgs no admin pin covers,
+	// which is every non-canary org without an override until a platform-wide
+	// default pin is set. Evaluated server-side with the org groups; fails closed. Remove it
+	// once the default pin is set in production.
 	FlagHooksRollout Flag = "hooks-rollout"
 
 	// FlagSignInEnforcement turns on, per organization (keyed by its id),

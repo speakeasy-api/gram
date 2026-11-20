@@ -16,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 )
 
 // handshakeUpstream is a scripted member that records the handshake dispatch runs against it.
@@ -30,6 +31,7 @@ type handshakeUpstream struct {
 type handshakeUpstreamConfig struct {
 	sessionID       string
 	protocolVersion string
+	instructions    string
 	listPages       int
 	discoveryStatus int
 	// initializeError answers initialize with a JSON-RPC error envelope instead of a result.
@@ -106,7 +108,7 @@ func (u *handshakeUpstream) serve(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		reply(map[string]any{"result": map[string]any{"supportedVersions": []string{u.protocolVersion}, "capabilities": map[string]any{"tools": map[string]any{}}, "_meta": map[string]any{"io.modelcontextprotocol/serverInfo": map[string]any{"name": "scripted", "version": "1"}}}})
+		reply(map[string]any{"result": map[string]any{"supportedVersions": []string{u.protocolVersion}, "capabilities": map[string]any{"tools": map[string]any{}}, "instructions": u.instructions, "_meta": map[string]any{"io.modelcontextprotocol/serverInfo": map[string]any{"name": "scripted", "version": "1"}}}})
 	case "initialize":
 		if u.protocolVersion == mcpversions.Version20260728 {
 			w.WriteHeader(http.StatusNotFound)
@@ -133,7 +135,7 @@ func (u *handshakeUpstream) serve(w http.ResponseWriter, r *http.Request) {
 			reply(map[string]any{"error": map[string]any{"code": -32602, "message": "unsupported client capabilities"}})
 			return
 		}
-		reply(map[string]any{"result": map[string]any{"protocolVersion": u.protocolVersion, "capabilities": map[string]any{"tools": map[string]any{}}, "serverInfo": map[string]any{"name": "scripted", "version": "1"}}})
+		reply(map[string]any{"result": map[string]any{"protocolVersion": u.protocolVersion, "capabilities": map[string]any{"tools": map[string]any{}}, "instructions": u.instructions, "serverInfo": map[string]any{"name": "scripted", "version": "1"}}})
 	case "notifications/initialized":
 		w.WriteHeader(http.StatusAccepted)
 	case "tools/list":
@@ -284,6 +286,39 @@ func TestServePublic_MetaEndpoint_MemberProtocolRevisions(t *testing.T) {
 			} else {
 				require.Equal(t, 1, deletes)
 			}
+		})
+	}
+}
+
+func TestServePublic_MetaEndpoint_DescribeServer_UpstreamInstructions(t *testing.T) {
+	t.Parallel()
+	for _, version := range []string{mcpversions.Version20250618, mcpversions.Version20260728} {
+		t.Run(version, func(t *testing.T) {
+			t.Parallel()
+			const instructions = "Use the member tools in order.\nStart with tool_0."
+			upstream := newHandshakeUpstream(t, handshakeUpstreamConfig{protocolVersion: version, instructions: instructions, listPages: 1})
+			ctx, ti := newTestMCPService(t)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			slug := "meta-instructions-" + uuid.NewString()[:8]
+			meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+			seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "upstream", "upstream", 1, upstream.url)
+
+			listedResult := decodeMetaToolResult(t, callMetaTool(t, ctx, ti, slug, "list_servers", map[string]any{}))
+			require.False(t, listedResult.IsError)
+			var listed metamcp.ListServersResult
+			require.NoError(t, json.Unmarshal(listedResult.StructuredContent, &listed))
+			require.Contains(t, listed.Note, metamcp.DescribeServerNote)
+			require.Len(t, listed.Servers, 1)
+			require.Empty(t, upstream.drain(), "listing does not contact the upstream")
+
+			result := decodeMetaToolResult(t, callMetaTool(t, ctx, ti, slug, "describe_server", map[string]any{"server": listed.Servers[0].Slug}))
+			require.False(t, result.IsError)
+			var described struct {
+				Instructions string `json:"instructions"`
+			}
+			require.NoError(t, json.Unmarshal(result.StructuredContent, &described))
+			require.Equal(t, instructions, described.Instructions)
 		})
 	}
 }

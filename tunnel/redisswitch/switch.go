@@ -9,9 +9,10 @@
 // A process may use the current instance only while it holds a reading of
 // StateKey that says so and is under a second old. Anything else (a missing
 // key, a value it does not recognise, a read that failed or stalled) makes it
-// wait. The operator's job closes every connection once the hold has been
-// seen, so a process that fell behind cannot write through an old one, and it
-// refuses to open a new one without a fresh reading.
+// wait. Where the instance allows it, the operator's job closes every
+// connection once the hold has been seen, so a process that fell behind cannot
+// write through an old one; an instance without the CLIENT command does not
+// allow it. A process refuses to open a new connection without a fresh reading.
 //
 // A client follows the state key of one role. A process that keeps different
 // workloads on different instances gives each its own client and role, so one
@@ -75,10 +76,12 @@ const (
 	// startTimeout bounds the first read of the keys at startup.
 	startTimeout = 5 * time.Second
 
-	// maxWait is the longest a command waits for a hold to end. The operator's
-	// hold expires well inside it, so only an instance that stays unreadable
-	// reaches it; the command then fails instead of waiting for ever.
-	maxWait = 60 * time.Second
+	// maxWait is the longest a command waits for a hold to end. It is longer
+	// than the longest hold the operator's job sets (120 s in prod), so a held
+	// command waits for the hold to end rather than failing; only an instance
+	// that stays unreadable reaches it, and the command then fails instead of
+	// waiting for ever. A request's own context can end the wait sooner.
+	maxWait = 150 * time.Second
 
 	// keepAlive matches the go-redis default dialer.
 	keepAlive = 5 * time.Minute
@@ -267,6 +270,9 @@ func (s *Switch) client(opts *redis.Options) *redis.Client {
 	// a second time on the other instance.
 	bound.MaxRetries = -1
 	bound.DialerRetries = 1
+	// A named connection sends CLIENT SETNAME, which an instance without the
+	// CLIENT command refuses, and the connection then fails.
+	bound.ClientName = ""
 
 	client := redis.NewClient(&bound)
 	client.AddHook(hook{sw: s})

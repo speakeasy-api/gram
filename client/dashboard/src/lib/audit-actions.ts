@@ -25,6 +25,10 @@ export const AUDIT_ACTIONS = [
   "access_grant:create_temporary",
   "access_grant:renew_temporary",
   "access_grant:revoke_temporary",
+  "access_request:approve",
+  "access_request:create",
+  "access_request:deny",
+  "access_request:withdraw",
   "agent:connection_attach",
   "agent:connection_block_create",
   "agent:connection_block_delete",
@@ -365,7 +369,9 @@ export const AUDIT_ACTIONS = [
   "unproxied-mcp:create",
   "unproxied-mcp:delete",
   "user-session-client:cimd-refresh",
+  "user-session-client:create",
   "user-session-client:revoke",
+  "user-session-client:update-redirect-uris",
   "user-session-consent:revoke",
   "user-session-issuer-cimd-client:add",
   "user-session-issuer-cimd-client:remove",
@@ -445,6 +451,14 @@ export function staticActionPhrase(action: AuditAction): string {
       return "renewed temporary access for";
     case "access_grant:revoke_temporary":
       return "revoked temporary access for";
+    case "access_request:create":
+      return "requested";
+    case "access_request:approve":
+      return "approved access request for";
+    case "access_request:deny":
+      return "denied access request for";
+    case "access_request:withdraw":
+      return "withdrew access request for";
 
     case "agent:connection_attach":
       return "granted their connection to agent";
@@ -1020,11 +1034,11 @@ export function staticActionPhrase(action: AuditAction): string {
       return "deleted an evaluation review for";
 
     case "shadow_mcp_official_server:create":
-      return "linked an official server to Shadow MCP server";
+      return "set the official server choice of Shadow MCP server";
     case "shadow_mcp_official_server:update":
-      return "changed the official server linked to Shadow MCP server";
+      return "changed the official server choice of Shadow MCP server";
     case "shadow_mcp_official_server:delete":
-      return "removed the official server link of Shadow MCP server";
+      return "removed the official server choice of Shadow MCP server";
     // Entries written before links lost their on/off switch: one action
     // covered every change, so the phrase names the link.
     case "shadow_mcp_official_server:set":
@@ -1166,8 +1180,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "revoked user session";
     case "user-session-client:cimd-refresh":
       return "refreshed the client metadata document for";
+    case "user-session-client:create":
+      return "registered user session client";
     case "user-session-client:revoke":
       return "revoked user session client";
+    case "user-session-client:update-redirect-uris":
+      return "updated user session client redirect URIs";
     case "user-session-consent:revoke":
       return "revoked consent for";
     case "user-session-issuer:create":

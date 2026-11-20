@@ -33,7 +33,7 @@ func TestLoadGrants_loadsUserAndRoleGrants(t *testing.T) {
 	ctx = GrantsToContext(ctx, grants)
 	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "proj:123"}))
-	require.NoError(t, engine.Require(ctx, MCPCheck(ScopeMCPConnect, "toolA", testProjectID)))
+	require.NoError(t, engine.Require(ctx, MCPServer(MCPServerIDFrom("toolA"), ProjectIDFrom(testProjectID)).Connect()))
 }
 
 func TestSeedSystemRoleGrantsBootstrapsGlobalRoles(t *testing.T) {
@@ -189,8 +189,8 @@ func TestLoadGrantsHonorsRevokedSystemRoleAssistantGrants(t *testing.T) {
 	seedOrganization(t, ctx, conn, organizationID)
 	require.NoError(t, SeedSystemRoleGrants(ctx, conn, organizationID))
 	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
-	assistantRead := AssistantCheck(ScopeAssistantRead, "assistant_1", "project_a")
-	assistantWrite := AssistantCheck(ScopeAssistantWrite, "assistant_1", "project_a")
+	assistantRead := Assistant(AssistantIDFrom("assistant_1"), ProjectIDFrom("project_a")).Read()
+	assistantWrite := Assistant(AssistantIDFrom("assistant_1"), ProjectIDFrom("project_a")).Write()
 
 	q := accessrepo.New(conn)
 	for _, tc := range []struct {

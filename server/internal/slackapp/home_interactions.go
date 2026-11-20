@@ -15,20 +15,20 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 	approvalrepo "github.com/speakeasy-api/gram/server/internal/risk/approval/repo"
+	"github.com/speakeasy-api/gram/server/internal/slackdm"
 )
 
 const (
+	// HomeActionPrefix starts the action ID of every Home tab button that
+	// HomeInteractions handles.
+	HomeActionPrefix = "home_approval_"
+
 	// homeClickApprove and homeClickDeny are the Home tab's tool approval
 	// buttons. Their value is the request's project ID and ID, joined by ":".
-	homeClickApprove = "home_approval_approve"
-	homeClickDeny    = "home_approval_deny"
-
-	// maxHomeInteractionBytes bounds a click payload. Home tab payloads carry
-	// the whole published view.
-	maxHomeInteractionBytes = 1 << 20 // 1 MiB
+	homeClickApprove = HomeActionPrefix + "approve"
+	homeClickDeny    = HomeActionPrefix + "deny"
 
 	// homeClickTimeout bounds deciding a click and republishing the Home tab
 	// after the click is acknowledged.
@@ -42,16 +42,16 @@ type HomeDecider interface {
 }
 
 // HomeInteractions handles clicks on the Home tab's approval buttons and hands
-// every other interaction to next, the existing interactivity handler, with
-// its body intact.
+// every other interaction to next with its body intact.
 type HomeInteractions struct {
 	events  *Events
 	decider HomeDecider
 	next    http.Handler
 }
 
-// NewHomeInteractions wraps next, which keeps serving every interaction that
-// is not a Home tab approval click.
+// NewHomeInteractions builds the Home tab click handler. next serves every
+// interaction that is not a Home tab approval click, such as a Home action ID
+// on a view that is not the Home tab.
 func NewHomeInteractions(events *Events, decider HomeDecider, next http.Handler) *HomeInteractions {
 	return &HomeInteractions{events: events, decider: decider, next: next}
 }
@@ -77,8 +77,8 @@ type homeClick struct {
 }
 
 func (h *HomeInteractions) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxHomeInteractionBytes+1))
-	if err != nil || len(body) > maxHomeInteractionBytes {
+	body, err := io.ReadAll(io.LimitReader(r.Body, slackdm.MaxInteractionBytes+1))
+	if err != nil || len(body) > slackdm.MaxInteractionBytes {
 		http.Error(w, "unreadable request", http.StatusBadRequest)
 		return
 	}
@@ -88,7 +88,7 @@ func (h *HomeInteractions) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.next.ServeHTTP(w, r)
 		return
 	}
-	if h.events.secret == "" || triggers.SlackSignature.Verify(body, r.Header, h.events.secret) != nil {
+	if h.events.secret == "" || slackdm.VerifySignature(body, r.Header, h.events.secret) != nil {
 		http.Error(w, "invalid signature", http.StatusUnauthorized)
 		return
 	}

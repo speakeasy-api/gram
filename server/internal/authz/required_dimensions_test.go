@@ -25,20 +25,20 @@ func TestValidateInput_MCPChecksRequireProject(t *testing.T) {
 				"tool, no project":  {SelectorKeyTool: "search", SelectorKeyDisposition: DispositionReadOnly},
 				"explicit mcp kind": nil,
 			} {
-				check := Check{Scope: scope, ResourceKind: "", ResourceID: "server-1", Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}
+				check := Check{Scope: scope, ResourceKind: "", ResourceID: "server-1", Dimensions: dimensions, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
 				if name == "explicit mcp kind" {
 					check.ResourceKind = ResourceKindMCP
 				}
 				require.ErrorIs(t, validateInput(check), ErrInvalidCheck, name)
 			}
-			require.NoError(t, validateInput(MCPCheck(scope, "server-1", "project-1")))
+			require.NoError(t, validateInput(mcpCheck(scope, "server-1", "project-1")))
 		})
 	}
 
-	require.ErrorIs(t, validateInput(MCPToolCallCheck("server-1", MCPToolCallDimensions{Tool: "search", Disposition: "", ProjectID: ""})), ErrInvalidCheck)
-	require.NoError(t, validateInput(MCPToolCallCheck("server-1", MCPToolCallDimensions{Tool: "search", Disposition: "", ProjectID: "project-1"})))
+	require.ErrorIs(t, validateInput(mcpToolCallCheck("server-1", mcpToolCallDimensions{Tool: "search", Disposition: "", ProjectID: ""})), ErrInvalidCheck)
+	require.NoError(t, validateInput(MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).ToolCall("search", "")))
 	// Kinds with no required dimension are unaffected.
-	require.NoError(t, validateInput(Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "project-1", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}))
+	require.NoError(t, validateInput(Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "project-1", Dimensions: nil, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}))
 }
 
 func TestRequiredCheckDimensions(t *testing.T) {
@@ -66,12 +66,12 @@ func TestGrantsAuthorize_ProjectBoundedMCPGrantOtherProject(t *testing.T) {
 		check   Check
 		allowed bool
 	}{
-		"project-level, same project":  {MCPCheck(ScopeMCPWrite, "project-p", "project-p"), true},
-		"server, same project":         {MCPCheck(ScopeMCPWrite, "server-1", "project-p"), true},
-		"read implied, same project":   {MCPCheck(ScopeMCPRead, "server-1", "project-p"), true},
-		"project-level, other project": {MCPCheck(ScopeMCPWrite, "project-q", "project-q"), false},
-		"server, other project":        {MCPCheck(ScopeMCPWrite, "server-1", "project-q"), false},
-		"read implied, other project":  {MCPCheck(ScopeMCPRead, "server-1", "project-q"), false},
+		"project-level, same project":  {MCPServers(ProjectIDFrom("project-p")).Write(), true},
+		"server, same project":         {MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-p")).Write(), true},
+		"read implied, same project":   {MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-p")).Read(), true},
+		"project-level, other project": {MCPServers(ProjectIDFrom("project-q")).Write(), false},
+		"server, other project":        {MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-q")).Write(), false},
+		"read implied, other project":  {MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-q")).Read(), false},
 	} {
 		allowed, err := GrantsAuthorize(grants, tc.check)
 		require.NoError(t, err, name)
@@ -79,10 +79,10 @@ func TestGrantsAuthorize_ProjectBoundedMCPGrantOtherProject(t *testing.T) {
 	}
 
 	// Omitting the project used to skip the grant's bound; it now fails closed.
-	allowed, err := GrantsAuthorize(grants, Check{Scope: ScopeMCPWrite, ResourceKind: "", ResourceID: "project-q", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil})
+	allowed, err := GrantsAuthorize(grants, Check{Scope: ScopeMCPWrite, ResourceKind: "", ResourceID: "project-q", Dimensions: nil, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault})
 	require.ErrorIs(t, err, ErrInvalidCheck)
 	require.False(t, allowed)
-	require.False(t, GrantsSatisfy(grants, Check{Scope: ScopeMCPWrite, ResourceKind: "", ResourceID: "project-q", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}))
+	require.False(t, GrantsSatisfy(grants, Check{Scope: ScopeMCPWrite, ResourceKind: "", ResourceID: "project-q", Dimensions: nil, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}))
 }
 
 func TestEngineRequire_ProjectBoundedMCPGrantOtherProject(t *testing.T) {
@@ -95,30 +95,30 @@ func TestEngineRequire_ProjectBoundedMCPGrantOtherProject(t *testing.T) {
 		SelectorKeyProjectID:    "project-p",
 	})})
 
-	require.NoError(t, engine.Require(bounded, MCPCheck(ScopeMCPWrite, "project-p", "project-p")))
+	require.NoError(t, engine.Require(bounded, MCPServers(ProjectIDFrom("project-p")).Write()))
 
 	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, engine.Require(bounded, MCPCheck(ScopeMCPWrite, "project-q", "project-q")), &oopsErr)
+	require.ErrorAs(t, engine.Require(bounded, MCPServers(ProjectIDFrom("project-q")).Write()), &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 
-	require.ErrorAs(t, engine.Require(bounded, Check{Scope: ScopeMCPWrite, ResourceKind: "", ResourceID: "project-q", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}), &oopsErr)
+	require.ErrorAs(t, engine.Require(bounded, Check{Scope: ScopeMCPWrite, ResourceKind: "", ResourceID: "project-q", Dimensions: nil, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}), &oopsErr)
 	require.Equal(t, oops.CodeUnexpected, oopsErr.Code, "a check without a project is invalid")
 
 	allowed, err := engine.Filter(bounded, []Check{
-		MCPCheck(ScopeMCPWrite, "server-1", "project-p"),
-		MCPCheck(ScopeMCPWrite, "server-2", "project-q"),
+		MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-p")).Write(),
+		MCPServer(MCPServerIDFrom("server-2"), ProjectIDFrom("project-q")).Write(),
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{"server-1"}, allowed)
 
 	matched, err := engine.FindMatched(bounded, []Check{
-		MCPCheck(ScopeMCPWrite, "server-1", "project-p"),
-		MCPCheck(ScopeMCPWrite, "server-2", "project-q"),
+		MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-p")).Write(),
+		MCPServer(MCPServerIDFrom("server-2"), ProjectIDFrom("project-q")).Write(),
 	})
 	require.NoError(t, err)
 	require.Equal(t, []bool{true, false}, matched)
 
 	// A wildcard grant still reaches every project.
 	unbounded := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeMCPWrite, WildcardResource)})
-	require.NoError(t, engine.Require(unbounded, MCPCheck(ScopeMCPWrite, "project-q", "project-q")))
+	require.NoError(t, engine.Require(unbounded, MCPServers(ProjectIDFrom("project-q")).Write()))
 }

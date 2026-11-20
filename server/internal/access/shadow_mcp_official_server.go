@@ -19,13 +19,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// SetShadowMCPOfficialServer links one Shadow MCP server to its official
-// version, or removes the link. With mcp_server_id the link is added, or
-// pointed at that server when it exists; adding a removed link back restores
-// its row. Without mcp_server_id the link is soft-deleted, which leaves the
-// Shadow MCP server unmanaged so another server can be linked. Every change
-// is recorded in the audit log; a request that changes nothing records
-// nothing.
+// SetShadowMCPOfficialServer overrides, or stops overriding, the automatic
+// link of one Shadow MCP server to the project server that proxies to its
+// URL. With mcp_server_id that server is linked; with keep_shadow nothing is
+// linked; adding a removed override back restores its row. With neither,
+// the override is soft-deleted and the automatic link applies again. Every
+// change is recorded in the audit log; a request that changes nothing
+// records nothing.
 func (s *Service) SetShadowMCPOfficialServer(ctx context.Context, payload *gen.SetShadowMCPOfficialServerPayload) error {
 	ac, projectID, inventoryURL, err := s.shadowMCPInventoryMutationContext(ctx, payload.ProjectID, payload.ServerURL)
 	if err != nil {
@@ -56,6 +56,13 @@ func (s *Service) SetShadowMCPOfficialServer(ctx context.Context, payload *gen.S
 		}
 		chosen = uuid.NullUUID{UUID: server.ID, Valid: true}
 	}
+	keepShadow := conv.PtrValOr(payload.KeepShadow, false)
+	if keepShadow && chosen.Valid {
+		return oops.E(oops.CodeBadRequest, nil, "keep_shadow cannot be combined with mcp_server_id").LogError(ctx, s.logger)
+	}
+	// With neither a server nor keep_shadow, the administrator hands the URL
+	// back to the automatic link.
+	useAutomatic := !chosen.Valid && !keepShadow
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -92,10 +99,10 @@ func (s *Service) SetShadowMCPOfficialServer(ctx context.Context, payload *gen.S
 	userID := conv.ToPGTextEmpty(ac.UserID)
 
 	switch {
-	case !chosen.Valid && existing == nil:
-		// No link to remove: nothing changed, so nothing is recorded.
+	case useAutomatic && existing == nil:
+		// No override to remove: nothing changed, so nothing is recorded.
 		return nil
-	case !chosen.Valid:
+	case useAutomatic:
 		if _, err := q.DeleteShadowMCPOfficialServerChoice(ctx, shadowmcprepo.DeleteShadowMCPOfficialServerChoiceParams{UserID: userID, ProjectID: projectID, ServerUrl: key}); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "remove shadow mcp official server link").LogError(ctx, s.logger)
 		}
@@ -115,7 +122,7 @@ func (s *Service) SetShadowMCPOfficialServer(ctx context.Context, payload *gen.S
 			ShadowMCPOfficialServerSnapshotAfter: saved.snapshot(),
 		})
 	case existing.MCPServerID == chosen:
-		// The link already points at this server.
+		// The override already says this.
 		return nil
 	default:
 		saved, upsertErr := q.UpsertShadowMCPOfficialServerChoice(ctx, shadowmcprepo.UpsertShadowMCPOfficialServerChoiceParams{
@@ -156,6 +163,7 @@ func (r officialLinkRow) snapshot() *audit.ShadowMCPOfficialServerSnapshot {
 	snapshot := &audit.ShadowMCPOfficialServerSnapshot{
 		ServerURL:   r.ServerURL,
 		MCPServerID: "",
+		KeepShadow:  !r.MCPServerID.Valid,
 	}
 	if r.MCPServerID.Valid {
 		snapshot.MCPServerID = r.MCPServerID.UUID.String()
@@ -163,7 +171,7 @@ func (r officialLinkRow) snapshot() *audit.ShadowMCPOfficialServerSnapshot {
 	return snapshot
 }
 
-// addShadowMCPOfficialServerLink adds a link for a URL with no live link:
+// addShadowMCPOfficialServerLink adds an override for a URL with none:
 // it restores the most recently removed row for the URL, or inserts one.
 func (s *Service) addShadowMCPOfficialServerLink(ctx context.Context, q *shadowmcprepo.Queries, projectID uuid.UUID, key string, chosen uuid.NullUUID, userID pgtype.Text) (officialLinkRow, error) {
 	restored, err := q.RestoreShadowMCPOfficialServerChoice(ctx, shadowmcprepo.RestoreShadowMCPOfficialServerChoiceParams{

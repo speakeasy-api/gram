@@ -2,10 +2,10 @@ import { useState } from "react";
 import { ListRestart } from "lucide-react";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import type { McpServer } from "@gram/client/models/components/mcpserver";
 import { SettingsSection } from "@/components/detail/settings-section";
 import { Button } from "@/components/ui/Button";
-import { FieldError } from "@/components/ui/Field";
 import { useSdkClient } from "@/contexts/Sdk";
 import { invalidateMcpServerQueries } from "@/lib/mcp-server-visibility";
 import { clearProviderProgress } from "@/pages/mcp/x/setup/provider-setup";
@@ -29,11 +29,9 @@ export function RestartSetupSection({
   const navigate = useNavigate();
   const routes = useRoutes();
   const [pending, setPending] = useState(false);
-  const [failed, setFailed] = useState(false);
 
   const restart = async () => {
     setPending(true);
-    setFailed(false);
     try {
       await sdk.mcpServers.setSetupGuideCompleted({
         setSetupGuideCompletedRequestBody: {
@@ -42,7 +40,7 @@ export function RestartSetupSection({
         },
       });
     } catch {
-      setFailed(true);
+      toast.error("Unable to restart setup. Try again.");
       setPending(false);
       return;
     }
@@ -80,11 +78,6 @@ export function RestartSetupSection({
               </Button.Text>
             </Button>
           </ServerControlRow>
-          {failed && (
-            <FieldError className="mt-3">
-              Unable to restart setup. Try again.
-            </FieldError>
-          )}
         </SettingsSection.Body>
       </SettingsSection.Panel>
     </SettingsSection>

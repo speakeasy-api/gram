@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 )
 
@@ -49,9 +50,49 @@ func gatewayTargetFromEndpoint(endpoint *ResolvedMcpEndpoint) (gatewayTarget, er
 	}, nil
 }
 
+func (t gatewayTarget) authorizationTarget(projectID uuid.UUID) (*AgentAuthorizationTarget, bool) {
+	if (t.kind != gatewayKindStored && t.kind != gatewayKindProject) || t.id == uuid.Nil || projectID == uuid.Nil {
+		return nil, false
+	}
+	return &AgentAuthorizationTarget{
+		Scope:               authz.ScopeMCPConnect,
+		OrganizationID:      t.organizationID,
+		ProjectID:           projectID,
+		UserSessionIssuerID: t.userSessionIssuerID,
+		MCPResourceID:       t.id,
+	}, true
+}
+
 // admits reports only whether the credential may enter this gateway. It does
 // not authorize any member.
-func (t gatewayTarget) admits(caller gatewayCaller) (bool, error) {
-	// Gateway entry remains people-only; member authorization is separate.
-	return caller.kind == gatewayCallerPerson, nil
+func (t gatewayTarget) admits(caller gatewayCaller, projectID uuid.UUID, machineAccess bool) (bool, error) {
+	if caller.kind == gatewayCallerPerson {
+		return true, nil
+	}
+	if !machineAccess || (t.kind != gatewayKindStored && t.kind != gatewayKindProject) || projectID == uuid.Nil {
+		return false, nil
+	}
+	if caller.projectScope != nil && *caller.projectScope != projectID {
+		return false, nil
+	}
+
+	switch caller.kind {
+	case gatewayCallerAgent:
+		// An agent's grants are checked against each member. Pointing the agent
+		// at a gateway grants no authority of its own.
+		return true, nil
+	case gatewayCallerWorkload:
+		// The workload credential ceiling must authorize this gateway target.
+		check, ok := t.authorizationTarget(projectID)
+		if !ok {
+			return false, nil
+		}
+		admitted, err := authz.GrantsAuthorize(caller.ceiling, check.connectCheck())
+		if err != nil {
+			return false, fmt.Errorf("authorize workload gateway target: %w", err)
+		}
+		return admitted, nil
+	default:
+		return false, nil
+	}
 }

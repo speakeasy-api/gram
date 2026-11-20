@@ -59,7 +59,7 @@ func (s *Service) ResolvePublicationEvidence(ctx context.Context, organizationID
 	if err := s.CanResolvePublicationEvidence(); err != nil || organizationID == "" {
 		return nil, fmt.Errorf("publication evidence authorization unavailable")
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(organizationID)).Admin()); err != nil {
 		return nil, fmt.Errorf("authorize publication evidence: %w", err)
 	}
 	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, projectID)

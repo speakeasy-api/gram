@@ -1,5 +1,3 @@
-import type { EmaReturn } from "./oktaEma";
-
 export const IDENTITY_TABS = [
   "sso",
   "identity-providers",
@@ -27,21 +25,12 @@ export function identityProvidersHref(): string {
   return "?tab=identity-providers";
 }
 
-export function oktaViewHref(
-  view: OktaView,
-  sectionId?: string,
-  emaReturn?: EmaReturn,
-): string {
+export function oktaViewHref(view: OktaView, sectionId?: string): string {
   const search = new URLSearchParams({
     tab: "identity-providers",
     provider: "okta",
     view,
   });
-  // Keep an Enterprise Managed Auth setup in progress across Okta's tabs.
-  if (emaReturn) {
-    search.set("emaFor", emaReturn.providerName);
-    search.set("emaReturn", emaReturn.path);
-  }
   return `?${search.toString()}${sectionId ? `#${sectionId}` : ""}`;
 }
 

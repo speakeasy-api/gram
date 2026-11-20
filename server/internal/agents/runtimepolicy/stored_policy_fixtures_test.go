@@ -42,7 +42,11 @@ var writeStoredPolicyFixture = flag.Int("write-stored-policy-fixture", 0, "write
 const storedPolicyFixtureDir = "testdata/stored_policies"
 
 func storedPolicyFixturePath(version DelegatedPolicyVersion) string {
-	return filepath.Join(storedPolicyFixtureDir, fmt.Sprintf("v%d.json", version))
+	return filepath.Join(storedPolicyFixtureDir, storedPolicyFixtureFileName(version))
+}
+
+func storedPolicyFixtureFileName(version DelegatedPolicyVersion) string {
+	return fmt.Sprintf("v%d.json", version)
 }
 
 func TestStoredPolicyFixtures_DecodeAtEveryVersion(t *testing.T) {
@@ -94,6 +98,7 @@ func TestStoredPolicyFixtures_NoneBeyondCurrentVersion(t *testing.T) {
 		var version DelegatedPolicyVersion
 		_, err := fmt.Sscanf(entry.Name(), "v%d.json", &version)
 		require.NoError(t, err, "unexpected file %s", entry.Name())
+		require.Equal(t, storedPolicyFixtureFileName(version), entry.Name(), "unexpected file %s", entry.Name())
 		require.GreaterOrEqual(t, version, DelegatedPolicyVersion1, "fixture %s is for a version this reader does not support", entry.Name())
 		require.LessOrEqual(t, version, CurrentDelegatedPolicyVersion, "fixture %s is for a version this reader does not support", entry.Name())
 	}

@@ -193,10 +193,10 @@ func TestGitHubActionsRule_OneAgentForPluginsMCPAndHooks(t *testing.T) {
 	require.Equal(t, urn.NewPrincipal(urn.PrincipalTypeAgent, f.agentID.String()).String(), polled.Principal.Urn, "getPlugins answers for the agent the rule assigns")
 
 	// Hooks for the workflow's project.
-	require.NoError(t, f.ti.authzEngine.Require(admitted, authz.HooksIngestCheck(f.fx.orgID, f.fx.target.ProjectID.String())))
+	require.NoError(t, f.ti.authzEngine.Require(admitted, authz.Org(authz.OrgIDFrom(f.fx.orgID)).HooksIngest(authz.ProjectIDOf(f.fx.target.ProjectID))))
 
 	// Hooks for any other project are refused: the grant names one project.
-	err = f.ti.authzEngine.Require(admitted, authz.HooksIngestCheck(f.fx.orgID, uuid.NewString()))
+	err = f.ti.authzEngine.Require(admitted, authz.Org(authz.OrgIDFrom(f.fx.orgID)).HooksIngest(authz.ProjectIDFrom(uuid.NewString())))
 	shareable, ok := errors.AsType[*oops.ShareableError](err)
 	require.True(t, ok, "error: %v", err)
 	require.Equal(t, oops.CodeForbidden, shareable.Code)

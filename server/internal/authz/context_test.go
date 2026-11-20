@@ -196,6 +196,24 @@ func TestPrepareContext_loadsGrantsForNonEnterpriseOrgs(t *testing.T) {
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "project_non_enterprise"}))
 }
 
+func TestWithoutCredentialCeilingKeepsLivePolicies(t *testing.T) {
+	t.Parallel()
+	ceiling := []Grant{{Scope: ScopeMCPConnect, Selector: Selector{SelectorKeyResourceID: "gateway"}}}
+	agent := []Grant{{Scope: ScopeMCPConnect, Selector: Selector{SelectorKeyResourceID: "member"}}}
+	owner := []Grant{{Scope: ScopeMCPConnect, Selector: Selector{SelectorKeyResourceID: "member"}}}
+	ctx := admittedPoliciesToContext(t.Context(), RepresentedUserPolicy{}, true, ceiling, agent, owner)
+
+	ctx = WithoutCredentialCeiling(ctx)
+
+	policies, ok := currentGrantAuthorizationFromContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, [][]Grant{agent, owner}, policies.policies)
+	require.False(t, policies.legacyAuthCeiling)
+	got, ok := CredentialCeilingFromContext(ctx)
+	require.True(t, ok)
+	require.Empty(t, got)
+}
+
 func TestCredentialCeilingFromContextIsImmutable(t *testing.T) {
 	t.Parallel()
 	source := []Grant{{

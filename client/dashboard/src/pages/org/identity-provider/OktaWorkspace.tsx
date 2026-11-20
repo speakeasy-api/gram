@@ -1,6 +1,6 @@
 import { enumPresentation } from "@/lib/enum";
 import { ArrowLeft } from "lucide-react";
-import { parseAsString, parseAsStringLiteral, useQueryState } from "nuqs";
+import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { Link, useNavigate } from "react-router";
 
 import { ApiErrorAlert } from "@/components/api-error-alert";
@@ -16,7 +16,7 @@ import type { OktaIdentityProviderConnection } from "@gram/client/models/compone
 import { useOrgRoutes } from "@/routes";
 import { CONNECTION_STATUS, isConnected } from "./connectionView";
 import { OktaOverview } from "./OktaOverview";
-import { connectionsUnavailable, parseEmaReturn } from "./oktaEma";
+import { connectionsUnavailable } from "./oktaEma";
 import { CrossAppAccessTab } from "./tabs/cross-app-access/CrossAppAccessTab";
 import { useOktaConnection } from "./identityProviderQueries";
 import { ChecklistOverridesProvider } from "./tabs/setup/ConnectionChecklist";
@@ -114,9 +114,6 @@ export function OktaWorkspace(): JSX.Element {
     "view",
     parseAsStringLiteral(OKTA_VIEWS).withDefault("overview"),
   );
-  const [emaFor] = useQueryState("emaFor", parseAsString);
-  const [emaPath] = useQueryState("emaReturn", parseAsString);
-  const emaReturn = parseEmaReturn(emaFor, emaPath);
   const orgRoutes = useOrgRoutes();
   const mcpAuthenticationHref = orgRoutes.userSessionIssuers.href();
   const navigate = useNavigate();
@@ -155,7 +152,6 @@ export function OktaWorkspace(): JSX.Element {
         // still works.
         <OktaOverview
           connection={{ kind: "unavailable" }}
-          emaReturn={emaReturn}
           mcpAuthenticationHref={mcpAuthenticationHref}
         />
       ) : (
@@ -170,8 +166,7 @@ export function OktaWorkspace(): JSX.Element {
                 value={shownView}
                 onValueChange={(value) => {
                   const next = views.find((item) => item === value);
-                  if (next)
-                    void navigate(oktaViewHref(next, undefined, emaReturn));
+                  if (next) void navigate(oktaViewHref(next));
                 }}
                 className="min-w-0 gap-6"
               >
@@ -192,7 +187,6 @@ export function OktaWorkspace(): JSX.Element {
                           ? { kind: "connected", connection }
                           : { kind: "not-connected" }
                       }
-                      emaReturn={emaReturn}
                       mcpAuthenticationHref={mcpAuthenticationHref}
                     />
                   ) : (
