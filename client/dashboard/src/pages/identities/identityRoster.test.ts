@@ -73,6 +73,41 @@ describe("fetchRegisteredAgents", () => {
     );
   });
 
+  it("skips other projects' pages while preserving order and the server cursor", async () => {
+    const client = agentsClient();
+    const projectAgent = { ...agent, projectId: "project_current" };
+    const secondProjectAgent = { ...projectAgent, id: "agent_second" };
+    const otherAgent = { ...agent, projectId: "project_other" };
+    const list = page(client, {
+      items: [projectAgent, otherAgent, agent, secondProjectAgent],
+      nextCursor: "more",
+    }).mockResolvedValueOnce({
+      result: { items: [otherAgent, agent], nextCursor: "next" },
+    });
+
+    await expect(
+      fetchRegisteredAgents(client, { projectId: "project_current" }),
+    ).resolves.toEqual({
+      items: [projectAgent, secondProjectAgent],
+      nextCursor: "more",
+    });
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(list).toHaveBeenLastCalledWith(
+      expect.objectContaining({ cursor: "next" }),
+      undefined,
+      { signal: undefined },
+    );
+  });
+
+  it("returns an empty roster after the last page when no agents match", async () => {
+    const client = agentsClient();
+    page(client, { items: [agent] });
+
+    await expect(
+      fetchRegisteredAgents(client, { projectId: "project_current" }),
+    ).resolves.toEqual({ items: [] });
+  });
+
   it("asks for the first page when given no request", async () => {
     const client = agentsClient();
     const list = page(client, { items: [] });

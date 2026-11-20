@@ -51,8 +51,8 @@ export function useAgentIdentityCandidates({
     isFetchingNextPage,
     isFetchNextPageError,
   } = useInfiniteQuery({
-    // This is the identities index's key, so opening Command K after that page
-    // reuses its inventory instead of issuing a duplicate list request.
+    // Global name search uses the organization inventory, separate from the
+    // project-scoped Agents page.
     queryKey: [
       "identities",
       "registered-agents",

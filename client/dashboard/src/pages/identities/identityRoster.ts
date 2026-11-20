@@ -76,6 +76,8 @@ export type RegisteredAgentPage = {
 };
 
 export type RegisteredAgentPageRequest = {
+  /** Restrict the roster to this project; omit for the organization inventory. */
+  projectId?: string;
   cursor?: string;
   limit?: number;
   /** Case-insensitive substring match on the agent name, applied by the server. */
@@ -94,9 +96,9 @@ export type RegisteredAgentPageRequest = {
 /**
  * Agent management is org-scoped and returns 404 when its rollout is off.
  *
- * The page is decided by the server: ordering, searching and the cursor all
- * belong to the same query, so narrowing or reordering in the browser would
- * describe a different list than the one the cursor walks.
+ * Preserve server search, ordering and cursor semantics. The SDK only lists
+ * the organization inventory, so skip pages with no matches for the project
+ * rather than showing an empty roster while matching rows are still ahead.
  */
 export async function fetchRegisteredAgents(
   client: AgentsClient,
@@ -104,26 +106,35 @@ export async function fetchRegisteredAgents(
   signal?: AbortSignal,
 ): Promise<RegisteredAgentPage> {
   try {
-    const page = await client.agents.list(
-      {
-        cursor: request.cursor,
-        limit: request.limit,
-        search: request.search?.trim() || undefined,
-        nameOrder: request.sortOrder,
-        lifecycle: request.lifecycle?.length ? request.lifecycle : undefined,
-        ownerUserIds: request.ownerUserIds?.length
-          ? request.ownerUserIds
-          : undefined,
-        registeredAfter: request.after,
-        registeredBefore: request.before,
-      },
-      undefined,
-      { signal },
-    );
-    return {
-      items: page.result.items,
-      nextCursor: page.result.nextCursor,
-    };
+    let cursor = request.cursor;
+    for (;;) {
+      const page = await client.agents.list(
+        {
+          cursor,
+          limit: request.limit,
+          search: request.search?.trim() || undefined,
+          nameOrder: request.sortOrder,
+          lifecycle: request.lifecycle?.length ? request.lifecycle : undefined,
+          ownerUserIds: request.ownerUserIds?.length
+            ? request.ownerUserIds
+            : undefined,
+          registeredAfter: request.after,
+          registeredBefore: request.before,
+        },
+        undefined,
+        { signal },
+      );
+      const { items, nextCursor } = page.result;
+      if (request.projectId === undefined) return { items, nextCursor };
+
+      const matches = items.filter(
+        (agent) => agent.projectId === request.projectId,
+      );
+      if (matches.length > 0 || !nextCursor) {
+        return { items: matches, nextCursor };
+      }
+      cursor = nextCursor;
+    }
   } catch (error) {
     if (error instanceof GramError && error.statusCode === 404)
       return { items: [] };
