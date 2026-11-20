@@ -172,9 +172,15 @@ func TestRemoteMCPReadinessMarksIdentityChainingConfiguredWithoutReady(t *testin
 	require.Equal(t, ReadinessEvidenceIdentityChainingConfigured, result.EvidenceCode)
 	require.Equal(t, "no_session", result.AuthorizationIdentity.Absence)
 	require.Equal(t, fixture.remoteIssuerID, result.AuthorizationIdentity.RemoteSessionIssuerID)
+	require.NotEqual(t, uuid.Nil, result.AuthorizationIdentity.RemoteSessionClientID)
 	fingerprint, err := ProviderAuthorizationFingerprint(result.AuthorizationIdentity)
 	require.NoError(t, err)
 	require.NotEmpty(t, fingerprint)
+	changed := result.AuthorizationIdentity
+	changed.RemoteSessionClientID = uuid.New()
+	changedFingerprint, err := ProviderAuthorizationFingerprint(changed)
+	require.NoError(t, err)
+	require.NotEqual(t, fingerprint, changedFingerprint)
 
 	recorded := governor.recorded()
 	require.Len(t, recorded, 1)
