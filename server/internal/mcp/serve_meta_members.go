@@ -336,6 +336,19 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	userSessionIssuerID uuid.UUID,
 	scopeProjectID uuid.UUID,
 ) (context.Context, []metaMember, []metaMember, error) {
+	return s.resolveOrganizationMemberSnapshotWithRecheck(ctx, logger, authzSurface, organizationID, organizationGateway, userSessionIssuerID, scopeProjectID, nil)
+}
+
+func (s *Service) resolveOrganizationMemberSnapshotWithRecheck(
+	ctx context.Context,
+	logger *slog.Logger,
+	authzSurface string,
+	organizationID string,
+	organizationGateway bool,
+	userSessionIssuerID uuid.UUID,
+	scopeProjectID uuid.UUID,
+	recheck *recheckMemberScope,
+) (context.Context, []metaMember, []metaMember, error) {
 	// Unconditional for the same reason resolveMetaMemberSnapshot prepares it.
 	ctx, err := s.authz.PrepareContext(ctx)
 	if err != nil {
@@ -395,22 +408,23 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	// Hosted members and issuerless agent gateways retain their legacy rules.
 	var offers map[uuid.UUID]configuredAuthOffer
 	var offerMetadata gatewayOfferMetadata
-	if userSessionIssuerID != uuid.Nil {
-		enforced, err := s.consentAuthChoicesEnforced(ctx, organizationID)
+	typedOffers := recheck != nil && recheck.typedOffer
+	if recheck == nil && userSessionIssuerID != uuid.Nil {
+		typedOffers, err = s.consentAuthChoicesEnforced(ctx, organizationID)
 		if err != nil {
 			return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "check gateway auth client mode").LogError(ctx, logger)
 		}
-		if enforced {
-			ids := make([]uuid.UUID, 0, len(members))
-			for _, member := range members {
-				if member.backend == metaMemberBackendProxied {
-					ids = append(ids, member.serverID)
-				}
+	}
+	if typedOffers {
+		ids := make([]uuid.UUID, 0, len(members))
+		for _, member := range members {
+			if member.backend == metaMemberBackendProxied && (recheck == nil || member.serverID == recheck.serverID) {
+				ids = append(ids, member.serverID)
 			}
-			offers, err = s.configuredAuthOffers(ctx, organizationID, ids)
-			if err != nil {
-				return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "load gateway auth offers").LogError(ctx, logger)
-			}
+		}
+		offers, err = s.configuredAuthOffers(ctx, organizationID, ids)
+		if err != nil {
+			return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "load gateway auth offers").LogError(ctx, logger)
 		}
 	}
 	if offers != nil {
@@ -421,7 +435,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	}
 
 	var clients []remotesessions.Client
-	if userSessionIssuerID != uuid.Nil {
+	if recheck == nil && userSessionIssuerID != uuid.Nil {
 		// The agent gateway signs nobody in, so its callers never read
 		// associations and its members keep the derived match.
 		if err := s.attachAssociatedClients(ctx, organizationID, members); err != nil {
@@ -435,7 +449,13 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	shadow := s.newMandatoryShadow(ctx, organizationID)
 	eligible := make([]metaMember, 0, len(members))
 	for _, member := range members {
+		if recheck != nil && (member.serverID != recheck.serverID || member.backend != metaMemberBackendProxied) {
+			continue
+		}
 		offer, known := offers[member.serverID]
+		if recheck != nil && recheck.typedOffer && (!known || len(offer.clients) == 0) {
+			continue
+		}
 		if offers != nil && member.backend == metaMemberBackendProxied {
 			if !known {
 				continue
@@ -468,7 +488,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 		if !supported {
 			continue
 		}
-		if needsOAuth && userSessionIssuerID != uuid.Nil && !slices.ContainsFunc(clients, func(client remotesessions.Client) bool {
+		if recheck == nil && needsOAuth && userSessionIssuerID != uuid.Nil && !slices.ContainsFunc(clients, func(client remotesessions.Client) bool {
 			return clientServesAnyMember(client, []metaMember{member})
 		}) {
 			continue
