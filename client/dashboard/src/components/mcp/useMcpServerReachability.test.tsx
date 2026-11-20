@@ -53,6 +53,7 @@ afterEach(() => {
   cleanup();
   listing.mockReset();
   mint.mockReset();
+  chatSession.mockClear();
 });
 
 describe("useMcpServerReachability", () => {
