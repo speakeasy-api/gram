@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 )
 
 // Preset identifies a document and the product that publishes it.
@@ -225,6 +227,10 @@ func (s *Snapshot) GatewayMatchersFor(p Product) GatewayMatchers {
 // and uses that view throughout; refreshing never mutates a captured view.
 type Store struct {
 	refreshMu sync.Mutex
+	// reported holds the skipped rows already logged, guarded by refreshMu.
+	reported map[string]struct{}
+	// confirmed is when the served snapshot last matched the database, in Unix nanoseconds.
+	confirmed atomic.Int64
 
 	mu       sync.RWMutex
 	snapshot *Snapshot
@@ -235,7 +241,9 @@ func NewStore(snapshot *Snapshot) *Store {
 	if snapshot == nil {
 		panic("AI catalog requires an initial snapshot")
 	}
-	return &Store{refreshMu: sync.Mutex{}, mu: sync.RWMutex{}, snapshot: snapshot}
+	s := &Store{refreshMu: sync.Mutex{}, reported: nil, confirmed: atomic.Int64{}, mu: sync.RWMutex{}, snapshot: snapshot}
+	s.confirmed.Store(time.Now().UnixNano())
+	return s
 }
 
 // Snapshot captures one catalog revision.

@@ -163,7 +163,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		return fmt.Errorf("connect to database: %w", err)
 	}
 	shutdown.dbClose = db.Close
-	aiCatalog, stopAICatalog, err := startAICatalog(ctx, db, logger)
+	aiCatalog, stopAICatalog, err := startAICatalog(ctx, db, logger, meterProvider)
 	if err != nil {
 		return err
 	}

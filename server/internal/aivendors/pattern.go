@@ -192,6 +192,25 @@ func PatternsOverlap(a, b string) bool {
 	return true
 }
 
+// patternWithin reports whether every client ID valid pattern a matches is also
+// matched by valid pattern b.
+func patternWithin(a, b string) bool {
+	if !PatternsOverlap(a, b) {
+		return false
+	}
+	_, aRest, _ := splitAuthorityAndPath(a)
+	_, bRest, _ := splitAuthorityAndPath(b)
+	aPath, _ := splitPathAndSuffix(aRest)
+	bPath, _ := splitPathAndSuffix(bRest)
+	bSegments := strings.Split(bPath, "/")
+	for i, segment := range strings.Split(aPath, "/") {
+		if bSegments[i] != "*" && bSegments[i] != segment {
+			return false
+		}
+	}
+	return true
+}
+
 // splitPathAndSuffix cuts the remainder returned by splitAuthorityAndPath
 // into its path and its query/fragment suffix (the suffix keeps its leading
 // "?" or "#", so an absent one is distinguishable from an empty one).

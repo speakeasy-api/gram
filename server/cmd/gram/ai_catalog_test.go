@@ -3,6 +3,7 @@ package gram
 import (
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	seedrepo "github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed/repo"
@@ -16,7 +17,7 @@ func TestAICatalogStartupRefusesUnavailableDatabase(t *testing.T) {
 	db, err := pgxpool.New(t.Context(), "postgresql://localhost:1/catalog_test?sslmode=disable")
 	require.NoError(t, err)
 	db.Close()
-	catalog, stop, err := startAICatalog(t.Context(), db, testenv.NewLogger(t))
+	catalog, stop, err := startAICatalog(t.Context(), db, testenv.NewLogger(t), testenv.NewMeterProvider(t))
 	require.ErrorContains(t, err, "bootstrap AI catalog")
 	require.Nil(t, catalog)
 	require.Nil(t, stop, "no refresh loop starts before a successful initial load")
@@ -30,12 +31,12 @@ func TestAICatalogStartupRefusesInvalidDeviceDefinition(t *testing.T) {
 	db, err := infra.CloneTestDatabase(t, "invalid_ai_catalog")
 	require.NoError(t, err)
 	_, err = seedrepo.New(db).InsertProduct(t.Context(), seedrepo.InsertProductParams{
-		ID: "invalid-fixture", VendorKey: "fixture", DisplayName: "Fixture",
+		ID: "invalid-fixture", VendorKey: "fixture", DisplayName: "Fixture", Category: pgtype.Text{String: "unknown", Valid: true},
 		BundleIds: []string{}, Binaries: []string{"fixture"}, ConfigDirs: []string{},
 		ProcessNames: []string{}, ClientInfoNames: []string{},
 	})
 	require.NoError(t, err)
-	catalog, stop, err := startAICatalog(t.Context(), db, testenv.NewLogger(t))
+	catalog, stop, err := startAICatalog(t.Context(), db, testenv.NewLogger(t), testenv.NewMeterProvider(t))
 	require.ErrorIs(t, err, aitargets.ErrInvalidTarget)
 	require.ErrorContains(t, err, "unknown category")
 	require.Nil(t, catalog)

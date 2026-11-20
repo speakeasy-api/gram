@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/aivendors/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -22,30 +23,41 @@ const (
 	loadTimeout = 10 * time.Second
 )
 
-// Load reads one consistent database revision. Invalid patterns are omitted from
-// every projection and logged; database or validation errors reject the entire
-// replacement. The required validator checks consumer contracts before publication.
+// Load reads one consistent database revision. Invalid pattern rows are
+// omitted from every projection and logged; database or validation errors
+// reject the entire replacement. Validate and the required consumer validator
+// both run before a snapshot is returned.
 func Load(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, validate func(*Snapshot) error) (*Snapshot, error) {
+	snapshot, skipped, err := load(ctx, db, validate)
+	for _, row := range skipped {
+		logger.WarnContext(ctx, "skip AI catalog row", attr.SlogError(row))
+	}
+	return snapshot, err
+}
+
+// load returns the snapshot and the rows it skipped, so callers decide how
+// often to report them.
+func load(ctx context.Context, db *pgxpool.Pool, validate func(*Snapshot) error) (*Snapshot, []error, error) {
 	if validate == nil {
-		return nil, fmt.Errorf("AI catalog validator is required")
+		return nil, nil, fmt.Errorf("AI catalog validator is required")
 	}
 	ctx, cancel := context.WithTimeout(ctx, loadTimeout)
 	defer cancel()
 
 	tx, err := db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly, DeferrableMode: "", BeginQuery: "", CommitQuery: ""})
 	if err != nil {
-		return nil, fmt.Errorf("begin AI catalog read: %w", err)
+		return nil, nil, fmt.Errorf("begin AI catalog read: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	q := repo.New(tx)
 	rows, err := q.ListCatalogProducts(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("read AI catalog products: %w", err)
+		return nil, nil, fmt.Errorf("read AI catalog products: %w", err)
 	}
 	docs, err := q.ListCatalogDocuments(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("read AI catalog documents: %w", err)
+		return nil, nil, fmt.Errorf("read AI catalog documents: %w", err)
 	}
 	products := make([]Product, 0, len(rows))
 	byID := make(map[string]int, len(rows))
@@ -70,38 +82,53 @@ func Load(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, validate f
 			Documents:       nil,
 		})
 	}
+	var skipped []error
 	for _, d := range docs {
 		if d.IsPattern {
 			if err := validatePattern(d.Url); err != nil {
-				logger.WarnContext(ctx, "skip invalid AI catalog pattern", attr.SlogError(fmt.Errorf("document %s: %w", d.ID, err)))
+				skipped = append(skipped, fmt.Errorf("document %s: %w", d.ID, err))
 				continue
 			}
 		}
 		i, ok := byID[d.AiProductID]
 		if !ok {
+			skipped = append(skipped, fmt.Errorf("document %s: product %s is not live", d.ID, d.AiProductID))
 			continue
 		}
 		products[i].Documents = append(products[i].Documents, Document{URL: d.Url, DisplayName: d.DisplayName, Enabled: d.Enabled, Pattern: d.IsPattern})
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("finish AI catalog read: %w", err)
+		return nil, skipped, fmt.Errorf("finish AI catalog read: %w", err)
 	}
 	snapshot := NewSnapshot(products)
-	if err := validate(snapshot); err != nil {
-		return nil, fmt.Errorf("validate AI catalog: %w", err)
+	if err := Validate(snapshot); err != nil {
+		return nil, skipped, fmt.Errorf("validate AI catalog: %w", err)
 	}
-	return snapshot, nil
+	if err := validate(snapshot); err != nil {
+		return nil, skipped, fmt.Errorf("validate AI catalog: %w", err)
+	}
+	return snapshot, skipped, nil
 }
 
 // Refresh retains the current snapshot when a load fails. Full content hashes,
 // never the truncated wire version, decide whether a replacement is needed.
+// A skipped row is logged when it first appears, not on every refresh.
 func (s *Store) Refresh(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, validate func(*Snapshot) error) error {
 	s.refreshMu.Lock()
 	defer s.refreshMu.Unlock()
-	next, err := Load(ctx, db, logger, validate)
+	next, skipped, err := load(ctx, db, validate)
+	reported := make(map[string]struct{}, len(skipped))
+	for _, row := range skipped {
+		reported[row.Error()] = struct{}{}
+		if _, seen := s.reported[row.Error()]; !seen {
+			logger.WarnContext(ctx, "skip AI catalog row", attr.SlogError(row))
+		}
+	}
+	s.reported = reported
 	if err != nil {
 		return err
 	}
+	s.confirmed.Store(time.Now().UnixNano())
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.snapshot.Fingerprint() != next.Fingerprint() {
@@ -112,21 +139,82 @@ func (s *Store) Refresh(ctx context.Context, db *pgxpool.Pool, logger *slog.Logg
 
 // Run refreshes until shutdown. Each process owns its cache; no durable work or
 // Temporal actions are needed to maintain an expendable in-memory view.
-func (s *Store) Run(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, validate func(*Snapshot) error) {
-	s.run(ctx, logger, func(ctx context.Context) error { return s.Refresh(ctx, db, logger, validate) })
+func (s *Store) Run(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, meterProvider metric.MeterProvider, validate func(*Snapshot) error) {
+	failures, stop := s.refreshMetrics(logger, meterProvider)
+	defer stop()
+	s.run(ctx, logger, failures, func(ctx context.Context) error { return s.Refresh(ctx, db, logger, validate) })
 }
 
-func (s *Store) run(ctx context.Context, logger *slog.Logger, refresh func(context.Context) error) {
+const (
+	meterScope = "github.com/speakeasy-api/gram/server/internal/aivendors"
+
+	meterRefreshFailures = "ai_catalog.refresh.failures"
+
+	meterSnapshotAge = "ai_catalog.snapshot.age"
+)
+
+// refreshMetrics counts failed refreshes and observes how long ago the served
+// snapshot was last confirmed against the database.
+func (s *Store) refreshMetrics(logger *slog.Logger, meterProvider metric.MeterProvider) (metric.Int64Counter, func()) {
+	meter := meterProvider.Meter(meterScope)
+	failures, err := meter.Int64Counter(meterRefreshFailures,
+		metric.WithDescription("AI client catalog refreshes that failed and kept the last good snapshot."),
+		metric.WithUnit("{refresh}"))
+	if err != nil {
+		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterRefreshFailures), attr.SlogError(err))
+	}
+	age, err := meter.Float64ObservableGauge(meterSnapshotAge,
+		metric.WithDescription("Seconds since the served AI client catalog snapshot was last loaded or confirmed."),
+		metric.WithUnit("s"))
+	if err != nil {
+		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterSnapshotAge), attr.SlogError(err))
+		return failures, func() {}
+	}
+	registration, err := meter.RegisterCallback(func(_ context.Context, o metric.Observer) error {
+		o.ObserveFloat64(age, time.Since(time.Unix(0, s.confirmed.Load())).Seconds())
+		return nil
+	}, age)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterSnapshotAge), attr.SlogError(err))
+		return failures, func() {}
+	}
+	return failures, func() { _ = registration.Unregister() }
+}
+
+func (s *Store) run(ctx context.Context, logger *slog.Logger, failures metric.Int64Counter, refresh func(context.Context) error) {
 	ticker := time.NewTicker(RefreshInterval)
 	defer ticker.Stop()
+	lastErr := ""
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := refresh(ctx); err != nil {
-				logger.WarnContext(ctx, "refresh AI catalog; retaining last snapshot", attr.SlogError(err))
+			err := refreshRecovered(ctx, refresh)
+			switch {
+			case err != nil:
+				if failures != nil {
+					failures.Add(ctx, 1)
+				}
+				if err.Error() != lastErr {
+					logger.WarnContext(ctx, "refresh AI catalog; retaining last snapshot", attr.SlogError(err))
+				}
+				lastErr = err.Error()
+			case lastErr != "":
+				logger.InfoContext(ctx, "AI catalog refresh recovered")
+				lastErr = ""
 			}
 		}
 	}
+}
+
+// refreshRecovered turns a panic in one refresh into an error, so the loop and
+// the last good snapshot survive it.
+func refreshRecovered(ctx context.Context, refresh func(context.Context) error) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("AI catalog refresh panicked: %v", r)
+		}
+	}()
+	return refresh(ctx)
 }

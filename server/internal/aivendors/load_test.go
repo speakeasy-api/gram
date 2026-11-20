@@ -155,7 +155,7 @@ func TestLoadOmitsPatternsWithoutRealPath(t *testing.T) {
 	}
 }
 
-func TestRefreshAcceptsIntentionallyEmptyCatalog(t *testing.T) {
+func TestRefreshRejectsEmptyCatalog(t *testing.T) {
 	t.Parallel()
 	db, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
@@ -171,10 +171,31 @@ func TestRefreshAcceptsIntentionallyEmptyCatalog(t *testing.T) {
 		require.NoError(t, testrepo.New(db).EditProductFixture(t.Context(), testrepo.EditProductFixtureParams{ID: p.ID, DisplayName: p.DisplayName, DeletedAt: pgtype.Timestamptz{Time: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Valid: true}}))
 	}
 	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db), "startup does not restore soft-deleted products")
-	require.NoError(t, store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog))
-	require.Empty(t, store.Snapshot().Products())
-	require.Empty(t, store.Snapshot().Catalog())
-	require.NotEqual(t, initial.Fingerprint(), store.Snapshot().Fingerprint())
+	require.ErrorIs(t, store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog), aivendors.ErrInvalidCatalog)
+	require.Same(t, initial, store.Snapshot(), "an empty load never replaces a good snapshot")
+	loaded, err := aivendors.Load(t.Context(), db, logger, aitargets.ValidateCatalog)
+	require.ErrorIs(t, err, aivendors.ErrInvalidCatalog)
+	require.Nil(t, loaded)
+}
+
+func TestRefreshRejectsOverlappingPatternsOfTwoProducts(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
+	logger := testenv.NewLogger(t)
+	initial, err := aivendors.Load(t.Context(), db, logger, aitargets.ValidateCatalog)
+	require.NoError(t, err)
+	store := aivendors.NewStore(initial)
+	// Neither this nor the ChatGPT pattern is narrower, so attribution would depend on URL order.
+	_, err = seedrepo.New(db).InsertDocument(t.Context(), seedrepo.InsertDocumentParams{
+		ID: uuid.New(), AiProductID: "zed", Url: "https://chatgpt.com/*/fixture/client.json", DisplayName: "Overlapping pattern", Enabled: true, IsPattern: true,
+	})
+	require.NoError(t, err)
+	err = store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog)
+	require.ErrorIs(t, err, aivendors.ErrInvalidCatalog)
+	require.ErrorContains(t, err, "overlap")
+	require.Same(t, initial, store.Snapshot())
 }
 
 func TestLoadListsDisabledDocumentsWithoutAdmittingThem(t *testing.T) {
@@ -208,9 +229,10 @@ func TestInvalidDeviceDefinitionsDoNotReplaceCatalog(t *testing.T) {
 		category  pgtype.Text
 		binaries  []string
 		processes []string
+		wantErr   error
 		want      string
 	}{
-		{name: "missing category", binaries: []string{"fixture"}, want: "unknown category"},
+		{name: "missing category", binaries: []string{"fixture"}, wantErr: aivendors.ErrInvalidCatalog, want: "no category"},
 		{name: "unknown category", category: pgtype.Text{String: "unknown", Valid: true}, binaries: []string{"fixture"}, want: "unknown category"},
 		{name: "invalid binary", category: pgtype.Text{String: "harness", Valid: true}, binaries: []string{"../fixture"}, want: "bare command name"},
 		{name: "process only", category: pgtype.Text{String: "harness", Valid: true}, processes: []string{"Fixture"}, want: "at least one install signature"},
@@ -230,12 +252,16 @@ func TestInvalidDeviceDefinitionsDoNotReplaceCatalog(t *testing.T) {
 				ProcessNames: append([]string{}, tc.processes...), ClientInfoNames: []string{},
 			})
 			require.NoError(t, err)
+			wantErr := tc.wantErr
+			if wantErr == nil {
+				wantErr = aitargets.ErrInvalidTarget
+			}
 			err = store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog)
-			require.ErrorIs(t, err, aitargets.ErrInvalidTarget)
+			require.ErrorIs(t, err, wantErr)
 			require.ErrorContains(t, err, tc.want)
 			require.Same(t, initial, store.Snapshot(), "a bad definition must not replace the usable catalog")
 			loaded, err := aivendors.Load(t.Context(), db, logger, aitargets.ValidateCatalog)
-			require.ErrorIs(t, err, aitargets.ErrInvalidTarget)
+			require.ErrorIs(t, err, wantErr)
 			require.Nil(t, loaded, "initial reads reject the same invalid definitions")
 		})
 	}

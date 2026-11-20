@@ -796,7 +796,7 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to connect to database: %w", err)
 			}
 			dbClose = db.Close
-			aiCatalog, stopAICatalog, err := startAICatalog(ctx, db, logger)
+			aiCatalog, stopAICatalog, err := startAICatalog(ctx, db, logger, meterProvider)
 			if err != nil {
 				return err
 			}

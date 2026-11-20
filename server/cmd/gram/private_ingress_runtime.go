@@ -103,7 +103,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	}
 	r.DB = db
 	r.cleanup = append(r.cleanup, func(context.Context) error { db.Close(); return nil })
-	aiCatalog, stopAICatalog, err := startAICatalog(ctx, db, logger)
+	aiCatalog, stopAICatalog, err := startAICatalog(ctx, db, logger, meterProvider)
 	if err != nil {
 		return nil, err
 	}
