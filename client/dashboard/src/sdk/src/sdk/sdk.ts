@@ -47,6 +47,7 @@ import { Killswitches } from "./killswitches.js";
 import { Litellm } from "./litellm.js";
 import { McpApproval } from "./mcpapproval.js";
 import { McpEndpoints } from "./mcpendpoints.js";
+import { McpFeedback } from "./mcpfeedback.js";
 import { McpMetadata } from "./mcpmetadata.js";
 import { McpRegistries } from "./mcpregistries.js";
 import { McpServers } from "./mcpservers.js";
@@ -326,6 +327,11 @@ export class Gram extends ClientSDK {
   private _mcpEndpoints?: McpEndpoints;
   get mcpEndpoints(): McpEndpoints {
     return (this._mcpEndpoints ??= new McpEndpoints(this._options));
+  }
+
+  private _mcpFeedback?: McpFeedback;
+  get mcpFeedback(): McpFeedback {
+    return (this._mcpFeedback ??= new McpFeedback(this._options));
   }
 
   private _mcpMetadata?: McpMetadata;

@@ -1,0 +1,378 @@
+package mcpfeedback_test
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpfeedback"
+	"github.com/speakeasy-api/gram/server/internal/mcpfeedback/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+)
+
+// noLimits is a recorder that accepts every report.
+var noLimits = mcpfeedback.Limits{Caller: nil, Server: nil}
+
+func sampleReport() mcpfeedback.Report {
+	return mcpfeedback.Report{
+		Content:    "search_logs returned nothing although the Logs page shows traffic.",
+		Severity:   mcpfeedback.SeverityDegraded,
+		Workaround: "Queried a wider range.",
+		Intention:  "Find a failing request.",
+		ToolName:   "search_logs",
+		Model:      "Claude in Claude Code",
+	}
+}
+
+func sampleCaller() mcpfeedback.Caller {
+	return mcpfeedback.Caller{
+		SessionID:      "session-1",
+		UserID:         "user-1",
+		UserEmail:      "priya@acme.example",
+		ExternalUserID: "idp|priya",
+		ClientName:     "claude-code",
+		ClientVersion:  "2.1.0",
+	}
+}
+
+func storedFeedback(t *testing.T, ctx context.Context, ti *testInstance, server mcpserversrepo.McpServer) []repo.ListFeedbackRow {
+	t.Helper()
+
+	rows, err := repo.New(ti.conn).ListFeedback(ctx, repo.ListFeedbackParams{
+		ProjectID:       server.ProjectID,
+		McpServerID:     server.ID,
+		Severity:        pgtype.Text{String: "", Valid: false},
+		ToolName:        pgtype.Text{String: "", Valid: false},
+		CursorCreatedAt: pgtype.Timestamptz{Valid: false},
+		CursorID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		PageLimit:       100,
+	})
+	require.NoError(t, err)
+	return rows
+}
+
+func TestRecorderOffersTheToolOnlyWhenSwitchedOn(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := seedRemoteBackedServer(t, ctx, ti)
+	recorder := newTestRecorder(t, ti, noLimits)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	_, offered, err := recorder.Tool(ctx, server.ProjectID, server.ID)
+	require.NoError(t, err)
+	require.False(t, offered, "a server with no settings does not offer the tool")
+
+	save := func(enabled bool, name, description string) {
+		_, err := repo.New(ti.conn).UpsertFeedbackConfig(ctx, repo.UpsertFeedbackConfigParams{
+			McpServerID:     server.ID,
+			OrganizationID:  authCtx.ActiveOrganizationID,
+			ProjectID:       server.ProjectID,
+			Enabled:         enabled,
+			ToolName:        pgtype.Text{String: name, Valid: name != ""},
+			ToolDescription: pgtype.Text{String: description, Valid: description != ""},
+			UpdatedByUserID: pgtype.Text{String: "", Valid: false},
+		})
+		require.NoError(t, err)
+	}
+
+	save(true, "", "")
+	tool, offered, err := recorder.Tool(ctx, server.ProjectID, server.ID)
+	require.NoError(t, err)
+	require.True(t, offered)
+	require.Equal(t, mcpfeedback.DefaultToolName, tool.Name)
+	require.Equal(t, mcpfeedback.DefaultToolDescription, tool.Description)
+
+	save(true, "acme_submit_feedback", "Tell Acme what went wrong.")
+	tool, offered, err = recorder.Tool(ctx, server.ProjectID, server.ID)
+	require.NoError(t, err)
+	require.True(t, offered)
+	require.Equal(t, "acme_submit_feedback", tool.Name)
+	require.Equal(t, "Tell Acme what went wrong.", tool.Description)
+
+	_, offered, err = recorder.Tool(ctx, uuid.New(), server.ID)
+	require.NoError(t, err)
+	require.False(t, offered, "another project does not see this server's tool")
+
+	save(false, "acme_submit_feedback", "Tell Acme what went wrong.")
+	_, offered, err = recorder.Tool(ctx, server.ProjectID, server.ID)
+	require.NoError(t, err)
+	require.False(t, offered, "switching the tool off keeps its settings and stops offering it")
+}
+
+func TestRecorderSubmitStoresTheReport(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := seedRemoteBackedServer(t, ctx, ti)
+	recorder := newTestRecorder(t, ti, noLimits)
+	target := targetOf(t, ctx, server)
+
+	receipt, err := recorder.Submit(ctx, target, sampleCaller(), sampleReport())
+	require.NoError(t, err)
+	require.Equal(t, "received", receipt.Status)
+
+	rows := storedFeedback(t, ctx, ti, server)
+	require.Len(t, rows, 1)
+	row := rows[0]
+	require.Equal(t, receipt.ID, row.ID)
+	require.Equal(t, target.OrganizationID, row.OrganizationID)
+	require.Equal(t, sampleReport().Content, row.Content)
+	require.Equal(t, "degraded", row.Severity.String)
+	require.Equal(t, "Queried a wider range.", row.Workaround.String)
+	require.Equal(t, "Find a failing request.", row.Intention.String)
+	require.Equal(t, "search_logs", row.ToolName.String)
+	require.Equal(t, "Claude in Claude Code", row.Model.String)
+	require.Equal(t, "session-1", row.SessionID.String)
+	require.Equal(t, "user-1", row.UserID.String)
+	require.Equal(t, "idp|priya", row.ExternalUserID.String)
+	require.Equal(t, "claude-code", row.ClientName.String)
+	require.Equal(t, "2.1.0", row.ClientVersion.String)
+}
+
+// An anonymous caller's report leaves out everything nobody told the gateway.
+func TestRecorderSubmitLeavesOutWhatIsUnknown(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := seedRemoteBackedServer(t, ctx, ti)
+	recorder := newTestRecorder(t, ti, noLimits)
+
+	anonymous := mcpfeedback.Caller{SessionID: "", UserID: "", UserEmail: "", ExternalUserID: "", ClientName: "", ClientVersion: ""}
+	praise := mcpfeedback.Report{Content: "The tool descriptions are clear.", Severity: mcpfeedback.SeverityUnspecified, Workaround: "", Intention: "", ToolName: "", Model: ""}
+	_, err := recorder.Submit(ctx, targetOf(t, ctx, server), anonymous, praise)
+	require.NoError(t, err)
+
+	rows := storedFeedback(t, ctx, ti, server)
+	require.Len(t, rows, 1)
+	require.False(t, rows[0].Severity.Valid)
+	require.False(t, rows[0].ToolName.Valid)
+	require.False(t, rows[0].SessionID.Valid)
+	require.False(t, rows[0].UserID.Valid)
+	require.False(t, rows[0].UserEmail.Valid)
+}
+
+func TestRecorderSubmitMasksSecretsAndPersonalData(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := seedRemoteBackedServer(t, ctx, ti)
+	recorder := newTestRecorder(t, ti, noLimits)
+
+	const secret = "sk-proj-abcdefghijklmnopqrstuvwxyz0123456789ABCD"
+	report := sampleReport()
+	report.Content = "The call failed with key " + secret + " for jane@customer.example."
+	report.Workaround = "Retried with " + secret + "."
+
+	_, err := recorder.Submit(ctx, targetOf(t, ctx, server), sampleCaller(), report)
+	require.NoError(t, err)
+
+	rows := storedFeedback(t, ctx, ti, server)
+	require.Len(t, rows, 1)
+	for _, stored := range []string{rows[0].Content, rows[0].Workaround.String} {
+		require.NotContains(t, stored, secret)
+		require.Contains(t, stored, "[REDACTED]")
+	}
+	require.NotContains(t, rows[0].Content, "jane@customer.example")
+}
+
+// Masking can lengthen a field, and the stored value must still fit its column.
+func TestRecorderSubmitCutsMaskedTextBackToItsLimit(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := seedRemoteBackedServer(t, ctx, ti)
+	recorder := mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, replacingRedactor{}, noLimits)
+
+	_, err := recorder.Submit(ctx, targetOf(t, ctx, server), sampleCaller(), sampleReport())
+	require.NoError(t, err)
+
+	rows := storedFeedback(t, ctx, ti, server)
+	require.Len(t, rows, 1)
+	require.Len(t, []rune(rows[0].Content), mcpfeedback.MaxContentLength)
+	require.Len(t, []rune(rows[0].Workaround.String), mcpfeedback.MaxWorkaroundLength)
+	require.Len(t, []rune(rows[0].ToolName.String), mcpfeedback.MaxReportedToolNameLength)
+	require.Len(t, []rune(rows[0].Model.String), mcpfeedback.MaxModelLength)
+}
+
+// replacingRedactor stands in for a scan that replaced short text with long markers.
+type replacingRedactor struct{}
+
+func (replacingRedactor) Text(_ context.Context, _ string) (string, bool, error) {
+	masked := make([]rune, mcpfeedback.MaxContentLength+50)
+	for i := range masked {
+		masked[i] = 'x'
+	}
+	return string(masked), true, nil
+}
+
+// failingRedactor stands in for a secret scan that could not complete.
+type failingRedactor struct{}
+
+func (failingRedactor) Text(context.Context, string) (string, bool, error) {
+	return "", false, errors.New("scan failed")
+}
+
+func TestRecorderSubmitStoresNothingWhenTheScanFails(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := seedRemoteBackedServer(t, ctx, ti)
+	recorder := mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, failingRedactor{}, noLimits)
+
+	_, err := recorder.Submit(ctx, targetOf(t, ctx, server), sampleCaller(), sampleReport())
+	require.ErrorContains(t, err, "redact feedback")
+
+	require.Empty(t, storedFeedback(t, ctx, ti, server))
+}
+
+func TestRecorderLimitsEachCallerAndEachServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := seedRemoteBackedServer(t, ctx, ti)
+	other := seedRemoteBackedServer(t, ctx, ti)
+
+	// Every test shares one Redis, so each gets its own buckets.
+	store := ratelimit.NewRedisStore(ti.redis)
+	limits := mcpfeedback.Limits{
+		Caller: ratelimit.New(store, mcpfeedback.CallerLimitName+":"+uuid.NewString(), ratelimit.PerMinute(2)),
+		Server: ratelimit.New(store, mcpfeedback.ServerLimitName+":"+uuid.NewString(), ratelimit.PerMinute(3)),
+	}
+	recorder := newTestRecorder(t, ti, limits)
+	target := targetOf(t, ctx, server)
+
+	priya := sampleCaller()
+	for range 2 {
+		_, err := recorder.Submit(ctx, target, priya, sampleReport())
+		require.NoError(t, err)
+	}
+	_, err := recorder.Submit(ctx, target, priya, sampleReport())
+	require.ErrorIs(t, err, mcpfeedback.ErrRateLimited, "the caller's third report in a minute is refused")
+
+	// A refused caller did not use up the server's allowance.
+	sam := sampleCaller()
+	sam.UserID = "user-2"
+	_, err = recorder.Submit(ctx, target, sam, sampleReport())
+	require.NoError(t, err)
+
+	// The server has now accepted three, so a caller with room of their own is refused.
+	lee := sampleCaller()
+	lee.UserID = "user-3"
+	_, err = recorder.Submit(ctx, target, lee, sampleReport())
+	require.ErrorIs(t, err, mcpfeedback.ErrRateLimited)
+
+	// Limits are per server: the same people can still report on another one.
+	_, err = recorder.Submit(ctx, targetOf(t, ctx, other), priya, sampleReport())
+	require.NoError(t, err)
+
+	require.Len(t, storedFeedback(t, ctx, ti, server), 3)
+	require.Len(t, storedFeedback(t, ctx, ti, other), 1)
+}
+
+// A caller nobody can tell apart is bounded by the server's limit alone.
+func TestRecorderLimitsAnonymousCallersByServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := seedRemoteBackedServer(t, ctx, ti)
+
+	store := ratelimit.NewRedisStore(ti.redis)
+	limits := mcpfeedback.Limits{
+		Caller: ratelimit.New(store, mcpfeedback.CallerLimitName+":"+uuid.NewString(), ratelimit.PerMinute(1)),
+		Server: ratelimit.New(store, mcpfeedback.ServerLimitName+":"+uuid.NewString(), ratelimit.PerMinute(2)),
+	}
+	recorder := newTestRecorder(t, ti, limits)
+	anonymous := mcpfeedback.Caller{SessionID: "", UserID: "", UserEmail: "", ExternalUserID: "", ClientName: "", ClientVersion: ""}
+
+	for range 2 {
+		_, err := recorder.Submit(ctx, targetOf(t, ctx, server), anonymous, sampleReport())
+		require.NoError(t, err)
+	}
+	_, err := recorder.Submit(ctx, targetOf(t, ctx, server), anonymous, sampleReport())
+	require.ErrorIs(t, err, mcpfeedback.ErrRateLimited)
+}
+
+// A credentialed caller from another organization is named nowhere, and still
+// has a bucket of its own.
+func TestRecorderLimitsACallerItDoesNotName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := seedRemoteBackedServer(t, ctx, ti)
+
+	store := ratelimit.NewRedisStore(ti.redis)
+	limits := mcpfeedback.Limits{
+		Caller: ratelimit.New(store, mcpfeedback.CallerLimitName+":"+uuid.NewString(), ratelimit.PerMinute(1)),
+		Server: ratelimit.New(store, mcpfeedback.ServerLimitName+":"+uuid.NewString(), ratelimit.PerMinute(10)),
+	}
+	recorder := newTestRecorder(t, ti, limits)
+	outsider := mcpfeedback.Caller{SessionID: "", UserID: "", UserEmail: "", ExternalUserID: "", ClientName: "", ClientVersion: "", LimitSubject: "user-from-another-org"}
+
+	_, err := recorder.Submit(ctx, targetOf(t, ctx, server), outsider, sampleReport())
+	require.NoError(t, err)
+	_, err = recorder.Submit(ctx, targetOf(t, ctx, server), outsider, sampleReport())
+	require.ErrorIs(t, err, mcpfeedback.ErrRateLimited)
+
+	rows := storedFeedback(t, ctx, ti, server)
+	require.Len(t, rows, 1)
+	require.False(t, rows[0].UserID.Valid)
+	require.False(t, rows[0].ExternalUserID.Valid)
+}
+
+func TestRecorderCallAnswersWithAToolResult(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := seedRemoteBackedServer(t, ctx, ti)
+
+	store := ratelimit.NewRedisStore(ti.redis)
+	limits := mcpfeedback.Limits{
+		Caller: ratelimit.New(store, mcpfeedback.CallerLimitName+":"+uuid.NewString(), ratelimit.PerMinute(1)),
+		Server: nil,
+	}
+	recorder := newTestRecorder(t, ti, limits)
+	target := targetOf(t, ctx, server)
+
+	invalid := recorder.Call(ctx, target, sampleCaller(), json.RawMessage(`{"severity":"blocked"}`))
+	require.True(t, invalid.IsError)
+	require.Equal(t, "Feedback was not recorded: content is required.", invalid.Text)
+	require.Nil(t, invalid.Structured)
+	require.Empty(t, storedFeedback(t, ctx, ti, server), "a refused report is not stored")
+
+	accepted := recorder.Call(ctx, target, sampleCaller(), json.RawMessage(`{"content":"search_logs timed out.","severity":"blocked","tool":"search_logs"}`))
+	require.False(t, accepted.IsError)
+	rows := storedFeedback(t, ctx, ti, server)
+	require.Len(t, rows, 1)
+	require.Equal(t, "Feedback received (reference "+rows[0].ID.String()+"). No follow-up will reach this session.", accepted.Text)
+	require.JSONEq(t, `{"id":"`+rows[0].ID.String()+`","status":"received"}`, string(accepted.Structured))
+
+	// An invalid report is refused before it is charged to the caller's limit,
+	// so the one above did not count; this second valid one is over it.
+	limited := recorder.Call(ctx, target, sampleCaller(), json.RawMessage(`{"content":"Another problem."}`))
+	require.True(t, limited.IsError)
+	require.Equal(t, "Feedback was sent too often just now. Wait a minute before sending more.", limited.Text)
+	require.Nil(t, limited.Structured)
+	require.Len(t, storedFeedback(t, ctx, ti, server), 1)
+}
+
+func TestRecorderCallDoesNotLeakWhyStoringFailed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := seedRemoteBackedServer(t, ctx, ti)
+	recorder := mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, failingRedactor{}, noLimits)
+
+	failed := recorder.Call(ctx, targetOf(t, ctx, server), sampleCaller(), json.RawMessage(`{"content":"A problem."}`))
+	require.True(t, failed.IsError)
+	require.Equal(t, "Feedback could not be recorded right now. Try again later.", failed.Text)
+}
