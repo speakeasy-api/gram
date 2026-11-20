@@ -1,10 +1,12 @@
 package remotemcp
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -13,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
@@ -20,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -28,7 +32,7 @@ import (
 // resourceClient is a remote session client registered for the resource a
 // remote MCP server serves.
 type resourceClient struct {
-	client remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerRow
+	client remotesessionsrepo.ListReachableRemoteSessionClientsRow
 }
 
 // resourceDisplay is what a client records about its resource's RFC 9728
@@ -85,43 +89,30 @@ func recordedDisplay(c remotesessionsrepo.RemoteSessionClient) resourceDisplay {
 // populated client behind on the slashless URL where no later move finds it.
 // Returns the clients whose members discovery should fill after commit.
 func (s *Service) claimProtectedResource(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, serverID uuid.UUID, previousURL, resourceURL string) ([]resourceClient, error) {
-	projectID := *authCtx.ProjectID
-	registrations, err := platformrepo.New(dbtx).ListPlatformMCPCatalogRegistrationsByRemoteMcpServer(ctx, platformrepo.ListPlatformMCPCatalogRegistrationsByRemoteMcpServerParams{
-		RemoteMcpServerID: conv.ToNullUUID(serverID),
-		OrganizationID:    authCtx.ActiveOrganizationID,
-		ProjectID:         projectID,
-	})
+	offered, err := catalogResourceOffers(ctx, dbtx, authCtx, serverID)
 	if err != nil {
-		return nil, fmt.Errorf("list platform mcp registrations for remote server: %w", err)
+		return nil, err
 	}
-
 	var clients []resourceClient
+	seen := make(map[uuid.UUID]bool)
 	q := remotesessionsrepo.New(dbtx)
-	for _, registration := range registrations {
-		if !registration.UserSessionIssuerID.Valid {
-			continue
-		}
-		bound, err := q.ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerParams{
-			UserSessionIssuerID: registration.UserSessionIssuerID.UUID,
-			ProjectID:           conv.ToNullUUID(projectID),
-			OrganizationID:      conv.ToPGText(authCtx.ActiveOrganizationID),
-			OrganizationWide:    false,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("list registration clients: %w", err)
-		}
-		for _, row := range bound {
+	for _, registrations := range offered {
+		for _, row := range registrations {
+			if seen[row.ClientID] {
+				continue
+			}
 			recorded := conv.FromPGTextOrEmpty[string](row.ResourceIdentifier)
-			switch {
-			case recorded == resourceURL:
-				if !recordedRowDisplay(row).hasMembers() {
-					clients = append(clients, resourceClient{client: row})
-				}
-			case recorded == previousURL || (recorded == "" && len(bound) == 1):
+			if (recorded == resourceURL && !recordedRowDisplay(row).hasMembers()) ||
+				(recorded != resourceURL && (recorded == previousURL || (recorded == "" && len(registrations) == 1))) {
+				seen[row.ClientID] = true
 				clients = append(clients, resourceClient{client: row})
 			}
 		}
 	}
+
+	// A registration may be offered on multiple targets. Lock the distinct
+	// registrations in the same order even when their target sets differ.
+	slices.SortFunc(clients, func(a, b resourceClient) int { return bytes.Compare(a.client.ClientID[:], b.client.ClientID[:]) })
 
 	if s.beforeClaim != nil {
 		s.beforeClaim(dbtx.Conn().PgConn().PID(), previousURL)
@@ -129,11 +120,7 @@ func (s *Service) claimProtectedResource(ctx context.Context, dbtx pgx.Tx, authC
 	claim := claimOn(resourceURL)
 	claimed := make([]resourceClient, 0, len(clients))
 	for _, rc := range clients {
-		existing, err := q.GetRemoteSessionClientByID(ctx, remotesessionsrepo.GetRemoteSessionClientByIDParams{
-			ProjectID:      projectID,
-			OrganizationID: authCtx.ActiveOrganizationID,
-			ID:             rc.client.ClientID,
-		})
+		existing, err := lockResourceClient(ctx, q, authCtx, rc.client.ClientID)
 		if err != nil {
 			// A client deleted since the list is stale, not a failed save.
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -141,7 +128,10 @@ func (s *Service) claimProtectedResource(ctx context.Context, dbtx pgx.Tx, authC
 			}
 			return nil, fmt.Errorf("re-read remote session client: %w", err)
 		}
-		if recordedDisplay(existing.RemoteSessionClient) == claim {
+		if existing.UpstreamRejectedAt.Valid || existing.ResourceIdentifier != rc.client.ResourceIdentifier {
+			continue
+		}
+		if recordedDisplay(existing) == claim {
 			claimed = append(claimed, rc)
 			continue
 		}
@@ -154,6 +144,47 @@ func (s *Service) claimProtectedResource(ctx context.Context, dbtx pgx.Tx, authC
 		claimed = append(claimed, rc)
 	}
 	return claimed, nil
+}
+
+// catalogResourceOffers resolves registrations for exact live catalogue
+// targets. It only considers writable, personal registrations offered there.
+func catalogResourceOffers(ctx context.Context, tx pgx.Tx, authCtx *contextvalues.AuthContext, sourceID uuid.UUID) (map[uuid.UUID][]remotesessionsrepo.ListReachableRemoteSessionClientsRow, error) {
+	projectID, org := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+	offers, err := platformrepo.New(tx).LockPlatformMCPCatalogResourceOffers(ctx, platformrepo.LockPlatformMCPCatalogResourceOffersParams{RemoteMcpServerID: conv.ToNullUUID(sourceID), OrganizationID: org, ProjectID: projectID})
+	if err != nil {
+		return nil, fmt.Errorf("lock catalogue resource offers: %w", err)
+	}
+	idsByTarget := make(map[uuid.UUID][]uuid.UUID)
+	var ids []uuid.UUID
+	for _, offer := range offers {
+		if !offer.RemoteSessionClientID.Valid {
+			continue
+		}
+		id := offer.RemoteSessionClientID.UUID
+		if !slices.Contains(ids, id) {
+			ids = append(ids, id)
+		}
+		if !slices.Contains(idsByTarget[offer.McpServerID], id) {
+			idsByTarget[offer.McpServerID] = append(idsByTarget[offer.McpServerID], id)
+		}
+	}
+	rows, err := remotesessionsrepo.New(tx).ListReachableRemoteSessionClients(ctx, remotesessionsrepo.ListReachableRemoteSessionClientsParams{ProjectID: projectID, OrganizationID: org, RemoteSessionClientIds: ids})
+	if err != nil {
+		return nil, fmt.Errorf("list reachable catalogue registrations: %w", err)
+	}
+	byTarget := make(map[uuid.UUID][]remotesessionsrepo.ListReachableRemoteSessionClientsRow)
+	for _, row := range rows {
+		// Write-time tenant checks reject platform-global or foreign rows.
+		if row.UpstreamRejectedAt.Valid || row.CredentialOwner != string(remotesessions.CredentialOwnerSubject) {
+			continue
+		}
+		for target, ids := range idsByTarget {
+			if slices.Contains(ids, row.ClientID) {
+				byTarget[target] = append(byTarget[target], row)
+			}
+		}
+	}
+	return byTarget, nil
 }
 
 // refreshProtectedResourceDisplay re-reads the RFC 9728 document at the
@@ -198,7 +229,7 @@ func (s *Service) refreshProtectedResourceDisplay(ctx context.Context, logger *s
 	}
 }
 
-func recordedRowDisplay(row remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerRow) resourceDisplay {
+func recordedRowDisplay(row remotesessionsrepo.ListReachableRemoteSessionClientsRow) resourceDisplay {
 	return resourceDisplay{
 		identifier:    conv.FromPGTextOrEmpty[string](row.ResourceIdentifier),
 		name:          conv.FromPGTextOrEmpty[string](row.ResourceName),
@@ -217,6 +248,10 @@ func (s *Service) writeDiscoveredDisplay(ctx context.Context, authCtx *contextva
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return fmt.Errorf("lock catalogue resource offer scope: %w", err)
+	}
+
 	// Locked so a concurrent save cannot move the URL on between this check and the write.
 	server, err := repo.New(dbtx).GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{ID: serverID, ProjectID: *authCtx.ProjectID})
 	if err != nil {
@@ -226,16 +261,29 @@ func (s *Service) writeDiscoveredDisplay(ctx context.Context, authCtx *contextva
 		return nil
 	}
 
-	existing, err := remotesessionsrepo.New(dbtx).GetRemoteSessionClientByID(ctx, remotesessionsrepo.GetRemoteSessionClientByIDParams{
-		ProjectID:      *authCtx.ProjectID,
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ID:             rc.client.ClientID,
-	})
+	offered, err := catalogResourceOffers(ctx, dbtx, authCtx, serverID)
+	if err != nil {
+		return err
+	}
+	stillOffered := false
+	for _, registrations := range offered {
+		stillOffered = stillOffered || slices.ContainsFunc(registrations, func(row remotesessionsrepo.ListReachableRemoteSessionClientsRow) bool {
+			return row.ClientID == rc.client.ClientID
+		})
+	}
+	if !stillOffered {
+		return nil
+	}
+
+	existing, err := lockResourceClient(ctx, remotesessionsrepo.New(dbtx), authCtx, rc.client.ClientID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("re-read remote session client: %w", err)
 	}
-	recorded := recordedDisplay(existing.RemoteSessionClient)
-	if recorded.identifier != display.identifier || recorded == display {
+	recorded := recordedDisplay(existing)
+	if existing.UpstreamRejectedAt.Valid || recorded.identifier != display.identifier || recorded == display {
 		return nil
 	}
 	if err := s.recordResourceDisplay(ctx, dbtx, authCtx, existing, display); err != nil {
@@ -248,18 +296,20 @@ func (s *Service) writeDiscoveredDisplay(ctx context.Context, authCtx *contextva
 	return nil
 }
 
-// recordResourceDisplay writes display onto the client and audits the change.
-func (s *Service) recordResourceDisplay(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, existing remotesessionsrepo.GetRemoteSessionClientByIDRow, display resourceDisplay) error {
-	q := remotesessionsrepo.New(dbtx)
-	// This writer also moves resource_identifier, not just cosmetic fields.
-	// Serialize with first EMA binding creation, then compare the locked row.
-	before, err := q.LockEMAClient(ctx, remotesessionsrepo.LockEMAClientParams{ID: existing.RemoteSessionClient.ID, ProjectID: conv.ToNullUUID(*authCtx.ProjectID), OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID)})
+// lockResourceClient serializes display writes with EMA binding creation.
+// The lock only accepts project- and organization-owned writable clients.
+func lockResourceClient(ctx context.Context, q *remotesessionsrepo.Queries, authCtx *contextvalues.AuthContext, id uuid.UUID) (remotesessionsrepo.RemoteSessionClient, error) {
+	client, err := q.LockEMAClient(ctx, remotesessionsrepo.LockEMAClientParams{ID: id, ProjectID: conv.ToNullUUID(*authCtx.ProjectID), OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID)})
 	if err != nil {
-		return fmt.Errorf("lock client resource identity: %w", err)
+		return remotesessionsrepo.RemoteSessionClient{}, fmt.Errorf("lock client resource identity: %w", err)
 	}
-	if before.ResourceIdentifier != existing.RemoteSessionClient.ResourceIdentifier {
-		return fmt.Errorf("client resource identity changed: %w", pgx.ErrNoRows)
-	}
+	return client, nil
+}
+
+// recordResourceDisplay writes display onto the already-locked client and
+// audits the change without sourcing authority from compatibility links.
+func (s *Service) recordResourceDisplay(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, before remotesessionsrepo.RemoteSessionClient, display resourceDisplay) error {
+	q := remotesessionsrepo.New(dbtx)
 	if conv.FromPGTextOrEmpty[string](before.ResourceIdentifier) != display.identifier {
 		count, err := q.CountActiveEMABindingsForClient(ctx, remotesessionsrepo.CountActiveEMABindingsForClientParams{ClientID: conv.ToNullUUID(before.ID), ProjectID: before.ProjectID.UUID, OrganizationID: authCtx.ActiveOrganizationID})
 		if err != nil {
@@ -283,11 +333,18 @@ func (s *Service) recordResourceDisplay(ctx context.Context, dbtx pgx.Tx, authCt
 		return fmt.Errorf("update client resource display: %w", err)
 	}
 
-	beforeView, err := mv.BuildRemoteSessionClientView(before, existing.UserSessionIssuerIds)
+	// Keep existing audit snapshot semantics while compatibility links exist.
+	// This read projects the relationship into the audit event; the locked
+	// typed offer and client above are the only authority for the write.
+	auditClient, err := q.GetRemoteSessionClientByID(ctx, remotesessionsrepo.GetRemoteSessionClientByIDParams{ID: before.ID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
+	if err != nil {
+		return fmt.Errorf("read client attachment audit context: %w", err)
+	}
+	beforeView, err := mv.BuildRemoteSessionClientView(before, auditClient.UserSessionIssuerIds)
 	if err != nil {
 		return fmt.Errorf("build client view: %w", err)
 	}
-	afterView, err := mv.BuildRemoteSessionClientView(updated, existing.UserSessionIssuerIds)
+	afterView, err := mv.BuildRemoteSessionClientView(updated, auditClient.UserSessionIssuerIds)
 	if err != nil {
 		return fmt.Errorf("build client view: %w", err)
 	}
