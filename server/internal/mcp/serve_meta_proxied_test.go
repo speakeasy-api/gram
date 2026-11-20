@@ -328,14 +328,15 @@ func insertQualifiedRemoteSessionToken(
 	require.NoError(t, err)
 }
 
-// mintMetaIssuerBearer mints and persists a user-session bearer for an
-// issuer-gated meta endpoint.
+// metaServingChoice is a fixture's explicit choice for a proxied member.
 type metaServingChoice struct {
 	organizationID string
 	serverID       uuid.UUID
 	clientID       uuid.UUID // nil means explicit no-auth
 }
 
+// mintMetaIssuerBearer mints and persists a user-session bearer for an
+// issuer-gated meta endpoint.
 func mintMetaIssuerBearer(t *testing.T, ti *testInstance, metaSlug string, issuerID uuid.UUID, subject urn.SessionSubject, choices ...metaServingChoice) string {
 	t.Helper()
 
@@ -626,11 +627,11 @@ func TestServePublic_MetaEndpoint_PartialProviderConnectionsServe(t *testing.T) 
 		"the covered member must receive its own bearer")
 
 	rpc = executeMetaTool(t, ti, metaSlug, bearer, "member-a--ping")
+	require.NotEmpty(t, rpc["error"], "the unconnected member fails closed")
+	require.Zero(t, upstreamA.requestCount(), "the unconnected member must not dial")
+	rpc = executeMetaTool(t, ti, metaSlug, bearer, "member-b--ping")
 	text, isError = metaToolResultText(t, rpc)
-	require.False(t, isError, "the uncovered member must degrade to an anonymous call, not fail the session: %s", text)
-	upstreamA.requireToolCallAuth(t, "",
-		"no bearer may reach the member whose provider was never connected")
-	upstreamA.requireNeverCarried(t, "Bearer token-member-b", "member A's upstream must never see member B's bearer")
+	require.False(t, isError, "the other member keeps serving: %s", text)
 }
 
 // The proxy probes a member's protected resource metadata off the request

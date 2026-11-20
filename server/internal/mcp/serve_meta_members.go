@@ -311,9 +311,10 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 //
 // userSessionIssuerID limits legacy sign-in eligibility to the gateway's clients;
 // uuid.Nil skips issuer matching for the agent gateway and Platform MCP.
-// Enforced typed offers replace this check for proxied members; pending setup
-// retains it. A nonzero scopeProjectID restricts candidates before admission
-// and credential association for project gateways.
+// In serving, typed offers decide proxied members, and pending setup is not
+// eligible without an offer. The consent preview retains its legacy check.
+// A nonzero scopeProjectID restricts candidates before admission for project
+// gateways.
 //
 // organizationGateway drops servers backed by a toolset with Platform tools,
 // mirroring automatic plugin delivery: those toolsets serve assistants and

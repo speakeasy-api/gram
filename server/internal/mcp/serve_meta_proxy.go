@@ -344,7 +344,8 @@ func chainMetaMember(ctx context.Context, gate metaGateContext, member metaMembe
 		if held && chained == "" {
 			return routed, "", routeErr
 		}
-		routed, token, routeErr = remotesessions.UpstreamToken{}, chained, err
+		var none remotesessions.UpstreamToken
+		routed, token, routeErr = none, chained, err
 	}
 	if routeErr == nil && token == "" && member.authClient != nil && member.chosenClientID.Valid && !member.upstreamNoAuth {
 		// A named client authorizes only its own checked connection. An
