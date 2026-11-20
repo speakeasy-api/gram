@@ -121,7 +121,7 @@ func TestCreateMCPServerInTransaction_DoesNotInheritIssuerClient(t *testing.T) {
 
 			links, err = fixtures.ListServerAuthClientsFixture(ctx, second)
 			require.NoError(t, err)
-			require.Empty(t, links, "selecting the same issuer configures no offers")
+			require.Empty(t, links, "the sibling's offer cannot stamp or qualify a new server")
 			links, err = fixtures.ListServerAuthClientsFixture(ctx, first)
 			require.NoError(t, err)
 			require.Equal(t, []uuid.UUID{typedClient}, links)
