@@ -174,14 +174,14 @@ The hook stays reactive as PostHog reloads flags. On localhost, the development 
 
 ### Removing a flag after rollout
 
-A flag is removed in code first and archived in PostHog only after that code is deployed. Read the live flag before you start, and decide which behavior to keep:
+A flag is removed in code first and archived in PostHog only after that code is deployed. Read the live flag before you start, and decide which behavior to keep. Every row except the last needs the flag to be active, with no holdout, no flag dependency, and no earlier condition that serves a different value to some users:
 
-| Flag state in PostHog                                                                 | Keep                                   |
-| ------------------------------------------------------------------------------------- | -------------------------------------- |
-| Boolean, a release condition at 100% with no properties                               | The enabled path                       |
-| Multivariate with a variant override, or one variant 100%                             | That variant's path                    |
-| Inactive, or every condition at 0%                                                    | The off path (delete the feature code) |
-| Anything else: partial rollout, targeted conditions, payload, kill switch, `*-shadow` | Nothing yet. A person decides first    |
+| Flag state in PostHog                                                                                    | Keep                                   |
+| -------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| Boolean, one release condition at 100% with no properties                                                | The enabled path                       |
+| Multivariate, one condition at 100% with no properties, whose override or 100% variant serves every user | That variant's path                    |
+| Inactive, or every condition at 0%                                                                       | The off path (delete the feature code) |
+| Anything else: partial rollout, targeted conditions, payload, kill switch, `*-shadow`                    | Nothing yet. A person decides first    |
 
 Then:
 
