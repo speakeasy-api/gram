@@ -192,8 +192,7 @@ func PatternsOverlap(a, b string) bool {
 	return true
 }
 
-// patternWithin reports whether every client ID valid pattern a matches is also
-// matched by valid pattern b.
+// patternWithin reports whether valid pattern b matches every client ID valid pattern a matches.
 func patternWithin(a, b string) bool {
 	if !PatternsOverlap(a, b) {
 		return false

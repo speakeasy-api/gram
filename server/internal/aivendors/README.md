@@ -1,40 +1,44 @@
 # AI client catalog snapshots
 
 `Load` reads one database snapshot of the AI client catalog. The API, MCP
-gateway and private ingress processes ensure the bootstrap rows exist, load a
-snapshot before serving, and refuse to start when that first load fails. The
-services read an injected `Store` built from it.
+gateway and private ingress processes load it before serving. If the database
+cannot be read, the process does not start. If the catalog is empty or invalid,
+`Load` logs an error and returns `CompiledSnapshot`, the built-in catalog, so a
+fresh environment that has not run the seed takes the same path. Only the
+`ai-client-catalog` startup seed and the demo seed write catalog rows.
+
+`CompiledSnapshot` lists the built-in registry in database order, so it gives
+the same answers in the same order as a freshly seeded database.
 
 `Store.Run` refreshes the store on a minute timer. Each refresh reads live
 products and documents in a read-only, repeatable-read transaction. A full
 content fingerprint detects changes, including edits that do not update
-timestamps. The catalog is small, so the reader fetches its contents instead of
-relying on a timestamp watermark. A failed refresh, or one that panics, keeps
-the previous snapshot. Each pod refreshes on its own timer, so for up to a
-minute after an edit pods can serve different snapshots. Cancelling the context
-stops the refresh loop.
+timestamps. A refresh that fails, panics, or finds an empty or invalid catalog
+keeps the current snapshot. The first refresh that validates replaces the
+built-in catalog. Each pod refreshes on its own timer, so for up to a minute
+after an edit pods can serve different snapshots.
 
-Every load runs `Validate`, then a consumer validator, before a snapshot is
-published. `Validate` rejects an empty catalog, products over the caps, a
-scanned product without a category, and two enabled patterns of different
-products that one client ID can match, unless one pattern is strictly narrower.
-Pattern hosts are not tied to the hosts a vendor already uses.
+Every load rejects an empty catalog, more products, documents per product or
+client info names than the caps, and two enabled patterns of different products
+that one client ID can match unless one is strictly narrower. Then the consumer
+validator runs. Pattern hosts are not tied to the hosts a vendor already uses.
 
-`ai_catalog.refresh.failures` counts failed refreshes and
-`ai_catalog.snapshot.age` reports how long ago the served snapshot last matched
-the database. A skipped row or a repeated refresh error is logged when it first
-appears, not every minute.
+Metrics: `ai_catalog.refresh.failures` counts failed refreshes,
+`ai_catalog.snapshot.age` is the seconds since the served snapshot last matched
+the database, and `ai_catalog.built_in` is 1 while a process serves the
+built-in catalog. A skipped row is logged by the load that first sees it, and a
+refresh error is logged when it changes, not every minute.
 
 Snapshots own their data and return copies. A compound operation should capture
 one snapshot and use it throughout. Snapshots keep input order for products
-and listings. Exact URLs win over patterns; among matching patterns the one with
-the most literal path segments wins, then the lower URL, then the lower product
-id, so input order never decides attribution. Listing order is content, so it is
-part of the fingerprint. Database reads sort by id, then URL, in byte order.
-The database's `is_pattern` discriminator is authoritative. Invalid patterns
-are logged and omitted from all projections; that is a successful partial load,
-distinct from a database failure. An empty catalog is rejected, so soft-deleting
-every product keeps the last snapshot.
+and listings; database reads sort by id, then URL, in byte order. Listing order
+is content, so it is part of the fingerprint. Exact URLs win over patterns;
+among matching patterns the one with the most literal path segments wins.
+Validation keeps overlapping patterns of different products strictly nested,
+so a tie can only be between one product's own patterns, and goes to the lower
+URL. The database's `is_pattern` discriminator is authoritative. Invalid
+patterns are logged and omitted from all projections; that is a successful
+partial load, distinct from a database failure.
 
 Full fingerprints drive refresh detection. The device scan list version is
 derived from the served targets in `agent/aitargets`, not from the snapshot.

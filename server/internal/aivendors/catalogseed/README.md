@@ -18,8 +18,9 @@ mise exec -- aube exec oxfmt -- --write server/internal/aivendors/catalogseed/ca
 Production is the source of truth after bootstrap. The seed only inserts, so a
 registry change reaches existing rows only as new products or documents. New
 clients belong in the admin review queue. API, MCP, and private ingress
-processes synchronously ensure reference data and load a database snapshot
-before serving. They refresh that snapshot about once a minute.
+processes load a database snapshot before serving and refresh it about once a
+minute. They do not write catalog rows; until this seed has run they serve the
+built-in catalog.
 
 The `ai-client-catalog` startup seed hashes the embedded file and its application
 revision. Workers apply each version through the existing startup workflow.
@@ -71,8 +72,8 @@ This checks reference integrity, not product liveness: staff deletions remain
 authoritative and must not make demo provisioning fail.
 Isolated demo tests seed the global catalog before taking their safety baseline.
 
-Platform MCP needs no new tool for process-startup initialization of global
-reference data or the worker-owned decision backfill. The existing Shadow AI
+Platform MCP needs no new tool for this worker-owned initialization of global
+reference data or the decision backfill. The existing Shadow AI
 inventory/library and client admission tools retain their readers, permissions
 and result contracts. Catalog and decision integration tests verify persistence
 and refreshed reader behavior.
