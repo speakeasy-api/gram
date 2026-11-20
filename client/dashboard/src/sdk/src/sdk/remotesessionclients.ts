@@ -105,6 +105,8 @@ export class RemoteSessionClients extends ClientSDK {
    *
    * @remarks
    * Attach a user_session_issuer to a remote_session_client by recording the binding in the join table. Rejected when another client is already bound to the same user_session_issuer for this client's remote_session_issuer.
+   *
+   * @deprecated method: This will be removed in a future release, please migrate away from it as soon as possible.
    */
   async attachUserSessionIssuer(
     request: AttachUserSessionIssuerRequest,
@@ -200,6 +202,8 @@ export class RemoteSessionClients extends ClientSDK {
    *
    * @remarks
    * Detach a user_session_issuer from a remote_session_client by removing the binding from the join table. A no-op when the binding does not exist.
+   *
+   * @deprecated method: This will be removed in a future release, please migrate away from it as soon as possible.
    */
   async detachUserSessionIssuer(
     request: DetachUserSessionIssuerRequest,

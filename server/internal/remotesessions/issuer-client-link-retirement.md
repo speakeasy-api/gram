@@ -1,0 +1,20 @@
+# Retiring direct issuer-to-client links (AIM-1153)
+
+These RPCs manage or report links between downstream sign-in issuers and upstream OAuth registrations:
+
+- `POST /rpc/remoteSessionClients.attachUserSessionIssuer`
+- `POST /rpc/remoteSessionClients.detachUserSessionIssuer`
+- `GET /rpc/organizationUserSessionIssuers.listRemoteSessionClientBindings`
+
+These links are not a source of truth for a server's typed upstream offers. Choose a replacement based on the operation, not the old link:
+
+- Keep downstream sign-in issuer configuration and hosted OAuth separate from upstream offers.
+- Use a server's typed choices to inspect its upstream offers. Use the typed attach and detach operations only when editing offers on that specific proxied server. A member offer can also be visible through other gateways; do not use it to emulate gateway-local access. Do not delete a registration to remove an offer or a downstream association.
+- Use the principal binding API for an agent's exact session attachment. Detaching an upstream offer is not an agent-session detach.
+
+## Rollout order
+
+1. Publish the deprecation markers while retaining the old request and response contracts and the guarded unlink behavior. No sunset clock starts with the markers alone.
+2. Verify that the replacement flows preserve gateway scope, hosted sign-in, and exact principal attachments. Ship the dashboard migration while both contracts are available. Keep the legacy endpoints on all serving server versions until the new dashboard can use the replacement on every server it can reach, old dashboard clients have drained, and the rollback dashboard no longer calls the legacy endpoints. Keep the legacy endpoints through the supported rollback period.
+3. The API owner must verify supported SDK versions and direct RPC support, and attribute remaining traffic. If supported clients still use the old contract, publish migration guidance and an agreed sunset date through their support channels. The proposed minimum notice is 30 calendar days from delivery of that guidance, or longer if support policy or an agreement requires it. Do not retire a route while a supported caller still depends on it or while traffic remains unexplained. Sampled trace counts alone are not evidence that callers have drained.
+4. Retire the three routes and regenerate contracts in a separate release after the gates above. Verify that none of the old routes can mutate legacy links and that each of the three supported capabilities above still works. Do not combine route retirement with schema removal. If route retirement must be rolled back, restore a server version with the guarded legacy handlers, not an unguarded junction writer.
