@@ -50,7 +50,6 @@ function show(): void {
     <MemoryRouter>
       <OktaOverview
         connection={{ kind: "not-connected" }}
-        emaReturn={undefined}
         mcpAuthenticationHref="/org/user-session-issuers"
       />
     </MemoryRouter>,

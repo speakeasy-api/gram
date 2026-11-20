@@ -62,6 +62,11 @@ describe("normalizeIssuer", () => {
       "https://example.com/oauth2/default",
       "https://example.com/oauth2/default",
     ],
+    [
+      "https://acme.okta.com/oauth2/default",
+      "https://acme.okta.com/oauth2/default",
+    ],
+    ["https://acme-admin.okta.com/admin/dashboard", "https://acme.okta.com"],
   ])("reads %s as %s", (address, issuer) => {
     expect(normalizeIssuer(address)).toBe(issuer);
   });
