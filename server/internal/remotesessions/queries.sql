@@ -2382,18 +2382,30 @@ WHERE m.id = @mcp_server_id
   AND m.project_id = @project_id
   AND m.deleted IS FALSE;
 
--- name: ListRemoteServerURLsForUserSessionIssuer :many
--- The upstream URLs of the project's remote-backed MCP servers that sign in
--- through a user session issuer, each with the resource its cached protected
--- resource document names, or empty. Identity chaining finds a binding's server by
--- either value, then keys the resource row by the URL as logins do.
+-- name: ListRemoteServerURLsForOfferedClient :many
+-- Direct-login servers that actually offer the binding's registration. The
+-- resource document is resolved from the target URL, not another offer's URL.
 SELECT rms.url, COALESCE(rpr.metadata->>'resource', '')::text AS document_resource
 FROM mcp_servers AS m
+JOIN projects AS p ON p.id = m.project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
 JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
-LEFT JOIN remote_protected_resources AS rpr ON rpr.project_id = m.project_id AND rpr.resource_identifier = rms.url AND rpr.deleted IS FALSE
+LEFT JOIN remote_protected_resources AS rpr ON rpr.project_id = m.project_id AND rpr.organization_id = p.organization_id AND rpr.resource_identifier = rms.url AND rpr.deleted IS FALSE
 WHERE m.project_id = @project_id
   AND m.user_session_issuer_id = @user_session_issuer_id
-  AND m.deleted IS FALSE;
+  AND (sqlc.narg(mcp_server_id)::uuid IS NULL OR m.id = sqlc.narg(mcp_server_id)::uuid)
+  AND m.deleted IS FALSE
+  AND m.visibility <> 'disabled'
+  AND EXISTS (
+    SELECT 1
+    FROM mcp_server_auth_clients AS offer
+    JOIN mcp_auth_clients AS ac ON ac.id = offer.auth_client_id
+      AND ac.organization_id = offer.organization_id
+      AND (ac.project_id IS NULL OR ac.project_id = offer.project_id)
+      AND ac.deleted IS FALSE AND ac.enabled AND ac.client_type IN ('remote_session', 'ema')
+    WHERE offer.mcp_server_id = m.id AND offer.project_id = m.project_id
+      AND offer.organization_id = p.organization_id AND offer.deleted IS FALSE
+      AND ac.remote_session_client_id = @remote_session_client_id
+  );
 
 -- name: ListRemoteSessionsByProjectID :many
 -- A project can reach a session only when both its provenance issuer and its
@@ -7429,3 +7441,12 @@ WHERE offer.organization_id = @organization_id::text AND offer.mcp_server_id <> 
   AND NOT offer.deleted AND NOT ac.deleted AND ac.enabled
   AND ac.client_type IN ('remote_session', 'service_account') AND ac.remote_session_client_id = @remote_session_client_id::uuid
 ORDER BY offer.mcp_server_id;
+
+-- name: ListIdentityReplacementTargets :many
+-- The affected servers in the caller's project. Callers still check read grants.
+SELECT s.id, s.toolset_id, s.name, s.slug, p.name AS project_name
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id AND NOT p.deleted
+WHERE p.organization_id = @organization_id::text AND s.project_id = @project_id::uuid
+  AND s.id = ANY(@server_ids::uuid[]) AND NOT s.deleted
+ORDER BY s.id;

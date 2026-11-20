@@ -188,10 +188,20 @@ export function serverSignIns(
   );
   if (personal.some((client) => !client.remoteSessionClientId))
     return undefined;
-  return personal.map((client) => ({
-    id: client.remoteSessionClientId!,
+  const byRegistration = new Map<string, string | null>();
+  for (const client of personal) {
+    const id = client.remoteSessionClientId!;
+    const name = client.name || null;
+    const previous = byRegistration.get(id);
+    byRegistration.set(
+      id,
+      previous === undefined || previous === name ? name : null,
+    );
+  }
+  return [...byRegistration].map(([id, name]) => ({
+    id,
     credentialOwner: "subject",
-    name: client.name,
+    name: name ?? undefined,
   }));
 }
 

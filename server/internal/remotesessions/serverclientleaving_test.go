@@ -13,6 +13,7 @@ import (
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -76,6 +77,7 @@ func TestLeavingStopsRequiringAClientAGatewayKeepsBound(t *testing.T) {
 	createImpactGateway(t, ctx, ti, "leaving-gateway-stops", issuer)
 	provider := createServerIdentityProvider(t, ctx, ti, "leaving-gateway-stops-provider", "", false, []string{"none"})
 	client := commitManualClient(t, ctx, ti, target, provider, "leaving-gateway-stops-client")
+	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client, UserSessionIssuerID: issuer}))
 	requireServerRequires(t, ctx, ti, manager, target, issuer, client)
 
 	preview, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(issuer, &target, "detach", nil, nil))
@@ -87,9 +89,8 @@ func TestLeavingStopsRequiringAClientAGatewayKeepsBound(t *testing.T) {
 	requireClientBound(t, ctx, ti, client, issuer, true)
 }
 
-// Servers sharing a client nobody has an association with each fall back to it,
-// so one leaving keeps the client bound and only stops requiring it itself.
-func TestLeavingAnUnclaimedClientOnlyAffectsThisServer(t *testing.T) {
+// A fallback client is not a server association that this API can detach.
+func TestCannotDetachAnUnclaimedClientFromAServer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -108,17 +109,15 @@ func TestLeavingAnUnclaimedClientOnlyAffectsThisServer(t *testing.T) {
 	require.Empty(t, preview.DetachClientIds)
 	require.Equal(t, []string{client.String()}, preview.ReleaseClientIds)
 	require.Empty(t, preview.Servers, "the other server keeps its sign-in")
-	require.NoError(t, detachServerClient(ctx, ti, first, client))
+	requireOopsCode(t, detachServerClient(ctx, ti, first, client), oops.CodeNotFound)
 
-	requireServerRequires(t, ctx, ti, manager, first, issuer)
+	requireServerRequires(t, ctx, ti, manager, first, issuer, client)
 	requireServerRequires(t, ctx, ti, manager, second, issuer, client)
 	requireClientBound(t, ctx, ti, client, issuer, true)
-
-	requireOopsCode(t, detachServerClient(ctx, ti, first, client), oops.CodeNotFound)
 }
 
 // Dropping a server's own client must not hand it the unclaimed one beside it.
-func TestLeavingGivesUpUnclaimedClientsBesideTheServersOwn(t *testing.T) {
+func TestLeavingDetachesOnlyTheServersOwnOffer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -141,8 +140,8 @@ func TestLeavingGivesUpUnclaimedClientsBesideTheServersOwn(t *testing.T) {
 	require.NoError(t, detachServerClient(ctx, ti, target, own))
 	requireServerRequires(t, ctx, ti, manager, target, issuer, unclaimed)
 
-	require.NoError(t, detachServerClient(ctx, ti, target, unclaimed))
-	requireServerRequires(t, ctx, ti, manager, target, issuer)
+	requireOopsCode(t, detachServerClient(ctx, ti, target, unclaimed), oops.CodeNotFound)
+	requireClientBound(t, ctx, ti, unclaimed, issuer, true)
 }
 
 // An explicit detach is a record of the past, not a refusal of the future.
@@ -158,6 +157,7 @@ func TestAssociatingAfterLeavingRequiresTheClientAgain(t *testing.T) {
 	target := createServerIdentityTargetOnIssuer(t, ctx, ti, "leaving-return-target", issuer)
 	createServerIdentityTargetOnIssuer(t, ctx, ti, "leaving-return-sibling", issuer)
 
+	associateServerClient(t, ctx, ti, target, client)
 	require.NoError(t, detachServerClient(ctx, ti, target, client))
 	requireServerRequires(t, ctx, ti, manager, target, issuer)
 

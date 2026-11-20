@@ -39,7 +39,7 @@ func TestClientBindingWritersReachEveryProjectOnAnOrganizationIssuer(t *testing.
 		require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, other))
 	})
 
-	t.Run("detaching prunes the client from another project's server", func(t *testing.T) {
+	t.Run("detaching leaves another project's explicit offer", func(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestService(t)
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -62,8 +62,8 @@ func TestClientBindingWritersReachEveryProjectOnAnOrganizationIssuer(t *testing.
 		})
 		require.NoError(t, err)
 
-		require.Empty(t, associatedClients(t, ctx, ti.conn, otherProject, other))
-		require.Empty(t, offeredAuthClients(t, ctx, ti.conn, other))
+		require.Equal(t, []uuid.UUID{client}, associatedClients(t, ctx, ti.conn, otherProject, other))
+		require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, other))
 	})
 }
 

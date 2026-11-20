@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/tombstone"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -141,7 +142,8 @@ func TestDeleteMetaMcpServer_KeepsAnIssuerAnotherGatewayUses(t *testing.T) {
 	})
 	require.NoError(t, err)
 	otherServer := seedMcpServer(t, ctx, ti.conn, projectID)
-	stampAndWireMemberClient(t, ctx, ti.conn, projectID, orgID, otherServer, createRemoteSessionClient(t, ctx, ti.conn, projectID, orgID, providerID, "lifecycle-survivor-client"))
+	survivingClient := createRemoteSessionClient(t, ctx, ti.conn, projectID, orgID, providerID, "lifecycle-survivor-client")
+	stampAndWireMemberClient(t, ctx, ti.conn, projectID, orgID, otherServer, survivingClient)
 	_, err = ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
 		SessionToken:     nil,
 		ApikeyToken:      nil,
@@ -159,6 +161,9 @@ func TestDeleteMetaMcpServer_KeepsAnIssuerAnotherGatewayUses(t *testing.T) {
 		ProjectSlugInput: nil,
 	}))
 
-	require.Equal(t, 1, countGatewayClientsForUpstream(t, ctx, ti.conn, projectID, orgID, gatewayIssuerID, providerID), "the other gateway's member still fronts the provider")
+	offers, err := upstreamclientsrepo.New(ti.conn).ListMCPServerRemoteSessionClients(ctx, upstreamclientsrepo.ListMCPServerRemoteSessionClientsParams{McpServerID: otherServer, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Len(t, offers, 1)
+	require.Equal(t, survivingClient, offers[0].RemoteSessionClientID)
 	require.True(t, issuerLive(t, ctx, ti, gatewayIssuerID), "the other gateway still uses the issuer")
 }

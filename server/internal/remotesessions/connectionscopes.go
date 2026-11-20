@@ -121,69 +121,41 @@ type BindingConnection struct {
 	// does for logins.
 	Discover bool
 
-	// FromAssociations attaches each client to the servers it is associated
-	// with when ownership of the resource is decided, instead of every server
-	// on the user session issuers it is bound to.
-	FromAssociations bool
+	// MCPServerID optionally scopes evidence to the exact inspected server.
+	MCPServerID uuid.UUID
 }
 
-// ConnectionScopes resolves, from cached rows only, what a sign-in through
-// the binding's client on its server requests. The server is the one
-// remote-backed MCP server signing in through the binding's user session
-// issuer whose URL, or cached protected resource document, names the
-// binding's resource; its resource row is keyed by that URL, as logins and
-// the server scopes view key it. The result is nil when the client is not
-// linked to the user session issuer or no single server matches: the binding
-// then has no connection to follow.
-//
-// Only servers signing in directly through the binding's user session issuer
-// are considered. A gateway member qualified through a different direct-login
-// issuer signs in under that member's resource policy, which this does not
-// resolve, so such a binding records the request's scopes.
+// ConnectionScopes resolves cached scopes for the exact remote resource and
+// offered client. An issuer/client compatibility row is not an offer. A
+// gateway-only or unmatched binding keeps its recorded/requested scopes.
 func ConnectionScopes(ctx context.Context, db repo.DBTX, b BindingConnection) (*ScopeResolution, error) {
 	q := repo.New(db)
-	rows, err := q.ListRemoteSessionClientsForUserSessionIssuer(ctx, repo.ListRemoteSessionClientsForUserSessionIssuerParams{
-		UserSessionIssuerID: b.UserSessionIssuerID,
-		ProjectID:           conv.ToNullUUID(b.ProjectID),
-		OrganizationID:      conv.ToPGText(b.OrganizationID),
-		// A binding always belongs to one project.
-		OrganizationWide: false,
+	servers, err := q.ListRemoteServerURLsForOfferedClient(ctx, repo.ListRemoteServerURLsForOfferedClientParams{
+		OrganizationID: b.OrganizationID, ProjectID: b.ProjectID,
+		UserSessionIssuerID:   conv.ToNullUUID(b.UserSessionIssuerID),
+		McpServerID:           uuid.NullUUID{UUID: b.MCPServerID, Valid: b.MCPServerID != uuid.Nil},
+		RemoteSessionClientID: conv.ToNullUUID(b.ClientID),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("list remote session clients: %w", err)
-	}
-	ids := make([]uuid.UUID, 0, len(rows))
-	var row *repo.ListRemoteSessionClientsForUserSessionIssuerRow
-	for i := range rows {
-		ids = append(ids, rows[i].ClientID)
-		if rows[i].ClientID == b.ClientID {
-			row = &rows[i]
-		}
-	}
-	if row == nil {
-		return nil, nil
-	}
-	servers, err := q.ListRemoteServerURLsForUserSessionIssuer(ctx, repo.ListRemoteServerURLsForUserSessionIssuerParams{ProjectID: b.ProjectID, UserSessionIssuerID: conv.ToNullUUID(b.UserSessionIssuerID)})
-	if err != nil {
-		return nil, fmt.Errorf("list remote server urls: %w", err)
+		return nil, fmt.Errorf("list remote URLs offering the binding's client: %w", err)
 	}
 	resourceURL, ok := bindingServerURL(servers, b.Resource)
 	if !ok {
+		return nil, nil
+	}
+	clients, err := q.ListReachableRemoteSessionClients(ctx, repo.ListReachableRemoteSessionClientsParams{ProjectID: b.ProjectID, OrganizationID: b.OrganizationID, RemoteSessionClientIds: []uuid.UUID{b.ClientID}})
+	if err != nil {
+		return nil, fmt.Errorf("read offered registration: %w", err)
+	}
+	if len(clients) != 1 || clients[0].UpstreamRejectedAt.Valid {
 		return nil, nil
 	}
 	cached, _, err := CachedResourceScopes(ctx, db, b.ProjectID, resourceURL, b.Discover)
 	if err != nil {
 		return nil, err
 	}
-	owns := false
-	if b.Discover {
-		owners, err := ResourceOwnersAmong(ctx, db, b.OrganizationID, ids, resourceURL, b.FromAssociations)
-		if err != nil {
-			return nil, fmt.Errorf("decide resource ownership: %w", err)
-		}
-		owns = owners[b.ClientID]
-	}
-	resolution := ClientConnectionScopes(ConnectionScopeInputFromClientRow(*row), cached, owns)
+	client := clients[0]
+	resolution := ClientConnectionScopes(ConnectionScopeInput{ClientID: client.ClientID, ClientScope: client.ClientScope, IssuerScopesSupported: client.ScopesSupported, IssuerScopeOverride: client.ScopeOverride, IssuerOmitScopeFallback: client.OmitScopeFallback.Valid && client.OmitScopeFallback.Bool}, cached, true)
 	return &resolution, nil
 }
 
@@ -206,7 +178,7 @@ func ServesBindingResource(serverURL, documentResource, resource string) bool {
 }
 
 // bindingServerURL is the one server URL that serves resource.
-func bindingServerURL(servers []repo.ListRemoteServerURLsForUserSessionIssuerRow, resource string) (string, bool) {
+func bindingServerURL(servers []repo.ListRemoteServerURLsForOfferedClientRow, resource string) (string, bool) {
 	var found string
 	for _, s := range servers {
 		if !ServesBindingResource(s.Url, s.DocumentResource, resource) {
