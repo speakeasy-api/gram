@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessgen "github.com/speakeasy-api/gram/server/gen/access"
+	accessserver "github.com/speakeasy-api/gram/server/gen/http/access/server"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
@@ -222,6 +223,11 @@ func TestAccessRoleMutationOutputsExposeNoRawIdentifiersOrSelectors(t *testing.T
 	require.ElementsMatch(t, []string{"name", "description", "reference", "version", "mcp_access"}, roleKeys)
 }
 
+// The Platform MCP must accept exactly the dispositions the access API
+// accepts. The API's list lives in the Goa design, so each value is run
+// through the generated request validator as well. For example, if the design
+// gains a disposition the switch in validAccessRoleDisposition does not know,
+// the two answers differ for that value and this test fails.
 func TestAccessRoleDispositionsMatchTheAccessAPI(t *testing.T) {
 	t.Parallel()
 
@@ -231,9 +237,15 @@ func TestAccessRoleDispositionsMatchTheAccessAPI(t *testing.T) {
 		authz.DispositionIdempotent,
 		authz.DispositionOpenWorld,
 		authz.DispositionUnannotated,
+		"unknown",
 	} {
-		require.True(t, validAccessRoleDisposition(disposition), disposition)
+		body := &accessserver.SelectorRequestBody{
+			ResourceKind: new("mcp"),
+			ResourceID:   new("*"),
+			Disposition:  new(disposition),
+		}
+		acceptedByAPI := accessserver.ValidateSelectorRequestBody(body) == nil
+		require.Equal(t, acceptedByAPI, validAccessRoleDisposition(disposition), disposition)
 	}
-	require.False(t, validAccessRoleDisposition("unknown"))
 	require.False(t, validAccessRoleDisposition(""))
 }
