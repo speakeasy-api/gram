@@ -186,23 +186,55 @@ func (q *Queries) AuthorizeEMADelegation(ctx context.Context, arg AuthorizeEMADe
 const checkRemoteSessionClientBindingForUserSessionIssuer = `-- name: CheckRemoteSessionClientBindingForUserSessionIssuer :one
 SELECT EXISTS (
   SELECT 1
-  FROM remote_session_client_user_session_issuers AS link
-  JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
-  JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
-  WHERE link.remote_session_client_id = $1
-    AND link.user_session_issuer_id = $2
-    AND (usi.project_id = $3::uuid OR (usi.project_id IS NULL AND usi.organization_id = $4::text))
-    AND (c.project_id = $3::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $4::text)))
+  FROM remote_session_clients AS c
+  JOIN remote_session_issuers AS upstream ON upstream.id = c.remote_session_issuer_id AND NOT upstream.deleted
+  JOIN user_session_issuers AS usi ON usi.id = $1
+  WHERE c.id = $2
+    AND EXISTS (
+    SELECT 1
+    FROM mcp_server_remote_session_clients AS association
+    JOIN mcp_servers AS placement ON placement.id = association.mcp_server_id
+      AND placement.project_id = association.project_id AND NOT placement.deleted
+    JOIN projects AS placement_project ON placement_project.id = placement.project_id
+      AND placement_project.organization_id = association.organization_id AND NOT placement_project.deleted
+    WHERE association.remote_session_client_id = c.id AND NOT association.deleted
+      AND association.organization_id = $3::text
+      AND (placement.project_id = $4::uuid)
+      AND (
+        placement.user_session_issuer_id = usi.id
+        OR EXISTS (
+          SELECT 1 FROM meta_mcp_server_members AS membership
+          JOIN meta_mcp_servers AS gateway ON gateway.id = membership.meta_mcp_server_id
+            AND gateway.project_id = membership.project_id AND gateway.organization_id = association.organization_id
+            AND NOT gateway.deleted
+          WHERE membership.mcp_server_id = placement.id AND membership.project_id = placement.project_id
+            AND NOT membership.deleted AND gateway.user_session_issuer_id = usi.id
+        )
+        OR (usi.project_id IS NULL AND usi.organization_id = association.organization_id
+          AND NOT EXISTS (
+            SELECT 1 FROM user_session_issuers AS other
+            WHERE other.organization_id = association.organization_id AND other.project_id IS NULL
+              AND NOT other.deleted AND other.id <> usi.id
+          ) AND NOT EXISTS (
+            SELECT 1 FROM organization_features AS flag
+            WHERE flag.organization_id = association.organization_id AND NOT flag.deleted
+              AND flag.feature_name = 'organization_gateway_disabled'
+          ))
+      )
+  )
+    AND (upstream.project_id = $4::uuid OR (upstream.project_id IS NULL AND (upstream.organization_id IS NULL OR upstream.organization_id = $3::text)))
+    AND (usi.project_id = $4::uuid OR (usi.project_id IS NULL AND usi.organization_id = $3::text))
+    AND (c.project_id = $4::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $3::text)))
     AND c.deleted IS FALSE
     AND usi.deleted IS FALSE
 )::boolean AS bound
 `
 
 type CheckRemoteSessionClientBindingForUserSessionIssuerParams struct {
-	RemoteSessionClientID uuid.UUID
 	UserSessionIssuerID   uuid.UUID
-	ProjectID             uuid.UUID
+	RemoteSessionClientID uuid.UUID
 	OrganizationID        string
+	ProjectID             uuid.UUID
 }
 
 // Tenant-scoped binding probe: does this user_session_issuer, in this
@@ -215,10 +247,10 @@ type CheckRemoteSessionClientBindingForUserSessionIssuerParams struct {
 // bound surface without consulting the credential's provenance issuer.
 func (q *Queries) CheckRemoteSessionClientBindingForUserSessionIssuer(ctx context.Context, arg CheckRemoteSessionClientBindingForUserSessionIssuerParams) (bool, error) {
 	row := q.db.QueryRow(ctx, checkRemoteSessionClientBindingForUserSessionIssuer,
-		arg.RemoteSessionClientID,
 		arg.UserSessionIssuerID,
-		arg.ProjectID,
+		arg.RemoteSessionClientID,
 		arg.OrganizationID,
+		arg.ProjectID,
 	)
 	var bound bool
 	err := row.Scan(&bound)
@@ -5062,13 +5094,13 @@ SELECT
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = $2
-  AND (i.organization_id = $1 OR c.organization_id = $1)
+  AND (i.organization_id = $1::text OR c.organization_id = $1::text)
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
 `
 
 type GetOrganizationRemoteSessionClientByIDParams struct {
-	OrganizationID string
+	OrganizationID pgtype.Text
 	ID             uuid.UUID
 }
 
@@ -7541,7 +7573,6 @@ SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remo
 JOIN remote_session_clients c ON c.id = s.remote_session_client_id AND NOT c.deleted
 JOIN remote_session_issuers i ON i.id = c.remote_session_issuer_id AND NOT i.deleted
 JOIN user_session_issuers u ON u.id = s.user_session_issuer_id AND NOT u.deleted
-JOIN remote_session_client_user_session_issuers link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = u.id
 JOIN projects p ON p.id = $1 AND p.organization_id = $2 AND NOT p.deleted
 JOIN organization_metadata org ON org.id = p.organization_id AND org.disabled_at IS NULL
 JOIN users person ON s.subject_urn = 'user:' || person.id AND person.deleted_at IS NULL AND person.workos_deleted_at IS NULL
@@ -8210,24 +8241,23 @@ func (q *Queries) InsertTrustedDelegationObservationFixture(ctx context.Context,
 
 const listConflictingClientBindingsForIssuerMigration = `-- name: ListConflictingClientBindingsForIssuerMigration :many
 SELECT DISTINCT
-    link_source.user_session_issuer_id AS user_session_issuer_id,
+    usi.id AS user_session_issuer_id,
     m.name AS mcp_server_name,
     COALESCE(rms.url, '')::text AS mcp_server_url
-FROM remote_session_client_user_session_issuers AS link_source
-JOIN remote_session_clients AS source_client
-    ON source_client.id = link_source.remote_session_client_id
-JOIN remote_session_client_user_session_issuers AS link_target
-    ON link_target.user_session_issuer_id = link_source.user_session_issuer_id
-JOIN remote_session_clients AS target_client
-    ON target_client.id = link_target.remote_session_client_id
-LEFT JOIN mcp_servers AS m
-    ON m.user_session_issuer_id = link_source.user_session_issuer_id
-   AND m.deleted IS FALSE
-LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id
+FROM mcp_server_remote_session_clients AS source
+JOIN remote_session_clients AS source_client ON source_client.id = source.remote_session_client_id AND NOT source_client.deleted
+JOIN mcp_servers AS m ON m.id = source.mcp_server_id AND m.project_id = source.project_id AND NOT m.deleted
+JOIN projects AS project ON project.id = source.project_id AND project.organization_id = source.organization_id AND NOT project.deleted
+JOIN user_session_issuers AS usi ON usi.id = m.user_session_issuer_id AND NOT usi.deleted
+JOIN mcp_servers AS target_server ON target_server.user_session_issuer_id = usi.id AND NOT target_server.deleted
+JOIN mcp_server_remote_session_clients AS target ON target.mcp_server_id = target_server.id
+  AND target.project_id = target_server.project_id AND target.organization_id = source.organization_id AND NOT target.deleted
+JOIN projects AS target_project ON target_project.id = target.project_id AND target_project.organization_id = target.organization_id AND NOT target_project.deleted
+JOIN remote_session_clients AS target_client ON target_client.id = target.remote_session_client_id AND NOT target_client.deleted
+LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND NOT rms.deleted
 WHERE source_client.remote_session_issuer_id = $1
-  AND source_client.deleted IS FALSE
-  AND target_client.remote_session_issuer_id = $2
-  AND target_client.deleted IS FALSE
+  AND NOT source.deleted AND target_client.remote_session_issuer_id = $2
+  AND (usi.project_id = project.id OR (usi.project_id IS NULL AND usi.organization_id = project.organization_id))
 `
 
 type ListConflictingClientBindingsForIssuerMigrationParams struct {
@@ -8241,18 +8271,7 @@ type ListConflictingClientBindingsForIssuerMigrationRow struct {
 	McpServerUrl        string
 }
 
-// The user_session_issuers that already have an active remote_session_client on
-// BOTH the source and the target issuer, joined to the MCP servers those
-// user_session_issuers gate. Re-pointing the source's clients onto the target
-// would put two clients on the same (user_session_issuer, remote_session_issuer)
-// pair, violating the invariant that guardSingleClientPerRemoteIssuer enforces
-// at attach time and that ResolveAccessTokens asserts at serve time. migrateIssuer
-// refuses when this returns any row.
-//
-// The mcp_servers join is LEFT so a conflicting user_session_issuer that gates no
-// MCP server still yields a row: the conflict blocks the migration whether or not
-// it has a name to show. Keep the "same user_session_issuer, different issuer"
-// semantics here in sync with guardSingleClientPerRemoteIssuer.
+// Find source and target registrations configured on the same tenant sign-in.
 func (q *Queries) ListConflictingClientBindingsForIssuerMigration(ctx context.Context, arg ListConflictingClientBindingsForIssuerMigrationParams) ([]ListConflictingClientBindingsForIssuerMigrationRow, error) {
 	rows, err := q.db.Query(ctx, listConflictingClientBindingsForIssuerMigration, arg.SourceIssuerID, arg.TargetIssuerID)
 	if err != nil {
@@ -9794,24 +9813,21 @@ func (q *Queries) ListOnlyOrganizationUserSessionIssuer(ctx context.Context, org
 }
 
 const listOrganizationClientsForUserSessionIssuer = `-- name: ListOrganizationClientsForUserSessionIssuer :many
-SELECT c.id, c.project_id, c.remote_session_issuer_id, c.credential_owner, i.deleted AS provider_deleted
-FROM remote_session_client_user_session_issuers AS link
-JOIN remote_session_clients AS c
-  ON c.id = link.remote_session_client_id
- AND c.deleted IS FALSE
-JOIN remote_session_issuers AS i
-  ON i.id = c.remote_session_issuer_id
-WHERE link.user_session_issuer_id = $1
-  AND ((c.project_id IS NULL AND c.organization_id = $2::text)
-       OR EXISTS (SELECT 1
-                  FROM projects AS p
-                  WHERE p.id = c.project_id
-                    AND p.organization_id = $2::text))
+SELECT DISTINCT c.id, c.project_id, c.remote_session_issuer_id, c.credential_owner, i.deleted AS provider_deleted
+FROM mcp_server_remote_session_clients AS association
+JOIN mcp_servers AS server ON server.id = association.mcp_server_id
+  AND server.project_id = association.project_id AND NOT server.deleted
+JOIN projects AS project ON project.id = server.project_id
+  AND project.organization_id = association.organization_id AND NOT project.deleted
+JOIN remote_session_clients AS c ON c.id = association.remote_session_client_id AND NOT c.deleted
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+WHERE server.user_session_issuer_id = $1
+  AND association.organization_id = $2::text AND NOT association.deleted
 ORDER BY c.id
 `
 
 type ListOrganizationClientsForUserSessionIssuerParams struct {
-	UserSessionIssuerID uuid.UUID
+	UserSessionIssuerID uuid.NullUUID
 	OrganizationID      string
 }
 
@@ -9823,13 +9839,7 @@ type ListOrganizationClientsForUserSessionIssuerRow struct {
 	ProviderDeleted       bool
 }
 
-// Live clients bound to one user session issuer that some project of the
-// organization can see: project-owned clients of the organization's projects
-// and organization-level clients. Each server's derivation then keeps only its
-// own project's and the organization-level ones, as
-// ResyncMCPServerRemoteSessionIssuers does. Clients of a deleted provider stay
-// in the list, as the commit's ListRemoteSessionClientsByProjectIDForUserSessionIssuer
-// keeps them; provider_deleted drops them from the derivation only.
+// Registrations on servers configured to sign in with this issuer.
 func (q *Queries) ListOrganizationClientsForUserSessionIssuer(ctx context.Context, arg ListOrganizationClientsForUserSessionIssuerParams) ([]ListOrganizationClientsForUserSessionIssuerRow, error) {
 	rows, err := q.db.Query(ctx, listOrganizationClientsForUserSessionIssuer, arg.UserSessionIssuerID, arg.OrganizationID)
 	if err != nil {
@@ -9964,19 +9974,13 @@ func (q *Queries) ListOrganizationMCPServersForUserSessionIssuer(ctx context.Con
 }
 
 const listOrganizationMcpServerNamesForIssuer = `-- name: ListOrganizationMcpServerNamesForIssuer :many
-SELECT DISTINCT
-    m.id,
-    m.name,
-    COALESCE(rms.url, '')::text AS url
-FROM mcp_servers AS m
-LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id
-WHERE m.deleted IS FALSE
-  AND m.user_session_issuer_id IN (
-      SELECT link.user_session_issuer_id
-      FROM remote_session_client_user_session_issuers AS link
-      JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
-      WHERE c.remote_session_issuer_id = $1 AND c.deleted IS FALSE
-  )
+SELECT DISTINCT m.id, m.name, COALESCE(rms.url, '')::text AS url
+FROM mcp_server_remote_session_clients AS association
+JOIN remote_session_clients AS c ON c.id = association.remote_session_client_id AND NOT c.deleted
+JOIN mcp_servers AS m ON m.id = association.mcp_server_id AND m.project_id = association.project_id AND NOT m.deleted
+JOIN projects AS project ON project.id = m.project_id AND project.organization_id = association.organization_id AND NOT project.deleted
+LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND NOT rms.deleted
+WHERE c.remote_session_issuer_id = $1 AND NOT association.deleted
 `
 
 type ListOrganizationMcpServerNamesForIssuerRow struct {
@@ -9985,17 +9989,7 @@ type ListOrganizationMcpServerNamesForIssuerRow struct {
 	Url  string
 }
 
-// Display names (and URL fallbacks) of MCP servers attached to any client of a
-// given issuer. Used to populate the issuer delete-confirmation dialog and the
-// migrate preflight.
-//
-// NOT org-scoped, despite the name: the only filter is the issuer id. Every
-// caller is safe today because the issuer it passes is tenant-scoped, so its
-// clients belong to one organization and the names returned are that
-// organization's own. Passing a PLATFORM issuer id here would return MCP server
-// names belonging to every organization on the platform in a single response.
-// That is why platform-admin issuer migration accepts only a tenant-scoped
-// source. Bound this query before relaxing that.
+// A tenant-owned issuer's registrations identify the servers configured to use it.
 func (q *Queries) ListOrganizationMcpServerNamesForIssuer(ctx context.Context, remoteSessionIssuerID uuid.UUID) ([]ListOrganizationMcpServerNamesForIssuerRow, error) {
 	rows, err := q.db.Query(ctx, listOrganizationMcpServerNamesForIssuer, remoteSessionIssuerID)
 	if err != nil {
@@ -10310,7 +10304,7 @@ SELECT
         JOIN projects AS p ON p.id = m.project_id
           AND p.organization_id = offer.organization_id AND p.deleted IS FALSE
         WHERE ac.remote_session_client_id = c.id
-          AND ac.organization_id = $1
+          AND ac.organization_id = $1::text
           AND (ac.project_id IS NULL OR ac.project_id = offer.project_id)
           AND ac.enabled AND ac.deleted IS FALSE
     )::bigint AS mcp_server_count,
@@ -10323,7 +10317,7 @@ SELECT
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.remote_session_issuer_id = $2
-  AND (i.organization_id = $1 OR c.organization_id = $1)
+  AND (i.organization_id = $1::text OR c.organization_id = $1::text)
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
   -- Clients left behind by a tombstoned identity provider connection are
@@ -10341,7 +10335,7 @@ LIMIT $4
 `
 
 type ListOrganizationRemoteSessionClientsByIssuerIDParams struct {
-	OrganizationID        string
+	OrganizationID        pgtype.Text
 	RemoteSessionIssuerID uuid.UUID
 	Cursor                uuid.NullUUID
 	LimitValue            int32
@@ -10361,7 +10355,7 @@ type ListOrganizationRemoteSessionClientsByIssuerIDRow struct {
 // ORG REACHABILITY (this predicate is repeated across every org-admin client
 // and session query; change them together):
 //
-//	(i.organization_id = @organization_id OR c.organization_id = @organization_id)
+//	(i.organization_id = sqlc.narg('organization_id')::text OR c.organization_id = sqlc.narg('organization_id')::text)
 //
 // Reaching the org through the ISSUER alone was sufficient while every issuer a
 // tenant could attach to carried an organization_id. Platform issuers do not —
@@ -11471,14 +11465,44 @@ func (q *Queries) ListRemoteServerURLsForOfferedClient(ctx context.Context, arg 
 
 const listRemoteSessionClientIDsForUserSessionIssuer = `-- name: ListRemoteSessionClientIDsForUserSessionIssuer :many
 SELECT c.id
-FROM remote_session_client_user_session_issuers AS link
-JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
+FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
-JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
-WHERE link.user_session_issuer_id = $1
-  AND (c.project_id = $2::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $3::text)))
-  AND (usi.project_id = $2::uuid OR (usi.project_id IS NULL AND usi.organization_id = $3::text))
-  AND (i.project_id = $2::uuid OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = $3::text)))
+JOIN user_session_issuers AS usi ON usi.id = $1
+WHERE EXISTS (
+    SELECT 1
+    FROM mcp_server_remote_session_clients AS association
+    JOIN mcp_servers AS placement ON placement.id = association.mcp_server_id
+      AND placement.project_id = association.project_id AND NOT placement.deleted
+    JOIN projects AS placement_project ON placement_project.id = placement.project_id
+      AND placement_project.organization_id = association.organization_id AND NOT placement_project.deleted
+    WHERE association.remote_session_client_id = c.id AND NOT association.deleted
+      AND association.organization_id = $2::text
+      AND (placement.project_id = $3::uuid)
+      AND (
+        placement.user_session_issuer_id = usi.id
+        OR EXISTS (
+          SELECT 1 FROM meta_mcp_server_members AS membership
+          JOIN meta_mcp_servers AS gateway ON gateway.id = membership.meta_mcp_server_id
+            AND gateway.project_id = membership.project_id AND gateway.organization_id = association.organization_id
+            AND NOT gateway.deleted
+          WHERE membership.mcp_server_id = placement.id AND membership.project_id = placement.project_id
+            AND NOT membership.deleted AND gateway.user_session_issuer_id = usi.id
+        )
+        OR (usi.project_id IS NULL AND usi.organization_id = association.organization_id
+          AND NOT EXISTS (
+            SELECT 1 FROM user_session_issuers AS other
+            WHERE other.organization_id = association.organization_id AND other.project_id IS NULL
+              AND NOT other.deleted AND other.id <> usi.id
+          ) AND NOT EXISTS (
+            SELECT 1 FROM organization_features AS flag
+            WHERE flag.organization_id = association.organization_id AND NOT flag.deleted
+              AND flag.feature_name = 'organization_gateway_disabled'
+          ))
+      )
+  )
+  AND (c.project_id = $3::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $2::text)))
+  AND (usi.project_id = $3::uuid OR (usi.project_id IS NULL AND usi.organization_id = $2::text))
+  AND (i.project_id = $3::uuid OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = $2::text)))
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
   AND usi.deleted IS FALSE
@@ -11487,8 +11511,8 @@ ORDER BY c.id ASC
 
 type ListRemoteSessionClientIDsForUserSessionIssuerParams struct {
 	UserSessionIssuerID uuid.UUID
-	ProjectID           uuid.UUID
 	OrganizationID      string
+	ProjectID           uuid.UUID
 }
 
 // The clients bound to a user session issuer in the tenant, exactly as
@@ -11498,7 +11522,7 @@ type ListRemoteSessionClientIDsForUserSessionIssuerParams struct {
 // against this set of siblings, so a client whose issuer is gone must not
 // stand in the way of a live one.
 func (q *Queries) ListRemoteSessionClientIDsForUserSessionIssuer(ctx context.Context, arg ListRemoteSessionClientIDsForUserSessionIssuerParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listRemoteSessionClientIDsForUserSessionIssuer, arg.UserSessionIssuerID, arg.ProjectID, arg.OrganizationID)
+	rows, err := q.db.Query(ctx, listRemoteSessionClientIDsForUserSessionIssuer, arg.UserSessionIssuerID, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -11846,22 +11870,52 @@ SELECT
         )
       )
     )::boolean                             AS metadata_needs_reprojection
-FROM remote_session_client_user_session_issuers AS link
-JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
+FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
-JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
-WHERE link.user_session_issuer_id = $1
+JOIN user_session_issuers AS usi ON usi.id = $1
+WHERE EXISTS (
+    SELECT 1
+    FROM mcp_server_remote_session_clients AS association
+    JOIN mcp_servers AS placement ON placement.id = association.mcp_server_id
+      AND placement.project_id = association.project_id AND NOT placement.deleted
+    JOIN projects AS placement_project ON placement_project.id = placement.project_id
+      AND placement_project.organization_id = association.organization_id AND NOT placement_project.deleted
+    WHERE association.remote_session_client_id = c.id AND NOT association.deleted
+      AND association.organization_id = $2::text
+      AND (placement.project_id = $3::uuid OR ($4::boolean AND usi.project_id IS NULL))
+      AND (
+        placement.user_session_issuer_id = usi.id
+        OR EXISTS (
+          SELECT 1 FROM meta_mcp_server_members AS membership
+          JOIN meta_mcp_servers AS gateway ON gateway.id = membership.meta_mcp_server_id
+            AND gateway.project_id = membership.project_id AND gateway.organization_id = association.organization_id
+            AND NOT gateway.deleted
+          WHERE membership.mcp_server_id = placement.id AND membership.project_id = placement.project_id
+            AND NOT membership.deleted AND gateway.user_session_issuer_id = usi.id
+        )
+        OR (usi.project_id IS NULL AND usi.organization_id = association.organization_id
+          AND NOT EXISTS (
+            SELECT 1 FROM user_session_issuers AS other
+            WHERE other.organization_id = association.organization_id AND other.project_id IS NULL
+              AND NOT other.deleted AND other.id <> usi.id
+          ) AND NOT EXISTS (
+            SELECT 1 FROM organization_features AS flag
+            WHERE flag.organization_id = association.organization_id AND NOT flag.deleted
+              AND flag.feature_name = 'organization_gateway_disabled'
+          ))
+      )
+  )
   AND (
-    c.project_id = $2
-    OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $3))
+    c.project_id = $3
+    OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $2))
     OR ($4::boolean AND usi.project_id IS NULL AND c.project_id IN (
-      SELECT p.id FROM projects AS p WHERE p.organization_id = $3::text AND p.deleted IS FALSE
+      SELECT p.id FROM projects AS p WHERE p.organization_id = $2::text AND p.deleted IS FALSE
     ))
   )
-  AND (usi.project_id = $2 OR (usi.project_id IS NULL AND usi.organization_id = $3::text))
+  AND (usi.project_id = $3 OR (usi.project_id IS NULL AND usi.organization_id = $2::text))
   AND (
-    i.project_id = $2
-    OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = $3))
+    i.project_id = $3
+    OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = $2))
     OR ($4::boolean AND usi.project_id IS NULL AND i.project_id = c.project_id)
   )
   AND c.deleted IS FALSE
@@ -11872,8 +11926,8 @@ ORDER BY c.id ASC
 
 type ListRemoteSessionClientsForUserSessionIssuerParams struct {
 	UserSessionIssuerID uuid.UUID
-	ProjectID           uuid.NullUUID
-	OrganizationID      pgtype.Text
+	OrganizationID      string
+	ProjectID           uuid.UUID
 	OrganizationWide    bool
 }
 
@@ -11940,8 +11994,8 @@ type ListRemoteSessionClientsForUserSessionIssuerRow struct {
 func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Context, arg ListRemoteSessionClientsForUserSessionIssuerParams) ([]ListRemoteSessionClientsForUserSessionIssuerRow, error) {
 	rows, err := q.db.Query(ctx, listRemoteSessionClientsForUserSessionIssuer,
 		arg.UserSessionIssuerID,
-		arg.ProjectID,
 		arg.OrganizationID,
+		arg.ProjectID,
 		arg.OrganizationWide,
 	)
 	if err != nil {
@@ -12319,17 +12373,51 @@ SELECT
     ELSE 'expired'
   END)::text AS status
 FROM remote_sessions AS s
-JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = s.remote_session_client_id
-JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
-JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
-WHERE s.subject_urn = $1
-  AND link.user_session_issuer_id = $2
-  AND (usi.project_id = $3::uuid OR (usi.project_id IS NULL AND usi.organization_id = $4::text))
+JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+JOIN remote_session_issuers AS upstream ON upstream.id = c.remote_session_issuer_id AND NOT upstream.deleted
+JOIN user_session_issuers AS usi ON usi.id = $1
+JOIN user_session_issuers AS minted_by ON minted_by.id = s.user_session_issuer_id
+LEFT JOIN projects AS minted_project ON minted_project.id = minted_by.project_id
+WHERE s.subject_urn = $2
+  AND COALESCE(minted_project.organization_id, minted_by.organization_id) = $3::text
+  AND EXISTS (
+    SELECT 1
+    FROM mcp_server_remote_session_clients AS association
+    JOIN mcp_servers AS placement ON placement.id = association.mcp_server_id
+      AND placement.project_id = association.project_id AND NOT placement.deleted
+    JOIN projects AS placement_project ON placement_project.id = placement.project_id
+      AND placement_project.organization_id = association.organization_id AND NOT placement_project.deleted
+    WHERE association.remote_session_client_id = c.id AND NOT association.deleted
+      AND association.organization_id = $3::text
+      AND (placement.project_id = $4::uuid OR ($5::boolean AND usi.project_id IS NULL))
+      AND (
+        placement.user_session_issuer_id = usi.id
+        OR EXISTS (
+          SELECT 1 FROM meta_mcp_server_members AS membership
+          JOIN meta_mcp_servers AS gateway ON gateway.id = membership.meta_mcp_server_id
+            AND gateway.project_id = membership.project_id AND gateway.organization_id = association.organization_id
+            AND NOT gateway.deleted
+          WHERE membership.mcp_server_id = placement.id AND membership.project_id = placement.project_id
+            AND NOT membership.deleted AND gateway.user_session_issuer_id = usi.id
+        )
+        OR (usi.project_id IS NULL AND usi.organization_id = association.organization_id
+          AND NOT EXISTS (
+            SELECT 1 FROM user_session_issuers AS other
+            WHERE other.organization_id = association.organization_id AND other.project_id IS NULL
+              AND NOT other.deleted AND other.id <> usi.id
+          ) AND NOT EXISTS (
+            SELECT 1 FROM organization_features AS flag
+            WHERE flag.organization_id = association.organization_id AND NOT flag.deleted
+              AND flag.feature_name = 'organization_gateway_disabled'
+          ))
+      )
+  )
+  AND (usi.project_id = $4::uuid OR (usi.project_id IS NULL AND usi.organization_id = $3::text))
   AND (
-    c.project_id = $3::uuid
-    OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $4::text))
+    c.project_id = $4::uuid
+    OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $3::text))
     OR ($5::boolean AND usi.project_id IS NULL AND c.project_id IN (
-      SELECT p.id FROM projects AS p WHERE p.organization_id = $4::text AND p.deleted IS FALSE
+      SELECT p.id FROM projects AS p WHERE p.organization_id = $3::text AND p.deleted IS FALSE
     ))
   )
   AND c.deleted IS FALSE
@@ -12338,10 +12426,10 @@ WHERE s.subject_urn = $1
 `
 
 type ListRemoteSessionStatusesForSubjectParams struct {
-	SubjectUrn          urn.SessionSubject
 	UserSessionIssuerID uuid.UUID
-	ProjectID           uuid.UUID
+	SubjectUrn          urn.SessionSubject
 	OrganizationID      string
+	ProjectID           uuid.UUID
 	OrganizationWide    bool
 }
 
@@ -12411,10 +12499,10 @@ type ListRemoteSessionStatusesForSubjectRow struct {
 // organization-level requesting issuer.
 func (q *Queries) ListRemoteSessionStatusesForSubject(ctx context.Context, arg ListRemoteSessionStatusesForSubjectParams) ([]ListRemoteSessionStatusesForSubjectRow, error) {
 	rows, err := q.db.Query(ctx, listRemoteSessionStatusesForSubject,
-		arg.SubjectUrn,
 		arg.UserSessionIssuerID,
-		arg.ProjectID,
+		arg.SubjectUrn,
 		arg.OrganizationID,
+		arg.ProjectID,
 		arg.OrganizationWide,
 	)
 	if err != nil {
