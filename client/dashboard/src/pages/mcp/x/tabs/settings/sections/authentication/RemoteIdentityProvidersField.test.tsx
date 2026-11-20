@@ -1,3 +1,4 @@
+import type { ServerClientAssociation } from "@gram/client/models/components/serverclientassociation.js";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -43,12 +44,14 @@ function renderField(
     onDelete?: () => void;
     allowAdditionalProviders?: boolean;
     isError?: boolean;
+    associations?: ServerClientAssociation[];
   } = {},
 ) {
   return render(
     <MemoryRouter>
       <RemoteIdentityProvidersField
         associatedIssuers={issuers}
+        associations={handlers.associations}
         isLoading={false}
         isError={handlers.isError}
         allowAdditionalProviders={handlers.allowAdditionalProviders ?? true}
@@ -69,6 +72,26 @@ describe("RemoteIdentityProvidersField", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+  });
+
+  it("offers exact unlink actions instead of editing an ambiguous issuer", () => {
+    const first = {
+      remoteSessionIssuerId: "issuer-1",
+      remoteSessionClientId: "registration-1",
+      clientId: "same-oauth-client",
+    } as ServerClientAssociation;
+    const second = { ...first, remoteSessionClientId: "registration-2" };
+    const onDelete = vi.fn();
+    renderField([issuer()], { associations: [first, second], onDelete });
+
+    expect(screen.getByText(/multiple registrations/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Unlink registration .*registration-2/,
+      }),
+    );
+    expect(onDelete).toHaveBeenCalledExactlyOnceWith(issuer(), second);
   });
 
   it("reports a failed lookup instead of the empty state", () => {

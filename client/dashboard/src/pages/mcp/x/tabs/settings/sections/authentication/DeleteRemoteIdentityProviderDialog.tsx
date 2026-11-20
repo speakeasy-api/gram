@@ -20,6 +20,7 @@ export function DeleteRemoteIdentityProviderDialog({
   open,
   onOpenChange,
   registrationId,
+  clientId,
   issuer,
   mcpServerId,
 }: {
@@ -27,6 +28,7 @@ export function DeleteRemoteIdentityProviderDialog({
   onOpenChange: (open: boolean) => void;
   /** The exact registration to unlink; the provider and registration remain. */
   registrationId: string;
+  clientId: string;
   issuer: RemoteSessionIssuer;
   /** The MCP server the provider is removed from, for the usage preview. */
   mcpServerId: string;
@@ -37,6 +39,7 @@ export function DeleteRemoteIdentityProviderDialog({
         {open && (
           <DeleteRemoteIdentityProviderDialogBody
             registrationId={registrationId}
+            clientId={clientId}
             issuer={issuer}
             mcpServerId={mcpServerId}
             onClose={() => onOpenChange(false)}
@@ -49,11 +52,13 @@ export function DeleteRemoteIdentityProviderDialog({
 
 function DeleteRemoteIdentityProviderDialogBody({
   registrationId,
+  clientId,
   issuer,
   mcpServerId,
   onClose,
 }: {
   registrationId: string;
+  clientId: string;
   issuer: RemoteSessionIssuer;
   mcpServerId: string;
   onClose: () => void;
@@ -93,7 +98,7 @@ function DeleteRemoteIdentityProviderDialogBody({
         invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
       ]);
-      toast.success("Authorization server removed from this server");
+      toast.success("Registration unlinked from this server");
       onClose();
     } catch (err) {
       console.error("Delete authorization server failed", err);
@@ -110,11 +115,11 @@ function DeleteRemoteIdentityProviderDialogBody({
   return (
     <>
       <Dialog.Header>
-        <Dialog.Title>Remove Authorization Server</Dialog.Title>
+        <Dialog.Title>Unlink Registration</Dialog.Title>
         <Dialog.Description>
-          This removes the authorization server's association with this MCP
-          server. The authorization server configuration stays in the project
-          and can be re-attached later or used by other servers.
+          This unlinks the registration <strong>{clientId}</strong> (
+          {registrationId}) from this MCP server only. The registration,
+          authorization server, and any other associations stay in place.
         </Dialog.Description>
       </Dialog.Header>
 
@@ -141,9 +146,8 @@ function DeleteRemoteIdentityProviderDialogBody({
       </div>
 
       <Alert variant="warning" dismissible={false}>
-        Removing {issuer.issuer} from this server cannot be undone — any active
-        user sessions issued via this authorization server will need to
-        re-authenticate.
+        Users who signed in through this registration may need to authenticate
+        again.
       </Alert>
 
       {error && (
@@ -166,7 +170,7 @@ function DeleteRemoteIdentityProviderDialogBody({
               <Spinner className="mr-0 size-4" />
             </Button.LeftIcon>
           )}
-          <Button.Text>{submitting ? "Removing" : "Remove"}</Button.Text>
+          <Button.Text>{submitting ? "Unlinking" : "Unlink"}</Button.Text>
         </Button>
       </Dialog.Footer>
     </>
