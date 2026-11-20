@@ -11,6 +11,7 @@ import (
 type contextKey string
 
 type admissionBoundaryKey struct{}
+type withoutCredentialCeilingKey struct{}
 
 const (
 	grantsContextKey contextKey = "authz_grants"
@@ -121,6 +122,22 @@ func admittedPoliciesToContext(ctx context.Context, represented RepresentedUserP
 		return context.WithValue(ctx, admittedCeilingContextKey, []Grant{})
 	}
 	return context.WithValue(ctx, admittedCeilingContextKey, cloneGrants(sets[0]))
+}
+
+// WithoutCredentialCeiling keeps live admitted policies but removes the
+// credential policy after it has authorized a gateway entry target. Member
+// authorization can then evaluate the live agent and owner policies without
+// treating the gateway identifier as a member-server grant.
+func WithoutCredentialCeiling(ctx context.Context) context.Context {
+	policies, ok := ctx.Value(admittedPoliciesContextKey).(grantAuthorization)
+	if !ok || len(policies.policies) == 0 {
+		return ctx
+	}
+	policies.legacyAuthCeiling = false
+	policies.policies = append([][]Grant{}, policies.policies[1:]...)
+	ctx = context.WithValue(ctx, admittedPoliciesContextKey, policies)
+	ctx = context.WithValue(ctx, admittedCeilingContextKey, []Grant{})
+	return context.WithValue(ctx, withoutCredentialCeilingKey{}, true)
 }
 
 // CredentialCeilingFromContext returns the immutable credential policy loaded

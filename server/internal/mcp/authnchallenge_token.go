@@ -355,9 +355,9 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 	}
 	creds := extractClientCredentials(r)
 	grant, ok := s.tokenGrantFor(r, grantType, creds)
-	// A workload's assertion signs in a workload, and an organization gateway
-	// serves users only.
-	if ok && grant.clientless != nil && endpoint.IsOrganizationGateway() {
+	// A workload's assertion signs in a workload, and an organization-wide
+	// gateway serves users only.
+	if ok && grant.clientless != nil && endpoint.IsOrganizationWideGateway() {
 		ok = false
 	}
 	if !ok {
