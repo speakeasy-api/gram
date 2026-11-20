@@ -221,11 +221,17 @@ vi.mock("@/lib/assistantEntityLinks", () => ({
 vi.mock("@/hooks/useInsightsDockCta", () => ({
   INSIGHTS_DOCK_CONTENT_VT_CLASS: "",
   INSIGHTS_DOCK_VT_CLASS: "",
-  useInsightsDockCta: () => ({
-    dismissed: mocks.dockDismissed,
-    dismiss: vi.fn(),
-    resume: mocks.resumeDock,
-  }),
+  useInsightsDockCta: () => {
+    const [dismissed, setDismissed] = useState(mocks.dockDismissed);
+    return {
+      dismissed,
+      dismiss: vi.fn(),
+      resume: () => {
+        mocks.resumeDock();
+        setDismissed(false);
+      },
+    };
+  },
 }));
 vi.mock("@/components/ui/hooks/useConfig", () => ({
   useConfig: () => ({ theme: "light" }),
@@ -614,33 +620,49 @@ describe("InsightsProvider", () => {
         mocks.resumeDock.mockClear();
       });
 
-      function Opener(): JSX.Element {
-        const { setIsExpanded } = useInsightsState();
+      function Opener({ hideDock }: { hideDock?: boolean }): JSX.Element {
+        const { setIsExpanded, registerDockHide } = useInsightsState();
+        useEffect(
+          () => (hideDock ? registerDockHide() : undefined),
+          [hideDock, registerDockHide],
+        );
         return <button onClick={() => setIsExpanded(true)}>Open</button>;
       }
 
-      function open(): void {
+      function open(hideDock = false): void {
         render(
           <InsightsProvider
             mcpConfig={{ projectSlug: "project" } as never}
             title="Assistant"
             subtitle=""
           >
-            <Opener />
+            <Opener hideDock={hideDock} />
           </InsightsProvider>,
         );
         fireEvent.click(screen.getByText("Open"));
       }
 
+      const panel = (): HTMLElement | null =>
+        screen.queryByLabelText("Close Project Assistant");
+
       it("brings back a dismissed dock", () => {
         mocks.dockDismissed = true;
         open();
         expect(mocks.resumeDock).toHaveBeenCalledTimes(1);
+        expect(panel()).not.toBeNull();
       });
 
       it("leaves a visible dock alone", () => {
         open();
         expect(mocks.resumeDock).not.toHaveBeenCalled();
+        expect(panel()).not.toBeNull();
+      });
+
+      it("keeps the dock dismissed on a page that hides it", () => {
+        mocks.dockDismissed = true;
+        open(true);
+        expect(mocks.resumeDock).not.toHaveBeenCalled();
+        expect(panel()).toBeNull();
       });
     });
 

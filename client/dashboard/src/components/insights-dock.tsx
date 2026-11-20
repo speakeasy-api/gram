@@ -1363,10 +1363,20 @@ export function InsightsProvider({
     dismissDock();
   }, [dismissDock]);
   // A dismissed dock renders no panel, so opening it has to bring the dock back.
-  const dockRef = useRef({ dismissed: dockDismissed, resume: resumeDock });
-  dockRef.current = { dismissed: dockDismissed, resume: resumeDock };
+  const dockRef = useRef({
+    hidden: hideTrigger,
+    dismissed: dockDismissed,
+    resume: resumeDock,
+  });
+  dockRef.current = {
+    hidden: hideTrigger,
+    dismissed: dockDismissed,
+    resume: resumeDock,
+  };
   const expandPanel = useCallback((expanded: boolean) => {
-    if (expanded && dockRef.current.dismissed) dockRef.current.resume();
+    const dock = dockRef.current;
+    // A page that hides the dock keeps it dismissed, and keeps its resume button.
+    if (expanded && dock.dismissed && !dock.hidden) dock.resume();
     setIsExpanded(expanded);
   }, []);
 
