@@ -53,6 +53,113 @@ read token material or perform an OAuth refresh to generate this inventory.
    rows alone cannot establish that classification. Report unresolved cases
    without changing them or treating this inventory as a backfill input.
 
+### Direct hosted configuration check
+
+Run this only on an approved read-only snapshot, with `org` and `project`
+set as `psql` variables for one authorized organization and project. It reads
+no grants or secret columns, and returns only counts. A zero `scoped_projects`
+count is an invalid scope, not a successful check. Use a restricted process and
+keep invocation inputs out of shared logs.
+
+```sql
+BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
+SET LOCAL statement_timeout = '30s';
+
+WITH scope AS (
+    SELECT id, organization_id
+    FROM projects
+    WHERE id = :'project'::uuid AND organization_id = :'org' AND NOT deleted
+), hosted AS (
+    SELECT s.id, p.id AS project_id, p.organization_id, s.user_session_issuer_id
+    FROM scope AS p
+    JOIN mcp_servers AS s ON s.project_id = p.id AND NOT s.deleted
+    JOIN toolsets AS t ON t.id = s.toolset_id AND NOT t.deleted
+        AND t.project_id = p.id AND t.organization_id = p.organization_id
+), registrations AS (
+    SELECT c.id
+    FROM scope AS p
+    JOIN remote_session_clients AS c ON NOT c.deleted
+        AND (c.project_id = p.id
+            OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+    JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND NOT i.deleted
+        AND (i.project_id = p.id
+            OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
+), compared AS (
+    SELECT s.id, s.user_session_issuer_id, u.id IS NOT NULL AS live_sign_in,
+           ARRAY(SELECT a.remote_session_client_id
+                 FROM mcp_server_remote_session_clients AS a
+                 JOIN registrations AS r ON r.id = a.remote_session_client_id
+                 WHERE a.mcp_server_id = s.id AND a.project_id = s.project_id
+                     AND a.organization_id = s.organization_id AND NOT a.deleted
+                 ORDER BY a.remote_session_client_id) AS associated,
+           ARRAY(SELECT l.remote_session_client_id
+                 FROM remote_session_client_user_session_issuers AS l
+                 JOIN registrations AS r ON r.id = l.remote_session_client_id
+                 WHERE l.user_session_issuer_id = u.id
+                 ORDER BY l.remote_session_client_id) AS legacy,
+           EXISTS (SELECT 1 FROM mcp_server_remote_session_clients AS a
+                   WHERE a.mcp_server_id = s.id AND a.project_id = s.project_id
+                       AND a.organization_id = s.organization_id AND a.deleted) AS removed_history,
+           EXISTS (SELECT 1 FROM mcp_server_remote_session_clients AS a
+                   WHERE a.mcp_server_id = s.id AND a.project_id = s.project_id
+                       AND a.organization_id = s.organization_id AND NOT a.deleted
+                       AND NOT EXISTS (SELECT 1 FROM registrations AS r WHERE r.id = a.remote_session_client_id))
+               AS invalid_association
+    FROM hosted AS s
+    LEFT JOIN user_session_issuers AS u ON u.id = s.user_session_issuer_id AND NOT u.deleted
+        AND (u.project_id = s.project_id
+            OR (u.project_id IS NULL AND u.organization_id = s.organization_id))
+), classified AS (
+    SELECT CASE
+               WHEN user_session_issuer_id IS NOT NULL AND NOT live_sign_in THEN 'invalid_sign_in'
+               WHEN invalid_association THEN 'invalid_association'
+               WHEN cardinality(associated) > 1 OR cardinality(legacy) > 1 THEN 'ambiguous'
+               WHEN cardinality(associated) = 0 AND cardinality(legacy) = 0 THEN 'empty_unverified'
+               WHEN cardinality(associated) = 0 THEN 'legacy_only'
+               WHEN cardinality(legacy) = 0 THEN 'association_only'
+               WHEN associated = legacy THEN 'singleton_match'
+               ELSE 'singleton_mismatch'
+           END AS result,
+           removed_history
+    FROM compared
+)
+SELECT (SELECT count(*) FROM scope) AS scoped_projects,
+       count(*) AS hosted_configurations,
+       count(*) FILTER (WHERE result = 'invalid_sign_in') AS invalid_sign_in,
+       count(*) FILTER (WHERE result = 'invalid_association') AS invalid_association,
+       count(*) FILTER (WHERE result = 'ambiguous') AS ambiguous,
+       count(*) FILTER (WHERE result = 'empty_unverified') AS empty_unverified,
+       count(*) FILTER (WHERE result = 'legacy_only') AS legacy_only,
+       count(*) FILTER (WHERE result = 'association_only') AS association_only,
+       count(*) FILTER (WHERE result = 'singleton_match') AS singleton_match,
+       count(*) FILTER (WHERE result = 'singleton_mismatch') AS singleton_mismatch,
+       count(*) FILTER (WHERE removed_history) AS with_removed_history
+FROM classified;
+
+ROLLBACK;
+```
+
+The eight result classes are disjoint; `with_removed_history` overlaps them.
+This is configuration coverage, not route admission, intent, or grant parity.
+For example, two hosted servers that share a sign-in with two legacy bindings
+remain ambiguous here even if each already has a different exact association.
+A removed row does not prove an explicit detach or authorize zero credentials.
+The query intentionally does not infer configuration from toolset environment,
+protected resource metadata, or the presence of a usable user session.
+
+For gateway verification, enumerate the admitted hosted placements separately
+with the exact deployed member snapshot (`resolveEndpointMemberSnapshot` for
+consent; `resolveGateMemberSnapshot` for dispatch). For each placement use the
+gateway's effective sign-in, member project and organization, and the effective
+provider (`upstreamIssuerKeys.authoritative`) for the existing `memberUsesClient`
+filter. The organization gateway enables the organization-wide lookup in
+`ListRemoteSessionClientsForUserSessionIssuer`, then qualifies each member;
+the stored gateway uses its project lookup. Compare those IDs with the same
+per-server association set and aggregate the same classes independently of
+this direct check. Do not union projects or treat a direct check as evidence
+of gateway parity. Verify grant parity separately with approved, redacted
+status and revocation evidence, not by reading tokens.
+
 ## Contract and release gates
 
 The intended configuration methods are `remoteSessions.listServerClientAssociations`,
