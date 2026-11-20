@@ -75,3 +75,26 @@ func TestHostedMemberTokens_SelfCredential(t *testing.T) {
 	require.True(t, ok, "error: %v", err)
 	require.False(t, outage.retryable, "the request resolved its token map once, so a retry would reread the same outage")
 }
+
+// hostedMemberTokens narrows a gate's token map to what a hosted member may
+// receive: the entry keyed by the member's own derived remote_session_issuer,
+// and only when its grant is unqualified. The tunneled arm of
+// routeMetaMemberToken applies the same rule. A lone-token fallback would
+// forward a sibling's bearer once partial resolution leaves gaps in the map,
+// and a resource-qualified token is audience-bound to the remote upstream it
+// was consented for; both cases yield no token. A self client whose
+// credential could not be obtained yields the member-scoped remedy instead,
+// so the member's tools never run without the credential it holds.
+func hostedMemberTokens(tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+	if !member.remoteSessionIssuerID.Valid {
+		return nil, nil
+	}
+	entry, ok := tokens[member.remoteSessionIssuerID.UUID]
+	if !ok || entry.Resource != "" {
+		return nil, nil
+	}
+	if err := entry.ClientCredentialErr; err != nil {
+		return nil, metaMemberClientCredentialError(member, err)
+	}
+	return map[uuid.UUID]remotesessions.UpstreamToken{member.remoteSessionIssuerID.UUID: entry}, nil
+}

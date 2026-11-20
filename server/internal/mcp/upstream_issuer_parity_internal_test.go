@@ -231,3 +231,12 @@ func TestMemberUpstreamIssuer_OtherSourceAndGoverningChoice(t *testing.T) {
 	require.Equal(t, "association-token", soleToken(otherHosted).Token)
 	require.False(t, sameRoutedUpstream(soleToken(hosted), hostedErr, soleToken(otherHosted), otherHostedErr))
 }
+
+// soleToken is the one entry hostedMemberTokens narrows to, or none.
+func soleToken(tokens map[uuid.UUID]remotesessions.UpstreamToken) remotesessions.UpstreamToken {
+	var none remotesessions.UpstreamToken
+	for _, entry := range tokens {
+		return entry
+	}
+	return none
+}

@@ -1221,6 +1221,9 @@ func (s *Service) attachAssociatedClients(ctx context.Context, organizationID st
 // client of the member's authorization server in the member's own project
 // when a project owns it.
 func memberUsesClient(member metaMember, clientID, clientIssuerID uuid.UUID, clientProjectID uuid.NullUUID) bool {
+	if member.backend == metaMemberBackendHosted {
+		return member.associatedClients[clientID]
+	}
 	if member.associatedClients != nil {
 		return member.associatedClients[clientID]
 	}
@@ -1240,6 +1243,9 @@ func memberUsesClient(member metaMember, clientID, clientIssuerID uuid.UUID, cli
 func memberNeedsSignIn(member metaMember) bool {
 	if len(member.associatedClients) > 0 {
 		return true
+	}
+	if member.backend == metaMemberBackendHosted && member.associatedClients != nil {
+		return false
 	}
 	return !member.typedRegistrations && member.remoteSessionIssuerID.Valid
 }

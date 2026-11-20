@@ -414,14 +414,17 @@ func (c *projectTokenCache) get(ctx context.Context, projectID uuid.UUID) (map[u
 	return tokens, nil
 }
 
-// getMember resolves a proxied member's credentials from its associated
-// clients alone.
+// getMember resolves a member's credentials without falling back to the
+// project's potentially broader credentials.
 func (c *projectTokenCache) getMember(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if tokens, ok := c.byMember[member.serverID]; ok {
 		return tokens, nil
+	}
+	if c.resolveMember == nil {
+		return nil, errors.New("member credential resolver is not configured")
 	}
 	tokens, err := c.resolveMember(ctx, member)
 	if err != nil {
@@ -456,7 +459,11 @@ func (s *Service) newOrganizationGatewayTokens(r *http.Request, endpoint *Resolv
 		},
 		resolveMember: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 			if member.backend == metaMemberBackendHosted {
-				return s.hostedUpstreamTokens(ctx, remotesessions.RefreshIn(connectionScope(endpoint, requestApp(ctx))).NotingSkips(skipped).FromRequest(r), endpoint.OrganizationID, member.projectID, member.serverID, endpoint.UserSessionIssuerID, subject, true)
+				tokens, err := s.hostedUpstreamTokens(ctx, remotesessions.RefreshIn(connectionScope(endpoint, requestApp(ctx))).NotingSkips(skipped).FromRequest(r), endpoint.OrganizationID, member.projectID, member.serverID, endpoint.UserSessionIssuerID, subject, true)
+				if err != nil {
+					return nil, oops.E(oops.CodeUnexpected, err, "resolve hosted member sign-in").LogError(ctx, s.logger)
+				}
+				return tokens, nil
 			}
 			tokens, err := s.remoteChallengeMgr.ResolveAssociatedAccessTokens(ctx, remotesessions.RefreshIn(connectionScope(endpoint, requestApp(ctx))).NotingSkips(skipped).FromRequest(r), member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, member.associatedClients, true)
 			if err != nil {
@@ -568,7 +575,7 @@ func (s *Service) listSignInClients(ctx context.Context, endpoint *ResolvedMcpEn
 	if endpoint.ToolsetID.Valid && endpoint.McpServerID.Valid {
 		return s.hostedSignInClients(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.McpServerID.UUID)
 	}
-	if usesTypedConsentInventory(ctx) && (endpoint.IsOrganizationGateway() || endpoint.MetaMcpServerID.Valid) {
+	if endpoint.IsOrganizationGateway() || endpoint.MetaMcpServerID.Valid {
 		members, err := loadMembers()
 		if err != nil {
 			return nil, err
@@ -579,41 +586,46 @@ func (s *Service) listSignInClients(ctx context.Context, endpoint *ResolvedMcpEn
 			if member.backend != metaMemberBackendHosted {
 				continue
 			}
-			assigned, err := s.hostedSignInClients(ctx, endpoint.OrganizationID, member.projectID, member.serverID)
-			if errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) {
-				continue
-			}
-			if err != nil {
-				return nil, err
-			}
-			for _, client := range assigned {
-				if !seen[client.ID] {
-					seen[client.ID] = true
-					clients = append(clients, client)
+			for registration := range member.associatedClients {
+				if seen[registration] {
+					continue
+				}
+				assigned, err := s.remoteChallengeMgr.ListAuthClientRegistrations(ctx, member.projectID, endpoint.OrganizationID, []uuid.UUID{registration})
+				if err != nil {
+					return nil, err
+				}
+				if len(assigned) == 1 {
+					seen[registration] = true
+					clients = append(clients, assigned[0])
 				}
 			}
 		}
-		return clients, nil
-	}
-	if endpoint.IsOrganizationGateway() {
-		clients, err := s.remoteChallengeMgr.ListOrganizationClients(ctx, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
+		if usesTypedConsentInventory(ctx) {
+			return clients, nil
+		}
+		// Compatibility inventory is still needed for proxied members outside
+		// typed consent. It cannot add or authorize a hosted registration.
+		proxied := slices.DeleteFunc(slices.Clone(members), func(member metaMember) bool {
+			return member.backend == metaMemberBackendHosted
+		})
+		if len(proxied) == 0 {
+			return clients, nil
+		}
+		var legacy []remotesessions.Client
+		if endpoint.IsOrganizationGateway() {
+			legacy, err = s.remoteChallengeMgr.ListOrganizationClients(ctx, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
+		} else {
+			legacy, err = s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
+		}
 		if err != nil {
-			return nil, fmt.Errorf("list organization remote session clients: %w", err)
+			return nil, fmt.Errorf("list proxied gateway sign-in clients: %w", err)
 		}
-		if len(clients) == 0 {
-			return nil, nil
-		}
-		members, err := loadMembers()
-		if err != nil {
-			return nil, err
-		}
-		reachable := make([]remotesessions.Client, 0, len(clients))
-		for _, client := range clients {
-			if clientServesSignInMember(ctx, client, members) {
-				reachable = append(reachable, client)
+		for _, client := range legacy {
+			if !seen[client.ID] && clientServesSignInMember(ctx, client, proxied) {
+				clients = append(clients, client)
 			}
 		}
-		return reachable, nil
+		return clients, nil
 	}
 	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 	if err != nil {
@@ -634,13 +646,6 @@ func (s *Service) listSignInClients(ctx context.Context, endpoint *ResolvedMcpEn
 		return slices.DeleteFunc(clients, func(client remotesessions.Client) bool {
 			return !associated[endpoint.McpServerID.UUID][client.ID]
 		}), nil
-	}
-	if endpoint.MetaMcpServerID.Valid {
-		members, err := loadMembers()
-		if err != nil {
-			return nil, err
-		}
-		return slices.DeleteFunc(clients, func(client remotesessions.Client) bool { return !clientServesSignInMember(ctx, client, members) }), nil
 	}
 	return clients, nil
 }
@@ -675,12 +680,6 @@ func (s *Service) consentSubjectMembers(ctx context.Context, endpoint *ResolvedM
 		return nil, oops.E(oops.CodeForbidden, nil, "The requested server is no longer available. Request a new connection link.")
 	}
 	return members, nil
-}
-
-func hasHostedConsentMember(members []metaMember) bool {
-	return slices.ContainsFunc(members, func(member metaMember) bool {
-		return member.backend == metaMemberBackendHosted
-	})
 }
 
 func clientServesSignInMember(ctx context.Context, client remotesessions.Client, members []metaMember) bool {

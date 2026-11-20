@@ -1,3 +1,5 @@
+import { AuthRow } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthRow";
+import { AUTHORIZATION_SERVERS_FIELD_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/RemoteIdentityProvidersField";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -20,12 +22,18 @@ export function GatewayAuthorizationServersField({
     row.classification === "proxied" && row.server ? [row.server] : [],
   );
   return (
-    <GatewayMemberSignInField
-      servers={servers}
-      isLoading={isLoading}
-      isError={isError}
-      refetch={refetch}
-    />
+    <AuthRow
+      id={AUTHORIZATION_SERVERS_FIELD_ID}
+      label="Authorization servers"
+      hint="The gateway uses each member’s own upstream configuration."
+    >
+      <GatewayMemberSignInField
+        servers={servers}
+        isLoading={isLoading}
+        isError={isError}
+        refetch={refetch}
+      />
+    </AuthRow>
   );
 }
 

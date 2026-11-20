@@ -541,23 +541,24 @@ func (s *Service) buildMemberDispatch(
 		return nil, hostingstate.NotHosted(), nil, err
 	}
 
-	// A hosted member records no upstream resource, so its credential is the
-	// token map entry keyed by its own derived remote_session_issuer: a token
-	// consented for a specific member must never reach another member's
-	// tools. No entry degrades to no token rather than an error, so partially
-	// connected meta sessions keep hosted members callable.
+	// A hosted member accepts only an unqualified token for its exact
+	// registration. In particular, a token resolved for a different member
+	// (even at the same provider) must never become a tool input.
 	tokens, err := s.resolveMemberTokens(ctx, gate, member)
 	if err != nil {
 		return nil, hostingstate.NotHosted(), nil, err
 	}
-	// Hosted dispatch receives the exact registration's tokens from its
-	// member resolver. Do not reselect them using a derived issuer column.
-	for _, token := range tokens {
+	qualified := make(map[uuid.UUID]remotesessions.UpstreamToken, 1)
+	for issuer, token := range tokens {
+		if !member.associatedClients[token.RemoteSessionClientID] || token.Resource != "" {
+			continue
+		}
 		if token.ClientCredentialErr != nil {
 			return nil, hostingstate.NotHosted(), nil, withMemberConnectLink(metaMemberClientCredentialError(member, token.ClientCredentialErr), member, gate.memberCallerURL(member))
 		}
+		qualified[issuer] = token
 	}
-	tokenInputs, err := appendRemoteSessionTokenInputs(nil, tokens)
+	tokenInputs, err := appendRemoteSessionTokenInputs(nil, qualified)
 	if err != nil {
 		return nil, hostingstate.NotHosted(), nil, oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for meta MCP member").LogError(ctx, logger)
 	}
@@ -627,29 +628,6 @@ func (s *Service) buildMemberDispatch(
 		upstreamRejection:        mcpconnectionattempts.Code{},
 	}
 	return toolset, hosting, inputs, nil
-}
-
-// hostedMemberTokens narrows a gate's token map to what a hosted member may
-// receive: the entry keyed by the member's own derived remote_session_issuer,
-// and only when its grant is unqualified. The tunneled arm of
-// routeMetaMemberToken applies the same rule. A lone-token fallback would
-// forward a sibling's bearer once partial resolution leaves gaps in the map,
-// and a resource-qualified token is audience-bound to the remote upstream it
-// was consented for; both cases yield no token. A self client whose
-// credential could not be obtained yields the member-scoped remedy instead,
-// so the member's tools never run without the credential it holds.
-func hostedMemberTokens(tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-	if !member.remoteSessionIssuerID.Valid {
-		return nil, nil
-	}
-	entry, ok := tokens[member.remoteSessionIssuerID.UUID]
-	if !ok || entry.Resource != "" {
-		return nil, nil
-	}
-	if err := entry.ClientCredentialErr; err != nil {
-		return nil, metaMemberClientCredentialError(member, err)
-	}
-	return map[uuid.UUID]remotesessions.UpstreamToken{member.remoteSessionIssuerID.UUID: entry}, nil
 }
 
 // loadMemberToolset loads the member's toolset row, applying the member

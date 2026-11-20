@@ -403,28 +403,31 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 			AutoConnectDone:          false,
 			FocusServer:              "",
 		}
-		recheckCtx := ctx
-		enforced, err := authenforcement.ReadEnforced(ctx, s.db, endpoint.OrganizationID)
-		if err != nil {
-			logger.ErrorContext(ctx, "read upstream auth enforcement for remote session re-check", attr.SlogError(err))
-			continue
+		hosted, err := s.recheckHostedRemoteSession(ctx, logger, endpoint, state, sess, row.OrganizationIds)
+		if !hosted && err == nil {
+			recheckCtx := ctx
+			enforced, enforcementErr := authenforcement.ReadEnforced(ctx, s.db, endpoint.OrganizationID)
+			if enforcementErr != nil {
+				logger.ErrorContext(ctx, "read upstream auth enforcement for remote session re-check", attr.SlogError(enforcementErr))
+				continue
+			}
+			if !enforced {
+				recheckCtx = context.WithValue(ctx, recheckLegacyInventoryKey{}, true)
+			}
+			clients, offered, inventoryErr := s.listEndpointClientsAndRegistrations(recheckCtx, endpoint, state)
+			if inventoryErr != nil {
+				logger.ErrorContext(ctx, "list clients for remote session re-check", attr.SlogError(inventoryErr))
+				continue
+			}
+			clients = subjectConnectedClients(clients)
+			client := findConsentClient(clients, sess.RemoteSessionClientID)
+			if client == nil {
+				logger.InfoContext(ctx, "remote session re-check skipped: client is not bound to the endpoint")
+				continue
+			}
+			// The probe logs its own refusals; only a dialled probe ends the search.
+			err = s.probeRemoteSession(recheckCtx, remotesessions.RefreshIn(connectionScope(endpoint, mcpconnectionattempts.AppBackground)), logger, mcpconnectionattempts.FromRequest(nil), endpoint, state, *client, offered, nil, remotesessionmetrics.ValidationTriggerKeepalive)
 		}
-		if !enforced {
-			recheckCtx = context.WithValue(ctx, recheckLegacyInventoryKey{}, true)
-		}
-		clients, offered, err := s.listEndpointClientsAndRegistrations(recheckCtx, endpoint, state)
-		if err != nil {
-			logger.ErrorContext(ctx, "list clients for remote session re-check", attr.SlogError(err))
-			continue
-		}
-		clients = subjectConnectedClients(clients)
-		client := findConsentClient(clients, sess.RemoteSessionClientID)
-		if client == nil {
-			logger.InfoContext(ctx, "remote session re-check skipped: client is not bound to the endpoint")
-			continue
-		}
-		// The probe logs its own refusals; only a dialled probe ends the search.
-		err = s.probeRemoteSession(recheckCtx, remotesessions.RefreshIn(connectionScope(endpoint, mcpconnectionattempts.AppBackground)), logger, mcpconnectionattempts.FromRequest(nil), endpoint, state, *client, offered, nil, remotesessionmetrics.ValidationTriggerKeepalive)
 		switch {
 		case errors.Is(err, errRemoteSessionRecheckRateLimited):
 			// Stay inside this probe's budget; a detached cleanup would extend the shutdown drain.
@@ -446,6 +449,60 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 		return recheckProbed
 	}
 	return recheckSkipped
+}
+
+// recheckHostedRemoteSession uses the pinned, non-refreshable grant the
+// worker claimed, not the browser inventory or the token resolver (which
+// could refresh a newly replaced grant). Enrichment opens that exact row.
+func (s *Service) recheckHostedRemoteSession(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, sess remotesessions_repo.RemoteSession, organizationIDs []string) (bool, error) {
+	placement, err := s.hostedValidationPlacement(ctx, logger, endpoint, state, sess.RemoteSessionClientID, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	if err != nil {
+		return false, err
+	}
+	if placement.serverID == uuid.Nil || sess.Resource.String != "" {
+		// A qualified grant may still reach a proxied member on this gateway,
+		// but must not be presented through a hosted assignment.
+		if isDirectHostedValidation(endpoint) {
+			return true, errRemoteSessionUnroutable
+		}
+		return false, nil
+	}
+	clients, err := s.hostedSignInClients(ctx, endpoint.OrganizationID, placement.projectID, placement.serverID)
+	if err != nil {
+		return true, err
+	}
+	if len(clients) != 1 || clients[0].ID != sess.RemoteSessionClientID || clients[0].CredentialOwner != remotesessions.CredentialOwnerSubject {
+		return true, errRemoteSessionUnroutable
+	}
+	client := clients[0]
+	if err := s.admitRemoteSessionRecheck(ctx, logger, client.IssuerURL); err != nil {
+		return true, err
+	}
+	now := time.Now()
+	q := remotesessions_repo.New(s.db)
+	current, err := q.GetDueRemoteSessionRecheckCandidate(ctx, remotesessions_repo.GetDueRemoteSessionRecheckCandidateParams{
+		ID: sess.ID, NowTs: conv.ToPGTimestamptz(now), RecheckCutoff: conv.ToPGTimestamptz(now.Add(-s.remoteSessionRecheck.interval)), OrganizationIds: organizationIDs,
+	})
+	if err != nil {
+		return true, fmt.Errorf("revalidate claimed hosted grant: %w", err)
+	}
+	if current.RemoteSession.GrantGeneration != sess.GrantGeneration || !current.RemoteSession.UpdatedAt.Time.Equal(sess.UpdatedAt.Time) {
+		return true, errRemoteSessionUnroutable
+	}
+	grant, err := q.GetTenantUserRemoteSessionForClient(ctx, remotesessions_repo.GetTenantUserRemoteSessionForClientParams{
+		ProjectID: placement.projectID, OrganizationID: endpoint.OrganizationID, SubjectUrn: sess.SubjectUrn, RemoteSessionClientID: sess.RemoteSessionClientID,
+	})
+	if err != nil {
+		return true, fmt.Errorf("revalidate hosted grant tenant: %w", err)
+	}
+	if grant.ID != sess.ID || grant.GrantGeneration != sess.GrantGeneration || !grant.UpdatedAt.Time.Equal(sess.UpdatedAt.Time) || grant.Resource.String != "" {
+		return true, errRemoteSessionUnroutable
+	}
+	ref := remotesessions.RemoteSessionRef{
+		ID: sess.ID, Subject: sess.SubjectUrn, ClientID: sess.RemoteSessionClientID, UpdatedAt: sess.UpdatedAt.Time,
+		ProjectID: placement.projectID, OrganizationID: endpoint.OrganizationID,
+	}
+	return true, s.verifyHostedRemoteSession(ctx, client, placement, ref, remotesessionmetrics.ValidationTriggerKeepalive)
 }
 
 // placeRemoteSessionRecheck resolves one endpoint the runtime still serves, trying the private surface when the public one is policy-refused.

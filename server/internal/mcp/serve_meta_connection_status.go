@@ -209,18 +209,24 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 		}
 	}
 	if member.backend == metaMemberBackendHosted {
-		if !member.remoteSessionIssuerID.Valid {
+		registrationID, err := s.hostedRegistration(ctx, gate.organizationID, member.projectID, member.serverID)
+		if err != nil {
+			logger.WarnContext(ctx, "check hosted member upstream assignment", attr.SlogError(err))
+			return signInRow(metamcp.SignInError, "could not check this server's sign-in", nil)
+		}
+		if registrationID == uuid.Nil {
 			return signInRow(metamcp.SignInNotRequired, "", nil)
 		}
-		gateTokens, err := s.resolveMemberTokens(ctx, gate, member)
+		tokens, err := s.resolveMemberTokens(ctx, gate, member)
 		if err != nil {
 			return memberFailureSignIn(ctx, *gate, member, err)
 		}
-		tokens, err := hostedMemberTokens(gateTokens, member)
-		if err != nil {
+		entry, ok := assignedHostedToken(tokens, registrationID)
+		if ok && entry.ClientCredentialErr != nil {
+			err := metaMemberClientCredentialError(member, entry.ClientCredentialErr)
 			return memberFailureSignIn(ctx, *gate, member, withMemberConnectLink(err, member, gate.memberCallerURL(member)))
 		}
-		if len(tokens) == 0 {
+		if !ok || entry.Token == "" {
 			return notConnectedRow(gate, true)
 		}
 		return signInRow(metamcp.SignInConnected, "", nil)
@@ -256,6 +262,26 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 		return notConnectedRow(gate, dial.oauthSignIn)
 	}
 	return signInRow(metamcp.SignInNotRequired, "", nil)
+}
+
+// assignedHostedToken cannot select an issuer sibling or a resource-qualified
+// grant. The registration can appear at most once in an exact resolver result.
+func assignedHostedToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, registrationID uuid.UUID) (remotesessions.UpstreamToken, bool) {
+	var entry remotesessions.UpstreamToken
+	found := false
+	if registrationID == uuid.Nil {
+		return entry, false
+	}
+	for _, token := range tokens {
+		if token.RemoteSessionClientID != registrationID || token.Resource != "" {
+			continue
+		}
+		if found {
+			return remotesessions.UpstreamToken{}, false
+		}
+		entry, found = token, true
+	}
+	return entry, found
 }
 
 // memberAuthRequirements reports whether a proxied member offers an enabled
