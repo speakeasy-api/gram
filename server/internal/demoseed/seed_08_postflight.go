@@ -456,7 +456,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "gateway members",
 			count: byProject(s.q.PostflightCountGatewayMembers),
-			fail:  postflightMustEqual(7, "expected 7 gateway members, found %d"),
+			fail:  postflightMustEqual(10, "expected 10 gateway members, found %d"),
 		},
 		{
 			what:  "removed gateway members",
@@ -481,7 +481,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "gateway endpoints",
 			count: byProject(s.q.PostflightCountGatewayEndpoints),
-			fail:  postflightMustEqual(3, "expected 3 gateway endpoints, found %d"),
+			fail:  postflightMustEqual(4, "expected 4 gateway endpoints, found %d"),
 		},
 		// A member whose server lost its backend can never be dispatched to,
 		// so it would sit in the gateway's table permanently unavailable.
