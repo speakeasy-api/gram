@@ -43,12 +43,21 @@ while IFS=$'\t' read -r path branch; do
   [[ -z $port && $path == "$REPO" ]] && port=5173
   [[ -z $port ]] && continue
   host=$(local_var GRAM_HOST "$path")
-  url="https://${host:-localhost}:$port"
+  host=${host:-localhost}
+  scheme=$(local_var GRAM_HTTP_SCHEME "$path")
+  scheme=${scheme:-https}
+  # The URL ends up in SwiftBar attributes and a shell command; skip anything
+  # that is not a plain scheme, hostname and port.
+  [[ $port =~ ^[0-9]+$ && $host =~ ^[A-Za-z0-9.-]+$ && $scheme =~ ^https?$ ]] || continue
+  url="$scheme://$host:$port"
+  # `|` separates SwiftBar's label from its attributes and `"` ends a quoted attribute.
+  branch=${branch//|/¦}
+  branch=${branch//\"/\'}
   pid=$(awk -v p="$port" '$1==p{print $2; exit}' <<<"$listeners")
   line="$branch  :$port"
   if [[ -z $pid ]]; then
     stopped+=("$line|$url")
-  elif ps -o args= -p "$pid" | grep -q 'park'; then
+  elif ps -o args= -p "$pid" | grep -q '\.mise-tasks/park\.mts'; then
     # `mise run pause` parks .mise-tasks/park.mts on the site port.
     paused+=("$line|$url")
   else

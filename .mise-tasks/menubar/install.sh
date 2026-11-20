@@ -23,7 +23,7 @@ if [[ ! -f $target ]]; then
   echo "The main checkout has no $plugin yet; linking this worktree's copy. Re-run after you pull main."
 fi
 
-if [[ ! -d /Applications/SwiftBar.app ]]; then
+if [[ -z $(mdfind "kMDItemCFBundleIdentifier == 'com.ameba.SwiftBar'" 2>/dev/null) ]]; then
   echo "Installing SwiftBar..."
   brew install --cask swiftbar
 fi
