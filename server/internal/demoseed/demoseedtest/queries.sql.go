@@ -81,7 +81,7 @@ func (q *Queries) GetVisitorEMAFixtureParents(ctx context.Context, arg GetVisito
 	return i, err
 }
 
-const hasSeedPersonalOAuthOffer = `-- name: HasSeedPersonalOAuthOffer :one
+const hasSeedPersonalOffer = `-- name: HasSeedPersonalOffer :one
 SELECT EXISTS (
  SELECT 1
  FROM mcp_server_auth_clients offer
@@ -93,21 +93,26 @@ SELECT EXISTS (
    AND offer.mcp_server_id = $2::text::uuid
    AND offer.deleted IS FALSE
    AND client.deleted IS FALSE
-   AND client.client_type = 'remote_session'
+   AND ((client.client_type = 'remote_session' AND registration.credential_owner = 'subject')
+        OR (client.client_type = 'ema' AND EXISTS (
+            SELECT 1 FROM mcp_auth_client_emas details
+            WHERE details.auth_client_id = client.id
+              AND details.organization_id = client.organization_id
+              AND details.deleted IS FALSE
+        )))
    AND registration.id = $3::text::uuid
-   AND registration.credential_owner = 'subject'
    AND registration.deleted IS FALSE
 )
 `
 
-type HasSeedPersonalOAuthOfferParams struct {
+type HasSeedPersonalOfferParams struct {
 	OrgID          string
 	ServerID       string
 	RegistrationID string
 }
 
-func (q *Queries) HasSeedPersonalOAuthOffer(ctx context.Context, arg HasSeedPersonalOAuthOfferParams) (bool, error) {
-	row := q.db.QueryRow(ctx, hasSeedPersonalOAuthOffer, arg.OrgID, arg.ServerID, arg.RegistrationID)
+func (q *Queries) HasSeedPersonalOffer(ctx context.Context, arg HasSeedPersonalOfferParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasSeedPersonalOffer, arg.OrgID, arg.ServerID, arg.RegistrationID)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err

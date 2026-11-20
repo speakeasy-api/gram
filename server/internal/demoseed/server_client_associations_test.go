@@ -30,14 +30,19 @@ func testServerClientAssociations(t *testing.T, spec Spec) {
 	queries := demoseedtest.New(db)
 	for range 2 {
 		seedNativePostgres(ctx, t, db, spec)
-		for _, server := range []string{"linear", "linear-app", "notion-app"} {
-			present, err := queries.HasSeedPersonalOAuthOffer(ctx, demoseedtest.HasSeedPersonalOAuthOfferParams{
+		for _, fixture := range []struct{ server, registration string }{
+			{"linear", "remote-identity-client-linear"},
+			{"linear-app", "remote-identity-client-linear-app"},
+			{"notion-app", "remote-identity-client-notion-app"},
+			{"ema-wiki", "ema-client-wiki"},
+		} {
+			present, err := queries.HasSeedPersonalOffer(ctx, demoseedtest.HasSeedPersonalOfferParams{
 				OrgID:          spec.OrgID,
-				ServerID:       seed.det("mcpserver-" + server).String(),
-				RegistrationID: seed.det("remote-identity-client-" + server).String(),
+				ServerID:       seed.det("mcpserver-" + fixture.server).String(),
+				RegistrationID: seed.det(fixture.registration).String(),
 			})
 			require.NoError(t, err)
-			require.True(t, present, "%s must offer its personal OAuth registration", server)
+			require.True(t, present, "%s must offer its personal registration", fixture.server)
 		}
 	}
 }

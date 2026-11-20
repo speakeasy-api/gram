@@ -107,10 +107,12 @@ WHERE project_id = @project_id::uuid
   AND grant_types = ARRAY['client_credentials']
   AND deleted IS FALSE;
 
--- Nobody connects a self client, and no MCP server uses this one.
--- name: PostflightIDJamfClientIssuerBindings :one
-SELECT count(*) FROM remote_session_client_user_session_issuers
-WHERE remote_session_client_id = @jamf_client::uuid;
+-- Nobody connects a self client, and no MCP server offers this one.
+-- name: PostflightIDJamfClientOffers :one
+SELECT count(*) FROM mcp_server_auth_clients offer
+JOIN mcp_auth_clients client ON client.id = offer.auth_client_id AND client.organization_id = offer.organization_id
+WHERE client.remote_session_client_id = @jamf_client::uuid
+  AND client.deleted IS FALSE AND offer.deleted IS FALSE;
 
 -- name: PostflightIDJamfClientSessions :one
 SELECT count(*) FROM remote_sessions
@@ -184,12 +186,6 @@ WHERE project_id = @project_id::uuid AND deleted IS FALSE;
 SELECT count(*) FROM remote_session_clients
 WHERE project_id = @project_id::uuid AND organization_id = @org_id::text
   AND client_id_issued_at IS NOT NULL AND deleted IS FALSE;
-
--- name: PostflightIDRemoteIdentityBindings :one
-SELECT count(*)
-FROM remote_session_client_user_session_issuers link
-JOIN user_session_issuers usi ON usi.id = link.user_session_issuer_id
-WHERE usi.project_id = @project_id::uuid;
 
 -- The Example OAuth server offers one personal registration, owned by its stamped provider.
 -- name: PostflightIDLinearPersonalOffer :one

@@ -613,14 +613,16 @@ func (q *Queries) PostflightIDIssuanceProfileChoices(ctx context.Context, arg Po
 	return count, err
 }
 
-const postflightIDJamfClientIssuerBindings = `-- name: PostflightIDJamfClientIssuerBindings :one
-SELECT count(*) FROM remote_session_client_user_session_issuers
-WHERE remote_session_client_id = $1::uuid
+const postflightIDJamfClientOffers = `-- name: PostflightIDJamfClientOffers :one
+SELECT count(*) FROM mcp_server_auth_clients offer
+JOIN mcp_auth_clients client ON client.id = offer.auth_client_id AND client.organization_id = offer.organization_id
+WHERE client.remote_session_client_id = $1::uuid
+  AND client.deleted IS FALSE AND offer.deleted IS FALSE
 `
 
-// Nobody connects a self client, and no MCP server uses this one.
-func (q *Queries) PostflightIDJamfClientIssuerBindings(ctx context.Context, jamfClient uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, postflightIDJamfClientIssuerBindings, jamfClient)
+// Nobody connects a self client, and no MCP server offers this one.
+func (q *Queries) PostflightIDJamfClientOffers(ctx context.Context, jamfClient uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDJamfClientOffers, jamfClient)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -950,20 +952,6 @@ type PostflightIDReadyEMABindingsParams struct {
 
 func (q *Queries) PostflightIDReadyEMABindings(ctx context.Context, arg PostflightIDReadyEMABindingsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDReadyEMABindings, arg.OrgID, arg.ProjectID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const postflightIDRemoteIdentityBindings = `-- name: PostflightIDRemoteIdentityBindings :one
-SELECT count(*)
-FROM remote_session_client_user_session_issuers link
-JOIN user_session_issuers usi ON usi.id = link.user_session_issuer_id
-WHERE usi.project_id = $1::uuid
-`
-
-func (q *Queries) PostflightIDRemoteIdentityBindings(ctx context.Context, projectID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, postflightIDRemoteIdentityBindings, projectID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

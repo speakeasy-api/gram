@@ -137,8 +137,8 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		}, 1, "demo seed postflight: expected the inert Jamf Pro self client, found %d"},
 		// Nobody connects a self client, and no MCP server uses this one.
 		{func(ctx context.Context) (int64, error) {
-			return s.q.PostflightIDJamfClientIssuerBindings(ctx, jamfClient)
-		}, 0, "demo seed postflight: Jamf Pro self client must not be bound to a user session issuer, found %d bindings"},
+			return s.q.PostflightIDJamfClientOffers(ctx, jamfClient)
+		}, 0, "demo seed postflight: Jamf Pro self client must not be offered on an MCP server, found %d offers"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDJamfClientSessions(ctx, jamfClient)
 		}, 0, "demo seed postflight: Jamf Pro self client must have no remote sessions, found %d"},
@@ -188,7 +188,6 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDRemoteIdentityClients(ctx, repo.PostflightIDRemoteIdentityClientsParams{ProjectID: proj, OrgID: org})
 		}, 3, "demo seed postflight: expected 3 Remote MCP identity clients (Example OAuth's, Linear's and Notion's), found %d"},
-		{byProj(s.q.PostflightIDRemoteIdentityBindings), 4, "demo seed postflight: expected 4 Remote MCP User Identity bindings, found %d"},
 		// The stamp has to be what ResyncMCPServerRemoteSessionIssuers would
 		// derive: every live client bound to the Example OAuth server's user session issuer names
 		// one remote issuer, and it is the stamped one. The query returns no

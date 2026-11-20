@@ -45,7 +45,7 @@ AND NOT EXISTS (
  AND c.organization_id = b.organization_id AND c.project_id = b.project_id
 );
 
--- name: HasSeedPersonalOAuthOffer :one
+-- name: HasSeedPersonalOffer :one
 SELECT EXISTS (
  SELECT 1
  FROM mcp_server_auth_clients offer
@@ -57,8 +57,13 @@ SELECT EXISTS (
    AND offer.mcp_server_id = sqlc.arg(server_id)::text::uuid
    AND offer.deleted IS FALSE
    AND client.deleted IS FALSE
-   AND client.client_type = 'remote_session'
+   AND ((client.client_type = 'remote_session' AND registration.credential_owner = 'subject')
+        OR (client.client_type = 'ema' AND EXISTS (
+            SELECT 1 FROM mcp_auth_client_emas details
+            WHERE details.auth_client_id = client.id
+              AND details.organization_id = client.organization_id
+              AND details.deleted IS FALSE
+        )))
    AND registration.id = sqlc.arg(registration_id)::text::uuid
-   AND registration.credential_owner = 'subject'
    AND registration.deleted IS FALSE
 );
