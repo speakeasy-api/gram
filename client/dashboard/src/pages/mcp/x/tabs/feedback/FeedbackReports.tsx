@@ -12,7 +12,8 @@ import {
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/Button";
-import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Stack } from "@/components/ui/Stack";
 import { Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
