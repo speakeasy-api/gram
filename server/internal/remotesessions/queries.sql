@@ -2332,10 +2332,9 @@ WHERE link.user_session_issuer_id = @user_session_issuer_id
 ORDER BY c.id ASC;
 
 -- name: ListRemoteSessionClientIDsForUserSessionIssuers :many
--- ListRemoteSessionClientIDsForUserSessionIssuer for many (user session
--- issuer, project) pairs in one round trip, with the same tenancy per pair.
+-- Registrations directly associated with servers on each issuer and project.
 -- Each pair's project must belong to the organization.
-SELECT
+SELECT DISTINCT
     pair.user_session_issuer_id::uuid AS user_session_issuer_id,
     pair.project_id::uuid AS project_id,
     c.id AS client_id
@@ -2343,17 +2342,18 @@ FROM generate_subscripts(@user_session_issuer_ids::uuid[], 1) AS idx
 CROSS JOIN LATERAL (
     SELECT (@user_session_issuer_ids::uuid[])[idx] AS user_session_issuer_id, (@project_ids::uuid[])[idx] AS project_id
 ) AS pair
-JOIN projects AS p ON p.id = pair.project_id AND p.organization_id = @organization_id::text
-JOIN remote_session_client_user_session_issuers AS link ON link.user_session_issuer_id = pair.user_session_issuer_id
+JOIN projects AS p ON p.id = pair.project_id AND p.organization_id = @organization_id::text AND NOT p.deleted
+JOIN user_session_issuers AS usi ON usi.id = pair.user_session_issuer_id AND NOT usi.deleted
+JOIN mcp_servers AS server ON server.project_id = p.id AND server.user_session_issuer_id = usi.id AND NOT server.deleted
+JOIN mcp_server_remote_session_clients AS link ON link.mcp_server_id = server.id
+  AND link.project_id = p.id AND link.organization_id = p.organization_id AND NOT link.deleted
 JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
-JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 WHERE (c.project_id = pair.project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
   AND (usi.project_id = pair.project_id OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
   AND (i.project_id = pair.project_id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = @organization_id::text)))
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
-  AND usi.deleted IS FALSE
 ORDER BY 1, 2, 3;
 
 -- name: GetRemoteURLForMcpServer :one

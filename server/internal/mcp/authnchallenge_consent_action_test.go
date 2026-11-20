@@ -733,10 +733,15 @@ func TestResourceOwners_MatchesConnectOwnership(t *testing.T) {
 	owner := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim431-owner", "", []uuid.UUID{fx.shared})
 	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim431-shared", "", []uuid.UUID{fx.shared, other})
 
+	_, err := authclientfixtures.New(fx.ti.conn).SeedAssociationFixture(ctx, authclientfixtures.SeedAssociationFixtureParams{
+		ProjectID: fx.projectID, OrganizationID: fx.orgID,
+		McpServerID: fx.endpoint.McpServerID.UUID, RemoteSessionClientID: owner,
+	})
+	require.NoError(t, err)
 	owners, err := remotesessions.ResourceOwners(ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.shared, consentUpstreamA, false)
 	require.NoError(t, err)
 	require.True(t, owners[owner])
-	require.False(t, owners[shared], "a sibling that derives the upstream on its own holds it")
+	require.NotContains(t, owners, shared, "a junction-only registration is not a candidate")
 
 	// The batch answers per server from one listing and one attachment load,
 	// and only for projects in the caller's organization.
