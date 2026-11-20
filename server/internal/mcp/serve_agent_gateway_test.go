@@ -688,14 +688,7 @@ func TestServeAgentGateway_UsesOwnerAttachment(t *testing.T) {
 	require.NoError(t, err)
 	text, isError := metaToolResultText(t, decodeRPCResponse(t, response))
 	require.False(t, isError, text)
-	toolCalls := 0
-	for _, req := range upstream.journal() {
-		if req.rpcMethod == "tools/call" {
-			toolCalls++
-			require.True(t, req.authorization == "Bearer owner-assigned-token", "active attachment: tool call lacks the owner bearer (has authorization: %t)", req.authorization != "")
-		}
-	}
-	require.Equal(t, 1, toolCalls)
+	upstream.requireToolCallAuth(t, "Bearer owner-assigned-token")
 	upstream.awaitMetadataProbe(t)
 	disconnectOwnerAttachedMember(t, ctx, seeded)
 	upstream.mu.Lock()
