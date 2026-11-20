@@ -238,7 +238,7 @@ func TestDelegableGrantsWithExclusions(t *testing.T) {
 		t.Helper()
 		policy, err := NewDelegatedPolicy(CurrentDelegatedPolicyVersion, grants)
 		require.NoError(t, err)
-		allowed, err := authz.GrantsAuthorize(policy.RuntimeGrants(), authz.MCPCheck(authz.ScopeMCPConnect, server, project))
+		allowed, err := authz.GrantsAuthorize(policy.RuntimeGrants(), authz.MCPServer(authz.MCPServerIDFrom(server), authz.ProjectIDFrom(project)).Connect())
 		require.NoError(t, err)
 		return allowed
 	}
@@ -283,9 +283,17 @@ func TestDelegableGrantsWithExclusions(t *testing.T) {
 			policy, err := NewDelegatedPolicy(CurrentDelegatedPolicyVersion, grants)
 			require.NoError(t, err)
 			allowed := func(value string) bool {
-				check := authz.MCPCheck(authz.ScopeMCPConnect, blocked, project)
+				server := authz.MCPServer(authz.MCPServerIDFrom(blocked), authz.ProjectIDFrom(project))
+				check := server.Connect()
 				if value != "" {
-					check.Dimensions[dimension.key] = value
+					// A tool call names both its tool and its disposition.
+					tool, disposition := "some-tool", authz.DispositionIdempotent
+					if dimension.key == authz.SelectorKeyTool {
+						tool = value
+					} else {
+						disposition = value
+					}
+					check = server.ToolCall(tool, disposition)
 				}
 				ok, err := authz.GrantsAuthorize(policy.RuntimeGrants(), check)
 				require.NoError(t, err)
@@ -308,8 +316,7 @@ func TestDelegableGrantsWithExclusions(t *testing.T) {
 		require.False(t, connects(t, grants, other))
 		policy, err := NewDelegatedPolicy(CurrentDelegatedPolicyVersion, grants)
 		require.NoError(t, err)
-		check := authz.MCPCheck(authz.ScopeMCPConnect, blocked, project)
-		check.Dimensions[authz.SelectorKeyTool] = "direct-tool"
+		check := authz.MCPServer(authz.MCPServerIDFrom(blocked), authz.ProjectIDFrom(project)).ToolCall("direct-tool", authz.DispositionIdempotent)
 		ok, err := authz.GrantsAuthorize(policy.RuntimeGrants(), check)
 		require.NoError(t, err)
 		require.True(t, ok)

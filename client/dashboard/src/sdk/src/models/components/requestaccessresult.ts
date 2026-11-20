@@ -7,10 +7,15 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import { AccessRequest, AccessRequest$inboundSchema } from "./accessrequest.js";
 
 export type RequestAccessResult = {
   /**
-   * Number of administrators who were notified.
+   * A member's request for access they were denied, decided by an organization administrator.
+   */
+  request?: AccessRequest | undefined;
+  /**
+   * Number of administrators who were emailed.
    */
   sentToCount: number;
 };
@@ -21,6 +26,7 @@ export const RequestAccessResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    request: z.optional(AccessRequest$inboundSchema),
     sent_to_count: z.int(),
   }),
   z.transform((v) => {

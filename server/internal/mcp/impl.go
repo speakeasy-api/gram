@@ -1404,7 +1404,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	// identity-auth chain below must be skipped or it would re-reject the JWT
 	// it doesn't recognise.
 	callerAlreadyGated := cfg.callerGated
-	connect := authz.MCPCheck(authz.ScopeMCPConnect, cfg.rbacResourceID.String(), toolset.ProjectID.String())
+	connect := authz.MCPServer(authz.MCPServerIDOf(cfg.rbacResourceID), authz.ProjectIDOf(toolset.ProjectID)).Connect()
 
 	isHostedToolsCall := req.Method == mcpversions.MethodToolsCall && cfg.mcpServerID != nil
 	resolvePendingIssuerGate := func() error {

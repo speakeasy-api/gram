@@ -17,6 +17,14 @@ import (
 
 // Client lists the userSessionClients service endpoint HTTP clients.
 type Client struct {
+	// CreateUserSessionClient Doer is the HTTP client used to make requests to the
+	// createUserSessionClient endpoint.
+	CreateUserSessionClientDoer goahttp.Doer
+
+	// UpdateUserSessionClientRedirectURIs Doer is the HTTP client used to make
+	// requests to the updateUserSessionClientRedirectURIs endpoint.
+	UpdateUserSessionClientRedirectURIsDoer goahttp.Doer
+
 	// ListUserSessionClients Doer is the HTTP client used to make requests to the
 	// listUserSessionClients endpoint.
 	ListUserSessionClientsDoer goahttp.Doer
@@ -54,15 +62,66 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListUserSessionClientsDoer:       doer,
-		GetUserSessionClientDoer:         doer,
-		RefreshUserSessionClientCIMDDoer: doer,
-		RevokeUserSessionClientDoer:      doer,
-		RestoreResponseBody:              restoreBody,
-		scheme:                           scheme,
-		host:                             host,
-		decoder:                          dec,
-		encoder:                          enc,
+		CreateUserSessionClientDoer:             doer,
+		UpdateUserSessionClientRedirectURIsDoer: doer,
+		ListUserSessionClientsDoer:              doer,
+		GetUserSessionClientDoer:                doer,
+		RefreshUserSessionClientCIMDDoer:        doer,
+		RevokeUserSessionClientDoer:             doer,
+		RestoreResponseBody:                     restoreBody,
+		scheme:                                  scheme,
+		host:                                    host,
+		decoder:                                 dec,
+		encoder:                                 enc,
+	}
+}
+
+// CreateUserSessionClient returns an endpoint that makes HTTP requests to the
+// userSessionClients service createUserSessionClient server.
+func (c *Client) CreateUserSessionClient() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateUserSessionClientRequest(c.encoder)
+		decodeResponse = DecodeCreateUserSessionClientResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateUserSessionClientRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateUserSessionClientDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("userSessionClients", "createUserSessionClient", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateUserSessionClientRedirectURIs returns an endpoint that makes HTTP
+// requests to the userSessionClients service
+// updateUserSessionClientRedirectURIs server.
+func (c *Client) UpdateUserSessionClientRedirectURIs() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateUserSessionClientRedirectURIsRequest(c.encoder)
+		decodeResponse = DecodeUpdateUserSessionClientRedirectURIsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateUserSessionClientRedirectURIsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateUserSessionClientRedirectURIsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("userSessionClients", "updateUserSessionClientRedirectURIs", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 

@@ -3,8 +3,9 @@ name: feature-flag
 description: >
   Use when gating a feature behind a flag, dogfooding or gradually rolling out a
   change, choosing between `productfeatures` and PostHog feature flags, adding
-  or checking a product feature or PostHog flag, or working out why a flag does
-  not apply to an organization, project, or user.
+  or checking a product feature or PostHog flag, removing a PostHog flag after
+  rollout, or working out why a flag does not apply to an organization,
+  project, or user.
 metadata:
   relevant_files:
     - "server/internal/productfeatures/**/*.go"
@@ -170,6 +171,25 @@ const assistantsEnabled = assistants.status === "enabled";
 ```
 
 The hook stays reactive as PostHog reloads flags. On localhost, the development telemetry provider reports every flag as enabled. PostHog flags control rollout UI only, never authorization or entitlement enforcement.
+
+### Removing a flag after rollout
+
+A flag is removed in code first and archived in PostHog only after that code is deployed. Read the live flag before you start, and decide which behavior to keep. Every row except the last needs the flag to be active, with no holdout, no flag dependency, and no earlier condition that serves a different value to some users:
+
+| Flag state in PostHog                                                                                    | Keep                                   |
+| -------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| Boolean, one release condition at 100% with no properties                                                | The enabled path                       |
+| Multivariate, one condition at 100% with no properties, whose override or 100% variant serves every user | That variant's path                    |
+| Inactive, or every condition at 0%                                                                       | The off path (delete the feature code) |
+| Anything else: partial rollout, targeted conditions, payload, kill switch, `*-shadow`                    | Nothing yet. A person decides first    |
+
+Then:
+
+1. Replace every read with the kept behavior: `feature.<Name>()` helpers, `EvaluateFlag`, `IsFlagEnabled`, `FlagVariant`, `useFeatureFlag(FEATURE_FLAGS.<key>)`, and string-literal reads of the key. Go to definition and find references from the `Flag` constant and from any helper in `server/internal/feature/` that wraps it, so no caller is missed.
+2. Delete the branch you did not keep, the helper, the `Flag` constant, and the `FEATURE_FLAGS` key. Remove the key from the local defaults too: `server/flags.csv` and the development variant maps in `client/dashboard/src/contexts/Telemetry.tsx`.
+3. Tests that assert the kept behavior must keep passing **unchanged**. Delete only tests that exercise the removed branch, such as a "flag off falls back to X" case. If a test of the kept behavior fails, you kept the wrong branch or dropped a step the flag used to enable. Fix the code, never the test's expectations.
+4. Leave data-model cleanup to a later change. Columns, tables or backfills that only the removed branch used stay in place.
+5. Do not archive or edit the PostHog flag in the same change. Archive it once the change is deployed and nothing still evaluates the key.
 
 ---
 

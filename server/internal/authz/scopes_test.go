@@ -286,14 +286,14 @@ func TestGrantsSatisfy_assistantWriteSatisfiesAssistantRead(t *testing.T) {
 	t.Parallel()
 
 	grants := []Grant{NewGrant(ScopeAssistantWrite, "assistant_1")}
-	require.True(t, GrantsSatisfy(grants, AssistantCheck(ScopeAssistantRead, "assistant_1", "project_a")))
+	require.True(t, GrantsSatisfy(grants, Assistant(AssistantIDFrom("assistant_1"), ProjectIDFrom("project_a")).Read()))
 }
 
 func TestGrantsSatisfy_assistantReadDoesNotSatisfyAssistantWrite(t *testing.T) {
 	t.Parallel()
 
 	grants := []Grant{NewGrant(ScopeAssistantRead, "assistant_1")}
-	require.False(t, GrantsSatisfy(grants, AssistantCheck(ScopeAssistantWrite, "assistant_1", "project_a")))
+	require.False(t, GrantsSatisfy(grants, Assistant(AssistantIDFrom("assistant_1"), ProjectIDFrom("project_a")).Write()))
 }
 
 func TestCheckExpand_orgRead(t *testing.T) {

@@ -153,7 +153,7 @@ func (a *LiveOrgAdminAuthorizer) AuthorizeExternalCall(ctx context.Context, prin
 		}
 		return nil
 	case ExternalAuthorizationOrgAdmin:
-		check = authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil}
+		check = authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Admin()
 	default:
 		return fmt.Errorf("%w: unsupported external authorization policy %q", ErrUnavailable, policy)
 	}

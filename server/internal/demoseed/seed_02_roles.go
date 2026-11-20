@@ -294,6 +294,9 @@ func (s *seeder) seedRoles(ctx context.Context) error {
 	if err := s.seedRolesSlack(ctx); err != nil {
 		return err
 	}
+	if err := s.seedRolesAccessRequests(ctx); err != nil {
+		return err
+	}
 	if err := s.seedRolesDirectory(ctx); err != nil {
 		return err
 	}

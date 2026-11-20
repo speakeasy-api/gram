@@ -10,6 +10,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -36,8 +37,16 @@ type gatewayCaller struct {
 }
 
 func emptyGatewayCaller() gatewayCaller {
+	return newGatewayCaller(0)
+}
+
+func personGatewayCaller() gatewayCaller {
+	return newGatewayCaller(gatewayCallerPerson)
+}
+
+func newGatewayCaller(kind gatewayCallerKind) gatewayCaller {
 	return gatewayCaller{
-		kind:         0,
+		kind:         kind,
 		principal:    urn.Principal{Type: "", ID: ""},
 		owner:        "",
 		ceiling:      nil,
@@ -47,6 +56,7 @@ func emptyGatewayCaller() gatewayCaller {
 
 type gatewayAdmission struct {
 	caller         gatewayCaller
+	agentID        uuid.UUID
 	authentication *issuerGateAuthentication
 	toolSelection  *toolfilter.SessionPolicy
 }
@@ -80,6 +90,7 @@ func (s *Service) admitGatewayCaller(
 	if authentication.subject.Kind == urn.SessionSubjectKindAnonymous {
 		return authedCtx, &gatewayAdmission{
 			caller:         emptyGatewayCaller(),
+			agentID:        uuid.Nil,
 			authentication: authentication,
 			toolSelection:  toolSelection,
 		}, nil
@@ -92,25 +103,62 @@ func (s *Service) admitGatewayCaller(
 	if err != nil {
 		return ctx, nil, err
 	}
-	admitted, err := target.admits(caller)
+	machineAccess := false
+	if caller.kind != gatewayCallerPerson {
+		machineAccess, err = s.gatewayMachineAccess(ctx, target)
+		if err != nil {
+			return ctx, nil, fmt.Errorf("check gateway machine access rollout: %w", err)
+		}
+	}
+	admitted, err := target.admits(caller, endpoint.ProjectID, machineAccess)
 	if err != nil {
 		return ctx, nil, fmt.Errorf("evaluate gateway target: %w", err)
 	}
 	if !admitted {
+		if reach, ok := workloadSessionReachFromContext(authedCtx); caller.kind == gatewayCallerWorkload && ok && reach == workloadSessionReachIssuer {
+			return ctx, nil, writeInsufficientScopeChallenge(w, authentication.protectedResourceURL, "access token does not grant access to this gateway")
+		}
 		return ctx, nil, WriteAuthenticateChallenge(w, authentication.protectedResourceURL, "credential cannot enter this gateway")
 	}
+	if caller.kind == gatewayCallerWorkload {
+		authedCtx = authz.WithoutCredentialCeiling(authedCtx)
+	}
 
-	// Machine callers are authenticated and live-admitted above, but gateways
-	// continue to accept user sessions only.
+	agentID := uuid.Nil
 	if caller.kind == gatewayCallerAgent || caller.kind == gatewayCallerWorkload {
-		return ctx, nil, WriteAuthenticateChallenge(w, authentication.protectedResourceURL, "this gateway accepts user sessions only")
+		var ok bool
+		agentID, ok = contextvalues.EffectiveAgentID(authedCtx)
+		if !ok {
+			return ctx, nil, fmt.Errorf("admitted %s caller has no effective agent", authentication.subject.Kind)
+		}
 	}
 
 	return authedCtx, &gatewayAdmission{
 		caller:         caller,
+		agentID:        agentID,
 		authentication: authentication,
 		toolSelection:  toolSelection,
 	}, nil
+}
+
+func (s *Service) gatewayMachineAccess(ctx context.Context, target gatewayTarget) (bool, error) {
+	if s.features == nil {
+		return false, nil
+	}
+	var flag feature.Flag
+	switch target.kind {
+	case gatewayKindStored:
+		flag = feature.FlagStoredGatewayMachineAccess
+	case gatewayKindProject:
+		flag = feature.FlagProjectGatewayMachineAccess
+	default:
+		return false, nil
+	}
+	enabled, err := s.features.IsFlagEnabledLocal(ctx, flag, target.organizationID, nil, nil)
+	if err != nil {
+		return false, fmt.Errorf("evaluate %s rollout: %w", flag, err)
+	}
+	return enabled, nil
 }
 
 func gatewayCallerFromContext(ctx context.Context, subject urn.SessionSubject) (gatewayCaller, error) {

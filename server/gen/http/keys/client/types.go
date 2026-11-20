@@ -161,12 +161,18 @@ type RotateKeyResponseBody struct {
 // "extendAgentKeys" endpoint HTTP response body.
 type ExtendAgentKeysResponseBody struct {
 	Keys []*KeyResponseBody `form:"keys,omitempty" json:"keys,omitempty" xml:"keys,omitempty"`
+	// Cursor for the next page of keys.list. Absent on the last page and when no
+	// limit was sent.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
 // ListKeysResponseBody is the type of the "keys" service "listKeys" endpoint
 // HTTP response body.
 type ListKeysResponseBody struct {
 	Keys []*KeyResponseBody `form:"keys,omitempty" json:"keys,omitempty" xml:"keys,omitempty"`
+	// Cursor for the next page of keys.list. Absent on the last page and when no
+	// limit was sent.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
 // UpdateKeyPolicyResponseBody is the type of the "keys" service
@@ -2194,7 +2200,9 @@ func NewRotateKeyGatewayError(body *RotateKeyGatewayErrorResponseBody) *goa.Serv
 // NewExtendAgentKeysListKeysResultOK builds a "keys" service "extendAgentKeys"
 // endpoint result from a HTTP "OK" response.
 func NewExtendAgentKeysListKeysResultOK(body *ExtendAgentKeysResponseBody) *keys.ListKeysResult {
-	v := &keys.ListKeysResult{}
+	v := &keys.ListKeysResult{
+		NextCursor: body.NextCursor,
+	}
 	v.Keys = make([]*keys.Key, len(body.Keys))
 	for i, val := range body.Keys {
 		if val == nil {
@@ -2360,7 +2368,9 @@ func NewExtendAgentKeysGatewayError(body *ExtendAgentKeysGatewayErrorResponseBod
 // NewListKeysResultOK builds a "keys" service "listKeys" endpoint result from
 // a HTTP "OK" response.
 func NewListKeysResultOK(body *ListKeysResponseBody) *keys.ListKeysResult {
-	v := &keys.ListKeysResult{}
+	v := &keys.ListKeysResult{
+		NextCursor: body.NextCursor,
+	}
 	v.Keys = make([]*keys.Key, len(body.Keys))
 	for i, val := range body.Keys {
 		if val == nil {
@@ -4958,8 +4968,8 @@ func ValidateAgentPolicySelectorRequestBody(body *AgentPolicySelectorRequestBody
 		}
 	}
 	if body.Disposition != nil {
-		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"read_only", "destructive", "idempotent", "open_world"}))
+		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world" || *body.Disposition == "unannotated") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"read_only", "destructive", "idempotent", "open_world", "unannotated"}))
 		}
 	}
 	if body.ServerURL != nil {
@@ -5075,8 +5085,8 @@ func ValidateAgentPolicySelectorResponseBody(body *AgentPolicySelectorResponseBo
 		}
 	}
 	if body.Disposition != nil {
-		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"read_only", "destructive", "idempotent", "open_world"}))
+		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world" || *body.Disposition == "unannotated") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"read_only", "destructive", "idempotent", "open_world", "unannotated"}))
 		}
 	}
 	if body.ServerURL != nil {

@@ -14,6 +14,7 @@ import (
 	"maps"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -94,6 +95,13 @@ func (s *Service) handleMetaDescribeServerCall(
 		})
 	}
 
+	instructions := catalog.instructions
+	if member.backend == metaMemberBackendHosted && member.toolsetID.Valid {
+		instructions = hostedServerInstructions(ctx, logger, s.mcpMetadataRepo, member.projectID, member.toolsetID.UUID)
+	}
+	if strings.TrimSpace(instructions) == "" {
+		instructions = ""
+	}
 	structured, err := json.Marshal(metamcp.DescribeServerResult{
 		Server: metamcp.ListedServer{
 			Slug:      member.slug,
@@ -101,7 +109,8 @@ func (s *Service) handleMetaDescribeServerCall(
 			SortOrder: int(member.sortOrder),
 			Status:    s.memberStatus(ctx, member),
 		},
-		Tools: described,
+		Instructions: instructions,
+		Tools:        described,
 	})
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "serialize describe_server result").LogError(ctx, logger)
@@ -415,6 +424,8 @@ type memberCatalog struct {
 	entries    []*toolListEntry
 	byName     map[string]*toolListEntry
 	incomplete bool
+	// From a live upstream handshake. Cached catalogs do not probe upstream.
+	instructions string
 }
 
 // describeMemberToolset loads the member's catalog via the same model view
@@ -445,7 +456,7 @@ func (s *Service) describeMemberToolset(
 		return nil, oops.E(oops.CodeUnexpected, err, "describe member toolset").LogError(ctx, logger)
 	}
 
-	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false}
+	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false, instructions: ""}
 	duplicates := map[string]bool{}
 	for _, tool := range described.Tools {
 		entry := toolToListEntry(tool)
@@ -691,7 +702,7 @@ func (s *Service) loadMemberToolset(
 // and a call that named a private member already recorded the same check, so
 // the request keeps one.
 func (s *Service) memberToolsetConnectAllowed(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, authenticated bool, toolset *toolsets_repo.Toolset, public bool) (bool, error) {
-	connect := authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())
+	connect := authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(toolset.ProjectID)).Connect()
 	visibility := mcpservers.VisibilityPrivate
 	if public {
 		visibility = mcpservers.VisibilityPublic

@@ -166,10 +166,19 @@ func (s *seeder) chfShadowTelemetry(ctx context.Context, ch driver.Conn) error {
 		if failed {
 			result = `,"gram.hook.error":"` + chfShadowErrors[hash64("sherr", n)%4] + `"`
 		}
+		// The Shadow MCP policy stopped a share of the calls before they ran.
+		// Blocks cluster on the servers that reach production data and on
+		// Notion, whose review is still waiting, so the blocked-calls column
+		// ranks a few servers well ahead of the rest.
+		event := "PostToolUse"
+		if chfShadowBlocked(sidx, n) {
+			event = "PreToolUse"
+			result = `,"gram.hook.block_reason":"MCP server is not approved for this project"`
+		}
 		user := demoUsers[chfShadowUserDraw[hash64("shu", n)%8]-1]
 		attrs := `{"gram.event.source":"hook"` +
 			`,"gram.hook.source":"claude-code"` +
-			`,"gram.hook.event":"PostToolUse"` +
+			`,"gram.hook.event":"` + event + `"` +
 			`,"gram.tool.name":"` + tool + `"` +
 			`,"gram.mcp.server_url":"` + chfShadowServers[sidx-1] + `"` +
 			result +
@@ -189,6 +198,18 @@ func (s *seeder) chfShadowTelemetry(ctx context.Context, ch driver.Conn) error {
 		})
 	}
 	return s.chfInsertTelemetry(ctx, ch, "shadow mcp telemetry", rows)
+}
+
+// chfShadowBlocked reports whether the seeded shadow call n to server sidx
+// (1-based) was blocked by the Shadow MCP policy.
+func chfShadowBlocked(sidx int, n int) bool {
+	switch sidx {
+	case 12, 15:
+		return hash64("shblk", n)%3 != 0
+	case 2, 10, 13:
+		return hash64("shblk", n)%2 == 0
+	}
+	return false
 }
 
 type chfDetection struct {

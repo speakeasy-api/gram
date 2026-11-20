@@ -433,7 +433,7 @@ export function SettingsTab({
             ...G.tools,
             content: <ToolFilteringSection mcpServer={mcpServer} />,
           },
-          // Finished guided setup moves here from the Setup tab.
+          // Finished guided setup moves here from the Setup page.
           guidedSetupStatus(mcpServer, remoteMcpServer?.url) === "done" &&
             hasScope("mcp:write", mcpServer.id) && {
               ...G.setup,

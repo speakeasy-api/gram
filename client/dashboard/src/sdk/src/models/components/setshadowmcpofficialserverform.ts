@@ -7,7 +7,11 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type SetShadowMCPOfficialServerForm = {
   /**
-   * The MCP server to link as the official version. Omit it to remove the link.
+   * Keep using the Shadow MCP server directly: no official server is linked, not even automatically. Cannot be combined with mcp_server_id.
+   */
+  keepShadow?: boolean | undefined;
+  /**
+   * The MCP server to link as the official version. Omit it, with keep_shadow unset, to go back to the automatic link.
    */
   mcpServerId?: string | undefined;
   projectId: string;
@@ -19,6 +23,7 @@ export type SetShadowMCPOfficialServerForm = {
 
 /** @internal */
 export type SetShadowMCPOfficialServerForm$Outbound = {
+  keep_shadow?: boolean | undefined;
   mcp_server_id?: string | undefined;
   project_id: string;
   server_url: string;
@@ -30,12 +35,14 @@ export const SetShadowMCPOfficialServerForm$outboundSchema: z.ZodMiniType<
   SetShadowMCPOfficialServerForm
 > = z.pipe(
   z.object({
+    keepShadow: z.optional(z.boolean()),
     mcpServerId: z.optional(z.string()),
     projectId: z.string(),
     serverUrl: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      keepShadow: "keep_shadow",
       mcpServerId: "mcp_server_id",
       projectId: "project_id",
       serverUrl: "server_url",

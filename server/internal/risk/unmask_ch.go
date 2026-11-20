@@ -121,7 +121,13 @@ func (s *Service) unmaskRiskResultFromClickHouse(ctx context.Context, authCtx *c
 // fails for a human member, the chat service's owner rule stands in (own the
 // session, or own or edit its agent): the transcript already shows the value.
 func (s *Service) requireChatRead(ctx context.Context, authCtx *contextvalues.AuthContext, chatID uuid.UUID) error {
-	err := s.authz.Require(ctx, authz.ChatReadCheck(chatID.String()))
+	// A finding with no recorded chat names none, so only an unrestricted
+	// chat grant reads it.
+	check := authz.UnrestrictedChats().Read()
+	if chatID != uuid.Nil {
+		check = authz.Chat(authz.ChatIDOf(chatID)).Read()
+	}
+	err := s.authz.Require(ctx, check)
 	if err == nil {
 		return nil
 	}

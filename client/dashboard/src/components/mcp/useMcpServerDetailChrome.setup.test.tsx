@@ -71,6 +71,7 @@ vi.mock("@/hooks/usePrivateMcpServerUrls", () => ({
 }));
 vi.mock("@/hooks/useToolsetUrl", () => ({
   useResolvedMcpServerUrl: () => ({}),
+  platformEndpointSlug: () => undefined,
   useCustomDomains: () => ({ domains: [], isLoading: false }),
   useMcpEndpointAddresses: () => [],
 }));
@@ -311,7 +312,7 @@ it("reports a turned-off server as broken, not as a setup step", () => {
   expect(readiness("Availability")).toBe("true");
 });
 
-it("sends a guide-only provider to the Setup tab, as the step after Authentication, until marked done", () => {
+it("sends a guide-only provider to the Setup page, as the step after Authentication, until marked done", () => {
   state.url = "https://mcp.linear.app/mcp";
   state.server = REMOTE_SERVER;
   state.guide = { only: { title: "Linear" }, openGuide: null };

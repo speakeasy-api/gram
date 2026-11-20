@@ -58,9 +58,12 @@ export function shadowMCPOfficialServerDescription(
 ): string {
   const official = server.officialServer;
   if (!official) return "";
+  const linked = official.automatic
+    ? `Official server: “${official.name}”, chosen automatically because it proxies this URL`
+    : `Linked to “${official.name}”`;
   const served = official.gatewayName
-    ? `Linked to “${official.name}”, served through the gateway “${official.gatewayName}”.`
-    : `Linked to “${official.name}”.`;
+    ? `${linked}, served through the gateway “${official.gatewayName}”.`
+    : `${linked}.`;
   if (!official.url) {
     return `${served} It has no address yet, so direct connections still work.`;
   }

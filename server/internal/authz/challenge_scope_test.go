@@ -59,13 +59,13 @@ func TestWithOneChallengePerResource_recordsEachResourceOnce(t *testing.T) {
 
 	// The server, then a tool on it: the second allow on the same server is
 	// not recorded again.
-	require.NoError(t, engine.Require(ctx, MCPCheck(ScopeMCPConnect, granted, testProjectID)))
-	require.NoError(t, engine.Require(ctx, MCPToolCallCheck(granted, MCPToolCallDimensions{Tool: "search", Disposition: "", ProjectID: testProjectID})))
+	require.NoError(t, engine.Require(ctx, MCPServer(MCPServerIDFrom(granted), ProjectIDFrom(testProjectID)).Connect()))
+	require.NoError(t, engine.Require(ctx, MCPServer(MCPServerIDFrom(granted), ProjectIDFrom(testProjectID)).ToolCall("search", "")))
 	// A denial is recorded once however often it is checked.
-	require.Error(t, engine.Require(ctx, MCPCheck(ScopeMCPConnect, ungranted, testProjectID)))
-	require.Error(t, engine.Require(ctx, MCPCheck(ScopeMCPConnect, ungranted, testProjectID)))
+	require.Error(t, engine.Require(ctx, MCPServer(MCPServerIDFrom(ungranted), ProjectIDFrom(testProjectID)).Connect()))
+	require.Error(t, engine.Require(ctx, MCPServer(MCPServerIDFrom(ungranted), ProjectIDFrom(testProjectID)).Connect()))
 	// A nested call keeps the request's record rather than starting over.
-	require.NoError(t, engine.Require(WithOneChallengePerResource(ctx), MCPCheck(ScopeMCPConnect, granted, testProjectID)))
+	require.NoError(t, engine.Require(WithOneChallengePerResource(ctx), MCPServer(MCPServerIDFrom(granted), ProjectIDFrom(testProjectID)).Connect()))
 
 	require.Equal(t, [][2]string{{granted, "allow"}, {ungranted, "deny"}}, recordedChallengeOutcomes(t, conn))
 }
@@ -83,8 +83,8 @@ func TestWithOneChallengePerResource_recordsADenialAfterAnAllow(t *testing.T) {
 
 	// Connecting is allowed, but this destructive tool is not: the refusal
 	// is a real one and must still show.
-	require.NoError(t, engine.Require(ctx, MCPCheck(ScopeMCPConnect, granted, testProjectID)))
-	require.Error(t, engine.Require(ctx, MCPToolCallCheck(granted, MCPToolCallDimensions{Tool: "delete", Disposition: DispositionDestructive, ProjectID: testProjectID})))
+	require.NoError(t, engine.Require(ctx, MCPServer(MCPServerIDFrom(granted), ProjectIDFrom(testProjectID)).Connect()))
+	require.Error(t, engine.Require(ctx, MCPServer(MCPServerIDFrom(granted), ProjectIDFrom(testProjectID)).ToolCall("delete", DispositionDestructive)))
 
 	require.Equal(t, [][2]string{{granted, "allow"}, {granted, "deny"}}, recordedChallengeOutcomes(t, conn))
 }
@@ -97,22 +97,22 @@ func TestWithOneChallengePerResource_recordsEachRefusedToolOnce(t *testing.T) {
 
 	for _, tc := range []struct {
 		name  string
-		calls []MCPToolCallDimensions
+		calls []mcpToolCallDimensions
 		want  int
 	}{
 		{
 			name:  "two tools",
-			calls: []MCPToolCallDimensions{{Tool: "delete", Disposition: DispositionDestructive, ProjectID: testProjectID}, {Tool: "drop", Disposition: DispositionDestructive, ProjectID: testProjectID}},
+			calls: []mcpToolCallDimensions{{Tool: "delete", Disposition: DispositionDestructive, ProjectID: testProjectID}, {Tool: "drop", Disposition: DispositionDestructive, ProjectID: testProjectID}},
 			want:  2,
 		},
 		{
 			name:  "one tool twice",
-			calls: []MCPToolCallDimensions{{Tool: "delete", Disposition: DispositionDestructive, ProjectID: testProjectID}, {Tool: "delete", Disposition: DispositionDestructive, ProjectID: testProjectID}},
+			calls: []mcpToolCallDimensions{{Tool: "delete", Disposition: DispositionDestructive, ProjectID: testProjectID}, {Tool: "delete", Disposition: DispositionDestructive, ProjectID: testProjectID}},
 			want:  1,
 		},
 		{
 			name:  "one tool under two dispositions",
-			calls: []MCPToolCallDimensions{{Tool: "delete", Disposition: DispositionDestructive, ProjectID: testProjectID}, {Tool: "delete", Disposition: DispositionOpenWorld, ProjectID: testProjectID}},
+			calls: []mcpToolCallDimensions{{Tool: "delete", Disposition: DispositionDestructive, ProjectID: testProjectID}, {Tool: "delete", Disposition: DispositionOpenWorld, ProjectID: testProjectID}},
 			want:  2,
 		},
 	} {
@@ -128,7 +128,7 @@ func TestWithOneChallengePerResource_recordsEachRefusedToolOnce(t *testing.T) {
 			ctx = WithOneChallengePerResource(ctx)
 
 			for _, call := range tc.calls {
-				require.Error(t, engine.Require(ctx, MCPToolCallCheck(granted, call)))
+				require.Error(t, engine.Require(ctx, mcpToolCallCheck(granted, call)))
 			}
 
 			want := make([][2]string, 0, tc.want)
@@ -146,9 +146,9 @@ func TestWithoutChallenges_recordsNothing(t *testing.T) {
 	ctx, engine, conn, granted := challengeScopeFixture(t)
 	silent := WithoutChallenges(WithOneChallengePerResource(ctx))
 
-	require.NoError(t, engine.Require(silent, MCPCheck(ScopeMCPConnect, granted, testProjectID)))
-	require.Error(t, engine.Require(silent, MCPCheck(ScopeMCPConnect, uuid.NewString(), "")))
-	matched, err := engine.FindMatched(silent, []Check{MCPCheck(ScopeMCPConnect, granted, testProjectID)})
+	require.NoError(t, engine.Require(silent, MCPServer(MCPServerIDFrom(granted), ProjectIDFrom(testProjectID)).Connect()))
+	require.Error(t, engine.Require(silent, mcpCheck(ScopeMCPConnect, uuid.NewString(), "")))
+	matched, err := engine.FindMatched(silent, []Check{MCPServer(MCPServerIDFrom(granted), ProjectIDFrom(testProjectID)).Connect()})
 	require.NoError(t, err)
 	require.Equal(t, []bool{true}, matched)
 
@@ -165,10 +165,10 @@ func TestWithOneChallengePerResource_batchesDoNotTakeAResourcesSlot(t *testing.T
 	// A batch filtering the server's tools records, but leaves the server's
 	// own denial to be recorded when a call names it. Once that is recorded,
 	// a later batch about the server records nothing.
-	_, err := engine.FindMatched(ctx, []Check{MCPToolCallCheck(ungranted, MCPToolCallDimensions{Tool: "search", Disposition: "", ProjectID: testProjectID})})
+	_, err := engine.FindMatched(ctx, []Check{MCPServer(MCPServerIDFrom(ungranted), ProjectIDFrom(testProjectID)).ToolCall("search", "")})
 	require.NoError(t, err)
-	require.Error(t, engine.Require(ctx, MCPCheck(ScopeMCPConnect, ungranted, testProjectID)))
-	_, err = engine.FindMatched(ctx, []Check{MCPToolCallCheck(ungranted, MCPToolCallDimensions{Tool: "search", Disposition: "", ProjectID: testProjectID})})
+	require.Error(t, engine.Require(ctx, MCPServer(MCPServerIDFrom(ungranted), ProjectIDFrom(testProjectID)).Connect()))
+	_, err = engine.FindMatched(ctx, []Check{MCPServer(MCPServerIDFrom(ungranted), ProjectIDFrom(testProjectID)).ToolCall("search", "")})
 	require.NoError(t, err)
 
 	// A batch row names no single resource.

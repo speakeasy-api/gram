@@ -37,6 +37,17 @@ var errWorkloadSessionOutOfReach = errors.New("workload session does not reach t
 // workloadSessionReach is which MCP servers a workload session was minted for.
 type workloadSessionReach string
 
+type workloadSessionReachContextKey struct{}
+
+func withWorkloadSessionReach(ctx context.Context, reach workloadSessionReach) context.Context {
+	return context.WithValue(ctx, workloadSessionReachContextKey{}, reach)
+}
+
+func workloadSessionReachFromContext(ctx context.Context) (workloadSessionReach, bool) {
+	reach, ok := ctx.Value(workloadSessionReachContextKey{}).(workloadSessionReach)
+	return reach, ok
+}
+
 const (
 	// workloadSessionReachResource is the one MCP server the grant named as
 	// its RFC 8707 resource.
@@ -109,6 +120,13 @@ func loadWorkloadSessionCredential(
 	delegatedGrantsVersion pgtype.Int4,
 ) (workloadSessionCredential, error) {
 	return checkWorkloadSessionCredential(endpoint.OrganizationID, subject, storedSubject, organizationID, delegatedGrants, delegatedGrantsVersion, func(version runtimepolicy.DelegatedPolicyVersion) ([]byte, error) {
+		if gateway, err := gatewayTargetFromEndpoint(endpoint); err == nil {
+			target, ok := gateway.authorizationTarget(endpoint.ProjectID)
+			if !ok {
+				return nil, errors.New("gateway cannot carry a workload session policy")
+			}
+			return encodeAgentSessionPolicy(*target, version)
+		}
 		target, ok := agentAuthorizationTarget(endpoint)
 		if !ok {
 			return nil, errors.New("endpoint cannot carry an agent session policy")
@@ -257,6 +275,10 @@ func (s *Service) admitWorkloadSession(ctx context.Context, organizationID strin
 // else could accept it. A session minted for all of the issuer's servers is
 // only out of reach here, and stays valid at the others.
 func (s *Service) requireWorkloadSessionAuthorization(ctx context.Context, endpoint *ResolvedMcpEndpoint, reach workloadSessionReach) (context.Context, error) {
+	if endpoint.MetaMcpServerID.Valid {
+		// Gateway entry and member authorization are separate decisions.
+		return ctx, nil
+	}
 	target, ok := agentAuthorizationTarget(endpoint)
 	if !ok {
 		if reach == workloadSessionReachIssuer {

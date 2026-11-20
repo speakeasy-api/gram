@@ -65,7 +65,7 @@ func TestExplicitAllProjectsInferenceGrantIsNotMCPAccess(t *testing.T) {
 	allowed, err := authz.GrantsAuthorize(grants, authz.InferenceExecuteCheck(project))
 	require.NoError(t, err)
 	require.True(t, allowed, "an explicit all-projects grant authorizes inference in this project")
-	allowed, err = authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPConnect, uuid.NewString(), project))
+	allowed, err = authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDFrom(uuid.NewString()), authz.ProjectIDFrom(project)).Connect())
 	require.NoError(t, err)
 	require.False(t, allowed, "inference grants cannot cause MCP role delivery or exposure approval")
 }
