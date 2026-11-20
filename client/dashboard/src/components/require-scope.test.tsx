@@ -71,6 +71,7 @@ vi.mock("@gram/client/react-query/accessRequests.js", () => ({
     },
     refetch: () => Promise.resolve(),
   }),
+  invalidateAllAccessRequests: () => Promise.resolve(),
 }));
 const toast = vi.hoisted(() => ({
   success: vi.fn(),
@@ -201,33 +202,35 @@ describe("RequestScopeAccess", () => {
     expect(screen.getByRole("button", { name: "Request Access" })).toBeTruthy();
   });
 
-  it("tells the requester once their pending request is approved", () => {
+  it("offers the request again once the pending request is decided", async () => {
     accessRequests.on = true;
     accessRequests.grantable = new Set(["log:read"]);
-    accessRequests.pending = [
-      { scope: "log:read", selector: { resourceId: "project-1" } },
-    ];
+    mutateAsync.mockResolvedValueOnce({
+      sentToCount: 1,
+      request: { id: "request-1" },
+    });
     const { rerender } = render(
       <RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />,
     );
-    expect(screen.getByText("Request pending")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+    expect(await screen.findByText("Request pending")).toBeTruthy();
 
+    // The pending list picks the request up, then drops it once an admin
+    // decides it and the app-wide watcher refreshes the list.
     accessRequests.pending = [
-      {
-        scope: "log:read",
-        selector: { resourceId: "project-1" },
-        status: "approved",
-        grantExpiresAt: new Date(2026, 10, 19, 14, 30),
-      },
+      { scope: "log:read", selector: { resourceId: "project-1" } },
     ];
     rerender(
       <RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />,
     );
+    expect(screen.getByText("Request pending")).toBeTruthy();
+    accessRequests.pending = [];
+    rerender(
+      <RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />,
+    );
 
-    expect(toast.success).toHaveBeenCalledTimes(1);
-    expect(toast.success).toHaveBeenCalledWith("Access approved until 14:30.");
-    // Lists fetched before the approval were filtered, not refused, so every
-    // query refetches, not only the grants.
-    expect(invalidateQueries).toHaveBeenCalledWith();
+    expect(
+      await screen.findByRole("button", { name: "Request Access" }),
+    ).toBeTruthy();
   });
 });

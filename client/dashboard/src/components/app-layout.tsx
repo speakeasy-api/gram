@@ -15,6 +15,7 @@ import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { ChatLaunchOverlay } from "./chat-launch-overlay.tsx";
 import { InsightsProvider } from "./insights-dock.tsx";
 import { OrgSidebar } from "./org-sidebar.tsx";
+import { AccessRequestWatcher } from "./access-request-watcher.tsx";
 import { TemporaryAccessPanel } from "./temporary-access-panel.tsx";
 import {
   SidePanelProvider,
@@ -199,6 +200,7 @@ const AppLayoutContent = ({
           navigation into the chat route. */}
       <ChatLaunchOverlay />
       <TemporaryAccessPanel />
+      <AccessRequestWatcher />
     </div>
   );
 };
@@ -294,6 +296,7 @@ export const OrgLayout = (): JSX.Element => {
           </SidebarInset>
         </ModeSurface>
         <TemporaryAccessPanel />
+        <AccessRequestWatcher />
       </div>
     </SidebarProvider>
   );

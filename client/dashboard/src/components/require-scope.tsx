@@ -3,11 +3,11 @@ import { useScopeCatalogue } from "@/hooks/useScopeCatalogue";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { RequestAccessFormScope } from "@gram/client/models/components/requestaccessform.js";
 import { useRequestAccessMutation } from "@gram/client/react-query/requestAccess.js";
-import { useAccessRequests } from "@gram/client/react-query/accessRequests.js";
-import { type QueryClient, useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
-import { toast } from "sonner";
-import { invalidateTemporaryAccess } from "./temporary-access-helpers";
+import {
+  invalidateAllAccessRequests,
+  useAccessRequests,
+} from "@gram/client/react-query/accessRequests.js";
+import { useQueryClient } from "@tanstack/react-query";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
@@ -378,6 +378,7 @@ type PendingRequest = { scope: string; selector: { resourceId: string } };
 function StoredRequestScopeAccess(
   props: RequestScopeAccessProps,
 ): React.JSX.Element | null {
+  const queryClient = useQueryClient();
   const myPending = useAccessRequests(
     { status: "pending", mine: true },
     undefined,
@@ -388,7 +389,7 @@ function StoredRequestScopeAccess(
       {...props}
       accessRequestsOn
       pending={myPending.data?.requests ?? NO_PENDING_REQUESTS}
-      onRequested={() => void myPending.refetch()}
+      onRequested={() => invalidateAllAccessRequests(queryClient)}
     />
   );
 }
@@ -406,7 +407,7 @@ function RequestScopeAccessButton({
 }: RequestScopeAccessProps & {
   accessRequestsOn: boolean;
   pending: PendingRequest[];
-  onRequested: (() => void) | undefined;
+  onRequested: (() => Promise<unknown>) | undefined;
 }): React.JSX.Element | null {
   const [requestState, setRequestState] = React.useState<
     | "idle"
@@ -419,9 +420,7 @@ function RequestScopeAccessButton({
   >("idle");
   const { hasScope } = useRBAC();
   const { catalogue } = useScopeCatalogue();
-  const requestAccessMutation = useRequestAccessMutation({
-    onSuccess: () => onRequested?.(),
-  });
+  const requestAccessMutation = useRequestAccessMutation();
   // Only request scopes the user is actually missing — an all-scopes gate can
   // trip on a partial grant, and admins shouldn't be asked for held scopes.
   const missingScopes = scopes.filter(
@@ -436,6 +435,27 @@ function RequestScopeAccessButton({
         (s) => catalogue.get(s)?.temporaryGrantable !== false,
       )
     : askableScopes;
+  // A pending request for this access, from an earlier visit, shows as
+  // pending instead of offering to ask again.
+  const alreadyPending = pending.some(
+    (request) =>
+      requestableScopes.includes(request.scope as RequestAccessFormScope) &&
+      request.selector.resourceId === (resourceId ?? "*"),
+  );
+
+  // A request made here stays pending until it leaves the viewer's pending
+  // list, which the app-wide watcher refreshes once it is decided.
+  const sawInPendingList = React.useRef(false);
+  React.useEffect(() => {
+    if (requestState !== "pending") return;
+    if (alreadyPending) {
+      sawInPendingList.current = true;
+    } else if (sawInPendingList.current) {
+      sawInPendingList.current = false;
+      setRequestState("idle");
+    }
+  }, [alreadyPending, requestState]);
+
   if (missingScopes.length === 0) return null;
   // An all-scopes gate stays shut unless every missing scope can be asked for.
   const cannotUnblock =
@@ -454,14 +474,6 @@ function RequestScopeAccessButton({
       </p>
     );
   }
-  // A pending request for this access, from an earlier visit, shows as
-  // pending instead of offering to ask again.
-  const alreadyPending = pending.some(
-    (request) =>
-      requestableScopes.includes(request.scope as RequestAccessFormScope) &&
-      request.selector.resourceId === (resourceId ?? "*"),
-  );
-
   const handleRequestAccess = async () => {
     setRequestState("sending");
     // An "any scope suffices" gate only needs the first requestable scope; an
@@ -485,7 +497,9 @@ function RequestScopeAccessButton({
       (r) => r.status === "fulfilled" && r.value.request !== undefined,
     );
     if (stored) {
+      // The app-wide watcher tells the viewer when it is decided.
       setRequestState("pending");
+      void onRequested?.();
       return;
     }
     const notified = results.some(
@@ -523,16 +537,6 @@ function RequestScopeAccessButton({
             An organization admin can approve it in Speakeasy or Slack. It
             lapses after 24 hours.
           </p>
-          {accessRequestsOn && (
-            <AccessRequestWatcher
-              scopes={requestableScopes}
-              resourceId={resourceId ?? "*"}
-              onDecided={() => {
-                setRequestState("idle");
-                onRequested?.();
-              }}
-            />
-          )}
         </div>
       );
     case "idle":
@@ -583,103 +587,6 @@ function RequestScopeAccessButton({
         </div>
       );
   }
-}
-
-/** How often a pending request is checked while its requester waits. */
-const ACCESS_REQUEST_POLL_MS = 15_000;
-
-/**
- * Watches the viewer's pending request for this access while "Request pending"
- * shows, so the page opens up without a reload once an admin decides it,
- * from Speakeasy or Slack. React Query pauses the polling in background tabs,
- * and grants refetch on focus anyway. Renders nothing.
- */
-function AccessRequestWatcher({
-  scopes,
-  resourceId,
-  onDecided,
-}: {
-  scopes: string[];
-  resourceId: string;
-  onDecided: () => void;
-}): null {
-  const queryClient = useQueryClient();
-  const seenPending = React.useRef(new Set<string>());
-  // The parent passes new references on every render; the effect only needs
-  // to run when the polled list changes.
-  const onDecidedRef = React.useRef(onDecided);
-  React.useLayoutEffect(() => {
-    onDecidedRef.current = onDecided;
-  });
-  const scopesKey = scopes.join(",");
-  const mine = useAccessRequests({ mine: true }, undefined, {
-    refetchInterval: ACCESS_REQUEST_POLL_MS,
-    throwOnError: false,
-  });
-
-  React.useEffect(() => {
-    if (!mine.data) return;
-    const watched = scopesKey.split(",");
-    const matching = mine.data.requests.filter(
-      (request) =>
-        watched.includes(request.scope) &&
-        request.selector.resourceId === resourceId,
-    );
-    // The list holds only the newest requests, so a request missing from it
-    // tells nothing: only a listed, decided request ends the wait.
-    if (matching.length === 0) return;
-    if (
-      seenPending.current.size === 0 &&
-      !matching.some((request) => request.status === "pending")
-    ) {
-      // Decided before this page last looked: show the current state, no toast.
-      if (matching.some((request) => request.status === "approved")) {
-        refetchWithNewAccess(queryClient);
-      } else {
-        invalidateTemporaryAccess(queryClient);
-      }
-      onDecidedRef.current();
-      return;
-    }
-    for (const request of matching) {
-      if (request.status === "pending") {
-        seenPending.current.add(request.id);
-        continue;
-      }
-      if (!seenPending.current.delete(request.id)) continue;
-      // The request the viewer is waiting on was decided.
-      if (request.status === "approved") {
-        refetchWithNewAccess(queryClient);
-      } else {
-        invalidateTemporaryAccess(queryClient);
-      }
-      if (request.status === "approved") {
-        toast.success(
-          request.grantExpiresAt
-            ? `Access approved until ${format(request.grantExpiresAt, "HH:mm")}.`
-            : "Access approved.",
-        );
-      } else if (request.status === "denied") {
-        toast.error("Your access request was denied.");
-      } else {
-        toast.info("Your access request expired before anyone decided it.");
-      }
-      onDecidedRef.current();
-    }
-  }, [mine.data, scopesKey, resourceId, queryClient]);
-
-  return null;
-}
-
-/**
- * Refetches everything the page shows once an approval lands. Lists that
- * loaded before it, such as Agent Sessions without chat:read, came back
- * filtered to what the viewer could see then, not refused, so refreshing the
- * grants alone leaves them stale until a reload. Only queries on screen
- * refetch now; the rest refetch when next used.
- */
-function refetchWithNewAccess(queryClient: QueryClient): void {
-  void queryClient.invalidateQueries();
 }
 
 /**
