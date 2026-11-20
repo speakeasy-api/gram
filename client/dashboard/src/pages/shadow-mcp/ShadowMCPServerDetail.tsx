@@ -1,4 +1,5 @@
 import { IdentityLink } from "@/components/identity-link";
+import { useHideInsightsDock } from "@/components/insights-context";
 import {
   encodeIdentityUrn,
   identityRefForUserKey,
@@ -10,8 +11,9 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Heading } from "@/components/ui/Heading";
 import { MetricCard, type MetricCardProps } from "@/components/ui/MetricCard";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import {
@@ -23,6 +25,11 @@ import {
   DecideAccessSheet,
   POLICIES_UNAVAILABLE_REASON,
 } from "@/components/mcp-approvals/DecideAccessSheet";
+import {
+  applicableDecision,
+  decisionActionLabel,
+  standingDecisionOf,
+} from "@/components/shadow-mcp/shadowMCPPolicyChange";
 import {
   MoreToggle,
   useCollapsedPreview,
@@ -127,9 +134,7 @@ function UserSources({
 }
 
 // MetricCard defaults to the roomier p-6/gap-4 the deployment page uses. This
-// strip shares a row with the review header and sits above dense hairline
-// tables, so it matches their rhythm, and px-3 puts its labels on the same left
-// rail as the fact lists below.
+// strip sits above dense hairline tables, so it matches their rhythm.
 const SUMMARY_TILE_CLASS = "gap-2 px-3 py-3";
 
 /** Day without the time, for a figure that has to read at a glance. */
@@ -168,13 +173,8 @@ function statusTone(status: ShadowMCPInventoryStatus): MetricCardProps["tone"] {
 }
 
 /**
- * The server at a glance: status, traffic, and recency as one bordered strip.
- *
- * Handed to the review as its `summary` so the two share a row. It replaced a
- * badge and two lines of prose in a full-width block, where the status sat
- * alone on the left and the figures had nowhere to go that did not read as an
- * island — giving every figure the same shape and its own column fills the
- * width by construction instead.
+ * The server at a glance: status, traffic, and recency as one bordered strip,
+ * first on the page so the answer comes before the detail.
  */
 function ServerSummary({ server }: { server: ShadowMCPInventoryServer }) {
   const status = shadowMCPInventoryStatus(server);
@@ -352,13 +352,18 @@ function TopUsersTable({
   );
 }
 
-function DetailActionButtons({
+function DecideAccessButton({
+  actionLabel,
+  actionReady,
   disabled,
   onOpenDecide,
   policiesUnavailable,
   server,
-  projectSlug,
 }: {
+  /** The action the policy makes applicable to this server. */
+  actionLabel: string;
+  /** The applicable action depends on the policy, so it waits for it. */
+  actionReady: boolean;
   disabled: boolean;
   onOpenDecide: () => void;
   /**
@@ -368,31 +373,21 @@ function DetailActionButtons({
    */
   policiesUnavailable: boolean;
   server: ShadowMCPInventoryServer;
-  projectSlug: string;
 }) {
   const pendingReview = server.approvalRequest?.status === "requested";
 
   return (
-    <div className="flex items-center gap-2">
-      {server.approvalRequest && (
-        <RefreshEvidenceButton
-          requestId={server.approvalRequest.id}
-          projectSlug={projectSlug}
-          ready={!disabled}
-        />
-      )}
-      <Button
-        disabled={disabled || policiesUnavailable}
-        onClick={onOpenDecide}
-        variant={pendingReview ? "primary" : "secondary"}
-        size="sm"
-        title={policiesUnavailable ? POLICIES_UNAVAILABLE_REASON : undefined}
-      >
-        <Button.Text>
-          {pendingReview ? "Review Request" : "Decide Access"}
-        </Button.Text>
-      </Button>
-    </div>
+    <Button
+      disabled={disabled || policiesUnavailable || !actionReady}
+      onClick={onOpenDecide}
+      variant={pendingReview ? "primary" : "secondary"}
+      size="sm"
+      title={policiesUnavailable ? POLICIES_UNAVAILABLE_REASON : undefined}
+    >
+      <Button.Text>
+        {pendingReview ? "Review request" : actionLabel}
+      </Button.Text>
+    </Button>
   );
 }
 
@@ -488,7 +483,19 @@ function EnsureServerReview({
   );
 }
 
+/** A section title on this page, in the same serif as the access review's. */
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <Heading variant="h3" className="text-lg font-thin">
+      {children}
+    </Heading>
+  );
+}
+
 export default function ShadowMCPServerDetail(): JSX.Element {
+  // The Project Assistant cannot read this server's inventory or review,
+  // so its dock stays off the Shadow MCP pages.
+  useHideInsightsDock();
   const { serverSlug = "" } = useParams<{ serverSlug: string }>();
   const project = useProject();
   const routes = useRoutes();
@@ -621,9 +628,6 @@ export default function ShadowMCPServerDetail(): JSX.Element {
     setUsersCursor(nextUsersCursor);
   };
 
-  // Built once and rendered wherever the review puts it: inside the evidence
-  // for a server that has one, standalone under its own heading for a server
-  // that does not.
   const usersPanel =
     usersQuery.isLoading && !hasLoadedUserPages ? (
       <SkeletonTable />
@@ -689,6 +693,35 @@ export default function ShadowMCPServerDetail(): JSX.Element {
     );
   }
 
+  const awaitingDecision = server?.approvalRequest?.status === "requested";
+  let accessReview: React.ReactNode = null;
+  if (server?.approvalRequest) {
+    accessReview = (
+      <section className="shrink-0">
+        <ApprovalReview
+          requestId={server.approvalRequest.id}
+          title="Access review"
+          collapseEvidence
+          evidenceAction={
+            <RefreshEvidenceButton
+              requestId={server.approvalRequest.id}
+              projectSlug={project.slug}
+              ready={decideTarget === null}
+            />
+          }
+        />
+      </section>
+    );
+  }
+  if (server && !server.approvalRequest) {
+    accessReview = (
+      <section className="shrink-0 space-y-3">
+        <SectionHeading>Access review</SectionHeading>
+        <EnsureServerReview canonicalServerUrl={server.canonicalServerUrl} />
+      </section>
+    );
+  }
+
   const openDecide = () => {
     if (!server) return;
     setDecideTarget({
@@ -698,6 +731,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
       // A pending legacy bypass request rides along so the sheet promotes it
       // into the review and the decision drains it too.
       pendingBypassRequestId: server.latestRequest?.id,
+      currentDecision: standingDecisionOf(server),
     });
   };
 
@@ -732,12 +766,22 @@ export default function ShadowMCPServerDetail(): JSX.Element {
             </Page.Section.Description>
             <Page.Section.CTA>
               {server && (
-                <DetailActionButtons
+                <DecideAccessButton
+                  actionLabel={
+                    policiesQuery.data
+                      ? decisionActionLabel(
+                          applicableDecision(
+                            disposition,
+                            standingDecisionOf(server),
+                          ),
+                        )
+                      : "Decide access"
+                  }
+                  actionReady={!!policiesQuery.data}
                   disabled={decideTarget !== null}
                   onOpenDecide={openDecide}
                   policiesUnavailable={policiesQuery.isError}
                   server={server}
-                  projectSlug={project.slug}
                 />
               )}
             </Page.Section.CTA>
@@ -754,7 +798,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                   </Text>
                 </div>
               ) : (
-                <div className="flex min-h-0 flex-col gap-6 pb-8">
+                <div className="flex min-h-0 flex-col gap-8 pb-8">
                   {/* pb-8: the last thing on this page is a disclosure
                       toggle, and a control flush against the bottom edge
                       reads as cut off rather than as the end of the page. */}
@@ -770,44 +814,18 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                     members={membersQuery.data?.members ?? []}
                     roles={rolesQuery.data?.roles ?? []}
                   />
-                  {/* First on the page: turning the server into an official
-                      one is the outcome the inventory leads to, and the
-                      review below is the evidence for it. */}
+                  {/* State first. A request someone is waiting on is the
+                      task, so its review comes next; otherwise the review
+                      is detail below the two outcomes: serve it as an
+                      official server, and who it affects. */}
+                  <ServerSummary server={server} />
+                  {awaitingDecision && accessReview}
                   <OfficialServerPanel server={server} />
-                  <section className="min-h-0 space-y-3">
-                    {/* The review owns its own heading: the request's status
-                        shares that row, and only the review has it. Observed
-                        traffic goes in with the evidence rather than trailing
-                        it as a section of its own — who calls the server is
-                        one of the questions a reviewer is asking. */}
-                    {server.approvalRequest ? (
-                      <ApprovalReview
-                        requestId={server.approvalRequest.id}
-                        title="Access review"
-                        usage={usersPanel}
-                        summary={<ServerSummary server={server} />}
-                      />
-                    ) : (
-                      <>
-                        {/* No dossier yet, so the review has no header to
-                            share a row with — the strip stands alone until
-                            the gather lands and the two-column row appears. */}
-                        <ServerSummary server={server} />
-                        <EnsureServerReview
-                          canonicalServerUrl={server.canonicalServerUrl}
-                        />
-                        <div>
-                          <Text variant="subheading">
-                            Who is currently using it?
-                          </Text>
-                          <Text muted small>
-                            Users with observed calls to this Shadow MCP server.
-                          </Text>
-                        </div>
-                        {usersPanel}
-                      </>
-                    )}
+                  <section className="shrink-0 space-y-3">
+                    <SectionHeading>Who uses it</SectionHeading>
+                    {usersPanel}
                   </section>
+                  {!awaitingDecision && accessReview}
                 </div>
               )}
             </Page.Section.Body>

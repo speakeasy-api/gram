@@ -67,6 +67,18 @@ func DirectOverrideGrants(grants []Grant) []Grant {
 	return direct
 }
 
+// DirectSelectorsByScope groups the selectors of DirectOverrideGrants by
+// scope. Clients read them next to each effective grant to apply the same
+// precedence: a direct grant naming a resource outranks a block inherited from
+// a role or everyone.
+func DirectSelectorsByScope(grants []Grant) map[Scope][]Selector {
+	direct := make(map[Scope][]Selector)
+	for _, grant := range DirectOverrideGrants(grants) {
+		direct[grant.Scope] = append(direct[grant.Scope], grant.Selector)
+	}
+	return direct
+}
+
 // isDirectOverrideGrant reports whether grant takes part in direct override
 // evaluation: a direct exclusion, or a direct allow naming a concrete resource.
 func isDirectOverrideGrant(grant Grant) bool {
@@ -124,7 +136,7 @@ func directOverride(grants []Grant, check Check) (*Grant, *Check, error) {
 // carries. Loose matching would let a disposition-scoped grant reach a tool
 // with no derivable disposition, past a block that otherwise covers it.
 func directOverrideCheck(check Check) Check {
-	if _, toolCall := check.Dimensions[SelectorKeyTool]; toolCall {
+	if check.isToolCall() {
 		return check.WithStrictSelectorMatch()
 	}
 	return check

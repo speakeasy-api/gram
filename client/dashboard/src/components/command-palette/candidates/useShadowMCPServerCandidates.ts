@@ -43,7 +43,7 @@ export function useShadowMCPServerCandidates({
         cursor: ctx.pageParam,
       }).queryFn(ctx),
     initialPageParam: undefined as string | undefined,
-    getNextPageParam: (page) => page.nextCursor || undefined,
+    getNextPageParam: (page) => page.result.nextCursor || undefined,
     enabled: queryEnabled,
     retry: false,
     throwOnError: false,
@@ -72,7 +72,8 @@ export function useShadowMCPServerCandidates({
 
   return useMemo(() => {
     if (!queryEnabled) return [];
-    const servers = inventory.data?.pages.flatMap((page) => page.servers) ?? [];
+    const servers =
+      inventory.data?.pages.flatMap((page) => page.result.servers) ?? [];
     return servers.map((server): LauncherCandidate => {
       const isLocalCommand = server.targetKind === "stdio_command";
       const href = isLocalCommand

@@ -153,6 +153,7 @@ function server(): ShadowMCPInventoryServer {
     canonicalServerUrl: "https://tracker.example.com/mcp",
     firstSeen: new Date("2026-01-01T10:00:00Z"),
     lastSeen: new Date("2026-01-02T10:00:00Z"),
+    blockedCallCount: 0,
     observedUseCount: 13,
     requestCount: 0,
     serverName: "Tracker",
@@ -257,7 +258,6 @@ describe("CatalogOfficialSheet", () => {
     expect(mocks.save).toHaveBeenCalledWith({
       serverUrl: "https://tracker.example.com/mcp",
       mcpServerId: "server-1",
-      allowDirectAccess: false,
     });
   });
 
@@ -295,7 +295,6 @@ describe("CatalogOfficialSheet", () => {
     expect(mocks.save).toHaveBeenCalledWith({
       serverUrl: "https://tracker.example.com/mcp",
       mcpServerId: "server-1",
-      allowDirectAccess: false,
     });
   });
 

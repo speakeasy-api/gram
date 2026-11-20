@@ -1364,12 +1364,11 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	}
 	// Onboarding takes effect at once: a server the project serves an
 	// official version of is blocked for direct use whatever the policy's
-	// default, and no bypass grant on the direct URL lifts it, unless an
-	// administrator kept direct connections working. A Speakeasy-hosted URL
-	// is never the direct connection.
+	// default, and no bypass grant on the direct URL lifts it. A
+	// Speakeasy-hosted URL is never the direct connection.
 	hasOfficialServer := false
 	if matched != nil && matched.URL != "" {
-		if official, ok := s.shadowMCPOfficialServer(ctx, metadata.GramOrgID, metadata.ProjectID, matched.URL); ok && !official.DirectAccessAllowed &&
+		if official, ok := s.shadowMCPOfficialServer(ctx, metadata.GramOrgID, metadata.ProjectID, matched.URL); ok &&
 			!s.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, metadata.GramOrgID) {
 			hasOfficialServer = true
 			detail = shadowMCPOfficialServerDetail(official, matched.URL)
@@ -1413,16 +1412,17 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 
 	auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
 	userReason := s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
-		OrganizationID:  metadata.GramOrgID,
-		ProjectID:       metadata.ProjectID,
-		RequesterUserID: metadata.UserID,
-		UserMessage:     policy.UserMessage,
-		AuditReason:     auditReason,
-		Evidence:        evidence,
-		ToolName:        mcpToolName,
-		ToolInput:       payload.ToolInput,
-		RiskPolicyID:    policy.ID,
-		PolicyName:      policy.Name,
+		OrganizationID:    metadata.GramOrgID,
+		ProjectID:         metadata.ProjectID,
+		RequesterUserID:   metadata.UserID,
+		UserMessage:       policy.UserMessage,
+		AuditReason:       auditReason,
+		Evidence:          evidence,
+		ToolName:          mcpToolName,
+		ToolInput:         payload.ToolInput,
+		RiskPolicyID:      policy.ID,
+		SessionMCPServers: entries,
+		PolicyName:        policy.Name,
 	})
 	matchedURL := ""
 	if matched != nil {

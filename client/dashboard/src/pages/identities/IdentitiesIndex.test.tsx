@@ -9,6 +9,7 @@ import { saveState } from "@/pages/platform-admin/rbac-override-state";
 
 const mocks = vi.hoisted(() => ({
   orgRead: true,
+  projectId: "project_current",
   workloadWrite: true,
   agents: vi.fn(),
   coverage: vi.fn(),
@@ -23,6 +24,7 @@ vi.mock("@/contexts/Auth", () => ({
   useIsPlatformAdmin: () => true,
   useOrganization: () => ({ id: "org_example", slug: "example" }),
   useSession: () => mocks.session,
+  useProject: () => ({ id: mocks.projectId }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({}),
@@ -120,6 +122,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
   mocks.orgRead = true;
+  mocks.projectId = "project_current";
   mocks.workloadWrite = true;
   mocks.session = {
     user: { id: "user_example" },
@@ -218,6 +221,30 @@ it.each(["unknown", "unknown,agent"])(
     await waitFor(() => expect(rowsText()).toContain("human@example.com"));
   },
 );
+
+it("reads a separate agents roster when the current project changes", async () => {
+  const { rerenderPage } = setup();
+  await screen.findByText("Registered agent");
+  expect(mocks.agents).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({ projectId: "project_current" }),
+    expect.anything(),
+  );
+
+  mocks.projectId = "project_other";
+  mocks.agents.mockResolvedValue({
+    items: [{ id: "agent_other", name: "Other project agent" }],
+  });
+  rerenderPage();
+
+  expect(screen.queryByText("Registered agent")).toBeNull();
+  await screen.findByText("Other project agent");
+  expect(mocks.agents).toHaveBeenLastCalledWith(
+    expect.anything(),
+    expect.objectContaining({ projectId: "project_other" }),
+    expect.anything(),
+  );
+});
 
 it("keeps agents visible and refetches their permissions when the RBAC override changes", async () => {
   setup("", "agent");

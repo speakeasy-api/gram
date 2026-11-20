@@ -1,5 +1,4 @@
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { errorRate } from "@/lib/error-rate";
 import type { ObservabilitySummary } from "@gram/client/models/components/observabilitysummary.js";
@@ -24,55 +23,51 @@ export function ObservabilitySummaryTiles({
   /** What the first tile counts, e.g. "Tool calls". */
   callsTitle: string;
 }): JSX.Element {
+  // The tiles keep their labels while loading; only the figures shimmer.
+  const loading = isLoading && !summary;
   return (
     <StatTileGroup>
-      {isLoading && !summary ? (
-        Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-[116px] flex-1" />
-        ))
-      ) : (
-        <>
-          <StatTile
-            title={callsTitle}
-            value={summary?.totalToolCalls ?? 0}
-            tone="information"
-            previousValue={comparison?.totalToolCalls}
-            format="compact"
-            comparisonLabel="vs previous period"
-          />
-          <StatTile
-            title="Failed calls"
-            value={summary?.failedToolCalls ?? 0}
-            tone={
-              (summary?.failedToolCalls ?? 0) > 0 ? "destructive" : "neutral"
-            }
-            previousValue={comparison?.failedToolCalls}
-            format="compact"
-            invertDelta
-            comparisonLabel="vs previous period"
-          />
-          <StatTile
-            title="Error rate"
-            value={summary ? summaryErrorRate(summary) : 0}
-            previousValue={
-              comparison ? summaryErrorRate(comparison) : undefined
-            }
-            format="percent"
-            invertDelta
-            thresholds={{ red: 10, amber: 5, inverted: true }}
-            comparisonLabel="vs previous period"
-          />
-          <StatTile
-            title="Avg latency"
-            value={summary?.avgLatencyMs ?? 0}
-            tone="information"
-            previousValue={comparison?.avgLatencyMs}
-            format="ms"
-            invertDelta
-            comparisonLabel="vs previous period"
-          />
-        </>
-      )}
+      <>
+        <StatTile
+          isLoading={loading}
+          title={callsTitle}
+          value={summary?.totalToolCalls ?? 0}
+          tone="information"
+          previousValue={comparison?.totalToolCalls}
+          format="compact"
+          comparisonLabel="vs previous period"
+        />
+        <StatTile
+          isLoading={loading}
+          title="Failed calls"
+          value={summary?.failedToolCalls ?? 0}
+          tone={(summary?.failedToolCalls ?? 0) > 0 ? "destructive" : "neutral"}
+          previousValue={comparison?.failedToolCalls}
+          format="compact"
+          invertDelta
+          comparisonLabel="vs previous period"
+        />
+        <StatTile
+          isLoading={loading}
+          title="Error rate"
+          value={summary ? summaryErrorRate(summary) : 0}
+          previousValue={comparison ? summaryErrorRate(comparison) : undefined}
+          format="percent"
+          invertDelta
+          thresholds={{ red: 10, amber: 5, inverted: true }}
+          comparisonLabel="vs previous period"
+        />
+        <StatTile
+          isLoading={loading}
+          title="Avg latency"
+          value={summary?.avgLatencyMs ?? 0}
+          tone="information"
+          previousValue={comparison?.avgLatencyMs}
+          format="ms"
+          invertDelta
+          comparisonLabel="vs previous period"
+        />
+      </>
     </StatTileGroup>
   );
 }

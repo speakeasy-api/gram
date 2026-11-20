@@ -10,7 +10,8 @@ export type SortOption =
   | "recent"
   | "updated"
   | "alphabetical"
-  | "alphabetical-desc";
+  | "alphabetical-desc"
+  | "team-usage";
 
 /**
  * Complete filter state for the catalog.
@@ -25,6 +26,7 @@ const VALID_SORT_OPTIONS: readonly SortOption[] = [
   "updated",
   "alphabetical",
   "alphabetical-desc",
+  "team-usage",
 ];
 
 /**

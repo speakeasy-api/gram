@@ -328,16 +328,87 @@ it("saves an unproxied server without verifying connectivity", async () => {
   fireEvent.click(
     screen.getByRole("radio", { name: /Clients connect directly/ }),
   );
-  state.verifyResult.mockReturnValue({ verified: true });
+  state.verifyResult.mockReturnValue({
+    verified: true,
+    url: "https://example.com/mcp",
+  });
   view.rerender(<CreateRemoteMcp />);
   expect(screen.queryByRole("button", { name: "Re-verify" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  // A checked URL fills an empty name in.
   await waitFor(() =>
     expect(state.create).toHaveBeenCalledWith({
-      name: undefined,
+      name: "Example",
       url: "https://example.com/mcp",
     }),
   );
+});
+
+it("prefers the name the server reports over one read from its address", () => {
+  state.flow.gatewayId = null;
+  state.verifyResult.mockReturnValue(undefined);
+  const view = render(<CreateRemoteMcp />, { wrapper: Router });
+  fireEvent.change(screen.getByLabelText("MCP server URL"), {
+    target: { value: "https://example.com/mcp" },
+  });
+  state.verifyResult.mockReturnValue({
+    verified: true,
+    url: "https://example.com/mcp",
+    serverName: "Example Server",
+  });
+  view.rerender(<CreateRemoteMcp />);
+  expect(
+    (screen.getByLabelText("Display name (optional)") as HTMLInputElement)
+      .value,
+  ).toBe("Example Server");
+});
+
+it("keeps a name a setup link filled in when the URL checks out", () => {
+  state.flow.gatewayId = null;
+  state.verifyResult.mockReturnValue(undefined);
+  const view = render(<CreateRemoteMcp />, {
+    wrapper: ({ children }) => (
+      <MemoryRouter
+        initialEntries={[
+          "/?url=https%3A%2F%2Fexample.com%2Fmcp&name=Team%20tools",
+        ]}
+      >
+        {children}
+      </MemoryRouter>
+    ),
+  });
+  state.verifyResult.mockReturnValue({
+    verified: true,
+    url: "https://example.com/mcp",
+    serverName: "Example Server",
+  });
+  view.rerender(<CreateRemoteMcp />);
+  expect(
+    (screen.getByLabelText("Display name (optional)") as HTMLInputElement)
+      .value,
+  ).toBe("Team tools");
+});
+
+it("keeps a name the person typed when the URL checks out", async () => {
+  state.flow.gatewayId = null;
+  state.verifyResult.mockReturnValue(undefined);
+  const view = render(<CreateRemoteMcp />, { wrapper: Router });
+  fireEvent.change(screen.getByLabelText("MCP server URL"), {
+    target: { value: "https://example.com/mcp" },
+  });
+  fireEvent.change(screen.getByLabelText("Display name (optional)"), {
+    target: { value: "Team tools" },
+  });
+  state.verifyResult.mockReturnValue({
+    verified: true,
+    url: "https://example.com/mcp",
+    serverName: "Example Server",
+  });
+  view.rerender(<CreateRemoteMcp />);
+  expect(
+    (screen.getByLabelText("Display name (optional)") as HTMLInputElement)
+      .value,
+  ).toBe("Team tools");
 });
 
 it("preselects User Identity only when the challenge advertised OAuth", () => {
@@ -467,4 +538,69 @@ describe("source wrapper recovery", () => {
       expect(state.createToolset).toHaveBeenCalledOnce();
     },
   );
+});
+
+describe("remote creation from a Shadow MCP server", () => {
+  const SHADOW_START =
+    "/start?url=https%3A%2F%2Ftracker.example.com%2Fmcp&name=Tracker&shadow-mcp=tracker-slug";
+  function ShadowRouter({ children }: { children: React.ReactNode }) {
+    return (
+      <MemoryRouter initialEntries={[SHADOW_START]}>
+        <LocationProbe />
+        {children}
+      </MemoryRouter>
+    );
+  }
+  beforeEach(() => {
+    state.flow.gatewayId = null;
+    state.flow.cancel.mockReturnValue(false);
+  });
+
+  it("fills in the form and says where saving leads", () => {
+    render(<CreateRemoteMcp />, { wrapper: ShadowRouter });
+    expect(
+      (screen.getByLabelText("MCP server URL") as HTMLInputElement).value,
+    ).toBe("https://tracker.example.com/mcp");
+    expect(
+      (screen.getByLabelText("Display name (optional)") as HTMLInputElement)
+        .value,
+    ).toBe("Tracker");
+    expect(
+      screen.getByText(/becomes the official version of Tracker/),
+    ).toBeTruthy();
+  });
+
+  it("goes back to the Shadow MCP server to link the new server", async () => {
+    render(<CreateRemoteMcp />, { wrapper: ShadowRouter });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(location()).toMatch(/\/shadow-ai\/mcps\/tracker-slug$/),
+    );
+    expect(state.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Tracker",
+        url: "https://tracker.example.com/mcp",
+      }),
+    );
+  });
+
+  it("keeps the official server behind the Speakeasy proxy", () => {
+    render(<CreateRemoteMcp />, { wrapper: ShadowRouter });
+    const direct = screen
+      .getAllByRole("radio")
+      .find((radio) => radio.getAttribute("value") === "unproxied");
+    expect(direct?.hasAttribute("disabled")).toBe(true);
+    expect(
+      screen.getByText(/An official server must proxy through Speakeasy/),
+    ).toBeTruthy();
+  });
+
+  it("goes back to the Shadow MCP server on cancel", async () => {
+    render(<CreateRemoteMcp />, { wrapper: ShadowRouter });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    });
+    expect(location()).toMatch(/\/shadow-ai\/mcps\/tracker-slug$/);
+    expect(state.create).not.toHaveBeenCalled();
+  });
 });

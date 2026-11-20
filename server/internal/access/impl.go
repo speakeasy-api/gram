@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/email"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -74,6 +75,7 @@ type Service struct {
 	// addresses are built on. Nil leaves official-server addresses on the
 	// platform domain empty.
 	serverURL *url.URL
+	features  feature.Provider
 }
 
 // WithServerURL sets the base URL that platform MCP endpoint addresses are
@@ -125,6 +127,7 @@ func NewService(
 		orgHosts:   orgHosts,
 		foldGate:   foldGate,
 		serverURL:  nil,
+		features:   nil,
 	}
 }
 
@@ -801,11 +804,11 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 
 func listRoleGrantsFromGrants(grants []authz.Grant) []*gen.ListRoleGrant {
 	scoped := authz.GrantsToScopedGrants(grants)
-	// Direct selectors let clients apply principal precedence: a direct grant
-	// naming a resource outranks a block inherited from a role or everyone.
 	direct := make(map[string][]*gen.Selector)
-	for _, grant := range authz.DirectOverrideGrants(grants) {
-		direct[string(grant.Scope)] = append(direct[string(grant.Scope)], authzSelectorToGen(grant.Selector))
+	for scope, selectors := range authz.DirectSelectorsByScope(grants) {
+		for _, sel := range selectors {
+			direct[string(scope)] = append(direct[string(scope)], authzSelectorToGen(sel))
+		}
 	}
 	out := make([]*gen.ListRoleGrant, 0, len(scoped))
 	for _, g := range scoped {
@@ -1631,12 +1634,7 @@ func (s *Service) assignChallengeRole(ctx context.Context, tx pgx.Tx, authCtx *c
 					dimensions[key] = value
 				}
 			}
-			check := authz.Check{
-				Scope:        authz.Scope(challenge.Scope),
-				ResourceKind: challenge.ResourceKind,
-				ResourceID:   challenge.ResourceID,
-				Dimensions:   dimensions,
-			}
+			check := authz.RecordedCheck(authz.Scope(challenge.Scope), challenge.ResourceKind, challenge.ResourceID, dimensions)
 			roleAllows, authorizeErr := authz.GrantsAuthorize(roleGrants, check.WithStrictSelectorMatch())
 			if authorizeErr != nil {
 				return oops.E(oops.CodeBadRequest, authorizeErr, "challenge cannot be granted through this role").LogError(ctx, s.logger)
@@ -1694,7 +1692,10 @@ func validateChallengeAssignmentInput(challenges []chrepo.ChallengeSummary, chal
 }
 
 // RequestAccess sends email notifications to organization administrators when a user
-// requests access to a scope they don't have permission for.
+// requests access to a scope they don't have permission for. With the access
+// requests rollout on, it also stores the request so an administrator can
+// approve it as a temporary grant or deny it; asking again while that request
+// is pending returns it without notifying anyone again.
 func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessPayload) (*gen.RequestAccessResult, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
@@ -1722,6 +1723,18 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization info").LogError(ctx, logger)
 	}
 
+	stored, err := s.recordAccessRequest(ctx, ac, payload)
+	if err != nil {
+		return nil, err
+	}
+	var storedView *gen.AccessRequest
+	if stored != nil {
+		storedView = stored.view
+		if !stored.created {
+			return &gen.RequestAccessResult{SentToCount: 0, Request: storedView}, nil
+		}
+	}
+
 	// Get active organization administrators.
 	admins, err := repo.New(s.db).ListActiveOrganizationAdmins(ctx, ac.ActiveOrganizationID)
 	if err != nil {
@@ -1730,7 +1743,7 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 
 	if len(admins) == 0 {
 		logger.WarnContext(ctx, "no org admins found to notify for access request")
-		return &gen.RequestAccessResult{SentToCount: 0}, nil
+		return &gen.RequestAccessResult{SentToCount: 0, Request: storedView}, nil
 	}
 
 	// Build the manage access link. The query params let the dashboard open a
@@ -1743,6 +1756,9 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 		q := url.Values{}
 		q.Set("grant_user", ac.UserID)
 		q.Set("scope", payload.Scope)
+		if storedView != nil {
+			q.Set("request", storedView.ID)
+		}
 		if payload.ResourceID != nil && *payload.ResourceID != "" {
 			q.Set("resource_id", *payload.ResourceID)
 			if strings.HasPrefix(payload.Scope, "mcp:") {
@@ -1800,7 +1816,7 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 			attr.SlogAccessRequestAdminCount(len(admins)),
 			attr.SlogAccessRequestScope(payload.Scope),
 		)
-		return &gen.RequestAccessResult{SentToCount: 0}, nil
+		return &gen.RequestAccessResult{SentToCount: 0, Request: storedView}, nil
 	}
 
 	logger.InfoContext(ctx, "access request emails sent",
@@ -1809,7 +1825,7 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 		attr.SlogAccessRequestScope(payload.Scope),
 	)
 
-	return &gen.RequestAccessResult{SentToCount: sentCount}, nil
+	return &gen.RequestAccessResult{SentToCount: sentCount, Request: storedView}, nil
 }
 
 // ListIdentityAccess returns the MCP servers and skills accessible to a user

@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * listKeys keys
  *
  * @remarks
- * List all api keys for an organization
+ * List an organization's api keys, newest first. Send limit to get one page at a time and follow next_cursor for the rest. Without limit, every matching key is returned in one response.
  */
 export function keysList(
   client: GramCore,
@@ -108,6 +108,9 @@ async function $do(
 
   const query = encodeFormQuery({
     "agent_id": payload?.agent_id,
+    "cursor": payload?.cursor,
+    "limit": payload?.limit,
+    "search": payload?.search,
   });
 
   const headers = new Headers(compactMap({

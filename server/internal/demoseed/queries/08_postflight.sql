@@ -592,3 +592,7 @@ WHERE organization_id = @org_id::text;
 -- The Inspect tab's stored annotations for Linear, Slack and GitHub.
 SELECT count(*) FROM mcp_server_tool_metadata
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- name: PostflightCountAccessRequests :one
+SELECT count(*) FROM access_requests
+WHERE organization_id = @org_id::text AND deleted IS FALSE;

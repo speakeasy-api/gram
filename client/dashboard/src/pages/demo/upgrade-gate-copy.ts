@@ -3,7 +3,7 @@ import {
   getTrialStatusFromDates,
   isValidDate,
 } from "@/lib/trial-status";
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 
 const SHARED_BODY =
   "Book 30 minutes with us and we'll find the plan that fits your organization.";

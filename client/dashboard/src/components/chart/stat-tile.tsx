@@ -25,6 +25,11 @@ export type StatTileProps = {
   icon?: IconName;
   /** Replaces the icon with a spinner while cached data refreshes in the background. */
   isRefreshing?: boolean;
+  /**
+   * Keeps the label and shimmers only the figure, so the tile reads as
+   * "loading" rather than missing while its data is on the way.
+   */
+  isLoading?: boolean;
   invertDelta?: boolean;
   thresholds?: ThresholdConfig;
   comparisonLabel?: string;
@@ -67,6 +72,7 @@ export function StatTile(props: StatTileProps): JSX.Element {
     format = "compact",
     icon,
     isRefreshing = false,
+    isLoading = false,
     invertDelta = false,
     thresholds,
     comparisonLabel,
@@ -172,11 +178,17 @@ export function StatTile(props: StatTileProps): JSX.Element {
     <UiMetricCard
       size="sm"
       label={label}
-      value={displayValue ?? formatValue(value)}
+      value={
+        isLoading ? (
+          <Skeleton className="h-[34px] w-20" label={`Loading ${title}`} />
+        ) : (
+          (displayValue ?? formatValue(value))
+        )
+      }
       tone={tone ?? getValueTone(value, thresholds)}
-      delta={deltaNode}
+      delta={isLoading ? undefined : deltaNode}
       deltaTone={isGood ? "success" : "destructive"}
-      description={description}
+      description={isLoading ? undefined : description}
     />
   );
 }

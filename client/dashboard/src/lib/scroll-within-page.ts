@@ -24,10 +24,14 @@ export function scrollWithinPage(
   // A bound pane with nothing to scroll already shows the element; scrolling
   // any further out would move the pinned header.
   if (scroller.scrollHeight <= scroller.clientHeight) return;
+  // A sticky strip at the scroller's top (the detail frame's tabs) sets
+  // scroll-padding-top, so the element lands below it rather than under it.
+  const padding = parseFloat(getComputedStyle(scroller).scrollPaddingTop) || 0;
   const top =
     element.getBoundingClientRect().top -
     scroller.getBoundingClientRect().top +
     scroller.scrollTop -
-    offset;
+    offset -
+    padding;
   scroller.scrollTo({ top: Math.max(0, top), behavior });
 }

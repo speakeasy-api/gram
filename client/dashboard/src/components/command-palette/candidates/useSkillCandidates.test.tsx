@@ -1,8 +1,5 @@
-import {
-  act,
-  renderHook as baseRenderHook,
-  waitFor,
-} from "@testing-library/react";
+import { waitForHookState as waitFor } from "@/test/waitForHookState";
+import { act, renderHook as baseRenderHook } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 

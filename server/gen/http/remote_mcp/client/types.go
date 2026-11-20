@@ -307,6 +307,10 @@ type ProbeURLResponseBody struct {
 	// unreachable; currently timeout, rate_limited, server_error, dns_error,
 	// tls_error, guardian_rejected, or transport_error.
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// The name the server reports for itself in the MCP handshake: its title, or
+	// its name when it has no title. Present only when outcome is mcp_available
+	// and the server reports one.
+	ServerName *string `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
 	// How Speakeasy can register as a client with the server's sign-in provider.
 	// Present only when authentication is required and the challenge advertised
 	// protected resource metadata: dcr (dynamic client registration), cimd (client
@@ -5037,6 +5041,7 @@ func NewProbeURLResultOK(body *ProbeURLResponseBody) *remotemcp.ProbeURLResult {
 		ProtectedResourceMetadataURL: body.ProtectedResourceMetadataURL,
 		HTTPStatus:                   body.HTTPStatus,
 		Reason:                       body.Reason,
+		ServerName:                   body.ServerName,
 		SignInSetup:                  body.SignInSetup,
 	}
 

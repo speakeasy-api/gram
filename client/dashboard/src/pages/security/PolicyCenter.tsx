@@ -44,7 +44,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import {
   Fragment,
   useState,

@@ -97,10 +97,13 @@ export function NoRevealAccessNote({
 export function ChatReadAccess({
   chatId,
   className,
+  align,
   onGranted,
 }: {
   chatId?: string;
   className?: string;
+  /** Lines the request result up with the text beside it. */
+  align?: "center" | "start";
   /** Refreshes what the page itself read without chat:read. */
   onGranted?: () => void;
 }): JSX.Element | null {
@@ -118,6 +121,7 @@ export function ChatReadAccess({
         onGranted?.();
       }}
       className={className}
+      align={align}
     />
   );
 }

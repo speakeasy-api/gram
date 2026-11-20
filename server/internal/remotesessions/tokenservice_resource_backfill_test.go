@@ -177,7 +177,7 @@ func TestResolveAccessToken_RefreshCASLossStampsNothing(t *testing.T) {
 	require.NoError(t, err)
 	winnerRefresh, err := enc.Encrypt([]byte("winner-refresh"))
 	require.NoError(t, err)
-	winner, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	winner, err := repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   before.UserSessionIssuerID,
 		RemoteSessionClientID: clientID,
@@ -283,7 +283,7 @@ func TestResolveAccessTokens_RefreshingRequestCarriesBackfilledResource(t *testi
 	secondClient, secondIssuer := seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, row.UserSessionIssuerID, authCtx.ActiveOrganizationID, "rsi-backfill-same-request")
 	secondAccess, err := enc.Encrypt([]byte("second-token"))
 	require.NoError(t, err)
-	_, err = repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	_, err = repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   row.UserSessionIssuerID,
 		RemoteSessionClientID: secondClient,
@@ -384,7 +384,7 @@ func TestResolveAccessTokens_BackfillStampsTheRefreshedClientsOwnResource(t *tes
 	siblingClient, siblingIssuer := seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, row.UserSessionIssuerID, authCtx.ActiveOrganizationID, "rsi-backfill-wrong-client")
 	siblingAccess, err := enc.Encrypt([]byte("sibling-token"))
 	require.NoError(t, err)
-	_, err = q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	_, err = q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   row.UserSessionIssuerID,
 		RemoteSessionClientID: siblingClient,

@@ -626,6 +626,7 @@ var _ = Service("access", func() {
 		Meta("openapi:operationId", "listShadowMCPInventory")
 		Meta("openapi:extension:x-speakeasy-name-override", "listShadowMCPInventory")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventory"}`)
+		shared.CursorPagination()
 	})
 
 	Method("getShadowMCPInventoryServer", func() {
@@ -656,6 +657,37 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventoryServer"}`)
 	})
 
+	Method("findShadowMCPInventoryServers", func() {
+		Description("Find the Shadow MCP servers in use whose upstream URL matches one of the given URLs, for example the endpoints of a server about to be added from the catalog. URLs match when they name the same upstream (case, default ports and a trailing slash are ignored). Requires an authenticated session authorized for org:admin on the active organization.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("project_id", String, func() {
+				Format(FormatUUID)
+			})
+			Attribute("server_urls", ArrayOf(String), "The upstream URLs to look for.", func() {
+				MinLength(1)
+				MaxLength(50)
+			})
+			Required("project_id", "server_urls")
+			security.SessionPayload()
+		})
+
+		Result(FindShadowMCPInventoryServersResult)
+
+		HTTP(func() {
+			GET("/rpc/access.findShadowMCPInventoryServers")
+			Param("project_id")
+			Param("server_urls")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "findShadowMCPInventoryServers")
+		Meta("openapi:extension:x-speakeasy-name-override", "findShadowMCPInventoryServers")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "FindShadowMCPInventoryServers"}`)
+	})
+
 	Method("updateShadowMCPInventoryServerName", func() {
 		Description("Update or clear the administrator-defined display name for one project-scoped Shadow MCP inventory server URL.")
 		Security(security.Session)
@@ -677,7 +709,7 @@ var _ = Service("access", func() {
 	})
 
 	Method("setShadowMCPOfficialServer", func() {
-		Description("Link one project-scoped Shadow MCP server to its official version, switch the link off or on, or remove it. A link with allow_direct_access false blocks direct connections wherever a Shadow MCP policy applies and points agents at the linked server; true keeps the link but lets direct connections follow the ordinary rules. Omitting mcp_server_id (with allow_direct_access false) removes the link. Requires an authenticated session authorized for org:admin on the active organization.")
+		Description("Choose the official version of one project-scoped Shadow MCP server. By default a project MCP server that proxies to the Shadow MCP server's URL is linked automatically (the oldest, when several do). While a link exists and the linked server has an address, direct connections are blocked wherever a Shadow MCP policy applies and agents are pointed at the linked server; a linked server with no address yet leaves direct connections on the ordinary rules. With mcp_server_id that server is linked instead; with keep_shadow no server is linked, so direct use follows the ordinary Shadow MCP rules; with neither, the automatic link applies again. Each change is recorded in the audit log. Requires an authenticated session authorized for org:admin on the active organization.")
 		Security(security.Session)
 
 		Payload(func() {
@@ -1034,7 +1066,7 @@ var _ = Service("access", func() {
 	})
 
 	Method("requestAccess", func() {
-		Description("Request access to a scope by sending an email notification to organization administrators.")
+		Description("Request access to a scope. Organization administrators are emailed. With the access requests rollout on, a signed-in member's request is also stored, so an administrator can approve it as temporary access or deny it from the dashboard or Slack.")
 		Security(security.ByKey, func() {
 			Scope("consumer")
 		})
@@ -1326,6 +1358,80 @@ var _ = Service("access", func() {
 		Meta("openapi:operationId", "revokeTemporaryGrant")
 		Meta("openapi:extension:x-speakeasy-name-override", "revokeTemporaryGrant")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RevokeTemporaryGrant", "type": "mutation"}`)
+	})
+
+	Method("listAccessRequests", func() {
+		Description("List access requests in the organization, newest first. Organization administrators see every request; anyone else sees only their own. Requires the access requests rollout for the organization.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("status", String, "Only requests with this status: pending, approved, denied, expired or withdrawn.")
+			Attribute("mine", Boolean, "Only requests made by the signed-in member, even for an administrator.", func() {
+				Default(false)
+			})
+			security.SessionPayload()
+		})
+
+		Result(ListAccessRequestsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listAccessRequests")
+			Param("status")
+			Param("mine")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAccessRequests")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAccessRequests")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AccessRequests"}`)
+	})
+
+	Method("decideAccessRequest", func() {
+		Description("Approve or deny a pending access request. Approving gives the requester the scope as a temporary grant until expires_at, with the same limits as createTemporaryGrant, and resolves the denials the request covers. Requires org:admin; the requester cannot decide their own request. Session only: the decision is attributed to the person who made it.")
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(DecideAccessRequestForm)
+			security.SessionPayload()
+		})
+
+		Result(AccessRequestModel)
+
+		HTTP(func() {
+			POST("/rpc/access.decideAccessRequest")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "decideAccessRequest")
+		Meta("openapi:extension:x-speakeasy-name-override", "decideAccessRequest")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DecideAccessRequest", "type": "mutation"}`)
+	})
+
+	Method("withdrawAccessRequest", func() {
+		Description("Withdraw a pending access request you made. Only the requester can withdraw it.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("id", String, "The access request to withdraw.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+		})
+
+		Result(AccessRequestModel)
+
+		HTTP(func() {
+			POST("/rpc/access.withdrawAccessRequest")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "withdrawAccessRequest")
+		Meta("openapi:extension:x-speakeasy-name-override", "withdrawAccessRequest")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "WithdrawAccessRequest", "type": "mutation"}`)
 	})
 
 })
@@ -1666,13 +1772,46 @@ var ExplainedAccessLevelModel = Type("ExplainedAccessLevel", func() {
 	Attribute("rules", ArrayOf(ExplainedAccessRuleModel), "Every rule matching this access, deciding rules first.")
 })
 
+// One loaded grant that matched a member's use of one upstream credential.
+var ExplainedCredentialRuleModel = Type("ExplainedCredentialRule", func() {
+	Required("principal_urn", "kind", "display_name", "applies_to", "effect", "via_directory_mapping")
+
+	Attribute("principal_urn", String, "Canonical principal URN holding the rule.")
+	Attribute("kind", String, "What the principal identifies.", func() {
+		Enum("everyone", "role", "user", "unknown")
+	})
+	Attribute("display_name", String, "Human-readable name for the principal.")
+	Attribute("applies_to", String, "Whether the rule names this credential (credential), every credential of its kind (credential_type), or every credential (all_credentials).")
+	Attribute("project_bound", Boolean, "Whether the rule applies only on servers in this server's project.")
+	Attribute("effect", String, "How the rule shaped the decision: allows, overrides, overridden, blocks or blocked, with the same meanings as an access rule's effect.")
+	Attribute("reason", String, "Why a blocked rule made directly to the member did not override the block: wildcard_direct_grant, narrower_direct_grant or own_exclusion.")
+	Attribute("via_directory_mapping", Boolean, "Whether the member holds this role only through a directory role mapping.")
+})
+
+// Whether a member may use one upstream credential the server offers.
+var ExplainedCredentialAccessModel = Type("ExplainedCredentialAccess", func() {
+	Required("auth_client_id", "name", "client_type", "enabled", "allowed", "rules")
+
+	Attribute("auth_client_id", String, "The credential's auth client ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The credential's name.")
+	Attribute("client_type", String, "The kind of credential.", func() {
+		Enum("remote_session", "service_account", "static_credential", "pass_through", "ema")
+	})
+	Attribute("enabled", Boolean, "Whether the credential is turned on. A turned-off credential is unusable whatever the rules say.")
+	Attribute("allowed", Boolean, "Whether the member's rules let them use it, with their own connection for a personal credential.")
+	Attribute("rules", ArrayOf(ExplainedCredentialRuleModel), "Every rule matching this use, deciding rules first.")
+})
+
 var ExplainResourceAccessResult = Type("ExplainResourceAccessResult", func() {
-	Required("visibility", "levels")
+	Required("visibility", "levels", "credentials")
 
 	Attribute("visibility", String, "Who may connect without a rule. public: connecting is not checked against rules. private: rules decide. disabled: nobody can connect.", func() {
 		Enum("public", "private", "disabled")
 	})
 	Attribute("levels", ArrayOf(ExplainedAccessLevelModel), "The decision for use, view and manage, in that order.")
+	Attribute("credentials", ArrayOf(ExplainedCredentialAccessModel), "For each upstream credential the server offers, whether the member may use it. A caller needs both use access to the server and one usable credential to reach an upstream that requires sign-in.")
 })
 
 var MemberModel = Type("AccessMember", func() {
@@ -1807,6 +1946,9 @@ var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("observed_use_count", Int)
+	Attribute("blocked_call_count", Int, "Calls to this server that a Speakeasy hook blocked, within the telemetry retention window. Included in observed_use_count. Optional for one release so a dashboard deployed ahead of the server still loads the inventory; the server always sends it.", func() {
+		Default(0)
+	})
 	Attribute("user_count", Int, "Distinct users who reached this server.")
 	Attribute("top_users", ArrayOf(String), "The users who reached this server most.")
 	Attribute("access", String, func() {
@@ -1822,10 +1964,13 @@ var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
 	Attribute("allowed_policy_ids", ArrayOf(String))
 	Attribute("blocked_policy_ids", ArrayOf(String), "Enabled blocking policies that block this server via a risk_policy:block grant (allow_all policies only).")
 	Attribute("official_server", ShadowMCPOfficialServerModel, func() {
-		Description("The MCP server linked as this Shadow MCP server's official version. While the link is on, direct use is blocked wherever a Shadow MCP policy applies, and the block points agents here.")
+		Description("The MCP server linked as this Shadow MCP server's official version. While it is linked, direct use is blocked wherever a Shadow MCP policy applies, and the block points agents here.")
 	})
 	Attribute("suggested_official_server", ShadowMCPSuggestedOfficialServerModel, func() {
 		Description("A project MCP server that proxies to the same upstream URL, offered as the server to link. Present only while no official server is linked.")
+	})
+	Attribute("official_server_declined", Boolean, func() {
+		Description("True when an administrator chose to keep using the Shadow MCP server directly, so no official server is linked automatically.")
 	})
 })
 
@@ -1841,8 +1986,8 @@ var ShadowMCPSuggestedOfficialServerModel = Type("ShadowMCPSuggestedOfficialServ
 })
 
 var ShadowMCPOfficialServerModel = Type("ShadowMCPOfficialServer", func() {
-	Description("The official, Speakeasy-served version of a Shadow MCP server, linked by an administrator.")
-	Required("mcp_server_id", "name", "direct_access_allowed")
+	Description("The official, Speakeasy-served version of a Shadow MCP server: a project MCP server that proxies to its URL, or one an administrator chose.")
+	Required("mcp_server_id", "name")
 
 	Attribute("mcp_server_id", String, func() {
 		Format(FormatUUID)
@@ -1851,22 +1996,38 @@ var ShadowMCPOfficialServerModel = Type("ShadowMCPOfficialServer", func() {
 	Attribute("slug", String, "The official server's slug, when it has one.")
 	Attribute("url", String, "Where agents connect. A gateway's address when the server is a gateway member. Absent while the server has no endpoint.")
 	Attribute("gateway_name", String, "The gateway that serves the official server, when url is a gateway's address.")
-	Attribute("direct_access_allowed", Boolean, "True while the link is switched off: direct connections to the Shadow MCP server follow the ordinary Shadow MCP rules instead of being blocked.")
+	Attribute("automatic", Boolean, "True when the link was made automatically because the server proxies to the Shadow MCP server's URL; false when an administrator chose it.")
+	Attribute("direct_access_allowed", Boolean, func() {
+		Description("Deprecated: links no longer have an on/off switch, so this is always false. Kept one release so older dashboards, which require it, keep rendering, then removed.")
+	})
 })
 
 var SetShadowMCPOfficialServerForm = Type("SetShadowMCPOfficialServerForm", func() {
-	Required("project_id", "server_url", "allow_direct_access")
+	Required("project_id", "server_url")
 
 	Attribute("project_id", String, func() { Format(FormatUUID) })
 	Attribute("server_url", String, "The Shadow MCP server's URL.", func() { Format(FormatURI) })
-	Attribute("mcp_server_id", String, "The MCP server to link as the official version. Omit it to remove the link.", func() { Format(FormatUUID) })
-	Attribute("allow_direct_access", Boolean, "Switch the link off: keep direct connections to the Shadow MCP server working under the ordinary Shadow MCP rules instead of blocking them. Requires mcp_server_id.")
+	Attribute("mcp_server_id", String, "The MCP server to link as the official version. Omit it, with keep_shadow unset, to go back to the automatic link.", func() { Format(FormatUUID) })
+	Attribute("keep_shadow", Boolean, "Keep using the Shadow MCP server directly: no official server is linked, not even automatically. Cannot be combined with mcp_server_id.")
 })
 
 var ListShadowMCPInventoryResult = Type("ListShadowMCPInventoryResult", func() {
 	Required("servers")
 	Attribute("servers", ArrayOf(ShadowMCPInventoryServerModel))
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
+})
+
+var ShadowMCPInventoryServerMatchModel = Type("ShadowMCPInventoryServerMatch", func() {
+	Description("A Shadow MCP server in use whose upstream URL matches one of the URLs looked up.")
+	Required("server_url", "server")
+
+	Attribute("server_url", String, "The URL that was looked up, exactly as given.")
+	Attribute("server", ShadowMCPInventoryServerModel)
+})
+
+var FindShadowMCPInventoryServersResult = Type("FindShadowMCPInventoryServersResult", func() {
+	Required("matches")
+	Attribute("matches", ArrayOf(ShadowMCPInventoryServerMatchModel), "One entry per looked-up URL that matches a Shadow MCP server in use. URLs without a match are left out.")
 })
 
 var ShadowMCPInventoryUserSourceModel = Type("ShadowMCPInventoryUserSource", func() {
@@ -2248,7 +2409,8 @@ var RequestAccessForm = Type("RequestAccessForm", func() {
 
 var RequestAccessResult = Type("RequestAccessResult", func() {
 	Required("sent_to_count")
-	Attribute("sent_to_count", Int, "Number of administrators who were notified.")
+	Attribute("sent_to_count", Int, "Number of administrators who were emailed.")
+	Attribute("request", AccessRequestModel, "The stored request administrators decide, returned when the access requests rollout is on for the organization and the caller is a signed-in member. API keys and agents get no stored request. Its id is the request id. Asking again while a request for the same access is pending returns that request without notifying anyone again.")
 })
 
 var AccessibleMCPServerModel = Type("AccessibleMCPServer", func() {
@@ -2628,4 +2790,58 @@ var TemporaryGrantModel = Type("TemporaryGrant", func() {
 var ListTemporaryGrantsResult = Type("ListTemporaryGrantsResult", func() {
 	Required("grants")
 	Attribute("grants", ArrayOf(TemporaryGrantModel), "Temporary grants, soonest deadline first. At most 500 are returned.")
+})
+
+var AccessRequestModel = Type("AccessRequest", func() {
+	Description("A member's request for access they were denied, decided by an organization administrator.")
+	Required("id", "requester_user_id", "requester_name", "scope", "selector", "status", "expires_at", "created_at", "updated_at")
+
+	Attribute("id", String, "Access request ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("requester_user_id", String, "The member who asked.")
+	Attribute("requester_name", String, "The requester's display name, or their email when they have none.")
+	Attribute("scope", String, "The scope asked for.")
+	Attribute("selector", SelectorModel, "The resource or activity boundary asked for.")
+	Attribute("resource_name", String, "Name of the resource, as it was when the request was made.")
+	Attribute("message", String, "The requester's note to the administrators.")
+	Attribute("status", String, "pending: waiting for a decision. approved: a temporary grant was given. denied, expired or withdrawn: no access was given.")
+	Attribute("decided_by_user_id", String, "The administrator who approved or denied the request.")
+	Attribute("decided_by_name", String, "The deciding administrator's display name, or their email.")
+	Attribute("decided_via", String, "Where the decision was made: dashboard or slack.")
+	Attribute("decided_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("temporary_grant_id", String, "The temporary grant an approval gave.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("grant_expires_at", String, "When the temporary grant an approval gave stops, or stopped, authorizing requests.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("expires_at", String, "When a pending request lapses.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("created_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Format(FormatDateTime)
+	})
+})
+
+var ListAccessRequestsResult = Type("ListAccessRequestsResult", func() {
+	Required("requests")
+	Attribute("requests", ArrayOf(AccessRequestModel), "Access requests, newest first. At most 200 are returned.")
+})
+
+var DecideAccessRequestForm = Type("DecideAccessRequestForm", func() {
+	Required("id", "approve")
+
+	Attribute("id", String, "The access request to decide.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("approve", Boolean, "True gives the access as a temporary grant; false denies the request.")
+	Attribute("expires_at", String, "When the temporary grant stops authorizing new requests. Required to approve: at least five minutes and at most 24 hours from now.", func() {
+		Format(FormatDateTime)
+	})
 })

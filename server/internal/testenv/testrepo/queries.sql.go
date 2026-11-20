@@ -2303,7 +2303,7 @@ func (q *Queries) GetChatSessionLinkByParentFixture(ctx context.Context, parentC
 }
 
 const getDelegationAssertionOrSubjectPresentFixture = `-- name: GetDelegationAssertionOrSubjectPresentFixture :one
-SELECT (identity_assertion_encrypted IS NOT NULL OR upstream_subject_encrypted IS NOT NULL)::boolean AS present
+SELECT ((identity_assertion_encrypted IS NOT NULL OR identity_assertion_org_encrypted IS NOT NULL) OR (upstream_subject_encrypted IS NOT NULL OR upstream_subject_org_encrypted IS NOT NULL))::boolean AS present
 FROM trusted_issuer_sessions WHERE id = $1
 `
 
@@ -2341,7 +2341,7 @@ func (q *Queries) GetDelegationRefreshClaimFixture(ctx context.Context, arg GetD
 }
 
 const getDelegationSecretsAndGenerationFixture = `-- name: GetDelegationSecretsAndGenerationFixture :one
-SELECT (identity_assertion_encrypted IS NOT NULL OR refresh_token_encrypted IS NOT NULL OR upstream_subject_encrypted IS NOT NULL OR nonce_encrypted IS NOT NULL)::boolean AS present,
+SELECT ((identity_assertion_encrypted IS NOT NULL OR identity_assertion_org_encrypted IS NOT NULL) OR (refresh_token_encrypted IS NOT NULL OR refresh_token_org_encrypted IS NOT NULL) OR (upstream_subject_encrypted IS NOT NULL OR upstream_subject_org_encrypted IS NOT NULL) OR (nonce_encrypted IS NOT NULL OR nonce_org_encrypted IS NOT NULL))::boolean AS present,
        credential_generation
 FROM trusted_issuer_sessions WHERE id = $1
 `
@@ -2359,7 +2359,7 @@ func (q *Queries) GetDelegationSecretsAndGenerationFixture(ctx context.Context, 
 }
 
 const getDelegationSecretsPresentFixture = `-- name: GetDelegationSecretsPresentFixture :one
-SELECT (identity_assertion_encrypted IS NOT NULL OR refresh_token_encrypted IS NOT NULL OR upstream_subject_encrypted IS NOT NULL OR nonce_encrypted IS NOT NULL)::boolean AS present
+SELECT ((identity_assertion_encrypted IS NOT NULL OR identity_assertion_org_encrypted IS NOT NULL) OR (refresh_token_encrypted IS NOT NULL OR refresh_token_org_encrypted IS NOT NULL) OR (upstream_subject_encrypted IS NOT NULL OR upstream_subject_org_encrypted IS NOT NULL) OR (nonce_encrypted IS NOT NULL OR nonce_org_encrypted IS NOT NULL))::boolean AS present
 FROM trusted_issuer_sessions WHERE id = $1
 `
 
@@ -3999,14 +3999,19 @@ BEGIN
     $fn$;
     CREATE TRIGGER mark_remote_session_identity_write
         BEFORE UPDATE ON remote_sessions FOR EACH ROW
-        WHEN (OLD.updated_at = NEW.updated_at AND OLD.last_used_at IS NOT DISTINCT FROM NEW.last_used_at)
+        WHEN (OLD.updated_at = NEW.updated_at AND OLD.last_used_at IS NOT DISTINCT FROM NEW.last_used_at
+            AND OLD.access_token_encrypted IS NOT DISTINCT FROM NEW.access_token_encrypted
+            AND OLD.access_token_org_encrypted IS NOT DISTINCT FROM NEW.access_token_org_encrypted)
         EXECUTE FUNCTION mark_remote_session_identity_write();
 END
 $install$
 `
 
-// Marks every remote_sessions update that leaves updated_at and last_used_at alone, the
-// identity restatement's signature, by appending to validation_reason.
+// Marks every remote_sessions update that leaves updated_at, last_used_at and the
+// access token alone, the identity restatement's signature, by appending to
+// validation_reason. The token write that follows a refresh's compare-and-swap
+// in the same transaction also leaves updated_at alone, but always replaces the
+// access token.
 func (q *Queries) InstallRemoteSessionIdentityWriteMarkerFixture(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, installRemoteSessionIdentityWriteMarkerFixture)
 	return err
@@ -6711,6 +6716,26 @@ func (q *Queries) SetAPIKeyExpiresAtFixture(ctx context.Context, arg SetAPIKeyEx
 	return err
 }
 
+const setAPIKeysCreatedAtFixture = `-- name: SetAPIKeysCreatedAtFixture :exec
+UPDATE api_keys
+SET created_at = $1
+WHERE organization_id = $2
+  AND id = ANY($3::uuid[])
+`
+
+type SetAPIKeysCreatedAtFixtureParams struct {
+	CreatedAt      pgtype.Timestamptz
+	OrganizationID string
+	Ids            []uuid.UUID
+}
+
+// Pins created_at on an organization's keys so keys.list paging tests can
+// force ties on the first half of its (created_at, id) ordering.
+func (q *Queries) SetAPIKeysCreatedAtFixture(ctx context.Context, arg SetAPIKeysCreatedAtFixtureParams) error {
+	_, err := q.db.Exec(ctx, setAPIKeysCreatedAtFixture, arg.CreatedAt, arg.OrganizationID, arg.Ids)
+	return err
+}
+
 const setAgentInvalidLifecycleFixture = `-- name: SetAgentInvalidLifecycleFixture :exec
 UPDATE agents
 SET suspended_at = clock_timestamp(), revoked_at = clock_timestamp()
@@ -7639,7 +7664,7 @@ func (q *Queries) SetPendingDirectoryReviewItemsStateFixture(ctx context.Context
 }
 
 const setPreparationFixtureCIMDURI = `-- name: SetPreparationFixtureCIMDURI :exec
-UPDATE remote_session_clients SET client_id_metadata_uri = 'https://gram.example.com/client.json', client_id = 'https://gram.example.com/client.json', client_secret_encrypted = NULL, token_endpoint_auth_method = 'none' WHERE id = $1 AND project_id = $2
+UPDATE remote_session_clients SET client_id_metadata_uri = 'https://gram.example.com/client.json', client_id = 'https://gram.example.com/client.json', client_secret_encrypted = NULL, client_secret_org_encrypted = NULL, client_secret_generation = client_secret_generation + 1, token_endpoint_auth_method = 'none' WHERE id = $1 AND project_id = $2
 `
 
 type SetPreparationFixtureCIMDURIParams struct {
@@ -7669,7 +7694,7 @@ func (q *Queries) SetPreparationFixtureClientGrants(ctx context.Context, arg Set
 }
 
 const setPreparationFixtureClientSecret = `-- name: SetPreparationFixtureClientSecret :exec
-UPDATE remote_session_clients SET token_endpoint_auth_method = 'client_secret_basic', client_secret_encrypted = $1
+UPDATE remote_session_clients SET token_endpoint_auth_method = 'client_secret_basic', client_secret_encrypted = $1, client_secret_org_encrypted = NULL, client_secret_generation = client_secret_generation + 1
 WHERE id = $2 AND project_id = $3
 `
 
@@ -7708,7 +7733,7 @@ WITH issuer AS (
     RETURNING remote_session_issuers.id
 )
 UPDATE remote_session_clients
-SET token_endpoint_auth_method = 'private_key_jwt', json_web_key_set_id = $1, client_secret_encrypted = NULL,
+SET token_endpoint_auth_method = 'private_key_jwt', json_web_key_set_id = $1, client_secret_encrypted = NULL, client_secret_org_encrypted = NULL, client_secret_generation = client_secret_generation + 1,
     organization_id = $2
 WHERE remote_session_clients.id = $3
   AND remote_session_clients.project_id = $4
@@ -7756,7 +7781,7 @@ func (q *Queries) SetPreparationFixtureDCREndpoint(ctx context.Context, arg SetP
 }
 
 const setPreparationFixtureInteractiveClient = `-- name: SetPreparationFixtureInteractiveClient :exec
-UPDATE remote_session_clients SET client_secret_encrypted='interactive-ciphertext', token_endpoint_auth_method='client_secret_basic', grant_types=ARRAY['authorization_code','refresh_token'], scope=ARRAY['openid'] WHERE id = $1 AND project_id = $2
+UPDATE remote_session_clients SET client_secret_encrypted='interactive-ciphertext', client_secret_org_encrypted = NULL, client_secret_generation = client_secret_generation + 1, token_endpoint_auth_method='client_secret_basic', grant_types=ARRAY['authorization_code','refresh_token'], scope=ARRAY['openid'] WHERE id = $1 AND project_id = $2
 `
 
 type SetPreparationFixtureInteractiveClientParams struct {
@@ -7802,7 +7827,7 @@ func (q *Queries) SetPreparationFixtureIssuerPostAuth(ctx context.Context, arg S
 }
 
 const setPreparationFixtureTestClientSecret = `-- name: SetPreparationFixtureTestClientSecret :exec
-UPDATE remote_session_clients SET token_endpoint_auth_method='client_secret_basic',client_secret_encrypted='test-ciphertext' WHERE id = $1 AND project_id = $2
+UPDATE remote_session_clients SET token_endpoint_auth_method='client_secret_basic',client_secret_encrypted='test-ciphertext', client_secret_org_encrypted = NULL, client_secret_generation = client_secret_generation + 1 WHERE id = $1 AND project_id = $2
 `
 
 type SetPreparationFixtureTestClientSecretParams struct {

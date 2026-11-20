@@ -164,7 +164,7 @@ func TestDelegatedPolicyV3AdmitsAssistantScopes(t *testing.T) {
 	decoded, err := DecodeDelegatedPolicy(DelegatedPolicyVersion3, encoded)
 	require.NoError(t, err)
 	for _, scope := range []authz.Scope{authz.ScopeAssistantWrite, authz.ScopeAssistantRead} {
-		allowed, err := authz.GrantsAuthorize(decoded.RuntimeGrants(), authz.Check{Scope: scope, ResourceKind: "", ResourceID: assistant.Selector.ResourceID(), Dimensions: nil})
+		allowed, err := authz.GrantsAuthorize(decoded.RuntimeGrants(), authz.AssistantCheck(scope, assistant.Selector.ResourceID(), "22222222-2222-4222-8222-222222222222"))
 		require.NoError(t, err)
 		require.True(t, allowed, scope)
 	}

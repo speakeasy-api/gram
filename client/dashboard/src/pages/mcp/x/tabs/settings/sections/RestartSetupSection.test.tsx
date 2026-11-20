@@ -9,7 +9,9 @@ import { RestartSetupSection } from "./RestartSetupSection";
 const mocks = vi.hoisted(() => ({
   markCompleted: vi.fn(),
   invalidate: vi.fn(),
+  toastError: vi.fn(),
 }));
+vi.mock("sonner", () => ({ toast: { error: mocks.toastError } }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     mcpServers: { setSetupGuideCompleted: mocks.markCompleted },
@@ -119,14 +121,16 @@ it("still opens Setup when the cache can't refresh after the restart is saved", 
   );
 });
 
-it("stays in Settings with an error when the restart can't be saved", async () => {
+it("stays in Settings with an error toast when the restart can't be saved", async () => {
   mocks.markCompleted.mockRejectedValue(new Error("unavailable"));
   sessionStorage.setItem(savedHere, JSON.stringify({ step: "test" }));
   renderSection();
   await userEvent.click(screen.getByRole("button", { name: "Restart setup" }));
-  expect(
-    await screen.findByText("Unable to restart setup. Try again."),
-  ).toBeDefined();
+  await waitFor(() =>
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      "Unable to restart setup. Try again.",
+    ),
+  );
   expect(screen.getByLabelText("Location").textContent).toBe("/settings");
   expect(sessionStorage.getItem(savedHere)).not.toBeNull();
   expect(

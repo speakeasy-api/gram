@@ -27,6 +27,7 @@ import (
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/infra/pkg/topics"
+	"github.com/speakeasy-api/gram/server/internal/access/slackrequests"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -57,6 +58,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval/slackapproval"
@@ -105,7 +107,12 @@ type WorkerOptions struct {
 	// ClientSecrets opens remote session client secrets over the process's
 	// organization encryption. Nil opens them as a process without
 	// organization encryption.
-	ClientSecrets   *clientsecrets.Secrets
+	ClientSecrets *clientsecrets.Secrets
+
+	// UpstreamTokens opens and stores upstream OAuth tokens over the process's
+	// organization encryption. Nil handles them as a process without
+	// organization encryption.
+	UpstreamTokens  *upstreamtokens.Tokens
 	FeatureProvider feature.Provider
 	AssetStorage    assets.BlobStore
 	SlackClient     *slack_client.SlackClient
@@ -239,6 +246,7 @@ func ForDeploymentProcessing(
 		TunnelHTTPClient:               nil,
 		EncryptionClient:               enc,
 		ClientSecrets:                  nil,
+		UpstreamTokens:                 nil,
 		FeatureProvider:                f,
 		AssetStorage:                   assetStorage,
 		FunctionsDeployer:              deployer,
@@ -346,6 +354,7 @@ func NewTemporalWorker(
 		DB:                             nil,
 		EncryptionClient:               nil,
 		ClientSecrets:                  nil,
+		UpstreamTokens:                 nil,
 		FeatureProvider:                nil,
 		AssetStorage:                   nil,
 		SlackClient:                    nil,
@@ -410,6 +419,7 @@ func NewTemporalWorker(
 			DB:                             conv.Default(o.DB, opts.DB),
 			EncryptionClient:               conv.Default(o.EncryptionClient, opts.EncryptionClient),
 			ClientSecrets:                  conv.Default(o.ClientSecrets, opts.ClientSecrets),
+			UpstreamTokens:                 conv.Default(o.UpstreamTokens, opts.UpstreamTokens),
 			FeatureProvider:                conv.Default(o.FeatureProvider, opts.FeatureProvider),
 			AssetStorage:                   conv.Default(o.AssetStorage, opts.AssetStorage),
 			SlackClient:                    conv.Default(o.SlackClient, opts.SlackClient),
@@ -528,6 +538,7 @@ func NewTemporalWorker(
 		opts.DB,
 		opts.EncryptionClient,
 		opts.ClientSecrets,
+		opts.UpstreamTokens,
 		opts.FeatureProvider,
 		opts.AssetStorage,
 		opts.SlackClient,
@@ -790,8 +801,13 @@ func NewTemporalWorker(
 			temporalWorker.RegisterActivity(riskApprovalSlack.NotifyRiskApprovalApprovers)
 			temporalWorker.RegisterActivity(riskApprovalSlack.FinishRiskApprovalCards)
 		}
+		requestNotifier := slackrequests.NewNotifier(logger, slackrequests.NewCards(opts.DB, opts.OrgHosts), slackDirectory.sync, slackapi.NewClient("", opts.GuardianPolicy.PooledClient()))
+		accessRequestSlack := &accessRequestSlackActivities{logger: logger, notifier: requestNotifier}
+		temporalWorker.RegisterActivity(accessRequestSlack.NotifyAccessRequestAdmins)
+		temporalWorker.RegisterActivity(accessRequestSlack.FinishAccessRequestCards)
 	}
 	temporalWorker.RegisterWorkflow(RiskApprovalSlackWorkflow)
+	temporalWorker.RegisterWorkflow(AccessRequestSlackWorkflow)
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncWorkflow)
 	temporalWorker.RegisterWorkflow(InternalSessionIssuerKeySweepWorkflow)

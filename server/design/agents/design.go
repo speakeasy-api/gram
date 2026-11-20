@@ -216,6 +216,7 @@ var _ = Service("agents", func() {
 				Minimum(1)
 				Maximum(200)
 			})
+			Attribute("project_id", String, "Keep only agents assigned to this project in the active organization.", func() { Format(FormatUUID) })
 			Attribute("search", String, "Case-insensitive substring match on the agent name.")
 			Attribute("lifecycle", ArrayOf(String), "Keep only agents in these lifecycle states.", func() {
 				Elem(func() { Enum("active", "suspended", "revoked") })
@@ -238,6 +239,7 @@ var _ = Service("agents", func() {
 			security.SessionHeader()
 			Param("cursor")
 			Param("limit")
+			Param("project_id")
 			Param("search")
 			Param("name_order")
 			Param("lifecycle")

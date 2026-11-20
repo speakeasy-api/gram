@@ -12,6 +12,35 @@ export function shadowMCPMakeOfficialHref(serverPageHref: string): string {
   return `${serverPageHref}?${SHADOW_MCP_MAKE_OFFICIAL_PARAM}=1`;
 }
 
+/**
+ * The query parameters that open the remote MCP creation page for a Shadow
+ * MCP server: its URL and name fill the form, and the server's slug sends
+ * the admin back to its Shadow MCP page to link the new server.
+ */
+export const SHADOW_MCP_SETUP_PARAMS = {
+  url: "url",
+  name: "name",
+  shadowServer: "shadow-mcp",
+} as const;
+
+/** The remote MCP creation page, filled in for a Shadow MCP server. */
+export function shadowMCPSetUpHref(
+  createRemoteHref: string,
+  server: Pick<
+    ShadowMCPInventoryServer,
+    "canonicalServerUrl" | "serverName" | "serverSlug"
+  >,
+): string {
+  const params = new URLSearchParams({
+    [SHADOW_MCP_SETUP_PARAMS.url]: server.canonicalServerUrl,
+    [SHADOW_MCP_SETUP_PARAMS.shadowServer]: server.serverSlug,
+  });
+  if (server.serverName) {
+    params.set(SHADOW_MCP_SETUP_PARAMS.name, server.serverName);
+  }
+  return `${createRemoteHref}?${params.toString()}`;
+}
+
 /** Whether a row can be made official at all: only a server with a URL can. */
 export function canMakeShadowMCPServerOfficial(
   server: Pick<ShadowMCPInventoryServer, "targetKind" | "officialServer">,
@@ -20,41 +49,39 @@ export function canMakeShadowMCPServerOfficial(
 }
 
 /**
- * What a linked server's status line says. A link that is on blocks direct
- * connections in every mode, with or without a blocking policy, so only a
- * link switched off or an official server with no address leaves them
- * working.
+ * What a linked server's status line says. A link blocks direct connections
+ * in every mode, with or without a blocking policy, so only an official
+ * server with no address leaves them working.
  */
 export function shadowMCPOfficialServerDescription(
   server: Pick<ShadowMCPInventoryServer, "officialServer">,
 ): string {
   const official = server.officialServer;
   if (!official) return "";
+  const linked = official.automatic
+    ? `Official server: “${official.name}”, chosen automatically because it proxies this URL`
+    : `Linked to “${official.name}”`;
   const served = official.gatewayName
-    ? `Linked to “${official.name}”, served through the gateway “${official.gatewayName}”.`
-    : `Linked to “${official.name}”.`;
+    ? `${linked}, served through the gateway “${official.gatewayName}”.`
+    : `${linked}.`;
   if (!official.url) {
     return `${served} It has no address yet, so direct connections still work.`;
-  }
-  if (official.directAccessAllowed) {
-    return `${served} The link is off, so direct connections follow the usual rules.`;
   }
   return `${served} Direct connections are blocked and agents are sent there.`;
 }
 
 /**
- * Whether a linked official version decides a Shadow MCP server's status. Only
- * a link that is on does: it blocks direct connections and sends agents to
- * the official server. A link switched off leaves the policy's ordinary
- * rules in charge, so the status shows those instead. A server someone is
- * waiting on keeps its pending state.
+ * Whether a linked official version decides a Shadow MCP server's status. A
+ * link blocks direct connections and sends agents to the official server, so
+ * the server reads as onboarded. A server someone is waiting on keeps its
+ * pending state.
  */
 export function shadowMCPOfficialState(
   server: Pick<ShadowMCPInventoryServer, "officialServer">,
   pending: boolean,
 ): "onboarded" | null {
   if (!server.officialServer || pending) return null;
-  return server.officialServer.directAccessAllowed ? null : "onboarded";
+  return "onboarded";
 }
 
 export const SHADOW_MCP_OFFICIAL_STATE_LABEL = {

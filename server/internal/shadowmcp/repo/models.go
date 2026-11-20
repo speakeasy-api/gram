@@ -3,33 +3,3 @@
 //   sqlc v1.31.1
 
 package repo
-
-import (
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
-)
-
-type ShadowMcpOfficialServer struct {
-	// @access: confidential
-	ID uuid.UUID
-	// @access: confidential
-	ProjectID uuid.UUID
-	// @access: restricted
-	ServerUrl string
-	// @access: confidential
-	McpServerID uuid.NullUUID
-	// @access: confidential
-	AllowDirectAccess bool
-	// @access: confidential
-	CreatedByUserID pgtype.Text
-	// @access: confidential
-	UpdatedByUserID pgtype.Text
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
-	// @access: confidential
-	UpdatedAt pgtype.Timestamptz
-	// @access: confidential
-	DeletedAt pgtype.Timestamptz
-	// @access: confidential
-	Deleted bool
-}

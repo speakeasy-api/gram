@@ -1,3 +1,4 @@
+import { DISPOSITION_PRECEDENCE } from "@/pages/access/mcpAccessModel";
 import { supportsAudienceReading } from "./manageAccessState";
 import { enumPresentation } from "@/lib/enum";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
@@ -139,17 +140,29 @@ export function isUnnarrowed(entry: {
   );
 }
 
+/**
+ * The one annotation a rule is matched against for this tool, as the server
+ * picks it. A tool that is both read-only and idempotent counts as read-only,
+ * so a block on idempotent tools does not reach it. Undefined when the tool
+ * carries none.
+ */
+function toolDisposition(tool: ToolSelectionTool): string | undefined {
+  return DISPOSITION_PRECEDENCE.find((disposition) =>
+    (tool.annotations as string[]).includes(disposition),
+  );
+}
+
 /** Whether a rule names this tool, by name or by annotation. */
 export function coversTool(
   entry: { tools?: string[]; dispositions?: string[] },
   tool: ToolSelectionTool,
 ): boolean {
   if (isUnnarrowed(entry)) return true;
-  const tools = new Set(entry.tools ?? []);
-  const dispositions = new Set<string>(entry.dispositions ?? []);
+  if ((entry.tools ?? []).includes(tool.name)) return true;
+  const disposition = toolDisposition(tool);
   return (
-    tools.has(tool.name) ||
-    tool.annotations.some((annotation) => dispositions.has(annotation))
+    disposition !== undefined &&
+    (entry.dispositions ?? []).includes(disposition)
   );
 }
 

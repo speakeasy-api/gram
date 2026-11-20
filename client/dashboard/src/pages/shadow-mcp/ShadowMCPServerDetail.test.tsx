@@ -17,6 +17,7 @@ import ShadowMCPServerDetail from "./ShadowMCPServerDetail";
 import { testAccessSummary } from "@/components/shadow-mcp/shadowMCPInventoryTestFixtures";
 
 const mocks = vi.hoisted(() => ({
+  hideInsightsDock: vi.fn(),
   useMembers: vi.fn(),
   useProject: vi.fn(),
   useRiskListPolicies: vi.fn(),
@@ -54,6 +55,11 @@ vi.mock("@/components/shadow-mcp/OfficialServerPanel", () => ({
       data-server-url={server.canonicalServerUrl}
     />
   ),
+}));
+
+// The dock needs the insights provider; the page only asks to hide it.
+vi.mock("@/components/insights-context", () => ({
+  useHideInsightsDock: mocks.hideInsightsDock,
 }));
 
 vi.mock("@/contexts/Sdk", () => ({
@@ -157,32 +163,23 @@ vi.mock("@/components/mcp-approvals/DecideAccessSheet", () => ({
 }));
 
 vi.mock("@/components/mcp-approvals/ApprovalReview", () => ({
-  // The double renders the usage and summary slots, because the real review
-  // does: observed traffic and the at-a-glance strip are both sections of the
-  // review, and a double that swallowed them would hide the page's own table
-  // and stats from every test here.
+  // The double renders the evidence action slot, because the real review
+  // does: the refresh control lives on the evidence disclosure row.
   ApprovalReview: ({
-    audience,
     requestId,
-    usage,
-    summary,
+    collapseEvidence,
+    evidenceAction,
   }: {
-    audience?: {
-      disposition: string | null;
-      members: unknown[];
-      roles: unknown[];
-    };
     requestId: string;
-    usage?: React.ReactNode;
-    summary?: React.ReactNode;
+    collapseEvidence?: boolean;
+    evidenceAction?: React.ReactNode;
   }) => (
     <div
       data-testid="approval-review"
-      data-audience-disposition={audience?.disposition ?? undefined}
       data-request-id={requestId}
+      data-collapse-evidence={String(Boolean(collapseEvidence))}
     >
-      {summary}
-      {usage}
+      {evidenceAction}
     </div>
   ),
   RefreshEvidenceButton: ({
@@ -364,7 +361,7 @@ vi.mock("@/components/ui/Table", () => ({
   ),
 }));
 
-vi.mock("@/components/ui/Skeleton", () => ({
+vi.mock("@/components/ui/SkeletonTable", () => ({
   SkeletonTable: () => <div>Loading table</div>,
 }));
 
@@ -391,6 +388,7 @@ function inventoryServer(
     firstSeen: new Date("2026-01-01T10:00:00Z"),
     lastCalled: new Date("2026-01-04T10:00:00Z"),
     lastSeen: new Date("2026-01-05T10:00:00Z"),
+    blockedCallCount: 0,
     observedUseCount: 8,
     requestCount: 0,
     serverName: "GitHub MCP",
@@ -520,6 +518,10 @@ describe("ShadowMCPServerDetail", () => {
     expect(screen.getByText("alex@example.com")).toBeTruthy();
     expect(screen.getByText("15 calls")).toBeTruthy();
     expect(screen.getByText("sam@example.com")).toBeTruthy();
+    // Who uses it stands on its own, not inside the review's evidence.
+    expect(screen.getByRole("heading", { name: "Who uses it" })).toBeTruthy();
+    // The Project Assistant dock stays off the Shadow MCP pages.
+    expect(mocks.hideInsightsDock).toHaveBeenCalled();
     // Making the server official is offered on the same page.
     expect(
       screen
@@ -841,10 +843,10 @@ describe("ShadowMCPServerDetail", () => {
 
     renderDetailPage();
 
-    expect(screen.queryByRole("button", { name: "Decide Access" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Approve server" })).toBeNull();
     expect(screen.queryByTestId("decide-access-sheet")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Review Request" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review request" }));
 
     const sheet = screen.getByTestId("decide-access-sheet");
     expect(sheet.getAttribute("data-canonical-server-url")).toBe(
@@ -858,10 +860,11 @@ describe("ShadowMCPServerDetail", () => {
   it("decides access proactively on a server with only a dossier", () => {
     renderDetailPage();
 
-    expect(screen.queryByRole("button", { name: "Review Request" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Review request" })).toBeNull();
     expect(screen.queryByTestId("decide-access-sheet")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Decide Access" }));
+    // Servers are blocked by default here, so the page offers approval.
+    fireEvent.click(screen.getByRole("button", { name: "Approve server" }));
 
     const sheet = screen.getByTestId("decide-access-sheet");
     expect(sheet.getAttribute("data-canonical-server-url")).toBe(
@@ -910,6 +913,49 @@ describe("ShadowMCPServerDetail", () => {
     expect(screen.queryByText("Gathering evidence")).toBeNull();
     const review = screen.getByTestId("approval-review");
     expect(review.getAttribute("data-request-id")).toBe("request-2");
+    // The evidence is detail on this page, behind its own disclosure.
+    expect(review.getAttribute("data-collapse-evidence")).toBe("true");
+    // Users still show outside the review.
+    expect(screen.getByRole("heading", { name: "Who uses it" })).toBeTruthy();
+  });
+
+  it("puts a review someone is waiting on before the official server", () => {
+    const order = () => {
+      const review = screen.getByTestId("approval-review");
+      const panel = screen.getByTestId("official-server-panel");
+      return review.compareDocumentPosition(panel) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+        ? "review first"
+        : "panel first";
+    };
+    mocks.useShadowMCPInventoryServer.mockReturnValue({
+      data: inventoryServer({
+        approvalRequest: {
+          id: "request-4",
+          requesterCount: 1,
+          status: "requested",
+        },
+      }),
+      error: null,
+      isLoading: false,
+    });
+    renderDetailPage();
+    expect(order()).toBe("review first");
+
+    cleanup();
+    mocks.useShadowMCPInventoryServer.mockReturnValue({
+      data: inventoryServer({
+        approvalRequest: {
+          id: "request-5",
+          requesterCount: 0,
+          status: "approved",
+        },
+      }),
+      error: null,
+      isLoading: false,
+    });
+    renderDetailPage();
+    expect(order()).toBe("panel first");
   });
 
   it("carries the pending legacy bypass request into the decide sheet", () => {
@@ -935,7 +981,7 @@ describe("ShadowMCPServerDetail", () => {
 
     renderDetailPage();
 
-    fireEvent.click(screen.getByRole("button", { name: "Review Request" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review request" }));
 
     const sheet = screen.getByTestId("decide-access-sheet");
     expect(sheet.getAttribute("data-pending-bypass-request-id")).toBe(
