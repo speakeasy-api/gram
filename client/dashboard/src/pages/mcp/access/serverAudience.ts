@@ -154,7 +154,7 @@ const DISPOSITION_PRECEDENCE = [
  * so a block on idempotent tools does not reach it. Undefined when the tool
  * carries none.
  */
-export function toolDisposition(tool: ToolSelectionTool): string | undefined {
+function toolDisposition(tool: ToolSelectionTool): string | undefined {
   return DISPOSITION_PRECEDENCE.find((disposition) =>
     (tool.annotations as string[]).includes(disposition),
   );
