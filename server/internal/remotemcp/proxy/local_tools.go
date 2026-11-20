@@ -147,8 +147,6 @@ func (p *Proxy) answerLocalToolCall(
 	return nil
 }
 
-// marshalLocalToolResult produces the tools/call response carrying result,
-// both as wire bytes and as the decoded message the request observer reads.
 // LocalToolResultObserver is told the result of a tools/call a local tool
 // answered, as the JSON-RPC result the client receives.
 type LocalToolResultObserver interface {
@@ -156,6 +154,8 @@ type LocalToolResultObserver interface {
 	ObserveLocalToolResult(ctx context.Context, call *ToolsCallRequest, result json.RawMessage)
 }
 
+// marshalLocalToolResult produces the tools/call response carrying result,
+// both as wire bytes and as the decoded message the request observer reads.
 func marshalLocalToolResult(id jsonrpc.ID, result *mcp.CallToolResult) ([]byte, *jsonrpc.Response, error) {
 	if result == nil {
 		return nil, nil, fmt.Errorf("local tool returned no result")

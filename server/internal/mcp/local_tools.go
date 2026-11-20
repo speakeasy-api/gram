@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 
@@ -10,6 +11,7 @@ import (
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
@@ -239,6 +241,9 @@ func answerHostedLocalToolCall(
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "answer local tool call").LogError(ctx, logger)
 	}
+	if called == nil {
+		return nil, oops.E(oops.CodeUnexpected, errors.New("local tool returned no result"), "answer local tool call").LogError(ctx, logger)
+	}
 
 	content := make([]json.RawMessage, 0, len(called.Content))
 	for _, item := range called.Content {
@@ -301,12 +306,10 @@ func (s *Service) proxyLocalTools(logger *slog.Logger, server localToolServer, c
 						sessionID = request.Header.Get(proxy.McpSessionIDHeader)
 					}
 					name, version := s.proxiedClient(ctx, logger, server.projectID, clientScope, sessionID)
-					// A proxied request carries an auth context only when its
-					// caller presented a credential.
 					return tool.call(ctx, localToolCall{
 						arguments:     call.Params.Arguments,
 						request:       request,
-						authenticated: true,
+						authenticated: proxiedCallerAuthenticated(ctx),
 						clientName:    name,
 						clientVersion: version,
 					})
@@ -321,4 +324,12 @@ func (s *Service) proxyLocalTools(logger *slog.Logger, server localToolServer, c
 // offered on: the member itself, in the gateway's organization.
 func memberLocalToolServer(organizationID string, member metaMember) localToolServer {
 	return localToolServer{organizationID: organizationID, projectID: member.projectID, mcpServerID: member.serverID}
+}
+
+// proxiedCallerAuthenticated reports whether a proxied request's caller
+// presented a credential. The proxy's request carries an auth context only
+// then; an anonymous caller of a public server has none.
+func proxiedCallerAuthenticated(ctx context.Context) bool {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	return ok && authCtx != nil
 }
