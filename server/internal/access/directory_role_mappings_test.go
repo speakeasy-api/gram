@@ -816,17 +816,24 @@ func TestLoadUserGrants_IncludesDirectoryMappedRoles(t *testing.T) {
 
 	byUser, err := authz.LoadUserGrants(ctx, ti.conn, orgID, []string{"local_sales_user", "local_support_user"})
 	require.NoError(t, err)
-	for _, userID := range []string{"local_sales_user", "local_support_user"} {
-		t.Run(userID, func(t *testing.T) {
-			principals, err := authz.ResolveUserPrincipals(ctx, ti.conn, orgID, userID)
+	cases := []struct {
+		name       string
+		userID     string
+		wantMapped bool
+	}{
+		{name: "Sales member gets the mapped role", userID: "local_sales_user", wantMapped: true},
+		{name: "Support member does not", userID: "local_support_user", wantMapped: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			principals, err := authz.ResolveUserPrincipals(ctx, ti.conn, orgID, tc.userID)
 			require.NoError(t, err)
 			want, err := authz.LoadGrants(ctx, ti.conn, orgID, principals)
 			require.NoError(t, err)
-			require.ElementsMatch(t, want, byUser[userID])
+			require.ElementsMatch(t, want, byUser[tc.userID], "the batch loader agrees with the single-user path")
+			require.Equal(t, tc.wantMapped, grantsFrom(byUser[tc.userID], builder))
 		})
 	}
-	require.True(t, grantsFrom(byUser["local_sales_user"], builder), "the mapped role's grants reach the Sales member")
-	require.False(t, grantsFrom(byUser["local_support_user"], builder), "the mapping does not reach the Support member")
 }
 
 func grantsFrom(grants []authz.Grant, principal urn.Principal) bool {
