@@ -145,8 +145,12 @@ type SetShadowMCPOfficialServerRequestBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The Shadow MCP server's URL.
 	ServerURL string `form:"server_url" json:"server_url" xml:"server_url"`
-	// The MCP server to link as the official version. Omit it to remove the link.
+	// The MCP server to link as the official version. Omit it, with keep_shadow
+	// unset, to go back to the automatic link.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// Keep using the Shadow MCP server directly: no official server is linked, not
+	// even automatically. Cannot be combined with mcp_server_id.
+	KeepShadow *bool `form:"keep_shadow,omitempty" json:"keep_shadow,omitempty" xml:"keep_shadow,omitempty"`
 }
 
 // ResolveShadowMCPInventoryRequestRequestBody is the type of the "access"
@@ -605,6 +609,9 @@ type GetShadowMCPInventoryServerResponseBody struct {
 	// A project MCP server that proxies to the same upstream URL, offered as the
 	// server to link. Present only while no official server is linked.
 	SuggestedOfficialServer *ShadowMCPSuggestedOfficialServerResponseBody `form:"suggested_official_server,omitempty" json:"suggested_official_server,omitempty" xml:"suggested_official_server,omitempty"`
+	// True when an administrator chose to keep using the Shadow MCP server
+	// directly, so no official server is linked automatically.
+	OfficialServerDeclined *bool `form:"official_server_declined,omitempty" json:"official_server_declined,omitempty" xml:"official_server_declined,omitempty"`
 }
 
 // FindShadowMCPInventoryServersResponseBody is the type of the "access"
@@ -10793,6 +10800,9 @@ type ShadowMCPInventoryServerResponseBody struct {
 	// A project MCP server that proxies to the same upstream URL, offered as the
 	// server to link. Present only while no official server is linked.
 	SuggestedOfficialServer *ShadowMCPSuggestedOfficialServerResponseBody `form:"suggested_official_server,omitempty" json:"suggested_official_server,omitempty" xml:"suggested_official_server,omitempty"`
+	// True when an administrator chose to keep using the Shadow MCP server
+	// directly, so no official server is linked automatically.
+	OfficialServerDeclined *bool `form:"official_server_declined,omitempty" json:"official_server_declined,omitempty" xml:"official_server_declined,omitempty"`
 }
 
 // ShadowMCPAccessSummaryResponseBody is used to define fields on response body
@@ -10873,6 +10883,9 @@ type ShadowMCPOfficialServerResponseBody struct {
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The gateway that serves the official server, when url is a gateway's address.
 	GatewayName *string `form:"gateway_name,omitempty" json:"gateway_name,omitempty" xml:"gateway_name,omitempty"`
+	// True when the link was made automatically because the server proxies to the
+	// Shadow MCP server's URL; false when an administrator chose it.
+	Automatic *bool `form:"automatic,omitempty" json:"automatic,omitempty" xml:"automatic,omitempty"`
 	// Deprecated: links no longer have an on/off switch, so this is always false.
 	// Kept one release so older dashboards, which require it, keep rendering, then
 	// removed.
@@ -11626,6 +11639,7 @@ func NewSetShadowMCPOfficialServerRequestBody(p *access.SetShadowMCPOfficialServ
 		ProjectID:   p.ProjectID,
 		ServerURL:   p.ServerURL,
 		McpServerID: p.McpServerID,
+		KeepShadow:  p.KeepShadow,
 	}
 	return body
 }
@@ -15706,18 +15720,19 @@ func NewListShadowMCPInventoryGatewayError(body *ListShadowMCPInventoryGatewayEr
 // response.
 func NewGetShadowMCPInventoryServerShadowMCPInventoryServerOK(body *GetShadowMCPInventoryServerResponseBody) *access.ShadowMCPInventoryServer {
 	v := &access.ShadowMCPInventoryServer{
-		CanonicalServerURL: *body.CanonicalServerURL,
-		ServerSlug:         *body.ServerSlug,
-		URLHost:            *body.URLHost,
-		TargetKind:         body.TargetKind,
-		ServerName:         body.ServerName,
-		FirstSeen:          *body.FirstSeen,
-		LastSeen:           *body.LastSeen,
-		LastCalled:         body.LastCalled,
-		ObservedUseCount:   *body.ObservedUseCount,
-		UserCount:          *body.UserCount,
-		Access:             *body.Access,
-		RequestCount:       *body.RequestCount,
+		CanonicalServerURL:     *body.CanonicalServerURL,
+		ServerSlug:             *body.ServerSlug,
+		URLHost:                *body.URLHost,
+		TargetKind:             body.TargetKind,
+		ServerName:             body.ServerName,
+		FirstSeen:              *body.FirstSeen,
+		LastSeen:               *body.LastSeen,
+		LastCalled:             body.LastCalled,
+		ObservedUseCount:       *body.ObservedUseCount,
+		UserCount:              *body.UserCount,
+		Access:                 *body.Access,
+		RequestCount:           *body.RequestCount,
+		OfficialServerDeclined: body.OfficialServerDeclined,
 	}
 	if body.BlockedCallCount != nil {
 		v.BlockedCallCount = *body.BlockedCallCount

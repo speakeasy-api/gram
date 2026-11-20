@@ -70,6 +70,14 @@ const (
 	FlagPlatformMCPPluginAssignmentMutations Flag = "platform-mcp-plugin-assignment-mutations"
 	// FlagGatewayPluginMembership gates new gateway attachments to plugins.
 	FlagGatewayPluginMembership Flag = "gateway-plugin-membership"
+	// FlagShadowMCPAutoLink links a Shadow MCP server automatically to the
+	// project MCP server that proxies its URL, so direct calls are sent there
+	// without an administrator linking the two. Evaluated server-side by the
+	// hook guard and the Shadow MCP inventory; targeted by PostHog
+	// organization group (org slug) or project slug group. Fails closed: off,
+	// only links an administrator made redirect, as before. Removed once
+	// automatic links are GA.
+	FlagShadowMCPAutoLink Flag = "shadow-mcp-auto-link"
 	// FlagStoredGatewayMachineAccess lets admitted agents and workloads use
 	// stored gateways. The server evaluates it per organization and fails closed.
 	FlagStoredGatewayMachineAccess Flag = "stored-gateway-machine-access"

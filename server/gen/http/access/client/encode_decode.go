@@ -12489,18 +12489,19 @@ func unmarshalListRoleGrantResponseBodyToAccessListRoleGrant(v *ListRoleGrantRes
 // *ShadowMCPInventoryServerResponseBody.
 func unmarshalShadowMCPInventoryServerResponseBodyToAccessShadowMCPInventoryServer(v *ShadowMCPInventoryServerResponseBody) *access.ShadowMCPInventoryServer {
 	res := &access.ShadowMCPInventoryServer{
-		CanonicalServerURL: *v.CanonicalServerURL,
-		ServerSlug:         *v.ServerSlug,
-		URLHost:            *v.URLHost,
-		TargetKind:         v.TargetKind,
-		ServerName:         v.ServerName,
-		FirstSeen:          *v.FirstSeen,
-		LastSeen:           *v.LastSeen,
-		LastCalled:         v.LastCalled,
-		ObservedUseCount:   *v.ObservedUseCount,
-		UserCount:          *v.UserCount,
-		Access:             *v.Access,
-		RequestCount:       *v.RequestCount,
+		CanonicalServerURL:     *v.CanonicalServerURL,
+		ServerSlug:             *v.ServerSlug,
+		URLHost:                *v.URLHost,
+		TargetKind:             v.TargetKind,
+		ServerName:             v.ServerName,
+		FirstSeen:              *v.FirstSeen,
+		LastSeen:               *v.LastSeen,
+		LastCalled:             v.LastCalled,
+		ObservedUseCount:       *v.ObservedUseCount,
+		UserCount:              *v.UserCount,
+		Access:                 *v.Access,
+		RequestCount:           *v.RequestCount,
+		OfficialServerDeclined: v.OfficialServerDeclined,
 	}
 	if v.BlockedCallCount != nil {
 		res.BlockedCallCount = *v.BlockedCallCount
@@ -12607,6 +12608,7 @@ func unmarshalShadowMCPOfficialServerResponseBodyToAccessShadowMCPOfficialServer
 		Slug:                v.Slug,
 		URL:                 v.URL,
 		GatewayName:         v.GatewayName,
+		Automatic:           v.Automatic,
 		DirectAccessAllowed: v.DirectAccessAllowed,
 	}
 

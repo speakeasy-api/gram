@@ -1162,7 +1162,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient), serverURL)
+			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient), serverURL).WithFeatureFlags(featureFlags)
 			assistantIdentities := newAssistantIdentities(c, auditLogger)
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, auditLogger, serverURL, siteURL, platformHosts, slackClient, cache.NewRedisCacheAdapter(redisClient), assistantIdentities)
 			speakeasySlackDirectory := newSpeakeasySlackDirectory(c, db, encryptionClient, guardianPolicy, auditLogger)
