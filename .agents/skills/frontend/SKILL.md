@@ -7,7 +7,12 @@ metadata:
     - "client/**/*.test.{ts,tsx}"
 ---
 
-# Dashboard frontend
+# Frontend
+
+The UI design guidance below applies to `client/dashboard`. The component-test
+and measurement guidance applies across frontend packages: use the touched
+package's render helpers and scripts. Dashboard-only helpers and import paths
+are identified explicitly; do not copy them into another package.
 
 Good UI does not come from a better first prompt. It comes from running a short loop several times. Most dashboard UI that needs rework failed the same way: it was built from the backend model outward and never judged on screen. Each pattern below came up in several recent PRs and needed follow-up PRs to fix. Code hygiene was rarely the problem.
 
@@ -383,7 +388,7 @@ The `waitForHookState` helper below lives in `client/dashboard`; check the packa
 
 `renderHook` state changes need not mutate the DOM, so ordinary Testing Library `waitFor` can repeatedly pay its default 50ms polling interval. Choose the wait by what the assertion observes:
 
-- **Cheap hook state or mock-call assertions:** use `waitForHookState` from `@/test/waitForHookState`. It retries every 1ms while retaining Testing Library's timeout, error propagation, and React handling. Await an actual operation inside `act` when the test already has its completion promise.
+- **Cheap hook state or mock-call assertions in dashboard:** use `waitForHookState` from `@/test/waitForHookState`. Other packages should use their existing wait utilities unless an equivalent helper is available. It retries every 1ms while retaining Testing Library's timeout, error propagation, and React handling. Await an actual operation inside `act` when the test already has its completion promise.
 - **DOM queries:** keep Testing Library's `findBy*` or ordinary `waitFor`. In mixed suites, use both helpers explicitly; a blanket import replacement would also accelerate expensive DOM queries. Keep the global polling interval unchanged.
 - **Debounce, polling cadence, cancellation, or timeout behavior:** retain the real or controlled clocks and intermediate-state assertions that prove that behavior. The helper is for observing state, not advancing time or replacing those checks.
 
