@@ -302,6 +302,33 @@ func TestRecorderLimitsAnonymousCallersByServer(t *testing.T) {
 	require.ErrorIs(t, err, mcpfeedback.ErrRateLimited)
 }
 
+// A credentialed caller from another organization is named nowhere, and still
+// has a bucket of its own.
+func TestRecorderLimitsACallerItDoesNotName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := seedRemoteBackedServer(t, ctx, ti)
+
+	store := ratelimit.NewRedisStore(ti.redis)
+	limits := mcpfeedback.Limits{
+		Caller: ratelimit.New(store, mcpfeedback.CallerLimitName+":"+uuid.NewString(), ratelimit.PerMinute(1)),
+		Server: ratelimit.New(store, mcpfeedback.ServerLimitName+":"+uuid.NewString(), ratelimit.PerMinute(10)),
+	}
+	recorder := newTestRecorder(t, ti, limits)
+	outsider := mcpfeedback.Caller{SessionID: "", UserID: "", UserEmail: "", ExternalUserID: "", ClientName: "", ClientVersion: "", LimitSubject: "user-from-another-org"}
+
+	_, err := recorder.Submit(ctx, targetOf(t, ctx, server), outsider, sampleReport())
+	require.NoError(t, err)
+	_, err = recorder.Submit(ctx, targetOf(t, ctx, server), outsider, sampleReport())
+	require.ErrorIs(t, err, mcpfeedback.ErrRateLimited)
+
+	rows := storedFeedback(t, ctx, ti, server)
+	require.Len(t, rows, 1)
+	require.False(t, rows[0].UserID.Valid)
+	require.False(t, rows[0].ExternalUserID.Valid)
+}
+
 func TestRecorderCallAnswersWithAToolResult(t *testing.T) {
 	t.Parallel()
 
