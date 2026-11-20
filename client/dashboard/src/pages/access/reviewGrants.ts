@@ -6,10 +6,7 @@
 
 import type { Role } from "@gram/client/models/components/role.js";
 import type { RoleGrant as SdkRoleGrant } from "@gram/client/models/components/rolegrant.js";
-import type {
-  Disposition,
-  Selector,
-} from "@gram/client/models/components/selector.js";
+import type { Disposition } from "@gram/client/models/components/selector.js";
 
 import {
   isPresentableScope,
