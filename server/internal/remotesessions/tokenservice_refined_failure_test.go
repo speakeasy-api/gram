@@ -130,7 +130,7 @@ func TestResolveAccessTokens_ReconnectEscapesTheOldGrantsCooldown(t *testing.T) 
 
 	old, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 	require.NoError(t, err)
-	reconnected, err := env.q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	reconnected, err := env.q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            env.subject,
 		UserSessionIssuerID:   old.UserSessionIssuerID,
 		RemoteSessionClientID: env.clientID,
@@ -201,7 +201,7 @@ func TestConnectionOutage_RecordedOnFailureClearedBySuccessAndReconnect(t *testi
 	require.Equal(t, remotesessions.RefreshOutageProvider, outage())
 
 	old := active()
-	_, err = env.q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	_, err = env.q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn: env.subject, UserSessionIssuerID: old.UserSessionIssuerID, RemoteSessionClientID: env.clientID,
 		AccessTokenEncrypted: old.AccessTokenEncrypted.String, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
 		RefreshTokenEncrypted: old.RefreshTokenEncrypted, Scopes: []string{},

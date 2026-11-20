@@ -236,6 +236,7 @@ func networkIngressConfigFromCLI(c *cli.Context) (networkingress.RuntimeConfig, 
 			KubernetesAPICIDR: c.String("network-ingress-kubernetes-api-cidr"),
 			KubernetesAPIPort: int32(apiPort), // #nosec G115 -- validated port range before conversion.
 			ClusterCIDRs:      append([]string(nil), c.StringSlice("network-ingress-cluster-cidrs")...),
+			DeletionWait:      k8s.DefaultNetworkIngressDeletionWait,
 		},
 		AttestorImage:  c.String("network-ingress-attestor-image"),
 		BackendService: c.String("network-ingress-backend-service"),

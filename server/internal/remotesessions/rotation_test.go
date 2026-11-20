@@ -485,7 +485,6 @@ func TestBuildAuthorizationUrl_WaitsForConcurrentRotation(t *testing.T) {
 		<-winner.C
 		_, _ = env.q.ReplaceRemoteSessionClientRegistration(context.WithoutCancel(ctx), repo.ReplaceRemoteSessionClientRegistrationParams{
 			ClientID:                "rotated-by-winner",
-			ClientSecretEncrypted:   pgtype.Text{String: "", Valid: false},
 			ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
 			ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 			TokenEndpointAuthMethod: before.TokenEndpointAuthMethod,
@@ -510,7 +509,6 @@ func TestBuildAuthorizationUrl_WaitsForConcurrentRotation(t *testing.T) {
 func replaceAsWinner(ctx context.Context, env syntheticExpiryEnv, before repo.RemoteSessionClient) error {
 	_, err := env.q.ReplaceRemoteSessionClientRegistration(context.WithoutCancel(ctx), repo.ReplaceRemoteSessionClientRegistrationParams{
 		ClientID:                "rotated-by-winner",
-		ClientSecretEncrypted:   pgtype.Text{String: "", Valid: false},
 		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
 		ClientSecretExpiresAt:   conv.ToPGTimestamptz(time.Now().Add(24 * time.Hour).UTC()),
 		TokenEndpointAuthMethod: before.TokenEndpointAuthMethod,

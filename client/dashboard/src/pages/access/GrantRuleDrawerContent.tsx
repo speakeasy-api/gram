@@ -18,6 +18,7 @@ import { Link } from "react-router";
 import type { Selector } from "@gram/client/models/components/selector.js";
 
 import {
+  selectorsAfterAnnotationToggle,
   selectorsAfterToolBatch,
   selectorsAfterToolToggle,
 } from "./toolSelectionTransition";
@@ -830,9 +831,9 @@ export function GrantRuleDrawerContent({
       {/* Plugins are shared with roles, never with an agent. */}
       {isMcpConnect && !isDenyProp && subject === "role" && (
         <p className="text-muted-foreground mt-2 text-xs">
-          Plugins shared with this role receive the servers chosen here. Read
-          and write access also let members connect, but never add servers to
-          plugins.
+          Plugins shared with this role receive the servers chosen here when the
+          plugin has Add MCP servers automatically turned on. Read and write
+          access also let members connect, but never add servers to plugins.
         </p>
       )}
       {/* The server inventory is withheld unless both org listings succeeded,
@@ -1166,11 +1167,10 @@ function RoleToolSelectionPanel({
         );
         onChangeAnnotations(hints);
         onChangeSelectors(
-          hints.map((hint) => ({
-            resourceKind: "mcp" as const,
-            resourceId: "*",
-            disposition: ANNOTATION_TO_DISPOSITION[hint],
-          })),
+          selectorsAfterAnnotationToggle(
+            selectors,
+            hints.map((hint) => ANNOTATION_TO_DISPOSITION[hint]),
+          ),
         );
         return;
       }

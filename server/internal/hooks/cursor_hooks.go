@@ -219,7 +219,9 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 				ToolName:        toolName,
 				ToolInput:       ev.ToolInput,
 				RiskPolicyID:    policy.ID,
-				PolicyName:      policy.Name,
+				// Cursor sends no MCP server list, so every route is offered.
+				SessionMCPServers: nil,
+				PolicyName:        policy.Name,
 			})
 			blockReason = auditReason
 			if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{

@@ -83,6 +83,7 @@ function plugin(agentPluginsV1Compatible: boolean): Plugin {
     agentPluginsV1Compatible,
     autoCreated: false,
     autoSyncEnabled: true,
+    autoAddServersEnabled: false,
     createdAt: new Date("2026-08-07T00:00:00Z"),
     id: "plugin-id",
     name: "Portable plugin",

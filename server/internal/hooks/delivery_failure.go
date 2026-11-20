@@ -79,7 +79,9 @@ func validateDeliveryFailurePayload(payload *gen.IngestPayload) error {
 }
 
 // activityBlockName returns the wire name of the first populated data block
-// other than delivery_failure, or "" when the report is the only block.
+// other than delivery_failure, or "" when the report is the only block. An
+// install failure block counts as another block here; the install failure
+// validation checks delivery_failure itself.
 func activityBlockName(data *gen.HookIngestData) string {
 	switch {
 	case data == nil:
@@ -106,6 +108,8 @@ func activityBlockName(data *gen.HookIngestData) string {
 		return "mcp_attribution"
 	case data.PromptAttachments != nil:
 		return "prompt_attachments"
+	case data.InstallFailure != nil:
+		return "install_failure"
 	default:
 		return ""
 	}

@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
@@ -111,6 +112,85 @@ func TestAppCreateRejectsDirectIngressDefinition(t *testing.T) {
 
 	require.ErrorIs(t, err, ErrBadRequest)
 	require.ErrorContains(t, err, "system-managed")
+}
+
+// unavailableDispatcher reports its target kind as turned off for the
+// deployment, as the assistants service does with the disabled runtime.
+type unavailableDispatcher struct {
+	fakeDispatcher
+}
+
+func (*unavailableDispatcher) TargetAvailable() bool { return false }
+
+// availableDispatcher reports its target kind as running.
+type availableDispatcher struct {
+	fakeDispatcher
+}
+
+func (*availableDispatcher) TargetAvailable() bool { return true }
+
+func TestAppCreateRejectsUnavailableTarget(t *testing.T) {
+	t.Parallel()
+
+	// The guard fires before any DB access.
+	dispatcher := &unavailableDispatcher{fakeDispatcher: fakeDispatcher{kind: TargetKindAssistant}}
+	app := &App{dispatchers: map[string]Dispatcher{dispatcher.kind: dispatcher}}
+
+	_, err := app.Create(t.Context(), CreateParams{
+		DefinitionSlug: "cron",
+		Name:           "x",
+		TargetKind:     TargetKindAssistant,
+		TargetRef:      "assistant-ref",
+	})
+
+	require.ErrorIs(t, err, ErrTargetUnavailable)
+	require.NotErrorIs(t, err, ErrBadRequest)
+}
+
+func TestAppUpdateRejectsUnavailableTarget(t *testing.T) {
+	t.Parallel()
+
+	dispatcher := &unavailableDispatcher{fakeDispatcher: fakeDispatcher{kind: TargetKindAssistant}}
+	app := &App{dispatchers: map[string]Dispatcher{dispatcher.kind: dispatcher}}
+
+	_, err := app.Update(t.Context(), UpdateParams{
+		DefinitionSlug: "cron",
+		Name:           "x",
+		TargetKind:     TargetKindAssistant,
+		TargetRef:      "assistant-ref",
+	})
+
+	require.ErrorIs(t, err, ErrTargetUnavailable)
+}
+
+func TestAppRequireTargetAvailableAcceptsAvailableOrUnregisteredKinds(t *testing.T) {
+	t.Parallel()
+
+	reporter := &availableDispatcher{fakeDispatcher: fakeDispatcher{kind: TargetKindAssistant}}
+	app := &App{dispatchers: map[string]Dispatcher{reporter.kind: reporter}}
+	require.NoError(t, app.requireTargetAvailable(TargetKindAssistant))
+	require.NoError(t, app.requireTargetAvailable(TargetKindNoop))
+
+	// A dispatcher that cannot be turned off is always accepted.
+	plain := &fakeDispatcher{kind: TargetKindAssistant}
+	app = &App{dispatchers: map[string]Dispatcher{plain.kind: plain}}
+	require.NoError(t, app.requireTargetAvailable(TargetKindAssistant))
+}
+
+func TestAppCreateWakeInstanceRejectsUnavailableTarget(t *testing.T) {
+	t.Parallel()
+
+	// The guard fires before any DB access.
+	dispatcher := &unavailableDispatcher{fakeDispatcher: fakeDispatcher{kind: TargetKindAssistant}}
+	app := &App{dispatchers: map[string]Dispatcher{dispatcher.kind: dispatcher}}
+
+	_, err := app.CreateWakeInstance(t.Context(), CreateWakeInstanceParams{
+		AssistantID:   uuid.New(),
+		CorrelationID: "thread-correlation",
+		FireAt:        time.Now().Add(time.Hour),
+	})
+
+	require.ErrorIs(t, err, ErrTargetUnavailable)
 }
 
 func TestLogTriggerDeliveryStampsTraceContext(t *testing.T) {

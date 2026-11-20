@@ -38,6 +38,7 @@ import { AssistantsAuditLog } from "./AssistantAuditLog";
 import { assistantAttachedServerSlugs } from "./assistantServers";
 import { TriggersPanel } from "../triggers/Triggers";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { RequireAssistantsAvailable } from "@/components/require-assistants-available";
 
 const TOP_LEVEL_TABS = ["assistants", "triggers", "audit"] as const;
 
@@ -49,9 +50,11 @@ function stopLinkNavigation(e: MouseEvent<HTMLDivElement>) {
 export function AssistantsRoot(): JSX.Element {
   const project = useProject();
   return (
-    <RequireScope scope="assistant:read" projectId={project.id} level="page">
-      <Outlet />
-    </RequireScope>
+    <RequireAssistantsAvailable>
+      <RequireScope scope="assistant:read" projectId={project.id} level="page">
+        <Outlet />
+      </RequireScope>
+    </RequireAssistantsAvailable>
   );
 }
 

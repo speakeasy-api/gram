@@ -114,7 +114,6 @@ describe("offersPersonalSignIn", () => {
 describe("serverConnection", () => {
   it("does not offer a session whose authorization ended before its tokens", () => {
     const connection = serverConnection(
-      "issuer_one",
       [client("client_one")],
       [
         session({
@@ -130,7 +129,6 @@ describe("serverConnection", () => {
   });
   it("needs no connection when the issuer asks for no personal sign-in", () => {
     const connection = serverConnection(
-      "issuer_one",
       [client("client_shared", "self")],
       [],
       now,
@@ -141,20 +139,14 @@ describe("serverConnection", () => {
 
   it("is ready when every personal sign-in has a working connection", () => {
     const mine = session({});
-    const connection = serverConnection(
-      "issuer_one",
-      [client("client_one")],
-      [mine],
-      now,
-    );
+    const connection = serverConnection([client("client_one")], [mine], now);
     expect(connection).toEqual({ status: "ready", sessions: [mine] });
     expect(connectionSelectable(connection)).toBe(true);
   });
 
-  it("is missing when one sign-in has no connection, or only one through another issuer", () => {
+  it("is missing when one sign-in has no connection", () => {
     expect(
       serverConnection(
-        "issuer_one",
         [client("client_one"), client("client_two")],
         [session({})],
         now,
@@ -165,27 +157,61 @@ describe("serverConnection", () => {
       connected: 1,
       connectedNames: [undefined],
     });
-    // The attachment endpoint accepts only sessions made through this
-    // server's own issuer.
-    const elsewhere = serverConnection(
-      "issuer_one",
-      [client("client_one")],
-      [session({ userSessionIssuerId: "issuer_other" })],
-      now,
-    );
-    expect(elsewhere).toEqual({
-      status: "missing",
-      signIns: [client("client_one")],
-      connected: 0,
+  });
+
+  describe("a sign-in made through a team gateway's issuer", () => {
+    // The member server's own issuer binds the same client as the gateway's,
+    // so the attachment endpoint accepts the gateway-made connection.
+    const viaGateway = session({ userSessionIssuerId: "issuer_gateway" });
+
+    it("serves the member server when every sign-in is required", () => {
+      const connection = serverConnection(
+        [client("client_one")],
+        [viaGateway],
+        now,
+      );
+      expect(connection).toEqual({ status: "ready", sessions: [viaGateway] });
+      expect(connectionSelectable(connection)).toBe(true);
     });
-    expect(connectionSelectable(elsewhere)).toBe(false);
+
+    it("serves the member server when any one sign-in is enough", () => {
+      const connection = serverConnection(
+        [client("client_one"), client("client_two")],
+        [viaGateway],
+        now,
+        { anyOne: true },
+      );
+      expect(connection).toEqual({ status: "ready", sessions: [viaGateway] });
+    });
+
+    it("does not serve a server that never asks for its client", () => {
+      const elsewhere = serverConnection(
+        [client("client_two")],
+        [viaGateway],
+        now,
+      );
+      expect(elsewhere).toEqual({
+        status: "missing",
+        signIns: [client("client_two")],
+        connected: 0,
+      });
+      expect(connectionSelectable(elsewhere)).toBe(false);
+      expect(
+        serverConnection([client("client_two")], [viaGateway], now, {
+          anyOne: true,
+        }),
+      ).toEqual({
+        status: "missing",
+        signIns: [client("client_two")],
+        connected: 0,
+      });
+    });
   });
 
   it("lists every sign-in still missing, not only the first", () => {
     // An issuer shared across the organization: the server's own sign-in is
     // connected, and two registrations from other servers are not.
     const connection = serverConnection(
-      "issuer_one",
       [
         { id: "client_one", credentialOwner: "subject", name: "Linear" },
         { id: "client_two", credentialOwner: "subject", name: "Stripe" },
@@ -213,7 +239,6 @@ describe("serverConnection", () => {
     // One sign-in ended, another was never made: neither works, so neither
     // may read as connected in "1 of 2 sign-ins connected".
     const connection = serverConnection(
-      "issuer_one",
       [
         { id: "client_one", credentialOwner: "subject", name: "Linear" },
         { id: "client_two", credentialOwner: "subject", name: "Stripe" },
@@ -247,7 +272,6 @@ describe("serverConnection", () => {
   it("is ready with any one working sign-in when one is enough", () => {
     // Under enforcement the caller chooses among the server's own sign-ins.
     const connection = serverConnection(
-      "issuer_one",
       [client("client_one"), client("client_two")],
       [session({})],
       now,
@@ -255,13 +279,9 @@ describe("serverConnection", () => {
     );
     expect(connection).toEqual({ status: "ready", sessions: [session({})] });
     expect(
-      serverConnection(
-        "issuer_one",
-        [client("client_one"), client("client_two")],
-        [],
-        now,
-        { anyOne: true },
-      ),
+      serverConnection([client("client_one"), client("client_two")], [], now, {
+        anyOne: true,
+      }),
     ).toEqual({
       status: "missing",
       signIns: [client("client_one"), client("client_two")],
@@ -273,23 +293,13 @@ describe("serverConnection", () => {
     const ended = session({ id: "session_old", accessExpiresAt: earlier });
     const working = session({ id: "session_new" });
     expect(
-      serverConnection(
-        "issuer_one",
-        [client("client_one")],
-        [ended, working],
-        now,
-      ),
+      serverConnection([client("client_one")], [ended, working], now),
     ).toEqual({ status: "ready", sessions: [working] });
   });
 
   it("does not offer a connection that has ended", () => {
     const ended = session({ accessExpiresAt: earlier });
-    const connection = serverConnection(
-      "issuer_one",
-      [client("client_one")],
-      [ended],
-      now,
-    );
+    const connection = serverConnection([client("client_one")], [ended], now);
     expect(connection).toEqual({ status: "ended", sessions: [ended] });
     expect(connectionSelectable(connection)).toBe(false);
   });

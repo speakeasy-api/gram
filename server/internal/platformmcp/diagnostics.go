@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Diagnostic projections intentionally omit documented optional fields.
+//nolint:exhaustruct_v5 // Diagnostic projections intentionally omit documented optional fields.
 package platformmcp
 
 import (

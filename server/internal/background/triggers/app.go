@@ -59,6 +59,10 @@ const (
 var (
 	ErrBadRequest = errors.New("trigger bad request")
 	ErrAuthFailed = errors.New("trigger webhook authentication failed")
+
+	// ErrTargetUnavailable reports that this deployment cannot run the
+	// trigger's target kind, so the trigger is refused rather than stored.
+	ErrTargetUnavailable = errors.New("trigger target is not available on this deployment")
 )
 
 type DeliveryStatus string
@@ -80,6 +84,13 @@ type DeliveryLogger interface {
 type Dispatcher interface {
 	Kind() string
 	Dispatch(context.Context, Task) error
+}
+
+// TargetAvailabilityReporter is implemented by dispatchers whose target kind
+// a deployment can turn off. Create and Update refuse triggers for a target
+// kind whose dispatcher reports it unavailable.
+type TargetAvailabilityReporter interface {
+	TargetAvailable() bool
 }
 
 type TriggerDeliveryLog struct {
@@ -280,6 +291,9 @@ func (a *App) Create(ctx context.Context, params CreateParams, hooks ...Instance
 	if err := ValidateTargetKind(params.TargetKind); err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: %w", ErrBadRequest, err)
 	}
+	if err := a.requireTargetAvailable(params.TargetKind); err != nil {
+		return triggerrepo.TriggerInstance{}, err
+	}
 	if params.Config == nil {
 		params.Config = map[string]any{}
 	}
@@ -347,6 +361,9 @@ func (a *App) Update(ctx context.Context, params UpdateParams, hooks ...Instance
 	}
 	if err := ValidateTargetKind(params.TargetKind); err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: %w", ErrBadRequest, err)
+	}
+	if err := a.requireTargetAvailable(params.TargetKind); err != nil {
+		return triggerrepo.TriggerInstance{}, err
 	}
 	if params.Config == nil {
 		params.Config = map[string]any{}
@@ -495,6 +512,13 @@ func (a *App) SetStatus(ctx context.Context, projectID uuid.UUID, id uuid.UUID, 
 	if err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("set trigger status: %w", err)
 	}
+	// Resuming would recreate the trigger's schedule for a target that can
+	// never run; pausing stays allowed so it can be wound down.
+	if status == StatusActive {
+		if err := a.requireTargetAvailable(item.TargetKind); err != nil {
+			return triggerrepo.TriggerInstance{}, err
+		}
+	}
 
 	for _, hook := range hooks {
 		if err := hook(ctx, tx, item); err != nil {
@@ -538,6 +562,9 @@ type CreateWakeInstanceParams struct {
 func (a *App) CreateWakeInstance(ctx context.Context, params CreateWakeInstanceParams, hooks ...InstanceDBHook) (triggerrepo.TriggerInstance, error) {
 	if params.AssistantID == uuid.Nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: assistant_id is required", ErrBadRequest)
+	}
+	if err := a.requireTargetAvailable(TargetKindAssistant); err != nil {
+		return triggerrepo.TriggerInstance{}, err
 	}
 	if strings.TrimSpace(params.CorrelationID) == "" {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: correlation_id is required", ErrBadRequest)
@@ -1126,6 +1153,21 @@ func (a *App) IngestDirect(ctx context.Context, instanceID uuid.UUID, payload []
 
 func (a *App) RegisterDispatcher(dispatcher Dispatcher) {
 	a.dispatchers[dispatcher.Kind()] = dispatcher
+}
+
+// requireTargetAvailable refuses a target kind whose registered dispatcher
+// reports it unavailable on this deployment. A kind with no dispatcher in
+// this process, or whose dispatcher cannot be turned off, is accepted.
+func (a *App) requireTargetAvailable(targetKind string) error {
+	dispatcher, ok := a.dispatchers[targetKind]
+	if !ok {
+		return nil
+	}
+	reporter, ok := dispatcher.(TargetAvailabilityReporter)
+	if !ok || reporter.TargetAvailable() {
+		return nil
+	}
+	return fmt.Errorf("%w: %s", ErrTargetUnavailable, targetKind)
 }
 
 func (a *App) Dispatch(ctx context.Context, input Task) error {

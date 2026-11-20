@@ -17,6 +17,7 @@ import {
 import { scrollWithinPage } from "@/lib/scroll-within-page";
 import { cn } from "@/lib/utils";
 import {
+  ArrowLeft,
   Check,
   ChevronDown,
   ChevronRight,
@@ -55,12 +56,7 @@ export function McpDetailFrame({
   contentRef?: React.Ref<HTMLDivElement>;
 }): JSX.Element {
   const { pathname } = useLocation();
-  // The Setup modal opens over Overview, which stays the active tab.
-  const activeTab =
-    chrome?.items.find((item) => item.active)?.key ??
-    (chrome?.setupHref && pathname === chrome.setupHref
-      ? "overview"
-      : undefined);
+  const activeTab = chrome?.items.find((item) => item.active)?.key;
   useHighlightLinkedSection();
 
   return (
@@ -77,12 +73,19 @@ export function McpDetailFrame({
         <DetailHeaderLayout
           title={
             chrome ? (
-              <TitleBlock chrome={chrome} />
+              <TitleBlock chrome={chrome} compact={activeTab === "inspect"} />
             ) : (
               <DetailHeaderTitleSkeleton />
             )
           }
-          controls={chrome ? <HeaderControls chrome={chrome} /> : null}
+          controls={
+            chrome ? (
+              <HeaderControls
+                chrome={chrome}
+                compact={activeTab === "inspect"}
+              />
+            ) : null
+          }
         />
       }
     >
@@ -95,20 +98,81 @@ export function McpDetailFrame({
         {activeTab === "overview" && chrome?.overviewSetup ? (
           <div className="mb-6">{chrome.overviewSetup}</div>
         ) : null}
-        {activeTab === "overview" && chrome?.overviewBanner ? (
-          // The banner renders nothing for viewers who can't manage
-          // plugins, so the gap goes with it.
-          <div className="mb-6 empty:hidden">{chrome.overviewBanner}</div>
-        ) : null}
         {children}
       </ReadinessIssuesProvider>
     </DetailFrame>
   );
 }
 
-function TitleBlock({ chrome }: { chrome: McpDetailChrome }): JSX.Element {
+/**
+ * Setup's own page: the detail frame's header, so it reads as the same
+ * server, but no tabs. Setup is something an admin finishes once, usually
+ * straight after adding the server, so in place of the tabs it points back to
+ * the server's Overview, where they land once it is done.
+ */
+export function McpSetupFrame({
+  chrome,
+  overviewHref,
+  breadcrumbs,
+  children,
+}: {
+  /** Null while the server loads. */
+  chrome: McpDetailChrome | null;
+  overviewHref: string;
+  breadcrumbs: {
+    substitutions: Record<string, string>;
+    skipSegments: string[];
+  };
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <DetailFrame
+      breadcrumbs={breadcrumbs}
+      tabsLabel="Setup"
+      tabs={[]}
+      activeTab={undefined}
+      strip={
+        <Link
+          to={overviewHref}
+          className="text-muted-foreground hover:text-foreground flex min-w-0 items-center gap-1.5 text-sm transition-colors hover:no-underline"
+        >
+          <ArrowLeft className="size-3.5 shrink-0" aria-hidden />
+          <span className="truncate">
+            {chrome ? `Back to ${chrome.name}` : "Back to server"}
+          </span>
+        </Link>
+      }
+      header={
+        <DetailHeaderLayout
+          title={
+            chrome ? (
+              <DetailHeaderTitle
+                icon={chrome.icon("size-10 shrink-0 object-contain")}
+                eyebrow="Connect · Setup"
+                name={`Set up ${chrome.name}`}
+              />
+            ) : (
+              <DetailHeaderTitleSkeleton />
+            )
+          }
+        />
+      }
+    >
+      {children}
+    </DetailFrame>
+  );
+}
+
+function TitleBlock({
+  chrome,
+  compact,
+}: {
+  chrome: McpDetailChrome;
+  compact: boolean;
+}): JSX.Element {
   return (
     <DetailHeaderTitle
+      compact={compact}
       icon={chrome.icon("size-10 shrink-0 object-contain")}
       eyebrow={chrome.kindLabel ? `Connect · ${chrome.kindLabel}` : "Connect"}
       name={chrome.name}
@@ -160,8 +224,10 @@ function TitleBlock({ chrome }: { chrome: McpDetailChrome }): JSX.Element {
  */
 function HeaderControls({
   chrome,
+  compact,
 }: {
   chrome: McpDetailChrome;
+  compact: boolean;
 }): JSX.Element | null {
   const rows: DetailHeaderControlRow[] = [];
   if (chrome.readinessChecks.length > 0) {
@@ -179,7 +245,7 @@ function HeaderControls({
         <Link
           to={chrome.identity.href}
           state={HIGHLIGHT_STATE}
-          aria-label={`Upstream auth: ${chrome.identity.label}. Open authentication settings`}
+          aria-label={`Upstream auth: ${chrome.identity.label}. ${chrome.identity.opens ?? "Open authentication settings"}`}
           className={DETAIL_HEADER_CONTROL_BUTTON}
         >
           {chrome.identity.tone ? (
@@ -210,7 +276,7 @@ function HeaderControls({
       ),
     });
   }
-  return <DetailHeaderControls rows={rows} />;
+  return <DetailHeaderControls rows={rows} compact={compact} />;
 }
 
 /** The server's other addresses, one click from the primary one. */

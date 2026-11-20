@@ -348,9 +348,29 @@ func grantsAuthorizeAnyResource(grants []authz.Grant, organizationID string, sco
 				dimensions[key] = "platform-mcp-catalogue-probe"
 			}
 		}
-		allowed, err := authz.GrantsAuthorize(grants, authz.Check{
-			Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions,
-		})
+		// A wildcard tool or disposition is no limit, and a check may not
+		// carry a wildcard, so the grant is probed without it.
+		for _, key := range []string{authz.SelectorKeyTool, authz.SelectorKeyDisposition} {
+			if dimensions[key] == authz.WildcardResource {
+				delete(dimensions, key)
+			}
+		}
+		check := authz.Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions}
+		_, hasTool := dimensions[authz.SelectorKeyTool]
+		_, hasDisposition := dimensions[authz.SelectorKeyDisposition]
+		if hasTool || hasDisposition {
+			// A grant limited to some tools or dispositions reaches tool
+			// calls, so probe with one. Only a tool call may name either.
+			if scope != authz.ScopeMCPConnect {
+				continue
+			}
+			check = authz.MCPToolCallCheck(resourceID, authz.MCPToolCallDimensions{
+				Tool:        dimensions[authz.SelectorKeyTool],
+				Disposition: dimensions[authz.SelectorKeyDisposition],
+				ProjectID:   dimensions[authz.SelectorKeyProjectID],
+			})
+		}
+		allowed, err := authz.GrantsAuthorize(grants, check)
 		if err == nil && allowed {
 			return true
 		}
@@ -362,14 +382,14 @@ func grantsAuthorizeAnyResource(grants []authz.Grant, organizationID string, sco
 // admitted to a resource cannot tell it apart from one that does not exist.
 func (r *Registrar) ResourceFor(audience Audience, uri string) (ResourceDescriptor, bool) {
 	if r == nil {
-		return ResourceDescriptor{}, false //nolint:exhaustruct // The zero descriptor is the "not found" signal.
+		return ResourceDescriptor{}, false //nolint:exhaustruct_v5 // The zero descriptor is the "not found" signal.
 	}
 	for _, resource := range r.resources {
 		if resource.URI == uri && resource.Meta.servesAudience(audience) {
 			return resource, true
 		}
 	}
-	return ResourceDescriptor{}, false //nolint:exhaustruct // The zero descriptor is the "not found" signal.
+	return ResourceDescriptor{}, false //nolint:exhaustruct_v5 // The zero descriptor is the "not found" signal.
 }
 
 // addResource registers one resource with the MCP server and records the
@@ -395,11 +415,12 @@ func addResource(r *Registrar, resource *mcp.Resource, meta ResourceMeta, read f
 			if err != nil {
 				return nil, err
 			}
-			return &mcp.ReadResourceResult{ //nolint:exhaustruct // MCP SDK metadata is intentionally omitted.
+			return &mcp.ReadResourceResult{ //nolint:exhaustruct_v5 // MCP SDK metadata is intentionally omitted.
 				Contents: []*mcp.ResourceContents{{
 					URI:      resource.URI,
 					MIMEType: resource.MIMEType,
 					Text:     text,
+					Blob:     nil,
 					// MCP Apps hosts read a view's presentation hints from
 					// the contents they render.
 					Meta: resource.Meta,
@@ -503,7 +524,7 @@ func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler m
 					return nil, fmt.Errorf("decode %s arguments: %w", tool.Name, err)
 				}
 			}
-			//nolint:exhaustruct // A direct call has no MCP session or params; handlers read the principal from ctx.
+			//nolint:exhaustruct_v5 // A direct call has no MCP session or params; handlers read the principal from ctx.
 			request := &mcp.CallToolRequest{}
 			result, output, err := handle(ctx, request, input)
 			if err != nil {

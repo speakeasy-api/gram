@@ -1231,6 +1231,152 @@ paths:
             x-speakeasy-name-override: getHookClients
             x-speakeasy-react-hook:
                 name: AdminGetHookClients
+    /admin/hooksRollout.get:
+        get:
+            tags:
+                - admin
+            summary: getHooksRollout admin
+            description: 'Returns the platform-wide hooks version rollout state: the version this build publishes, the default pin, canary organizations, organization overrides and recent changes.'
+            operationId: adminGetHooksRollout
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminHooksRollout'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
+    /admin/hooksRollout.setDefault:
+        post:
+            tags:
+                - admin
+            summary: setHooksRolloutDefault admin
+            description: Moves the default hooks rollout pin for every organization without an override. Customer organizations receive a hooks version on the next rollout sweep once the pin reaches it. Lowering the pin holds back later versions; it never downgrades a published hooks plugin.
+            operationId: adminSetHooksRolloutDefault
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetHooksRolloutDefaultRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminHooksRollout'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /admin/mcpAuthGrants.backfill:
         post:
             description: Grants unrestricted mcp:auth to every principal that holds any mcp:connect grant, in every organization. The connect grant's selectors are ignored. Safe to run more than once.
@@ -3040,6 +3186,82 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/organization.clearHooksRollout:
+        post:
+            tags:
+                - admin
+            summary: clearOrganizationHooksRollout admin
+            description: Removes an organization's hooks version override so it follows the default pin again.
+            operationId: adminClearOrganizationHooksRollout
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ClearOrganizationHooksRolloutRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOrganizationHooksRollout'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /admin/organization.create:
         post:
             tags:
@@ -3445,6 +3667,83 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/AdminOrganization'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
+    /admin/organization.hooksRollout:
+        get:
+            tags:
+                - admin
+            summary: getOrganizationHooksRollout admin
+            description: Returns the hooks version rollout state for one organization.
+            operationId: adminGetOrganizationHooksRollout
+            parameters:
+                - name: organization_id
+                  in: query
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOrganizationHooksRollout'
                 "400":
                     description: 'bad_request: request is invalid'
                     content:
@@ -4455,84 +4754,6 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
-    /admin/organization.providerSetup:
-        post:
-            description: Enable or disable the temporary provider setup rollout for one organization. Staff only; disabled by default. Existing credential storage and OAuth flows are unaffected.
-            operationId: adminSetOrganizationProviderSetup
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/SetOrganizationProviderSetupRequestBody'
-                required: true
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ProductFeatures'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - admin_auth_header_Authorization: []
-            summary: setOrganizationProviderSetup admin
-            tags:
-                - admin
-            x-speakeasy-react-hook:
-                name: SetAdminOrganizationProviderSetup
     /admin/organization.repairAssistantAgentNames:
         post:
             description: Repairs exact legacy generated names of live bound agents in one organization, preserving custom names and reporting conflicts. Safe to retry.
@@ -4847,6 +5068,82 @@ paths:
             tags:
                 - admin
             x-speakeasy-name-override: setAdoptionDashboardUrl
+    /admin/organization.setHooksRollout:
+        post:
+            tags:
+                - admin
+            summary: setOrganizationHooksRollout admin
+            description: Pins one organization to its own hooks version, regardless of the default pin.
+            operationId: adminSetOrganizationHooksRollout
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetOrganizationHooksRolloutRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOrganizationHooksRollout'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /admin/organization.setInferenceKeyMonthlyLimit:
         post:
             tags:
@@ -10878,6 +11175,94 @@ paths:
             x-speakeasy-react-hook:
                 name: CreateTemporaryGrant
                 type: mutation
+    /rpc/access.decideAccessRequest:
+        post:
+            description: 'Approve or deny a pending access request. Approving gives the requester the scope as a temporary grant until expires_at, with the same limits as createTemporaryGrant, and resolves the denials the request covers. Requires org:admin; the requester cannot decide their own request. Session only: the decision is attributed to the person who made it.'
+            operationId: decideAccessRequest
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DecideAccessRequestForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AccessRequest'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: decideAccessRequest access
+            tags:
+                - access
+            x-speakeasy-name-override: decideAccessRequest
+            x-speakeasy-react-hook:
+                name: DecideAccessRequest
+                type: mutation
     /rpc/access.deleteDirectoryRoleMapping:
         delete:
             description: Remove a directory role mapping.
@@ -11173,6 +11558,106 @@ paths:
             x-speakeasy-name-override: explainResourceAccess
             x-speakeasy-react-hook:
                 name: ExplainResourceAccess
+    /rpc/access.findShadowMCPInventoryServers:
+        get:
+            description: Find the Shadow MCP servers in use whose upstream URL matches one of the given URLs, for example the endpoints of a server about to be added from the catalog. URLs match when they name the same upstream (case, default ports and a trailing slash are ignored). Requires an authenticated session authorized for org:admin on the active organization.
+            operationId: findShadowMCPInventoryServers
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: project_id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: The upstream URLs to look for.
+                  in: query
+                  name: server_urls
+                  required: true
+                  schema:
+                    description: The upstream URLs to look for.
+                    items:
+                        type: string
+                    maxItems: 50
+                    minItems: 1
+                    type: array
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/FindShadowMCPInventoryServersResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: findShadowMCPInventoryServers access
+            tags:
+                - access
+            x-speakeasy-name-override: findShadowMCPInventoryServers
+            x-speakeasy-react-hook:
+                name: FindShadowMCPInventoryServers
     /rpc/access.getDirectoryReviewSettings:
         get:
             description: 'Get the organization''s directory review settings: whether its admins are emailed when directory changes are waiting for a decision.'
@@ -11646,6 +12131,102 @@ paths:
             x-speakeasy-name-override: listAIDetections
             x-speakeasy-react-hook:
                 name: AIDetections
+    /rpc/access.listAccessRequests:
+        get:
+            description: List access requests in the organization, newest first. Organization administrators see every request; anyone else sees only their own. Requires the access requests rollout for the organization.
+            operationId: listAccessRequests
+            parameters:
+                - allowEmptyValue: true
+                  description: 'Only requests with this status: pending, approved, denied, expired or withdrawn.'
+                  in: query
+                  name: status
+                  schema:
+                    description: 'Only requests with this status: pending, approved, denied, expired or withdrawn.'
+                    type: string
+                - allowEmptyValue: true
+                  description: Only requests made by the signed-in member, even for an administrator.
+                  in: query
+                  name: mine
+                  schema:
+                    default: false
+                    description: Only requests made by the signed-in member, even for an administrator.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListAccessRequestsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listAccessRequests access
+            tags:
+                - access
+            x-speakeasy-name-override: listAccessRequests
+            x-speakeasy-react-hook:
+                name: AccessRequests
     /rpc/access.listAgentPolicyScopes:
         get:
             description: 'List the scopes an agent policy may hold, as the catalogue describes them. Needs a session and no organization grant: an owner configuring their own agent holds no RBAC grant, and the list is product configuration.'
@@ -13177,6 +13758,14 @@ paths:
             tags:
                 - access
             x-speakeasy-name-override: listShadowMCPInventory
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
             x-speakeasy-react-hook:
                 name: ShadowMCPInventory
     /rpc/access.listShadowMCPInventoryServersForUser:
@@ -13693,7 +14282,7 @@ paths:
                 type: mutation
     /rpc/access.requestAccess:
         post:
-            description: Request access to a scope by sending an email notification to organization administrators.
+            description: Request access to a scope. Organization administrators are emailed. With the access requests rollout on, a signed-in member's request is also stored, so an administrator can approve it as temporary access or deny it from the dashboard or Slack.
             operationId: requestAccess
             parameters:
                 - allowEmptyValue: true
@@ -14533,6 +15122,90 @@ paths:
             x-speakeasy-react-hook:
                 name: SetResourceAudience
                 type: mutation
+    /rpc/access.setShadowMCPOfficialServer:
+        post:
+            description: Choose the official version of one project-scoped Shadow MCP server. By default a project MCP server that proxies to the Shadow MCP server's URL is linked automatically (the oldest, when several do). While a link exists and the linked server has an address, direct connections are blocked wherever a Shadow MCP policy applies and agents are pointed at the linked server; a linked server with no address yet leaves direct connections on the ordinary rules. With mcp_server_id that server is linked instead; with keep_shadow no server is linked, so direct use follows the ordinary Shadow MCP rules; with neither, the automatic link applies again. Each change is recorded in the audit log. Requires an authenticated session authorized for org:admin on the active organization.
+            operationId: setShadowMCPOfficialServer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetShadowMCPOfficialServerForm'
+                required: true
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: setShadowMCPOfficialServer access
+            tags:
+                - access
+            x-speakeasy-name-override: setShadowMCPOfficialServer
+            x-speakeasy-react-hook:
+                name: SetShadowMCPOfficialServer
+                type: mutation
     /rpc/access.syncDirectoryGroups:
         post:
             description: Fetch the organization's directory groups from WorkOS and save any that are new or changed.
@@ -14992,6 +15665,94 @@ paths:
             x-speakeasy-name-override: updateShadowMCPInventoryServerName
             x-speakeasy-react-hook:
                 name: UpdateShadowMCPInventoryServerName
+                type: mutation
+    /rpc/access.withdrawAccessRequest:
+        post:
+            description: Withdraw a pending access request you made. Only the requester can withdraw it.
+            operationId: withdrawAccessRequest
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RiskIDRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AccessRequest'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: withdrawAccessRequest access
+            tags:
+                - access
+            x-speakeasy-name-override: withdrawAccessRequest
+            x-speakeasy-react-hook:
+                name: WithdrawAccessRequest
                 type: mutation
     /rpc/adminAssets.uploadImage:
         post:
@@ -19498,6 +20259,14 @@ paths:
                     maximum: 200
                     minimum: 1
                     type: integer
+                - allowEmptyValue: true
+                  description: Keep only agents assigned to this project in the active organization.
+                  in: query
+                  name: project_id
+                  schema:
+                    description: Keep only agents assigned to this project in the active organization.
+                    format: uuid
+                    type: string
                 - allowEmptyValue: true
                   description: Case-insensitive substring match on the agent name.
                   in: query
@@ -41769,124 +42538,6 @@ paths:
             x-speakeasy-name-override: verify
             x-speakeasy-react-hook:
                 name: VerifyIdentityProviderConnection
-    /rpc/instances.get:
-        get:
-            description: Load all relevant data for an instance of a toolset and environment
-            operationId: getInstance
-            parameters:
-                - allowEmptyValue: true
-                  description: The slug of the toolset to load
-                  in: query
-                  name: toolset_slug
-                  required: true
-                  schema:
-                    description: A short url-friendly label that uniquely identifies a resource.
-                    maxLength: 40
-                    pattern: ^[a-z0-9_-]{1,128}$
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: Chat Sessions token header
-                  in: header
-                  name: Gram-Chat-Session
-                  schema:
-                    description: Chat Sessions token header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/GetInstanceResult'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-                - chat_sessions_token_header_Gram-Chat-Session: []
-            summary: getInstance instances
-            tags:
-                - instances
-            x-speakeasy-name-override: getBySlug
-            x-speakeasy-react-hook:
-                name: Instance
     /rpc/integrations.get:
         get:
             tags:
@@ -43508,16 +44159,42 @@ paths:
                 name: ExtendAgentAPIKeys
     /rpc/keys.list:
         get:
-            description: List all api keys for an organization
+            description: List an organization's api keys, newest first. Send limit to get one page at a time and follow next_cursor for the rest. Without limit, every matching key is returned in one response.
             operationId: listAPIKeys
             parameters:
                 - allowEmptyValue: true
-                  description: When set, list keys for this first-class agent
+                  description: When set, list keys for this first-class agent. Cannot be combined with cursor, limit or search.
                   in: query
                   name: agent_id
                   schema:
-                    description: When set, list keys for this first-class agent
+                    description: When set, list keys for this first-class agent. Cannot be combined with cursor, limit or search.
                     format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Opaque cursor from a previous response's next_cursor. Returns the keys after that page.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Opaque cursor from a previous response's next_cursor. Returns the keys after that page.
+                    maxLength: 512
+                    type: string
+                - allowEmptyValue: true
+                  description: Page size. When omitted, every matching key is returned and next_cursor is never set.
+                  in: query
+                  name: limit
+                  schema:
+                    description: Page size. When omitted, every matching key is returned and next_cursor is never set.
+                    format: int64
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Only return keys whose name contains this text, ignoring case.
+                  in: query
+                  name: search
+                  schema:
+                    description: Only return keys whose name contains this text, ignoring case.
+                    maxLength: 255
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -61976,6 +62653,7 @@ paths:
                         - copilot
                         - openclaw
                         - pi
+                        - vibe
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -70203,7 +70881,7 @@ paths:
                 name: RevokeRemoteSession
     /rpc/remoteSessions.testServerConnection:
         post:
-            description: Initialize a directly Remote MCP-backed server and discover all tools using the signed-in user's saved authorization. Never executes tools. A provider tab returning is not evidence of authorization. Requires an ordinary dashboard session and mcp:connect on the exact server; API keys are refused. Requires the staff-managed provider_setup organization feature, disabled by default; unavailable organizations receive HTTP 404.
+            description: Initialize a directly Remote MCP-backed server and discover all tools using the signed-in user's saved authorization. Never executes tools. A provider tab returning is not evidence of authorization. Requires an ordinary dashboard session and mcp:connect on the exact server; API keys are refused.
             operationId: testServerConnection
             parameters:
                 - allowEmptyValue: true
@@ -93139,6 +93817,110 @@ paths:
             x-speakeasy-name-override: setSpendCap
             x-speakeasy-react-hook:
                 name: setSpendCap
+    /rpc/userSessionClients.create:
+        post:
+            description: Register a confidential client against a user-session issuer on an operator's behalf, for a client that cannot register itself. Speakeasy mints the client_id and client_secret; the secret is returned once and only its hash is stored. Requires project:write on the issuer's project, or org:admin for an organization-owned issuer.
+            operationId: createUserSessionClient
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateUserSessionClientRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CreateUserSessionClientResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: createUserSessionClient userSessionClients
+            tags:
+                - userSessionClients
+            x-speakeasy-name-override: create
+            x-speakeasy-react-hook:
+                name: CreateUserSessionClient
     /rpc/userSessionClients.get:
         get:
             description: Get a user_session_client by id.
@@ -93586,6 +94368,110 @@ paths:
             x-speakeasy-name-override: revoke
             x-speakeasy-react-hook:
                 name: RevokeUserSessionClient
+    /rpc/userSessionClients.updateRedirectURIs:
+        post:
+            description: Replace a client's redirect URIs. Applies to the next /authorize; sessions already issued are unaffected. Rejected for CIMD clients, whose metadata document owns their redirect URIs. Requires project:write on the issuer's project, or org:admin for an organization-owned issuer.
+            operationId: updateUserSessionClientRedirectURIs
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateUserSessionClientRedirectURIsRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UserSessionClient'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: updateUserSessionClientRedirectURIs userSessionClients
+            tags:
+                - userSessionClients
+            x-speakeasy-name-override: updateRedirectURIs
+            x-speakeasy-react-hook:
+                name: UpdateUserSessionClientRedirectURIs
     /rpc/userSessionConsents.list:
         get:
             description: List consent records for the caller's project.
@@ -98699,6 +99585,74 @@ components:
                 - role_id
                 - mapping_id
                 - source_kind
+        AccessRequest:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    format: date-time
+                decided_at:
+                    type: string
+                    format: date-time
+                decided_by_name:
+                    type: string
+                    description: The deciding administrator's display name, or their email.
+                decided_by_user_id:
+                    type: string
+                    description: The administrator who approved or denied the request.
+                decided_via:
+                    type: string
+                    description: 'Where the decision was made: dashboard or slack.'
+                expires_at:
+                    type: string
+                    description: When a pending request lapses.
+                    format: date-time
+                grant_expires_at:
+                    type: string
+                    description: When the temporary grant an approval gave stops, or stopped, authorizing requests.
+                    format: date-time
+                id:
+                    type: string
+                    description: Access request ID.
+                    format: uuid
+                message:
+                    type: string
+                    description: The requester's note to the administrators.
+                requester_name:
+                    type: string
+                    description: The requester's display name, or their email when they have none.
+                requester_user_id:
+                    type: string
+                    description: The member who asked.
+                resource_name:
+                    type: string
+                    description: Name of the resource, as it was when the request was made.
+                scope:
+                    type: string
+                    description: The scope asked for.
+                selector:
+                    $ref: '#/components/schemas/Selector'
+                status:
+                    type: string
+                    description: 'pending: waiting for a decision. approved: a temporary grant was given. denied, expired or withdrawn: no access was given.'
+                temporary_grant_id:
+                    type: string
+                    description: The temporary grant an approval gave.
+                    format: uuid
+                updated_at:
+                    type: string
+                    format: date-time
+            description: A member's request for access they were denied, decided by an organization administrator.
+            required:
+                - id
+                - requester_user_id
+                - requester_name
+                - scope
+                - selector
+                - status
+                - expires_at
+                - created_at
+                - updated_at
         AccessibleMCPServer:
             type: object
             properties:
@@ -99884,6 +100838,96 @@ components:
                 - version
                 - status
                 - installs
+        AdminHooksRollout:
+            type: object
+            properties:
+                canary_organization_slugs:
+                    type: array
+                    items:
+                        type: string
+                    description: Organizations that always receive current_version and ignore pins.
+                current_version:
+                    type: integer
+                    description: The hooks generator version this server build publishes to an organization once its pin reaches it.
+                    format: int64
+                default_pin:
+                    $ref: '#/components/schemas/AdminHooksRolloutPin'
+                overrides:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminHooksRolloutOverride'
+                    description: Organizations with an override, by slug.
+                recent_changes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminHooksRolloutChange'
+                    description: The most recent pin changes, newest first.
+            description: Platform-wide hooks version rollout state.
+            required:
+                - current_version
+                - canary_organization_slugs
+                - overrides
+                - recent_changes
+        AdminHooksRolloutChange:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                    description: Organization whose override changed. Absent for a change to the default pin.
+                organization_slug:
+                    type: string
+                    description: Slug of organization_id. Absent for a change to the default pin.
+                set_at:
+                    type: string
+                    description: When the change was made.
+                    format: date-time
+                set_by:
+                    type: string
+                    description: Email of the staff operator who made the change.
+                version:
+                    type: integer
+                    description: Version the change set. Absent when the change cleared an organization override.
+                    format: int64
+            description: One change to a hooks rollout pin.
+            required:
+                - set_by
+                - set_at
+        AdminHooksRolloutOverride:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                organization_name:
+                    type: string
+                organization_slug:
+                    type: string
+                pin:
+                    $ref: '#/components/schemas/AdminHooksRolloutPin'
+            description: An organization pinned to its own hooks version instead of the default pin.
+            required:
+                - organization_id
+                - organization_name
+                - organization_slug
+                - pin
+        AdminHooksRolloutPin:
+            type: object
+            properties:
+                set_at:
+                    type: string
+                    description: When the pin was set.
+                    format: date-time
+                set_by:
+                    type: string
+                    description: Email of the staff operator who set the pin.
+                version:
+                    type: integer
+                    description: Highest hooks generator version the pin clears.
+                    format: int64
+            description: 'A hooks version rollout pin: the highest hooks generator version its scope is cleared to receive.'
+            required:
+                - version
+                - set_by
+                - set_at
         AdminInferenceHookCell:
             type: object
             properties:
@@ -101432,6 +102476,39 @@ components:
             required:
                 - organization_id
                 - assistants
+        AdminOrganizationHooksRollout:
+            type: object
+            properties:
+                current_version:
+                    type: integer
+                    description: The hooks generator version this server build publishes to an organization once its pin reaches it.
+                    format: int64
+                default_pin:
+                    $ref: '#/components/schemas/AdminHooksRolloutPin'
+                effective_version:
+                    type: integer
+                    description: Version of the pin that applies. Absent for canary and legacy_flag.
+                    format: int64
+                eligible:
+                    type: boolean
+                    description: Whether the organization's next publish moves its hooks plugin to current_version. Absent for legacy_flag, which the admin server cannot read.
+                organization_id:
+                    type: string
+                override:
+                    $ref: '#/components/schemas/AdminHooksRolloutPin'
+                source:
+                    type: string
+                    description: 'What decides an organization''s hooks version: canary organizations always get the current version, organization and default name the pin that applies, and legacy_flag means no pin applies yet and the hooks-rollout PostHog flag decides.'
+                    enum:
+                        - canary
+                        - organization
+                        - default
+                        - legacy_flag
+            description: Hooks version rollout state for one organization.
+            required:
+                - organization_id
+                - current_version
+                - source
         AdminOrganizationMember:
             type: object
             properties:
@@ -103276,6 +104353,7 @@ components:
                         - destructive
                         - idempotent
                         - open_world
+                        - unannotated
                 project_id:
                     type: string
                     description: Project filter (MCP, environment, assistant, inference, mcp:auth and mcp:blocked_auth scopes).
@@ -107262,6 +108340,13 @@ components:
                 - cost_micros
                 - models
                 - query_sources
+        ClearOrganizationHooksRolloutRequestBody:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+            required:
+                - organization_id
         CloneEnvironmentForm:
             type: object
             properties:
@@ -108785,6 +109870,9 @@ components:
         CreatePluginForm:
             type: object
             properties:
+                auto_add_servers_enabled:
+                    type: boolean
+                    description: Whether the plugin's role audiences add and remove its MCP servers automatically. Defaults to false.
                 auto_sync_enabled:
                     type: boolean
                     description: Whether changes to this plugin publish to the marketplace automatically. Defaults to true. When false, the plugin stays out of the marketplace until someone syncs it by hand.
@@ -109827,6 +110915,48 @@ components:
             description: Form for creating a new unproxied MCP server
             required:
                 - url
+        CreateUserSessionClientRequestBody:
+            type: object
+            properties:
+                client_name:
+                    type: string
+                    description: Display name shown in client listings and on the consent screen.
+                    minLength: 1
+                    maxLength: 255
+                redirect_uris:
+                    type: array
+                    items:
+                        type: string
+                    description: Redirect URIs validated on every /authorize. At least one is required.
+                    minItems: 1
+                    maxItems: 32
+                token_endpoint_auth_method:
+                    type: string
+                    description: How the client presents its secret at the token endpoint (RFC 7591).
+                    default: client_secret_basic
+                    enum:
+                        - client_secret_basic
+                        - client_secret_post
+                user_session_issuer_id:
+                    type: string
+                    description: The issuer the client signs in through.
+                    format: uuid
+            required:
+                - user_session_issuer_id
+                - client_name
+                - redirect_uris
+        CreateUserSessionClientResult:
+            type: object
+            properties:
+                client:
+                    $ref: '#/components/schemas/UserSessionClient'
+                client_secret:
+                    type: string
+                    description: The minted client secret. Not retrievable again.
+            description: A newly registered client and its secret. The secret is returned only here.
+            required:
+                - client
+                - client_secret
         CreateUserSessionIssuerCimdClientForm:
             type: object
             properties:
@@ -110390,6 +111520,23 @@ components:
                 - operation_id
                 - prescription_id
                 - expected_version
+        DecideAccessRequestForm:
+            type: object
+            properties:
+                approve:
+                    type: boolean
+                    description: True gives the access as a temporary grant; false denies the request.
+                expires_at:
+                    type: string
+                    description: 'When the temporary grant stops authorizing new requests. Required to approve: at least five minutes and at most 24 hours from now.'
+                    format: date-time
+                id:
+                    type: string
+                    description: The access request to decide.
+                    format: uuid
+            required:
+                - id
+                - approve
         DeclineRiskPolicyChallengeResponseBody:
             type: object
             properties:
@@ -112387,6 +113534,11 @@ components:
         ExplainResourceAccessResult:
             type: object
             properties:
+                credentials:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExplainedCredentialAccess'
+                    description: For each upstream credential the server offers, whether the member may use it. A caller needs both use access to the server and one usable credential to reach an upstream that requires sign-in.
                 levels:
                     type: array
                     items:
@@ -112402,6 +113554,7 @@ components:
             required:
                 - visibility
                 - levels
+                - credentials
         ExplainedAccessDirectorySource:
             type: object
             properties:
@@ -112478,6 +113631,7 @@ components:
                             - destructive
                             - idempotent
                             - open_world
+                            - unannotated
                     description: Tool annotations the rule is narrowed to, when it is not the whole resource.
                 effect:
                     type: string
@@ -112531,6 +113685,82 @@ components:
                 - kind
                 - display_name
                 - level
+                - applies_to
+                - effect
+                - via_directory_mapping
+        ExplainedCredentialAccess:
+            type: object
+            properties:
+                allowed:
+                    type: boolean
+                    description: Whether the member's rules let them use it, with their own connection for a personal credential.
+                auth_client_id:
+                    type: string
+                    description: The credential's auth client ID.
+                    format: uuid
+                client_type:
+                    type: string
+                    description: The kind of credential.
+                    enum:
+                        - remote_session
+                        - service_account
+                        - static_credential
+                        - pass_through
+                        - ema
+                enabled:
+                    type: boolean
+                    description: Whether the credential is turned on. A turned-off credential is unusable whatever the rules say.
+                name:
+                    type: string
+                    description: The credential's name.
+                rules:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExplainedCredentialRule'
+                    description: Every rule matching this use, deciding rules first.
+            required:
+                - auth_client_id
+                - name
+                - client_type
+                - enabled
+                - allowed
+                - rules
+        ExplainedCredentialRule:
+            type: object
+            properties:
+                applies_to:
+                    type: string
+                    description: Whether the rule names this credential (credential), every credential of its kind (credential_type), or every credential (all_credentials).
+                display_name:
+                    type: string
+                    description: Human-readable name for the principal.
+                effect:
+                    type: string
+                    description: 'How the rule shaped the decision: allows, overrides, overridden, blocks or blocked, with the same meanings as an access rule''s effect.'
+                kind:
+                    type: string
+                    description: What the principal identifies.
+                    enum:
+                        - everyone
+                        - role
+                        - user
+                        - unknown
+                principal_urn:
+                    type: string
+                    description: Canonical principal URN holding the rule.
+                project_bound:
+                    type: boolean
+                    description: Whether the rule applies only on servers in this server's project.
+                reason:
+                    type: string
+                    description: 'Why a blocked rule made directly to the member did not override the block: wildcard_direct_grant, narrower_direct_grant or own_exclusion.'
+                via_directory_mapping:
+                    type: boolean
+                    description: Whether the member holds this role only through a directory role mapping.
+            required:
+                - principal_urn
+                - kind
+                - display_name
                 - applies_to
                 - effect
                 - via_directory_mapping
@@ -113102,6 +114332,16 @@ components:
                 - id
                 - label
                 - count
+        FindShadowMCPInventoryServersResult:
+            type: object
+            properties:
+                matches:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ShadowMCPInventoryServerMatch'
+                    description: One entry per looked-up URL that matches a Shadow MCP server in use. URLs without a match are left out.
+            required:
+                - matches
         FleetCoverage:
             type: object
             properties:
@@ -114034,67 +115274,6 @@ components:
                 connection:
                     $ref: '#/components/schemas/OktaIdentityProviderConnection'
             description: The organization's Okta connection, or nothing when none is connected.
-        GetInstanceForm:
-            type: object
-            properties:
-                apikey_token:
-                    type: string
-                chat_sessions_token:
-                    type: string
-                project_slug_input:
-                    type: string
-                session_token:
-                    type: string
-                toolset_slug:
-                    type: string
-                    description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9_-]{1,128}$
-                    maxLength: 40
-            required:
-                - toolset_slug
-        GetInstanceResult:
-            type: object
-            properties:
-                description:
-                    type: string
-                    description: The description of the toolset
-                function_environment_variables:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/FunctionEnvironmentVariable'
-                    description: The function environment variables that are relevant to the toolset
-                mcp_servers:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/InstanceMcpServer'
-                    description: The MCP servers that are relevant to the toolset
-                name:
-                    type: string
-                    description: The name of the toolset
-                prompt_templates:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/PromptTemplate'
-                    description: The list of prompt templates
-                security_variables:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/SecurityVariable'
-                    description: The security variables that are relevant to the toolset
-                server_variables:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/ServerVariable'
-                    description: The server variables that are relevant to the toolset
-                tools:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/Tool'
-                    description: The list of tools
-            required:
-                - name
-                - tools
-                - mcp_servers
         GetIntegrationForm:
             type: object
             properties:
@@ -115459,6 +116638,8 @@ components:
             properties:
                 delivery_failure:
                     $ref: '#/components/schemas/HookDeliveryFailureData'
+                install_failure:
+                    $ref: '#/components/schemas/HookInstallFailureData'
                 mcp:
                     $ref: '#/components/schemas/HookMCPData'
                 mcp_attribution:
@@ -115517,6 +116698,7 @@ components:
                         - skill.activated
                         - notification.reported
                         - client.delivery_failed
+                        - client.install_failed
             description: Canonical Speakeasy feature event.
             required:
                 - type
@@ -115560,6 +116742,39 @@ components:
             description: Metadata about the local hook adapter that translated a provider event into the Speakeasy hook contract.
             required:
                 - adapter
+        HookInstallFailureData:
+            type: object
+            properties:
+                arch:
+                    type: string
+                    description: CPU architecture of the device.
+                    maxLength: 32
+                attempted_at:
+                    type: string
+                    description: RFC3339 time of the failed install, on the device clock.
+                    format: date-time
+                cause:
+                    type: string
+                    description: Why a bootstrap script could not install the hooks binary.
+                    enum:
+                        - download
+                        - checksum_mismatch
+                harness:
+                    type: string
+                    description: Coding agent harness the hook ran under.
+                    maxLength: 64
+                os:
+                    type: string
+                    description: Operating system of the device.
+                    maxLength: 32
+                version:
+                    type: string
+                    description: speakeasy-hooks version the script tried to install.
+                    maxLength: 64
+            description: Bootstrap install failure report, sent with event type client.install_failed. A plugin's bootstrap script sends one, best effort, when it cannot download the hooks binary or the download fails its checksum. It is diagnostic only and never counts as agent activity.
+            required:
+                - cause
+                - attempted_at
         HookMCPAttributionEntry:
             type: object
             properties:
@@ -116518,14 +117733,6 @@ components:
             required:
                 - input_type
                 - request_data
-        InstanceMcpServer:
-            type: object
-            properties:
-                url:
-                    type: string
-                    description: The address of the MCP server
-            required:
-                - url
         Integration:
             type: object
             properties:
@@ -117610,6 +118817,16 @@ components:
                 - organization_id
                 - provider
                 - schedules
+        ListAccessRequestsResult:
+            type: object
+            properties:
+                requests:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AccessRequest'
+                    description: Access requests, newest first. At most 200 are returned.
+            required:
+                - requests
         ListActorAttributesResult:
             type: object
             properties:
@@ -118609,6 +119826,9 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/Key'
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page of keys.list. Absent on the last page and when no limit was sent.
             required:
                 - keys
         ListMCPPlatformToolsetsResult:
@@ -124149,6 +125369,9 @@ components:
                     items:
                         $ref: '#/components/schemas/PluginAssignment'
                     description: Role/user assignments.
+                auto_add_servers_enabled:
+                    type: boolean
+                    description: Whether the plugin's role audiences add and remove its MCP servers automatically, based on the MCP servers those roles can use. When false, only manual changes alter the plugin's server list.
                 auto_created:
                     type: boolean
                     description: Whether automatic role distribution created this plugin. Read-only; preserved after edits and reuse.
@@ -124196,6 +125419,7 @@ components:
                 - slug
                 - auto_created
                 - auto_sync_enabled
+                - auto_add_servers_enabled
                 - agent_plugins_v1_compatible
                 - created_at
                 - updated_at
@@ -124574,6 +125798,17 @@ components:
                 reason:
                     type: string
                     description: Stable machine-readable reason code. Present only when outcome is unreachable; currently timeout, rate_limited, server_error, dns_error, tls_error, guardian_rejected, or transport_error.
+                server_name:
+                    type: string
+                    description: 'The name the server reports for itself in the MCP handshake: its title, or its name when it has no title. Present only when outcome is mcp_available and the server reports one.'
+                sign_in_setup:
+                    type: string
+                    description: 'How Speakeasy can register as a client with the server''s sign-in provider. Present only when authentication is required and the challenge advertised protected resource metadata: dcr (dynamic client registration), cimd (client ID metadata document), manual (a client must be registered by hand), or unknown (the provider''s metadata could not be read).'
+                    enum:
+                        - dcr
+                        - cimd
+                        - manual
+                        - unknown
             description: Structured outcome of probing a remote MCP server URL. Variant-specific fields are populated only when applicable.
             required:
                 - outcome
@@ -124583,6 +125818,9 @@ components:
                 ai_platform_push_integrations_enabled:
                     type: boolean
                     description: Whether the organization can provision push integrations for AI platforms
+                assistants_available:
+                    type: boolean
+                    description: 'Whether this deployment can run assistants. A deployment-wide setting, not an organization entitlement: false when the deployment runs with the disabled assistant runtime provider. Absent from staff admin responses.'
                 authz_challenge_logging_enabled:
                     type: boolean
                     description: Whether authz challenge logging to ClickHouse is enabled
@@ -124598,6 +125836,9 @@ components:
                 device_agent:
                     type: boolean
                     description: Whether the organization uses the device agent (any device has polled agent.getPlugins). Derived from device-agent syncs, not an admin-settable feature.
+                functions_available:
+                    type: boolean
+                    description: 'Whether this deployment can run Speakeasy Functions. A deployment-wide setting, not an organization entitlement: false when the deployment runs with the disabled Functions provider. Absent from staff admin responses.'
                 hooks_browser_login_enabled:
                     type: boolean
                     description: Whether generated hook plugins may mint per-user keys via the interactive browser login
@@ -124616,9 +125857,6 @@ components:
                 platform_mcp_enabled:
                     type: boolean
                     description: Whether the organization can use the Speakeasy Platform MCP capability
-                provider_setup_enabled:
-                    type: boolean
-                    description: Whether the staff-managed provider setup rollout is enabled. Defaults to false when absent.
                 remote_session_auto_refresh_enabled:
                     type: boolean
                     description: Whether consent screens expose automatic remote-session refresh for the organization
@@ -125448,6 +126686,12 @@ components:
                 up_to_date:
                     type: boolean
                     description: Whether the project's current plugin state matches what was last published to GitHub, including changes of plugins whose auto sync is off that wait for a manual sync. Absent when the project is not connected, or when the connection predates content fingerprinting (freshness can't be determined).
+                vibe_observability_available:
+                    type: boolean
+                    description: 'Whether the Mistral Vibe observability plugin ZIP can be downloaded right now: the pinned hooks release''s relay carries the vibe provider and the org name satisfies the Agent Plugins 1.0 name schema. Present (true or false) when connected and observability is enabled for the project.'
+                vibe_observability_plugin:
+                    type: string
+                    description: Slug of the generated Mistral Vibe observability plugin's install directory (`~/.vibe/plugins/<slug>`) — present only when connected, observability is enabled, the vibe package is available, and the stored published hooks version equals the current generator version, i.e. the published marketplace repo actually carries the package. The marketplace repo directory is `<slug>-vibe`.
             required:
                 - configured
                 - connected
@@ -125811,6 +127055,7 @@ components:
                         - codex
                         - cursor
                         - opencode
+                        - vibe
                         - other
             required:
                 - client_family
@@ -127039,9 +128284,11 @@ components:
         RequestAccessResult:
             type: object
             properties:
+                request:
+                    $ref: '#/components/schemas/AccessRequest'
                 sent_to_count:
                     type: integer
-                    description: Number of administrators who were notified.
+                    description: Number of administrators who were emailed.
                     format: int64
             required:
                 - sent_to_count
@@ -127358,6 +128605,7 @@ components:
                             - destructive
                             - idempotent
                             - open_world
+                            - unannotated
                     description: Tool annotations the rule is narrowed to, when it is not the whole resource.
                 kind:
                     type: string
@@ -130361,6 +131609,7 @@ components:
                         - destructive
                         - idempotent
                         - open_world
+                        - unannotated
                 project_id:
                     type: string
                     description: Project filter (MCP, environment, assistant, inference, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.
@@ -131384,6 +132633,17 @@ components:
                 - execution_context
                 - mcp_server_id
                 - expected_version
+        SetHooksRolloutDefaultRequestBody:
+            type: object
+            properties:
+                version:
+                    type: integer
+                    description: Highest hooks generator version to clear. Must not exceed the version this build publishes.
+                    format: int64
+                    minimum: 1
+                    maximum: 100000
+            required:
+                - version
         SetIdentityProviderConnectionSetupMethodRequestBody:
             type: object
             properties:
@@ -131602,6 +132862,20 @@ components:
                 - organization_id
                 - feature_name
                 - enabled
+        SetOrganizationHooksRolloutRequestBody:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                version:
+                    type: integer
+                    description: Highest hooks generator version to clear for the organization. Must not exceed the version this build publishes.
+                    format: int64
+                    minimum: 1
+                    maximum: 100000
+            required:
+                - organization_id
+                - version
         SetOrganizationOnboardingStackRequestBody:
             type: object
             properties:
@@ -131622,16 +132896,6 @@ components:
                 - organization_id
                 - vendors
                 - mdm_vendor
-        SetOrganizationProviderSetupRequestBody:
-            type: object
-            properties:
-                enabled:
-                    type: boolean
-                organization_id:
-                    type: string
-            required:
-                - organization_id
-                - enabled
         SetOrganizationWhitelistRequestBody:
             type: object
             properties:
@@ -131785,6 +133049,7 @@ components:
                             - destructive
                             - idempotent
                             - open_world
+                            - unannotated
                     description: Narrow the access to tools carrying these annotations. Omit for the whole resource.
                 level:
                     type: string
@@ -131894,6 +133159,26 @@ components:
             required:
                 - id
                 - completed
+        SetShadowMCPOfficialServerForm:
+            type: object
+            properties:
+                keep_shadow:
+                    type: boolean
+                    description: 'Keep using the Shadow MCP server directly: no official server is linked, not even automatically. Cannot be combined with mcp_server_id.'
+                mcp_server_id:
+                    type: string
+                    description: The MCP server to link as the official version. Omit it, with keep_shadow unset, to go back to the automatic link.
+                    format: uuid
+                project_id:
+                    type: string
+                    format: uuid
+                server_url:
+                    type: string
+                    description: The Shadow MCP server's URL.
+                    format: uri
+            required:
+                - project_id
+                - server_url
         SetSlackDirectoryDefaultProjectRequestBody:
             type: object
             properties:
@@ -132309,6 +133594,11 @@ components:
                         type: string
                 approval_request:
                     $ref: '#/components/schemas/ShadowMCPInventoryApprovalRequest'
+                blocked_call_count:
+                    type: integer
+                    description: Calls to this server that a Speakeasy hook blocked, within the telemetry retention window. Included in observed_use_count. Optional for one release so a dashboard deployed ahead of the server still loads the inventory; the server always sends it.
+                    default: 0
+                    format: int64
                 blocked_policy_ids:
                     type: array
                     items:
@@ -132330,6 +133620,11 @@ components:
                 observed_use_count:
                     type: integer
                     format: int64
+                official_server:
+                    $ref: '#/components/schemas/ShadowMCPOfficialServer'
+                official_server_declined:
+                    type: boolean
+                    description: True when an administrator chose to keep using the Shadow MCP server directly, so no official server is linked automatically.
                 request_count:
                     type: integer
                     format: int64
@@ -132337,6 +133632,8 @@ components:
                     type: string
                 server_slug:
                     type: string
+                suggested_official_server:
+                    $ref: '#/components/schemas/ShadowMCPSuggestedOfficialServer'
                 target_kind:
                     type: string
                     description: 'What the row identifies: a server URL observed or requested, or a local stdio command known only through its review. Absent means server_url.'
@@ -132367,6 +133664,18 @@ components:
                 - request_count
                 - allowed_policy_ids
                 - blocked_policy_ids
+        ShadowMCPInventoryServerMatch:
+            type: object
+            properties:
+                server:
+                    $ref: '#/components/schemas/ShadowMCPInventoryServer'
+                server_url:
+                    type: string
+                    description: The URL that was looked up, exactly as given.
+            description: A Shadow MCP server in use whose upstream URL matches one of the URLs looked up.
+            required:
+                - server_url
+                - server
         ShadowMCPInventoryURLState:
             type: object
             properties:
@@ -132435,6 +133744,50 @@ components:
             required:
                 - source
                 - observed_use_count
+        ShadowMCPOfficialServer:
+            type: object
+            properties:
+                automatic:
+                    type: boolean
+                    description: True when the link was made automatically because the server proxies to the Shadow MCP server's URL; false when an administrator chose it.
+                direct_access_allowed:
+                    type: boolean
+                    description: 'Deprecated: links no longer have an on/off switch, so this is always false. Kept one release so older dashboards, which require it, keep rendering, then removed.'
+                gateway_name:
+                    type: string
+                    description: The gateway that serves the official server, when url is a gateway's address.
+                mcp_server_id:
+                    type: string
+                    format: uuid
+                name:
+                    type: string
+                    description: The official server's display name.
+                slug:
+                    type: string
+                    description: The official server's slug, when it has one.
+                url:
+                    type: string
+                    description: Where agents connect. A gateway's address when the server is a gateway member. Absent while the server has no endpoint.
+            description: 'The official, Speakeasy-served version of a Shadow MCP server: a project MCP server that proxies to its URL, or one an administrator chose.'
+            required:
+                - mcp_server_id
+                - name
+        ShadowMCPSuggestedOfficialServer:
+            type: object
+            properties:
+                mcp_server_id:
+                    type: string
+                    format: uuid
+                name:
+                    type: string
+                    description: The server's display name.
+                slug:
+                    type: string
+                    description: The server's slug, when it has one.
+            description: A project MCP server that already serves a Shadow MCP server's upstream URL and can be linked as its official version.
+            required:
+                - mcp_server_id
+                - name
         ShareSkillRequestBody:
             type: object
             properties:
@@ -139118,6 +140471,9 @@ components:
         UpdatePluginForm:
             type: object
             properties:
+                auto_add_servers_enabled:
+                    type: boolean
+                    description: Whether the plugin's role audiences add and remove its MCP servers automatically. Omit to keep the current setting. Turning it on adds the MCP servers its assigned roles can use now, except ones an admin removed before.
                 auto_sync_enabled:
                     type: boolean
                     description: Whether changes to this plugin publish to the marketplace automatically. Omit to keep the current setting. Turning it off is refused while the plugin has changes that haven't been synced, and the slug can't change while it is off.
@@ -140120,6 +141476,23 @@ components:
             description: Form for updating a tunneled MCP server source
             required:
                 - id
+        UpdateUserSessionClientRedirectURIsRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The user_session_client id.
+                    format: uuid
+                redirect_uris:
+                    type: array
+                    items:
+                        type: string
+                    description: The complete new list of redirect URIs. At least one is required.
+                    minItems: 1
+                    maxItems: 32
+            required:
+                - id
+                - redirect_uris
         UpdateUserSessionIssuerForm:
             type: object
             properties:
@@ -142537,8 +143910,6 @@ tags:
       description: Resolves the identifiers Speakeasy records activity under into a single identity.
     - name: identityProviderConnections
       description: 'Manage the organization''s Okta connection: provision the private_key_jwt credential, submit the Okta client ID, verify granted scopes, and revoke.'
-    - name: instances
-      description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
     - name: integrations
       description: Explore third-party tools in Speakeasy.
     - name: internalSessionIssuers
@@ -142644,7 +144015,7 @@ tags:
     - name: admin
       description: Operations supporting admin tasks, protected by Google workspace auth.
     - name: userSessionClients
-      description: Operator visibility into MCP clients registered against a user-session issuer (user_session_clients). Read + revoke. Registrations are written by /mcp/{slug}/register (RFC 7591 DCR) or resolved from a Client ID Metadata Document on /mcp/{slug}/authorize (CIMD); client_id_metadata_uri distinguishes the two.
+      description: Operator management of MCP clients registered against a user-session issuer (user_session_clients). Registrations are written by /mcp/{slug}/register (RFC 7591 DCR), resolved from a Client ID Metadata Document on /mcp/{slug}/authorize (CIMD), or created by an operator through createUserSessionClient; client_id_metadata_uri distinguishes CIMD clients from the rest.
     - name: userSessionConsents
       description: Operator visibility into user_session_consents — persistent consent records per (subject, user_session_client). List + revoke.
     - name: userSessionIssuersCimdClients

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emaReturnHref, oktaIssuerUrl, parseEmaReturn } from "./oktaEma";
+import { oktaIssuerUrl } from "./oktaEma";
 
 describe("oktaIssuerUrl", () => {
   it.each([
@@ -19,50 +19,4 @@ describe("oktaIssuerUrl", () => {
       expect(oktaIssuerUrl(domain)).toBeUndefined();
     },
   );
-});
-
-describe("parseEmaReturn", () => {
-  it("keeps a same-site path", () => {
-    expect(parseEmaReturn("acme-workforce", "/org/projects/p/x")).toEqual({
-      providerName: "acme-workforce",
-      path: "/org/projects/p/x",
-    });
-  });
-
-  it.each([
-    "https://evil.example",
-    "//evil.example",
-    "/\\evil.example",
-    "x",
-    "/\n/evil.example",
-    "/\t/evil.example",
-    "/\r//evil.example",
-  ])("refuses %s", (path) => {
-    expect(parseEmaReturn("acme-workforce", path)).toBeUndefined();
-  });
-
-  it("needs both the name and the path", () => {
-    expect(parseEmaReturn(null, "/x")).toBeUndefined();
-    expect(parseEmaReturn("acme-workforce", null)).toBeUndefined();
-  });
-});
-
-describe("emaReturnHref", () => {
-  it("asks the provider page to turn EMA on with the issuer", () => {
-    expect(
-      emaReturnHref(
-        { providerName: "acme-workforce", path: "/org/x" },
-        "https://acme.okta.com",
-      ),
-    ).toBe("/org/x?ema=https%3A%2F%2Facme.okta.com");
-  });
-
-  it("keeps the path's own query and hash", () => {
-    expect(
-      emaReturnHref(
-        { providerName: "acme-workforce", path: "/org/x?tab=y#ema" },
-        "https://acme.okta.com",
-      ),
-    ).toBe("/org/x?tab=y&ema=https%3A%2F%2Facme.okta.com#ema");
-  });
 });

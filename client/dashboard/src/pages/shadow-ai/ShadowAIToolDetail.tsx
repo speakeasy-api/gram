@@ -6,7 +6,7 @@ import { AIToolDecisionSheet } from "@/components/shadow-ai/AIToolDecisionSheet"
 import { DETECTION_EVIDENCE_COLUMNS } from "@/components/shadow-ai/detectionColumns";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { shadowAIBreadcrumbSubstitutions } from "@/pages/shadow-ai/tabs";

@@ -189,6 +189,27 @@ func (s *ServiceCore) configuredIdleExpiringBackends() []string {
 	return backends
 }
 
+// RuntimeAvailable reports whether this deployment can admit new assistant
+// runtimes. It is false when the process runs with the disabled runtime
+// provider; callers that would start, drive, or schedule runtime work check it
+// up front and report ErrRuntimeDisabled.
+func (s *ServiceCore) RuntimeAvailable() bool {
+	return s.runtime.Backend() != RuntimeProviderDisabled
+}
+
+// RuntimeHasBackends reports whether any runtime backend is reachable from
+// this process. Every other provider requires its target backend, so this
+// differs from RuntimeAvailable only for the disabled provider: a deployment
+// switched to disabled while a GKE cluster or the local backend is still
+// configured keeps reaping the rows those backends own, and one with no
+// backend at all has no runtime sweep to run.
+func (s *ServiceCore) RuntimeHasBackends() bool {
+	if s.RuntimeAvailable() {
+		return true
+	}
+	return s.runtime.SupportsBackend(runtimeBackendGKE) || s.runtime.SupportsBackend(runtimeBackendLocal)
+}
+
 func assistantValidationError(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", errAssistantValidation, fmt.Sprintf(format, args...))
 }
@@ -482,6 +503,7 @@ type ServiceCore struct {
 	contextWindow     *openrouter.ContextWindowResolver
 	wakeCanceller     WakeCanceller
 	chatWriter        *chat.ChatMessageWriter
+	turnStream        *chat.TurnStream
 	assetStorage      assets.BlobStore
 	assetSigningKey   string
 	envLoader         toolconfig.EnvironmentLoader
@@ -543,6 +565,7 @@ func NewServiceCore(
 		contextWindow:               contextWindow,
 		wakeCanceller:               nil,
 		chatWriter:                  nil,
+		turnStream:                  nil,
 		assetStorage:                nil,
 		assetSigningKey:             "",
 		envLoader:                   nil,
@@ -574,6 +597,11 @@ func (s *ServiceCore) SetDashboardIngestor(i DashboardIngestor) {
 // site. Self-heal is skipped if the writer was never set.
 func (s *ServiceCore) SetChatMessageWriter(w *chat.ChatMessageWriter) {
 	s.chatWriter = w
+}
+
+// SetTurnStream wires the worker's dashboard replay buffer.
+func (s *ServiceCore) SetTurnStream(stream *chat.TurnStream) {
+	s.turnStream = stream
 }
 
 // SetAssetStorage wires the blob store history replay uses to fetch
@@ -741,6 +769,9 @@ type ReapStuckRuntimesResult struct {
 // than locks so a live turn is never interrupted.
 func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesResult, error) {
 	var out ReapStuckRuntimesResult
+	if !s.RuntimeHasBackends() {
+		return out, nil
+	}
 	var errs []error
 	now := time.Now().UTC()
 	affected := map[uuid.UUID]struct{}{}
@@ -2225,6 +2256,9 @@ type ReapInactiveAssistantRuntimesParams struct {
 // never an orphan candidate: inactivity alone does not discard its workspace.
 // The sweep also collects stopped rows on superseded backends and retired Kit rows.
 func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params ReapInactiveAssistantRuntimesParams) (ReapAssistantRuntimesResult, error) {
+	if !s.RuntimeHasBackends() {
+		return ReapAssistantRuntimesResult{Reaped: 0, Errors: 0}, nil
+	}
 	if params.InactivityThreshold <= 0 {
 		return ReapAssistantRuntimesResult{}, fmt.Errorf("inactivity threshold must be positive")
 	}
@@ -2286,6 +2320,9 @@ type ReapStoppedAssistantRuntimesParams struct {
 // sibling activity on the same assistant. Each backend tears down the
 // stopped runtime resource before its row is marked reaped.
 func (s *ServiceCore) ReapStoppedAssistantRuntimes(ctx context.Context, params ReapStoppedAssistantRuntimesParams) (ReapAssistantRuntimesResult, error) {
+	if !s.RuntimeHasBackends() {
+		return ReapAssistantRuntimesResult{Reaped: 0, Errors: 0}, nil
+	}
 	if params.StoppedTTL <= 0 {
 		return ReapAssistantRuntimesResult{}, fmt.Errorf("stopped TTL must be positive")
 	}
@@ -2379,6 +2416,9 @@ type RecycleAssistantRuntimeImagesParams struct {
 // inactivity janitor to reap it, so without this sweep it would stay on its
 // admission-time image across deploys indefinitely.
 func (s *ServiceCore) RecycleActiveRuntimeImages(ctx context.Context, params RecycleAssistantRuntimeImagesParams) (RecycleAssistantRuntimeImagesResult, error) {
+	if !s.RuntimeAvailable() {
+		return RecycleAssistantRuntimeImagesResult{Recycled: 0, Skipped: 0, Errors: 0}, nil
+	}
 	queries := assistantrepo.New(s.db)
 	rows, err := queries.ListActiveAssistantRuntimes(ctx, runtimeStateActive)
 	if err != nil {
@@ -2563,6 +2603,15 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	assistantID, err := uuid.Parse(task.TargetRef)
 	if err != nil {
 		return EnqueueResult{}, fmt.Errorf("parse assistant id: %w", err)
+	}
+	if !s.RuntimeAvailable() {
+		// Nothing could ever run the task, so retrying won't help: drop it so
+		// the activity succeeds instead of spending its retry budget.
+		s.logger.WarnContext(ctx, "skipping trigger dispatch: assistants are not available on this deployment",
+			attr.SlogAssistantID(assistantID.String()),
+			attr.SlogTriggerInstanceID(task.TriggerInstanceID),
+		)
+		return EnqueueResult{AssistantID: uuid.Nil, ThreadID: uuid.Nil, ShouldSignal: false}, nil
 	}
 	assistant, err := s.getAssistantForDispatch(ctx, assistantID)
 	switch {
@@ -2900,6 +2949,15 @@ func (s *ServiceCore) AdmitPendingThreads(ctx context.Context, assistantID uuid.
 		return AdmitPendingThreadsResult{}, err
 	}
 	if assistant.Status != StatusActive {
+		return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
+	}
+	if !s.RuntimeAvailable() {
+		// Pending events stay pending rather than failing, so they run if the
+		// deployment turns assistants back on. Returning an error would only
+		// burn the coordinator's retries.
+		s.logger.WarnContext(ctx, "skipping assistant admission: assistants are not available on this deployment",
+			attr.SlogAssistantID(assistantID.String()),
+		)
 		return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
 	}
 
@@ -3292,6 +3350,15 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "turn_start", "assistant turn started", "INFO", nil)
 
 		stopLeaseHeartbeat := s.startProcessingLeaseHeartbeat(turnCtx, thread.ProjectID, runtimeRecord.ID, event.ID)
+		// Reset on the first claim, not on enqueue (the previous turn may
+		// still be running) or retry (the frames belong to this same turn).
+		if thread.SourceKind == sourceKindDashboard && event.Attempts == 1 {
+			if err := s.turnStream.Reset(turnCtx, thread.ChatID); err != nil {
+				// Redis retries transient failures. If they are exhausted,
+				// keep serving the turn rather than fail it on a cache error.
+				s.logger.WarnContext(turnCtx, "reset assistant turn replay", attr.SlogError(err))
+			}
+		}
 		currentSkillSnapshot, runErr := s.processEventTurnWithProtocol(turnCtx, thread, assistant, runtimeRecord, event, protocol)
 		stopLeaseHeartbeat()
 		if runErr != nil {

@@ -14,43 +14,16 @@ import (
 // {"resource_kind":"project","resource_id":"proj_123"}.
 // Wildcard uses {"resource_kind":"*","resource_id":"*"}.
 // For a grant selector to match a check selector, every key in the grant must
-// either equal the corresponding check value or be the wildcard "*".
+// be carried by the check and either equal its value or be the wildcard "*".
+// Check.mayOmit names the few checks that may leave a grant key out.
 type Selector map[string]string
 
-const (
-	SelectorKeyResourceKind   = "resource_kind"
-	SelectorKeyResourceID     = "resource_id"
-	SelectorKeyTool           = "tool"
-	SelectorKeyDisposition    = "disposition"
-	SelectorKeyProjectID      = "project_id"
-	SelectorKeyServerURL      = "server_url"
-	SelectorKeyServerIdentity = "server_identity"
-	// SelectorKeyClientType and SelectorKeyConnectionOwner narrow mcp:auth and
-	// mcp:blocked_auth grants to an auth client type and to the owner of a
-	// personal connection.
-	SelectorKeyClientType      = "client_type"
-	SelectorKeyConnectionOwner = "connection_owner"
-	// SelectorKeyUpstreamClient narrows mcp:auth and mcp:blocked_auth grants
-	// on personal clients to one upstream OAuth client, the
-	// remote_session_clients id behind it. With a connection owner it names one
-	// logical connection across every auth client sharing that upstream
-	// client, which is what a connection owner's block names.
-	SelectorKeyUpstreamClient = "upstream_client"
-)
+// The SelectorKey*, AuthClientType* and Disposition* names are generated from
+// the registry into selectors_gen.go.
 
 // SelectorValueRepresentedUser is the connection_owner value naming the user a
 // request acts for. The engine binds it; checks never carry it.
 const SelectorValueRepresentedUser = "$represented_user"
-
-// Auth client types an mcp:auth check can name. Only remote_session clients
-// are personal: their checks carry the connection owner.
-const (
-	AuthClientTypeRemoteSession    = "remote_session"
-	AuthClientTypeServiceAccount   = "service_account"
-	AuthClientTypeStaticCredential = "static_credential" //nolint:gosec // client type name, not a credential
-	AuthClientTypePassThrough      = "pass_through"
-	AuthClientTypeEMA              = "ema"
-)
 
 // IsSharedAuthClientType reports whether clientType serves every caller with
 // one credential that belongs to nobody, as opposed to a person's own
@@ -71,37 +44,10 @@ func IsAgentKeyAuthClientType(clientType string) bool {
 	return IsSharedAuthClientType(clientType) && clientType != AuthClientTypePassThrough
 }
 
-// validAuthClientTypes is the closed value set of client_type in Model.
-var validAuthClientTypes = Model.deriveDimensionValues(ResourceKindMCPAuthClient, SelectorKeyClientType)
-
-// Matches reports whether this (grant) selector satisfies the given check
-// selector. A nil/empty grant selector matches any check (defensive fallback).
-// For each key present in BOTH the grant and check selectors, the values must
-// be equal or the grant value must be "*". Keys present in the grant but absent
-// from the check are skipped — the check is not constraining that dimension.
-// This allows disposition-scoped grants (e.g. {"disposition":"read_only"}) to
-// match connection-level checks that don't yet specify a disposition.
-func (s Selector) Matches(check Selector) bool {
-	return s.matches(check, "")
-}
-
-func (s Selector) matches(check Selector, representedUser string) bool {
-	for k, grantVal := range s {
-		checkVal, ok := check[k]
-		if !ok {
-			// Check doesn't constrain this dimension — skip.
-			continue
-		}
-		if !selectorValueMatches(k, grantVal, checkVal, representedUser) {
-			return false
-		}
-	}
-	return true
-}
-
-// StrictMatches is like Matches but requires every key in the grant selector
-// to be present in the check selector. Exclusion scopes use strict matching so
-// a tool-scoped exclusion does not match a dimensionless server-level check.
+// StrictMatches reports whether this (grant) selector covers the given check
+// selector: every key the grant names must be present in the check with an
+// equal value, or the grant value must be "*". A key the check omits never
+// matches, so a tool-scoped exclusion does not match a server-level check.
 func (s Selector) StrictMatches(check Selector) bool {
 	return s.strictMatches(check, "")
 }
@@ -141,12 +87,8 @@ func selectorValueMatches(key, grantVal, checkVal, representedUser string) bool 
 		(checkVal == SelectorValueRepresentedUser && grantVal == representedUser)
 }
 
-// scopeResourceKinds maps every scope the model declares to the resource kind
-// its checks and grant selectors name.
-var scopeResourceKinds = Model.deriveResourceKinds()
-
 // ResourceKindForScope returns the selector resource kind of a scope: the kind
-// Model declares it on, or, for a scope the model does not know, the kind its
+// the registry declares it on, or, for a scope the model does not know, the kind its
 // prefix has always meant.
 func ResourceKindForScope(scope Scope) string {
 	if kind, ok := scopeResourceKinds[scope]; ok {
@@ -165,34 +107,11 @@ func legacyResourceKindForScope(scope Scope) string {
 	case "remote-mcp":
 		return ResourceKindMCP
 	}
-	for _, t := range Model.Types {
-		if string(t.Kind) == prefix && t.Kind != ResourceKindMCPAuthClient {
-			return prefix
-		}
+	if declaredResourceKinds[prefix] && prefix != ResourceKindMCPAuthClient {
+		return prefix
 	}
 	return ResourceKindWildcard
 }
-
-// Disposition values matching MCP tool annotation hint names (snake_case, no _hint suffix).
-const (
-	DispositionReadOnly    = "read_only"
-	DispositionDestructive = "destructive"
-	DispositionIdempotent  = "idempotent"
-	DispositionOpenWorld   = "open_world"
-)
-
-// validDispositions is the closed value set of disposition in Model.
-var validDispositions = Model.deriveDimensionValues(ResourceKindMCP, SelectorKeyDisposition)
-
-// allowedSelectorKeys defines which extra keys (beyond resource_kind and
-// resource_id) are valid for each resource kind: the Dimensions each type
-// declares in Model. Kinds not listed here allow no extra keys, except where
-// scopeAllowsSelectorKey admits one for a single scope.
-var allowedSelectorKeys = Model.deriveAllowedSelectorKeys()
-
-// scopeSelectorKeys holds the keys single permissions declare beyond their
-// type's.
-var scopeSelectorKeys = Model.deriveScopeSelectorKeys()
 
 // scopeAllowsSelectorKey reports whether a single permission declares key
 // beyond its type's dimensions. Today that is project_id on org:hooks_ingest:

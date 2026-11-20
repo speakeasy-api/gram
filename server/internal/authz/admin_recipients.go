@@ -30,6 +30,7 @@ func ResolveOrganizationAdminEmails(ctx context.Context, db repo.DBTX, organizat
 		representedUser: "",
 		probe:           false,
 		anyOf:           nil,
+		operation:       operationDefault,
 	}
 	type recipient struct {
 		email  string

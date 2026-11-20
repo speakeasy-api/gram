@@ -3339,8 +3339,8 @@ func DecodeDownloadObservabilityPluginRequest(mux goahttp.Muxer, decoder func(*h
 		if platform == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("platform", "query string"))
 		}
-		if !(platform == "claude" || platform == "cursor" || platform == "codex" || platform == "opencode" || platform == "copilot" || platform == "openclaw" || platform == "pi") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor", "codex", "opencode", "copilot", "openclaw", "pi"}))
+		if !(platform == "claude" || platform == "cursor" || platform == "codex" || platform == "opencode" || platform == "copilot" || platform == "openclaw" || platform == "pi" || platform == "vibe") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor", "codex", "opencode", "copilot", "openclaw", "pi", "vibe"}))
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -4697,6 +4697,7 @@ func marshalPluginsPluginToPluginResponseBody(v *plugins.Plugin) *PluginResponse
 		IsDefault:                v.IsDefault,
 		AutoCreated:              v.AutoCreated,
 		AutoSyncEnabled:          v.AutoSyncEnabled,
+		AutoAddServersEnabled:    v.AutoAddServersEnabled,
 		ServerCount:              v.ServerCount,
 		SkillCount:               v.SkillCount,
 		AssignmentCount:          v.AssignmentCount,

@@ -63,6 +63,14 @@ func (e *ResolvedMcpEndpoint) IsOrganizationGateway() bool {
 	return e.RouteBase == mcproute.OrganizationGateway
 }
 
+func (e *ResolvedMcpEndpoint) IsProjectGateway() bool {
+	return e.IsOrganizationGateway() && e.ProjectID != uuid.Nil
+}
+
+func (e *ResolvedMcpEndpoint) IsOrganizationWideGateway() bool {
+	return e.IsOrganizationGateway() && e.ProjectID == uuid.Nil
+}
+
 // organizationGateway is a resolved organization gateway: the synthetic rows
 // the meta runtime is shaped around, and the issuer-gate endpoint built from
 // them.
@@ -356,7 +364,7 @@ func (s *Service) organizationGatewayRows(ctx context.Context, organization orgs
 		DeletedAt:         pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		Deleted:           false,
 	}
-	endpoint := &mcpendpointsrepo.McpEndpoint{ //nolint:exhaustruct // synthetic: only the fields the meta runtime reads are meaningful
+	endpoint := &mcpendpointsrepo.McpEndpoint{ //nolint:exhaustruct_v5 // synthetic: only the fields the meta runtime reads are meaningful
 		ProjectID: uuid.Nil,
 		Slug:      organization.Slug,
 	}

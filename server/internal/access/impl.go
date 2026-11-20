@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/email"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -50,10 +51,19 @@ type CanonicalFoldGate interface {
 }
 
 type Service struct {
-	tracer   trace.Tracer
-	logger   *slog.Logger
-	db       *pgxpool.Pool
-	chConn   driver.Conn
+	tracer trace.Tracer
+	logger *slog.Logger
+	db     *pgxpool.Pool
+
+	// chConn is the read-write ClickHouse connection. The shadow MCP inventory
+	// catalog stays on it: renaming a server inserts a row that the next list
+	// must already see.
+	chConn driver.Conn
+
+	// chReadConn is the read replica. It serves the AI detection and challenge
+	// aggregates, which background workers write and this service only reads.
+	chReadConn driver.Conn
+
 	auth     *auth.Auth
 	authz    *authz.Engine
 	roleMgr  *RoleManager
@@ -61,6 +71,19 @@ type Service struct {
 	email    *email.Service
 	orgHosts *orghost.Resolver
 	foldGate CanonicalFoldGate
+	// serverURL is the deployment's API base URL, which MCP endpoint
+	// addresses are built on. Nil leaves official-server addresses on the
+	// platform domain empty.
+	serverURL *url.URL
+	features  feature.Provider
+}
+
+// WithServerURL sets the base URL that platform MCP endpoint addresses are
+// built on, so the Shadow MCP inventory can say where an official server is
+// served.
+func (s *Service) WithServerURL(serverURL *url.URL) *Service {
+	s.serverURL = serverURL
+	return s
 }
 
 // canonicalFoldOrg resolves the org id to fold under. A nil gate means no fold.
@@ -79,6 +102,7 @@ func NewService(
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	chConn driver.Conn,
+	chReadConn driver.Conn,
 	sessions *sessions.Manager,
 	roleMgr *RoleManager,
 	authz *authz.Engine,
@@ -90,17 +114,20 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("access"))
 
 	return &Service{
-		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
-		logger:   logger,
-		db:       db,
-		chConn:   chConn,
-		auth:     auth.New(logger, db, sessions, authz),
-		authz:    authz,
-		roleMgr:  roleMgr,
-		audit:    auditLogger,
-		email:    emailService,
-		orgHosts: orgHosts,
-		foldGate: foldGate,
+		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
+		logger:     logger,
+		db:         db,
+		chConn:     chConn,
+		chReadConn: chReadConn,
+		auth:       auth.New(logger, db, sessions, authz),
+		authz:      authz,
+		roleMgr:    roleMgr,
+		audit:      auditLogger,
+		email:      emailService,
+		orgHosts:   orgHosts,
+		foldGate:   foldGate,
+		serverURL:  nil,
+		features:   nil,
 	}
 }
 
@@ -738,50 +765,50 @@ func scopedGrantToGenRoleGrant(g *authz.ScopedGrant) *gen.RoleGrant {
 // permission scope. Used when RBAC is not enforced or for admin impersonation.
 func userVisibleScopeGrants() []*gen.ListRoleGrant {
 	return []*gen.ListRoleGrant{
-		{Scope: string(authz.ScopeOrgRead), Selectors: nil},
-		{Scope: string(authz.ScopeOrgAdmin), Selectors: nil},
-		{Scope: string(authz.ScopeProjectRead), Selectors: nil},
-		{Scope: string(authz.ScopeProjectWrite), Selectors: nil},
-		{Scope: string(authz.ScopeMCPRead), Selectors: nil},
-		{Scope: string(authz.ScopeMCPWrite), Selectors: nil},
-		{Scope: string(authz.ScopeMCPConnect), Selectors: nil},
-		{Scope: string(authz.ScopeEnvironmentRead), Selectors: nil},
-		{Scope: string(authz.ScopeEnvironmentWrite), Selectors: nil},
-		{Scope: string(authz.ScopeSkillRead), Selectors: nil},
-		{Scope: string(authz.ScopeSkillWrite), Selectors: nil},
-		{Scope: string(authz.ScopePluginWrite), Selectors: nil},
-		{Scope: string(authz.ScopeAssistantRead), Selectors: nil},
-		{Scope: string(authz.ScopeAssistantWrite), Selectors: nil},
-		{Scope: string(authz.ScopeRiskPolicyEvaluate), Selectors: nil},
-		{Scope: string(authz.ScopeRiskPolicyBypass), Selectors: nil},
-		{Scope: string(authz.ScopeRiskPolicyBlock), Selectors: nil},
-		{Scope: string(authz.ScopeInferenceExecute), Selectors: nil},
-		{Scope: string(authz.ScopeChatRead), Selectors: nil},
-		{Scope: string(authz.ScopeChatWrite), Selectors: nil},
-		{Scope: string(authz.ScopeLogRead), Selectors: nil},
-		{Scope: string(authz.ScopeMemoryRead), Selectors: nil},
-		{Scope: string(authz.ScopeMemoryWrite), Selectors: nil},
-		{Scope: string(authz.ScopeAgentRead), Selectors: nil},
-		{Scope: string(authz.ScopeAgentWrite), Selectors: nil},
-		{Scope: string(authz.ScopeAgentAuthorize), Selectors: nil},
-		{Scope: string(authz.ScopeAgentTransfer), Selectors: nil},
-		{Scope: string(authz.ScopeWorkloadRead), Selectors: nil},
-		{Scope: string(authz.ScopeWorkloadWrite), Selectors: nil},
-		{Scope: string(authz.ScopeOrgDeviceAgentSync), Selectors: nil},
-		{Scope: string(authz.ScopeOrgHooksIngest), Selectors: nil},
-		{Scope: string(authz.ScopeChannelsConnect), Selectors: nil},
-		{Scope: string(authz.ScopeChannelsAdmin), Selectors: nil},
-		{Scope: string(authz.ScopeChannelsReadAll), Selectors: nil},
+		{Scope: string(authz.ScopeOrgRead), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeOrgAdmin), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeProjectRead), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeProjectWrite), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeMCPRead), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeMCPWrite), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeMCPConnect), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeEnvironmentRead), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeEnvironmentWrite), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeSkillRead), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeSkillWrite), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopePluginWrite), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeAssistantRead), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeAssistantWrite), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeRiskPolicyEvaluate), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeRiskPolicyBypass), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeRiskPolicyBlock), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeInferenceExecute), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeChatRead), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeChatWrite), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeLogRead), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeMemoryRead), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeMemoryWrite), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeAgentRead), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeAgentWrite), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeAgentAuthorize), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeAgentTransfer), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeWorkloadRead), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeWorkloadWrite), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeOrgDeviceAgentSync), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeOrgHooksIngest), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeChannelsConnect), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeChannelsAdmin), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeChannelsReadAll), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
 	}
 }
 
 func listRoleGrantsFromGrants(grants []authz.Grant) []*gen.ListRoleGrant {
 	scoped := authz.GrantsToScopedGrants(grants)
-	// Direct selectors let clients apply principal precedence: a direct grant
-	// naming a resource outranks a block inherited from a role or everyone.
 	direct := make(map[string][]*gen.Selector)
-	for _, grant := range authz.DirectOverrideGrants(grants) {
-		direct[string(grant.Scope)] = append(direct[string(grant.Scope)], authzSelectorToGen(grant.Selector))
+	for scope, selectors := range authz.DirectSelectorsByScope(grants) {
+		for _, sel := range selectors {
+			direct[string(scope)] = append(direct[string(scope)], authzSelectorToGen(sel))
+		}
 	}
 	out := make([]*gen.ListRoleGrant, 0, len(scoped))
 	for _, g := range scoped {
@@ -897,7 +924,7 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 		attr.UserID(authCtx.UserID),
 	)
 
-	chQueries := chrepo.New(s.chConn)
+	chQueries := chrepo.New(s.chReadConn)
 
 	// Fast path: fetch specific challenges by ID (used for bucket expansion).
 	if len(payload.Ids) > 0 {
@@ -1240,7 +1267,7 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 		Offset:               uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
 	}
 
-	chQueries := chrepo.New(s.chConn)
+	chQueries := chrepo.New(s.chReadConn)
 
 	buckets, total, err := chQueries.ListChallengeBuckets(ctx, filters)
 	if err != nil {
@@ -1556,7 +1583,7 @@ func (s *Service) assignChallengeRole(ctx context.Context, tx pgx.Tx, authCtx *c
 	// organization-qualified read below validates caller-supplied IDs and the
 	// complete selector before any PostgreSQL role mutation is attempted. A row
 	// that has not reached ClickHouse yet remains unresolved and can be retried.
-	challenges, err := chrepo.New(s.chConn).ListChallengesByIDs(ctx, authCtx.ActiveOrganizationID, challengeIDs)
+	challenges, err := chrepo.New(s.chReadConn).ListChallengesByIDs(ctx, authCtx.ActiveOrganizationID, challengeIDs)
 	if err != nil {
 		return "", MemberRoleReconciliation{}, oops.E(oops.CodeUnavailable, err, "denied challenges could not be verified yet").LogError(ctx, s.logger)
 	}
@@ -1607,12 +1634,7 @@ func (s *Service) assignChallengeRole(ctx context.Context, tx pgx.Tx, authCtx *c
 					dimensions[key] = value
 				}
 			}
-			check := authz.Check{
-				Scope:        authz.Scope(challenge.Scope),
-				ResourceKind: challenge.ResourceKind,
-				ResourceID:   challenge.ResourceID,
-				Dimensions:   dimensions,
-			}
+			check := authz.RecordedCheck(authz.Scope(challenge.Scope), challenge.ResourceKind, challenge.ResourceID, dimensions)
 			roleAllows, authorizeErr := authz.GrantsAuthorize(roleGrants, check.WithStrictSelectorMatch())
 			if authorizeErr != nil {
 				return oops.E(oops.CodeBadRequest, authorizeErr, "challenge cannot be granted through this role").LogError(ctx, s.logger)
@@ -1670,7 +1692,10 @@ func validateChallengeAssignmentInput(challenges []chrepo.ChallengeSummary, chal
 }
 
 // RequestAccess sends email notifications to organization administrators when a user
-// requests access to a scope they don't have permission for.
+// requests access to a scope they don't have permission for. With the access
+// requests rollout on, it also stores the request so an administrator can
+// approve it as a temporary grant or deny it; asking again while that request
+// is pending returns it without notifying anyone again.
 func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessPayload) (*gen.RequestAccessResult, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
@@ -1698,6 +1723,18 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization info").LogError(ctx, logger)
 	}
 
+	stored, err := s.recordAccessRequest(ctx, ac, payload)
+	if err != nil {
+		return nil, err
+	}
+	var storedView *gen.AccessRequest
+	if stored != nil {
+		storedView = stored.view
+		if !stored.created {
+			return &gen.RequestAccessResult{SentToCount: 0, Request: storedView}, nil
+		}
+	}
+
 	// Get active organization administrators.
 	admins, err := repo.New(s.db).ListActiveOrganizationAdmins(ctx, ac.ActiveOrganizationID)
 	if err != nil {
@@ -1706,7 +1743,7 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 
 	if len(admins) == 0 {
 		logger.WarnContext(ctx, "no org admins found to notify for access request")
-		return &gen.RequestAccessResult{SentToCount: 0}, nil
+		return &gen.RequestAccessResult{SentToCount: 0, Request: storedView}, nil
 	}
 
 	// Build the manage access link. The query params let the dashboard open a
@@ -1719,6 +1756,9 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 		q := url.Values{}
 		q.Set("grant_user", ac.UserID)
 		q.Set("scope", payload.Scope)
+		if storedView != nil {
+			q.Set("request", storedView.ID)
+		}
 		if payload.ResourceID != nil && *payload.ResourceID != "" {
 			q.Set("resource_id", *payload.ResourceID)
 			if strings.HasPrefix(payload.Scope, "mcp:") {
@@ -1776,7 +1816,7 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 			attr.SlogAccessRequestAdminCount(len(admins)),
 			attr.SlogAccessRequestScope(payload.Scope),
 		)
-		return &gen.RequestAccessResult{SentToCount: 0}, nil
+		return &gen.RequestAccessResult{SentToCount: 0, Request: storedView}, nil
 	}
 
 	logger.InfoContext(ctx, "access request emails sent",
@@ -1785,7 +1825,7 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 		attr.SlogAccessRequestScope(payload.Scope),
 	)
 
-	return &gen.RequestAccessResult{SentToCount: sentCount}, nil
+	return &gen.RequestAccessResult{SentToCount: sentCount, Request: storedView}, nil
 }
 
 // ListIdentityAccess returns the MCP servers and skills accessible to a user

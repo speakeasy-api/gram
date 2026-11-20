@@ -26,7 +26,10 @@ import (
 	oktaresourceconnectionsrepo "github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -144,7 +147,7 @@ func newDevIDPFixture(t *testing.T, opts devIDPOptions) devIDPFixture {
 	require.NoError(t, err)
 	idpSecret, err := enc.Encrypt([]byte("idp-secret"))
 	require.NoError(t, err)
-	idpClient, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+	idpClient, err := q.CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 		OrganizationID: pgtype.Text{String: org, Valid: true}, RemoteSessionIssuerID: idpIssuer.ID, ClientID: devIDPClientID,
 		ClientSecretEncrypted:   pgtype.Text{String: idpSecret, Valid: true},
 		TokenEndpointAuthMethod: pgtype.Text{String: oauthwire.AuthMethodClientSecretPost, Valid: true},
@@ -192,7 +195,7 @@ func newDevIDPFixture(t *testing.T, opts devIDPOptions) devIDPFixture {
 	require.NoError(t, err)
 	encryptedSubject, err := enc.Encrypt([]byte(upstreamSubject))
 	require.NoError(t, err)
-	_, err = q.UpsertTrustedDelegationCredential(ctx, repo.UpsertTrustedDelegationCredentialParams{
+	_, err = q.UpsertTrustedDelegationCredentialFixture(ctx, repo.UpsertTrustedDelegationCredentialFixtureParams{
 		OrganizationID: org, ClientID: idpClient.ID, IssuerID: idpIssuer.ID, SubjectUrn: urn.NewUserSubject(human).String(), ExpectedGeneration: 0,
 		IdentityAssertionEncrypted: pgtype.Text{String: encryptedToken, Valid: true},
 		IdentityAssertionExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true, InfinityModifier: pgtype.Finite},
@@ -213,7 +216,7 @@ func newDevIDPFixture(t *testing.T, opts devIDPOptions) devIDPFixture {
 	serverURL, err := url.Parse("https://gram.example.test")
 	require.NoError(t, err)
 	challenges := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, db, enc, policy, nil, locks, serverURL, remotesessions.WithIDTokenVerifier(remotesessions.NewIDTokenVerifier(keys)))
-	chainer := New(logger, db, enc, challenges, remotesessions.NewDelegationService(db, enc, challenges), keys, locks)
+	chainer := New(logger, db, upstreamtokens.WithoutOrganizationEncryption(logger, db, enc), challenges, remotesessions.NewDelegationService(db, challenges), keys, locks)
 	observed := &recordingObserver{}
 	chainer.SetObserver(observed)
 	return devIDPFixture{
@@ -314,11 +317,8 @@ func TestDevIDP_RegistrationChangeRetiresStoredToken(t *testing.T) {
 	require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
 	require.True(t, f.chainer.HasUsableCredential(t.Context(), f.req))
 
-	rotated, err := f.enc.Encrypt([]byte("rotated-secret"))
-	require.NoError(t, err)
-	_, err = repo.New(f.db).UpdateOrganizationRemoteSessionClient(t.Context(), repo.UpdateOrganizationRemoteSessionClientParams{
-		ClientSecretEncrypted: pgtype.Text{String: rotated, Valid: true}, ID: f.idpClientID, OrganizationID: pgtype.Text{String: f.req.OrganizationID, Valid: true},
-	})
+	owner := clientsecrets.OwnerOf(pgtype.Text{String: f.req.OrganizationID, Valid: true}, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	_, err := clientsecretstest.New(t, f.db, f.enc).Set(t.Context(), f.db, f.idpClientID, owner, []byte("rotated-secret"), pgtype.Timestamptz{})
 	require.NoError(t, err)
 	require.False(t, f.chainer.HasUsableCredential(t.Context(), f.req), "status reads agree with the runtime")
 
@@ -356,7 +356,7 @@ func TestDevIDP_HeldDelegationClaim(t *testing.T) {
 			_, outcome := f.chainer.Acquire(t.Context(), f.req)
 			require.Equal(t, Outcome{Stage: StageDelegation, Reason: tc.reason, Confidence: ConfidenceVerified, Retryable: tc.retryable, Cached: false, Provider: remotesessions.EMAProviderExternal}, outcome)
 			require.Equal(t, requests, f.idp.Requests(), "a held claim contacts nobody")
-			require.Equal(t, tc.decision, NewGovernor(testenv.NewLogger(t), f.db, f.enc, f.chainer.delegation).RefreshDecision(t.Context(), f.req).Decision)
+			require.Equal(t, tc.decision, NewGovernor(testenv.NewLogger(t), f.db, upstreamtokens.WithoutOrganizationEncryption(testenv.NewLogger(t), f.db, f.enc), f.chainer.delegation).RefreshDecision(t.Context(), f.req).Decision)
 		})
 	}
 }

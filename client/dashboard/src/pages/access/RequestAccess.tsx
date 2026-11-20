@@ -46,7 +46,13 @@ export default function RequestAccess(): React.JSX.Element {
           },
         },
       });
-      setRequestState(result.sentToCount > 0 ? "sent" : "no-admin");
+      // A stored request reached the admins, including one asked for again
+      // while pending, which notifies nobody a second time.
+      setRequestState(
+        result.request !== undefined || result.sentToCount > 0
+          ? "sent"
+          : "no-admin",
+      );
     } catch {
       setRequestState("error");
     }

@@ -99,7 +99,7 @@ func TestBuildAuthorizationUrl_ScopeResolution(t *testing.T) {
 
 			userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "usi-scope-"+slugSuffix)
 
-			client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+			client, err := q.CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 				ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 				OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 				RemoteSessionIssuerID:   issuer.ID,

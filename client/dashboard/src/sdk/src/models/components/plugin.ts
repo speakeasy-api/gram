@@ -27,6 +27,10 @@ export type Plugin = {
    */
   assignments?: Array<PluginAssignment> | undefined;
   /**
+   * Whether the plugin's role audiences add and remove its MCP servers automatically, based on the MCP servers those roles can use. When false, only manual changes alter the plugin's server list.
+   */
+  autoAddServersEnabled: boolean;
+  /**
    * Whether automatic role distribution created this plugin. Read-only; preserved after edits and reuse.
    */
   autoCreated: boolean;
@@ -76,6 +80,7 @@ export const Plugin$inboundSchema: z.ZodMiniType<Plugin, unknown> = z.pipe(
     agent_plugins_v1_compatible: z.boolean(),
     assignment_count: z.optional(z.int()),
     assignments: z.optional(z.array(PluginAssignment$inboundSchema)),
+    auto_add_servers_enabled: z.boolean(),
     auto_created: z.boolean(),
     auto_sync_enabled: z.boolean(),
     created_at: z.pipe(
@@ -99,6 +104,7 @@ export const Plugin$inboundSchema: z.ZodMiniType<Plugin, unknown> = z.pipe(
     return remap$(v, {
       "agent_plugins_v1_compatible": "agentPluginsV1Compatible",
       "assignment_count": "assignmentCount",
+      "auto_add_servers_enabled": "autoAddServersEnabled",
       "auto_created": "autoCreated",
       "auto_sync_enabled": "autoSyncEnabled",
       "created_at": "createdAt",

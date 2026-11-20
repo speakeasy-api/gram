@@ -41,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -177,6 +178,8 @@ type AuthnChallengeState struct {
 	// FreshLoginForced marks a flow already sent back to the identity
 	// provider because its sign-in was revoked, so it never loops.
 	FreshLoginForced bool `json:"fresh_login_forced,omitempty"`
+	// AccountSwitches counts the person's switches to another Speakeasy account; maxAccountSwitches bounds it.
+	AccountSwitches int `json:"account_switches,omitempty"`
 	// AgentAuthorizationTarget fixes the only policy an agent selection may
 	// authorize. Older in-flight states omit it and remain self-only.
 	AgentAuthorizationTarget *AgentAuthorizationTarget `json:"agent_authorization_target,omitempty"`
@@ -463,6 +466,8 @@ func issuerGateFailureReason(err error) string {
 		return "tool_selection_resource_mismatch"
 	case errors.Is(err, errToolSelectionLoad):
 		return "tool_selection_load_failed"
+	case errors.Is(err, errSessionLivenessLoad):
+		return "session_liveness_load_failed"
 	case errors.Is(err, errAgentSessionCredentialLoad):
 		return "agent_session_load_failed"
 	case errors.Is(err, errWorkloadSessionCredentialLoad):
@@ -622,12 +627,14 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 			return ctx, nil, nil, false, err
 		}
 	}
-	// An organization gateway serves the organization's users, each with the
-	// servers their own access reaches; an agent, workload, or anonymous
-	// session has no such access to derive, so it is refused before any of
-	// its session state is read.
-	if endpoint.IsOrganizationGateway() && session.Subject().Kind != urn.SessionSubjectKindUser {
+	// The organization-wide gateway serves the organization's users, each with
+	// the servers their own access reaches. Machine callers use project-scoped
+	// gateways instead and are refused here before session state is read.
+	if endpoint.IsOrganizationWideGateway() && session.Subject().Kind != urn.SessionSubjectKindUser {
 		return ctx, nil, nil, false, fmt.Errorf("%w: the organization gateway accepts user sessions only", errCredentialRejected)
+	}
+	if endpoint.IsProjectGateway() && session.Subject().Kind == urn.SessionSubjectKindAnonymous {
+		return ctx, nil, nil, false, fmt.Errorf("%w: the project gateway does not accept anonymous sessions", errCredentialRejected)
 	}
 
 	// The consent-screen tool selection loads for every subject kind —
@@ -637,6 +644,14 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 	policy, err := s.loadSessionPolicy(ctx, endpoint, session.JTI())
 	if err != nil {
 		return ctx, nil, nil, false, fmt.Errorf("%w: %w", errToolSelectionLoad, err)
+	}
+	if !policy.rowConfirmed {
+		if err := s.requireLiveSession(ctx, endpoint, session.JTI()); err != nil {
+			if errors.Is(err, errSessionPolicyGone) {
+				return ctx, nil, nil, false, fmt.Errorf("%w: %w", errCredentialRejected, err)
+			}
+			return ctx, nil, nil, false, fmt.Errorf("%w: %w", errSessionLivenessLoad, err)
+		}
 	}
 	toolSelection, sessionRefreshable := policy.selection, policy.refreshable
 	if toolSelection != nil && !endpointAcceptsToolSelectionResource(endpoint, toolSelection.Resource) {
@@ -716,6 +731,7 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 		if err != nil {
 			return ctx, nil, nil, false, err
 		}
+		newCtx = withWorkloadSessionReach(newCtx, reach)
 	}
 	if subject.Kind == urn.SessionSubjectKindWorkload {
 		agentID, ok := authz.AdmittedWorkloadAgent(newCtx)
@@ -1137,13 +1153,12 @@ func (s *Service) authenticateIssuerGate(
 		refreshable   bool
 		valErr        error
 	)
-	// An organization gateway serves the organization's users, each with the
-	// servers their own access reaches. Principal credentials, agent keys,
-	// assistant tokens, and workload sessions are all bound to a project or a
-	// workload's own policy, so none of them signs in to it.
-	organizationGateway := endpoint.IsOrganizationGateway()
+	// The organization-wide gateway serves the organization's users and refuses
+	// machine credentials. Other endpoints continue through their own admission.
+	organizationWideGateway := endpoint.IsOrganizationWideGateway()
+	anyOrganizationGateway := endpoint.IsOrganizationGateway()
 	switch {
-	case principalcredential.IsToken(authToken) && !organizationGateway:
+	case principalcredential.IsToken(authToken) && !organizationWideGateway:
 		newCtx, subject, valErr = s.authenticateIssuerGatePrincipalCredential(ctx, authToken, endpoint)
 	case principalcredential.IsToken(authToken):
 		valErr = fmt.Errorf("%w: the organization gateway accepts user sessions only", errCredentialRejected)
@@ -1151,7 +1166,7 @@ func (s *Service) authenticateIssuerGate(
 		newCtx, subject, toolSelection, refreshable, valErr = s.validateUserSessionToken(ctx, authToken, baseURL, endpoint)
 	}
 	refreshableUserSession := subject != nil && refreshable
-	if subject == nil && !organizationGateway {
+	if subject == nil && !anyOrganizationGateway {
 		// Accept an assistant-runtime JWT, but only when the assistant
 		// belongs to the endpoint's project — otherwise a token minted
 		// in project A could resolve a remote_session linked under
@@ -1167,7 +1182,7 @@ func (s *Service) authenticateIssuerGate(
 			valErr = aerr
 		}
 	}
-	if subject == nil && !organizationGateway && strings.HasPrefix(authToken, "gram_") {
+	if subject == nil && !organizationWideGateway && strings.HasPrefix(authToken, "gram_") {
 		newCtx, subject, valErr = s.authenticateIssuerGateAgentKey(ctx, authToken, endpoint)
 		var denied *oops.ShareableError
 		if errors.As(valErr, &denied) && denied.Code == oops.CodeNotFound {
@@ -1340,10 +1355,12 @@ func clientCredentialMisconfiguredError(err error) *oops.ShareableError {
 	return oops.E(oops.CodeFailedPrecondition, err, "%s", selfClientMisconfiguredDescription)
 }
 
-// remoteSessionUnavailableError sets Retry-After on w and returns the 503 for a
-// required upstream token endpoint that is temporarily unavailable, so every
-// path that hits one tells the client the same thing and paces its retries.
+// remoteSessionUnavailableError returns the 503 for a required token endpoint that failed; only an outage sets its own Retry-After.
 func remoteSessionUnavailableError(w http.ResponseWriter, err error) *oops.ShareableError {
+	if address := remotesessions.OutageAddress(err); address != guardian.AddressFine {
+		// Still a 503, but without Retry-After: waiting does not fix an address.
+		return oops.E(oops.CodeUnavailable, err, "%s", address.EndUserMessage("This server", guardian.SignInAddress)).Unpaced()
+	}
 	if wait := remotesessions.RetryAfter(err); wait > oops.OutageRetryAfter {
 		outage := outageError(w, err, "This MCP server can't get the credential it needs right now. Retry "+outageWaitWords(wait)+". If it keeps happening, ask your administrator.")
 		w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())))
@@ -1401,6 +1418,9 @@ func (s *Service) recordRemoteSessionOutcome(ctx context.Context, authentication
 	}
 	if id, ok := remotesessions.UnreadableRemoteSessionID(errors.Join(causes...)); ok {
 		opts = append(opts, mcpconnectionattempts.RemoteSession(id))
+	}
+	if mcpconnectionattempts.AddressOf(code) != guardian.AddressFine {
+		opts = append(opts, remotesessions.OutageAddressOption(errors.Join(causes...)))
 	}
 	s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(ctx)), code, authentication.request, opts...)
 }

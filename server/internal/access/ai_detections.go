@@ -168,7 +168,7 @@ func (s *Service) ListAIDetectionUsers(ctx context.Context, payload *gen.ListAID
 	})
 	eg.Go(func() error {
 		var egErr error
-		rows, egErr = telemetryrepo.New(s.chConn).ListAIDetectionUsers(egCtx, telemetryrepo.ListAIDetectionUsersParams{
+		rows, egErr = telemetryrepo.New(s.chReadConn).ListAIDetectionUsers(egCtx, telemetryrepo.ListAIDetectionUsersParams{
 			OrganizationID:       ac.ActiveOrganizationID,
 			TargetID:             targetID,
 			CanonicalIdentityOrg: canonicalOrg,
@@ -206,7 +206,7 @@ func (s *Service) ListAIDetectionUsers(ctx context.Context, payload *gen.ListAID
 }
 
 func (s *Service) listAIDetectionModels(ctx context.Context, params telemetryrepo.ListAIDetectionSummariesParams) (*gen.ListAIDetectionsResult, error) {
-	rows, err := telemetryrepo.New(s.chConn).ListAIDetectionSummaries(ctx, params)
+	rows, err := telemetryrepo.New(s.chReadConn).ListAIDetectionSummaries(ctx, params)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list ai detections").LogError(ctx, s.logger)
 	}

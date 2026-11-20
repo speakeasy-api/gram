@@ -31,7 +31,7 @@ func privateIngressReadinessHandler(reviewer netingress.TokenReviewer, tokenFile
 			}
 			// An omitted audience uses the API server audience of this pod's token,
 			// not the separate audience required for ingress attestors.
-			//nolint:exhaustruct // TokenReview request only sets spec; Kubernetes owns metadata and status.
+			//nolint:exhaustruct_v5 // TokenReview request only sets spec; Kubernetes owns metadata and status.
 			review, err := reviewer.Create(ctx, &authenticationv1.TokenReview{
 				Spec: authenticationv1.TokenReviewSpec{Token: strings.TrimSpace(string(token)), Audiences: nil},
 			}, metav1.CreateOptions{})

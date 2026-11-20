@@ -380,7 +380,7 @@ importers:
         version: 14.11.1(react@19.3.1)(react-dom@19.3.1(react@19.3.1))
       nuqs:
         specifier: ^2.9.0
-        version: 2.9.0(@tanstack/react-router@1.170.41(react@19.3.1)(react-dom@19.3.1(react@19.3.1)))(react@19.3.1)(react-router@8.5.1(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.3.1)(react-dom@19.3.1(react@19.3.1)))
+        version: 2.9.0(@tanstack/react-router@1.170.41(react@19.3.1)(react-dom@19.3.1(react@19.3.1)))(react@19.3.1)(react-router@8.5.2(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.3.1)(react-dom@19.3.1(react@19.3.1)))
       posthog-js:
         specifier: ^1.442.1
         version: 1.442.1(@types/react@19.3.0)(react@19.3.1)
@@ -409,8 +409,8 @@ importers:
         specifier: ^4.12.2
         version: 4.12.2(react@19.3.1)(react-dom@19.3.1(react@19.3.1))
       react-router:
-        specifier: ^8.5.0
-        version: 8.5.1(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.3.1)(react-dom@19.3.1(react@19.3.1))
+        specifier: ^8.5.2
+        version: 8.5.2(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.3.1)(react-dom@19.3.1(react@19.3.1))
       recharts:
         specifier: ^3.9.2
         version: 3.9.2(react@19.3.1)(react-dom@19.3.1(react@19.3.1))(react-is@17.0.2)
@@ -435,9 +435,6 @@ importers:
       tw-shimmer:
         specifier: ^0.4.11
         version: 0.4.11(tailwindcss@4.3.5)
-      uuid:
-        specifier: ^14.0.1
-        version: 14.0.1
       vega:
         specifier: ^6.4.0
         version: 6.4.0
@@ -6662,8 +6659,8 @@ packages:
       react: '>= 16.3'
       react-dom: '>= 16.3'
 
-  react-router@8.5.1:
-    resolution: {integrity: sha512-5u1eQ46QjuXjNfEnLwzrnou1Bm5dquO3xjVYkkMYCudtkicD2AQHtx+fvXzPATtPJx8TW6DR1x1TDRqsfHyZBw==}
+  react-router@8.5.2:
+    resolution: {integrity: sha512-luPXqNUAIZAmCHbeBysc2KO7VJjckIMZk4ByEetS7Jotit8R6lLSVVeC76UE//AYK6QD6tAnVAPGkvmqMd+b1w==}
     engines: {node: '>=22.22.0'}
     peerDependencies:
       '@types/react': '>=19.2.0'
@@ -7457,10 +7454,6 @@ packages:
 
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
-
-  uuid@14.0.1:
-    resolution: {integrity: sha512-6ZxzVpzDXDa3bJWaHilVayA+BH/1zmxCJoVgvmqJnid/gPoKHxUrS/aC/T6LGQtNHT+XHG9fXPJB4d+IrU30Ew==}
-    hasBin: true
 
   validate-npm-package-name@7.0.2:
     resolution: {integrity: sha512-hVDIBwsRruT73PbK7uP5ebUt+ezEtCmzZz3F59BSr2F6OVFnJ/6h8liuvdLrQ88Xmnk6/+xGGuq+pG9WwTuy3A==}
@@ -13174,13 +13167,13 @@ snapshots:
       path-key: 4.0.0
       unicorn-magic: 0.3.0
 
-  nuqs@2.9.0(@tanstack/react-router@1.170.41(react@19.3.1)(react-dom@19.3.1(react@19.3.1)))(react@19.3.1)(react-router@8.5.1(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.3.1)(react-dom@19.3.1(react@19.3.1))):
+  nuqs@2.9.0(@tanstack/react-router@1.170.41(react@19.3.1)(react-dom@19.3.1(react@19.3.1)))(react@19.3.1)(react-router@8.5.2(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.3.1)(react-dom@19.3.1(react@19.3.1))):
     dependencies:
       '@standard-schema/spec': 1.0.0
       react: 19.3.1
     optionalDependencies:
       '@tanstack/react-router': 1.170.41(react@19.3.1)(react-dom@19.3.1(react@19.3.1))
-      react-router: 8.5.1(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.3.1)(react-dom@19.3.1(react@19.3.1))
+      react-router: 8.5.2(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.3.1)(react-dom@19.3.1(react@19.3.1))
 
   object-assign@4.1.1: {}
 
@@ -13788,7 +13781,7 @@ snapshots:
       react-dom: 19.3.1(react@19.3.1)
       react-draggable: 4.7.2(react@19.3.1)(react-dom@19.3.1(react@19.3.1))
 
-  react-router@8.5.1(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.3.1)(react-dom@19.3.1(react@19.3.1)):
+  react-router@8.5.2(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.3.1)(react-dom@19.3.1(react@19.3.1)):
     dependencies:
       '@remix-run/route-pattern': 0.22.1
       '@types/react': 19.3.0
@@ -14632,8 +14625,6 @@ snapshots:
     optional: true
 
   util-deprecate@1.0.2: {}
-
-  uuid@14.0.1: {}
 
   validate-npm-package-name@7.0.2: {}
 

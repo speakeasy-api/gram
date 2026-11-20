@@ -2,6 +2,7 @@ package toolsets_test
 
 import (
 	"context"
+	"github.com/jackc/pgx/v5/pgtype"
 	"testing"
 	"time"
 
@@ -31,9 +32,9 @@ func seedContentMutationMemberships(t *testing.T, ctx context.Context, ti *testI
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	q := pluginsrepo.New(ti.conn)
-	automatic, err := q.CreatePlugin(ctx, pluginsrepo.CreatePluginParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, Name: "Automatic", Slug: "automatic"})
+	automatic, err := q.CreatePlugin(ctx, pluginsrepo.CreatePluginParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, Name: "Automatic", Slug: "automatic", AutoAddServersEnabled: pgtype.Bool{Bool: true, Valid: true}})
 	require.NoError(t, err)
-	manual, err := q.CreatePlugin(ctx, pluginsrepo.CreatePluginParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, Name: "Manual", Slug: "manual"})
+	manual, err := q.CreatePlugin(ctx, pluginsrepo.CreatePluginParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, Name: "Manual", Slug: "manual", AutoAddServersEnabled: pgtype.Bool{Bool: true, Valid: true}})
 	require.NoError(t, err)
 	role, err := accessrepo.New(ti.conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{OrganizationID: ac.ActiveOrganizationID, WorkosSlug: "content-edit", WorkosName: "Content edit", WorkosCreatedAt: conv.ToPGTimestamptz(time.Now()), WorkosUpdatedAt: conv.ToPGTimestamptz(time.Now())})
 	require.NoError(t, err)
@@ -134,7 +135,7 @@ func TestUpdateToolsetRemovingLastPlatformToolRestoresEligibility(t *testing.T) 
 	require.NoError(t, err)
 	ac, _ := contextvalues.GetAuthContext(ctx)
 	q := pluginsrepo.New(ti.conn)
-	fresh, err := q.CreatePlugin(ctx, pluginsrepo.CreatePluginParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, Name: "New audience", Slug: "new-audience"})
+	fresh, err := q.CreatePlugin(ctx, pluginsrepo.CreatePluginParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, Name: "New audience", Slug: "new-audience", AutoAddServersEnabled: pgtype.Bool{Bool: true, Valid: true}})
 	require.NoError(t, err)
 	_, err = q.AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: role, PluginID: fresh.ID})
 	require.NoError(t, err)

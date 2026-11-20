@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Generated repository parameter types intentionally use documented zero-value optional fields.
+//nolint:exhaustruct_v5 // Generated repository parameter types intentionally use documented zero-value optional fields.
 package platformmcp
 
 import (

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
-import { Skeleton, SkeletonCode, SkeletonParagraph, SkeletonTable } from ".";
+import { Skeleton, SkeletonCode, SkeletonParagraph } from ".";
 
 const meta: Meta<typeof Skeleton> = {
   title: "Design System/Skeleton",
@@ -40,10 +40,6 @@ export const Paragraph: Story = {
       <SkeletonParagraph lines={4} />
     </div>
   ),
-};
-
-export const TablePlaceholder: Story = {
-  render: () => <SkeletonTable />,
 };
 
 export const CodePlaceholder: Story = {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"io"
 	"net/http"
@@ -58,7 +59,7 @@ func TestDelegationRefreshNormalizesProviderLifetime(t *testing.T) {
 					p.metadata.JwksURI = upstream.URL + "/jwks"
 					p.client.ClientSecretEncrypted.String, err = s.enc.Encrypt([]byte("secret"))
 					require.NoError(t, err)
-					manager := &ChallengeManager{enc: s.enc, policy: policy, logger: testenv.NewLogger(t)}
+					manager := &ChallengeManager{enc: s.enc, secrets: clientsecrets.WithoutOrganizationEncryption(testenv.NewLogger(t), s.db, s.enc), policy: policy, logger: testenv.NewLogger(t)}
 					var original time.Time
 					login := delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second)
 					if known {

@@ -347,7 +347,9 @@ func buildRiskFindingRelayExport(records []*logsv1.LogRecord) *collectorlogsv1.E
 					DroppedAttributesCount: 0,
 				},
 				LogRecords: records,
+				SchemaUrl:  "",
 			}},
+			SchemaUrl: "",
 		}},
 	}
 }

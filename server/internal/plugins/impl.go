@@ -45,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/hooksrollout"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/keys"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
@@ -168,13 +169,16 @@ type Service struct {
 	github    *GitHubConfig
 	serverURL string
 	keyPrefix string
-	// features drives the phased hooks rollout gate applied to every publish (see
-	// publishProject). Both the automated publisher (NewPublisher) and the
-	// dashboard service (NewService) set it, so interactive publishes are gated
-	// too. A nil provider fails CLOSED — non-canary orgs are treated as not
-	// eligible and carry their existing hooks — so a missing provider can never
-	// force-advance an org.
-	features feature.Provider
+	// hooksPins and features drive the phased hooks rollout gate applied to
+	// every publish (see publishProject): the admin-managed pins decide, and the
+	// legacy FlagHooksRollout payload covers orgs no pin applies to yet. Both
+	// the automated publisher (NewPublisher) and the dashboard service
+	// (NewService) set them, so interactive publishes are gated too. Either one
+	// failing or missing fails CLOSED — non-canary orgs are treated as not
+	// eligible and carry their existing hooks — so it can never force-advance
+	// an org.
+	hooksPins hooksrollout.PinReader
+	features  feature.Provider
 	// publisher enqueues the republish that propagates a plugin change to the
 	// project's marketplace repo. Nil on the automated publisher (which is
 	// itself the thing doing the publishing) and in tests; signalPublish is a
@@ -222,10 +226,11 @@ func NewService(
 		github:    github,
 		serverURL: serverURL,
 		keyPrefix: auth.APIKeyPrefix(env),
-		// features gates human/dashboard-initiated hook-output changes (marketplace
-		// rename via UpdateMarketplaceSettings, browser-login toggle via
-		// productfeatures) on the phased hooks rollout, mirroring the automated
-		// publisher. Fail-closed when nil: non-canary orgs defer those changes.
+		// hooksPins and features gate human/dashboard-initiated hook-output
+		// changes (marketplace rename via UpdateMarketplaceSettings,
+		// browser-login toggle via productfeatures) on the phased hooks rollout,
+		// mirroring the automated publisher.
+		hooksPins:             hooksrollout.NewStore(db),
 		features:              features,
 		publisher:             publisher,
 		publicationRequests:   PublicationRequests{Enabled: false},
@@ -262,6 +267,7 @@ func NewPublisher(
 		github:    github,
 		serverURL: serverURL,
 		keyPrefix: auth.APIKeyPrefix(env),
+		hooksPins: hooksrollout.NewStore(db),
 		features:  features,
 		// The publisher runs the publish workflow itself; it never signals one.
 		publisher:             nil,
@@ -361,6 +367,7 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 			IsDefault:                conv.FromPGBool[bool](r.IsDefault),
 			AutoCreated:              r.AutoCreated,
 			AutoSyncEnabled:          PluginAutoSyncEnabled(r.AutoSyncEnabled),
+			AutoAddServersEnabled:    r.AutoAddServersEnabled,
 			ServerCount:              &r.ServerCount,
 			SkillCount:               &r.SkillCount,
 			AssignmentCount:          &r.AssignmentCount,
@@ -536,13 +543,14 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	created, err := NewPluginMetadataCore(s.audit, s.publicationRequests).CreateInTransaction(ctx, tx, CreatePluginMutation{
-		OrganizationID:  ac.ActiveOrganizationID,
-		ProjectID:       *ac.ProjectID,
-		Name:            payload.Name,
-		Slug:            payload.Slug,
-		Description:     payload.Description,
-		AutoSyncEnabled: payload.AutoSyncEnabled,
-		Actor:           PluginMetadataActor{UserID: ac.UserID, DisplayName: ac.Email},
+		OrganizationID:        ac.ActiveOrganizationID,
+		ProjectID:             *ac.ProjectID,
+		Name:                  payload.Name,
+		Slug:                  payload.Slug,
+		Description:           payload.Description,
+		AutoSyncEnabled:       payload.AutoSyncEnabled,
+		AutoAddServersEnabled: payload.AutoAddServersEnabled,
+		Actor:                 PluginMetadataActor{UserID: ac.UserID, DisplayName: ac.Email},
 	})
 	if err != nil {
 		return nil, s.pluginMetadataError(ctx, err, "create plugin")
@@ -603,18 +611,37 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 		}
 	}
 
-	updated, err := NewPluginMetadataCore(s.audit, s.publicationRequests).UpdateInTransaction(ctx, tx, UpdatePluginMutation{
-		OrganizationID:  ac.ActiveOrganizationID,
-		ProjectID:       *ac.ProjectID,
-		PluginID:        pluginID,
-		Name:            &payload.Name,
-		Slug:            &payload.Slug,
-		Description:     payload.Description,
-		KeepDescription: false,
-		AutoSyncEnabled: payload.AutoSyncEnabled,
-		Actor:           PluginMetadataActor{UserID: ac.UserID, DisplayName: ac.Email},
+	// Turning on automatic server adding fills the plugin from its role
+	// audiences. Like adding a server by hand, an organization administrator's
+	// own change is recorded as the Shadow MCP approval it stands for.
+	updateCtx := ctx
+	if payload.AutoAddServersEnabled != nil && *payload.AutoAddServersEnabled {
+		admissionCtx, admissionErr := admission.AdministratorWriteContext(ctx, s.authz, ac.ActiveOrganizationID)
+		if admissionErr != nil {
+			return nil, oops.E(oops.CodeUnavailable, admissionErr, "distribution approval could not be verified safely").LogError(ctx, s.logger)
+		}
+		updateCtx = admissionCtx
+	}
+
+	updated, err := NewPluginMetadataCore(s.audit, s.publicationRequests).UpdateInTransaction(updateCtx, tx, UpdatePluginMutation{
+		OrganizationID:        ac.ActiveOrganizationID,
+		ProjectID:             *ac.ProjectID,
+		PluginID:              pluginID,
+		Name:                  &payload.Name,
+		Slug:                  &payload.Slug,
+		Description:           payload.Description,
+		KeepDescription:       false,
+		AutoSyncEnabled:       payload.AutoSyncEnabled,
+		AutoAddServersEnabled: payload.AutoAddServersEnabled,
+		DeliveryGuard:         s.distributionAdmission,
+		Actor:                 PluginMetadataActor{UserID: ac.UserID, DisplayName: ac.Email},
 	})
 	if err != nil {
+		// Turning on automatic server adding fills the plugin from its role
+		// audiences, which the Shadow MCP admission guard can refuse.
+		if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrPrivateGatewayAudience) || errors.Is(err, admission.ErrUnavailable) {
+			return nil, mapDistributionAdmissionError(err)
+		}
 		return nil, s.pluginMetadataError(ctx, err, "update plugin")
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -1537,22 +1564,34 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "read published marketplace name").LogError(ctx, s.logger)
 	}
 
+	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectSlug, *ac.ProjectID, s.projectServerURL(ctx, *ac.ProjectID), publishedHooksConfig)
+
+	// For vibe, check the gate before minting anything: a pinned release
+	// without the provider, or an org name that breaks the AP1.0 name schema,
+	// is a failed precondition, not a 500 — and must not store a hooks key.
+	if payload.Platform == "vibe" && !VibeObservabilityPluginAvailable(cfg) {
+		if !vibeProviderReleased() {
+			return nil, nil, oops.E(oops.CodeFailedPrecondition, nil, "the pinned speakeasy-hooks release ("+hooksBinaryVersion+") does not carry the vibe provider; it opens when a release with hooks/relay/vibe.go is pinned")
+		}
+		return nil, nil, oops.E(oops.CodeFailedPrecondition, nil, "the organization name produces a plugin name that does not satisfy the Agent Plugins 1.0 name schema (max 64 characters, starting with a letter or digit)")
+	}
+
 	candidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks-download")
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "build hooks api key").LogError(ctx, s.logger)
 	}
-
-	if err := s.persistDownloadAPIKey(ctx, ac, candidate); err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "persist hooks api key").LogError(ctx, s.logger)
-	}
-
-	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectSlug, *ac.ProjectID, s.projectServerURL(ctx, *ac.ProjectID), publishedHooksConfig)
 	cfg.HooksAPIKey = candidate.fullKey
 	cfg.InstallRoute = InstallRouteDownload
 
+	// Generate first, persist the key only on success: a failed generation
+	// (e.g. an org name the schema rejects) must not leave a stored hooks key
+	// behind — each attempt used to mint one.
 	archive, err := ObservabilityPluginZip(cfg, payload.Platform)
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "generate observability plugin package").LogError(ctx, s.logger)
+	}
+	if err := s.persistDownloadAPIKey(ctx, ac, candidate); err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "persist hooks api key").LogError(ctx, s.logger)
 	}
 
 	filename := "observability"
@@ -1569,6 +1608,8 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 		filename = "observability-openclaw"
 	case "pi":
 		filename = "observability-pi"
+	case "vibe":
+		filename = "observability-vibe"
 	}
 	return &gen.DownloadObservabilityPluginResult{
 		ContentType:        "application/zip",
@@ -1741,21 +1782,23 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 	}
 
 	result := &gen.PublishStatusResult{
-		Configured:                s.github != nil,
-		Connected:                 false,
-		RepoOwner:                 nil,
-		RepoName:                  nil,
-		RepoURL:                   nil,
-		MarketplaceURL:            nil,
-		ClaudeObservabilityPlugin: nil,
-		CodexObservabilityPlugin:  nil,
-		CursorObservabilityPlugin: nil,
-		HasCollaborators:          nil,
-		UpToDate:                  nil,
-		AutomaticSyncPending:      nil,
-		Plugins:                   nil,
-		LastPublishedAt:           nil,
-		LiveVersion:               nil,
+		Configured:                 s.github != nil,
+		Connected:                  false,
+		RepoOwner:                  nil,
+		RepoName:                   nil,
+		RepoURL:                    nil,
+		MarketplaceURL:             nil,
+		ClaudeObservabilityPlugin:  nil,
+		CodexObservabilityPlugin:   nil,
+		CursorObservabilityPlugin:  nil,
+		VibeObservabilityPlugin:    nil,
+		VibeObservabilityAvailable: nil,
+		HasCollaborators:           nil,
+		UpToDate:                   nil,
+		AutomaticSyncPending:       nil,
+		Plugins:                    nil,
+		LastPublishedAt:            nil,
+		LiveVersion:                nil,
 	}
 
 	if s.github != nil {
@@ -1799,6 +1842,19 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				result.ClaudeObservabilityPlugin = conv.PtrEmpty(ClaudeObservabilitySlug(slugCfg))
 				result.CodexObservabilityPlugin = conv.PtrEmpty(CodexObservabilitySlug(slugCfg))
 				result.CursorObservabilityPlugin = conv.PtrEmpty(CursorObservabilitySlug(slugCfg))
+				// The ZIP download depends only on the pin and the org name,
+				// not on the marketplace repo, so availability is reported
+				// on VibeObservabilityPluginAvailable alone. The slug is
+				// reported from what was actually published: the stored
+				// published hooks version matching the current generator —
+				// a first publish skips the rollout gate and writes the
+				// current hooks subtree, so rollout eligibility is the wrong
+				// signal here.
+				vibeStatus := VibeObservabilityStatusFor(slugCfg, conv.FromPGTextOrEmpty[string](conn.PublishedHooksVersion))
+				result.VibeObservabilityAvailable = &vibeStatus.Available
+				if vibeStatus.Published {
+					result.VibeObservabilityPlugin = conv.PtrEmpty(vibeStatus.Plugin)
+				}
 			}
 			// The marketplace URL contains a bearer token, not just a package location.
 			if admin && conn.MarketplaceToken.Valid && s.serverURL != "" {
@@ -2122,8 +2178,9 @@ type PublishProjectInput struct {
 	// There is deliberately NO flag to opt a publish into (or out of) hooks-
 	// version gating: every publish path is gated unconditionally inside
 	// publishProject, so no caller can force a hooks upgrade onto an org the
-	// rollout hasn't cleared. The only lever to advance hooks is the
-	// FlagHooksRollout payload pin in PostHog (plus the hardcoded canary).
+	// rollout hasn't cleared. The only lever to advance hooks is the org's
+	// rollout pin in the admin dashboard (plus the hardcoded canary, and the
+	// legacy hooks-rollout flag for orgs no pin covers yet).
 	SkipIfUnchanged bool
 	// IncludePausedPlugins makes this a manual sync, like the dashboard's
 	// PublishPlugins: it also publishes the pending changes of plugins whose
@@ -2264,29 +2321,60 @@ type publishProjectInput struct {
 	HooksKeyCandidate *pluginAPIKeyCandidate
 }
 
-// publishOutcome is the internal result of publishProject. Skipped is true when
-// SkipIfUnchanged was set and the fingerprint matched, in which case no GitHub
-// commit was made and RepoURL points at the existing repo (or is empty if the
-// project has no connection yet).
-// canaryHooksOrgSlugs always receive the current hooksGeneratorVersion
-// immediately, bypassing the FlagHooksRollout payload. This is a code-side
-// allowlist rather than PostHog group targeting on purpose: the provider
-// returns no payload when PostHog is disabled or unreachable, and we never want
-// such an outage to strand our own team on a stale hooks version.
-var canaryHooksOrgSlugs = map[string]bool{
-	"speakeasy-team": true,
+// CurrentHooksGeneratorVersion reports hooksGeneratorVersion as a number: the
+// hooks version this build publishes to an organization once its rollout pin
+// reaches it.
+func CurrentHooksGeneratorVersion() (int, error) {
+	current, err := strconv.Atoi(hooksGeneratorVersion)
+	if err != nil {
+		return 0, fmt.Errorf("parse hooks generator version: %w", err)
+	}
+	return current, nil
 }
 
 // hooksRolloutEligible reports whether the org is cleared to receive the current
-// hooksGeneratorVersion. Canary orgs always are. Otherwise the FlagHooksRollout
-// payload — JSON {"version": N} naming the highest hooks version cleared for the
-// org — must reach the current version. It fails closed: a missing provider,
-// payload, parse error, or resolve error all mean "not eligible", so the org
-// keeps its published hooks rather than rolling forward on an incomplete signal.
+// hooksGeneratorVersion. Canary orgs always are. Otherwise the org's effective
+// rollout pin — its override, or else the platform-wide default, both set from
+// the admin dashboard — must reach the current version. Until a default pin
+// exists, an org without an override falls back to the legacy FlagHooksRollout
+// payload. It fails closed: a pin read error, a missing provider or payload, or
+// a parse error all mean "not eligible", so the org keeps its published hooks
+// rather than rolling forward on an incomplete signal.
 func (s *Service) hooksRolloutEligible(ctx context.Context, orgID, orgSlug string) bool {
-	if canaryHooksOrgSlugs[orgSlug] {
+	if hooksrollout.IsCanary(orgSlug) {
 		return true
 	}
+
+	// hooksGeneratorVersion is a compile-time numeric constant; a non-numeric
+	// value would be a programming error, so treat it as "no one is eligible"
+	// rather than silently rolling everyone forward.
+	current, err := CurrentHooksGeneratorVersion()
+	if err != nil {
+		return false
+	}
+
+	if s.hooksPins == nil {
+		return false
+	}
+	pins, err := s.hooksPins.OrganizationPins(ctx, orgID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "read hooks rollout pins; carrying current hooks",
+			attr.SlogOrganizationID(orgID),
+			attr.SlogError(err),
+		)
+		return false
+	}
+	if pin, _ := pins.Effective(); pin != nil {
+		return pin.Version >= current
+	}
+
+	return s.legacyHooksRolloutFlagEligible(ctx, orgID, orgSlug, current)
+}
+
+// legacyHooksRolloutFlagEligible reads the FlagHooksRollout payload — JSON
+// {"version": N} naming the highest hooks version cleared for the org — for
+// orgs no admin pin covers yet.
+func (s *Service) legacyHooksRolloutFlagEligible(ctx context.Context, orgID, orgSlug string, current int) bool {
 	if s.features == nil {
 		return false
 	}
@@ -2311,14 +2399,6 @@ func (s *Service) hooksRolloutEligible(ctx context.Context, orgID, orgSlug strin
 			attr.SlogOrganizationID(orgID),
 			attr.SlogError(err),
 		)
-		return false
-	}
-
-	// hooksGeneratorVersion is a compile-time numeric constant; a non-numeric
-	// value would be a programming error, so treat it as "no one is eligible"
-	// rather than silently rolling everyone forward.
-	current, err := strconv.Atoi(hooksGeneratorVersion)
-	if err != nil {
 		return false
 	}
 
@@ -2421,8 +2501,9 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// UNCONDITIONAL — it is not an opt-in per call site — so no publish path (the
 	// automated rollout, a dashboard publish, a marketplace rename, an
 	// browser-login toggle) can force a hooks change onto an org that the
-	// rollout hasn't cleared. The single lever to advance an org is the
-	// FlagHooksRollout payload pin in PostHog (plus the hardcoded canary); see
+	// rollout hasn't cleared. The single lever to advance an org is its rollout
+	// pin in the admin dashboard (plus the hardcoded canary, and the legacy
+	// hooks-rollout flag for orgs no pin covers yet); see
 	// hooksRolloutEligible. When an org isn't eligible we carry its already-
 	// published hooks verbatim (both version AND config), because regenerating
 	// always lands on the current generator version and would advance it past the
@@ -3843,6 +3924,7 @@ func pluginToGen(p repo.Plugin, servers []repo.PluginServer, wrappers map[uuid.U
 		IsDefault:                conv.FromPGBool[bool](p.IsDefault),
 		AutoCreated:              p.AutoCreated,
 		AutoSyncEnabled:          PluginAutoSyncEnabled(p.AutoSyncEnabled),
+		AutoAddServersEnabled:    p.AutoAddServersEnabled,
 		ServerCount:              nil,
 		SkillCount:               nil,
 		AssignmentCount:          nil,

@@ -54,7 +54,7 @@ export type RequestAccessMutationError =
  * requestAccess access
  *
  * @remarks
- * Request access to a scope by sending an email notification to organization administrators.
+ * Request access to a scope. Organization administrators are emailed. With the access requests rollout on, a signed-in member's request is also stored, so an administrator can approve it as temporary access or deny it from the dashboard or Slack.
  */
 export function useRequestAccessMutation(
   options?: MutationHookOptions<

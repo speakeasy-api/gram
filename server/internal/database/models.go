@@ -14,6 +14,89 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// Requests from members for access they were denied, decided by an organization admin. An approval creates a temporary grant.
+type AccessRequest struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// The Speakeasy user who asked for access.
+	// @access: confidential
+	RequesterUserID string
+	// The scope asked for, e.g. "project:read".
+	// @access: confidential
+	Scope string
+	// Where the scope applies, in the shape of principal_grants.selectors.
+	// @access: opaque-restricted
+	Selector []byte
+	// Name of the resource the request is for, as it was when requested.
+	// @access: opaque-confidential
+	ResourceName pgtype.Text
+	// Free-form note from the requester to the admins.
+	// @access: opaque-restricted
+	Message pgtype.Text
+	// pending, approved, denied, expired or withdrawn.
+	// @access: confidential
+	Status string
+	// The admin who approved or denied the request.
+	// @access: confidential
+	DecidedByUserID pgtype.Text
+	// Where the decision came from: dashboard or slack.
+	// @access: confidential
+	DecidedVia pgtype.Text
+	// @access: confidential
+	DecidedAt pgtype.Timestamptz
+	// The principal_grants row an approval created. Soft reference: the grant may be revoked later.
+	// @access: confidential
+	TemporaryGrantID uuid.NullUUID
+	// IDs of the denied challenges in the ClickHouse authz_challenges table that this request covers.
+	// @access: opaque-confidential
+	ChallengeIds []string
+	// When a pending request lapses.
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+// Notifications sent for an access request, such as one Slack DM per admin.
+type AccessRequestMessage struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	AccessRequestID uuid.UUID
+	// @access: confidential
+	Provider string
+	// @access: confidential
+	Kind string
+	// @access: confidential
+	RecipientUserID string
+	// @access: confidential
+	SlackTeamID pgtype.Text
+	// @access: confidential-pii
+	SlackUserID pgtype.Text
+	// @access: confidential
+	SlackChannelID pgtype.Text
+	// @access: confidential
+	SlackMessageTs pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
 type AdminMcpAuthorizationGrant struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -2793,33 +2876,6 @@ type ExternalMcpToolDefinition struct {
 	Deleted bool
 }
 
-type ExternalOauthClientRegistration struct {
-	// @access: confidential
-	ID uuid.UUID
-	// @access: confidential
-	OrganizationID string
-	// @access: confidential
-	ProjectID uuid.UUID
-	// @access: restricted
-	OauthServerIssuer string
-	// @access: restricted
-	ClientID string
-	// @access: secret-restricted
-	ClientSecretEncrypted pgtype.Text
-	// @access: confidential
-	ClientIDIssuedAt pgtype.Timestamptz
-	// @access: confidential
-	ClientSecretExpiresAt pgtype.Timestamptz
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
-	// @access: confidential
-	UpdatedAt pgtype.Timestamptz
-	// @access: confidential
-	DeletedAt pgtype.Timestamptz
-	// @access: confidential
-	Deleted bool
-}
-
 type ExternalOauthServerMetadatum struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -3046,6 +3102,26 @@ type GlobalRole struct {
 	DeletedAt pgtype.Timestamptz
 	// @access: confidential
 	Deleted bool
+}
+
+type HooksRolloutPin struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	Seq int64
+	// NULL for the platform-wide default pin.
+	// @access: confidential
+	OrganizationID pgtype.Text
+	// Highest hooks generator version the scope is cleared for. NULL clears an organization override.
+	// @access: confidential
+	Version pgtype.Int4
+	// Email of the staff operator who made the change.
+	// @access: confidential-pii
+	SetBy string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type HooksServerNameOverride struct {
@@ -5642,6 +5718,8 @@ type Plugin struct {
 	// @access: confidential
 	AutoSyncEnabled pgtype.Bool
 	// @access: confidential
+	AutoAddServersEnabled bool
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
@@ -7060,8 +7138,6 @@ type ShadowMcpOfficialServer struct {
 	ServerUrl string
 	// @access: confidential
 	McpServerID uuid.NullUUID
-	// @access: confidential
-	AllowDirectAccess bool
 	// @access: confidential
 	CreatedByUserID pgtype.Text
 	// @access: confidential
@@ -8800,43 +8876,6 @@ type UserHiddenMcpServer struct {
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
-}
-
-type UserOauthToken struct {
-	// @access: confidential
-	ID uuid.UUID
-	// @access: confidential
-	UserID string
-	// @access: confidential
-	OrganizationID string
-	// @access: confidential
-	ProjectID uuid.UUID
-	// @access: confidential
-	ClientRegistrationID uuid.UUID
-	// @access: confidential
-	ToolsetID uuid.UUID
-	// @access: restricted
-	OauthServerIssuer string
-	// @access: secret-restricted
-	AccessTokenEncrypted string
-	// @access: secret-restricted
-	RefreshTokenEncrypted pgtype.Text
-	// @access: confidential
-	TokenType pgtype.Text
-	// @access: confidential
-	ExpiresAt pgtype.Timestamptz
-	// @access: opaque-restricted
-	Scopes []string
-	// @access: confidential
-	ProviderName pgtype.Text
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
-	// @access: confidential
-	UpdatedAt pgtype.Timestamptz
-	// @access: confidential
-	DeletedAt pgtype.Timestamptz
-	// @access: confidential
-	Deleted bool
 }
 
 type UserSession struct {

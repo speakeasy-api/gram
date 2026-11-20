@@ -93,7 +93,7 @@ export const AVAILABLE_MODELS: AvailableModel[] = [
   { value: "mistralai/mistral-medium-3.1", label: "Mistral Medium 3.1" },
 ];
 
-// Default model used across in-app chat surfaces (playground, MCP test chat,
+// Default model used across in-app chat surfaces (MCP Inspect chat,
 // chat window) when the user has not picked one explicitly. Kept next to
 // AVAILABLE_MODELS so the default is easy to discover and adjust.
 export const DEFAULT_MODEL: Model = "anthropic/claude-opus-5";

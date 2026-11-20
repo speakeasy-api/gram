@@ -47,9 +47,11 @@ export function userSubject(userId: string): string {
  * A server's readiness, using existing assignments and the caller's own
  * sessions for the upstream sign-ins its issuer requests.
  *
- * A session counts only when it was made through this server's issuer, which
- * is what the attachment endpoint will accept. A client whose credential is
- * its own (`credential_owner: self`) is shared by every caller and needs no
+ * A session counts when its client is one the server asks for, whichever
+ * issuer the person signed in through: a connection made through a team
+ * gateway serves each member server whose own issuer binds the same client,
+ * and the attachment endpoint accepts it. A client whose credential is its
+ * own (`credential_owner: self`) is shared by every caller and needs no
  * person.
  *
  * With `anyOne`, the server is ready once any of its personal sign-ins has a
@@ -59,7 +61,6 @@ export function userSubject(userId: string): string {
  * registrations when upstream auth is not enforced.
  */
 export function serverConnection(
-  issuerId: string,
   clients: ServerSignIn[],
   sessions: RemoteSession[],
   now: number = Date.now(),
@@ -78,9 +79,7 @@ export function serverConnection(
   const connectedClients: ServerSignIn[] = [];
   for (const client of personal) {
     const matching = sessions.filter(
-      (candidate) =>
-        candidate.remoteSessionClientId === client.id &&
-        candidate.userSessionIssuerId === issuerId,
+      (candidate) => candidate.remoteSessionClientId === client.id,
     );
     // A working connection wins over one that has ended, whatever the order.
     const session =

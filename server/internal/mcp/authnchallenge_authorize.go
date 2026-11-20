@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -123,7 +124,20 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// trusted — and a document fetch failure aborts the request per
 	// draft-ietf-oauth-client-id-metadata-document-02 §5.1 (fail closed,
 	// no stale fallback).
-	client, err := s.resolveUserSessionClient(ctx, logger, endpoint, req.ClientID, resolveClientCIMD)
+	var client *usersessions_repo.UserSessionClient
+	if req.ClientID == dashboardInspectClientID {
+		redirectURIs := s.dashboardInspectRedirectURIs()
+		if !slices.Contains(redirectURIs, req.RedirectURI) {
+			// This client ID is recognized by the server before it has a row.
+			t.Scope(connectionScope(endpoint, mcpconnectionattempts.AppOf(req.ClientID, mcpconnectionattempts.ClientIDAdmitted)))
+			t.Refuse(ctx, mcpconnectionattempts.CodeRedirectURIMismatch)
+			page.Reason = oauthui.ReasonInvalidClient
+			return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, page, "invalid_request", "redirect_uri is not registered for this client")
+		}
+		client, err = s.registerDashboardInspectClient(ctx, logger, endpoint, redirectURIs)
+	} else {
+		client, err = s.resolveUserSessionClient(ctx, logger, endpoint, req.ClientID, resolveClientCIMD)
+	}
 	if err != nil {
 		if admissionErr, ok := errors.AsType[*admission.DenialError](err); ok {
 			page.Reason = oauthui.ReasonOrganizationBlocked
@@ -275,6 +289,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		AuthorizerImpersonated:   nil,
 		SignInID:                 nil,
 		FreshLoginForced:         false,
+		AccountSwitches:          0,
 		AgentAuthorizationTarget: agentTarget,
 		Endpoint:                 endpointRef,
 		ClientID:                 req.ClientID,
@@ -335,6 +350,20 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			http.Redirect(w, r, federatedURL.String(), http.StatusFound)
 			return nil
 		}
+		if endpoint.servingSharedAuthorizationServer() == nil && s.accountSwitchEnabled(ctx, endpoint.OrganizationID) {
+			if err := bindConsentBrowser(w, &challengeState); err != nil {
+				_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
+				s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
+				t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+				return oops.E(oops.CodeUnexpected, err, "bind consent browser").LogError(ctx, logger)
+			}
+			if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
+				_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
+				s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
+				t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+				return oops.E(oops.CodeUnexpected, err, "store authn challenge state").LogError(ctx, logger)
+			}
+		}
 		callbackURL, err := endpoint.IDPCallbackURL(s.outboundOrigin().String())
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
@@ -349,6 +378,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			LoginHint:       "",
 			ScreenHint:      "",
 			Prompt:          "",
+			OrganizationID:  "",
 		})
 		if err != nil {
 			// A failure to build the IDP authorization URL typically means the
@@ -447,6 +477,7 @@ func authorizationErrorPage(client *usersessions_repo.UserSessionClient, clientI
 		ClientIDOrigin: "",
 		ServerName:     serverName,
 		ProviderName:   "",
+		AdminDetail:    "",
 	}
 	if client == nil {
 		return page

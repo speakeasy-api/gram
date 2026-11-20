@@ -3,9 +3,12 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -20,6 +23,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
@@ -866,5 +870,37 @@ func TestVerdictExport_MCPServerFailureDoesNotNameTheIssuer(t *testing.T) {
 		_, got := exportVerdict(t, false, verdict, probeFailure{status: http.StatusForbidden})
 		require.NotContains(t, got, string(attr.ServerAddressKey), verdict)
 		require.NotContains(t, got, string(attr.ServerPortKey), verdict)
+	}
+}
+
+// A listing lost to an address Speakeasy did not dial names the address; a transport loss reads as a call does.
+func TestListingFailureNamesAnAddressOnly(t *testing.T) {
+	t.Parallel()
+
+	member := metaMember{slug: "member", serverID: uuid.New()}
+	lost := func(dialErr error) error {
+		attempt := newMemberAttempt(nil)
+		attempt.recordFailure(true, false, false, dialErr)
+		return memberClientFailure(t.Context(), testenv.NewLogger(t), attempt, memberDial{}, member, dialErr)
+	}
+	for _, tc := range []struct {
+		name string
+		err  error
+		want mcpconnectionattempts.Code
+	}{
+		{name: "own address refused", err: lost(&net.OpError{Op: "dial", Net: "tcp", Err: fmt.Errorf("192.0.2.10: %w", guardian.ErrBlockedIP)}), want: mcpconnectionattempts.CodeAddressNotAllowed},
+		{name: "own name missing", err: lost(&net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "no such host", Name: "member.example.invalid", IsNotFound: true}}), want: mcpconnectionattempts.CodeAddressNotFound},
+		{name: "sign-in provider address", err: memberAddressOutage("stopped", nil, guardian.AddressNotFound), want: mcpconnectionattempts.CodeAddressNotFound},
+		{name: "lookup failing for now", err: lost(&net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "timeout", Name: "member.example.com", IsTimeout: true}}), want: mcpconnectionattempts.CodeProviderUnreachable},
+		{name: "connection reset", err: lost(&net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}), want: mcpconnectionattempts.CodeProviderUnreachable},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			rec := mcpconnectionattemptstest.New(t)
+			s := &Service{connections: rec.Recorder}
+			gate := &metaGateContext{organizationID: "org-test", projectID: uuid.New(), metaServerID: uuid.New()}
+			s.recordListingFailures(t.Context(), gate, []unavailableMember{{member: member, err: tc.err}})
+			rec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, tc.want)
+		})
 	}
 }

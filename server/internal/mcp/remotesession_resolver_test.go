@@ -178,7 +178,7 @@ func createRemoteSessionResolverFixture(
 	})
 	require.NoError(t, err)
 
-	remoteClient, err := remoteRepo.CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
+	remoteClient, err := remoteRepo.CreateRemoteSessionClientFixture(ctx, remotesessions_repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
 		RemoteSessionIssuerID: remoteIssuer.ID,
 		ClientID:              "resolver-client-" + suffix,
@@ -216,7 +216,7 @@ func insertRemoteSessionAccessToken(
 	accessTokenEncrypted, err := ti.enc.Encrypt([]byte(accessToken))
 	require.NoError(t, err)
 
-	session, err := remotesessions_repo.New(ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	session, err := remotesessions_repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userSessionIssuerID,
 		RemoteSessionClientID: remoteSessionClientID,

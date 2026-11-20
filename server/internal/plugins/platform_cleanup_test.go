@@ -66,9 +66,9 @@ func TestPlatformCleanupPreservesManualAndPublishes(t *testing.T) {
 			require.NoError(t, err)
 			_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{OrganizationID: org, PrincipalUrn: principal, Scope: string(authz.ScopeMCPConnect), Selectors: selectors})
 			require.NoError(t, err)
-			automatic, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Cleanup automatic"})
+			automatic, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Cleanup automatic", AutoAddServersEnabled: new(true)})
 			require.NoError(t, err)
-			manual, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Cleanup manual"})
+			manual, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Cleanup manual", AutoAddServersEnabled: new(true)})
 			require.NoError(t, err)
 			manualPayload.PluginID = manual.ID
 			manualMembership, err := ti.service.AddPluginServer(ctx, manualPayload)

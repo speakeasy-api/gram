@@ -1123,8 +1123,11 @@ VALUES (@id, @organization_id, @project_id, @name)
 RETURNING id;
 
 -- name: InstallRemoteSessionIdentityWriteMarkerFixture :exec
--- Marks every remote_sessions update that leaves updated_at and last_used_at alone, the
--- identity restatement's signature, by appending to validation_reason.
+-- Marks every remote_sessions update that leaves updated_at, last_used_at and the
+-- access token alone, the identity restatement's signature, by appending to
+-- validation_reason. The token write that follows a refresh's compare-and-swap
+-- in the same transaction also leaves updated_at alone, but always replaces the
+-- access token.
 DO $install$
 BEGIN
     CREATE FUNCTION mark_remote_session_identity_write() RETURNS trigger LANGUAGE plpgsql AS $fn$
@@ -1135,7 +1138,9 @@ BEGIN
     $fn$;
     CREATE TRIGGER mark_remote_session_identity_write
         BEFORE UPDATE ON remote_sessions FOR EACH ROW
-        WHEN (OLD.updated_at = NEW.updated_at AND OLD.last_used_at IS NOT DISTINCT FROM NEW.last_used_at)
+        WHEN (OLD.updated_at = NEW.updated_at AND OLD.last_used_at IS NOT DISTINCT FROM NEW.last_used_at
+            AND OLD.access_token_encrypted IS NOT DISTINCT FROM NEW.access_token_encrypted
+            AND OLD.access_token_org_encrypted IS NOT DISTINCT FROM NEW.access_token_org_encrypted)
         EXECUTE FUNCTION mark_remote_session_identity_write();
 END
 $install$;
@@ -1197,6 +1202,14 @@ SELECT count(*) FROM api_keys WHERE organization_id = @organization_id;
 UPDATE api_keys
 SET expires_at = @expires_at
 WHERE key_hash = @key_hash;
+
+-- name: SetAPIKeysCreatedAtFixture :exec
+-- Pins created_at on an organization's keys so keys.list paging tests can
+-- force ties on the first half of its (created_at, id) ordering.
+UPDATE api_keys
+SET created_at = @created_at
+WHERE organization_id = @organization_id
+  AND id = ANY(@ids::uuid[]);
 
 -- name: CountAssistantAttachments :one
 -- Count stored attachments, including those whose targets are soft-deleted.
@@ -1509,6 +1522,17 @@ SELECT user_session_issuer_id
 FROM principal_remote_session_bindings
 WHERE id = @id;
 
+-- name: GetPrincipalRemoteSessionBindingSessionFixture :one
+SELECT remote_session_id
+FROM principal_remote_session_bindings
+WHERE id = @id;
+
+-- name: CountActivePrincipalRemoteSessionBindingsForSessionFixture :one
+SELECT COUNT(*)::int
+FROM principal_remote_session_bindings
+WHERE remote_session_id = @remote_session_id
+  AND revoked_at IS NULL;
+
 -- name: InsertRemoteSessionEMABindingFixture :one
 INSERT INTO remote_session_ema_bindings (
   project_id,
@@ -1718,7 +1742,7 @@ SELECT grant_types FROM remote_session_clients WHERE id = @id AND project_id = @
 SELECT count(*) FROM remote_session_ema_bindings WHERE project_id = @project_id;
 
 -- name: SetPreparationFixtureClientSecret :exec
-UPDATE remote_session_clients SET token_endpoint_auth_method = 'client_secret_basic', client_secret_encrypted = @secret
+UPDATE remote_session_clients SET token_endpoint_auth_method = 'client_secret_basic', client_secret_encrypted = @secret, client_secret_org_encrypted = NULL, client_secret_generation = client_secret_generation + 1
 WHERE id = @id AND project_id = @project_id;
 
 -- name: SetPreparationFixtureClientSecretExpiry :exec
@@ -1730,7 +1754,7 @@ WHERE id = @id AND project_id = @project_id;
 UPDATE remote_session_issuers SET registration_endpoint = @endpoint, token_endpoint_auth_methods_supported=ARRAY['client_secret_basic'] WHERE id = @id AND project_id = @project_id;
 
 -- name: SetPreparationFixtureInteractiveClient :exec
-UPDATE remote_session_clients SET client_secret_encrypted='interactive-ciphertext', token_endpoint_auth_method='client_secret_basic', grant_types=ARRAY['authorization_code','refresh_token'], scope=ARRAY['openid'] WHERE id = @id AND project_id = @project_id;
+UPDATE remote_session_clients SET client_secret_encrypted='interactive-ciphertext', client_secret_org_encrypted = NULL, client_secret_generation = client_secret_generation + 1, token_endpoint_auth_method='client_secret_basic', grant_types=ARRAY['authorization_code','refresh_token'], scope=ARRAY['openid'] WHERE id = @id AND project_id = @project_id;
 
 -- name: AttachPreparationFixtureInteractiveClient :execrows
 INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id,user_session_issuer_id)
@@ -1877,15 +1901,15 @@ UPDATE trusted_issuer_sessions SET project_id = @project_id WHERE id = @id;
 
 -- name: GetDelegationAssertionOrSubjectPresentFixture :one
 -- Reads private credential columns that no production query exposes.
-SELECT (identity_assertion_encrypted IS NOT NULL OR upstream_subject_encrypted IS NOT NULL)::boolean AS present
+SELECT ((identity_assertion_encrypted IS NOT NULL OR identity_assertion_org_encrypted IS NOT NULL) OR (upstream_subject_encrypted IS NOT NULL OR upstream_subject_org_encrypted IS NOT NULL))::boolean AS present
 FROM trusted_issuer_sessions WHERE id = @id;
 
 -- name: GetDelegationSecretsPresentFixture :one
-SELECT (identity_assertion_encrypted IS NOT NULL OR refresh_token_encrypted IS NOT NULL OR upstream_subject_encrypted IS NOT NULL OR nonce_encrypted IS NOT NULL)::boolean AS present
+SELECT ((identity_assertion_encrypted IS NOT NULL OR identity_assertion_org_encrypted IS NOT NULL) OR (refresh_token_encrypted IS NOT NULL OR refresh_token_org_encrypted IS NOT NULL) OR (upstream_subject_encrypted IS NOT NULL OR upstream_subject_org_encrypted IS NOT NULL) OR (nonce_encrypted IS NOT NULL OR nonce_org_encrypted IS NOT NULL))::boolean AS present
 FROM trusted_issuer_sessions WHERE id = @id;
 
 -- name: GetDelegationSecretsAndGenerationFixture :one
-SELECT (identity_assertion_encrypted IS NOT NULL OR refresh_token_encrypted IS NOT NULL OR upstream_subject_encrypted IS NOT NULL OR nonce_encrypted IS NOT NULL)::boolean AS present,
+SELECT ((identity_assertion_encrypted IS NOT NULL OR identity_assertion_org_encrypted IS NOT NULL) OR (refresh_token_encrypted IS NOT NULL OR refresh_token_org_encrypted IS NOT NULL) OR (upstream_subject_encrypted IS NOT NULL OR upstream_subject_org_encrypted IS NOT NULL) OR (nonce_encrypted IS NOT NULL OR nonce_org_encrypted IS NOT NULL))::boolean AS present,
        credential_generation
 FROM trusted_issuer_sessions WHERE id = @id;
 
@@ -1925,7 +1949,7 @@ VALUES (@id, sqlc.narg('project_id')::uuid, sqlc.narg('organization_id')::text, 
 SELECT cardinality(pg_blocking_pids(@pid::integer)) > 0 AS blocked;
 
 -- name: SetPreparationFixtureTestClientSecret :exec
-UPDATE remote_session_clients SET token_endpoint_auth_method='client_secret_basic',client_secret_encrypted='test-ciphertext' WHERE id = @id AND project_id = @project_id;
+UPDATE remote_session_clients SET token_endpoint_auth_method='client_secret_basic',client_secret_encrypted='test-ciphertext', client_secret_org_encrypted = NULL, client_secret_generation = client_secret_generation + 1 WHERE id = @id AND project_id = @project_id;
 
 -- name: LockPreparationFixtureIssuer :one
 SELECT id FROM remote_session_issuers WHERE id = @id AND project_id = @project_id FOR UPDATE;
@@ -1940,7 +1964,7 @@ UPDATE remote_session_issuers SET metadata_last_error='discovery unavailable', m
 UPDATE remote_session_issuers SET client_id_metadata_document_supported = true, token_endpoint_auth_methods_supported = array_append(token_endpoint_auth_methods_supported, 'none') WHERE id = @id AND project_id = @project_id;
 
 -- name: SetPreparationFixtureCIMDURI :exec
-UPDATE remote_session_clients SET client_id_metadata_uri = 'https://gram.example.com/client.json', client_id = 'https://gram.example.com/client.json', client_secret_encrypted = NULL, token_endpoint_auth_method = 'none' WHERE id = @id AND project_id = @project_id;
+UPDATE remote_session_clients SET client_id_metadata_uri = 'https://gram.example.com/client.json', client_id = 'https://gram.example.com/client.json', client_secret_encrypted = NULL, client_secret_org_encrypted = NULL, client_secret_generation = client_secret_generation + 1, token_endpoint_auth_method = 'none' WHERE id = @id AND project_id = @project_id;
 
 -- name: SetPreparationFixtureConfidentialClient :execrows
 -- Identity chaining refuses public clients: make a fixture client authenticate
@@ -1952,7 +1976,7 @@ WITH issuer AS (
     RETURNING remote_session_issuers.id
 )
 UPDATE remote_session_clients
-SET token_endpoint_auth_method = 'private_key_jwt', json_web_key_set_id = @json_web_key_set_id, client_secret_encrypted = NULL,
+SET token_endpoint_auth_method = 'private_key_jwt', json_web_key_set_id = @json_web_key_set_id, client_secret_encrypted = NULL, client_secret_org_encrypted = NULL, client_secret_generation = client_secret_generation + 1,
     organization_id = @organization_id
 WHERE remote_session_clients.id = @id
   AND remote_session_clients.project_id = @project_id

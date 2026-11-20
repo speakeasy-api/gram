@@ -955,7 +955,7 @@ WHERE a.organization_id = $1
     )
     OR (s.authorization_expires_at IS NOT NULL AND s.authorization_expires_at <= now())
     OR (s.access_expires_at IS NOT NULL AND s.access_expires_at <= now()
-      AND (s.refresh_token_encrypted IS NULL OR s.refresh_expires_at <= now()))
+      AND ((s.refresh_token_encrypted IS NULL AND s.refresh_token_org_encrypted IS NULL) OR s.refresh_expires_at <= now()))
   )
 `
 
@@ -1181,53 +1181,55 @@ func (q *Queries) ListManagedAgentSessions(ctx context.Context, arg ListManagedA
 const listManagedAgents = `-- name: ListManagedAgents :many
 SELECT id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted FROM agents
 WHERE organization_id = $1 AND deleted IS FALSE
+  AND ($2::uuid IS NULL OR project_id = $2::uuid)
   AND (
-    $2::text IS NULL
-    OR name ILIKE '%' || $2::text || '%'
+    $3::text IS NULL
+    OR name ILIKE '%' || $3::text || '%'
   )
   -- Lifecycle is derived from the same two columns the Go side derives it
   -- from, so a filter cannot disagree with the badge the row shows.
   AND (
-    cardinality($3::text[]) = 0
+    cardinality($4::text[]) = 0
     OR (CASE
           WHEN revoked_at IS NOT NULL THEN 'revoked'
           WHEN suspended_at IS NOT NULL THEN 'suspended'
           ELSE 'active'
-        END) = ANY($3::text[])
+        END) = ANY($4::text[])
   )
   AND (
-    cardinality($4::text[]) = 0
-    OR owner_user_id = ANY($4::text[])
-  )
-  AND (
-    $5::timestamptz IS NULL
-    OR created_at >= $5::timestamptz
+    cardinality($5::text[]) = 0
+    OR owner_user_id = ANY($5::text[])
   )
   AND (
     $6::timestamptz IS NULL
-    OR created_at < $6::timestamptz
+    OR created_at >= $6::timestamptz
   )
   AND (
-    $7::text IS NULL
+    $7::timestamptz IS NULL
+    OR created_at < $7::timestamptz
+  )
+  AND (
+    $8::text IS NULL
     OR (
-      $8::boolean IS FALSE
-      AND (LOWER(name), id) > ($7::text, $9::uuid)
+      $9::boolean IS FALSE
+      AND (LOWER(name), id) > ($8::text, $10::uuid)
     )
     OR (
-      $8::boolean IS TRUE
-      AND (LOWER(name), id) < ($7::text, $9::uuid)
+      $9::boolean IS TRUE
+      AND (LOWER(name), id) < ($8::text, $10::uuid)
     )
   )
 ORDER BY
-  CASE WHEN $8::boolean THEN LOWER(name) END DESC,
-  CASE WHEN NOT $8::boolean THEN LOWER(name) END ASC,
-  CASE WHEN $8::boolean THEN id END DESC,
-  CASE WHEN NOT $8::boolean THEN id END ASC
-LIMIT $10
+  CASE WHEN $9::boolean THEN LOWER(name) END DESC,
+  CASE WHEN NOT $9::boolean THEN LOWER(name) END ASC,
+  CASE WHEN $9::boolean THEN id END DESC,
+  CASE WHEN NOT $9::boolean THEN id END ASC
+LIMIT $11
 `
 
 type ListManagedAgentsParams struct {
 	OrganizationID   string
+	ProjectID        uuid.NullUUID
 	Search           pgtype.Text
 	Lifecycles       []string
 	OwnerUserIds     []string
@@ -1249,6 +1251,7 @@ type ListManagedAgentsParams struct {
 func (q *Queries) ListManagedAgents(ctx context.Context, arg ListManagedAgentsParams) ([]Agent, error) {
 	rows, err := q.db.Query(ctx, listManagedAgents,
 		arg.OrganizationID,
+		arg.ProjectID,
 		arg.Search,
 		arg.Lifecycles,
 		arg.OwnerUserIds,
