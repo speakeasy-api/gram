@@ -637,7 +637,7 @@ function MemberPluginsTooltip({
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-auto max-w-none p-0"
+        className="w-auto max-w-[calc(100vw-2rem)] overflow-x-auto p-0"
         onPointerEnter={openNow}
         onPointerLeave={closeSoon}
       >
