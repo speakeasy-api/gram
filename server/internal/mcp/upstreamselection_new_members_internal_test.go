@@ -85,7 +85,6 @@ func TestRecordNewMemberChoices(t *testing.T) {
 	choices := &memberChoices{
 		selector:     &upstreamSelector{service: f.service, organizationID: f.orgID, userSessionIssuerID: issuerID, credentialKind: upstreamclients.CredentialKindUserSession, credentialID: credentialID},
 		subject:      user,
-		enforced:     true,
 		metaServerID: validUUID(gatewayID),
 		byServer:     map[uuid.UUID]*memberTokens{},
 	}
@@ -124,7 +123,7 @@ func TestRecordNewMemberChoices(t *testing.T) {
 	// still has a disabled header client attached.
 	for range 2 {
 		served := []metaMember{member(noAuth)}
-		choices.apply(ctx, testenv.NewLogger(t), served, true)
+		choices.apply(ctx, testenv.NewLogger(t), served)
 		require.NoError(t, served[0].upstreamUnavailable)
 		require.True(t, served[0].upstreamNoAuth)
 	}

@@ -95,11 +95,6 @@ type metaMember struct {
 	// authentication for this member.
 	upstreamNoAuth bool
 
-	// typedAuthClient reports that chosenClientID is the registration of a
-	// typed auth client the resolver checked against the member, which
-	// authorizes it without a sign-in link.
-	typedAuthClient bool
-
 	// upstreamUnavailable is why the credential cannot reach this member
 	// under its choices, nil otherwise.
 	upstreamUnavailable error
@@ -233,7 +228,7 @@ func (s *Service) resolveMetaMemberSnapshot(
 // an organization gateway's derived members.
 func (s *Service) resolveEndpointMemberSnapshot(ctx context.Context, logger *slog.Logger, surface string, endpoint *ResolvedMcpEndpoint) (context.Context, []metaMember, error) {
 	if endpoint.IsOrganizationGateway() {
-		ctx, members, _, err := s.resolveOrganizationMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, true, endpoint.UserSessionIssuerID, endpoint.ProjectID)
+		ctx, members, _, err := s.resolveOrganizationMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, true, endpoint.UserSessionIssuerID, endpoint.ProjectID, false)
 		return ctx, members, err
 	}
 	ctx, members, _, err := s.resolveMetaMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
@@ -271,7 +266,7 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 				issuer = gate.userSessionIssuerID
 			}
 		}
-		ctx, members, gate.deniedMembers, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, gate.organizationGateway && gate.caller.kind == gatewayCallerPerson, issuer, scopeProjectID)
+		ctx, members, gate.deniedMembers, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, gate.organizationGateway && gate.caller.kind == gatewayCallerPerson, issuer, scopeProjectID, true)
 	}
 	if err == nil && gate.userID != "" && !isAssistantRequest(ctx) {
 		members, gate.hiddenMembers = s.splitHiddenMembers(ctx, logger, gate.organizationID, gate.userID, members)
@@ -298,10 +293,8 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 		}
 	}
 	if err == nil && gate.memberChoices != nil {
-		if gate.catalog == nil {
-			gate.memberChoices.apply(ctx, logger, members, false)
-		} else if gate.catalogRef.Mode != toolfilter.CatalogModeCached || gate.execute {
-			gate.memberChoices.apply(ctx, logger, members, true)
+		if gate.catalog == nil || gate.catalogRef.Mode != toolfilter.CatalogModeCached || gate.execute {
+			gate.memberChoices.apply(ctx, logger, members)
 		}
 	}
 	return ctx, members, err
@@ -335,6 +328,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	organizationGateway bool,
 	userSessionIssuerID uuid.UUID,
 	scopeProjectID uuid.UUID,
+	serving bool,
 ) (context.Context, []metaMember, []metaMember, error) {
 	// Unconditional for the same reason resolveMetaMemberSnapshot prepares it.
 	ctx, err := s.authz.PrepareContext(ctx)
@@ -396,9 +390,12 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	var offers map[uuid.UUID]configuredAuthOffer
 	var offerMetadata gatewayOfferMetadata
 	if userSessionIssuerID != uuid.Nil {
-		enforced, err := s.consentAuthChoicesEnforced(ctx, organizationID)
-		if err != nil {
-			return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "check gateway auth client mode").LogError(ctx, logger)
+		enforced := serving
+		if !serving {
+			enforced, err = s.consentAuthChoicesEnforced(ctx, organizationID)
+			if err != nil {
+				return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "check gateway consent auth choices").LogError(ctx, logger)
+			}
 		}
 		if enforced {
 			ids := make([]uuid.UUID, 0, len(members))
@@ -586,7 +583,6 @@ func (s *Service) admitMetaMembers(
 			chosenClientID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			upstreamNoAuth:                 false,
 			upstreamUnavailable:            nil,
-			typedAuthClient:                false,
 			associatedClients:              nil,
 			typedRegistrations:             false,
 		}

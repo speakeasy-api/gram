@@ -174,7 +174,6 @@ func TestUpstreamIssuerFlag_HostedGatewayMemberTakesTheFlaggedSourcesToken(t *te
 			attr.UpstreamIssuerSite("route"),
 			attr.UpstreamIssuerOutcome("differ"),
 			attr.UpstreamIssuerSource(source),
-			attr.AuthClientResolverMode("off"),
 		)
 	}
 	dispatch := func() {

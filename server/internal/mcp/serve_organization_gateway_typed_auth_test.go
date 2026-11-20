@@ -12,7 +12,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
@@ -121,8 +120,8 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 			require.NoError(t, err)
 			stateID := uuid.NewString()
 			require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{ID: stateID, UserSessionIssuerID: fx.issuerID, Endpoint: mcp.EndpointRef{McpSlug: endpoint.Slug, RouteBase: endpoint.RouteBase, MetaMcpServerID: endpoint.MetaMcpServerID}, RedirectURI: "http://example.com/cb", CSRFToken: "csrf-token", Subject: &fx.subject, CreatedAt: time.Now(), FirstParty: true, AutoConnectDone: true}))
-			for _, mode := range []string{"off", "shadow", "enforced", "rollback"} {
-				t.Run(mode, func(t *testing.T) { // Sequential transitions verify rollback of the same configuration.
+			for _, mode := range []string{"not_enrolled", "enforced"} {
+				t.Run(mode, func(t *testing.T) { // Serving is identical before and after consent enrollment.
 					q := featuresrepo.New(ti.conn)
 					params := featuresrepo.EnableFeatureParams{OrganizationID: ac.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)}
 					_, err := q.EnableFeature(ctx, params)
@@ -132,12 +131,7 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 						require.NoError(t, err)
 					}
 					mcp.ResetAuthEnforcementForTest(ti.service.Service)
-					ti.features.SetFlag(feature.FlagAuthClientResolver, ac.ActiveOrganizationID, false)
-					ti.features.SetFlag(feature.FlagAuthClientResolverShadow, ac.ActiveOrganizationID, mode == "shadow")
-					visible := tc.visibleLegacy
-					if mode == "enforced" {
-						visible = tc.visibleEnforced
-					}
+					visible := tc.visibleEnforced
 					w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, token, listServersBody(t))
 					require.NoError(t, err)
 					require.Equal(t, http.StatusOK, w.Code, w.Body.String())
@@ -163,7 +157,7 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 					page := httptest.NewRecorder()
 					require.NoError(t, ti.service.ServeConsent(page, request, endpoint))
 					require.Equal(t, http.StatusOK, page.Code)
-					if visible {
+					if (mode == "enforced" && visible) || (mode != "enforced" && tc.visibleLegacy) {
 						require.NotContains(t, page.Body.String(), "data-gateway-focus-unavailable")
 					} else {
 						require.Contains(t, page.Body.String(), "data-gateway-focus-unavailable")

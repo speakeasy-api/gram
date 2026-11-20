@@ -1451,7 +1451,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		default:
 			ctx, err = s.TryPublicIdentityAuth(ctx, r, false, toolset.ID)
 			if err == nil {
-				err = s.refuseForeignCaller(ctx, toolset.OrganizationID)
+				err = s.refuseForeignCallerOutsideTypedServing(ctx, toolset.OrganizationID)
 			}
 			if err != nil {
 				s.newMandatoryShadow(ctx, toolset.OrganizationID).shadowRequire(ctx, mandatorySurfaceHostedConnect, err, connect)
