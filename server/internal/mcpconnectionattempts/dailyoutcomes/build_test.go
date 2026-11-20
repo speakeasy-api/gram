@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -63,6 +64,7 @@ func newFixture(t *testing.T) *fixture {
 	require.NoError(t, err)
 	db, err := infra.CloneTestDatabase(t, "dailyoutcomes")
 	require.NoError(t, err)
+	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
 	now := time.Now().UTC()
 	return &fixture{t: t, b: NewBuilder(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, ch), ch: ch, db: db, org: "org-" + uuid.NewString(), now: now, today: StartOfDay(now)}
 }
