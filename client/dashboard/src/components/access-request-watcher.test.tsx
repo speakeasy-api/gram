@@ -58,11 +58,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
   useQueryClient: () => ({ invalidateQueries }),
 }));
 
-import {
-  ACCESS_REQUEST_IDLE_POLL_MS,
-  ACCESS_REQUEST_POLL_MS,
-  AccessRequestWatcher,
-} from "./access-request-watcher";
+import { AccessRequestWatcher } from "./access-request-watcher";
 
 afterEach(() => {
   cleanup();
@@ -99,14 +95,15 @@ describe("AccessRequestWatcher", () => {
     const interval = state.options?.refetchInterval;
 
     expect(state.query).toEqual({ mine: true });
+    // Every 15 seconds while one is pending, every 5 minutes otherwise.
     expect(interval?.({ state: { data: { requests: [pending] } } })).toBe(
-      ACCESS_REQUEST_POLL_MS,
+      15_000,
     );
     expect(
       interval?.({
         state: { data: { requests: [{ ...pending, status: "denied" }] } },
       }),
-    ).toBe(ACCESS_REQUEST_IDLE_POLL_MS);
+    ).toBe(300_000);
   });
 
   it("tells the viewer once a request is approved and refetches the page", () => {
