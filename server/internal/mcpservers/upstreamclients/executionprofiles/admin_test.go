@@ -2,6 +2,7 @@ package executionprofiles
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -205,7 +206,14 @@ func TestSetChoiceReportsTheAutomaticChoiceItReplaces(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	server := f.server(pgtype.Bool{Bool: true, Valid: true})
-	only := f.authClient(server, typeStaticCredential, uuid.Nil)
+	only := f.offerOnly(server, typeServiceAccount)
+	view, err := Describe(t.Context(), f.pool, f.target(ContextUserless))
+	require.NoError(t, err)
+	idx := slices.IndexFunc(view.Servers, func(entry ServerView) bool { return entry.MCPServerID == server })
+	require.GreaterOrEqual(t, idx, 0)
+	require.Nil(t, view.Servers[idx].Gap)
+	require.NotNil(t, view.Servers[idx].Choice)
+	require.Equal(t, uuid.NullUUID{UUID: only, Valid: true}, view.Servers[idx].Choice.AuthClientID)
 
 	previous, err := f.setChoice(ContextUserless, server, ChoiceInput{Clear: true})
 	require.NoError(t, err)
