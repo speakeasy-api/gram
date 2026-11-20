@@ -196,6 +196,45 @@ func TestGetMCPAccessUsesFrontingServerIDAndStoredToolMetadata(t *testing.T) {
 	require.Equal(t, []string{"list_tasks"}, output.Roles[0].AllowedKnownTools)
 }
 
+func TestGetMCPAccessReportsTheToolKindsTheEvaluatorAllowsAndBlocks(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_access_kinds")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	service := NewAccessReadService(testenv.NewLogger(t), conn, allowBudget(), "access-read-key")
+
+	rows, err := platformrepo.New(conn).ListPlatformMCPInventory(ctx, platformrepo.ListPlatformMCPInventoryParams{
+		OrganizationID: principal.OrganizationID, ConnectionID: uuid.NullUUID{}, ConnectionGeneration: uuid.NullUUID{}, SkipAuthorizationFilter: true,
+		UserID: inventoryText(principal.UserID), ActingSurface: inventoryText(string(principal.surface())),
+		ProjectID: uuid.NullUUID{UUID: project.ID, Valid: true}, AfterMcpID: uuid.NullUUID{}, QueryText: "", ReadinessState: pgtype.Text{}, LimitValue: 10,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, rows)
+	target := rows[0]
+
+	// Read-only tools are allowed, and destructive ones are blocked even for
+	// members given the server by another role. A kind rule on another server
+	// does not count here.
+	role := seedAccessRole(t, ctx, conn, principal.OrganizationID, "readers", "Readers")
+	readOnly := authz.NewSelector(authz.ScopeMCPConnect, target.McpServerID.String())
+	readOnly[authz.SelectorKeyDisposition] = authz.DispositionReadOnly
+	otherServer := authz.NewSelector(authz.ScopeMCPConnect, uuid.NewString())
+	otherServer[authz.SelectorKeyDisposition] = authz.DispositionIdempotent
+	destructive := authz.NewSelector(authz.ScopeMCPBlockedConnect, target.McpServerID.String())
+	destructive[authz.SelectorKeyDisposition] = authz.DispositionDestructive
+	upsertRoleGrant(t, ctx, conn, principal.OrganizationID, role, authz.ScopeMCPConnect, readOnly)
+	upsertRoleGrant(t, ctx, conn, principal.OrganizationID, role, authz.ScopeMCPConnect, otherServer)
+	upsertRoleGrant(t, ctx, conn, principal.OrganizationID, role, authz.ScopeMCPBlockedConnect, destructive)
+
+	output, err := service.GetMCPAccess(ctx, principal, GetMCPAccessInput{ProjectID: project.ID.String(), MCPID: target.McpServerID.String()})
+	require.NoError(t, err)
+	require.Len(t, output.Roles, 1)
+	require.Equal(t, []string{authz.DispositionReadOnly}, output.Roles[0].DispositionRules)
+	require.Equal(t, []string{authz.DispositionDestructive}, output.Roles[0].BlockedDispositions)
+}
+
 func TestGetMemberMCPAccessEvaluatesLiveRoleGrantsAcrossInventory(t *testing.T) {
 	t.Parallel()
 
@@ -396,4 +435,14 @@ func TestListRolesNamesDirectorySourcesAndWithholdsSmallCounts(t *testing.T) {
 	// A role nothing is mapped to says so with an empty list, not a missing one.
 	require.NotNil(t, byName["Operators"].DirectorySources)
 	require.Empty(t, byName["Operators"].DirectorySources)
+}
+
+func upsertRoleGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, role urn.Principal, scope authz.Scope, selector authz.Selector) {
+	t.Helper()
+	selectorBytes, err := selector.MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: organizationID, PrincipalUrn: role, Scope: string(scope), Selectors: selectorBytes,
+	})
+	require.NoError(t, err)
 }

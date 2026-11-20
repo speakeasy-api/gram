@@ -182,8 +182,8 @@ type MCPRoleCoverage struct {
 	CanEnterServer      bool                       `json:"can_enter_server"`
 	KnownToolAccess     string                     `json:"known_tool_access"`
 	AllowedKnownTools   []string                   `json:"allowed_known_tools"`
-	DispositionRules    []string                   `json:"disposition_rules"`
-	BlockedDispositions []string                   `json:"blocked_dispositions"`
+	DispositionRules    []string                   `json:"disposition_rules" jsonschema:"tool annotations (dispositions) whose tools this role may call on this server, including future tools; empty when the role is not limited by annotation"`
+	BlockedDispositions []string                   `json:"blocked_dispositions" jsonschema:"tool annotations (dispositions) this role's own blocks take away on this server, even from members given the server by another role"`
 	UnevaluatedGrants   bool                       `json:"unevaluated_grants"`
 	AssignmentRules     []AccessRoleAssignmentRule `json:"assignment_rules,omitempty" jsonschema:"complete role rules for eligible assignments; all_tools includes future tools; tool and disposition together are conjunctive"`
 	AssignmentEligible  bool                       `json:"assignment_eligible" jsonschema:"true only when the entire custom role is confined to this project and MCP; still requires explicit confirmation of all returned access rules"`
@@ -722,7 +722,17 @@ func (s *AccessReadService) GetMCPAccess(ctx context.Context, principal Principa
 				allowedTools = append(allowedTools, tool.Name)
 			}
 		}
-		dispositions, blockedDispositions := matchingDispositionRules(role.Grants, row.McpServerID.String(), projectID.String())
+		kinds, err := authz.ToolKindsOnServer(grants, authz.MCPServer(authz.MCPServerIDOf(row.McpServerID), authz.ProjectIDOf(projectID)))
+		if err != nil {
+			return GetMCPAccessOutput{}, fmt.Errorf("evaluate tool kind access for role %q: %w", role.Name, err)
+		}
+		// Kinds are listed only when they limit the role: a role that allows
+		// every kind, such as one with unlimited connect, has no kind rules.
+		dispositions := kinds.Allowed
+		if len(dispositions) == len(authz.Dispositions()) {
+			dispositions = []string{}
+		}
+		blockedDispositions := kinds.Blocked
 		if !canEnter && len(allowedTools) == 0 && len(dispositions) == 0 && len(blockedDispositions) == 0 && !unevaluated {
 			continue
 		}
@@ -936,43 +946,6 @@ func roleAuthzGrants(role *accessgen.Role) ([]authz.Grant, bool) {
 		}
 	}
 	return grants, unevaluated
-}
-
-func matchingDispositionRules(grants []*accessgen.RoleGrant, mcpID, projectID string) ([]string, []string) {
-	found := map[string]struct{}{}
-	blocked := map[string]struct{}{}
-	for _, grant := range grants {
-		if grant == nil || (!scopeMayAllowConnect(grant.Scope) && !scopeMayBlockConnect(grant.Scope)) {
-			continue
-		}
-		for _, selector := range grant.Selectors {
-			if selector == nil || selector.Disposition == nil || *selector.Disposition == "" {
-				continue
-			}
-			if selector.ResourceID != authz.WildcardResource && selector.ResourceID != mcpID {
-				continue
-			}
-			if selector.ProjectID != nil && *selector.ProjectID != authz.WildcardResource && *selector.ProjectID != projectID {
-				continue
-			}
-			if scopeMayBlockConnect(grant.Scope) {
-				blocked[*selector.Disposition] = struct{}{}
-			} else {
-				found[*selector.Disposition] = struct{}{}
-			}
-		}
-	}
-	out := make([]string, 0, len(found))
-	for value := range found {
-		out = append(out, value)
-	}
-	blockedOut := make([]string, 0, len(blocked))
-	for value := range blocked {
-		blockedOut = append(blockedOut, value)
-	}
-	slices.Sort(out)
-	slices.Sort(blockedOut)
-	return out, blockedOut
 }
 
 func scopeMayAllowConnect(scope string) bool {
