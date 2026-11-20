@@ -355,7 +355,7 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 		require.Equal(t, validUUID(f.registration), res.choice.clientID)
 	})
 
-	t.Run("a registration an admin detached is a gap", func(t *testing.T) {
+	t.Run("a saved client an admin detached from the server is a gap", func(t *testing.T) {
 		t.Parallel()
 		f := newAuthClientFixture(t, pool)
 		id := f.client(authClientTypeServiceAccount, validUUID(f.registration), true)

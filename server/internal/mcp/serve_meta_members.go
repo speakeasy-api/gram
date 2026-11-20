@@ -437,8 +437,13 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 			if !known {
 				continue
 			}
-			// Without a live offer, retain legacy transport and issuer checks,
-			// including after an auth-client link was deleted (pending=false).
+			// An unanswered upstream requirement is not a serving offer. A
+			// server that needs no auth may still serve with no enabled client.
+			if serving && len(offer.clients) == 0 && offer.pending {
+				continue
+			}
+			// Keep the existing transport checks for members that need no
+			// credential and for the legacy consent preview.
 			if len(offer.clients) > 0 {
 				supported := gatewayOfferCapability(member, offer, offerMetadata)
 				if supported {
@@ -462,7 +467,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 				return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "check gateway member authentication").LogError(ctx, logger)
 			}
 		}
-		if !supported {
+		if !supported || (serving && known && len(offer.clients) == 0 && needsOAuth) {
 			continue
 		}
 		if needsOAuth && userSessionIssuerID != uuid.Nil && !slices.ContainsFunc(clients, func(client remotesessions.Client) bool {

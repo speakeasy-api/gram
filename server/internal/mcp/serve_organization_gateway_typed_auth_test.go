@@ -36,8 +36,8 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 	}{
 		{name: "detached_required_caller_header", detached: true, bound: true, clientType: authz.AuthClientTypeStaticCredential, header: "X-API-Key", source: "X-API-Key", required: true, clientHeader: "fromRequest", visibleLegacy: false, visibleEnforced: false},
 		{name: "detached_unbound_oauth", detached: true, clientType: authz.AuthClientTypeRemoteSession, clientHeader: "", visibleLegacy: false, visibleEnforced: false},
-		{name: "detached_bound_oauth", detached: true, bound: true, clientType: authz.AuthClientTypeRemoteSession, clientHeader: "", visibleLegacy: true, visibleEnforced: true},
-		{name: "legacy_pending_bound", pending: true, bound: true, clientHeader: "", visibleLegacy: true, visibleEnforced: true},
+		{name: "detached_bound_oauth", detached: true, bound: true, clientType: authz.AuthClientTypeRemoteSession, clientHeader: "", visibleLegacy: true, visibleEnforced: false},
+		{name: "legacy_pending_bound", pending: true, bound: true, clientHeader: "", visibleLegacy: true, visibleEnforced: false},
 		{name: "legacy_pending_unbound", pending: true, clientHeader: "", visibleLegacy: false, visibleEnforced: false},
 		{name: "personal_pending", clientType: authz.AuthClientTypeRemoteSession, clientHeader: "", visibleLegacy: false, visibleEnforced: true},
 		{name: "shared_pending", clientType: authz.AuthClientTypeServiceAccount, clientHeader: "", visibleLegacy: false, visibleEnforced: true},
@@ -157,7 +157,11 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 					page := httptest.NewRecorder()
 					require.NoError(t, ti.service.ServeConsent(page, request, endpoint))
 					require.Equal(t, http.StatusOK, page.Code)
-					if (mode == "enforced" && visible) || (mode != "enforced" && tc.visibleLegacy) {
+					consentVisible := tc.visibleLegacy
+					if mode == "enforced" && !tc.pending && !tc.detached {
+						consentVisible = visible
+					}
+					if consentVisible {
 						require.NotContains(t, page.Body.String(), "data-gateway-focus-unavailable")
 					} else {
 						require.Contains(t, page.Body.String(), "data-gateway-focus-unavailable")
