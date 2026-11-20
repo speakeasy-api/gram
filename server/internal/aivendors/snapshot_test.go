@@ -337,3 +337,12 @@ func TestPublishRejectsNil(t *testing.T) {
 	require.Panics(t, func() { store.Publish(nil) })
 	require.Same(t, initial, store.Snapshot())
 }
+
+func TestPinBelongsToItsStore(t *testing.T) {
+	t.Parallel()
+	first := NewStore(NewSnapshot(Products()))
+	second := NewStore(NewSnapshot(Products()))
+	ctx := first.Pin(t.Context())
+	require.Same(t, first.Snapshot(), first.SnapshotFor(ctx))
+	require.Same(t, second.Snapshot(), second.SnapshotFor(ctx))
+}
