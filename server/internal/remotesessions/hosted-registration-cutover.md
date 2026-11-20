@@ -87,10 +87,13 @@ back to legacy bindings or return that registration's credentials. Do not
 remove downstream sign-in to simulate a detach.
 
 A mixed-version fleet can keep today's readers while checking parity, but
-must not expose association-only attach/detach or linkless activation while
-any serving or rollback revision can still return credentials via the legacy
-path. Verify serving revisions, the rollback floor, exact mappings, and grant
-parity before switching. This is separate from depletion of legacy RPC callers.
+must not expose association-only attach or detach while any serving or rollback
+revision can still return credentials via the legacy path. This also blocks
+activating a per-server registration without a legacy registration-to-sign-in
+binding; the downstream sign-in issuer itself can remain attached. Verify
+serving revisions, the rollback floor, exact mappings, and grant parity
+before switching. This is separate from verifying that legacy RPC callers
+have stopped using those endpoints.
 
 Acceptance tests for a future switch: direct and stored/derived gateway
 hosted consent, callback/recovery, and tool execution with the exact token;
