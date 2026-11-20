@@ -2364,7 +2364,6 @@ SELECT
     JOIN user_session_issuers AS usi ON usi.id = b.user_session_issuer_id AND usi.deleted IS FALSE
     JOIN user_session_issuers AS provenance ON provenance.id = rs.user_session_issuer_id AND provenance.deleted IS FALSE
     JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE
-    JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = usi.id
     WHERE c.id = b.remote_session_client_id
       AND c.deleted IS FALSE
       AND (issuer.project_id = p.id OR (issuer.project_id IS NULL AND (issuer.organization_id IS NULL OR issuer.organization_id = p.organization_id)))
@@ -3867,11 +3866,8 @@ SELECT c.id
 FROM principal_remote_session_bindings AS b
 JOIN remote_session_clients AS c ON c.id = b.remote_session_client_id
 JOIN projects AS p ON p.id = b.project_id
-JOIN remote_session_client_user_session_issuers AS link
-  ON link.remote_session_client_id = c.id
- AND link.user_session_issuer_id = b.user_session_issuer_id
 WHERE b.id = $1 AND b.organization_id = $2
-FOR SHARE OF c, p, link
+FOR SHARE OF c, p
 `
 
 type LockAttachmentConfigurationParams struct {
@@ -3948,8 +3944,7 @@ FOR SHARE
 // unservable (issuer deletion or migration, attachment revocation, agent
 // suspension, revocation or reassignment, reauthorization or revocation of
 // the connection, removal of the owner or their membership, and removal of
-// the upstream client, its issuer, the project, the sign-in binding or the
-// auth client) can commit between the read that decides a grant and the
+// the upstream client, its issuer, the project or the auth client) can commit between the read that decides a grant and the
 // grant. FOR SHARE, not FOR KEY SHARE, so they also wait on writers that only
 // update a column, such as a reauthorization's grant_generation. Every
 // candidate's owner and membership are locked first, once for the whole run,

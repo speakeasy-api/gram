@@ -140,6 +140,31 @@ func (s *Service) ListBindings(ctx context.Context, payload *gen.ListBindingsPay
 	return &gen.ListBindingsResult{Items: items}, nil
 }
 
+func (op *bindingOperation) lockAttachmentIssuer(ctx context.Context) error {
+	_, err := op.queries.LockPrincipalAttachmentIssuer(ctx, repo.LockPrincipalAttachmentIssuerParams{ProjectID: op.projectID, OrganizationID: op.organizationID, UserSessionIssuerID: op.issuerID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return oops.C(oops.CodeNotFound)
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock attachment sign-in issuer")
+	}
+	return nil
+}
+
+func (op *bindingOperation) ensureAttachmentParent(ctx context.Context, clientID uuid.UUID) error {
+	return op.queries.EnsurePrincipalAttachmentParents(ctx, repo.EnsurePrincipalAttachmentParentsParams{ClientIds: []uuid.UUID{clientID}, UserSessionIssuerID: op.issuerID})
+}
+
+// lockAttachmentParentForUnlink protects active attachments while the legacy
+// link mutation API coexists with the composite FK. The caller must hold this
+// lock through the delete and commit in the same transaction.
+func lockAttachmentParentForUnlink(ctx context.Context, q *repo.Queries, orgID string, clientID, issuerID uuid.UUID) (bool, error) {
+	if err := q.LockRemoteSessionClientUserSessionIssuerLink(ctx, repo.LockRemoteSessionClientUserSessionIssuerLinkParams{RemoteSessionClientID: clientID, UserSessionIssuerID: issuerID}); err != nil {
+		return false, err
+	}
+	return q.HasLivePrincipalRemoteSessionBindingsForClientBinding(ctx, repo.HasLivePrincipalRemoteSessionBindingsForClientBindingParams{OrganizationID: orgID, RemoteSessionClientID: clientID, UserSessionIssuerID: issuerID})
+}
+
 func (s *Service) AttachBinding(ctx context.Context, payload *gen.AttachBindingPayload) (*gen.PrincipalRemoteSessionBinding, error) {
 	op, err := s.beginBindingOperation(ctx, payload.PrincipalID, payload.UserSessionIssuerID, true)
 	if err != nil {
@@ -150,16 +175,21 @@ func (s *Service) AttachBinding(ctx context.Context, payload *gen.AttachBindingP
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_id")
 	}
+	if err := op.lockAttachmentIssuer(ctx); err != nil {
+		return nil, err
+	}
 	candidates, err := op.candidates(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "validate attachment candidate")
 	}
 	var generation int64
+	var clientID uuid.UUID
 	var account string
 	var sessionView *types.RemoteSession
 	for _, candidate := range candidates {
 		if candidate.RemoteSession.ID == sessionID {
 			generation = candidate.RemoteSession.GrantGeneration
+			clientID = candidate.RemoteSession.RemoteSessionClientID
 			account = upstreamAccount(candidate.RemoteSession)
 			sessionView = mv.BuildRemoteSessionView(candidate.RemoteSession, conv.FromPGText[string](candidate.SubjectDisplayName), conv.FromPGText[string](candidate.SubjectEmail))
 			break
@@ -167,6 +197,9 @@ func (s *Service) AttachBinding(ctx context.Context, payload *gen.AttachBindingP
 	}
 	if sessionView == nil {
 		return nil, oops.C(oops.CodeNotFound)
+	}
+	if err := op.ensureAttachmentParent(ctx, clientID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "ensure attachment parent")
 	}
 	row, err := op.queries.AttachPrincipalRemoteSessionBinding(ctx, repo.AttachPrincipalRemoteSessionBindingParams{
 		ProjectID: op.projectID, OrganizationID: op.organizationID, PrincipalID: op.principalID, UserSessionIssuerID: op.issuerID, SubjectUrn: op.subject.String(), RemoteSessionID: sessionID,
@@ -177,7 +210,7 @@ func (s *Service) AttachBinding(ctx context.Context, payload *gen.AttachBindingP
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "attach remote session")
 	}
-	if row.GrantGeneration != generation {
+	if row.GrantGeneration != generation || row.RemoteSessionClientID != clientID {
 		return nil, oops.E(oops.CodeConflict, nil, "session changed while attaching; retry")
 	}
 	if err := s.logBinding(ctx, op, audit.ActionRemoteSessionAttach, audit.ActionAgentConnectionAttach, row.ID, row.RemoteSessionID, row.RemoteSessionClientID, row.GrantGeneration, account); err != nil {

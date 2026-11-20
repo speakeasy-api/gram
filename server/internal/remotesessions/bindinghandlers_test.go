@@ -103,7 +103,6 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	require.NoError(t, err)
 	issuer := createRemoteIssuer(t, ctx, ti, "binding-provider", "")
 	config := createUserSessionIssuer(t, ctx, ti.conn, "binding-config")
-	otherConfig := createUserSessionIssuer(t, ctx, ti.conn, "binding-unreachable-config")
 	sourceConfig := config
 	client := createRemoteClient(t, ctx, ti, issuer, config.String(), "binding-client")
 	mine := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), sourceConfig.String(), client)
@@ -177,11 +176,19 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	require.EqualValues(t, 1, mine.GrantGeneration, "pre-rollout sessions start at the migration default")
 	_, err = ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: theirs.ID.String()})
 	requireOopsCode(t, err, oops.CodeNotFound)
-	_, err = ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: otherConfig.String(), RemoteSessionID: mine.ID.String()})
+	_, err = ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: uuid.NewString(), RemoteSessionID: mine.ID.String()})
 	requireOopsCode(t, err, oops.CodeNotFound)
 	_, err = ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{PrincipalID: conv.PtrEmpty(uuid.NewString()), UserSessionIssuerID: conv.PtrEmpty(config.String())})
 	requireOopsCode(t, err, oops.CodeForbidden)
 
+	clientID := uuid.MustParse(client)
+	_, err = testrepo.New(ti.conn).UnlinkAttachmentClientFixture(ctx, testrepo.UnlinkAttachmentClientFixtureParams{RemoteSessionClientID: clientID, UserSessionIssuerID: config})
+	require.NoError(t, err)
+	q := repo.New(ti.conn)
+	parent := repo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: clientID, UserSessionIssuerID: config}
+	parents, err := q.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
+	require.NoError(t, err)
+	require.Zero(t, parents, "creation must work without a legacy link")
 	attach := &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: mine.ID.String()}
 	sessionAttachesBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionAttach)
 	require.NoError(t, err)
@@ -189,6 +196,9 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	require.NoError(t, err)
 	binding, err := ti.service.AttachBinding(ctx, attach)
 	require.NoError(t, err)
+	parents, err = q.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, parents, "only the FK compatibility row is needed")
 	again, err := ti.service.AttachBinding(ctx, attach)
 	require.NoError(t, err)
 	require.Equal(t, binding.ID, again.ID)

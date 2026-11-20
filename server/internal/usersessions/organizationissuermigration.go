@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -851,8 +852,22 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 	if err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "migrate remote-session provenance").LogError(ctx, logger)
 	}
-	if _, err := q.UpdatePrincipalRemoteSessionBindingsToUserSessionIssuer(ctx, repo.UpdatePrincipalRemoteSessionBindingsToUserSessionIssuerParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, OrganizationID: organizationID}); err != nil {
-		return run, oops.E(oops.CodeUnexpected, err, "migrate agent connection attachments").LogError(ctx, logger)
+	rekeys, err := q.ListPrincipalRemoteSessionBindingRekeys(ctx, repo.ListPrincipalRemoteSessionBindingRekeysParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, OrganizationID: organizationID})
+	if err != nil {
+		return run, oops.E(oops.CodeUnexpected, err, "list agent connection attachment rekeys").LogError(ctx, logger)
+	}
+	if len(rekeys) > 0 {
+		bindingIDs, clientIDs := make([]uuid.UUID, 0, len(rekeys)), make([]uuid.UUID, 0, len(rekeys))
+		for _, rekey := range rekeys {
+			bindingIDs = append(bindingIDs, rekey.ID)
+			clientIDs = append(clientIDs, rekey.RemoteSessionClientID)
+		}
+		if err := remotesessionsrepo.New(dbtx).EnsurePrincipalAttachmentParents(ctx, remotesessionsrepo.EnsurePrincipalAttachmentParentsParams{ClientIds: clientIDs, UserSessionIssuerID: target.ID}); err != nil {
+			return run, oops.E(oops.CodeUnexpected, err, "ensure attachment parents for migration").LogError(ctx, logger)
+		}
+		if _, err := q.UpdatePrincipalRemoteSessionBindingsToUserSessionIssuer(ctx, repo.UpdatePrincipalRemoteSessionBindingsToUserSessionIssuerParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, OrganizationID: organizationID, BindingIds: bindingIDs}); err != nil {
+			return run, oops.E(oops.CodeUnexpected, err, "migrate agent connection attachments").LogError(ctx, logger)
+		}
 	}
 	if _, err := q.DeleteSourceRemoteSessionClientIssuerLinks(ctx, repo.DeleteSourceRemoteSessionClientIssuerLinksParams{SourceIssuerID: source.ID, TargetIssuerID: target.ID, OrganizationID: organizationID}); err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "remove source remote-session client links").LogError(ctx, logger)

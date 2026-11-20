@@ -557,7 +557,6 @@ WHERE a.organization_id = @organization_id
       JOIN remote_session_issuers issuer ON issuer.id = c.remote_session_issuer_id AND NOT issuer.deleted
       JOIN user_session_issuers usi ON usi.id = b.user_session_issuer_id AND NOT usi.deleted
       JOIN user_session_issuers provenance ON provenance.id = s.user_session_issuer_id AND NOT provenance.deleted
-      JOIN remote_session_client_user_session_issuers link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = usi.id
       WHERE c.id = b.remote_session_client_id AND c.id = s.remote_session_client_id AND NOT c.deleted
         AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
         AND (issuer.project_id = p.id OR (issuer.project_id IS NULL AND (issuer.organization_id IS NULL OR issuer.organization_id = p.organization_id)))
