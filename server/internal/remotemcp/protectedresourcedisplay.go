@@ -299,7 +299,11 @@ func (s *Service) writeDiscoveredDisplay(ctx context.Context, authCtx *contextva
 // lockResourceClient serializes display writes with EMA binding creation.
 // The lock only accepts project- and organization-owned writable clients.
 func lockResourceClient(ctx context.Context, q *remotesessionsrepo.Queries, authCtx *contextvalues.AuthContext, id uuid.UUID) (remotesessionsrepo.RemoteSessionClient, error) {
-	return q.LockEMAClient(ctx, remotesessionsrepo.LockEMAClientParams{ID: id, ProjectID: conv.ToNullUUID(*authCtx.ProjectID), OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID)})
+	client, err := q.LockEMAClient(ctx, remotesessionsrepo.LockEMAClientParams{ID: id, ProjectID: conv.ToNullUUID(*authCtx.ProjectID), OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID)})
+	if err != nil {
+		return remotesessionsrepo.RemoteSessionClient{}, fmt.Errorf("lock client resource identity: %w", err)
+	}
+	return client, nil
 }
 
 // recordResourceDisplay writes display onto the already-locked client and
