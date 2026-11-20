@@ -600,11 +600,11 @@
       }
     }
   ],
-  "list_version": 9,
-  "etag": "c8282035af97e983ca33112ab17ffad010f03a95319f64b6c0e36d65abcd5faa",
+  "list_version": 752276068,
+  "etag": "581cc1e84813fe2487cbbf6f8bdf26fd20c250c0a900f55881fb7a224f2e2637",
   "envelope": {
-    "etag": "c8282035af97e983ca33112ab17ffad010f03a95319f64b6c0e36d65abcd5faa",
-    "list_version": 9,
+    "etag": "581cc1e84813fe2487cbbf6f8bdf26fd20c250c0a900f55881fb7a224f2e2637",
+    "list_version": 752276068,
     "schema_version": 1,
     "targets": [
       {
