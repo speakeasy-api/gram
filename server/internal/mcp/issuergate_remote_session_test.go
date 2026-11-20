@@ -17,9 +17,13 @@ import (
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -469,6 +473,9 @@ func TestServePublic_IssuerGate_ChainingProviderRefusalChallengesTheChosenClient
 			})
 			require.NoError(t, err)
 			persistTestUserSession(t, ti, issuerID, subject, jti)
+			client := seedTypedSessionClient(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, mcpServer.ID, remoteClient.ID, authz.AuthClientTypeEMA, subject)
+			require.NoError(t, authclientbackfill.New(ti.conn).SeedAuthClientEMAFixture(ctx, authclientbackfill.SeedAuthClientEMAFixtureParams{Resource: "https://chain-refused.example.test/mcp", AuthClientID: client}))
+			seedTypedSessionChoice(t, ctx, ti, authCtx.ActiveOrganizationID, issuerID, jti, mcpServer.ID, client)
 
 			refused := identitychaining.Outcome{Stage: tc.refusal.stage, Reason: tc.refusal.reason, Confidence: identitychaining.ConfidenceVerified, Retryable: tc.refusal.retryable, Cached: false, Provider: ""}
 			// Refresh sees a refusal only once it is cached, as the chainer reads it.
@@ -497,6 +504,29 @@ func TestServePublic_IssuerGate_ChainingProviderRefusalChallengesTheChosenClient
 			}
 		})
 	}
+}
+
+// seedTypedSessionClient records the exact typed offer a serving fixture uses.
+// Give the fixture's user access to this client, not to other credentials.
+func seedTypedSessionClient(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID, serverID, registrationID uuid.UUID, clientType string, subject urn.SessionSubject) uuid.UUID {
+	t.Helper()
+	q := authclientbackfill.New(ti.conn)
+	clientID, err := q.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: organizationID, ProjectID: conv.ToNullUUID(projectID), ClientType: clientType, Source: "admin", RemoteSessionClientID: conv.ToNullUUID(registrationID)})
+	require.NoError(t, err)
+	require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: organizationID, McpServerID: serverID, AuthClientID: clientID, Source: "admin"}))
+	if subject.Kind == urn.SessionSubjectKindUser {
+		seedPrincipalGrant(t, ctx, ti, organizationID, urn.NewPrincipal(urn.PrincipalTypeUser, subject.ID), authz.ScopeMCPAuth, clientID.String())
+	}
+	return clientID
+}
+
+func seedTypedSessionChoice(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, issuerID uuid.UUID, jti string, serverID, clientID uuid.UUID) {
+	t.Helper()
+	policy, err := usersessionsrepo.New(ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuerID, Jti: jti})
+	require.NoError(t, err)
+	written, err := upstreamclientsrepo.New(ti.conn).RecordAuthClientChoice(ctx, upstreamclientsrepo.RecordAuthClientChoiceParams{CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: policy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, OrganizationID: organizationID, McpServerID: serverID, AuthClientID: conv.ToNullUUID(clientID)})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), written)
 }
 
 func requireProjectAuthContext(t *testing.T, ctx context.Context) *contextvalues.AuthContext {

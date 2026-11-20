@@ -29,7 +29,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
-	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -418,12 +417,13 @@ func TestCodeModeReconnectEndToEnd(t *testing.T) {
 	member := createMetaMember(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "tracker", upstream.url, conv.ToNullUUID(remoteIssuer), 0)
 	selection := selectionFixture{ti: ti, projectID: *auth.ProjectID, orgID: auth.ActiveOrganizationID}
 	selection.associate(t, ctx, member.mcpServerID, client)
+	authClientID := seedTypedSessionClient(t, ctx, ti, auth.ActiveOrganizationID, *auth.ProjectID, member.mcpServerID, client, "remote_session", urn.NewUserSubject(auth.UserID))
 	bearer := mintGatewayTestSession(t, ctx, ti, gateway.ID, issuer, slug, metamcp.DiscoveryModeCode)
 	claims, err := usersessions.NewSigner("test-jwt-secret").Validate(bearer, urn.NewUserSessionIssuer(issuer).String())
 	require.NoError(t, err)
 	sessionPolicy, err := usersessionsrepo.New(ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuer, Jti: claims.ID})
 	require.NoError(t, err)
-	_, err = usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{UserSessionIssuerID: issuer, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: sessionPolicy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, PickedMcpServerIds: []uuid.UUID{member.mcpServerID}, PickedClientIds: []uuid.UUID{client}})
+	_, err = usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{UserSessionIssuerID: issuer, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: sessionPolicy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, PickedMcpServerIds: []uuid.UUID{member.mcpServerID}, PickedClientIds: []uuid.UUID{client}, PickedAuthClientIds: []uuid.UUID{authClientID}})
 	require.NoError(t, err)
 	execute := func(code string, restricted bool) codemode.ExecutionResult {
 		t.Helper()
@@ -572,14 +572,11 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 			member := createMetaMember(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "tracker", upstream.url, conv.ToNullUUID(remoteIssuer), 0)
 			selection := selectionFixture{ti: ti, projectID: *auth.ProjectID, orgID: auth.ActiveOrganizationID}
 			selection.associate(t, ctx, member.mcpServerID, client)
+			authClientID := seedTypedSessionClient(t, ctx, ti, auth.ActiveOrganizationID, *auth.ProjectID, member.mcpServerID, client, "remote_session", urn.NewUserSubject(auth.UserID))
 			var permitCallers func() []string
 			if tc.typedAuth {
 				permitCallers = ti.service.RecordAuthClientPermitCallers()
-				fixtures := authclientfixtures.New(ti.conn)
-				authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: conv.ToNullUUID(*auth.ProjectID), ClientType: "remote_session", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(client)})
-				require.NoError(t, err)
-				require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: member.mcpServerID, AuthClientID: authClientID, Source: "admin"}))
-				_, err = productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+				_, err := productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
 				require.NoError(t, err)
 			}
 			other := newCatalogUpstream(t, 2)
@@ -604,7 +601,7 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 				_, err = usersessionsrepo.New(ti.conn).GetReconnectSessionPolicy(ctx, params)
 				require.Error(t, err)
 			}
-			_, err = usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{UserSessionIssuerID: issuer, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: sessionPolicy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, PickedMcpServerIds: []uuid.UUID{member.mcpServerID}, PickedClientIds: []uuid.UUID{client}})
+			_, err = usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{UserSessionIssuerID: issuer, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: sessionPolicy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, PickedMcpServerIds: []uuid.UUID{member.mcpServerID}, PickedClientIds: []uuid.UUID{client}, PickedAuthClientIds: []uuid.UUID{authClientID}})
 			require.NoError(t, err)
 			unrelatedGateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "unrelated-"+uuid.NewString(), issuer)
 			unrelated := createMetaMember(t, ctx, ti.conn, *auth.ProjectID, unrelatedGateway.ID, "unrelated", upstream.url, conv.ToNullUUID(remoteIssuer), 0)
