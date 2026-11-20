@@ -121,8 +121,8 @@ type Caller struct {
 	// the server's organization.
 	UserID string
 
-	// UserEmail is that member's email. It leaves with the exported record and
-	// is not stored: readers resolve it from UserID.
+	// UserEmail is that member's email. It is not stored with the report,
+	// whose readers resolve it from UserID; it leaves with the exported record.
 	UserEmail string
 
 	// ExternalUserID is the caller's subject in the identity provider the
