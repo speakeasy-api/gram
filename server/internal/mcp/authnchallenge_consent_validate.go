@@ -674,9 +674,9 @@ func (s *Service) metaValidationTarget(
 	if !found {
 		return ctx, none, errRemoteSessionUnroutable
 	}
-	if member.associatedClients != nil {
-		// The member claimed this client by association, so a credential that
-		// chose it routes by the client's own issuer.
+	if scope != nil || member.associatedClients != nil {
+		// A confirmed claim by offer or association routes by the client's
+		// own issuer, not the member's old provider stamp.
 		member.remoteSessionIssuerID = uuid.NullUUID{UUID: client.RemoteSessionIssuerID, Valid: true}
 	}
 	name := conv.Default(member.name, member.slug)
