@@ -931,7 +931,7 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 				res.choice, memberErr = choices.forServer(member.serverID)
 			}
 		}
-		c.selector.service.applyMemberAuthClient(ctx, member, res, memberErr)
+		c.selector.service.applyMemberAuthClient(ctx, c.selector.organizationID, member, res, memberErr)
 		// Under enforcement a resolved OAuth-backed client was checked against
 		// the member, which authorizes its registration without a sign-in link.
 		member.typedAuthClient = c.enforced && member.upstreamUnavailable == nil && res.outcome == authClientResolved && member.chosenClientID.Valid
@@ -973,7 +973,7 @@ func (c *memberChoices) resolveUnchosenMembers(ctx context.Context, ids []uuid.U
 	return resolved, memberErrors, nil
 }
 
-func (s *Service) applyMemberAuthClient(ctx context.Context, member *metaMember, res authClientResolution, err error) {
+func (s *Service) applyMemberAuthClient(ctx context.Context, organizationID string, member *metaMember, res authClientResolution, err error) {
 	member.authClient = &res
 	if reason, stale, saved := staleNoAuthReason(res, err); stale {
 		member.upstreamUnavailable = memberStaleChoiceError{memberCredentialError{&metaMemberError{message: fmt.Sprintf("Server %q's sign-in setup changed.", member.slug)}}, reason, saved}
@@ -992,13 +992,46 @@ func (s *Service) applyMemberAuthClient(ctx context.Context, member *metaMember,
 		member.upstreamUnavailable = s.authClientNoAccessError(ctx, member.serverID, res)
 		return
 	case authClientGap:
-		member.upstreamUnavailable = memberCredentialError{&metaMemberError{message: "This server's authentication needs setup or a new sign-in."}}
+		credential := memberCredentialError{&metaMemberError{message: "This server's authentication needs setup or a new sign-in."}}
+		// Only a missing choice is fixed by connecting the member on its own
+		// page, and only once its sign-in is set up. Other gaps link nothing:
+		// an ambiguous choice needs the person to reconnect the gateway and
+		// pick one, and the rest need an administrator.
+		if res.reason == authClientReasonMissingChoice {
+			if s.memberSignInNotSetUp(ctx, organizationID, member) {
+				member.upstreamUnavailable = memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q has no sign-in set up yet, so connecting won't fix this. Ask your administrator to finish setting up its sign-in, then retry", member.slug)}}
+				return
+			}
+			member.upstreamUnavailable = memberChoiceGapError{credential}
+			return
+		}
+		member.upstreamUnavailable = credential
 		return
 	case authClientResolved, authClientNoAuth, authClientLegacy:
 	}
 	member.chosenClientID = res.choice.clientID
 	member.remoteSessionIssuerID = res.choice.remoteSessionIssuerID
 	member.upstreamNoAuth = res.outcome == authClientNoAuth || res.headersOnly() || (res.outcome == authClientLegacy && res.choice.noAuth())
+}
+
+// memberSignInNotSetUp reports a member that needs upstream authentication
+// but offers no client to sign in with yet, which only an administrator can
+// fix. A failed read reports false, keeping the connect link.
+func (s *Service) memberSignInNotSetUp(ctx context.Context, organizationID string, member *metaMember) bool {
+	rows, err := upstreamclientsrepo.New(s.db).ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{OrganizationID: organizationID, McpServerIds: []uuid.UUID{member.serverID}})
+	if err != nil {
+		s.logger.ErrorContext(ctx, "check member sign-in setup", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
+		return false
+	}
+	if len(rows) == 0 {
+		return false
+	}
+	for _, row := range rows {
+		if row.AuthClientID.Valid {
+			return false
+		}
+	}
+	return rows[0].UpstreamAuthPending
 }
 
 // staleNoAuthReason names why a member's no-auth choice is stale, if it is, and whether the choice was saved.

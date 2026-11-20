@@ -430,7 +430,7 @@ func (s *Service) routeMetaMember(
 	gate.servedCredentials = map[uuid.UUID]contextvalues.UpstreamCredential{}
 	tokens, skipped, err := s.resolveMemberTokensSkipping(ctx, &gate, member)
 	if err != nil {
-		return memberDial{}, "", err
+		return memberDial{}, "", withMemberConnectLink(err, member, gate.memberCallerURL(member))
 	}
 
 	switch {

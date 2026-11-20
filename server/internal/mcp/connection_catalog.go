@@ -235,6 +235,7 @@ func (c *connectionCatalog) upstreamChoices(credentialID uuid.UUID, typedOnly bo
 		CredentialID:        credentialID,
 		Source:              upstreamclients.SelectionSourceIssuance,
 		ScopeMcpServerIds:   make([]uuid.UUID, 0, len(c.Members)),
+		ExcludeMcpServerIds: nil,
 		PickedMcpServerIds:  nil,
 		PickedClientIds:     nil,
 		PickedAuthClientIds: nil,
