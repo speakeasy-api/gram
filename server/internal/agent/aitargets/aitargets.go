@@ -183,18 +183,13 @@ func (t Target) Clone() Target {
 	return out
 }
 
-// Defaults is the code-owned set an empty catalog is seeded from; after that
-// Postgres is the source of truth. Derived from the aivendors registry, so a
-// product declared once is both admissible and blockable.
-//
-// A product with no CIMD document carries detection names only, and a vendor
-// key covering more than one product names neither — GatewayMatchersFor
-// derives both rules.
-func Defaults() []Target {
-	products := aivendors.ScanProducts()
+// Defaults projects a catalog snapshot into device scan targets.
+// Products without install signatures remain available to admission only.
+func Defaults(catalog *aivendors.Snapshot) []Target {
+	products := catalog.ScanProducts()
 	targets := make([]Target, 0, len(products))
 	for _, product := range products {
-		matchers := aivendors.GatewayMatchersFor(product)
+		matchers := catalog.GatewayMatchersFor(product)
 		target := Target{
 			ID:          product.ID,
 			DisplayName: product.DisplayName,
@@ -209,7 +204,7 @@ func Defaults() []Target {
 			GatewayClient: GatewayClient{
 				CIMDVendorKeys:  matchers.VendorKeys,
 				OAuthClientIDs:  matchers.ClientIDs,
-				ClientInfoNames: product.ClientInfoNames,
+				ClientInfoNames: orNil(product.ClientInfoNames),
 			},
 		}
 		if product.VersionPlistKey != "" {

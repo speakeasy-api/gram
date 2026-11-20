@@ -66,6 +66,13 @@ func TestCompiledSnapshotMatchesRegistry(t *testing.T) {
 		want[i].Aliases = nil
 	}
 	require.Equal(t, want, snapshot.Products())
+	scanned := ScanProducts()
+	for i := range scanned {
+		scanned[i].Family = ""
+		scanned[i].Aliases = nil
+	}
+	require.Equal(t, scanned, snapshot.ScanProducts())
+	require.Same(t, snapshot, CompiledSnapshot(), "every caller shares one compiled snapshot")
 	var documents []Preset
 	for _, entry := range CIMDDocuments() {
 		require.Equal(t, strings.Contains(entry.Document.URL, "*"), entry.Document.Pattern, entry.Document.URL)

@@ -24,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/feature"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
 
 // discoveryMode is the tool surface one Platform MCP request is served.
@@ -103,7 +102,7 @@ var harnessProducts = sync.OnceValue(func() map[string]string {
 // does, never through the client's self-reported clientInfo. A dynamically
 // registered client has an opaque client_id that matches no entry.
 func harnessForClient(clientID string) string {
-	if preset, ok := admission.CatalogPreset(clientID); ok {
+	if preset, ok := aivendors.CompiledSnapshot().CatalogPreset(clientID); ok {
 		if product, ok := harnessProducts()[preset.URL]; ok {
 			return product
 		}
