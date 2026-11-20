@@ -752,6 +752,12 @@ func TestOrganizationUserSessionIssuerMigrateMovesAttachmentOnLoginFromAnotherIs
 	clientID := seedMigrationRemoteClient(t, ctx, ti, "cross-issuer-migrate-upstream", sourceID, gatewayID)
 	login, bindingIDs := seedMigrationAttachments(t, ctx, ti, "cross-issuer-migrate-user", gatewayID, clientID, sourceID)
 
+	// A new generation on the same pinned row must still move. Only material
+	// publication uses the grant generation as a compare-and-swap fence.
+	changed, err := testrepo.New(ti.conn).MutateAttachmentSupersededGrantGenerationFixture(ctx, login)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, changed)
+
 	remoteRepo := remotesessionsrepo.New(ti.conn)
 	parent := remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: clientID, UserSessionIssuerID: targetID}
 	parents, err := remoteRepo.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
@@ -798,6 +804,9 @@ func TestOrganizationUserSessionIssuerMigrateKeepsOneAttachmentForSameLogin(t *t
 	sourceIssuer, err := testrepo.New(ti.conn).GetPrincipalRemoteSessionBindingIssuerFixture(ctx, bindingIDs[sourceID])
 	require.NoError(t, err)
 	require.Equal(t, sourceID, sourceIssuer, "the duplicate remains on the retired issuer, never replacing the target attachment")
+	active, err := testrepo.New(ti.conn).CountActivePrincipalRemoteSessionBindingsForSessionFixture(ctx, login)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, active, "only the target attachment remains active")
 
 }
 

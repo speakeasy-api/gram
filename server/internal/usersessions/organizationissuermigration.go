@@ -809,6 +809,9 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 	if err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "soft-delete migrated user session issuer").LogError(ctx, logger)
 	}
+	if err := q.RevokeRemainingAttachmentsForRetiredIssuer(ctx, repo.RevokeRemainingAttachmentsForRetiredIssuerParams{OrganizationID: organizationID, SourceIssuerID: source.ID}); err != nil {
+		return run, oops.E(oops.CodeUnexpected, err, "retire remaining source issuer attachments").LogError(ctx, logger)
+	}
 	if err := authclientbackfill.SyncEMAServers(ctx, dbtx, organizationID, scope.syncServers); err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "reconcile issuer EMA offers").LogError(ctx, logger)
 	}

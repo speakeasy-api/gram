@@ -1146,6 +1146,15 @@ WHERE user_session_issuer_id = @source_issuer_id::uuid
   AND organization_id = @organization_id::text
   AND id = ANY(@binding_ids::uuid[]);
 
+-- name: RevokeRemainingAttachmentsForRetiredIssuer :exec
+-- Rekey already moved eligible attachments. Retire the remaining references
+-- to the old sign-in issuer without deleting their FK parents or sessions.
+UPDATE principal_remote_session_bindings
+SET revoked_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = @organization_id::text
+  AND user_session_issuer_id = @source_issuer_id::uuid
+  AND revoked_at IS NULL;
+
 -- name: UpdateRemoteSessionEMABindingsToUserSessionIssuer :execrows
 UPDATE remote_session_ema_bindings AS binding
 SET user_session_issuer_id = @target_issuer_id,
@@ -3275,8 +3284,9 @@ eligible AS (
         WHERE binding.remote_session_client_id = ac.remote_session_client_id
           AND binding.user_session_issuer_id = @user_session_issuer_id
       ))
-    GROUP BY l.mcp_server_id, ac.remote_session_client_id
-    HAVING count(DISTINCT ac.id) = 1
+    GROUP BY l.mcp_server_id, ac.remote_session_client_id,
+             CASE WHEN @typed_offer_repair::boolean THEN ac.id END
+    HAVING @typed_offer_repair::boolean OR count(DISTINCT ac.id) = 1
 ),
 decided AS MATERIALIZED (
     SELECT r.id AS mcp_server_id,
@@ -3500,6 +3510,7 @@ LEFT JOIN mcp_auth_clients AS named
 WHERE (chosen.id IS NOT NULL
        OR (d.remote_session_client_id IS NULL AND (auth_client.id IS NOT NULL OR d.no_auth)))
   AND (pick.auth_client_id IS NULL OR auth_client.id IS NOT NULL)
+  AND (NOT @typed_offer_repair::boolean OR d.remote_session_client_id IS NOT NULL OR named.id IS NOT NULL)
 ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FALSE DO UPDATE
 SET remote_session_client_id = EXCLUDED.remote_session_client_id,
     client_attachment_scope = EXCLUDED.client_attachment_scope,

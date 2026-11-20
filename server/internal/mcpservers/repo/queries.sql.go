@@ -2212,7 +2212,7 @@ func (q *Queries) LockMCPServersByIDs(ctx context.Context, arg LockMCPServersByI
 
 const resyncMCPServerRemoteSessionIssuers = `-- name: ResyncMCPServerRemoteSessionIssuers :execrows
 WITH scoped AS (
-    SELECT server.id, project.id AS project_id, project.organization_id, NOT signin.deleted AS signin_live
+    SELECT server.id, project.id AS project_id, project.organization_id, signin.id AS signin_id, NOT signin.deleted AS signin_live
     FROM mcp_servers AS server
     JOIN projects AS project ON project.id = server.project_id AND NOT project.deleted
     JOIN user_session_issuers AS signin ON signin.id = server.user_session_issuer_id
@@ -2240,7 +2240,7 @@ WITH scoped AS (
       AND NOT association.deleted
     WHERE NOT EXISTS (SELECT 1 FROM typed WHERE typed.id = server.id)
 ), derived AS (
-    SELECT server.id,
+    SELECT server.id, server.signin_id,
            CASE WHEN count(DISTINCT provider.id) = 1 THEN (array_agg(DISTINCT provider.id) FILTER (WHERE provider.id IS NOT NULL))[1] END AS remote_session_issuer_id
     FROM scoped AS server
     LEFT JOIN candidates ON candidates.id = server.id
@@ -2250,13 +2250,15 @@ WITH scoped AS (
     LEFT JOIN remote_session_issuers AS provider ON provider.id = registration.remote_session_issuer_id
       AND NOT provider.deleted
       AND (provider.project_id = server.project_id OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = server.organization_id)))
-    GROUP BY server.id
+    GROUP BY server.id, server.signin_id
 )
 UPDATE mcp_servers AS server
 SET remote_session_issuer_id = derived.remote_session_issuer_id,
     updated_at = clock_timestamp()
 FROM derived
 WHERE server.id = derived.id
+  AND NOT server.deleted
+  AND server.user_session_issuer_id = derived.signin_id
   AND server.remote_session_issuer_id IS DISTINCT FROM derived.remote_session_issuer_id
 `
 

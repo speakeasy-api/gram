@@ -66,7 +66,7 @@ func TestOrganizationUserSessionIssuerMigrateReconcilesCredentialChoices(t *test
 				}
 				sourceID := seedIssuerInProject(t, ctx, ti.conn, projectID, fmt.Sprintf("selection-source-%d", i))
 				serverID, clientID := seedIssuerMigrationOAuthServer(t, ctx, ti, projectID, sourceID)
-				seedMigrationTypedOffer(t, ctx, ti, projectID, serverID, clientID)
+				syncIssuerMigrationTestServers(t, ctx, ti, serverID)
 				moved, err := seedUserSession(t, ctx, ti.conn, sourceID, urn.NewUserSubject(fmt.Sprintf("moved-%d", i)))
 				require.NoError(t, err)
 				// A choice recorded before typed clients existed must keep its row
@@ -336,7 +336,7 @@ func TestOrganizationUserSessionIssuerMigrateKeepsExistingTargetChoice(t *testin
 // credential before consolidation and two after it. A credential with no
 // recorded choice is decided by the bindings it was served through, not left
 // to reconnect.
-func TestOrganizationUserSessionIssuerMigrateDecidesChoicesBeforeMergingBindings(t *testing.T) {
+func TestOrganizationUserSessionIssuerMigrateDoesNotPickAmongAmbiguousOffers(t *testing.T) {
 	t.Parallel()
 	for _, enforced := range []bool{false, true} {
 		t.Run(fmt.Sprintf("enforced=%t", enforced), func(t *testing.T) {
@@ -350,7 +350,7 @@ func TestOrganizationUserSessionIssuerMigrateDecidesChoicesBeforeMergingBindings
 			}
 			targetID := seedIssuer(t, ctx, ti, "premerge-target")
 			sourceID := seedIssuer(t, ctx, ti, "premerge-source")
-			targetServer, targetRegistration := seedIssuerMigrationOAuthServer(t, ctx, ti, *auth.ProjectID, targetID)
+			targetServer, _ := seedIssuerMigrationOAuthServer(t, ctx, ti, *auth.ProjectID, targetID)
 			sourceServer, sourceRegistration := seedIssuerMigrationOAuthServer(t, ctx, ti, *auth.ProjectID, sourceID)
 			fixtures := selectionbackfill.New(ti.conn)
 			require.NoError(t, fixtures.SeedAssociationFixture(ctx, selectionbackfill.SeedAssociationFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: targetServer, RemoteSessionClientID: sourceRegistration}))
@@ -372,15 +372,13 @@ func TestOrganizationUserSessionIssuerMigrateDecidesChoicesBeforeMergingBindings
 				}
 				return byServer
 			}
-			require.Equal(t, map[uuid.UUID]uuid.UUID{targetServer: targetRegistration, sourceServer: sourceRegistration}, choices(existing),
-				"the target credential keeps the registration its issuer bound and learns the moved server")
+			require.Equal(t, map[uuid.UUID]uuid.UUID{sourceServer: sourceRegistration}, choices(existing),
+				"the target credential learns the moved server without choosing among the target server offers")
 			require.Equal(t, map[uuid.UUID]uuid.UUID{sourceServer: sourceRegistration}, choices(moved),
 				"the moved credential never reached the target's server, so two eligible clients there are a real choice")
-			for _, server := range []uuid.UUID{targetServer, sourceServer} {
-				typed, err := fixtures.GetSelectionAuthClientFixture(ctx, selectionbackfill.GetSelectionAuthClientFixtureParams{CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: migrationCredentialID(existing), McpServerID: server})
-				require.NoError(t, err)
-				require.True(t, typed.AuthClientID.Valid, "each choice names its typed auth client")
-			}
+			typed, err := fixtures.GetSelectionAuthClientFixture(ctx, selectionbackfill.GetSelectionAuthClientFixtureParams{CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: migrationCredentialID(existing), McpServerID: sourceServer})
+			require.NoError(t, err)
+			require.True(t, typed.AuthClientID.Valid)
 		})
 	}
 }

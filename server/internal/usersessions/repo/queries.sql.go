@@ -6054,7 +6054,7 @@ func (q *Queries) RecordUpstreamClientSelections(ctx context.Context, arg Record
 
 const recordUpstreamClientSelectionsForCredentials = `-- name: RecordUpstreamClientSelectionsForCredentials :execrows
 WITH credential_ids AS MATERIALIZED (
-    SELECT DISTINCT unnest($3::uuid[]) AS id
+    SELECT DISTINCT unnest($4::uuid[]) AS id
 ),
 session_issuer AS (
     SELECT usi.id,
@@ -6062,7 +6062,7 @@ session_issuer AS (
            CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END AS organization_id
     FROM user_session_issuers AS usi
     LEFT JOIN projects AS p ON p.id = usi.project_id
-    WHERE usi.id = $4
+    WHERE usi.id = $5
       AND usi.deleted IS FALSE
       AND (usi.project_id IS NULL OR p.deleted IS FALSE)
 ),
@@ -6093,8 +6093,8 @@ reachable AS MATERIALIZED (
               OR existing.remote_session_client_id IS NOT NULL)
         )
       )
-      AND ($5::uuid[] IS NULL
-           OR s.id = ANY($5::uuid[]))
+      AND ($6::uuid[] IS NULL
+           OR s.id = ANY($6::uuid[]))
       AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
       AND (
         s.user_session_issuer_id = si.id
@@ -6113,9 +6113,9 @@ reachable AS MATERIALIZED (
 ),
 picked AS (
     -- The consent page's pick for each server, as parallel arrays.
-    SELECT unnest($6::uuid[]) AS mcp_server_id,
-           unnest($7::uuid[]) AS remote_session_client_id,
-           NULLIF(unnest($8::uuid[]), '00000000-0000-0000-0000-000000000000'::uuid) AS auth_client_id
+    SELECT unnest($7::uuid[]) AS mcp_server_id,
+           unnest($8::uuid[]) AS remote_session_client_id,
+           NULLIF(unnest($9::uuid[]), '00000000-0000-0000-0000-000000000000'::uuid) AS auth_client_id
 ),
 eligible AS (
     SELECT a.mcp_server_id,
@@ -6128,9 +6128,9 @@ eligible AS (
      AND c.deleted IS FALSE
     JOIN remote_session_client_user_session_issuers AS link
       ON link.remote_session_client_id = a.remote_session_client_id
-     AND link.user_session_issuer_id = $4
+     AND link.user_session_issuer_id = $5
     WHERE a.deleted IS FALSE
-      AND NOT $9::boolean
+      AND NOT $10::boolean
     UNION ALL
     SELECT l.mcp_server_id,
            ac.remote_session_client_id
@@ -6152,17 +6152,18 @@ eligible AS (
      AND rsi.deleted IS FALSE
     WHERE l.deleted IS FALSE
       AND l.organization_id = (SELECT organization_id FROM session_issuer)
-      AND $9::boolean
+      AND $10::boolean
       AND l.project_id = r.project_id
       AND (c.project_id = r.project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = l.organization_id)))
       AND (rsi.project_id = r.project_id OR (rsi.project_id IS NULL AND (rsi.organization_id IS NULL OR rsi.organization_id = l.organization_id)))
-      AND ($10::boolean OR EXISTS (
+      AND ($3::boolean OR EXISTS (
         SELECT 1 FROM remote_session_client_user_session_issuers AS binding
         WHERE binding.remote_session_client_id = ac.remote_session_client_id
-          AND binding.user_session_issuer_id = $4
+          AND binding.user_session_issuer_id = $5
       ))
-    GROUP BY l.mcp_server_id, ac.remote_session_client_id
-    HAVING count(DISTINCT ac.id) = 1
+    GROUP BY l.mcp_server_id, ac.remote_session_client_id,
+             CASE WHEN $3::boolean THEN ac.id END
+    HAVING $3::boolean OR count(DISTINCT ac.id) = 1
 ),
 decided AS MATERIALIZED (
     SELECT r.id AS mcp_server_id,
@@ -6202,7 +6203,7 @@ decided AS MATERIALIZED (
                LIMIT 1
              )
            ) END AS remote_session_client_id,
-           CASE WHEN $9::boolean THEN NOT EXISTS (
+           CASE WHEN $10::boolean THEN NOT EXISTS (
              SELECT 1
              FROM mcp_server_auth_clients AS l
              JOIN mcp_auth_clients AS ac
@@ -6372,6 +6373,7 @@ LEFT JOIN mcp_auth_clients AS named
 WHERE (chosen.id IS NOT NULL
        OR (d.remote_session_client_id IS NULL AND (auth_client.id IS NOT NULL OR d.no_auth)))
   AND (pick.auth_client_id IS NULL OR auth_client.id IS NOT NULL)
+  AND (NOT $3::boolean OR d.remote_session_client_id IS NOT NULL OR named.id IS NOT NULL)
 ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FALSE DO UPDATE
 SET remote_session_client_id = EXCLUDED.remote_session_client_id,
     client_attachment_scope = EXCLUDED.client_attachment_scope,
@@ -6389,6 +6391,7 @@ WHERE upstream_client_selections.no_auth
 type RecordUpstreamClientSelectionsForCredentialsParams struct {
 	CredentialKind      string
 	Source              string
+	TypedOfferRepair    bool
 	CredentialIds       []uuid.UUID
 	UserSessionIssuerID uuid.UUID
 	ScopeMcpServerIds   []uuid.UUID
@@ -6396,7 +6399,6 @@ type RecordUpstreamClientSelectionsForCredentialsParams struct {
 	PickedClientIds     []uuid.UUID
 	PickedAuthClientIds []uuid.UUID
 	TypedOnly           bool
-	TypedOfferRepair    bool
 }
 
 // Records what RecordUpstreamClientSelections records, for several credential
@@ -6463,6 +6465,7 @@ func (q *Queries) RecordUpstreamClientSelectionsForCredentials(ctx context.Conte
 	result, err := q.db.Exec(ctx, recordUpstreamClientSelectionsForCredentials,
 		arg.CredentialKind,
 		arg.Source,
+		arg.TypedOfferRepair,
 		arg.CredentialIds,
 		arg.UserSessionIssuerID,
 		arg.ScopeMcpServerIds,
@@ -6470,7 +6473,6 @@ func (q *Queries) RecordUpstreamClientSelectionsForCredentials(ctx context.Conte
 		arg.PickedClientIds,
 		arg.PickedAuthClientIds,
 		arg.TypedOnly,
-		arg.TypedOfferRepair,
 	)
 	if err != nil {
 		return 0, err
@@ -6784,6 +6786,26 @@ func (q *Queries) RetireMergedUserSessionClient(ctx context.Context, sourceClien
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const revokeRemainingAttachmentsForRetiredIssuer = `-- name: RevokeRemainingAttachmentsForRetiredIssuer :exec
+UPDATE principal_remote_session_bindings
+SET revoked_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1::text
+  AND user_session_issuer_id = $2::uuid
+  AND revoked_at IS NULL
+`
+
+type RevokeRemainingAttachmentsForRetiredIssuerParams struct {
+	OrganizationID string
+	SourceIssuerID uuid.UUID
+}
+
+// Rekey already moved eligible attachments. Retire the remaining references
+// to the old sign-in issuer without deleting their FK parents or sessions.
+func (q *Queries) RevokeRemainingAttachmentsForRetiredIssuer(ctx context.Context, arg RevokeRemainingAttachmentsForRetiredIssuerParams) error {
+	_, err := q.db.Exec(ctx, revokeRemainingAttachmentsForRetiredIssuer, arg.OrganizationID, arg.SourceIssuerID)
+	return err
 }
 
 const revokeUserSession = `-- name: RevokeUserSession :one
