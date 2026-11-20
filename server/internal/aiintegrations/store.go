@@ -1296,7 +1296,7 @@ func (s *Store) decryptAPIKey(ctx context.Context, db repo.DBTX, orgID string, s
 
 // apiKeyError maps an aiproviderkeys error. Only a key that can never be read
 // again is unexpected: an unavailable organization key may clear on its own.
-func apiKeyError(err error, msg string) error {
+func apiKeyError(err error, msg string) *oops.ShareableError {
 	if errors.Is(err, aiproviderkeys.ErrNotStored) {
 		return oops.E(oops.CodeConflict, err, "The integration changed while saving. Reload and try again.")
 	}

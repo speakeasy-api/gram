@@ -29,7 +29,7 @@ const (
 	// UseCaseAIProviderKeys is the use case for AI provider and model keys:
 	// AI integration API keys and webhook signing secrets, customer model
 	// provider keys, and provisioned OpenRouter keys.
-	UseCaseAIProviderKeys UseCase = "ai-provider-keys" //nolint:gosec // G101: a use case name, not a credential
+	UseCaseAIProviderKeys UseCase = "ai-provider-keys"
 )
 
 // registeredUseCases lists every use case the package accepts. Add a consumer
