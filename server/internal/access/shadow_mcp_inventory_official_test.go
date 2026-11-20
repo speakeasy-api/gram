@@ -27,7 +27,7 @@ import (
 func enableShadowMCPAutoLink(ti *testInstance, organizationID string) {
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagShadowMCPAutoLink, organizationID, true)
-	ti.service.WithFeatureFlags(flags)
+	ti.service.WithFeatures(flags)
 }
 
 func TestService_ReadShadowMCPInventoryTarget_SuggestsWithoutAutoLink(t *testing.T) {

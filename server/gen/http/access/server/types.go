@@ -268,6 +268,25 @@ type RevokeTemporaryGrantRequestBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 }
 
+// DecideAccessRequestRequestBody is the type of the "access" service
+// "decideAccessRequest" endpoint HTTP request body.
+type DecideAccessRequestRequestBody struct {
+	// The access request to decide.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// True gives the access as a temporary grant; false denies the request.
+	Approve *bool `form:"approve,omitempty" json:"approve,omitempty" xml:"approve,omitempty"`
+	// When the temporary grant stops authorizing new requests. Required to
+	// approve: at least five minutes and at most 24 hours from now.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
+}
+
+// WithdrawAccessRequestRequestBody is the type of the "access" service
+// "withdrawAccessRequest" endpoint HTTP request body.
+type WithdrawAccessRequestRequestBody struct {
+	// The access request to withdraw.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+}
+
 // ListRolesResponseBody is the type of the "access" service "listRoles"
 // endpoint HTTP response body.
 type ListRolesResponseBody struct {
@@ -730,8 +749,14 @@ type ExplainResourceAccessResponseBody struct {
 // RequestAccessResponseBody is the type of the "access" service
 // "requestAccess" endpoint HTTP response body.
 type RequestAccessResponseBody struct {
-	// Number of administrators who were notified.
+	// Number of administrators who were emailed.
 	SentToCount int `form:"sent_to_count" json:"sent_to_count" xml:"sent_to_count"`
+	// The stored request administrators decide, returned when the access requests
+	// rollout is on for the organization and the caller is a signed-in member. API
+	// keys and agents get no stored request. Its id is the request id. Asking
+	// again while a request for the same access is pending returns that request
+	// without notifying anyone again.
+	Request *AccessRequestResponseBody `form:"request,omitempty" json:"request,omitempty" xml:"request,omitempty"`
 }
 
 // ListChallengesResponseBody is the type of the "access" service
@@ -861,6 +886,89 @@ type RevokeTemporaryGrantResponseBody struct {
 	// the only route.
 	OtherAccess []string `form:"other_access" json:"other_access" xml:"other_access"`
 	// When the grant was given, or restarted after expiring.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// ListAccessRequestsResponseBody is the type of the "access" service
+// "listAccessRequests" endpoint HTTP response body.
+type ListAccessRequestsResponseBody struct {
+	// Access requests, newest first. At most 200 are returned.
+	Requests []*AccessRequestResponseBody `form:"requests" json:"requests" xml:"requests"`
+}
+
+// DecideAccessRequestResponseBody is the type of the "access" service
+// "decideAccessRequest" endpoint HTTP response body.
+type DecideAccessRequestResponseBody struct {
+	// Access request ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The member who asked.
+	RequesterUserID string `form:"requester_user_id" json:"requester_user_id" xml:"requester_user_id"`
+	// The requester's display name, or their email when they have none.
+	RequesterName string `form:"requester_name" json:"requester_name" xml:"requester_name"`
+	// The scope asked for.
+	Scope string `form:"scope" json:"scope" xml:"scope"`
+	// The resource or activity boundary asked for.
+	Selector *SelectorResponseBody `form:"selector" json:"selector" xml:"selector"`
+	// Name of the resource, as it was when the request was made.
+	ResourceName *string `form:"resource_name,omitempty" json:"resource_name,omitempty" xml:"resource_name,omitempty"`
+	// The requester's note to the administrators.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// pending: waiting for a decision. approved: a temporary grant was given.
+	// denied, expired or withdrawn: no access was given.
+	Status string `form:"status" json:"status" xml:"status"`
+	// The administrator who approved or denied the request.
+	DecidedByUserID *string `form:"decided_by_user_id,omitempty" json:"decided_by_user_id,omitempty" xml:"decided_by_user_id,omitempty"`
+	// The deciding administrator's display name, or their email.
+	DecidedByName *string `form:"decided_by_name,omitempty" json:"decided_by_name,omitempty" xml:"decided_by_name,omitempty"`
+	// Where the decision was made: dashboard or slack.
+	DecidedVia *string `form:"decided_via,omitempty" json:"decided_via,omitempty" xml:"decided_via,omitempty"`
+	DecidedAt  *string `form:"decided_at,omitempty" json:"decided_at,omitempty" xml:"decided_at,omitempty"`
+	// The temporary grant an approval gave.
+	TemporaryGrantID *string `form:"temporary_grant_id,omitempty" json:"temporary_grant_id,omitempty" xml:"temporary_grant_id,omitempty"`
+	// When the temporary grant an approval gave stops, or stopped, authorizing
+	// requests.
+	GrantExpiresAt *string `form:"grant_expires_at,omitempty" json:"grant_expires_at,omitempty" xml:"grant_expires_at,omitempty"`
+	// When a pending request lapses.
+	ExpiresAt string `form:"expires_at" json:"expires_at" xml:"expires_at"`
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// WithdrawAccessRequestResponseBody is the type of the "access" service
+// "withdrawAccessRequest" endpoint HTTP response body.
+type WithdrawAccessRequestResponseBody struct {
+	// Access request ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The member who asked.
+	RequesterUserID string `form:"requester_user_id" json:"requester_user_id" xml:"requester_user_id"`
+	// The requester's display name, or their email when they have none.
+	RequesterName string `form:"requester_name" json:"requester_name" xml:"requester_name"`
+	// The scope asked for.
+	Scope string `form:"scope" json:"scope" xml:"scope"`
+	// The resource or activity boundary asked for.
+	Selector *SelectorResponseBody `form:"selector" json:"selector" xml:"selector"`
+	// Name of the resource, as it was when the request was made.
+	ResourceName *string `form:"resource_name,omitempty" json:"resource_name,omitempty" xml:"resource_name,omitempty"`
+	// The requester's note to the administrators.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// pending: waiting for a decision. approved: a temporary grant was given.
+	// denied, expired or withdrawn: no access was given.
+	Status string `form:"status" json:"status" xml:"status"`
+	// The administrator who approved or denied the request.
+	DecidedByUserID *string `form:"decided_by_user_id,omitempty" json:"decided_by_user_id,omitempty" xml:"decided_by_user_id,omitempty"`
+	// The deciding administrator's display name, or their email.
+	DecidedByName *string `form:"decided_by_name,omitempty" json:"decided_by_name,omitempty" xml:"decided_by_name,omitempty"`
+	// Where the decision was made: dashboard or slack.
+	DecidedVia *string `form:"decided_via,omitempty" json:"decided_via,omitempty" xml:"decided_via,omitempty"`
+	DecidedAt  *string `form:"decided_at,omitempty" json:"decided_at,omitempty" xml:"decided_at,omitempty"`
+	// The temporary grant an approval gave.
+	TemporaryGrantID *string `form:"temporary_grant_id,omitempty" json:"temporary_grant_id,omitempty" xml:"temporary_grant_id,omitempty"`
+	// When the temporary grant an approval gave stops, or stopped, authorizing
+	// requests.
+	GrantExpiresAt *string `form:"grant_expires_at,omitempty" json:"grant_expires_at,omitempty" xml:"grant_expires_at,omitempty"`
+	// When a pending request lapses.
+	ExpiresAt string `form:"expires_at" json:"expires_at" xml:"expires_at"`
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
@@ -9625,6 +9733,565 @@ type RevokeTemporaryGrantGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListAccessRequestsUnauthorizedResponseBody is the type of the "access"
+// service "listAccessRequests" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListAccessRequestsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAccessRequestsForbiddenResponseBody is the type of the "access" service
+// "listAccessRequests" endpoint HTTP response body for the "forbidden" error.
+type ListAccessRequestsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAccessRequestsBadRequestResponseBody is the type of the "access" service
+// "listAccessRequests" endpoint HTTP response body for the "bad_request" error.
+type ListAccessRequestsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAccessRequestsNotFoundResponseBody is the type of the "access" service
+// "listAccessRequests" endpoint HTTP response body for the "not_found" error.
+type ListAccessRequestsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAccessRequestsConflictResponseBody is the type of the "access" service
+// "listAccessRequests" endpoint HTTP response body for the "conflict" error.
+type ListAccessRequestsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAccessRequestsUnsupportedMediaResponseBody is the type of the "access"
+// service "listAccessRequests" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListAccessRequestsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAccessRequestsInvalidResponseBody is the type of the "access" service
+// "listAccessRequests" endpoint HTTP response body for the "invalid" error.
+type ListAccessRequestsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAccessRequestsInvariantViolationResponseBody is the type of the "access"
+// service "listAccessRequests" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListAccessRequestsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAccessRequestsUnexpectedResponseBody is the type of the "access" service
+// "listAccessRequests" endpoint HTTP response body for the "unexpected" error.
+type ListAccessRequestsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAccessRequestsGatewayErrorResponseBody is the type of the "access"
+// service "listAccessRequests" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListAccessRequestsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DecideAccessRequestUnauthorizedResponseBody is the type of the "access"
+// service "decideAccessRequest" endpoint HTTP response body for the
+// "unauthorized" error.
+type DecideAccessRequestUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DecideAccessRequestForbiddenResponseBody is the type of the "access" service
+// "decideAccessRequest" endpoint HTTP response body for the "forbidden" error.
+type DecideAccessRequestForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DecideAccessRequestBadRequestResponseBody is the type of the "access"
+// service "decideAccessRequest" endpoint HTTP response body for the
+// "bad_request" error.
+type DecideAccessRequestBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DecideAccessRequestNotFoundResponseBody is the type of the "access" service
+// "decideAccessRequest" endpoint HTTP response body for the "not_found" error.
+type DecideAccessRequestNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DecideAccessRequestConflictResponseBody is the type of the "access" service
+// "decideAccessRequest" endpoint HTTP response body for the "conflict" error.
+type DecideAccessRequestConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DecideAccessRequestUnsupportedMediaResponseBody is the type of the "access"
+// service "decideAccessRequest" endpoint HTTP response body for the
+// "unsupported_media" error.
+type DecideAccessRequestUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DecideAccessRequestInvalidResponseBody is the type of the "access" service
+// "decideAccessRequest" endpoint HTTP response body for the "invalid" error.
+type DecideAccessRequestInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DecideAccessRequestInvariantViolationResponseBody is the type of the
+// "access" service "decideAccessRequest" endpoint HTTP response body for the
+// "invariant_violation" error.
+type DecideAccessRequestInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DecideAccessRequestUnexpectedResponseBody is the type of the "access"
+// service "decideAccessRequest" endpoint HTTP response body for the
+// "unexpected" error.
+type DecideAccessRequestUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DecideAccessRequestGatewayErrorResponseBody is the type of the "access"
+// service "decideAccessRequest" endpoint HTTP response body for the
+// "gateway_error" error.
+type DecideAccessRequestGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// WithdrawAccessRequestUnauthorizedResponseBody is the type of the "access"
+// service "withdrawAccessRequest" endpoint HTTP response body for the
+// "unauthorized" error.
+type WithdrawAccessRequestUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// WithdrawAccessRequestForbiddenResponseBody is the type of the "access"
+// service "withdrawAccessRequest" endpoint HTTP response body for the
+// "forbidden" error.
+type WithdrawAccessRequestForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// WithdrawAccessRequestBadRequestResponseBody is the type of the "access"
+// service "withdrawAccessRequest" endpoint HTTP response body for the
+// "bad_request" error.
+type WithdrawAccessRequestBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// WithdrawAccessRequestNotFoundResponseBody is the type of the "access"
+// service "withdrawAccessRequest" endpoint HTTP response body for the
+// "not_found" error.
+type WithdrawAccessRequestNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// WithdrawAccessRequestConflictResponseBody is the type of the "access"
+// service "withdrawAccessRequest" endpoint HTTP response body for the
+// "conflict" error.
+type WithdrawAccessRequestConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// WithdrawAccessRequestUnsupportedMediaResponseBody is the type of the
+// "access" service "withdrawAccessRequest" endpoint HTTP response body for the
+// "unsupported_media" error.
+type WithdrawAccessRequestUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// WithdrawAccessRequestInvalidResponseBody is the type of the "access" service
+// "withdrawAccessRequest" endpoint HTTP response body for the "invalid" error.
+type WithdrawAccessRequestInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// WithdrawAccessRequestInvariantViolationResponseBody is the type of the
+// "access" service "withdrawAccessRequest" endpoint HTTP response body for the
+// "invariant_violation" error.
+type WithdrawAccessRequestInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// WithdrawAccessRequestUnexpectedResponseBody is the type of the "access"
+// service "withdrawAccessRequest" endpoint HTTP response body for the
+// "unexpected" error.
+type WithdrawAccessRequestUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// WithdrawAccessRequestGatewayErrorResponseBody is the type of the "access"
+// service "withdrawAccessRequest" endpoint HTTP response body for the
+// "gateway_error" error.
+type WithdrawAccessRequestGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // RoleResponseBody is used to define fields on response body types.
 type RoleResponseBody struct {
 	// Unique role identifier.
@@ -10428,6 +11095,43 @@ type ExplainedCredentialRuleResponseBody struct {
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 	// Whether the member holds this role only through a directory role mapping.
 	ViaDirectoryMapping bool `form:"via_directory_mapping" json:"via_directory_mapping" xml:"via_directory_mapping"`
+}
+
+// AccessRequestResponseBody is used to define fields on response body types.
+type AccessRequestResponseBody struct {
+	// Access request ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The member who asked.
+	RequesterUserID string `form:"requester_user_id" json:"requester_user_id" xml:"requester_user_id"`
+	// The requester's display name, or their email when they have none.
+	RequesterName string `form:"requester_name" json:"requester_name" xml:"requester_name"`
+	// The scope asked for.
+	Scope string `form:"scope" json:"scope" xml:"scope"`
+	// The resource or activity boundary asked for.
+	Selector *SelectorResponseBody `form:"selector" json:"selector" xml:"selector"`
+	// Name of the resource, as it was when the request was made.
+	ResourceName *string `form:"resource_name,omitempty" json:"resource_name,omitempty" xml:"resource_name,omitempty"`
+	// The requester's note to the administrators.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// pending: waiting for a decision. approved: a temporary grant was given.
+	// denied, expired or withdrawn: no access was given.
+	Status string `form:"status" json:"status" xml:"status"`
+	// The administrator who approved or denied the request.
+	DecidedByUserID *string `form:"decided_by_user_id,omitempty" json:"decided_by_user_id,omitempty" xml:"decided_by_user_id,omitempty"`
+	// The deciding administrator's display name, or their email.
+	DecidedByName *string `form:"decided_by_name,omitempty" json:"decided_by_name,omitempty" xml:"decided_by_name,omitempty"`
+	// Where the decision was made: dashboard or slack.
+	DecidedVia *string `form:"decided_via,omitempty" json:"decided_via,omitempty" xml:"decided_via,omitempty"`
+	DecidedAt  *string `form:"decided_at,omitempty" json:"decided_at,omitempty" xml:"decided_at,omitempty"`
+	// The temporary grant an approval gave.
+	TemporaryGrantID *string `form:"temporary_grant_id,omitempty" json:"temporary_grant_id,omitempty" xml:"temporary_grant_id,omitempty"`
+	// When the temporary grant an approval gave stops, or stopped, authorizing
+	// requests.
+	GrantExpiresAt *string `form:"grant_expires_at,omitempty" json:"grant_expires_at,omitempty" xml:"grant_expires_at,omitempty"`
+	// When a pending request lapses.
+	ExpiresAt string `form:"expires_at" json:"expires_at" xml:"expires_at"`
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // AuthzChallengeResponseBody is used to define fields on response body types.
@@ -11640,6 +12344,9 @@ func NewRequestAccessResponseBody(res *access.RequestAccessResult) *RequestAcces
 	body := &RequestAccessResponseBody{
 		SentToCount: res.SentToCount,
 	}
+	if res.Request != nil {
+		body.Request = marshalAccessAccessRequestToAccessRequestResponseBody(res.Request)
+	}
 	return body
 }
 
@@ -11831,6 +12538,79 @@ func NewRevokeTemporaryGrantResponseBody(res *access.TemporaryGrant) *RevokeTemp
 		}
 	} else {
 		body.OtherAccess = []string{}
+	}
+	return body
+}
+
+// NewListAccessRequestsResponseBody builds the HTTP response body from the
+// result of the "listAccessRequests" endpoint of the "access" service.
+func NewListAccessRequestsResponseBody(res *access.ListAccessRequestsResult) *ListAccessRequestsResponseBody {
+	body := &ListAccessRequestsResponseBody{}
+	if res.Requests != nil {
+		body.Requests = make([]*AccessRequestResponseBody, len(res.Requests))
+		for i, val := range res.Requests {
+			if val == nil {
+				body.Requests[i] = nil
+				continue
+			}
+			body.Requests[i] = marshalAccessAccessRequestToAccessRequestResponseBody(val)
+		}
+	} else {
+		body.Requests = []*AccessRequestResponseBody{}
+	}
+	return body
+}
+
+// NewDecideAccessRequestResponseBody builds the HTTP response body from the
+// result of the "decideAccessRequest" endpoint of the "access" service.
+func NewDecideAccessRequestResponseBody(res *access.AccessRequest) *DecideAccessRequestResponseBody {
+	body := &DecideAccessRequestResponseBody{
+		ID:               res.ID,
+		RequesterUserID:  res.RequesterUserID,
+		RequesterName:    res.RequesterName,
+		Scope:            res.Scope,
+		ResourceName:     res.ResourceName,
+		Message:          res.Message,
+		Status:           res.Status,
+		DecidedByUserID:  res.DecidedByUserID,
+		DecidedByName:    res.DecidedByName,
+		DecidedVia:       res.DecidedVia,
+		DecidedAt:        res.DecidedAt,
+		TemporaryGrantID: res.TemporaryGrantID,
+		GrantExpiresAt:   res.GrantExpiresAt,
+		ExpiresAt:        res.ExpiresAt,
+		CreatedAt:        res.CreatedAt,
+		UpdatedAt:        res.UpdatedAt,
+	}
+	if res.Selector != nil {
+		body.Selector = marshalAccessSelectorToSelectorResponseBody(res.Selector)
+	}
+	return body
+}
+
+// NewWithdrawAccessRequestResponseBody builds the HTTP response body from the
+// result of the "withdrawAccessRequest" endpoint of the "access" service.
+func NewWithdrawAccessRequestResponseBody(res *access.AccessRequest) *WithdrawAccessRequestResponseBody {
+	body := &WithdrawAccessRequestResponseBody{
+		ID:               res.ID,
+		RequesterUserID:  res.RequesterUserID,
+		RequesterName:    res.RequesterName,
+		Scope:            res.Scope,
+		ResourceName:     res.ResourceName,
+		Message:          res.Message,
+		Status:           res.Status,
+		DecidedByUserID:  res.DecidedByUserID,
+		DecidedByName:    res.DecidedByName,
+		DecidedVia:       res.DecidedVia,
+		DecidedAt:        res.DecidedAt,
+		TemporaryGrantID: res.TemporaryGrantID,
+		GrantExpiresAt:   res.GrantExpiresAt,
+		ExpiresAt:        res.ExpiresAt,
+		CreatedAt:        res.CreatedAt,
+		UpdatedAt:        res.UpdatedAt,
+	}
+	if res.Selector != nil {
+		body.Selector = marshalAccessSelectorToSelectorResponseBody(res.Selector)
 	}
 	return body
 }
@@ -18740,6 +19520,447 @@ func NewRevokeTemporaryGrantGatewayErrorResponseBody(res *goa.ServiceError) *Rev
 	return body
 }
 
+// NewListAccessRequestsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listAccessRequests" endpoint of the "access" service.
+func NewListAccessRequestsUnauthorizedResponseBody(res *goa.ServiceError) *ListAccessRequestsUnauthorizedResponseBody {
+	body := &ListAccessRequestsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAccessRequestsForbiddenResponseBody builds the HTTP response body
+// from the result of the "listAccessRequests" endpoint of the "access" service.
+func NewListAccessRequestsForbiddenResponseBody(res *goa.ServiceError) *ListAccessRequestsForbiddenResponseBody {
+	body := &ListAccessRequestsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAccessRequestsBadRequestResponseBody builds the HTTP response body
+// from the result of the "listAccessRequests" endpoint of the "access" service.
+func NewListAccessRequestsBadRequestResponseBody(res *goa.ServiceError) *ListAccessRequestsBadRequestResponseBody {
+	body := &ListAccessRequestsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAccessRequestsNotFoundResponseBody builds the HTTP response body from
+// the result of the "listAccessRequests" endpoint of the "access" service.
+func NewListAccessRequestsNotFoundResponseBody(res *goa.ServiceError) *ListAccessRequestsNotFoundResponseBody {
+	body := &ListAccessRequestsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAccessRequestsConflictResponseBody builds the HTTP response body from
+// the result of the "listAccessRequests" endpoint of the "access" service.
+func NewListAccessRequestsConflictResponseBody(res *goa.ServiceError) *ListAccessRequestsConflictResponseBody {
+	body := &ListAccessRequestsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAccessRequestsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listAccessRequests" endpoint of the "access"
+// service.
+func NewListAccessRequestsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListAccessRequestsUnsupportedMediaResponseBody {
+	body := &ListAccessRequestsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAccessRequestsInvalidResponseBody builds the HTTP response body from
+// the result of the "listAccessRequests" endpoint of the "access" service.
+func NewListAccessRequestsInvalidResponseBody(res *goa.ServiceError) *ListAccessRequestsInvalidResponseBody {
+	body := &ListAccessRequestsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAccessRequestsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listAccessRequests" endpoint of the "access"
+// service.
+func NewListAccessRequestsInvariantViolationResponseBody(res *goa.ServiceError) *ListAccessRequestsInvariantViolationResponseBody {
+	body := &ListAccessRequestsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAccessRequestsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listAccessRequests" endpoint of the "access" service.
+func NewListAccessRequestsUnexpectedResponseBody(res *goa.ServiceError) *ListAccessRequestsUnexpectedResponseBody {
+	body := &ListAccessRequestsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAccessRequestsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listAccessRequests" endpoint of the "access" service.
+func NewListAccessRequestsGatewayErrorResponseBody(res *goa.ServiceError) *ListAccessRequestsGatewayErrorResponseBody {
+	body := &ListAccessRequestsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDecideAccessRequestUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "decideAccessRequest" endpoint of the "access"
+// service.
+func NewDecideAccessRequestUnauthorizedResponseBody(res *goa.ServiceError) *DecideAccessRequestUnauthorizedResponseBody {
+	body := &DecideAccessRequestUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDecideAccessRequestForbiddenResponseBody builds the HTTP response body
+// from the result of the "decideAccessRequest" endpoint of the "access"
+// service.
+func NewDecideAccessRequestForbiddenResponseBody(res *goa.ServiceError) *DecideAccessRequestForbiddenResponseBody {
+	body := &DecideAccessRequestForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDecideAccessRequestBadRequestResponseBody builds the HTTP response body
+// from the result of the "decideAccessRequest" endpoint of the "access"
+// service.
+func NewDecideAccessRequestBadRequestResponseBody(res *goa.ServiceError) *DecideAccessRequestBadRequestResponseBody {
+	body := &DecideAccessRequestBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDecideAccessRequestNotFoundResponseBody builds the HTTP response body
+// from the result of the "decideAccessRequest" endpoint of the "access"
+// service.
+func NewDecideAccessRequestNotFoundResponseBody(res *goa.ServiceError) *DecideAccessRequestNotFoundResponseBody {
+	body := &DecideAccessRequestNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDecideAccessRequestConflictResponseBody builds the HTTP response body
+// from the result of the "decideAccessRequest" endpoint of the "access"
+// service.
+func NewDecideAccessRequestConflictResponseBody(res *goa.ServiceError) *DecideAccessRequestConflictResponseBody {
+	body := &DecideAccessRequestConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDecideAccessRequestUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "decideAccessRequest" endpoint of the "access"
+// service.
+func NewDecideAccessRequestUnsupportedMediaResponseBody(res *goa.ServiceError) *DecideAccessRequestUnsupportedMediaResponseBody {
+	body := &DecideAccessRequestUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDecideAccessRequestInvalidResponseBody builds the HTTP response body from
+// the result of the "decideAccessRequest" endpoint of the "access" service.
+func NewDecideAccessRequestInvalidResponseBody(res *goa.ServiceError) *DecideAccessRequestInvalidResponseBody {
+	body := &DecideAccessRequestInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDecideAccessRequestInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "decideAccessRequest" endpoint of the
+// "access" service.
+func NewDecideAccessRequestInvariantViolationResponseBody(res *goa.ServiceError) *DecideAccessRequestInvariantViolationResponseBody {
+	body := &DecideAccessRequestInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDecideAccessRequestUnexpectedResponseBody builds the HTTP response body
+// from the result of the "decideAccessRequest" endpoint of the "access"
+// service.
+func NewDecideAccessRequestUnexpectedResponseBody(res *goa.ServiceError) *DecideAccessRequestUnexpectedResponseBody {
+	body := &DecideAccessRequestUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDecideAccessRequestGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "decideAccessRequest" endpoint of the "access"
+// service.
+func NewDecideAccessRequestGatewayErrorResponseBody(res *goa.ServiceError) *DecideAccessRequestGatewayErrorResponseBody {
+	body := &DecideAccessRequestGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewWithdrawAccessRequestUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "withdrawAccessRequest" endpoint of the "access"
+// service.
+func NewWithdrawAccessRequestUnauthorizedResponseBody(res *goa.ServiceError) *WithdrawAccessRequestUnauthorizedResponseBody {
+	body := &WithdrawAccessRequestUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewWithdrawAccessRequestForbiddenResponseBody builds the HTTP response body
+// from the result of the "withdrawAccessRequest" endpoint of the "access"
+// service.
+func NewWithdrawAccessRequestForbiddenResponseBody(res *goa.ServiceError) *WithdrawAccessRequestForbiddenResponseBody {
+	body := &WithdrawAccessRequestForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewWithdrawAccessRequestBadRequestResponseBody builds the HTTP response body
+// from the result of the "withdrawAccessRequest" endpoint of the "access"
+// service.
+func NewWithdrawAccessRequestBadRequestResponseBody(res *goa.ServiceError) *WithdrawAccessRequestBadRequestResponseBody {
+	body := &WithdrawAccessRequestBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewWithdrawAccessRequestNotFoundResponseBody builds the HTTP response body
+// from the result of the "withdrawAccessRequest" endpoint of the "access"
+// service.
+func NewWithdrawAccessRequestNotFoundResponseBody(res *goa.ServiceError) *WithdrawAccessRequestNotFoundResponseBody {
+	body := &WithdrawAccessRequestNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewWithdrawAccessRequestConflictResponseBody builds the HTTP response body
+// from the result of the "withdrawAccessRequest" endpoint of the "access"
+// service.
+func NewWithdrawAccessRequestConflictResponseBody(res *goa.ServiceError) *WithdrawAccessRequestConflictResponseBody {
+	body := &WithdrawAccessRequestConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewWithdrawAccessRequestUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "withdrawAccessRequest" endpoint of the
+// "access" service.
+func NewWithdrawAccessRequestUnsupportedMediaResponseBody(res *goa.ServiceError) *WithdrawAccessRequestUnsupportedMediaResponseBody {
+	body := &WithdrawAccessRequestUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewWithdrawAccessRequestInvalidResponseBody builds the HTTP response body
+// from the result of the "withdrawAccessRequest" endpoint of the "access"
+// service.
+func NewWithdrawAccessRequestInvalidResponseBody(res *goa.ServiceError) *WithdrawAccessRequestInvalidResponseBody {
+	body := &WithdrawAccessRequestInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewWithdrawAccessRequestInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "withdrawAccessRequest" endpoint of the
+// "access" service.
+func NewWithdrawAccessRequestInvariantViolationResponseBody(res *goa.ServiceError) *WithdrawAccessRequestInvariantViolationResponseBody {
+	body := &WithdrawAccessRequestInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewWithdrawAccessRequestUnexpectedResponseBody builds the HTTP response body
+// from the result of the "withdrawAccessRequest" endpoint of the "access"
+// service.
+func NewWithdrawAccessRequestUnexpectedResponseBody(res *goa.ServiceError) *WithdrawAccessRequestUnexpectedResponseBody {
+	body := &WithdrawAccessRequestUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewWithdrawAccessRequestGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "withdrawAccessRequest" endpoint of the "access"
+// service.
+func NewWithdrawAccessRequestGatewayErrorResponseBody(res *goa.ServiceError) *WithdrawAccessRequestGatewayErrorResponseBody {
+	body := &WithdrawAccessRequestGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListRolesPayload builds a access service listRoles endpoint payload.
 func NewListRolesPayload(apikeyToken *string, sessionToken *string) *access.ListRolesPayload {
 	v := &access.ListRolesPayload{}
@@ -19435,6 +20656,41 @@ func NewRevokeTemporaryGrantPayload(body *RevokeTemporaryGrantRequestBody, sessi
 	return v
 }
 
+// NewListAccessRequestsPayload builds a access service listAccessRequests
+// endpoint payload.
+func NewListAccessRequestsPayload(status *string, mine bool, sessionToken *string) *access.ListAccessRequestsPayload {
+	v := &access.ListAccessRequestsPayload{}
+	v.Status = status
+	v.Mine = mine
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewDecideAccessRequestPayload builds a access service decideAccessRequest
+// endpoint payload.
+func NewDecideAccessRequestPayload(body *DecideAccessRequestRequestBody, sessionToken *string) *access.DecideAccessRequestPayload {
+	v := &access.DecideAccessRequestPayload{
+		ID:        *body.ID,
+		Approve:   *body.Approve,
+		ExpiresAt: body.ExpiresAt,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewWithdrawAccessRequestPayload builds a access service
+// withdrawAccessRequest endpoint payload.
+func NewWithdrawAccessRequestPayload(body *WithdrawAccessRequestRequestBody, sessionToken *string) *access.WithdrawAccessRequestPayload {
+	v := &access.WithdrawAccessRequestPayload{
+		ID: *body.ID,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // ValidateCreateRoleRequestBody runs the validations defined on
 // CreateRoleRequestBody
 func ValidateCreateRoleRequestBody(body *CreateRoleRequestBody) (err error) {
@@ -19855,6 +21111,36 @@ func ValidateRenewTemporaryGrantRequestBody(body *RenewTemporaryGrantRequestBody
 // ValidateRevokeTemporaryGrantRequestBody runs the validations defined on
 // RevokeTemporaryGrantRequestBody
 func ValidateRevokeTemporaryGrantRequestBody(body *RevokeTemporaryGrantRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateDecideAccessRequestRequestBody runs the validations defined on
+// DecideAccessRequestRequestBody
+func ValidateDecideAccessRequestRequestBody(body *DecideAccessRequestRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Approve == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("approve", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateWithdrawAccessRequestRequestBody runs the validations defined on
+// WithdrawAccessRequestRequestBody
+func ValidateWithdrawAccessRequestRequestBody(body *WithdrawAccessRequestRequestBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}

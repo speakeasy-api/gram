@@ -1,14 +1,9 @@
 package slackapproval
 
 import (
-	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"hash"
 	"io"
 	"log/slog"
 	"net/http"
@@ -20,65 +15,31 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval/repo"
+	"github.com/speakeasy-api/gram/server/internal/slackdm"
 )
 
-const (
-	// InteractionsPath is the Slack app's interactivity request URL.
-	InteractionsPath = "/slack/interactions"
+// InteractionsPath is the Slack app's interactivity request URL.
+const InteractionsPath = slackdm.InteractionsPath
 
-	// maxInteractionBytes bounds a click payload. Slack's block_actions
-	// payloads carry the message they came from and stay well under this.
-	maxInteractionBytes = 1 << 20 // 1 MiB
-
-	// slackResponseHost is the only host a response_url may point at.
-	slackResponseHost = "hooks.slack.com"
-
-	// responseTimeout bounds the reply to a click.
-	responseTimeout = 10 * time.Second
-
-	// clickTimeout bounds deciding a click and replying to it. The click is
-	// acknowledged first, and Slack takes replies through response_url for 30
-	// minutes, so this only has to stop a stuck click from running forever.
-	clickTimeout = time.Minute
-)
-
-// slackSignature is how Slack signs requests: v0=HMAC-SHA256 over
-// "v0:{timestamp}:{body}", with timestamps more than 5 minutes off rejected.
-var slackSignature = triggers.HMACScheme{
-	NewHash:         func(key []byte) hash.Hash { return hmac.New(sha256.New, key) },
-	Header:          "X-Slack-Signature",
-	Encoding:        "hex",
-	Prefix:          "v0=",
-	Template:        "v0:{timestamp}:{body}",
-	TimestampHeader: "X-Slack-Request-Timestamp",
-	TimestampSkew:   5 * time.Minute,
-}
+// clickTimeout bounds deciding a click and replying to it. The click is
+// acknowledged first, and Slack takes replies through response_url for 30
+// minutes, so this only has to stop a stuck click from running forever.
+const clickTimeout = time.Minute
 
 // Responder replies to a click through its response_url.
-type Responder interface {
-	Respond(ctx context.Context, responseURL string, message ResponseMessage) error
-}
+type Responder = slackdm.Responder
 
-// ResponseMessage is a reply to a click. It either replaces the message the
-// click came from or adds an ephemeral note only the clicker sees.
-type ResponseMessage struct {
-	// ResponseType is ephemeral for a note only the clicker sees.
-	ResponseType string `json:"response_type,omitempty"`
+// ResponseMessage is a reply to a click.
+type ResponseMessage = slackdm.ResponseMessage
 
-	// ReplaceOriginal replaces the message the click came from.
-	ReplaceOriginal bool `json:"replace_original"`
-
-	// Text is the reply's text, and the fallback when it has blocks.
-	Text string `json:"text"`
-
-	// Blocks replace the original message's blocks.
-	Blocks []block `json:"blocks,omitempty"`
+// NewHTTPResponder builds a Responder that posts to Slack's response_url
+// with client.
+func NewHTTPResponder(client *guardian.HTTPClient) *slackdm.HTTPResponder {
+	return slackdm.NewHTTPResponder(client)
 }
 
 // Interactions handles clicks on approval request DMs.
@@ -144,8 +105,8 @@ type interactionPayload struct {
 // and the outcome goes back through response_url.
 func (h *Interactions) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxInteractionBytes+1))
-	if err != nil || len(body) > maxInteractionBytes {
+	body, err := io.ReadAll(io.LimitReader(r.Body, slackdm.MaxInteractionBytes+1))
+	if err != nil || len(body) > slackdm.MaxInteractionBytes {
 		http.Error(w, "unreadable request", http.StatusBadRequest)
 		return
 	}
@@ -153,7 +114,7 @@ func (h *Interactions) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Slack interactions are not configured", http.StatusNotFound)
 		return
 	}
-	if err := slackSignature.Verify(body, r.Header, h.signingSecret); err != nil {
+	if err := slackdm.VerifySignature(body, r.Header, h.signingSecret); err != nil {
 		h.logger.WarnContext(ctx, "reject unsigned Slack interaction", attr.SlogError(err))
 		http.Error(w, "invalid signature", http.StatusUnauthorized)
 		return
@@ -199,18 +160,18 @@ func (h *Interactions) handleClick(ctx context.Context, payload interactionPaylo
 		SlackMessageTs: conv.ToPGText(payload.Container.MessageTS),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ephemeral("This approval request is no longer available.")
+		return slackdm.Ephemeral("This approval request is no longer available.")
 	}
 	if err != nil {
 		h.logger.ErrorContext(ctx, "look up approval DM", attr.SlogError(err))
-		return ephemeral("Something went wrong. Try again, or decide in Speakeasy.")
+		return slackdm.Ephemeral("Something went wrong. Try again, or decide in Speakeasy.")
 	}
 	message := found.RiskPolicyApprovalMessage
 	// The DM went to one approver, so a click is theirs only when it comes
 	// from that Slack user and names the request the DM was sent for.
 	if message.SlackUserID.String != payload.User.ID || message.ApprovalID.String() != value {
 		h.logger.WarnContext(ctx, "reject Slack click from another user", attr.SlogSlackTeamID(payload.Team.ID), attr.SlogRiskPolicyApprovalID(message.ApprovalID.String()))
-		return ephemeral("Only the approver this message was sent to can decide here.")
+		return slackdm.Ephemeral("Only the approver this message was sent to can decide here.")
 	}
 	logger := h.logger.With(attr.SlogOrganizationID(message.OrganizationID), attr.SlogRiskPolicyApprovalID(message.ApprovalID.String()), attr.SlogUserID(message.RecipientUserID))
 
@@ -226,23 +187,23 @@ func (h *Interactions) handleClick(ctx context.Context, payload interactionPaylo
 	})
 	switch {
 	case errors.Is(err, approval.ErrSelfApproval):
-		return ephemeral("You made this call, so someone else has to approve it.")
+		return slackdm.Ephemeral("You made this call, so someone else has to approve it.")
 	case errors.Is(err, approval.ErrNotApprover):
-		return ephemeral("You are no longer an approver for this policy, so you cannot decide this request.")
+		return slackdm.Ephemeral("You are no longer an approver for this policy, so you cannot decide this request.")
 	case errors.Is(err, approval.ErrNotFound):
-		return ephemeral("This approval request no longer exists. Its policy may have been deleted.")
+		return slackdm.Ephemeral("This approval request no longer exists. Its policy may have been deleted.")
 	case errors.Is(err, approval.ErrNotPending):
 		return h.replaceWithCurrent(ctx, logger, message.OrganizationID, message.ProjectID, message.ApprovalID)
 	case err != nil:
 		logger.ErrorContext(ctx, "decide approval from Slack", attr.SlogError(err))
-		return ephemeral("Something went wrong. Try again, or decide in Speakeasy.")
+		return slackdm.Ephemeral("Something went wrong. Try again, or decide in Speakeasy.")
 	}
 	final, err := h.cards.decided(ctx, decided)
 	if err != nil {
 		logger.ErrorContext(ctx, "build decided approval card", attr.SlogError(err))
-		return ephemeral("Your decision was recorded.")
+		return slackdm.Ephemeral("Your decision was recorded.")
 	}
-	return replace(final)
+	return slackdm.Replace(final)
 }
 
 // replaceWithCurrent shows a click on a card that is out of date what
@@ -251,60 +212,12 @@ func (h *Interactions) replaceWithCurrent(ctx context.Context, logger *slog.Logg
 	row, err := h.approvals.Get(ctx, organizationID, projectID, approvalID)
 	if err != nil {
 		logger.ErrorContext(ctx, "reload approval after a late Slack click", attr.SlogError(err))
-		return ephemeral("This request was already decided or has expired.")
+		return slackdm.Ephemeral("This request was already decided or has expired.")
 	}
 	final, err := h.cards.decided(ctx, row)
 	if err != nil {
 		logger.ErrorContext(ctx, "build decided approval card", attr.SlogError(err))
-		return ephemeral("This request was already decided or has expired.")
+		return slackdm.Ephemeral("This request was already decided or has expired.")
 	}
-	return replace(final)
-}
-
-func ephemeral(text string) ResponseMessage {
-	return ResponseMessage{ResponseType: "ephemeral", ReplaceOriginal: false, Text: text, Blocks: nil}
-}
-
-func replace(content card) ResponseMessage {
-	return ResponseMessage{ResponseType: "", ReplaceOriginal: true, Text: content.Text, Blocks: content.Blocks}
-}
-
-// HTTPResponder posts replies to Slack's response_url.
-type HTTPResponder struct {
-	client *guardian.HTTPClient
-}
-
-// NewHTTPResponder builds a Responder that posts with client.
-func NewHTTPResponder(client *guardian.HTTPClient) *HTTPResponder {
-	return &HTTPResponder{client: client}
-}
-
-// Respond posts message to responseURL, which must be a Slack response URL:
-// the payload is signed, but the URL is still never trusted to point
-// anywhere else.
-func (r *HTTPResponder) Respond(ctx context.Context, responseURL string, message ResponseMessage) error {
-	target, err := url.Parse(responseURL)
-	if err != nil || target.Scheme != "https" || target.Host != slackResponseHost {
-		return errors.New("response_url is not a Slack response URL")
-	}
-	body, err := json.Marshal(message)
-	if err != nil {
-		return fmt.Errorf("encode Slack reply: %w", err)
-	}
-	ctx, cancel := context.WithTimeout(ctx, responseTimeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target.String(), bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("build Slack reply: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := r.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("send Slack reply: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("send Slack reply: status %d", resp.StatusCode)
-	}
-	return nil
+	return slackdm.Replace(final)
 }

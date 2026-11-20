@@ -5,7 +5,6 @@ package slackapproval
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -27,6 +26,7 @@ import (
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/slackscopes"
+	"github.com/speakeasy-api/gram/server/internal/slackdm"
 	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -95,7 +95,7 @@ type Notifier struct {
 	approvals  *approval.Service
 	cards      *Cards
 	workspaces WorkspaceSource
-	slack      *slackapi.Client
+	slack      *slackdm.Messenger
 }
 
 // NewNotifier builds a Notifier that posts through slack to the workspaces
@@ -107,7 +107,7 @@ func NewNotifier(logger *slog.Logger, cards *Cards, workspaces WorkspaceSource, 
 		approvals:  cards.approvals,
 		cards:      cards,
 		workspaces: workspaces,
-		slack:      slack,
+		slack:      slackdm.NewMessenger(cards.db, slack),
 	}
 }
 
@@ -188,7 +188,7 @@ func (n *Notifier) Notify(ctx context.Context, target Target) (NotifyResult, err
 		if sent[person.userID] {
 			continue
 		}
-		workspace, slackUserID, err := n.findSlackUser(ctx, row.OrganizationID, person, workspaces)
+		workspace, slackUserID, err := n.slack.FindUser(ctx, row.OrganizationID, slackdm.Person{UserID: person.userID, Email: person.email}, workspaces)
 		if err != nil {
 			retry = errors.Join(retry, err)
 			continue
@@ -197,9 +197,9 @@ func (n *Notifier) Notify(ctx context.Context, target Target) (NotifyResult, err
 			logger.InfoContext(ctx, "approver has no Slack account in a connected workspace", attr.SlogUserID(person.userID))
 			continue
 		}
-		posted, err := n.post(ctx, workspace.Token, slackUserID, pending)
+		posted, err := n.slack.Post(ctx, workspace.Token, slackUserID, pending)
 		if err != nil {
-			if retryable(err) {
+			if slackdm.Retryable(err) {
 				retry = errors.Join(retry, err)
 				continue
 			}
@@ -277,14 +277,9 @@ func (n *Notifier) Finish(ctx context.Context, target Target) error {
 			skipped = true
 			continue
 		}
-		_, err := n.slack.CallWithToken(ctx, "chat.update", map[string]any{
-			"channel": message.SlackChannelID.String,
-			"ts":      message.SlackMessageTs.String,
-			"text":    final.Text,
-			"blocks":  final.Blocks,
-		}, token)
+		err := n.slack.Update(ctx, token, message.SlackChannelID.String, message.SlackMessageTs.String, final)
 		if err != nil {
-			if retryable(err) {
+			if slackdm.Retryable(err) {
 				retry = errors.Join(retry, err)
 				continue
 			}
@@ -301,18 +296,18 @@ func (n *Notifier) Finish(ctx context.Context, target Target) error {
 }
 
 // decided is the card a request's DMs show once it is no longer pending.
-func (c *Cards) decided(ctx context.Context, row repo.RiskPolicyApproval) (card, error) {
+func (c *Cards) decided(ctx context.Context, row repo.RiskPolicyApproval) (slackdm.Message, error) {
 	policy, err := c.policy(ctx, row)
 	name := "Deleted policy"
 	if err == nil {
 		name = policy.Name
 	}
 	if err != nil && !errors.Is(err, approval.ErrNotFound) {
-		return card{Text: "", Blocks: nil}, err
+		return slackdm.Message{Text: "", Blocks: nil}, err
 	}
 	content, err := c.input(ctx, row, name)
 	if err != nil {
-		return card{Text: "", Blocks: nil}, err
+		return slackdm.Message{Text: "", Blocks: nil}, err
 	}
 	return decidedCard(content), nil
 }
@@ -386,76 +381,6 @@ func (n *Notifier) recipients(ctx context.Context, row repo.RiskPolicyApproval, 
 		out = append(out, recipient{userID: member.UserID, email: member.Email, displayName: member.DisplayName})
 	}
 	return out, nil
-}
-
-// findSlackUser finds the approver in a workspace the app can post to: a
-// confirmed mapping first, then their email, when Slack has confirmed it the
-// way directory sync requires. It returns a nil workspace when the approver
-// has no Slack account there.
-func (n *Notifier) findSlackUser(ctx context.Context, organizationID string, person recipient, workspaces []slackdirectoryconnections.MessagingWorkspace) (*slackdirectoryconnections.MessagingWorkspace, string, error) {
-	accounts, err := slackdirectoryconnections.SlackAccounts(ctx, n.db, organizationID, person.userID)
-	if err != nil {
-		return nil, "", fmt.Errorf("list approver Slack accounts: %w", err)
-	}
-	for _, account := range accounts {
-		for i := range workspaces {
-			if workspaces[i].TeamID == account.TeamID {
-				return &workspaces[i], account.UserID, nil
-			}
-		}
-	}
-	if person.email == "" {
-		return nil, "", nil
-	}
-	var retry error
-	for i := range workspaces {
-		body, err := n.slack.CallWithToken(ctx, "users.lookupByEmail", map[string]any{"email": person.email}, workspaces[i].Token)
-		if err != nil {
-			if retryable(err) {
-				retry = errors.Join(retry, err)
-			}
-			continue
-		}
-		var found struct {
-			User struct {
-				ID             string `json:"id"`
-				EmailConfirmed *bool  `json:"is_email_confirmed"`
-			} `json:"user"`
-		}
-		if err := json.Unmarshal(body, &found); err != nil || found.User.ID == "" || !conv.PtrValOr(found.User.EmailConfirmed, true) {
-			continue
-		}
-		return &workspaces[i], found.User.ID, nil
-	}
-	return nil, "", retry
-}
-
-// postedMessage is where chat.postMessage put a message.
-type postedMessage struct {
-	// Channel is the DM channel ID.
-	Channel string `json:"channel"`
-
-	// TS is the message timestamp, its ID within the channel.
-	TS string `json:"ts"`
-}
-
-// post sends a card to a Slack user. A user ID as the channel lands in the
-// app's DM with them, so nobody has to invite the app anywhere.
-func (n *Notifier) post(ctx context.Context, token, slackUserID string, content card) (postedMessage, error) {
-	body, err := n.slack.CallWithToken(ctx, "chat.postMessage", map[string]any{
-		"channel":      slackUserID,
-		"text":         content.Text,
-		"blocks":       content.Blocks,
-		"unfurl_links": false,
-	}, token)
-	if err != nil {
-		return postedMessage{Channel: "", TS: ""}, fmt.Errorf("post approval DM: %w", err)
-	}
-	var posted postedMessage
-	if err := json.Unmarshal(body, &posted); err != nil || posted.Channel == "" || posted.TS == "" {
-		return postedMessage{Channel: "", TS: ""}, errors.New("post approval DM: Slack returned no message")
-	}
-	return posted, nil
 }
 
 func (c *Cards) input(ctx context.Context, row repo.RiskPolicyApproval, policyName string) (cardInput, error) {
@@ -572,14 +497,4 @@ func (c *Cards) dashboardURL(ctx context.Context, row repo.RiskPolicyApproval) (
 	link := siteURL.JoinPath(slugs.OrganizationSlug, "projects", slugs.ProjectSlug, "risk-policies")
 	link.RawQuery = url.Values{"tab": {"tool-approvals"}, "request": {row.ID.String()}}.Encode()
 	return link.String(), nil
-}
-
-// retryable reports a Slack failure worth trying again: Slack's own errors,
-// throttling and transport failures. A refusal the app's install or the
-// request has to fix, such as a missing scope, is not.
-func retryable(err error) bool {
-	if slackErr, ok := errors.AsType[*slackapi.Error](err); ok {
-		return !slackErr.ClientFault()
-	}
-	return true
 }

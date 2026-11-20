@@ -2099,3 +2099,99 @@ func BuildRevokeTemporaryGrantPayload(accessRevokeTemporaryGrantBody string, acc
 
 	return v, nil
 }
+
+// BuildListAccessRequestsPayload builds the payload for the access
+// listAccessRequests endpoint from CLI flags.
+func BuildListAccessRequestsPayload(accessListAccessRequestsStatus string, accessListAccessRequestsMine string, accessListAccessRequestsSessionToken string) (*access.ListAccessRequestsPayload, error) {
+	var err error
+	var status *string
+	{
+		if accessListAccessRequestsStatus != "" {
+			status = &accessListAccessRequestsStatus
+		}
+	}
+	var mine bool
+	{
+		if accessListAccessRequestsMine != "" {
+			mine, err = strconv.ParseBool(accessListAccessRequestsMine)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for mine, must be BOOL")
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if accessListAccessRequestsSessionToken != "" {
+			sessionToken = &accessListAccessRequestsSessionToken
+		}
+	}
+	v := &access.ListAccessRequestsPayload{}
+	v.Status = status
+	v.Mine = mine
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildDecideAccessRequestPayload builds the payload for the access
+// decideAccessRequest endpoint from CLI flags.
+func BuildDecideAccessRequestPayload(accessDecideAccessRequestBody string, accessDecideAccessRequestSessionToken string) (*access.DecideAccessRequestPayload, error) {
+	var err error
+	var body DecideAccessRequestRequestBody
+	{
+		err = json.Unmarshal([]byte(accessDecideAccessRequestBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"approve\": false,\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.ExpiresAt != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessDecideAccessRequestSessionToken != "" {
+			sessionToken = &accessDecideAccessRequestSessionToken
+		}
+	}
+	v := &access.DecideAccessRequestPayload{
+		ID:        body.ID,
+		Approve:   body.Approve,
+		ExpiresAt: body.ExpiresAt,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildWithdrawAccessRequestPayload builds the payload for the access
+// withdrawAccessRequest endpoint from CLI flags.
+func BuildWithdrawAccessRequestPayload(accessWithdrawAccessRequestBody string, accessWithdrawAccessRequestSessionToken string) (*access.WithdrawAccessRequestPayload, error) {
+	var err error
+	var body WithdrawAccessRequestRequestBody
+	{
+		err = json.Unmarshal([]byte(accessWithdrawAccessRequestBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessWithdrawAccessRequestSessionToken != "" {
+			sessionToken = &accessWithdrawAccessRequestSessionToken
+		}
+	}
+	v := &access.WithdrawAccessRequestPayload{
+		ID: body.ID,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}

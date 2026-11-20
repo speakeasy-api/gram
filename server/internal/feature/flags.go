@@ -33,6 +33,15 @@ const (
 	// slug). Fails closed to the operator. Existing connections keep the
 	// runtime they were created with. Removed once the gateway is the default.
 	FlagPrivateNetworkGateway Flag = "private-network-gateway"
+	// FlagAccessRequests gates stored access requests: requestAccess records
+	// a request an admin can approve as a temporary grant or deny, from the
+	// dashboard or a Slack DM, and refuses scopes that cannot be given
+	// temporarily. Evaluated server-side in requestAccess and in the
+	// dashboard; targeted by PostHog organization group (org slug). Fails
+	// closed: requestAccess then only emails the admins, as before, and the
+	// request listing answers not found. Requests already stored stay
+	// decidable and withdrawable. Removed once access requests are GA.
+	FlagAccessRequests Flag = "access-requests"
 	// FlagRiskEnforcementPubsub routes applicable realtime scanner lanes over Pub/Sub.
 	FlagRiskEnforcementPubsub Flag = "risk-enforcement-pubsub"
 	// FlagRiskEnforcementMaxContentBytes overrides the realtime enforcement

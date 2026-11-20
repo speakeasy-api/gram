@@ -279,7 +279,7 @@ func (s *Service) attachShadowMCPOfficialServers(ctx context.Context, organizati
 		return
 	}
 
-	automatic := shadowmcp.AutoLinkEnabled(ctx, s.logger, riskrepo.New(s.db), s.flags, organizationID, projectID)
+	automatic := shadowmcp.AutoLinkEnabled(ctx, s.logger, riskrepo.New(s.db), s.features, organizationID, projectID)
 	links, err := shadowmcp.LoadOfficialServerLinks(ctx, s.db, organizationID, projectID, s.serverURL, keys, automatic)
 	if err != nil {
 		s.logger.WarnContext(ctx, "resolve official servers for shadow mcp inventory",
