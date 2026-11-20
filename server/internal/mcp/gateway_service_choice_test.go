@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -122,9 +123,13 @@ func approveServiceChoice(t *testing.T, ctx context.Context, fx serviceChoiceGat
 	if session.CredentialID.Valid {
 		credentialID = session.CredentialID.UUID
 	}
-	choice, err := usersessionsrepo.New(fx.ti.conn).GetUpstreamClientSelection(ctx, usersessionsrepo.GetUpstreamClientSelectionParams{UserSessionIssuerID: fx.issuerID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: credentialID, McpServerID: fx.serverID, OrganizationID: fx.orgID})
+	choices, err := upstreamclientsrepo.New(fx.ti.conn).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{OrganizationID: fx.orgID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: credentialID, McpServerIds: []uuid.UUID{fx.serverID}, TypedOnly: true})
 	require.NoError(t, err)
-	return choice.RemoteSessionClientID
+	require.Len(t, choices, 1)
+	choice := choices[0]
+	require.Equal(t, fx.offers[choice.RegistrationID.UUID], choice.AuthClientID.UUID)
+	require.True(t, choice.AuthClientID.Valid, "issuance stores the typed offer, never a legacy registration-only choice")
+	return choice.RegistrationID
 }
 
 // With sign-in enforcement off, a member with two connected services offers a

@@ -429,20 +429,23 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	}
 
 	var clients []remotesessions.Client
+	typedConsent := authzSurface == mandatorySurfaceConsent && usesTypedConsentInventory(ctx)
 	if userSessionIssuerID != uuid.Nil {
-		if authzSurface == mandatorySurfaceConsent && usesTypedConsentInventory(ctx) {
+		if typedConsent {
 			applyTypedMemberRegistrations(members, offers)
 		}
 		// The agent gateway signs nobody in, so its callers never read
 		// associations and its members keep the derived match.
-		if authzSurface != mandatorySurfaceConsent || !usesTypedConsentInventory(ctx) {
+		if !typedConsent {
 			if err := s.attachAssociatedClients(ctx, organizationID, members); err != nil {
 				return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "load gateway member clients").LogError(ctx, logger)
 			}
 		}
-		clients, err = s.remoteChallengeMgr.ListOrganizationClients(ctx, organizationID, userSessionIssuerID)
-		if err != nil {
-			return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "list gateway sign-in clients").LogError(ctx, logger)
+		if !typedConsent || hasHostedConsentMember(members) {
+			clients, err = s.remoteChallengeMgr.ListOrganizationClients(ctx, organizationID, userSessionIssuerID)
+			if err != nil {
+				return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "list gateway sign-in clients").LogError(ctx, logger)
+			}
 		}
 	}
 	shadow := s.newMandatoryShadow(ctx, organizationID)
@@ -482,7 +485,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 			continue
 		}
 		if needsOAuth && userSessionIssuerID != uuid.Nil && !slices.ContainsFunc(clients, func(client remotesessions.Client) bool {
-			return (authzSurface != mandatorySurfaceConsent || !usesTypedConsentInventory(ctx) || member.backend != metaMemberBackendProxied) && memberUsesClient(member, client.ID, client.RemoteSessionIssuerID, client.ProjectID)
+			return (!typedConsent || member.backend != metaMemberBackendProxied) && memberUsesClient(member, client.ID, client.RemoteSessionIssuerID, client.ProjectID)
 		}) {
 			continue
 		}

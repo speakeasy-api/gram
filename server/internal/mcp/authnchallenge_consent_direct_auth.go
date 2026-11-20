@@ -16,6 +16,17 @@ func (s *Service) consentDirectPreviewAuth(ctx context.Context, endpoint *Resolv
 	if err != nil {
 		return nil, fmt.Errorf("build consent connection cards: %w", err)
 	}
+	// A preview may show the page's current option, but this does not make
+	// it an explicit EMA pick on the approval POST.
+	if posted == "" {
+		auth, err := s.directConsentAuthChoice(ctx, endpoint, state, cards, uuid.Nil)
+		if err != nil {
+			return nil, err
+		}
+		if auth != nil && auth.Selected() != nil {
+			posted = auth.Selected().ID.String()
+		}
+	}
 	picks, err := s.consentDirectAuthClientPick(ctx, endpoint, state, posted, nil, cards)
 	if err != nil {
 		return nil, err

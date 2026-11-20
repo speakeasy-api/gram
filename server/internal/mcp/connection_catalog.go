@@ -25,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -134,6 +133,7 @@ func (m connectionCatalogMember) approvedHash(typed bool) string {
 type connectionCatalogAuth struct {
 	ClientID       uuid.UUID     `json:"client_id"`
 	RegistrationID uuid.NullUUID `json:"registration_id"`
+	ExplicitPick   bool          `json:"explicit_pick,omitempty"`
 }
 
 // connectionCatalog freezes discovery for one approved OAuth connection.
@@ -231,23 +231,23 @@ func (s *Service) publishConnectionCatalog(ctx context.Context, catalog *connect
 
 // upstreamChoices records only reviewed members, even when their issuer also
 // serves other gateways. An empty scope must stay non-nil: nil means issuer-wide.
-func (c *connectionCatalog) upstreamChoices(credentialID uuid.UUID, typedOnly bool) usersessionsrepo.RecordUpstreamClientSelectionsParams {
-	picks := usersessionsrepo.RecordUpstreamClientSelectionsParams{
+func (c *connectionCatalog) upstreamChoices(credentialID uuid.UUID) usersessionsrepo.RecordIssuedAuthClientChoicesParams {
+	picks := usersessionsrepo.RecordIssuedAuthClientChoicesParams{
 		UserSessionIssuerID: c.IssuerID,
-		CredentialKind:      upstreamclients.CredentialKindUserSession,
 		CredentialID:        credentialID,
-		Source:              upstreamclients.SelectionSourceIssuance,
 		ScopeMcpServerIds:   make([]uuid.UUID, 0, len(c.Members)),
 		ExcludeMcpServerIds: nil,
+		PickedExplicit:      nil,
 		PickedMcpServerIds:  nil,
 		PickedClientIds:     nil,
 		PickedAuthClientIds: nil,
-		TypedOnly:           typedOnly,
+		AllowSoleOffer:      false,
 	}
 	for _, member := range c.Members {
 		picks.ScopeMcpServerIds = append(picks.ScopeMcpServerIds, member.ServerID)
 		if member.Auth != nil {
 			picks.PickedMcpServerIds = append(picks.PickedMcpServerIds, member.ServerID)
+			picks.PickedExplicit = append(picks.PickedExplicit, member.Auth.ExplicitPick)
 			picks.PickedClientIds = append(picks.PickedClientIds, member.Auth.RegistrationID.UUID)
 			picks.PickedAuthClientIds = append(picks.PickedAuthClientIds, member.Auth.ClientID)
 		}
@@ -280,6 +280,8 @@ func (s *Service) freezeConnectionCatalog(ctx context.Context, endpoint *Resolve
 	if err != nil {
 		return nil, err
 	}
+	// Each member's credential is judged for the consenting person, as their
+	// requests will be.
 	subjectCtx, err := s.contextForSessionSubject(ctx, endpoint, *state.Subject, "consent:"+state.ID, clientID)
 	if err != nil {
 		return nil, fmt.Errorf("stamp consent subject context: %w", err)

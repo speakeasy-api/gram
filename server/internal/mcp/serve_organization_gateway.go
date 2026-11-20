@@ -562,6 +562,12 @@ func (s *Service) listEndpointClientsAndRegistrations(ctx context.Context, endpo
 // listSignInClients is the clients the endpoint's sign-in links that
 // listEndpointClients offers.
 func (s *Service) listSignInClients(ctx context.Context, endpoint *ResolvedMcpEndpoint, loadMembers func() ([]metaMember, error)) ([]remotesessions.Client, error) {
+	if usesTypedConsentInventory(ctx) && (endpoint.IsOrganizationGateway() || endpoint.MetaMcpServerID.Valid) {
+		members, err := loadMembers()
+		if err != nil || !hasHostedConsentMember(members) {
+			return nil, err
+		}
+	}
 	if endpoint.IsOrganizationGateway() {
 		clients, err := s.remoteChallengeMgr.ListOrganizationClients(ctx, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 		if err != nil {
@@ -642,6 +648,12 @@ func (s *Service) consentSubjectMembers(ctx context.Context, endpoint *ResolvedM
 		return nil, oops.E(oops.CodeForbidden, nil, "The requested server is no longer available. Request a new connection link.")
 	}
 	return members, nil
+}
+
+func hasHostedConsentMember(members []metaMember) bool {
+	return slices.ContainsFunc(members, func(member metaMember) bool {
+		return member.backend == metaMemberBackendHosted
+	})
 }
 
 func clientServesSignInMember(ctx context.Context, client remotesessions.Client, members []metaMember) bool {
