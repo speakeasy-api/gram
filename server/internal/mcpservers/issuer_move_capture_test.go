@@ -14,9 +14,7 @@ import (
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 )
 
-// Moving a server onto a user session issuer configures its sign-in there.
-// Under upstream auth enforcement a server that is the issuer's only consumer
-// offers the clients bound to it, and one that shares the issuer offers none.
+// Moving to another downstream issuer must not add upstream offers.
 func TestUpdateMcpServer_IssuerMoveDoesNotInheritOffers(t *testing.T) {
 	t.Parallel()
 

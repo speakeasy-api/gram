@@ -434,6 +434,8 @@ func TestAttachServerClientAssociation_OffersHostedRegistrationWithoutIssuer(t *
 
 	_, err := f.attach(ctx, server, client)
 	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{client}, associatedClients(t, ctx, f.ti.conn, f.projectID, server))
+	require.Len(t, offeredAuthClients(t, ctx, f.ti.conn, server), 1)
 }
 
 func TestAttachServerClientAssociation_RefusesASecondClient(t *testing.T) {

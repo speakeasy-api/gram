@@ -498,6 +498,9 @@ func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, proje
 			return err
 		}
 		change.moved = decision.moved
+		if targetID.Valid {
+			change.added = nil // An offer is not an attachment to the issuer.
+		}
 		for _, client := range decision.detach {
 			if err := refuseOrgWideBinding(userIssuerOrgLevel, orgAdmin, client.ProjectID); err != nil {
 				return err

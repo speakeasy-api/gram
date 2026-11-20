@@ -182,9 +182,7 @@ func TestCommitAutomaticRegistrationKeepsTheServersOwnClient(t *testing.T) {
 	requireClientBound(t, ctx, ti, client, issuer, false)
 }
 
-// Different credentials for a provider whose client another server uses are
-// refused before anything is written, and the message points at the existing
-// client.
+// Two servers that share downstream sign-in can offer distinct registrations.
 func TestCommitKeepsDistinctClientsForServersSharingAnIssuer(t *testing.T) {
 	t.Parallel()
 
@@ -403,9 +401,8 @@ func seedBoundServiceAccountClient(t *testing.T, ctx context.Context, ti *testIn
 	return client.ID
 }
 
-// A service account client is one credential every caller shares, so automatic
-// registration for per-user sign-in replaces this server's own and is refused
-// another server's, rather than reusing either.
+// Personal setup never reuses a service-account credential, whether it is
+// offered by this server or by a sibling sharing sign-in.
 func TestCommitAutomaticRegistrationNeverReusesAServiceAccountClient(t *testing.T) {
 	t.Parallel()
 
@@ -563,7 +560,8 @@ func TestCommitExplicitReplaceRefusesAnUnconfirmedServerList(t *testing.T) {
 	require.Equal(t, []uuid.UUID{client}, serverAssociatedClients(t, ctx, ti, second))
 }
 
-// Nothing can say what a gateway would lose, so the client is not replaced.
+// A gateway issuer is not a server offer. It does not block replacement of
+// a server's own registration.
 func TestCommitExplicitReplaceDoesNotTreatGatewayIssuerAsAnOffer(t *testing.T) {
 	t.Parallel()
 

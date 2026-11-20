@@ -17,10 +17,7 @@ import (
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
-// Moving a hosted server onto a user session issuer configures its sign-in
-// there. Under upstream auth enforcement a server that is the issuer's only
-// consumer is associated with the clients bound to it, and one that shares the
-// issuer is associated with none.
+// Moving a hosted server to another issuer does not inherit upstream offers.
 func TestHostedServerIssuerMoveDoesNotInheritOffers(t *testing.T) {
 	t.Parallel()
 
