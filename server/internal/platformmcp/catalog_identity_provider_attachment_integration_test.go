@@ -96,14 +96,40 @@ func attachmentTestUserSessionIssuer(t *testing.T, conn *pgxpool.Pool, projectID
 	return issuer.ID
 }
 
-func attachmentTestClients(t *testing.T, conn *pgxpool.Pool, principal Principal, project ResolvedProject, userSessionIssuerID uuid.UUID) []remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerRow {
+func attachmentTestTarget(t *testing.T, conn *pgxpool.Pool, project ResolvedProject, userSessionIssuerID uuid.UUID) uuid.UUID {
 	t.Helper()
-	rows, err := remotesessionsrepo.New(conn).ListRemoteSessionClientsForUserSessionIssuer(t.Context(), remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerParams{
-		UserSessionIssuerID: userSessionIssuerID,
-		ProjectID:           conv.ToNullUUID(project.ID),
-		OrganizationID:      conv.ToPGText(principal.OrganizationID),
+	ids, err := mcpserversrepo.New(conn).ListMCPServerIDsByUserSessionIssuerID(t.Context(), mcpserversrepo.ListMCPServerIDsByUserSessionIssuerIDParams{
+		ProjectID: project.ID, UserSessionIssuerID: conv.ToNullUUID(userSessionIssuerID),
 	})
 	require.NoError(t, err)
+	if len(ids) == 0 {
+		return attachmentTestMCPServer(t, conn, project.ID, userSessionIssuerID)
+	}
+	require.Len(t, ids, 1)
+	return ids[0]
+}
+
+func attachmentTestClients(t *testing.T, conn *pgxpool.Pool, principal Principal, project ResolvedProject, userSessionIssuerID uuid.UUID) []remotesessionsrepo.ListReachableRemoteSessionClientsRow {
+	t.Helper()
+	serverID := attachmentTestTarget(t, conn, project, userSessionIssuerID)
+	q := remotesessionsrepo.New(conn)
+	offers, err := q.ListIdentityOfferClients(t.Context(), remotesessionsrepo.ListIdentityOfferClientsParams{
+		McpServerID: serverID, ProjectID: project.ID, OrganizationID: principal.OrganizationID,
+	})
+	require.NoError(t, err)
+	ids := make([]uuid.UUID, 0, len(offers))
+	for _, offer := range offers {
+		ids = append(ids, offer.ID)
+	}
+	rows, err := q.ListReachableRemoteSessionClients(t.Context(), remotesessionsrepo.ListReachableRemoteSessionClientsParams{
+		ProjectID: project.ID, OrganizationID: principal.OrganizationID, RemoteSessionClientIds: ids,
+	})
+	require.NoError(t, err)
+	bound, err := q.ListRemoteSessionClientsForUserSessionIssuer(t.Context(), remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerParams{
+		UserSessionIssuerID: userSessionIssuerID, ProjectID: conv.ToNullUUID(project.ID), OrganizationID: conv.ToPGText(principal.OrganizationID),
+	})
+	require.NoError(t, err)
+	require.Empty(t, bound, "catalog attachment offers the registration without changing issuer bindings")
 	return rows
 }
 
@@ -127,6 +153,7 @@ func attachmentTestCommit(t *testing.T, service *CatalogIdentityProviderAttachme
 			ActorDisplayName: nil,
 		},
 		UserSessionIssuerID: userSessionIssuerID,
+		MCPServerID:         attachmentTestTarget(t, service.db, project, userSessionIssuerID),
 		Provider:            provider,
 		Client: remotesessions.ManualClient(remotesessions.ClientCredentials{
 			ClientID:                clientID,
@@ -368,7 +395,7 @@ func attachmentTestRegister(t *testing.T, service *CatalogIdentityProviderAttach
 	ctx := t.Context()
 	existing, reuse, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
 	require.NoError(t, err)
-	commit := service.identity.Prepare(attachmentIdentityPlan(principal, project, uuid.New(), userSessionIssuerID, uuid.Nil, metadata, existing, reuse, resource.Resource, resource, remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: resource.ScopesSupported, Live: true, UseDiscovered: true}))
+	commit := service.identity.Prepare(attachmentIdentityPlan(principal, project, attachmentTestTarget(t, service.db, project, userSessionIssuerID), userSessionIssuerID, uuid.Nil, metadata, existing, reuse, resource.Resource, resource, remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: resource.ScopesSupported, Live: true, UseDiscovered: true}))
 	require.NoError(t, commit.Preflight(ctx))
 	reg, err := commit.Register(ctx)
 	require.NoError(t, err)
