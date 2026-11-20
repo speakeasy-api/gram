@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // SetBindingAuthorizer wires the human-only agent management authorizer without
@@ -141,6 +142,18 @@ func (s *Service) ListBindings(ctx context.Context, payload *gen.ListBindingsPay
 }
 
 func (op *bindingOperation) lockAttachmentIssuer(ctx context.Context) error {
+	issuer := repo.GetUserSessionIssuerForProjectParams{ID: op.issuerID, ProjectID: op.projectID, OrganizationID: op.organizationID}
+	if _, err := op.queries.GetUserSessionIssuerForProject(ctx, issuer); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.C(oops.CodeNotFound)
+		}
+		return oops.E(oops.CodeUnexpected, err, "check attachment sign-in issuer")
+	}
+	// Legacy writers take the same stable issuer advisory lock. Validate
+	// before the lock and recheck under a row lock afterwards.
+	if err := usersessionsrepo.New(op.tx).LockUserSessionIssuerForOwnerBinding(ctx, op.issuerID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "serialize attachment sign-in issuer")
+	}
 	_, err := op.queries.LockPrincipalAttachmentIssuer(ctx, repo.LockPrincipalAttachmentIssuerParams{ProjectID: op.projectID, OrganizationID: op.organizationID, UserSessionIssuerID: op.issuerID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return oops.C(oops.CodeNotFound)
@@ -152,17 +165,24 @@ func (op *bindingOperation) lockAttachmentIssuer(ctx context.Context) error {
 }
 
 func (op *bindingOperation) ensureAttachmentParent(ctx context.Context, clientID uuid.UUID) error {
-	return op.queries.EnsurePrincipalAttachmentParents(ctx, repo.EnsurePrincipalAttachmentParentsParams{ClientIds: []uuid.UUID{clientID}, UserSessionIssuerID: op.issuerID})
+	if err := op.queries.EnsurePrincipalAttachmentParents(ctx, repo.EnsurePrincipalAttachmentParentsParams{ClientIds: []uuid.UUID{clientID}, UserSessionIssuerID: op.issuerID, OrganizationID: op.organizationID, ProjectID: conv.ToNullUUID(op.projectID)}); err != nil {
+		return fmt.Errorf("ensure compatibility link for attachment: %w", err)
+	}
+	return nil
 }
 
 // lockAttachmentParentForUnlink protects active attachments while the legacy
 // link mutation API coexists with the composite FK. The caller must hold this
 // lock through the delete and commit in the same transaction.
 func lockAttachmentParentForUnlink(ctx context.Context, q *repo.Queries, orgID string, clientID, issuerID uuid.UUID) (bool, error) {
-	if err := q.LockRemoteSessionClientUserSessionIssuerLink(ctx, repo.LockRemoteSessionClientUserSessionIssuerLinkParams{RemoteSessionClientID: clientID, UserSessionIssuerID: issuerID}); err != nil {
-		return false, err
+	if err := q.LockRemoteSessionClientUserSessionIssuerLink(ctx, repo.LockRemoteSessionClientUserSessionIssuerLinkParams{RemoteSessionClientID: clientID, UserSessionIssuerID: issuerID, OrganizationID: orgID}); err != nil {
+		return false, fmt.Errorf("lock attachment parent: %w", err)
 	}
-	return q.HasLivePrincipalRemoteSessionBindingsForClientBinding(ctx, repo.HasLivePrincipalRemoteSessionBindingsForClientBindingParams{OrganizationID: orgID, RemoteSessionClientID: clientID, UserSessionIssuerID: issuerID})
+	attached, err := q.HasLivePrincipalRemoteSessionBindingsForClientBinding(ctx, repo.HasLivePrincipalRemoteSessionBindingsForClientBindingParams{OrganizationID: orgID, RemoteSessionClientID: clientID, UserSessionIssuerID: issuerID})
+	if err != nil {
+		return false, fmt.Errorf("find active attachments for parent: %w", err)
+	}
+	return attached, nil
 }
 
 func (s *Service) AttachBinding(ctx context.Context, payload *gen.AttachBindingPayload) (*gen.PrincipalRemoteSessionBinding, error) {

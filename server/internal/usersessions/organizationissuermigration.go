@@ -859,7 +859,7 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 			bindingIDs = append(bindingIDs, rekey.ID)
 			clientIDs = append(clientIDs, rekey.RemoteSessionClientID)
 		}
-		if err := remotesessionsrepo.New(dbtx).EnsurePrincipalAttachmentParents(ctx, remotesessionsrepo.EnsurePrincipalAttachmentParentsParams{ClientIds: clientIDs, UserSessionIssuerID: target.ID}); err != nil {
+		if err := remotesessionsrepo.New(dbtx).EnsurePrincipalAttachmentParents(ctx, remotesessionsrepo.EnsurePrincipalAttachmentParentsParams{ClientIds: clientIDs, UserSessionIssuerID: target.ID, OrganizationID: organizationID, ProjectID: target.ProjectID}); err != nil {
 			return run, oops.E(oops.CodeUnexpected, err, "ensure attachment parents for migration").LogError(ctx, logger)
 		}
 		if _, err := q.UpdatePrincipalRemoteSessionBindingsToUserSessionIssuer(ctx, repo.UpdatePrincipalRemoteSessionBindingsToUserSessionIssuerParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, OrganizationID: organizationID, BindingIds: bindingIDs}); err != nil {
