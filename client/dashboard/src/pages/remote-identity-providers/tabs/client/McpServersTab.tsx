@@ -42,7 +42,9 @@ function mcpServerIdentityHref(
   server: OrganizationMcpServer,
 ): string | null {
   if (!orgSlug || !server.projectSlug) return null;
-  return `/${orgSlug}/projects/${server.projectSlug}/mcp/${mcpServerRouteParam(server)}/settings#${MCP_AUTHENTICATION_SECTION_ID}`;
+  const settings = `/${orgSlug}/projects/${server.projectSlug}/mcp/${mcpServerRouteParam(server)}/settings`;
+  // Empty URLs can describe either a tunnel or a legacy hosted usage row.
+  return server.url ? `${settings}#${MCP_AUTHENTICATION_SECTION_ID}` : settings;
 }
 
 export function McpServersTab({ clientId }: { clientId: string }): JSX.Element {
@@ -84,7 +86,9 @@ export function McpServersTab({ clientId }: { clientId: string }): JSX.Element {
         const actions: Action[] = identityHref
           ? [
               {
-                label: "Manage in Identity",
+                label: server.url
+                  ? "Manage in Identity"
+                  : "Open server settings",
                 onClick: () => void navigate(identityHref),
               },
             ]

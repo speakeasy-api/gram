@@ -4108,10 +4108,18 @@ WHERE remote_session_issuer_id = @source_issuer_id
 -- concurrent attachment either commits first, and the check sees it, or waits
 -- for this transaction to end.
 SELECT 1
-FROM remote_session_client_user_session_issuers
-WHERE remote_session_client_id = @remote_session_client_id
-  AND user_session_issuer_id = @user_session_issuer_id
-FOR UPDATE;
+FROM remote_session_client_user_session_issuers AS l
+JOIN remote_session_clients AS c ON c.id = l.remote_session_client_id
+JOIN user_session_issuers AS u ON u.id = l.user_session_issuer_id
+WHERE l.remote_session_client_id = @remote_session_client_id
+  AND l.user_session_issuer_id = @user_session_issuer_id
+  AND EXISTS (
+    SELECT 1 FROM projects AS p
+    WHERE p.organization_id = @organization_id::text AND NOT p.deleted
+      AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+      AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+  )
+FOR UPDATE OF l;
 
 -- name: DescribeBoundClientUse :many
 -- For each client bound to one user session issuer, who signs in through it on
@@ -5201,10 +5209,22 @@ FOR SHARE OF usi;
 -- or rekeys validated attachments. Lock existing parents without updating
 -- them, so a guarded legacy unlink cannot delete one before the FK check.
 INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
-SELECT client_id, @user_session_issuer_id::uuid
-FROM unnest(@client_ids::uuid[]) AS clients(client_id)
-ORDER BY client_id
-ON CONFLICT (remote_session_client_id, user_session_issuer_id) DO UPDATE SET user_session_issuer_id = EXCLUDED.user_session_issuer_id WHERE FALSE;
+SELECT DISTINCT c.id, u.id
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND NOT i.deleted
+JOIN user_session_issuers AS u ON u.id = @user_session_issuer_id::uuid AND NOT u.deleted
+WHERE c.id = ANY(@client_ids::uuid[]) AND NOT c.deleted
+  AND EXISTS (
+    SELECT 1 FROM projects AS p
+    WHERE p.organization_id = @organization_id::text AND NOT p.deleted
+      AND (sqlc.narg('project_id')::uuid IS NULL OR p.id = sqlc.narg('project_id')::uuid)
+      AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+      AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+      AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
+  )
+ORDER BY c.id, u.id
+ON CONFLICT (remote_session_client_id, user_session_issuer_id)
+DO UPDATE SET user_session_issuer_id = EXCLUDED.user_session_issuer_id WHERE FALSE;
 
 -- name: AttachPrincipalRemoteSessionBinding :one
 -- Lock the exact grant to serialize insertion with session revoke/reconnect.

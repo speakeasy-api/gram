@@ -192,7 +192,7 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	require.EqualValues(t, 1, mine.GrantGeneration, "pre-rollout sessions start at the migration default")
 	_, err = ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: theirs.ID.String()})
 	requireOopsCode(t, err, oops.CodeNotFound)
-	_, err = ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: uuid.NewString(), RemoteSessionID: mine.ID.String()})
+	_, err = ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: foreignSignIn.String(), RemoteSessionID: mine.ID.String()})
 	requireOopsCode(t, err, oops.CodeNotFound)
 	_, err = ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{PrincipalID: conv.PtrEmpty(uuid.NewString()), UserSessionIssuerID: conv.PtrEmpty(config.String())})
 	requireOopsCode(t, err, oops.CodeForbidden)

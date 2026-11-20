@@ -371,14 +371,6 @@ describe("IdentityChainingSection", () => {
     expect(state.clientFilters).toEqual([]);
   });
 
-  it("holds its place while the typed offers load", () => {
-    state.credentialsLoading = true;
-    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
-    expect(screen.getByRole("status").textContent).toBe(
-      "Loading Enterprise Managed Authorization…",
-    );
-  });
-
   it("holds its place while the server's credentials load", () => {
     state.credentialsLoading = true;
     render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
