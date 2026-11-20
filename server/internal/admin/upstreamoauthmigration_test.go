@@ -106,38 +106,6 @@ func (o *migrationOrg) session(userIssuerID uuid.UUID) uuid.UUID {
 	return id
 }
 
-// A credential issued through a gateway consent has choices for the servers
-// that consent approved and is refused anywhere else. A server it holds no
-// choice for must not report the organization as unmigrated, while the same
-// server still does for a credential with no consent catalog.
-func TestUpstreamOAuthMigration_ConsentScopedCredentialsUnrecordedChoiceIsNotPending(t *testing.T) {
-	t.Parallel()
-	ctx, svc, db := newTestAdminService(t)
-	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
-
-	org := newMigrationOrg(t, ctx, db, "migrate-consent-scoped")
-	issuer := org.issuer()
-	org.client(issuer)
-	org.server(issuer)
-	org.session(issuer)
-	seedCoveredMigrationFixture(t, ctx, db, org.id)
-
-	scoped := org.session(issuer)
-	require.NoError(t, org.q.ApproveConsentCatalogFixture(ctx, selectionbackfill.ApproveConsentCatalogFixtureParams{CatalogID: uuid.New(), ID: scoped}))
-	status, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
-	require.NoError(t, err)
-	require.True(t, status.Migrated)
-	require.Zero(t, status.PendingSelections)
-	require.Equal(t, new(int64(1)), status.ConsentScopedSelections)
-
-	org.session(issuer)
-	status, err = svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
-	require.NoError(t, err)
-	require.False(t, status.Migrated, "a credential with no consent catalog is missing its choice")
-	require.Equal(t, int64(1), status.PendingSelections)
-	require.Equal(t, new(int64(1)), status.ConsentScopedSelections)
-}
-
 // A profile no turn has run under has no version. A run records it before
 // enforcement, so it is pending then. Under enforcement a turn records its own
 // profile, so it is reported apart and no longer blocks.
@@ -187,7 +155,7 @@ func TestUpstreamOAuthMigration_EnforcedOrganizationHasNoPendingInferredAssociat
 
 	before, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
 	require.NoError(t, err)
-	require.Equal(t, int64(1), before.PendingAssociations)
+	require.Zero(t, before.PendingAssociations, "junction rows are not configuration")
 
 	_, err = productfeaturesrepo.New(db).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: org.id, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
 	require.NoError(t, err)
@@ -197,38 +165,6 @@ func TestUpstreamOAuthMigration_EnforcedOrganizationHasNoPendingInferredAssociat
 	require.Zero(t, enforced.PendingAssociations)
 	require.Empty(t, enforced.UnresolvedServers)
 	require.True(t, enforced.Migrated)
-}
-
-func TestUpstreamOAuthMigration_ReportsServersNeedingConfiguration(t *testing.T) {
-	t.Parallel()
-	ctx, svc, db := newTestAdminService(t)
-	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
-
-	// Two servers share an issuer whose two clients both hold grants for
-	// their upstream, so neither server's client is proven.
-	org := newMigrationOrg(t, ctx, db, "migrate-shared")
-	issuer := org.issuer()
-	for _, clientID := range []uuid.UUID{org.client(issuer), org.client(issuer)} {
-		require.NoError(t, associationbackfill.New(db).SeedGrantFixture(ctx, associationbackfill.SeedGrantFixtureParams{
-			SubjectUrn:            urn.NewUserSubject("user-" + uuid.NewString()[:8]),
-			UserSessionIssuerID:   issuer,
-			RemoteSessionClientID: clientID,
-			Resource:              pgtype.Text{String: "https://upstream.example.com/mcp", Valid: true},
-		}))
-	}
-	first := org.server(issuer)
-	second := org.server(issuer)
-	org.session(issuer)
-
-	status, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
-	require.NoError(t, err)
-	require.False(t, status.Migrated)
-	unresolved := make([]string, 0, len(status.UnresolvedServers))
-	for _, server := range status.UnresolvedServers {
-		require.Equal(t, org.projectID.String(), server.ProjectID)
-		unresolved = append(unresolved, server.McpServerID)
-	}
-	require.ElementsMatch(t, []string{first.String(), second.String()}, unresolved)
 }
 
 func TestUpstreamOAuthMigration_ListsOnlyOrganizationsWithIssuerServers(t *testing.T) {
@@ -287,11 +223,11 @@ func TestUpstreamOAuthMigration_ReportsAnAuthClientRunInProgress(t *testing.T) {
 // the compatibility status and enforcement tests, without calling staff APIs.
 func seedCoveredMigrationFixture(t *testing.T, ctx context.Context, db *pgxpool.Pool, org string) {
 	t.Helper()
-	_, err := associationbackfill.Run(ctx, db, associationbackfill.Options{OrganizationID: org, Apply: true})
+	_, err := associationbackfill.Run(ctx, db, associationbackfill.Options{OrganizationID: org, Apply: true, PageSize: 0})
 	require.NoError(t, err)
-	_, err = selectionbackfill.Run(ctx, db, selectionbackfill.Options{OrganizationID: org, Apply: true})
+	_, err = selectionbackfill.Run(ctx, db, selectionbackfill.Options{OrganizationID: org, Apply: true, PageSize: 0})
 	require.NoError(t, err)
-	report, err := authclientbackfill.Run(ctx, db, authclientbackfill.Options{OrganizationID: org, Apply: true})
+	report, err := authclientbackfill.Run(ctx, db, authclientbackfill.Options{OrganizationID: org, Apply: true, PageSize: 0, TypedOnly: false})
 	require.NoError(t, err)
 	require.Empty(t, report.PhaseErrors)
 }

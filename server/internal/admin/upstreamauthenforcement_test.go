@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -19,9 +20,13 @@ func TestUpstreamAuthEnforcement_RefusedUntilCovered(t *testing.T) {
 	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
 	org := newMigrationOrg(t, ctx, db, "enforce-uncovered")
 	issuer := org.issuer()
-	org.client(issuer)
-	org.server(issuer)
+	client := org.client(issuer)
+	server := org.server(issuer)
 	org.session(issuer)
+	_, err := authclientbackfill.New(db).SeedAssociationFixture(ctx, authclientbackfill.SeedAssociationFixtureParams{
+		ProjectID: org.projectID, OrganizationID: org.id, McpServerID: server, RemoteSessionClientID: client,
+	})
+	require.NoError(t, err)
 
 	status, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
 	require.NoError(t, err)

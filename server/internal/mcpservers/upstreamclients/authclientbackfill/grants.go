@@ -130,7 +130,7 @@ func (p *grantPlan) want(kind GrantKind, principal urn.Principal, scope authz.Sc
 // no rollout tasks or issuer-link repairs are run by this entry point.
 func ProvisionFromTypedOffers(ctx context.Context, tx pgx.Tx, organizationID string) error {
 	report := newReport(true)
-	return runGrants(ctx, tx, Options{OrganizationID: organizationID, Apply: true, TypedOnly: true}, &report, true, true)
+	return runGrants(ctx, tx, Options{OrganizationID: organizationID, Apply: true, PageSize: 0, TypedOnly: true}, &report, true, true)
 }
 
 func runGrants(ctx context.Context, tx pgx.Tx, opts Options, report *Report, withShared, withKeys bool) error {
