@@ -6,6 +6,11 @@ import { enumPresentation } from "@/lib/enum";
 
 import type { Disposition } from "@gram/client/models/components/selector.js";
 
+import {
+  TOOL_ANNOTATIONS,
+  type ToolAnnotation,
+} from "@/components/tool-selection/annotations";
+
 import type { Server, ServerGroup, ServerTool } from "./serverMerge";
 
 /** The four tool annotations the backend checks, in the order shown. */
@@ -55,6 +60,14 @@ export type ToolLimit =
 
 export type ToolLimitKind = ToolLimit["kind"];
 
+/** The MCP behaviour hints a tool declares. */
+interface ToolHints {
+  readOnlyHint?: boolean | null;
+  destructiveHint?: boolean | null;
+  idempotentHint?: boolean | null;
+  openWorldHint?: boolean | null;
+}
+
 /**
  * The order the backend picks a tool's one disposition in when it carries
  * several (DispositionFromAnnotations in server/internal/conv/tools.go). A
@@ -74,7 +87,9 @@ export const DISPOSITION_PRECEDENCE = [
  * is unannotated. disposition-cases.gen.json holds the server's answers, and
  * the tests check this function against them.
  */
-export function toolDisposition(tool: ServerTool): Disposition {
+export function toolDisposition(tool: {
+  annotations?: ToolHints | null;
+}): Disposition {
   const hints = tool.annotations;
   if (hints?.readOnlyHint && hints.destructiveHint) return "destructive";
   if (hints?.readOnlyHint) return "read_only";
@@ -82,6 +97,19 @@ export function toolDisposition(tool: ServerTool): Disposition {
   if (hints?.idempotentHint) return "idempotent";
   if (hints?.openWorldHint) return "open_world";
   return "unannotated";
+}
+
+/**
+ * The tool's one disposition in the annotation vocabulary tool pickers and
+ * coverage use, so a tool counts under exactly the disposition the server
+ * matches it by. A tool with several hints is not also counted under the
+ * others. An unannotated tool has none of the four annotations.
+ */
+export function toolDispositionAnnotations(tool: {
+  annotations?: ToolHints | null;
+}): ToolAnnotation[] {
+  const disposition = toolDisposition(tool);
+  return TOOL_ANNOTATIONS.filter((annotation) => annotation === disposition);
 }
 
 /**
