@@ -113,11 +113,23 @@ SELECT pg_temp.attach(1, 'fixture-org-a', 1, 1, 41);
 DELETE FROM principal_remote_session_bindings
 WHERE principal_id = pg_temp.fixture_id(1) AND user_session_issuer_id = pg_temp.fixture_id(1)
   AND remote_session_id = pg_temp.fixture_id(41);
-DELETE FROM remote_session_client_user_session_issuers
-WHERE user_session_issuer_id = pg_temp.fixture_id(1) AND remote_session_client_id = pg_temp.fixture_id(4);
-SELECT pg_temp.expect_integrity_error(
-  $$SELECT pg_temp.attach(1, 'fixture-org-a', 1, 4)$$,
-  'principal_remote_session_bindings_client_issuer_fkey');
+-- Removing a compatibility row must neither cascade nor prevent a new attach.
+DO $$
+DECLARE binding_id uuid := pg_temp.attach(1, 'fixture-org-a', 1, 4);
+BEGIN
+  DELETE FROM remote_session_client_user_session_issuers
+  WHERE user_session_issuer_id = pg_temp.fixture_id(1) AND remote_session_client_id = pg_temp.fixture_id(4);
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Expected a compatibility row to remove';
+  END IF;
+  DELETE FROM principal_remote_session_bindings WHERE id = binding_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Attachment was removed with its compatibility row';
+  END IF;
+  binding_id := pg_temp.attach(1, 'fixture-org-a', 1, 4);
+  DELETE FROM principal_remote_session_bindings WHERE id = binding_id;
+END;
+$$;
 
 -- A native FK pins the copied scopes, including parent UPDATEs. The trigger
 -- refreshes snapshots on binding UPDATEs, preventing stale or forged scope keys.
@@ -143,8 +155,7 @@ BEGIN
     'DELETE FROM agents WHERE id = pg_temp.fixture_id(1)',
     'DELETE FROM user_session_issuers WHERE id = pg_temp.fixture_id(1)',
     'DELETE FROM remote_session_clients WHERE id = pg_temp.fixture_id(1)',
-    'DELETE FROM remote_sessions WHERE id = pg_temp.fixture_id(11)',
-    'DELETE FROM remote_session_client_user_session_issuers WHERE user_session_issuer_id = pg_temp.fixture_id(1) AND remote_session_client_id = pg_temp.fixture_id(1)'
+    'DELETE FROM remote_sessions WHERE id = pg_temp.fixture_id(11)'
   ] LOOP
     BEGIN
       PERFORM pg_temp.attach(1, 'fixture-org-a', 1, 1);

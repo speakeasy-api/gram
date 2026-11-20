@@ -22,7 +22,7 @@ import (
 // but only while its exact grant, owner, tenant and configuration remain live.
 func TestRefreshSweep_AttachmentOnlyLifecycle(t *testing.T) {
 	t.Parallel()
-	for _, state := range []string{"detach", "session-revoked", "agent-suspended", "agent-revoked", "owner-reassignment", "owner-departed", "owner-deleted", "owner-transfer", "config-unlinked", "config-deleted", "source-deleted", "client-deleted", "issuer-deleted", "project-deleted", "opt-out", "policy-disabled"} {
+	for _, state := range []string{"detach", "session-revoked", "agent-suspended", "agent-revoked", "owner-reassignment", "owner-departed", "owner-deleted", "owner-transfer", "config-deleted", "source-deleted", "client-deleted", "issuer-deleted", "project-deleted", "opt-out", "policy-disabled"} {
 		t.Run(state, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestService(t)
@@ -39,6 +39,11 @@ func TestRefreshSweep_AttachmentOnlyLifecycle(t *testing.T) {
 			ensureAttachmentParent(t, ctx, ti.conn, session.RemoteSessionClientID, config)
 			binding, err := q.AttachPrincipalRemoteSessionBinding(ctx, repo.AttachPrincipalRemoteSessionBindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: config, RemoteSessionID: session.ID, SubjectUrn: session.SubjectUrn.String()})
 			require.NoError(t, err)
+			// Compatibility rows no longer own attachments. Exercise both live
+			// lookup and every invalidation path without the parent row.
+			unlinked, err := testrepo.New(ti.conn).UnlinkAttachmentClientFixture(ctx, testrepo.UnlinkAttachmentClientFixtureParams{RemoteSessionClientID: session.RemoteSessionClientID, UserSessionIssuerID: config})
+			require.NoError(t, err)
+			require.EqualValues(t, 1, unlinked)
 			_, err = testrepo.New(ti.conn).EnableAttachmentSourceRefreshFixture(ctx, testrepo.EnableAttachmentSourceRefreshFixtureParams{ID: session.ID, UpdatedAt: pgtype.Timestamptz{Time: time.Now().Add(-25 * time.Hour), Valid: true}})
 			require.NoError(t, err)
 			enableOrgAutoRefreshFeature(t, ctx, ti, auth.ActiveOrganizationID, productfeatures.FeatureRemoteSessionAutoRefresh)
@@ -84,8 +89,6 @@ func TestRefreshSweep_AttachmentOnlyLifecycle(t *testing.T) {
 				_, err = testrepo.New(ti.conn).AddAttachmentReplacementOwnerMembershipFixture(ctx, auth.ActiveOrganizationID)
 				require.NoError(t, err)
 				_, err = agentrepo.New(ti.conn).TransferAgent(ctx, agentrepo.TransferAgentParams{ID: agent.ID, OrganizationID: auth.ActiveOrganizationID, OwnerUserID: "replacement-owner"})
-			case "config-unlinked":
-				_, err = testrepo.New(ti.conn).UnlinkAttachmentClientFixture(ctx, testrepo.UnlinkAttachmentClientFixtureParams{RemoteSessionClientID: session.RemoteSessionClientID, UserSessionIssuerID: config})
 			case "config-deleted", "source-deleted":
 				id := config
 				if state == "source-deleted" {
@@ -97,7 +100,7 @@ func TestRefreshSweep_AttachmentOnlyLifecycle(t *testing.T) {
 				require.NoError(t, err)
 				fixtures := testrepo.New(ti.conn)
 				_, err = fixtures.GetPrincipalRemoteSessionBindingSessionFixture(ctx, binding.ID)
-				require.NoError(t, err, "the compatibility FK did not physically remove the attachment")
+				require.NoError(t, err, "registration deletion retained the attachment record")
 				active, err := fixtures.CountActivePrincipalRemoteSessionBindingsForSessionFixture(ctx, session.ID)
 				require.NoError(t, err)
 				require.Zero(t, active, "the registration deletion explicitly retired its attachment")
