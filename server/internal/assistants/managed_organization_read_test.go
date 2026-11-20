@@ -6,6 +6,7 @@ import (
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -82,8 +83,7 @@ func TestManagedAssistantOrganizationReadCeiling(t *testing.T) {
 		if row.Scope != string(authz.ScopeProjectRead) {
 			continue
 		}
-		_, err = db.Exec(t.Context(), "UPDATE principal_grants SET expires_at = now() - interval '1 hour' WHERE id = $1", row.ID)
-		require.NoError(t, err)
+		require.NoError(t, testrepo.New(db).LapsePrincipalGrantFixture(t.Context(), row.ID))
 	}
 	_, err = core.EnableManagedAssistant(t.Context(), "org-test", project, "user-1", true)
 	require.NoError(t, err)
