@@ -23,6 +23,7 @@ func TestManagedAssistantOrganizationReadCeiling(t *testing.T) {
 	require.NoError(t, err)
 	for _, row := range ordinaryGrants {
 		require.NotEqual(t, string(authz.ScopeOrgRead), row.Scope)
+		require.NotEqual(t, string(authz.ScopeProjectRead), row.Scope)
 	}
 
 	_, err = core.EnableManagedAssistant(t.Context(), "org-test", project, "user-1", true)
@@ -32,34 +33,38 @@ func TestManagedAssistantOrganizationReadCeiling(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, managed.AgentID)
 	agentID := uuid.MustParse(*managed.AgentID)
-	count := func() int {
+	count := func(scope authz.Scope, allowedID, otherID string) int {
 		rows, err := agentrepo.New(db).ListAgentPolicyGrants(t.Context(), agentrepo.ListAgentPolicyGrantsParams{OrganizationID: "org-test", AgentID: agentID})
 		require.NoError(t, err)
 		n := 0
 		for _, row := range rows {
-			if row.Scope != string(authz.ScopeOrgRead) {
+			if row.Scope != string(scope) {
 				continue
 			}
 			n++
 			selector, err := authz.SelectorFromRow(row.Selectors)
 			require.NoError(t, err)
-			allowed, err := authz.GrantsAuthorize([]authz.Grant{authz.NewGrantWithSelector(authz.ScopeOrgRead, selector)}, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: "org-test"})
+			allowed, err := authz.GrantsAuthorize([]authz.Grant{authz.NewGrantWithSelector(scope, selector)}, authz.Check{Scope: scope, ResourceID: allowedID})
 			require.NoError(t, err)
 			require.True(t, allowed)
-			allowed, err = authz.GrantsAuthorize([]authz.Grant{authz.NewGrantWithSelector(authz.ScopeOrgRead, selector)}, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: "org_other"})
+			allowed, err = authz.GrantsAuthorize([]authz.Grant{authz.NewGrantWithSelector(scope, selector)}, authz.Check{Scope: scope, ResourceID: otherID})
 			require.NoError(t, err)
 			require.False(t, allowed)
 		}
 		return n
 	}
-	require.Equal(t, 1, count())
+	countOrgRead := func() int { return count(authz.ScopeOrgRead, "org-test", "org_other") }
+	countProjectRead := func() int { return count(authz.ScopeProjectRead, project.String(), uuid.NewString()) }
+	require.Equal(t, 1, countOrgRead())
+	require.Equal(t, 1, countProjectRead())
 	_, err = core.EnableManagedAssistant(t.Context(), "org-test", project, "user-1", true)
 	require.NoError(t, err)
-	require.Equal(t, 1, count(), "repeated enable is idempotent")
+	require.Equal(t, 1, countOrgRead(), "repeated enable is idempotent")
+	require.Equal(t, 1, countProjectRead(), "repeated enable is idempotent")
 	rows, err := agentrepo.New(db).ListAgentPolicyGrants(t.Context(), agentrepo.ListAgentPolicyGrantsParams{OrganizationID: "org-test", AgentID: agentID})
 	require.NoError(t, err)
 	for _, row := range rows {
-		if row.Scope != string(authz.ScopeOrgRead) {
+		if row.Scope != string(authz.ScopeOrgRead) && row.Scope != string(authz.ScopeProjectRead) {
 			continue
 		}
 		_, err = agentrepo.New(db).DeleteAgentPolicyGrant(t.Context(), agentrepo.DeleteAgentPolicyGrantParams{OrganizationID: "org-test", AgentID: agentID, GrantID: row.ID})
@@ -67,7 +72,8 @@ func TestManagedAssistantOrganizationReadCeiling(t *testing.T) {
 	}
 	_, err = core.EnableManagedAssistant(t.Context(), "org-test", project, "user-1", true)
 	require.NoError(t, err)
-	require.Equal(t, 1, count(), "existing managed assistants gain the new ceiling")
+	require.Equal(t, 1, countOrgRead(), "existing managed assistants gain the org ceiling")
+	require.Equal(t, 1, countProjectRead(), "existing managed assistants gain the project ceiling")
 	err = pgx.BeginFunc(t.Context(), db, func(tx pgx.Tx) error {
 		return core.ensureManagedOrganizationRead(t.Context(), tx, "org-test", project, ordinary.ID, "user-1")
 	})
