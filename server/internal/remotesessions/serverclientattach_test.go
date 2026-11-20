@@ -699,7 +699,8 @@ func TestAttachServerClientAssociation_AgainRefusesNothingAnExistingAssociationA
 
 	result, err := f.attach(ctx, server, client)
 	require.NoError(t, err, "the client's missing own-issuer binding doesn't refuse an association that already stands")
-	require.Equal(t, []string{openGateway.String()}, result.BoundUserSessionIssuerIds, "only the gateway it can complete")
+	require.Empty(t, result.BoundUserSessionIssuerIds)
+	requireClientBound(t, ctx, f.ti, client, openGateway, false)
 	requireClientBound(t, ctx, f.ti, client, heldGateway, false)
 	requireClientBound(t, ctx, f.ti, holder, heldGateway, true)
 }

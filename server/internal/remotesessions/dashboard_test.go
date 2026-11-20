@@ -1036,7 +1036,7 @@ func TestCommitServerIdentityConfigurationRefusesReplacingClientWithLiveAgentBin
 	requireLiveAgentBindings(t, ctx, ti, currentClientID, userIssuerID)
 }
 
-func TestCommitServerIdentityConfigurationRefusesLinkingOrgClientToOrgIssuerWithoutOrganizationAdmin(t *testing.T) {
+func TestCommitServerIdentityConfigurationOffersOrgClientWithoutChangingOrganizationIssuer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -1046,15 +1046,15 @@ func TestCommitServerIdentityConfigurationRefusesLinkingOrgClientToOrgIssuerWith
 	orgClientID := createServerIdentityClient(t, ctx, ti, "org-link-client", providerID, true)
 
 	_, err := ti.service.CommitServerIdentityConfiguration(withoutOrganizationAdmin(t, ctx), existingServerIdentityPayload(targetID, providerID, orgClientID))
-	requireOopsCode(t, err, oops.CodeForbidden)
-	require.ErrorContains(t, err, remotesessions.OrgWideBindingMessage)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{orgClientID}, serverAssociatedClients(t, ctx, ti, targetID))
 	requireClientBound(t, ctx, ti, orgClientID, userIssuerID, false)
 }
 
 // An organization admin may link an organization-level client to an
 // organization-level user session issuer, and every project's servers on the
 // issuer pick up its provider.
-func TestCommitServerIdentityConfigurationLinksOrgClientToOrgIssuerForOrganizationAdmin(t *testing.T) {
+func TestCommitServerIdentityConfigurationDoesNotRepublishOrgClientToOtherProjects(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -1068,11 +1068,11 @@ func TestCommitServerIdentityConfigurationLinksOrgClientToOrgIssuerForOrganizati
 	result, err := ti.service.CommitServerIdentityConfiguration(ctx, existingServerIdentityPayload(targetID, providerID, orgClientID))
 	require.NoError(t, err)
 	require.Equal(t, "linked", *result.Status)
-	requireClientBound(t, ctx, ti, orgClientID, userIssuerID, true)
+	requireClientBound(t, ctx, ti, orgClientID, userIssuerID, false)
 
 	otherServer, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: otherServerID, ProjectID: otherProjectID})
 	require.NoError(t, err)
-	require.Equal(t, uuid.NullUUID{UUID: providerID, Valid: true}, otherServer.RemoteSessionIssuerID)
+	require.False(t, otherServer.RemoteSessionIssuerID.Valid)
 }
 
 func TestCommitServerIdentityConfigurationRefusesReplacingOrgClientWithAgentBindingInAnotherProject(t *testing.T) {
@@ -1125,7 +1125,7 @@ func TestCommitServerIdentityConfigurationReplacesProjectClientOnOrgIssuer(t *te
 	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "org-project-issuer")
 	targetID := createServerIdentityTargetOnIssuer(t, ctx, ti, "org-project-target", userIssuerID)
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "org-project-current", "", false, []string{"none"})
-	projectClientID := bindServerIdentityClient(t, ctx, ti, "org-project-client", currentProviderID, userIssuerID, false)
+	projectClientID := bindServerIdentityClient(t, ctx, ti, "org-project-client", currentProviderID, userIssuerID, true)
 
 	result, err := ti.service.CommitServerIdentityConfiguration(ctx, &gen.CommitServerIdentityConfigurationPayload{
 		SessionToken:       nil,
@@ -1147,7 +1147,7 @@ func TestCommitServerIdentityConfigurationReplacesProjectClientOnOrgIssuer(t *te
 	})
 	require.NoError(t, err)
 	require.Equal(t, "project-specific", *result.ClientTier)
-	requireClientBound(t, ctx, ti, projectClientID, userIssuerID, false)
+	requireClientBound(t, ctx, ti, projectClientID, userIssuerID, true)
 
 	storedTarget, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
 		ID:        targetID,
@@ -1199,8 +1199,8 @@ func TestCommitServerIdentityConfigurationReplacesClientWhenServerIssuerColumnIs
 	nextClientID, err := uuid.Parse(result.Client.ID)
 	require.NoError(t, err)
 
-	requireClientBound(t, ctx, ti, currentClientID, userIssuerID, false)
-	requireClientBound(t, ctx, ti, nextClientID, userIssuerID, true)
+	requireClientBound(t, ctx, ti, currentClientID, userIssuerID, true)
+	requireClientBound(t, ctx, ti, nextClientID, userIssuerID, false)
 	require.Equal(t, conv.ToNullUUID(nextProviderID), storedIssuer(t, ctx, ti.conn, projectIDFromContext(t, ctx), targetID))
 }
 
@@ -1236,15 +1236,15 @@ func TestCommitServerIdentityConfigurationReplacesClientForSameProvider(t *testi
 	ctx, ti := newTestService(t)
 	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "same-provider-target")
 	providerID := createServerIdentityProvider(t, ctx, ti, "same-provider", "", false, []string{"none"})
-	currentClientID := bindServerIdentityClient(t, ctx, ti, "same-provider-current-client", providerID, userIssuerID, false)
+	currentClientID := bindServerIdentityClient(t, ctx, ti, "same-provider-current-client", providerID, userIssuerID, true)
 
 	result, err := ti.service.CommitServerIdentityConfiguration(ctx, manualExistingProviderIdentityPayload(targetID, providerID, "same-provider-next-client"))
 	require.NoError(t, err)
 	nextClientID, err := uuid.Parse(result.Client.ID)
 	require.NoError(t, err)
 
-	requireClientBound(t, ctx, ti, currentClientID, userIssuerID, false)
-	requireClientBound(t, ctx, ti, nextClientID, userIssuerID, true)
+	requireClientBound(t, ctx, ti, currentClientID, userIssuerID, true)
+	requireClientBound(t, ctx, ti, nextClientID, userIssuerID, false)
 	require.Equal(t, conv.ToNullUUID(providerID), storedIssuer(t, ctx, ti.conn, projectIDFromContext(t, ctx), targetID))
 }
 

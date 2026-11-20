@@ -309,10 +309,9 @@ func TestMemberProvider_RemoveKeepsBindingWhileAServerSharesTheGatewayIssuer(t *
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 	_, err = writer.RemoveMember(ctx, tx, metamcp.Actor{OrganizationID: f.organizationID, ProjectID: f.projectID, UserID: "user", Email: nil}, meta, memberID)
-	require.NoError(t, err, "the violation is reported, not returned")
+	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))
 
 	require.Zero(t, f.bound(t, ctx, f.gatewayIssuerID, provider))
-	require.Contains(t, logs.String(), "level=ERROR")
-	require.Contains(t, logs.String(), "no MCP server signs in directly through a gateway's issuer")
+	require.Empty(t, logs.String(), "removal no longer attempts issuer unlink")
 }

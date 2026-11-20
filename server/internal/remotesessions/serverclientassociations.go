@@ -443,7 +443,7 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 	}
 
 	// The server lock serializes this with identity commits and server
-	// updates, which change the bindings the sole-consumer check reads.
+	// updates, which can change the server or its credential sources.
 	server, err := mcpserversrepo.New(dbtx).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{
 		ID:        serverID,
 		ProjectID: *authCtx.ProjectID,
@@ -474,22 +474,32 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 	if !found {
 		return oops.E(oops.CodeNotFound, nil, "MCP server is not associated with this client").LogWarn(ctx, logger)
 	}
-	// Retire only the typed links derived from this association. Keep an
-	// administrator's independent links and record a durable explicit detach.
-	offered, err := authclientsrepo.New(dbtx).ListServerBackfillAuthClients(ctx, authclientsrepo.ListServerBackfillAuthClientsParams{
-		McpServerID: serverID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
-	})
+	// In the typed serving path, preserve the explicit detach of the derived
+	// offer and audit it. Outside that path the association's tombstone is
+	// sufficient, so an independent typed administrator detach stays distinct.
+	enforced, err := authenforcement.ReadEnforced(ctx, dbtx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list MCP server auth clients").LogError(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "read upstream auth enforcement").LogError(ctx, logger)
 	}
-	for _, client := range offered {
-		if client.RemoteSessionClientID.UUID != clientID {
-			continue
+	if enforced {
+		// Retire only the typed links derived from this association. Keep an
+		// administrator's independent links and record a durable explicit detach.
+		offered, err := authclientsrepo.New(dbtx).ListServerBackfillAuthClients(ctx, authclientsrepo.ListServerBackfillAuthClientsParams{
+			McpServerID: serverID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "list MCP server auth clients").LogError(ctx, logger)
 		}
-		if err := authclients.DetachMcpServer(ctx, dbtx, s.auditLogger, authCtx, client, serverID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeUnexpected, err, "detach MCP server auth client").LogError(ctx, logger)
+		for _, client := range offered {
+			if client.RemoteSessionClientID.UUID != clientID {
+				continue
+			}
+			if err := authclients.DetachMcpServer(ctx, dbtx, s.auditLogger, authCtx, client, serverID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return oops.E(oops.CodeUnexpected, err, "detach MCP server auth client").LogError(ctx, logger)
+			}
 		}
 	}
+
 	if _, err := q.DetachMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.DetachMCPServerRemoteSessionClientParams{
 		McpServerID: serverID, RemoteSessionClientID: clientID, ProjectID: *authCtx.ProjectID,
 	}); err != nil {

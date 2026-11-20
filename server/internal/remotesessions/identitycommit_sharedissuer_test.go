@@ -424,17 +424,18 @@ func TestCommitAutomaticRegistrationNeverReusesAServiceAccountClient(t *testing.
 	selfClient := seedBoundServiceAccountClient(t, ctx, ti, "self-reuse-client", provider, issuer, own)
 	other := createCapturingServer(t, ctx, ti, "self-reuse-other", issuer)
 
-	_, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(other, provider))
-	requireOopsCode(t, err, oops.CodeConflict)
-	require.Zero(t, requests.Load())
-	require.Empty(t, serverAssociatedClients(t, ctx, ti, other), "another server's shared credential is never handed to this one")
+	recordTypedClients(t, ctx, ti.conn, activeOrganizationID(t, ctx), own)
+	otherResult, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(other, provider))
+	require.NoError(t, err)
+	require.NotEqual(t, selfClient.String(), otherResult.Client.ID)
+	require.Equal(t, []uuid.UUID{selfClient}, serverAssociatedClients(t, ctx, ti, own))
 
 	result, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(own, provider))
 	require.NoError(t, err)
 	require.Nil(t, result.Failure)
-	require.Equal(t, int64(1), requests.Load())
+	require.Equal(t, int64(2), requests.Load())
 	require.NotEqual(t, selfClient.String(), result.Client.ID)
-	requireClientBound(t, ctx, ti, selfClient, issuer, false)
+	requireClientBound(t, ctx, ti, selfClient, issuer, true)
 }
 
 // The preview tells a server leaving User Identity what to remove, and the
@@ -594,7 +595,14 @@ func TestCommitExplicitReplaceRefusesAServerInAnotherProject(t *testing.T) {
 	target := createServerIdentityTargetOnIssuer(t, ctx, ti, "replace-project-target", issuer)
 	otherProject := createProject(t, ctx, ti.conn, "replace-project-other")
 	other := createImpactServer(t, ctx, ti, otherProject, "replace-project-other-server", issuer)
-	provider := createServerIdentityProvider(t, ctx, ti, "replace-project-provider", "", false, []string{"none"})
+	orgProvider, err := repo.New(ti.conn).CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
+		OrganizationID: conv.ToPGText(activeOrganizationID(t, ctx)), Slug: "replace-project-provider",
+		Issuer:          "https://idp.example.com/replace-project-provider",
+		ScopesSupported: []string{}, GrantTypesSupported: []string{}, ResponseTypesSupported: []string{}, CodeChallengeMethodsSupported: []string{},
+		TokenEndpointAuthMethodsSupported: []string{"none"},
+	})
+	require.NoError(t, err)
+	provider := orgProvider.ID
 	client := bindServerIdentityClient(t, ctx, ti, "replace-project-client", provider, issuer, true)
 	for _, association := range []upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
 		{OrganizationID: activeOrganizationID(t, ctx), RemoteSessionClientID: client, McpServerID: target, ProjectID: projectIDFromContext(t, ctx)},
@@ -609,7 +617,7 @@ func TestCommitExplicitReplaceRefusesAServerInAnotherProject(t *testing.T) {
 
 	preview := impactPayload(issuer, &target, "replace", &provider, nil)
 	preview.ReplaceClient = new(true)
-	_, err := ti.service.GetServerIdentityImpact(ctx, preview)
+	_, err = ti.service.GetServerIdentityImpact(ctx, preview)
 	requireOopsCode(t, err, oops.CodeConflict)
 	require.ErrorContains(t, err, "another project")
 
