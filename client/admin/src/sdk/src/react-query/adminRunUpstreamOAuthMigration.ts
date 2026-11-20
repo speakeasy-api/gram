@@ -51,7 +51,7 @@ export type AdminRunUpstreamOAuthMigrationMutationError =
  * runUpstreamOAuthMigration admin
  *
  * @remarks
- * Migrates one organization's upstream OAuth configuration: records the server to client associations its configuration proves, then each live credential's client choice. Idempotent, so it is safe to run again; a server the configuration does not prove is reported and never guessed.
+ * Retired. Rejects authenticated calls and does not change upstream authentication configuration.
  */
 export function useAdminRunUpstreamOAuthMigrationMutation(
   options?: MutationHookOptions<

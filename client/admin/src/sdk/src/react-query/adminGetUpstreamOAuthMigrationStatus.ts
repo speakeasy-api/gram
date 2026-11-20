@@ -56,7 +56,7 @@ export type AdminGetUpstreamOAuthMigrationStatusQueryError =
  * getUpstreamOAuthMigrationStatus admin
  *
  * @remarks
- * Reports where one organization stands in the upstream OAuth migration from a dry run that writes nothing.
+ * Reports typed upstream authentication readiness for one organization without making changes.
  */
 export function useAdminGetUpstreamOAuthMigrationStatus(
   request: AdminGetUpstreamOAuthMigrationStatusRequest,
@@ -83,7 +83,7 @@ export function useAdminGetUpstreamOAuthMigrationStatus(
  * getUpstreamOAuthMigrationStatus admin
  *
  * @remarks
- * Reports where one organization stands in the upstream OAuth migration from a dry run that writes nothing.
+ * Reports typed upstream authentication readiness for one organization without making changes.
  */
 export function useAdminGetUpstreamOAuthMigrationStatusSuspense(
   request: AdminGetUpstreamOAuthMigrationStatusRequest,

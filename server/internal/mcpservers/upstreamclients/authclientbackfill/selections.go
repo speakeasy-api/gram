@@ -265,7 +265,7 @@ func visitSelectionMappings(ctx context.Context, q *Queries, params ListSelectio
 }
 
 func decideSelectionRow(ctx context.Context, q *Queries, opts Options, write bool, credential liveCredential, row ListSelectionMappingsRow, report *Report) error {
-	outcome, clientID := decideSelection(row, credential.issuer, opts.TypedOnly, false)
+	outcome, clientID := decideSelection(row, credential.issuer, opts.TypedOnly, opts.TypedOnly)
 	counts := report.selectionClass(credential.class)
 	counts.Selections++
 	if outcome == SelectionMap {

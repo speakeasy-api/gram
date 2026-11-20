@@ -10282,7 +10282,7 @@ paths:
             x-speakeasy-name-override: listUpstreamOAuthMigrationOrganizations
     /admin/upstreamOAuthMigration.run:
         post:
-            description: 'Migrates one organization''s upstream OAuth configuration: records the server to client associations its configuration proves, then each live credential''s client choice. Idempotent, so it is safe to run again; a server the configuration does not prove is reported and never guessed.'
+            description: Retired. Rejects authenticated calls and does not change upstream authentication configuration.
             operationId: adminRunUpstreamOAuthMigration
             requestBody:
                 content:
@@ -10359,7 +10359,7 @@ paths:
             x-speakeasy-name-override: runUpstreamOAuthMigration
     /admin/upstreamOAuthMigration.status:
         get:
-            description: Reports where one organization stands in the upstream OAuth migration from a dry run that writes nothing.
+            description: Reports typed upstream authentication readiness for one organization without making changes.
             operationId: adminGetUpstreamOAuthMigrationStatus
             parameters:
                 - allowEmptyValue: true

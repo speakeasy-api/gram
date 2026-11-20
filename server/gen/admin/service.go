@@ -348,13 +348,11 @@ type Service interface {
 	// Lists every organization the upstream OAuth migration applies to, so staff
 	// can check and migrate them one by one.
 	ListUpstreamOAuthMigrationOrganizations(context.Context, *ListUpstreamOAuthMigrationOrganizationsPayload) (res *AdminUpstreamOAuthMigrationOrganizations, err error)
-	// Reports where one organization stands in the upstream OAuth migration from a
-	// dry run that writes nothing.
+	// Reports typed upstream authentication readiness for one organization without
+	// making changes.
 	GetUpstreamOAuthMigrationStatus(context.Context, *GetUpstreamOAuthMigrationStatusPayload) (res *AdminUpstreamOAuthMigrationStatus, err error)
-	// Migrates one organization's upstream OAuth configuration: records the server
-	// to client associations its configuration proves, then each live credential's
-	// client choice. Idempotent, so it is safe to run again; a server the
-	// configuration does not prove is reported and never guessed.
+	// Retired. Rejects authenticated calls and does not change upstream
+	// authentication configuration.
 	RunUpstreamOAuthMigration(context.Context, *RunUpstreamOAuthMigrationPayload) (res *AdminUpstreamOAuthMigrationRun, err error)
 	// Enables upstream auth enforcement for one organization: its direct proxied
 	// servers and assistant turns are served by the typed auth client resolver,
