@@ -1556,6 +1556,12 @@ WHERE deleted IS FALSE;
 CREATE UNIQUE INDEX IF NOT EXISTS api_keys_organization_id_project_id_id_key
 ON api_keys (organization_id, project_id, id);
 
+-- Serves keys.list: an organization's live ordinary keys, newest first, read
+-- one keyset page at a time.
+CREATE INDEX IF NOT EXISTS api_keys_organization_id_created_at_id_idx
+ON api_keys (organization_id, created_at DESC, id DESC)
+WHERE deleted IS FALSE AND subject_urn IS NULL;
+
 CREATE TABLE IF NOT EXISTS litellm_instances (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
