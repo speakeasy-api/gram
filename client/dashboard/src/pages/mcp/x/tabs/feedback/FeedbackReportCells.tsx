@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/Badge";
+import { useNow } from "@/hooks/useNow";
 import { Text } from "@/components/ui/Text";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { dateTimeFormatters, formatRelativeTime } from "@/lib/dates";
@@ -6,14 +7,21 @@ import type { McpFeedback } from "@gram/client/models/components/mcpfeedback.js"
 import { reporterName, reportingAgent } from "./feedbackReporter";
 import { feedbackSeverity } from "./feedbackSeverity";
 
-/** Nothing for a report with no severity: a comment or praise is not a problem. */
+/**
+ * Nothing for a report with no severity: a comment or praise is not a problem.
+ * A severity this page does not know yet is shown as it arrived.
+ */
 export function ReportSeverityCell({
   report,
 }: {
   report: McpFeedback;
 }): JSX.Element | null {
   const severity = feedbackSeverity(report.severity);
-  if (!severity) return null;
+  if (!severity) {
+    return report.severity ? (
+      <Badge variant="neutral">{report.severity}</Badge>
+    ) : null;
+  }
   return (
     <SimpleTooltip tooltip={severity.meaning}>
       <Badge variant={severity.badge}>{severity.label}</Badge>
@@ -79,12 +87,17 @@ export function ReportSenderCell({
   );
 }
 
+// How often the received times are redrawn. They count in minutes at best.
+const RECEIVED_TICK_MS = 60_000;
+
 /** How long ago the report arrived, with the exact time on hover. */
 export function ReportReceivedCell({
   report,
 }: {
   report: McpFeedback;
 }): JSX.Element {
+  // Redraws as time passes; the label is computed from the current time.
+  useNow(RECEIVED_TICK_MS);
   return (
     <Text
       small

@@ -9,10 +9,21 @@ export function reporterName(report: McpFeedback): string {
   return "Not signed in";
 }
 
-/** The agent's own name for itself, from its handshake with the server. */
+/**
+ * The agent's own name for itself, from its handshake with the server. The
+ * client chose it, so control and format characters, such as bidi overrides,
+ * become spaces rather than change how the name reads.
+ */
 export function reportingAgent(report: McpFeedback): string | undefined {
-  if (!report.clientName) return undefined;
-  return report.clientVersion
-    ? `${report.clientName} ${report.clientVersion}`
-    : report.clientName;
+  const name = displaySafe(report.clientName);
+  if (!name) return undefined;
+  const version = displaySafe(report.clientVersion);
+  return version ? `${name} ${version}` : name;
+}
+
+function displaySafe(value: string | undefined): string {
+  return (value ?? "")
+    .replace(/[\p{Cc}\p{Cf}]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }

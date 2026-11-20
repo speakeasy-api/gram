@@ -108,9 +108,9 @@ is 38 days old, so the list holds one more report than the counts. One report
 quotes a connection string whose password is already `[REDACTED]`, as the
 gateway stores it. Example OAuth has the tool on under the name
 `report_a_problem` with nothing sent yet, and Example Shared Credential was
-never set up. Demo users have no write access, so they see each state without
-its controls. Nothing is seeded for exports or webhooks: seeded reports are
-inserted directly and publish neither.
+never set up. Demo sessions hold every scope, so the tab shows its controls;
+a change made there lasts until the next daily reseed. Nothing is seeded for
+exports or webhooks: seeded reports are inserted directly and publish neither.
 
 ### Gateway instructions
 

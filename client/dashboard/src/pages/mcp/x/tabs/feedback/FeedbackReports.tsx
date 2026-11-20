@@ -42,10 +42,13 @@ const SEVERITY_OPTIONS = FEEDBACK_SEVERITIES.map(
   ({ value, label, meaning }) => ({ value, label, description: meaning }),
 );
 
-// The table's column tracks, so its skeleton holds the same shape.
-const COLUMN_WIDTHS = feedbackReportColumns(() => {}).map(
-  (column) => column.width,
-);
+// The table's column tracks, so its skeleton holds the same shape: the
+// expand control's track the table adds for expandable rows, then the columns.
+const EXPAND_COLUMN_WIDTH = "64px" as const;
+const COLUMN_WIDTHS = [
+  EXPAND_COLUMN_WIDTH,
+  ...feedbackReportColumns(() => {}).map((column) => column.width),
+];
 
 /**
  * What agents reported about this server: how much and how bad over the last

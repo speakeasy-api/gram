@@ -2,6 +2,7 @@ import type { ListMcpFeedbackResult } from "@gram/client/models/components/listm
 import type { McpFeedback } from "@gram/client/models/components/mcpfeedback.js";
 import type { McpFeedbackSettings } from "@gram/client/models/components/mcpfeedbacksettings.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import {
   cleanup,
   fireEvent,
@@ -382,6 +383,26 @@ describe("a server with feedback on", () => {
     expect(lastListRequest()).toMatchObject({ severity: undefined });
   });
 
+  it("shows a severity it does not know as it arrived", () => {
+    state.result = result({
+      feedback: [report({ severity: unrecognized("catastrophic") })],
+    });
+    renderTab();
+
+    expect(screen.getByText("catastrophic")).toBeTruthy();
+  });
+
+  it("shows an agent's name without the control characters it sent", () => {
+    state.result = result({
+      feedback: [
+        report({ clientName: "good\u202Eagent\u200B", clientVersion: "1.0" }),
+      ],
+    });
+    renderTab();
+
+    expect(screen.getAllByText("good agent 1.0").length).toBeGreaterThan(0);
+  });
+
   it("links to exports and webhooks beside the reports", () => {
     renderTab();
 
@@ -560,6 +581,16 @@ describe("customizing the feedback tool", () => {
     fireEvent.click(screen.getByRole("button", { name: "Use the default" }));
 
     expect(name).toHaveProperty("value", DEFAULT_NAME);
+  });
+
+  it("counts instructions in characters, as the server does", () => {
+    const { instructions, save } = openSheet();
+
+    // 1,500 emoji are 3,000 UTF-16 units but 1,500 characters.
+    fireEvent.change(instructions, { target: { value: "🙂".repeat(1500) } });
+
+    expect(screen.getByText(/1,500 of 2,000 characters/)).toBeTruthy();
+    expect(save).toHaveProperty("disabled", false);
   });
 
   it("asks before throwing away an edit", () => {
