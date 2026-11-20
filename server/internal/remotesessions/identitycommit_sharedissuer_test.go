@@ -115,8 +115,8 @@ func TestCommitAddsAnotherProviderAlongsideAServersClient(t *testing.T) {
 			second := createCapturingServer(t, ctx, ti, "alongside-second", issuer)
 			betaClient := commitManualClient(t, ctx, ti, second, beta, "alongside-beta-client")
 
-			requireClientBound(t, ctx, ti, alphaClient, issuer, true)
-			requireClientBound(t, ctx, ti, betaClient, issuer, true)
+			requireClientBound(t, ctx, ti, alphaClient, issuer, false)
+			requireClientBound(t, ctx, ti, betaClient, issuer, false)
 			require.Equal(t, []uuid.UUID{alphaClient}, serverAssociatedClients(t, ctx, ti, first))
 			require.Equal(t, []uuid.UUID{betaClient}, serverAssociatedClients(t, ctx, ti, second), "only this server is associated with its new client")
 		})
@@ -125,7 +125,7 @@ func TestCommitAddsAnotherProviderAlongsideAServersClient(t *testing.T) {
 
 // A retried commit, and a second server for the same provider, reuse the bound
 // client: no upstream registration and nothing removed.
-func TestCommitReusesTheProvidersBoundClient(t *testing.T) {
+func TestCommitReusesItsOwnTypedOffer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -142,6 +142,8 @@ func TestCommitReusesTheProvidersBoundClient(t *testing.T) {
 	client := commitManualClient(t, ctx, ti, first, provider, "reuse-client")
 	second := createCapturingServer(t, ctx, ti, "reuse-second", issuer)
 
+	_, err := ti.service.CommitServerIdentityConfiguration(ctx, existingServerIdentityPayload(second, provider, client))
+	require.NoError(t, err)
 	for range 2 {
 		result, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(second, provider))
 		require.NoError(t, err)
@@ -151,7 +153,7 @@ func TestCommitReusesTheProvidersBoundClient(t *testing.T) {
 	}
 
 	require.Zero(t, requests.Load(), "reusing a client registers nothing upstream")
-	requireClientBound(t, ctx, ti, client, issuer, true)
+	requireClientBound(t, ctx, ti, client, issuer, false)
 	require.Equal(t, []uuid.UUID{client}, serverAssociatedClients(t, ctx, ti, first))
 	require.Equal(t, []uuid.UUID{client}, serverAssociatedClients(t, ctx, ti, second))
 }
@@ -177,13 +179,13 @@ func TestCommitAutomaticRegistrationKeepsTheServersOwnClient(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, client.String(), result.Client.ID)
 	require.Zero(t, requests.Load())
-	requireClientBound(t, ctx, ti, client, issuer, true)
+	requireClientBound(t, ctx, ti, client, issuer, false)
 }
 
 // Different credentials for a provider whose client another server uses are
 // refused before anything is written, and the message points at the existing
 // client.
-func TestCommitRefusesDifferentCredentialsForAClientAnotherServerUses(t *testing.T) {
+func TestCommitKeepsDistinctClientsForServersSharingAnIssuer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -193,13 +195,12 @@ func TestCommitRefusesDifferentCredentialsForAClientAnotherServerUses(t *testing
 	client := commitManualClient(t, ctx, ti, first, provider, "credentials-client")
 	second := createCapturingServer(t, ctx, ti, "credentials-second", issuer)
 
-	_, err := ti.service.CommitServerIdentityConfiguration(ctx, manualExistingProviderIdentityPayload(second, provider, "credentials-other-client"))
-	requireOopsCode(t, err, oops.CodeConflict)
-	require.ErrorContains(t, err, "Use the existing client")
+	other := commitManualClient(t, ctx, ti, second, provider, "credentials-other-client")
 
-	requireClientBound(t, ctx, ti, client, issuer, true)
+	requireClientBound(t, ctx, ti, client, issuer, false)
 	require.Equal(t, []uuid.UUID{client}, serverAssociatedClients(t, ctx, ti, first))
-	require.Empty(t, serverAssociatedClients(t, ctx, ti, second))
+	require.Equal(t, []uuid.UUID{other}, serverAssociatedClients(t, ctx, ti, second))
+	requireClientBound(t, ctx, ti, other, issuer, false)
 }
 
 // Moving a server to another provider releases a client other servers use: it
@@ -223,7 +224,7 @@ func TestCommitMovingToAnotherProviderReleasesASharedClient(t *testing.T) {
 
 	betaClient := commitManualClient(t, ctx, ti, moving, beta, "move-beta-client")
 
-	requireClientBound(t, ctx, ti, alphaClient, issuer, true)
+	requireClientBound(t, ctx, ti, alphaClient, issuer, false)
 	require.Equal(t, []uuid.UUID{alphaClient}, serverAssociatedClients(t, ctx, ti, staying))
 	require.Equal(t, []uuid.UUID{betaClient}, serverAssociatedClients(t, ctx, ti, moving))
 
@@ -251,7 +252,7 @@ func TestCommitMovingToAnotherProviderUnbindsAClientOnlyThisServerUses(t *testin
 	betaClient := commitManualClient(t, ctx, ti, moving, beta, "sole-beta-client")
 
 	requireClientBound(t, ctx, ti, alphaClient, issuer, false)
-	requireClientBound(t, ctx, ti, betaClient, issuer, true)
+	requireClientBound(t, ctx, ti, betaClient, issuer, false)
 	require.Equal(t, []uuid.UUID{betaClient}, serverAssociatedClients(t, ctx, ti, moving))
 }
 
@@ -269,7 +270,7 @@ func TestCommitKeepsAClientAGatewayMayUse(t *testing.T) {
 
 	betaClient := commitManualClient(t, ctx, ti, target, beta, "gateway-keep-beta-client")
 
-	requireClientBound(t, ctx, ti, alphaClient, issuer, true)
+	requireClientBound(t, ctx, ti, alphaClient, issuer, false)
 	require.Equal(t, []uuid.UUID{betaClient}, serverAssociatedClients(t, ctx, ti, target))
 }
 
@@ -284,13 +285,14 @@ func TestCommitAddingAServerIsNotBlockedByAnotherServersAgents(t *testing.T) {
 	beta := createServerIdentityProvider(t, ctx, ti, "agents-beta", "", false, []string{"none"})
 	first := createCapturingServer(t, ctx, ti, "agents-first", issuer)
 	alphaClient := commitManualClient(t, ctx, ti, first, alpha, "agents-alpha-client")
+	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: alphaClient, UserSessionIssuerID: issuer}))
 	seedLiveAgentBinding(t, ctx, ti, alphaClient, issuer)
 	second := createCapturingServer(t, ctx, ti, "agents-second", issuer)
 
 	betaClient := commitManualClient(t, ctx, ti, second, beta, "agents-beta-client")
 
 	requireClientBound(t, ctx, ti, alphaClient, issuer, true)
-	requireClientBound(t, ctx, ti, betaClient, issuer, true)
+	requireClientBound(t, ctx, ti, betaClient, issuer, false)
 	requireLiveAgentBindings(t, ctx, ti, alphaClient, issuer)
 }
 
@@ -486,7 +488,7 @@ func TestCommitExplicitReplaceRequiresWriteOnTheServersItMoves(t *testing.T) {
 	payload.ReplaceClientServerIds = []string{outside.String()}
 	_, err := ti.service.CommitServerIdentityConfiguration(limited, payload)
 	requireOopsCode(t, err, oops.CodeForbidden)
-	requireClientBound(t, ctx, ti, client, issuer, true)
+	requireClientBound(t, ctx, ti, client, issuer, false)
 }
 
 // Replacing a client other servers use is an explicit choice: the preview names
@@ -523,13 +525,13 @@ func TestCommitExplicitReplaceMovesEveryServerToTheNewClient(t *testing.T) {
 	require.NoError(t, err)
 
 	requireClientBound(t, ctx, ti, oldClient, issuer, false)
-	requireClientBound(t, ctx, ti, newClient, issuer, true)
+	requireClientBound(t, ctx, ti, newClient, issuer, false)
 	require.Equal(t, []uuid.UUID{newClient}, serverAssociatedClients(t, ctx, ti, first))
 	require.Equal(t, []uuid.UUID{newClient}, serverAssociatedClients(t, ctx, ti, second))
 
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDetachMcpServer)
 	require.NoError(t, err)
-	require.Equal(t, before+1, after, "each server the replacement moves is audited")
+	require.Equal(t, before+2, after, "each server the replacement moves is audited")
 }
 
 // A confirmation that does not match who uses the client changes nothing.
@@ -554,13 +556,13 @@ func TestCommitExplicitReplaceRefusesAnUnconfirmedServerList(t *testing.T) {
 		require.ErrorContains(t, err, "changed")
 	}
 
-	requireClientBound(t, ctx, ti, client, issuer, true)
+	requireClientBound(t, ctx, ti, client, issuer, false)
 	require.Equal(t, []uuid.UUID{client}, serverAssociatedClients(t, ctx, ti, first))
 	require.Equal(t, []uuid.UUID{client}, serverAssociatedClients(t, ctx, ti, second))
 }
 
 // Nothing can say what a gateway would lose, so the client is not replaced.
-func TestCommitExplicitReplaceRefusesAClientAGatewayMayUse(t *testing.T) {
+func TestCommitExplicitReplaceDoesNotTreatGatewayIssuerAsAnOffer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -571,15 +573,15 @@ func TestCommitExplicitReplaceRefusesAClientAGatewayMayUse(t *testing.T) {
 
 	payload := manualExistingProviderIdentityPayload(target, provider, "replace-gateway-new-client")
 	payload.ReplaceClient = new(true)
-	_, err := ti.service.CommitServerIdentityConfiguration(ctx, payload)
-	requireOopsCode(t, err, oops.CodeConflict)
-	require.ErrorContains(t, err, "gateway")
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, payload)
+	require.NoError(t, err)
+	require.NotEqual(t, client.String(), result.Client.ID)
 
 	preview := impactPayload(issuer, &target, "replace", &provider, nil)
 	preview.ReplaceClient = new(true)
 	_, err = ti.service.GetServerIdentityImpact(ctx, preview)
-	requireOopsCode(t, err, oops.CodeConflict)
-	requireClientBound(t, ctx, ti, client, issuer, true)
+	require.NoError(t, err)
+	requireClientBound(t, ctx, ti, client, issuer, false)
 }
 
 // A server in another project is outside the commit's writer scope, so its
@@ -602,6 +604,8 @@ func TestCommitExplicitReplaceRefusesAServerInAnotherProject(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, int64(1), rows)
 	}
+
+	recordTypedClients(t, ctx, ti.conn, activeOrganizationID(t, ctx), target, other)
 
 	preview := impactPayload(issuer, &target, "replace", &provider, nil)
 	preview.ReplaceClient = new(true)

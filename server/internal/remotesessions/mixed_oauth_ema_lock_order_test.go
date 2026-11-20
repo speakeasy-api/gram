@@ -111,7 +111,7 @@ func TestMixedOAuthEMA_OpposingWriterScope(t *testing.T) {
 					err = repo.New(writer).LockingFixtureLockServer(ctx, repo.LockingFixtureLockServerParams{ProjectID: projectID, ServerID: serverID})
 					require.NoError(t, err)
 				}
-				commit := identityCommitter(t, ti).Prepare(linkPlan(t, ctx, in.UserSessionIssuerID, in.RemoteSessionIssuerID, in.ClientID))
+				commit := identityCommitter(t, ti).Prepare(linkPlan(t, ctx, ti, in.UserSessionIssuerID, in.RemoteSessionIssuerID, in.ClientID))
 				var inherited pgx.Tx
 				if operation == "reconcile_inherited_tx" {
 					inherited = testenv.BeginTx(t, ctx, ti.conn)

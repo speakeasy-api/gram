@@ -1034,14 +1034,6 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		}
 	}
 
-	// Moving the server onto an issuer configures its sign-in, so a server
-	// that is the issuer's only consumer offers the clients bound there.
-	if ids.UserSessionIssuerID.Valid && ids.UserSessionIssuerID != existing.UserSessionIssuerID {
-		if err := upstreamclients.CaptureSoleConsumers(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{ids.UserSessionIssuerID.UUID}, nil); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "capture mcp server upstream clients").LogError(ctx, logger)
-		}
-	}
-
 	if err := s.publicationRequests.Project(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "enqueue MCP server publication").LogError(ctx, logger)
 	}
@@ -1049,7 +1041,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 	if ids.UserSessionIssuerID.Valid {
-		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{ids.UserSessionIssuerID.UUID})
+		remotesessions.BestEffortRestampMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{ids.UserSessionIssuerID.UUID})
 		refreshed, refreshErr := repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, repo.GetMCPServerByIDAndProjectIDParams{
 			ID:        serverID,
 			ProjectID: *authCtx.ProjectID,
@@ -1060,12 +1052,12 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 			updated = refreshed
 		}
 	} else {
-		// Without an issuer the server keeps no upstream client associations; a detached issuer's other servers are recomputed.
+		// Refresh the stamp for other servers if this server left their issuer.
 		var detached []uuid.UUID
 		if clearIssuer && existing.UserSessionIssuerID.Valid {
 			detached = []uuid.UUID{existing.UserSessionIssuerID.UUID}
 		}
-		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, detached)
+		remotesessions.BestEffortRestampMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, detached)
 	}
 	afterView, _ := s.buildMcpServerView(ctx, authCtx.ActiveOrganizationID, updated)
 
@@ -1330,7 +1322,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	if deleted.UserSessionIssuerID.Valid {
 		releasedIssuers = []uuid.UUID{deleted.UserSessionIssuerID.UUID}
 	}
-	remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, releasedIssuers)
+	remotesessions.BestEffortRestampMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, releasedIssuers)
 	if tombstoned.DetachedPluginServers > 0 {
 		connected, connectionErr := pluginsrepo.New(s.db).HasPluginGithubConnectionForProject(ctx, *authCtx.ProjectID)
 		if connectionErr != nil {

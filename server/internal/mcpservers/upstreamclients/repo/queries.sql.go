@@ -1711,49 +1711,8 @@ WHERE a.mcp_server_id = s.id
   AND (
     s.deleted IS TRUE
     OR NOT EXISTS (
-      SELECT 1
-      FROM remote_session_client_user_session_issuers AS link
-      JOIN remote_session_clients AS c
-        ON c.id = link.remote_session_client_id
-       AND c.deleted IS FALSE
-      WHERE link.remote_session_client_id = a.remote_session_client_id
-        AND (
-          link.user_session_issuer_id = s.user_session_issuer_id
-          OR EXISTS (
-            SELECT 1
-            FROM meta_mcp_servers AS gateway
-            JOIN projects AS gateway_project
-              ON gateway_project.id = gateway.project_id
-             AND gateway_project.deleted IS FALSE
-            JOIN user_session_issuers AS gateway_issuer
-              ON gateway_issuer.id = gateway.user_session_issuer_id
-             AND gateway_issuer.deleted IS FALSE
-             AND (gateway_issuer.project_id = s.project_id
-                  OR (gateway_issuer.project_id IS NULL AND gateway_issuer.organization_id = a.organization_id))
-            JOIN meta_mcp_server_members AS member
-              ON member.meta_mcp_server_id = gateway.id
-             AND member.project_id = gateway.project_id
-             AND member.deleted IS FALSE
-            WHERE gateway.user_session_issuer_id = link.user_session_issuer_id
-              AND gateway.deleted IS FALSE
-              AND member.mcp_server_id = s.id
-          )
-          OR EXISTS (
-            SELECT 1
-            FROM user_session_issuers AS organization_issuer
-            WHERE organization_issuer.id = link.user_session_issuer_id
-              AND organization_issuer.project_id IS NULL
-              AND organization_issuer.organization_id = a.organization_id
-              AND organization_issuer.deleted IS FALSE
-              AND (
-              SELECT count(*)
-              FROM user_session_issuers AS sibling
-              WHERE sibling.organization_id = organization_issuer.organization_id
-                AND sibling.project_id IS NULL
-                AND sibling.deleted IS FALSE
-            ) = 1
-          )
-        )
+      SELECT 1 FROM remote_session_clients AS c
+      WHERE c.id = a.remote_session_client_id AND c.deleted IS FALSE
     )
   )
 RETURNING a.mcp_server_id
@@ -1764,14 +1723,8 @@ type PruneUnservableAssociationsParams struct {
 	OrganizationID string
 }
 
-// Removes the project's associations no issuer can serve: the server is gone,
-// the client is deleted, or the client is bound neither to the server's own
-// user session issuer nor to the live issuer of a gateway fronting the server
-// (a gateway it is a member of, or its organization's only organization-level
-// issuer for the organization gateway). Rows are deleted outright rather
-// than soft-deleted: a soft-deleted row records an explicit detach, which
-// capture and the backfill keep, and automatic cleanup must not read as one,
-// so a server that regains its binding or rejoins a gateway is captured again.
+// Removes only associations with a deleted server or registration. The offer
+// belongs to the server and survives changes to its sign-in or gateway paths.
 func (q *Queries) PruneUnservableAssociations(ctx context.Context, arg PruneUnservableAssociationsParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, pruneUnservableAssociations, arg.ProjectID, arg.OrganizationID)
 	if err != nil {

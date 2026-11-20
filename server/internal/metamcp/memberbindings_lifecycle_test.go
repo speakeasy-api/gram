@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/tombstone"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -31,7 +32,8 @@ func gatewayWithMember(t *testing.T, ctx context.Context, ti *testInstance, name
 	require.NotNil(t, meta.UserSessionIssuerID, "create mints the gateway issuer")
 	providerID = seedRemoteSessionIssuer(t, ctx, ti.conn, projectID, orgID, "lifecycle-rsi")
 	serverID = seedMcpServer(t, ctx, ti.conn, projectID)
-	stampAndWireMemberClient(t, ctx, ti.conn, projectID, orgID, serverID, createRemoteSessionClient(t, ctx, ti.conn, projectID, orgID, providerID, "lifecycle-client-"+uuid.NewString()[:8]))
+	clientID := createRemoteSessionClient(t, ctx, ti.conn, projectID, orgID, providerID, "lifecycle-client-"+uuid.NewString()[:8])
+	stampAndWireMemberClient(t, ctx, ti.conn, projectID, orgID, serverID, clientID)
 	_, err := ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
 		SessionToken:     nil,
 		ApikeyToken:      nil,
@@ -42,7 +44,11 @@ func gatewayWithMember(t *testing.T, ctx context.Context, ti *testInstance, name
 	})
 	require.NoError(t, err)
 	gatewayIssuerID = uuid.MustParse(*meta.UserSessionIssuerID)
-	require.Equal(t, 1, countGatewayClientsForUpstream(t, ctx, ti.conn, projectID, orgID, gatewayIssuerID, providerID), "add binds the member's client to the gateway issuer")
+	require.Zero(t, countGatewayClientsForUpstream(t, ctx, ti.conn, projectID, orgID, gatewayIssuerID, providerID))
+	// Simulate a historical binding made before membership became typed.
+	require.NoError(t, remotesessionsrepo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: clientID, UserSessionIssuerID: gatewayIssuerID,
+	}))
 	return meta.ID, gatewayIssuerID, serverID, providerID
 }
 
@@ -63,9 +69,8 @@ func issuerLive(t *testing.T, ctx context.Context, ti *testInstance, issuerID uu
 	return true
 }
 
-// Deleting a member's MCP server ends its membership, so the binding the
-// membership put on the gateway issuer goes with it in the same transaction.
-func TestDeleteMcpServer_UnbindsMemberProviderClient(t *testing.T) {
+// Deleting a member ends membership without unlinking the gateway issuer.
+func TestDeleteMcpServer_KeepsGatewayIssuerPair(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -89,7 +94,7 @@ func TestDeleteMcpServer_UnbindsMemberProviderClient(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))
 
-	require.Equal(t, 0, countGatewayClientsForUpstream(t, ctx, ti.conn, projectID, orgID, gatewayIssuerID, providerID))
+	require.Equal(t, 1, countGatewayClientsForUpstream(t, ctx, ti.conn, projectID, orgID, gatewayIssuerID, providerID))
 }
 
 // Deleting a gateway removes the bindings its members put on its issuer, and

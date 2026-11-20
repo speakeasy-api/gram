@@ -12,7 +12,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
@@ -21,7 +20,6 @@ import (
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestDeleteMetaMcpServer_DetachesPluginGateway(t *testing.T) {
@@ -339,7 +337,7 @@ func TestDeleteMetaMcpServer_RemovesGatewayFromSharedRiskPolicyScope(t *testing.
 // Deleting a gateway removes its members, so a member's association with a
 // client only the gateway's issuer binds goes with them, as it does when the
 // member is removed on its own.
-func TestDeleteMetaMcpServer_PrunesGatewayOnlyAssociations(t *testing.T) {
+func TestDeleteMetaMcpServer_PreservesMemberOffers(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -355,13 +353,16 @@ func TestDeleteMetaMcpServer_PrunesGatewayOnlyAssociations(t *testing.T) {
 		UserSessionIssuerID:   uuid.MustParse(*meta.UserSessionIssuerID),
 	}))
 	serverID := seedMcpServer(t, ctx, ti.conn, projectID)
-	stamped, err := testrepo.New(ti.conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{
-		RemoteSessionIssuerID: conv.ToNullUUID(remoteIssuerID),
-		ID:                    serverID,
-		ProjectID:             projectID,
+	_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectID, McpServerID: serverID, RemoteSessionClientID: clientID,
 	})
 	require.NoError(t, err)
-	require.Equal(t, int64(1), stamped)
+	tx, err := ti.conn.Begin(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback(ctx) })
+	require.NoError(t, authclientbackfill.LockEMAWriterScope(ctx, tx, authCtx.ActiveOrganizationID, []uuid.UUID{projectID}))
+	require.NoError(t, authclientbackfill.SyncServerAssociations(ctx, tx, authCtx.ActiveOrganizationID, serverID))
+	require.NoError(t, tx.Commit(ctx))
 	associations := func() int {
 		rows, err := upstreamclientsrepo.New(ti.conn).ListMCPServerRemoteSessionClients(ctx, upstreamclientsrepo.ListMCPServerRemoteSessionClientsParams{McpServerID: serverID, ProjectID: projectID})
 		require.NoError(t, err)
@@ -376,18 +377,18 @@ func TestDeleteMetaMcpServer_PrunesGatewayOnlyAssociations(t *testing.T) {
 
 	_, err = ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{MetaMcpServerID: meta.ID, McpServerID: serverID.String()})
 	require.NoError(t, err)
-	require.Equal(t, 1, associations(), "joining the gateway captures its client for the member")
+	require.Equal(t, 1, associations(), "joining preserves the configured association")
 	require.Equal(t, 1, offers())
 
 	require.NoError(t, ti.service.DeleteMetaMcpServer(ctx, &gen.DeleteMetaMcpServerPayload{ID: meta.ID}))
-	require.Zero(t, associations(), "no issuer reaching the server binds the client any more")
-	require.Zero(t, offers(), "nor is the typed link derived from it offered")
+	require.Equal(t, 1, associations(), "deleting the gateway preserves the member association")
+	require.Equal(t, 1, offers(), "the member typed offer remains")
 }
 
 // Removing a member prunes its association with a client only the gateway's
 // issuer binds, and retires the typed link derived from it, in the removal's
 // own transaction.
-func TestRemoveMetaMcpMember_PrunesGatewayOnlyAssociations(t *testing.T) {
+func TestRemoveMetaMcpMember_PreservesMemberOffers(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -398,18 +399,17 @@ func TestRemoveMetaMcpMember_PrunesGatewayOnlyAssociations(t *testing.T) {
 	require.NotNil(t, meta.UserSessionIssuerID)
 	remoteIssuerID := seedRemoteSessionIssuer(t, ctx, ti.conn, projectID, authCtx.ActiveOrganizationID, "member-only")
 	clientID := createRemoteSessionClient(t, ctx, ti.conn, projectID, authCtx.ActiveOrganizationID, remoteIssuerID, "member-only-client")
-	require.NoError(t, remotesessionsrepo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   uuid.MustParse(*meta.UserSessionIssuerID),
-	}))
 	serverID := seedMcpServer(t, ctx, ti.conn, projectID)
-	stamped, err := testrepo.New(ti.conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{
-		RemoteSessionIssuerID: conv.ToNullUUID(remoteIssuerID),
-		ID:                    serverID,
-		ProjectID:             projectID,
+	_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectID, McpServerID: serverID, RemoteSessionClientID: clientID,
 	})
 	require.NoError(t, err)
-	require.Equal(t, int64(1), stamped)
+	tx, err := ti.conn.Begin(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback(ctx) })
+	require.NoError(t, authclientbackfill.LockEMAWriterScope(ctx, tx, authCtx.ActiveOrganizationID, []uuid.UUID{projectID}))
+	require.NoError(t, authclientbackfill.SyncServerAssociations(ctx, tx, authCtx.ActiveOrganizationID, serverID))
+	require.NoError(t, tx.Commit(ctx))
 	associations := func() int {
 		rows, err := upstreamclientsrepo.New(ti.conn).ListMCPServerRemoteSessionClients(ctx, upstreamclientsrepo.ListMCPServerRemoteSessionClientsParams{McpServerID: serverID, ProjectID: projectID})
 		require.NoError(t, err)
@@ -427,6 +427,6 @@ func TestRemoveMetaMcpMember_PrunesGatewayOnlyAssociations(t *testing.T) {
 	require.Equal(t, 1, offers())
 
 	require.NoError(t, ti.service.RemoveMetaMcpMember(ctx, &gen.RemoveMetaMcpMemberPayload{ID: member.ID}))
-	require.Zero(t, associations(), "the gateway's issuer no longer serves the removed member")
-	require.Zero(t, offers(), "nor is the typed link derived from its association offered")
+	require.Equal(t, 1, associations(), "the member retains its own association")
+	require.Equal(t, 1, offers(), "the typed offer remains enabled")
 }

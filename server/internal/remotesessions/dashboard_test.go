@@ -34,7 +34,7 @@ func TestCommitServerIdentityConfigurationManualCreatesConfigurationAtomically(t
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "manual-target")
+	targetID, _ := createServerIdentityTarget(t, ctx, ti, "manual-target")
 
 	issuerAuditBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerCreate)
 	require.NoError(t, err)
@@ -66,7 +66,7 @@ func TestCommitServerIdentityConfigurationManualCreatesConfigurationAtomically(t
 	require.False(t, result.ManualSetupRequired)
 	require.Equal(t, "project-specific", *result.ProviderTier)
 	require.Equal(t, "project-specific", *result.ClientTier)
-	require.Equal(t, []string{userIssuerID.String()}, result.Client.UserSessionIssuerIds)
+	require.Empty(t, result.Client.UserSessionIssuerIds)
 	require.Equal(t, "/remote-identity-providers/"+result.Provider.ID, *result.ProviderPath)
 	require.Equal(t, *result.ProviderPath+"/clients/"+result.Client.ID, *result.ClientPath)
 
@@ -102,7 +102,7 @@ func TestCommitServerIdentityConfigurationAutoPrefersCIMD(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "cimd-target")
+	targetID, _ := createServerIdentityTarget(t, ctx, ti, "cimd-target")
 	providerID := createServerIdentityProvider(t, ctx, ti, "cimd-provider", "https://registration.invalid", true, []string{"none", "client_secret_basic"})
 
 	result, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, providerID))
@@ -110,7 +110,7 @@ func TestCommitServerIdentityConfigurationAutoPrefersCIMD(t *testing.T) {
 	require.Equal(t, "registered", *result.Status)
 	require.Equal(t, "cimd", *result.RegistrationMethod)
 	require.Equal(t, "none", *result.Client.TokenEndpointAuthMethod)
-	require.Equal(t, []string{userIssuerID.String()}, result.Client.UserSessionIssuerIds)
+	require.Empty(t, result.Client.UserSessionIssuerIds)
 	require.NotNil(t, result.Client.ClientIDMetadataURI)
 	require.Equal(t, *result.Client.ClientIDMetadataURI, result.Client.ClientID)
 }
@@ -428,7 +428,7 @@ func TestCommitServerIdentityConfigurationExistingClientNeedsOnlyMCPWrite(t *tes
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "existing-target")
+	targetID, _ := createServerIdentityTarget(t, ctx, ti, "existing-target")
 	providerID := createServerIdentityProvider(t, ctx, ti, "existing-provider", "", false, []string{"client_secret_basic"})
 	client, err := repo.New(ti.conn).CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 		ProjectID:             conv.ToNullUUID(projectIDFromContext(t, ctx)),
@@ -455,7 +455,7 @@ func TestCommitServerIdentityConfigurationExistingClientNeedsOnlyMCPWrite(t *tes
 	require.NoError(t, err)
 	require.Equal(t, "linked", *result.Status)
 	require.Equal(t, "existing", *result.RegistrationMethod)
-	require.Equal(t, []string{userIssuerID.String()}, result.Client.UserSessionIssuerIds)
+	require.Empty(t, result.Client.UserSessionIssuerIds)
 
 	_, err = ti.service.CommitServerIdentityConfiguration(restrictedCtx, &gen.CommitServerIdentityConfigurationPayload{
 		SessionToken:       nil,
@@ -567,7 +567,7 @@ func TestCommitServerIdentityConfigurationReplacesCurrentClientAtomically(t *tes
 		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now().UTC()),
 	})
 	require.NoError(t, err)
-	detachAuditBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDetachUserSessionIssuer)
+	detachAuditBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDetachMcpServer)
 	require.NoError(t, err)
 
 	result, err := ti.service.CommitServerIdentityConfiguration(ctx, &gen.CommitServerIdentityConfigurationPayload{
@@ -598,18 +598,18 @@ func TestCommitServerIdentityConfigurationReplacesCurrentClientAtomically(t *tes
 		ID:             replacementClient.ID,
 	})
 	require.NoError(t, err)
-	require.Contains(t, newClient.UserSessionIssuerIds, userIssuerID)
+	require.NotContains(t, newClient.UserSessionIssuerIds, userIssuerID)
 	storedTarget, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
 		ID:        targetID,
 		ProjectID: projectIDFromContext(t, ctx),
 	})
 	require.NoError(t, err)
 	require.Equal(t, replacementProviderID, storedTarget.RemoteSessionIssuerID.UUID)
-	detachAuditAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDetachUserSessionIssuer)
+	detachAuditAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDetachMcpServer)
 	require.NoError(t, err)
 	require.Equal(t, detachAuditBefore+1, detachAuditAfter)
 	require.Equal(t, []uuid.UUID{replacementClient.ID}, associatedClients(t, ctx, ti.conn, projectIDFromContext(t, ctx), targetID),
-		"the replaced client's association goes with its binding")
+		"replacement removes the old offer, not issuer links")
 	require.Equal(t,
 		[]uuid.UUID{authclientbackfill.OAuthClientID(activeOrganizationID(t, ctx), replacementClient.ID, authclientbackfill.TypeRemoteSession)},
 		offeredAuthClients(t, ctx, ti.conn, targetID),
@@ -790,7 +790,7 @@ func projectIDFromContext(t *testing.T, ctx context.Context) uuid.UUID {
 	return *authCtx.ProjectID
 }
 
-func TestCommitServerIdentityConfigurationRequiresWriteOnEveryServerSharingTheIssuer(t *testing.T) {
+func TestCommitServerIdentityConfigurationRequiresWriteOnlyOnTargetWhenIssuerShared(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -846,17 +846,11 @@ func TestCommitServerIdentityConfigurationRequiresWriteOnEveryServerSharingTheIs
 	}
 
 	targetOnlyCtx := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, targetID.String()))
-	_, err = ti.service.CommitServerIdentityConfiguration(targetOnlyCtx, payload())
-	requireOopsCode(t, err, oops.CodeForbidden)
-
-	bothCtx := withExactAccessGrants(t, ctx, ti.conn,
-		authz.NewGrant(authz.ScopeMCPWrite, targetID.String()),
-		authz.NewGrant(authz.ScopeMCPWrite, sibling.ID.String()),
-	)
-	result, err := ti.service.CommitServerIdentityConfiguration(bothCtx, payload())
+	result, err := ti.service.CommitServerIdentityConfiguration(targetOnlyCtx, payload())
 	require.NoError(t, err)
 	require.Equal(t, "linked", *result.Status)
-	require.Equal(t, []string{userIssuerID.String()}, result.Client.UserSessionIssuerIds)
+	require.Empty(t, result.Client.UserSessionIssuerIds)
+	require.Empty(t, serverAssociatedClients(t, ctx, ti, sibling.ID))
 }
 
 func TestCommitServerIdentityConfigurationLocksProviderBeforeCommitting(t *testing.T) {

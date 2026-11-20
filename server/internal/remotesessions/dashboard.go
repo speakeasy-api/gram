@@ -168,29 +168,9 @@ func (s *Service) authorizeServerIdentityTarget(ctx context.Context, logger *slo
 	if req.createProvider != nil || req.clientMode != serverIdentityClientModeExisting {
 		checks = append(checks, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
 	}
-	// A user session issuer is not unique to one MCP server. The client binding
-	// this commit rewrites is keyed by issuer, and ResyncMCPServerRemoteSessionIssuers
-	// re-stamps every server carrying that issuer, so write access to the named
-	// target alone would let a caller repoint its siblings.
-	// A replacement moves the servers it names, which need not share the issuer:
-	// one can reach the client through a gateway or an organization issuer.
+	// An explicit replacement mutates only the named, confirmed servers.
 	if req.replacement != nil {
 		for _, id := range req.replacement.ServerIDs {
-			checks = append(checks, authz.MCPCheck(authz.ScopeMCPWrite, id.String(), target.ProjectID.String()))
-		}
-	}
-	if target.UserSessionIssuerID.Valid {
-		sharing, err := mcpRepo.ListMCPServerIDsByUserSessionIssuerID(ctx, mcpserversrepo.ListMCPServerIDsByUserSessionIssuerIDParams{
-			ProjectID:           *authCtx.ProjectID,
-			UserSessionIssuerID: target.UserSessionIssuerID,
-		})
-		if err != nil {
-			return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "list MCP servers sharing the user session issuer").LogError(ctx, logger)
-		}
-		for _, id := range sharing {
-			if id == target.ID {
-				continue
-			}
 			checks = append(checks, authz.MCPCheck(authz.ScopeMCPWrite, id.String(), target.ProjectID.String()))
 		}
 	}
