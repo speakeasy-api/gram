@@ -206,7 +206,14 @@ func (t *Transcript) Merge(d Delivery) (Result, error) {
 
 		n, copied := t.find(parent, continues, e, d.Entries[i+1:])
 		if n != nil {
-			seen := Seen{Index: i, Node: n, NewIDs: t.adopt(n, e.IDs), Continues: nil, Synthetic: false}
+			ids := e.IDs
+			if copied {
+				// e repeats an older entry in a newer tree, and n is the entry
+				// another source already stored there: n takes the
+				// tree-scoped IDs, never the original's.
+				ids = scopeAll(e.IDs, t.treeRoot(n))
+			}
+			seen := Seen{Index: i, Node: n, NewIDs: t.adopt(n, ids), Continues: nil, Synthetic: false}
 			if continues != nil && n.Continues == nil {
 				n.Continues = continues
 				seen.Continues = continues
@@ -313,9 +320,11 @@ func (t *Transcript) resolve(ref NaturalID, links map[NaturalID]Link, scope *Nod
 	return target, cont, nil
 }
 
-// find returns the stored node that e already is. It returns nil and
-// copied=true when e repeats an entry of an older tree inside a newer one
-// (a partial compaction): e then becomes a new node with tree-scoped IDs.
+// find returns the stored node that e already is. copied=true means e
+// repeats an entry of an older tree inside a newer one (a partial
+// compaction): e then matches an entry another source already stored in the
+// newer tree, or becomes a new node there, and either way carries
+// tree-scoped IDs.
 //
 // A natural ID match is certain: first a copy in the parent's tree, then the
 // entry itself anywhere in the transcript. Otherwise the content key is
@@ -335,7 +344,10 @@ func (t *Transcript) find(parent, continues *Node, e Entry, rest []Entry) (n *No
 		}
 		if found, ok := t.byID[id]; ok {
 			if t.repeatsOlderTree(found, scope) {
-				return nil, true
+				// Inference may have stored this entry in the newer tree
+				// already, without IDs: look for it by content below.
+				copied = true
+				break
 			}
 			return found, false
 		}
@@ -356,7 +368,7 @@ func (t *Transcript) find(parent, continues *Node, e Entry, rest []Entry) (n *No
 			best, bestScore = c, score
 		}
 	}
-	return best, false
+	return best, copied
 }
 
 // followMatches counts how many of the next entries continue the newest
@@ -436,12 +448,7 @@ func (t *Transcript) attach(parent, continues *Node, e Entry, copied bool) (*Nod
 	parent.Children = append(parent.Children, n)
 	t.nodes[id] = n
 	if copied {
-		scope := t.treeRoot(n)
-		ids := make([]NaturalID, 0, len(e.IDs))
-		for _, raw := range e.IDs {
-			ids = append(ids, scoped(raw, scope))
-		}
-		t.adopt(n, ids)
+		t.adopt(n, scopeAll(e.IDs, t.treeRoot(n)))
 		return n, nil
 	}
 	t.adopt(n, e.IDs)

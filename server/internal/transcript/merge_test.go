@@ -678,6 +678,45 @@ func TestMerge_PartialCompactionCopiesKeptMessagesUnderTheSummary(t *testing.T) 
 	require.Empty(t, res.Added)
 }
 
+func TestMerge_PartialCompactionWithInferenceFirst(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	_, err := tr.Merge(transcriptDelivery(
+		transcriptPrompt("u1", "", "p1", "first"),
+		transcriptReply("u2", "u1", "one"),
+		transcriptPrompt("u3", "u2", "p2", "second"),
+		transcriptReply("u4", "u3", "two"),
+	))
+	require.NoError(t, err)
+
+	// Live frames after the compaction arrive before the transcript upload.
+	res, err := tr.Merge(inferenceFrame(user("summary of first and one"), user("second"), assistant("two"), user("third"), assistant("three")))
+	require.NoError(t, err)
+	require.Len(t, res.Added, 5)
+
+	res, err = tr.Merge(Delivery{
+		Source: SourceClaudeTranscript,
+		Links:  []Link{{ID: line("b1"), To: parentLine("u4"), Compaction: true}},
+		Entries: []Entry{
+			{Role: RoleUser, Text: "summary of first and one", Synthetic: true, IDs: []NaturalID{line("s1")}, Parent: parentLine("b1")},
+			transcriptPrompt("u3", "s1", "p2", "second"),
+			transcriptReply("u4", "u3", "two"),
+			transcriptPrompt("u5", "u4", "p5", "third"),
+			transcriptReply("u6", "u5", "three"),
+		},
+	})
+	require.NoError(t, err)
+	require.Empty(t, res.Added, "the transcript joins what inference stored in the new tree")
+	require.Len(t, res.Seen, 5)
+	for _, s := range res.Seen[1:3] {
+		for _, id := range s.NewIDs {
+			_, scopedID := unscoped(id)
+			require.True(t, scopedID, "repeated entries take tree-scoped IDs, not the originals'")
+		}
+	}
+	require.Empty(t, mustNode(t, tr, line("u4")).Children, "the old tree ends where it ended")
+}
+
 func TestSplit_DropsEmptyAndReminderOnlyTextBlocks(t *testing.T) {
 	t.Parallel()
 	entries := Split(Message{Role: RoleUser, Blocks: []Block{
