@@ -879,59 +879,6 @@ func (q *Queries) HasCredentialChoice(ctx context.Context, arg HasCredentialChoi
 	return has_choice, err
 }
 
-const isSoleConsumerBinding = `-- name: IsSoleConsumerBinding :one
-SELECT EXISTS (
-  SELECT 1
-  FROM mcp_servers AS s
-  JOIN projects AS p
-    ON p.id = s.project_id
-  JOIN remote_session_client_user_session_issuers AS link
-    ON link.user_session_issuer_id = s.user_session_issuer_id
-   AND link.remote_session_client_id = $1::uuid
-  WHERE s.id = $2::uuid
-    AND s.project_id = $3::uuid
-    AND s.deleted IS FALSE
-    AND NOT EXISTS (
-      SELECT 1
-      FROM mcp_servers AS other
-      JOIN projects AS other_project
-        ON other_project.id = other.project_id
-       AND other_project.organization_id = p.organization_id
-       AND other_project.deleted IS FALSE
-      WHERE other.user_session_issuer_id = s.user_session_issuer_id
-        AND other.id <> s.id
-        AND other.deleted IS FALSE
-    )
-    AND NOT EXISTS (
-      SELECT 1
-      FROM meta_mcp_servers AS gateway
-      JOIN projects AS gateway_project
-        ON gateway_project.id = gateway.project_id
-       AND gateway_project.deleted IS FALSE
-      WHERE gateway.user_session_issuer_id = s.user_session_issuer_id
-        AND gateway.organization_id = p.organization_id
-        AND gateway.deleted IS FALSE
-    )
-) AS sole_consumer
-`
-
-type IsSoleConsumerBindingParams struct {
-	RemoteSessionClientID uuid.UUID
-	McpServerID           uuid.UUID
-	ProjectID             uuid.UUID
-}
-
-// Whether the client is bound to the server's user session issuer and the
-// server is that issuer's only consumer in its organization, in which case an
-// association is re-derived from the binding and cannot be detached on its
-// own.
-func (q *Queries) IsSoleConsumerBinding(ctx context.Context, arg IsSoleConsumerBindingParams) (bool, error) {
-	row := q.db.QueryRow(ctx, isSoleConsumerBinding, arg.RemoteSessionClientID, arg.McpServerID, arg.ProjectID)
-	var sole_consumer bool
-	err := row.Scan(&sole_consumer)
-	return sole_consumer, err
-}
-
 const listAuthClientHeaders = `-- name: ListAuthClientHeaders :many
 SELECT h.auth_client_id, h.name, h.is_required, h.is_secret, h.value, h.value_from_request_header
 FROM mcp_auth_client_headers AS h
@@ -1836,58 +1783,6 @@ func (q *Queries) RecordAuthClientChoice(ctx context.Context, arg RecordAuthClie
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const recordMCPServerRemoteSessionClientDetach = `-- name: RecordMCPServerRemoteSessionClientDetach :one
-INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope, deleted_at)
-SELECT s.project_id, p.organization_id, s.id, c.id, c.attachment_scope, clock_timestamp()
-FROM mcp_servers AS s
-JOIN projects AS p
-  ON p.id = s.project_id
- AND p.organization_id = $1::text
- AND p.deleted IS FALSE
-JOIN remote_session_client_user_session_issuers AS link
-  ON link.user_session_issuer_id = s.user_session_issuer_id
-JOIN remote_session_clients AS c
-  ON c.id = link.remote_session_client_id
- AND c.deleted IS FALSE
- AND (c.project_id = p.id
-      OR (c.project_id IS NULL AND c.organization_id = p.organization_id)
-      OR (c.project_id IS NULL AND c.organization_id IS NULL))
-WHERE s.id = $2::uuid
-  AND s.project_id = $3::uuid
-  AND s.deleted IS FALSE
-  AND c.id = $4::uuid
-RETURNING (
-  SELECT recorded.client_id
-  FROM remote_session_clients AS recorded
-  WHERE recorded.id = remote_session_client_id
-)::text AS external_client_id
-`
-
-type RecordMCPServerRemoteSessionClientDetachParams struct {
-	OrganizationID        string
-	McpServerID           uuid.UUID
-	ProjectID             uuid.UUID
-	RemoteSessionClientID uuid.UUID
-}
-
-// Records an explicit detach for a client bound to the server's user session
-// issuer that the server has no association with, so a server that signs in
-// through a binding alone can give it up. The row is written soft-deleted, the
-// same record DetachMCPServerRemoteSessionClient leaves. Returns the client's
-// external id, and no row when the server or client does not qualify. Both ids
-// are re-checked against the caller's tenant.
-func (q *Queries) RecordMCPServerRemoteSessionClientDetach(ctx context.Context, arg RecordMCPServerRemoteSessionClientDetachParams) (string, error) {
-	row := q.db.QueryRow(ctx, recordMCPServerRemoteSessionClientDetach,
-		arg.OrganizationID,
-		arg.McpServerID,
-		arg.ProjectID,
-		arg.RemoteSessionClientID,
-	)
-	var external_client_id string
-	err := row.Scan(&external_client_id)
-	return external_client_id, err
 }
 
 const removeGlobalClientAssociations = `-- name: RemoveGlobalClientAssociations :execrows

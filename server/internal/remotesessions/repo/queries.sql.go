@@ -10739,47 +10739,6 @@ func (q *Queries) ListOtherIdentityOfferServers(ctx context.Context, arg ListOth
 	return items, nil
 }
 
-const listOtherProviderClientsBoundToUserSessionIssuer = `-- name: ListOtherProviderClientsBoundToUserSessionIssuer :many
-SELECT client.id
-FROM remote_session_client_user_session_issuers AS link
-JOIN remote_session_clients AS client
-  ON client.id = link.remote_session_client_id
- AND client.deleted IS FALSE
-WHERE link.user_session_issuer_id = $1::uuid
-  AND client.remote_session_issuer_id = $2::uuid
-  AND client.id <> $3::uuid
-ORDER BY client.id
-`
-
-type ListOtherProviderClientsBoundToUserSessionIssuerParams struct {
-	UserSessionIssuerID   uuid.UUID
-	RemoteSessionIssuerID uuid.UUID
-	RemoteSessionClientID uuid.UUID
-}
-
-// The live clients of one provider bound to a user session issuer, other than
-// the given client. Reads every tenant tier, because an issuer holds one client
-// per provider whichever project's client that is.
-func (q *Queries) ListOtherProviderClientsBoundToUserSessionIssuer(ctx context.Context, arg ListOtherProviderClientsBoundToUserSessionIssuerParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listOtherProviderClientsBoundToUserSessionIssuer, arg.UserSessionIssuerID, arg.RemoteSessionIssuerID, arg.RemoteSessionClientID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listPrincipalRemoteSessionBindings = `-- name: ListPrincipalRemoteSessionBindings :many
 SELECT b.id, b.principal_id, b.user_session_issuer_id, b.remote_session_client_id, b.remote_session_id, b.grant_generation, u.display_name AS subject_display_name, u.email AS subject_email
 FROM principal_remote_session_bindings AS b

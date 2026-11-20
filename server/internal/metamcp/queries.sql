@@ -560,47 +560,6 @@ WHERE m.meta_mcp_server_id = @meta_mcp_server_id
   AND (r.id IS NOT NULL OR t.id IS NOT NULL)
 ORDER BY m.sort_order, m.created_at, m.id, a.remote_session_client_id;
 
--- name: AutoAttachMemberProviderClient :execrows
--- Bind the client the member is associated with to the gateway's issuer so
--- consent can offer the member's provider. A member can hold several clients
--- of one upstream, one per gateway it joined, so the client on its own issuer
--- wins, then the oldest. No-op when the gateway's issuer already holds a client
--- for that upstream (one client per upstream per issuer), or when the member
--- has no live association to the upstream. Tenancy mirrors the resync
--- derivation: the member's own project client, or an org-level client.
-INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
-SELECT c.id, @gateway_issuer_id
-FROM mcp_server_remote_session_clients AS a
-JOIN remote_session_clients AS c
-  ON c.id = a.remote_session_client_id
-JOIN mcp_servers AS s
-  ON s.id = a.mcp_server_id
- AND s.project_id = a.project_id
-JOIN projects AS p
-  ON p.id = @project_id
-LEFT JOIN remote_session_client_user_session_issuers AS own
-  ON own.remote_session_client_id = c.id
- AND own.user_session_issuer_id = s.user_session_issuer_id
-WHERE a.mcp_server_id = @member_server_id
-  AND a.project_id = @project_id
-  AND a.deleted IS FALSE
-  AND c.remote_session_issuer_id = @remote_issuer_id
-  AND c.deleted IS FALSE
-  AND (c.project_id = @project_id
-       OR (c.project_id IS NULL AND c.organization_id = p.organization_id))
-  AND NOT EXISTS (
-    SELECT 1
-    FROM remote_session_client_user_session_issuers AS l2
-    JOIN remote_session_clients AS c2
-      ON c2.id = l2.remote_session_client_id
-     AND c2.deleted IS FALSE
-    WHERE l2.user_session_issuer_id = @gateway_issuer_id
-      AND c2.remote_session_issuer_id = @remote_issuer_id
-  )
-ORDER BY own.remote_session_client_id IS NULL, c.created_at
-LIMIT 1
-ON CONFLICT DO NOTHING;
-
 -- name: CountServersOnGatewayIssuer :one
 -- Live servers signing in directly through a gateway's issuer, across the
 -- organization because an issuer can be organization-level. A gateway's issuer
@@ -625,7 +584,7 @@ ORDER BY l.remote_session_client_id
 FOR UPDATE OF l;
 
 -- name: AutoDetachMemberProviderClient :execrows
--- Reverse of AutoAttachMemberProviderClient: unbind the gateway issuer's
+-- Unbind the gateway issuer's
 -- client(s) for a removed member's upstream so the provider stops appearing on
 -- the gateway's consent screen. The binding is scoped to the user_session_issuer,
 -- so it must survive as long as ANY live member of a meta server on the issuer

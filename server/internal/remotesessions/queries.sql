@@ -4443,20 +4443,6 @@ WHERE issuer.project_id IS NULL
       AND sibling.deleted IS FALSE
   ) = 1;
 
--- name: ListOtherProviderClientsBoundToUserSessionIssuer :many
--- The live clients of one provider bound to a user session issuer, other than
--- the given client. Reads every tenant tier, because an issuer holds one client
--- per provider whichever project's client that is.
-SELECT client.id
-FROM remote_session_client_user_session_issuers AS link
-JOIN remote_session_clients AS client
-  ON client.id = link.remote_session_client_id
- AND client.deleted IS FALSE
-WHERE link.user_session_issuer_id = @user_session_issuer_id::uuid
-  AND client.remote_session_issuer_id = @remote_session_issuer_id::uuid
-  AND client.id <> @remote_session_client_id::uuid
-ORDER BY client.id;
-
 -- name: ListProxiedMCPServersUsingClientAtAnotherAddress :many
 -- The other live proxied MCP servers of the organization associated with a
 -- client whose upstream address is not the given one. A person holds one grant

@@ -336,31 +336,6 @@ WHERE sqlc.narg('cursor')::uuid IS NULL OR attachment.id < sqlc.narg('cursor')::
 ORDER BY attachment.id DESC
 LIMIT sqlc.arg('limit_value');
 
--- name: ListUserSessionIssuerBoundRemoteSessionClients :many
--- The live remote session clients an issuer binds, with the authorization
--- server each one belongs to. Clients scoped to another organization, or to a
--- project outside it, are left out.
-SELECT
-    client.id,
-    client.client_id,
-    remote_issuer.id AS remote_session_issuer_id,
-    COALESCE(remote_issuer.name, remote_issuer.slug)::text AS remote_session_issuer_name,
-    remote_issuer.issuer AS remote_session_issuer_url
-FROM remote_session_client_user_session_issuers AS link
-JOIN remote_session_clients AS client ON client.id = link.remote_session_client_id
-JOIN remote_session_issuers AS remote_issuer ON remote_issuer.id = client.remote_session_issuer_id
-WHERE link.user_session_issuer_id = @user_session_issuer_id::uuid
-  AND client.deleted IS FALSE
-  AND remote_issuer.deleted IS FALSE
-  AND (client.organization_id IS NULL OR client.organization_id = @organization_id::text)
-  AND (client.project_id IS NULL OR EXISTS (
-    SELECT 1 FROM projects AS client_project
-    WHERE client_project.id = client.project_id
-      AND client_project.organization_id = @organization_id::text
-      AND client_project.deleted IS FALSE
-  ))
-ORDER BY client.id;
-
 -- name: ListUserSessionIssuerServerRemoteSessionClients :many
 -- The remote session clients associated with each live MCP server that uses
 -- an issuer in the organization, with the authorization server each client
