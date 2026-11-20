@@ -1,3 +1,4 @@
+import { DISPOSITION_PRECEDENCE } from "@/pages/access/mcpAccessModel";
 import { supportsAudienceReading } from "./manageAccessState";
 import { enumPresentation } from "@/lib/enum";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
@@ -138,15 +139,6 @@ export function isUnnarrowed(entry: {
     (entry.tools ?? []).length === 0 && (entry.dispositions ?? []).length === 0
   );
 }
-
-// The order the server picks a tool's one disposition in when a tool carries
-// several annotations (DispositionFromAnnotations in server/internal/conv).
-const DISPOSITION_PRECEDENCE = [
-  "read_only",
-  "destructive",
-  "idempotent",
-  "open_world",
-] as const;
 
 /**
  * The one annotation a rule is matched against for this tool, as the server
