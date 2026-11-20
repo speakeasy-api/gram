@@ -151,7 +151,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 			if err != nil {
 				return nil, s.serviceError(ctx, err, "evaluate agent permissions")
 			}
-			if !ownsUnblockedAgent(human, agent) && !authz.GrantsSatisfy(human.grants, agentCheck(authz.ScopeAgentRead, agent.ID)) {
+			if !ownsUnblockedAgent(human, agent) && !authz.GrantsSatisfy(human.grants, agentCheck(authz.AgentRef.Read, agent.ID)) {
 				continue
 			}
 			readable = append(readable, agent)
