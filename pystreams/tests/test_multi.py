@@ -144,6 +144,61 @@ async def test_role_registers_only_its_receivers(
     assert receivers.subscriptions == expected_subscriptions
 
 
+async def test_next_instance_equal_to_current_builds_an_unarmed_client(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    built: list[tuple[str, bool]] = []
+
+    @asynccontextmanager
+    async def fake_otel_sdk(*_args, **_kwargs):
+        yield
+
+    async def fake_publisher(*_args, **_kwargs):
+        return object()
+
+    def fake_client(addr, _password, *, armed):
+        built.append((addr, armed))
+        raise _StopAfterActivation
+
+    monkeypatch.setattr(multi_mod.logging, "configure_logging", lambda **_kwargs: None)
+    monkeypatch.setattr(multi_mod.otel, "otel_sdk", fake_otel_sdk)
+    monkeypatch.setattr(multi_mod, "_build_broker", lambda **_kwargs: _Broker())
+    monkeypatch.setattr(multi_mod, "pubsub_publisher_for_message_async", fake_publisher)
+    monkeypatch.setattr(multi_mod, "_enforce_redis_client", fake_client)
+
+    with pytest.raises(_StopAfterActivation):
+        await multi_mod.multi(
+            service_version=None,
+            environment="local",
+            git_sha=None,
+            log_level="INFO",
+            pretty_log=False,
+            enable_tracing=False,
+            enable_metrics=False,
+            role="enforcement",
+            gcp_project_id="test-project",
+            pubsub_emulator_host=None,
+            control_host="127.0.0.1",
+            control_port=0,
+            max_scan_concurrency=None,
+            scan_workers=0,
+            scan_max_tasks_per_child=1,
+            scan_timeout=1,
+            scan_slot_timeout=1,
+            max_inflight=None,
+            redis_addr="10.0.0.1:6379",
+            redis_password=None,
+            redis_next_addr="10.0.0.1:6379",
+            redis_next_password=None,
+            risk_fingerprint_pepper_keyring=_PEPPER_KEYRING,
+        )
+
+    assert built == [("10.0.0.1:6379", False)]
+
+
+_PEPPER_KEYRING = '{"current": "k1", "keys": {"k1": "c2VjcmV0"}}'
+
+
 async def test_enforcement_role_requires_redis_and_pepper(
     monkeypatch: pytest.MonkeyPatch,
 ):
