@@ -5780,18 +5780,19 @@ SELECT
         WHERE link.remote_session_client_id = c.id AND NOT link.deleted
           AND link.organization_id = $1::text
           AND (usi.project_id = associated_project.id OR (usi.project_id IS NULL AND usi.organization_id = associated_project.organization_id))
+          AND (usi.project_id IS NULL OR usi.project_id = $2::uuid)
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
-WHERE c.id = $2
-  AND (c.project_id = $3::uuid OR (c.project_id IS NULL AND c.organization_id = $1))
+WHERE c.id = $3
+  AND (c.project_id = $2::uuid OR (c.project_id IS NULL AND c.organization_id = $1))
   AND c.deleted IS FALSE
 `
 
 type GetRemoteSessionClientByIDParams struct {
 	OrganizationID string
-	ID             uuid.UUID
 	ProjectID      uuid.UUID
+	ID             uuid.UUID
 }
 
 type GetRemoteSessionClientByIDRow struct {
@@ -5801,7 +5802,7 @@ type GetRemoteSessionClientByIDRow struct {
 }
 
 func (q *Queries) GetRemoteSessionClientByID(ctx context.Context, arg GetRemoteSessionClientByIDParams) (GetRemoteSessionClientByIDRow, error) {
-	row := q.db.QueryRow(ctx, getRemoteSessionClientByID, arg.OrganizationID, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, getRemoteSessionClientByID, arg.OrganizationID, arg.ProjectID, arg.ID)
 	var i GetRemoteSessionClientByIDRow
 	err := row.Scan(
 		&i.RemoteSessionClient.ID,
@@ -11613,6 +11614,7 @@ SELECT
         WHERE link.remote_session_client_id = c.id AND NOT link.deleted
           AND link.organization_id = $1::text
           AND (usi.project_id = associated_project.id OR (usi.project_id IS NULL AND usi.organization_id = associated_project.organization_id))
+          AND (usi.project_id IS NULL OR usi.project_id = $2::uuid)
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
 WHERE (c.project_id = $2::uuid OR (c.project_id IS NULL AND c.organization_id = $1))
@@ -11712,6 +11714,7 @@ SELECT
         WHERE link.remote_session_client_id = c.id AND NOT link.deleted
           AND link.organization_id = $1::text
           AND (usi.project_id = associated_project.id OR (usi.project_id IS NULL AND usi.organization_id = associated_project.organization_id))
+          AND (usi.project_id IS NULL OR usi.project_id = $2::uuid)
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
 WHERE (c.project_id = $2::uuid OR (c.project_id IS NULL AND c.organization_id = $1))

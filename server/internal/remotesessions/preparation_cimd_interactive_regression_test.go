@@ -66,6 +66,7 @@ func TestPreparationCIMDPreservesInteractiveGrants(t *testing.T) {
 					prepared, err := ti.service.PrepareIdentityChaining(ctx, in)
 					require.NoError(t, err)
 					require.ElementsMatch(t, combined, prepared.GrantTypes)
+					require.Equal(t, "published_acceptance_unverified", prepared.State)
 					in.ExpectedGeneration = prepared.Generation
 					before, err := ti.service.ReadIdentityChaining(ctx, in)
 					require.NoError(t, err)
@@ -86,8 +87,7 @@ func TestPreparationCIMDPreservesInteractiveGrants(t *testing.T) {
 					require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &doc))
 					require.ElementsMatch(t, combined, doc.GrantTypes)
 					require.Equal(t, []string{oauthwire.ResponseTypeCode}, doc.ResponseTypes)
-					typedID := assertPreparationTypedClient(t, ctx, ti, in.ClientID, in.Resource)
-					require.Contains(t, offeredAuthClients(t, ctx, ti.conn, serverID), typedID, "preparation publishes its own EMA offer")
+					require.Empty(t, offeredAuthClients(t, ctx, ti.conn, serverID), "unverified CIMD publication does not create a typed offer")
 					require.Equal(t, []uuid.UUID{in.ClientID}, associatedClients(t, ctx, ti.conn, *auth.ProjectID, serverID), "the interactive placement survives")
 				})
 			}

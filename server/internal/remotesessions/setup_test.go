@@ -403,12 +403,18 @@ func clearTrustedRemoteSessionIssuer(t *testing.T, ctx context.Context, conn *pg
 // principal-attachment fixture writes. It never configures a login.
 func ensureAttachmentParent(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientID, signInID uuid.UUID) {
 	t.Helper()
+	ensureAttachmentParentInScope(t, ctx, conn, conv.ToNullUUID(projectIDFromContext(t, ctx)), clientID, signInID)
+}
+
+func ensureAttachmentParentInScope(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.NullUUID, clientID, signInID uuid.UUID) {
+	t.Helper()
 	require.NoError(t, repo.New(conn).EnsurePrincipalAttachmentParents(ctx, repo.EnsurePrincipalAttachmentParentsParams{
 		UserSessionIssuerID: signInID,
 		ClientIds:           []uuid.UUID{clientID},
 		OrganizationID:      activeOrganizationID(t, ctx),
-		ProjectID:           conv.ToNullUUID(projectIDFromContext(t, ctx)),
+		ProjectID:           projectID,
 	}))
+	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, conn, clientID, signInID), "the attachment fixture needs a compatibility FK parent")
 }
 
 func countRemoteSessionClientUserSessionIssuerBindings(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientID, userIssuerID uuid.UUID) int {

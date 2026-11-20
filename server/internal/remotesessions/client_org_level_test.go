@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -91,7 +93,8 @@ func TestAttachUserSessionIssuer_OrgLevelClientConflictsWithProjectClient(t *tes
 
 	orgIssuer := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "guard-issuer")
 	userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "guard-usi")
-	createRemoteClient(t, ctx, ti, orgIssuer.String(), userIssuer.String(), "guard-project-cid")
+	server := seedServerOnIssuer(t, ctx, ti.conn, *authCtx.ProjectID, userIssuer, "guard-project-server")
+	projectClient := createRemoteClient(t, ctx, ti, orgIssuer.String(), userIssuer.String(), "guard-project-cid")
 
 	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "guard-org-cid")
 
@@ -101,6 +104,7 @@ func TestAttachUserSessionIssuer_OrgLevelClientConflictsWithProjectClient(t *tes
 	})
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeConflict)
+	require.Equal(t, []uuid.UUID{uuid.MustParse(projectClient)}, serverAssociatedClients(t, ctx, ti, server))
 }
 
 // TestGetRemoteSessionClient_OrgLevelClientHidesOtherProjectsUserSessionIssuerIds
@@ -120,11 +124,29 @@ func TestGetRemoteSessionClient_OrgLevelClientHidesOtherProjectsUserSessionIssue
 	otherProject := createProject(t, ctx, ti.conn, "p2-other-project")
 	otherUserIssuer := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProject, "p2-other-usi")
 	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "p2-cid", callerUserIssuer)
-	placeClientForSignInInProject(t, ctx, ti.conn, otherProject, authCtx.ActiveOrganizationID, orgClient, otherUserIssuer)
+	otherServer := placeClientForSignInInProject(t, ctx, ti.conn, otherProject, authCtx.ActiveOrganizationID, orgClient, otherUserIssuer)
+	require.Equal(t, []uuid.UUID{orgClient}, associatedClients(t, ctx, ti.conn, otherProject, otherServer), "the foreign placement must exist to exercise project scoping")
 
 	view, err := ti.service.GetRemoteSessionClient(ctx, &clientsgen.GetRemoteSessionClientPayload{ID: orgClient.String()})
 	require.NoError(t, err)
 	require.Equal(t, []string{callerUserIssuer.String()}, view.UserSessionIssuerIds)
+
+	q := repo.New(ti.conn)
+	rows, err := q.ListRemoteSessionClientsByProjectID(ctx, repo.ListRemoteSessionClientsByProjectIDParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+		RemoteSessionIssuerID: conv.ToNullUUID(orgIssuer), Cursor: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, LimitValue: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, []uuid.UUID{callerUserIssuer}, rows[0].UserSessionIssuerIds)
+
+	filtered, err := q.ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx, repo.ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, UserSessionIssuerID: callerUserIssuer,
+		RemoteSessionIssuerID: conv.ToNullUUID(orgIssuer), Cursor: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, LimitValue: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, filtered, 1)
+	require.Equal(t, []uuid.UUID{callerUserIssuer}, filtered[0].UserSessionIssuerIds)
 }
 
 // TestDetachUserSessionIssuer_RejectsOtherProjectsBindingOnOrgLevelClient

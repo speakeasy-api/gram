@@ -243,10 +243,9 @@ func TestClientDeletePreflight_NamesAnUnnamedTunnelBySlug(t *testing.T) {
 	require.Equal(t, []string{"unnamed-tunnel"}, preflight.McpServerNames)
 }
 
-// A sign-in can front servers with different upstreams. Where typed auth
-// clients are enforced, the server that offers the registration decides its
-// resource, not every server behind the sign-in it is linked to.
-func TestResourceForClientAtUpstream_OfferDecidesOverSignInLinks(t *testing.T) {
+// A compatibility parent alone supplies no resource. With enforcement, a typed
+// offer takes precedence over an association on another server sharing the sign-in.
+func TestResourceForClientAtUpstream_OfferDecidesOverAssociation(t *testing.T) {
 	t.Parallel()
 	const offering, sibling = "https://offering.example.com/mcp", "https://sibling.example.com/mcp"
 	ctx, ti := newTestService(t)
@@ -257,19 +256,20 @@ func TestResourceForClientAtUpstream_OfferDecidesOverSignInLinks(t *testing.T) {
 
 	signIn := createUserSessionIssuer(t, ctx, ti.conn, "usi-offer-decides")
 	offeringServer := seedRemoteMcpServerForLogin(t, ctx, ti.conn, projectID, signIn, "offer-decides-a", offering)
-	seedRemoteMcpServerForLogin(t, ctx, ti.conn, projectID, signIn, "offer-decides-b", sibling)
+	siblingServer := seedRemoteMcpServerForLogin(t, ctx, ti.conn, projectID, signIn, "offer-decides-b", sibling)
 	issuerID := seedRemoteIssuerWithURL(t, ctx, ti.conn, conv.ToNullUUID(projectID), conv.ToPGText(organizationID), "offer-decides-issuer", "https://issuer.example.com/offer-decides")
 	registration := seedProjectRemoteClientNoOrg(t, ctx, ti.conn, projectID, issuerID, "offer-decides-cid")
-	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: registration,
-		UserSessionIssuerID:   signIn,
-	}))
-	offerRegistration(t, ctx, ti.conn, organizationID, projectID, offeringServer, registration)
+	ensureAttachmentParent(t, ctx, ti.conn, registration, signIn)
 	mgr := newResolveManager(t, ti.conn, testenv.NewEncryptionClient(t))
-
 	got, err := mgr.ResourceForClientAtUpstream(ctx, organizationID, registration, nil, sibling)
 	require.NoError(t, err)
-	require.Equal(t, sibling, got, "without enforcement the sign-in's servers decide, and the registration claims the upstream it is connected through")
+	require.Empty(t, got, "a compatibility parent does not make the registration serve a sibling")
+
+	associateClient(t, ctx, ti.conn, organizationID, projectID, siblingServer, registration)
+	offerRegistration(t, ctx, ti.conn, organizationID, projectID, offeringServer, registration)
+	got, err = mgr.ResourceForClientAtUpstream(ctx, organizationID, registration, nil, sibling)
+	require.NoError(t, err)
+	require.Equal(t, sibling, got, "without enforcement the explicit association supplies the resource")
 
 	enforceUpstreamAuth(t, ctx, ti.conn, organizationID)
 
