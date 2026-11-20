@@ -25,6 +25,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/otel/chrepo"
 )
 
+// maxOTLPExportBytes bounds an OTLP export both as sent and after gzip
+// decompression. On the wire the listener's constants.MaxRequestBodyBytes is
+// the lower ceiling; this value is what a gzip export may expand to.
 const maxOTLPExportBytes = 20 * constants.MiB
 
 // ProvenanceSource is the provenance source stamped on every record entering

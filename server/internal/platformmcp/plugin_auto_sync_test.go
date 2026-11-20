@@ -258,7 +258,7 @@ func TestSetPluginAutoSyncRefusesTurningOffWithUnsyncedChanges(t *testing.T) {
 	require.NoError(t, err)
 
 	payload := invokePluginMetadataRefusal(t, fixture.descriptor(t, operationSetPluginAutoSync), map[string]any{
-		"project_id": fixture.project.ID.String(), "plugin": plugin.ID.String(), "auto_sync_enabled": false,
+		"project_slug": fixture.project.Slug, "plugin": plugin.ID.String(), "auto_sync_enabled": false,
 		"idempotency_key": "refused-off", "confirmed": true,
 	}, ContextWithPrincipal(ctx, fixture.principal))
 	var refusal pluginMetadataRefusal
@@ -368,7 +368,7 @@ func TestSetPluginAutoSyncRefusesPackageDirectoryCollisions(t *testing.T) {
 	}
 
 	payload := invokePluginMetadataRefusal(t, fixture.descriptor(t, operationSetPluginAutoSync), map[string]any{
-		"project_id": fixture.project.ID.String(), "plugin": plugin.ID.String(), "auto_sync_enabled": false,
+		"project_slug": fixture.project.Slug, "plugin": plugin.ID.String(), "auto_sync_enabled": false,
 		"idempotency_key": "off-collision", "confirmed": true,
 	}, ContextWithPrincipal(ctx, fixture.principal))
 	var refusal pluginMetadataRefusal
@@ -423,7 +423,7 @@ func TestPluginAutoSyncInputSchemas(t *testing.T) {
 	require.NotContains(t, required, "auto_sync_enabled")
 
 	properties, required = schema(operationSetPluginAutoSync)
-	require.ElementsMatch(t, []string{"project_id", "plugin", "auto_sync_enabled", "idempotency_key", "confirmed"}, required)
+	require.ElementsMatch(t, []string{"project_slug", "plugin", "auto_sync_enabled", "idempotency_key", "confirmed"}, required)
 	require.Len(t, properties, len(required))
 }
 
@@ -436,7 +436,7 @@ func TestSetPluginAutoSyncRequiresConfirmationAndPluginWrite(t *testing.T) {
 	descriptor := fixture.descriptor(t, operationSetPluginAutoSync)
 	arguments := func(confirmed bool) map[string]any {
 		return map[string]any{
-			"project_id": fixture.project.ID.String(), "plugin": plugin.ID.String(), "auto_sync_enabled": false,
+			"project_slug": fixture.project.Slug, "plugin": plugin.ID.String(), "auto_sync_enabled": false,
 			"idempotency_key": uuid.NewString(), "confirmed": confirmed,
 		}
 	}
@@ -469,7 +469,7 @@ func TestSetPluginAutoSyncIsUnavailableWithoutTheTurnOffCheck(t *testing.T) {
 	require.False(t, fixture.service.autoSyncMutationValid())
 
 	payload := invokePluginMetadataRefusal(t, fixture.descriptor(t, operationSetPluginAutoSync), map[string]any{
-		"project_id": fixture.project.ID.String(), "plugin": "anything", "auto_sync_enabled": false,
+		"project_slug": fixture.project.Slug, "plugin": "anything", "auto_sync_enabled": false,
 		"idempotency_key": uuid.NewString(), "confirmed": true,
 	}, ContextWithPrincipal(ctx, fixture.principal))
 	require.Contains(t, payload, pluginMetadataFeature)

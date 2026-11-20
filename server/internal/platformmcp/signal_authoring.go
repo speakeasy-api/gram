@@ -81,7 +81,9 @@ type sensorConfiguration struct {
 }
 
 type signalAuthoringInput struct {
-	ProjectID       string                `json:"project_id" jsonschema:"exact project UUID"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID       string                `json:"-"`
 	Proposal        sigint.AuthoringInput `json:"proposal" jsonschema:"complete desired proposal; operation must match the tool name"`
 	Confirmed       bool                  `json:"confirmed" jsonschema:"false previews without persisting; true only after explicit confirmation of the returned preview"`
 	ExpectedVersion string                `json:"expected_version,omitempty" jsonschema:"project configuration version returned by the preview"`
@@ -136,11 +138,11 @@ func (s *SignalAuthoringService) scope(ctx context.Context, principal Principal,
 	}
 
 	// Check exact selectors before looking up rows so denied callers cannot probe existence.
-	if err := s.engine.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: id.String(), Dimensions: nil}); err != nil {
+	if err := s.engine.Require(ctx, authz.Project(authz.ProjectIDOf(id)).Read()); err != nil {
 		return ctx, project, state, ErrForbidden
 	}
 	if write {
-		if err := s.engine.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: id.String(), Dimensions: nil}); err != nil {
+		if err := s.engine.Require(ctx, authz.Project(authz.ProjectIDOf(id)).Write()); err != nil {
 			return ctx, project, state, ErrForbidden
 		}
 	}

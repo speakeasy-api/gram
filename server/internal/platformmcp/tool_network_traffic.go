@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP SDK manifests intentionally rely on documented zero-value optional fields.
+//nolint:exhaustruct_v5 // MCP SDK manifests intentionally rely on documented zero-value optional fields.
 package platformmcp
 
 import (
@@ -22,7 +22,9 @@ type MCPNetworkTrafficReader interface {
 }
 
 type MCPNetworkTrafficInput struct {
-	ProjectID  string `json:"project_id" jsonschema:"exact project ID"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID  string `json:"-"`
 	TargetKind string `json:"target_kind" jsonschema:"mcp or gateway"`
 	TargetID   string `json:"target_id" jsonschema:"exact MCP server or gateway ID"`
 	Window     string `json:"window,omitempty" jsonschema:"24h or 7d (default)"`
@@ -62,7 +64,7 @@ func (r *PostgresReader) GetMCPNetworkTraffic(ctx context.Context, principal Pri
 		return MCPNetworkTrafficOutput{}, err
 	}
 	targetID, err := uuid.Parse(input.TargetID)
-	if err != nil || (input.TargetKind != "mcp" && input.TargetKind != "gateway") {
+	if err != nil || targetID == uuid.Nil || (input.TargetKind != "mcp" && input.TargetKind != "gateway") {
 		return MCPNetworkTrafficOutput{}, fmt.Errorf("target_kind must be mcp or gateway and target_id must be a UUID")
 	}
 	window := input.Window
@@ -77,7 +79,7 @@ func (r *PostgresReader) GetMCPNetworkTraffic(ctx context.Context, principal Pri
 	}
 
 	kind := telemetryrepo.MCPNetworkTrafficServerKindMCP
-	resourceID := targetID.String()
+	resourceID := targetID
 	if input.TargetKind == "mcp" {
 		server, err := mcpserversrepo.New(r.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: targetID, ProjectID: project.ID})
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -87,7 +89,7 @@ func (r *PostgresReader) GetMCPNetworkTraffic(ctx context.Context, principal Pri
 			return MCPNetworkTrafficOutput{}, fmt.Errorf("load MCP server: %w", err)
 		}
 		if server.ToolsetID.Valid {
-			resourceID = server.ToolsetID.UUID.String()
+			resourceID = server.ToolsetID.UUID
 		}
 	} else {
 		kind = telemetryrepo.MCPNetworkTrafficServerKindMeta
@@ -99,7 +101,7 @@ func (r *PostgresReader) GetMCPNetworkTraffic(ctx context.Context, principal Pri
 			return MCPNetworkTrafficOutput{}, fmt.Errorf("load gateway: %w", err)
 		}
 	}
-	if err := r.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, resourceID, project.ID.String())); err != nil {
+	if err := r.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(resourceID), authz.ProjectIDOf(project.ID)).Read()); err != nil {
 		if isAuthorizationDenied(err) {
 			return MCPNetworkTrafficOutput{}, ErrMCPConnectionSettingsNotFound
 		}

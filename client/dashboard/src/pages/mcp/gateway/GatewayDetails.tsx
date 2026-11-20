@@ -1,7 +1,15 @@
+import { useGatewayDetailChrome } from "@/components/mcp/useGatewayDetailChrome";
+import { McpDetailFrame } from "@/components/mcp/McpDetailFrame";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import {
+  RouteNotFoundState,
+  SecondaryRouteAction,
+} from "@/components/route-not-found-state";
 import { ClientsAndSessionsTab } from "@/components/sessions/ClientsAndSessionsTab";
 import { useTabScrollReset } from "@/hooks/useTabScrollReset";
+import { isNotNotFound } from "@/lib/query-errors";
+import { isNotFoundError } from "@/lib/route-errors";
 import { useRoutes } from "@/routes";
 import { useGetMetaMcpServer } from "@gram/client/react-query/getMetaMcpServer.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
@@ -18,19 +26,79 @@ import { GatewayOverviewTab } from "./GatewayOverviewTab";
 import { GatewaySettingsTab } from "./GatewaySettingsTab";
 import { GatewaySkillsTab } from "./GatewaySkillsTab";
 
+/**
+ * Reads the gateway before the detail chrome mounts: a deleted or unknown id
+ * answers 404, which gets its own page here instead of the error boundary.
+ */
 export default function GatewayDetails(): JSX.Element {
+  const { gatewayId } = useParams<{ gatewayId: string }>();
+  const id = gatewayId ?? "";
+  const { data, error } = useGetMetaMcpServer({ id }, undefined, {
+    enabled: id !== "",
+    throwOnError: isNotNotFound,
+  });
+  if (isNotFoundError(error)) return <GatewayNotFound id={id} />;
+  // The chrome reads the same query without the not-found guard, so it
+  // mounts only once the gateway is known to exist.
+  if (id !== "" && !data && !error) {
+    return (
+      <McpDetailFrame
+        chrome={null}
+        breadcrumbs={{
+          substitutions: { [id]: "Gateway" },
+          skipSegments: ["gateway", ...GATEWAY_TAB_URLS],
+        }}
+      >
+        {null}
+      </McpDetailFrame>
+    );
+  }
+  return <GatewayDetailsContent />;
+}
+
+function GatewayNotFound({ id }: { id: string }): JSX.Element {
+  const routes = useRoutes();
+  return (
+    <Page>
+      <Page.Header>
+        {/* The missing gateway's id is not a name: leave it, and the tab, out. */}
+        <Page.Header.Breadcrumbs
+          substitutions={{ [id]: "Gateway not found" }}
+          skipSegments={["gateway", ...GATEWAY_TAB_URLS]}
+        />
+      </Page.Header>
+      <Page.Body>
+        <RouteNotFoundState
+          title="Gateway not found"
+          description="It may have been deleted."
+          action={
+            <routes.mcp.Link>
+              <SecondaryRouteAction>Back to MCP</SecondaryRouteAction>
+            </routes.mcp.Link>
+          }
+        />
+      </Page.Body>
+    </Page>
+  );
+}
+
+function GatewayDetailsContent(): JSX.Element {
   const { gatewayId } = useParams<{ gatewayId: string }>();
   const location = useLocation();
   const routes = useRoutes();
   const id = gatewayId ?? "";
   const activeTab = activeTabFromPath(location.pathname, id);
   const tabContentRef = useTabScrollReset(activeTab);
+  const chrome = useGatewayDetailChrome();
 
   const {
     data: metaMcpServer,
     isLoading,
     isError,
-  } = useGetMetaMcpServer({ id }, undefined, { enabled: id !== "" });
+  } = useGetMetaMcpServer({ id }, undefined, {
+    enabled: id !== "",
+    throwOnError: isNotNotFound,
+  });
 
   const { data: endpointsResult, isLoading: isLoadingEndpoints } =
     useMcpEndpoints({ metaMcpServerId: id }, undefined, {
@@ -115,22 +183,15 @@ export default function GatewayDetails(): JSX.Element {
   };
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs
-          substitutions={{ [id]: metaMcpServer?.name || "Gateway" }}
-          skipSegments={["gateway", ...GATEWAY_TAB_URLS]}
-        />
-      </Page.Header>
-
-      <Page.Body fullWidth className="gap-0">
-        <div
-          ref={tabContentRef}
-          className="mx-auto w-full max-w-[1270px] flex-1"
-        >
-          {renderTabContent()}
-        </div>
-      </Page.Body>
-    </Page>
+    <McpDetailFrame
+      chrome={chrome}
+      breadcrumbs={{
+        substitutions: { [id]: metaMcpServer?.name || "Gateway" },
+        skipSegments: ["gateway", ...GATEWAY_TAB_URLS],
+      }}
+      contentRef={tabContentRef}
+    >
+      {renderTabContent()}
+    </McpDetailFrame>
   );
 }

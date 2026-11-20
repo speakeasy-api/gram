@@ -1,63 +1,38 @@
 package authz
 
-// MCPToolCallDimensions carries the typed attributes of an MCP tool call.
-// Zero-value fields are omitted from the check dimensions.
-type MCPToolCallDimensions struct {
-	Tool        string
-	Disposition string
-	ProjectID   string
-}
+import "slices"
 
-// MCPToolCallCheck builds a Check for an MCP tool call with the given dimensions.
-func MCPToolCallCheck(toolsetID string, dims MCPToolCallDimensions) Check {
-	dimensions := map[string]string{}
-	if dims.Tool != "" {
-		dimensions[SelectorKeyTool] = dims.Tool
+// validateCheckOperation holds a check to the operation it was built as.
+// Only a tool call carries a tool or a disposition: a check that names a tool
+// without being built as a tool call is refused, so it can never be read as a
+// connection or the reverse. A tool call may still leave either out: a tool
+// whose annotations are unknown has no disposition to carry, and a grant
+// limited to a disposition refuses it.
+func validateCheckOperation(c Check) error {
+	_, hasTool := c.Dimensions[SelectorKeyTool]
+	_, hasDisposition := c.Dimensions[SelectorKeyDisposition]
+	if c.isToolCall() {
+		if !isConnectScope(c.Scope) {
+			return invalidCheckReason(c.Scope, c.ResourceID, "only the connect permission has tool calls")
+		}
+		return nil
 	}
-	if dims.Disposition != "" {
-		dimensions[SelectorKeyDisposition] = dims.Disposition
+	if hasTool || hasDisposition {
+		return invalidCheckReason(c.Scope, c.ResourceID, "tool and disposition belong to a tool call")
 	}
-	if dims.ProjectID != "" {
-		dimensions[SelectorKeyProjectID] = dims.ProjectID
+	if c.operation == operationConnection && !isConnectScope(c.Scope) {
+		return invalidCheckReason(c.Scope, c.ResourceID, "only the connect permission has connections")
 	}
-	return Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: toolsetID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: ""}
-}
-
-// MCPCheck builds a Check for an MCP scope (read/write/connect) with project_id
-// injected as a dimension so project-scoped grants can match.
-func MCPCheck(scope Scope, resourceID, projectID string) Check {
-	var dimensions map[string]string
-	if projectID != "" {
-		dimensions = map[string]string{SelectorKeyProjectID: projectID}
+	if c.operation == operationPolicyAudience && c.Scope != ScopeRiskPolicyEvaluate && c.Scope != ScopeRiskPolicyBypass {
+		return invalidCheckReason(c.Scope, c.ResourceID, "only the risk policy audience permission, or the bypass that takes it away, asks an audience question")
 	}
-	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: ""}
+	return nil
 }
 
-// AssistantCheck builds a Check for an assistant scope. resourceID is the
-// assistant ID for operations on one assistant, or the project ID for
-// project-level operations such as creating an assistant. projectID is injected
-// as a dimension, so a project-wide grant ({"resource_id":"*","project_id":P})
-// covers every assistant in P, while a grant naming one assistant
-// ({"resource_id":A}) covers only that assistant.
-func AssistantCheck(scope Scope, resourceID, projectID string) Check {
-	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal, representedUser: ""}
-}
-
-// EnvironmentCheck builds a Check for an environment scope. resourceID is the
-// environment ID for operations on one environment, or the project ID for
-// project-level operations that have no concrete environment (create, or a
-// slug that did not resolve). projectID is always injected as a dimension, so a
-// project-wide grant ({"resource_id":"*","project_id":P}) covers every
-// environment in P, while a grant naming one environment covers only that one.
-func EnvironmentCheck(scope Scope, resourceID, projectID string) Check {
-	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal, representedUser: ""}
-}
-
-// HooksIngestCheck builds the org:hooks_ingest check for projectID. It always
-// carries the project, because matching skips grant keys a check omits, which
-// would let a project-bounded grant through for any project.
-func HooksIngestCheck(organizationID, projectID string) Check {
-	return Check{Scope: ScopeOrgHooksIngest, ResourceKind: "", ResourceID: organizationID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal, representedUser: ""}
+// isConnectScope reports whether scope is the MCP connect permission or the
+// block that takes it away.
+func isConnectScope(scope Scope) bool {
+	return scope == ScopeMCPConnect || scope == ScopeMCPBlockedConnect
 }
 
 // MCPAuthClientDimensions carries the trusted attributes of one use of an auth
@@ -88,7 +63,43 @@ func MCPAuthClientCheck(clientID string, dims MCPAuthClientDimensions) Check {
 	if dims.UpstreamClient != "" {
 		dimensions[SelectorKeyUpstreamClient] = dims.UpstreamClient
 	}
-	return Check{Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: clientID, Dimensions: dimensions, selectorMatch: selectorMatchStrict, representedUser: ""}
+	return Check{Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: clientID, Dimensions: dimensions, exact: true, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
+}
+
+// RequiredCheckDimensions returns the dimensions a check of resourceKind must
+// carry, or nil when the kind requires none.
+func RequiredCheckDimensions(resourceKind string) []string {
+	return slices.Clone(requiredCheckDimensions[resourceKind])
+}
+
+// validateCheckDimensions rejects dimension values no concrete request can
+// carry: an empty string, the wildcard and the represented-user marker.
+func validateCheckDimensions(c Check) error {
+	for key, value := range c.Dimensions {
+		switch value {
+		case "":
+			return invalidCheckReason(c.Scope, c.ResourceID, "dimension "+key+" is empty")
+		case WildcardResource, SelectorValueRepresentedUser:
+			return invalidCheckReason(c.Scope, c.ResourceID, "dimension "+key+" must be concrete")
+		}
+	}
+	return nil
+}
+
+// validateRequiredDimensions rejects a check that omits, or wildcards, a
+// dimension its resource kind requires, so it fails closed instead of matching
+// a grant bounded on that dimension.
+func validateRequiredDimensions(c Check) error {
+	for _, key := range requiredCheckDimensions[c.resourceKind()] {
+		value := c.Dimensions[key]
+		if value == "" {
+			return invalidCheckReason(c.Scope, c.ResourceID, "missing "+key)
+		}
+		if value == WildcardResource {
+			return invalidCheckReason(c.Scope, c.ResourceID, "dimension "+key+" must be concrete")
+		}
+	}
+	return nil
 }
 
 // validateAuthClientCheck rejects auth-client checks missing the trusted
@@ -154,7 +165,7 @@ func expressionForCheck(check Check) GrantExpression {
 	return GrantDifference{
 		Base: base,
 		Exclusion: GrantCheck{
-			Check:    Check{Scope: exclusion, ResourceKind: check.ResourceKind, ResourceID: check.ResourceID, Dimensions: check.Dimensions, selectorMatch: selectorMatchStrict, representedUser: check.representedUser},
+			Check:    Check{Scope: exclusion, ResourceKind: check.ResourceKind, ResourceID: check.ResourceID, Dimensions: check.Dimensions, exact: true, representedUser: check.representedUser, probe: false, anyOf: nil, operation: check.operation},
 			Instance: instance,
 		},
 	}
@@ -165,8 +176,12 @@ type RiskPolicyDimensions struct {
 	ServerIdentity string
 }
 
+// RiskPolicyEvaluateCheck asks whether the audience of a risk policy includes
+// the caller. It names no server, and an audience grant limited to some
+// servers still matches it: a match places the caller under the policy, so
+// leaving the server out can only apply the policy more widely.
 func RiskPolicyEvaluateCheck(policyID string) Check {
-	return Check{Scope: ScopeRiskPolicyEvaluate, ResourceKind: "", ResourceID: policyID, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""}
+	return Check{Scope: ScopeRiskPolicyEvaluate, ResourceKind: "", ResourceID: policyID, Dimensions: nil, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationPolicyAudience}
 }
 
 // RiskPolicyApplies builds the runtime authorization rule for applying a risk
@@ -190,27 +205,6 @@ func RiskPolicyApplies(policyID string, bypassDims RiskPolicyDimensions) GrantEx
 	}
 }
 
-// ChatReadCheck builds a Check authorizing read access to agent chat sessions.
-// It is satisfied by an unrestricted chat:read grant, or by chat:write via
-// scope expansion. No system role holds either — not even admin — so access to
-// sessions a caller owns comes from owner-matching in the chat handlers, not
-// from this scope. resourceID is a placeholder that does not affect matching —
-// every chat grant wildcards resource_id — so any concrete value (the chat or
-// project id) works.
-func ChatReadCheck(resourceID string) Check {
-	return Check{Scope: ScopeChatRead, ResourceKind: "", ResourceID: resourceID, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""}
-}
-
-// ChatWriteCheck builds a Check authorizing destructive mutation of agent chat
-// sessions — renaming, attaching feedback, and deleting. It is deliberately
-// separate from ChatReadCheck: a session reviewer granted chat:read can read
-// every transcript (and pin one as a shared bookmark) but must not be able to
-// destroy one. Owner-matching in the chat handlers still lets anyone mutate
-// their own sessions without a grant.
-func ChatWriteCheck(resourceID string) Check {
-	return Check{Scope: ScopeChatWrite, ResourceKind: "", ResourceID: resourceID, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""}
-}
-
 func RiskPolicyBypassCheck(policyID string, dims RiskPolicyDimensions) Check {
 	var dimensions map[string]string
 	if dims.ServerURL != "" {
@@ -223,11 +217,11 @@ func RiskPolicyBypassCheck(policyID string, dims RiskPolicyDimensions) Check {
 		}
 		dimensions[SelectorKeyServerIdentity] = dims.ServerIdentity
 	}
-	return Check{Scope: ScopeRiskPolicyBypass, ResourceKind: "", ResourceID: policyID, Dimensions: dimensions, selectorMatch: selectorMatchStrict, representedUser: ""}
+	return Check{Scope: ScopeRiskPolicyBypass, ResourceKind: "", ResourceID: policyID, Dimensions: dimensions, exact: true, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
 }
 
 // InferenceExecuteCheck authorizes inference in one project, not chat mutation.
-// Always include project_id so project-bounded grants cannot match by omission.
+// It always carries project_id, so a project-bounded grant covers only its project.
 func InferenceExecuteCheck(projectID string) Check {
-	return Check{Scope: ScopeInferenceExecute, ResourceKind: "", ResourceID: projectID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal, representedUser: ""}
+	return Check{Scope: ScopeInferenceExecute, ResourceKind: "", ResourceID: projectID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
 }

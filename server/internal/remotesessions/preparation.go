@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urls"
@@ -283,6 +284,13 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		if !urls.IsAbsoluteHTTPSOrLoopback(issuer.RegistrationEndpoint.String) {
 			return preparationResult(b, issuer, client, PreparationStateManualSetupRequired), nil
 		}
+		// A registration cannot be undone, so confirm the returned secret can be
+		// stored before claiming the binding and asking the provider for one. A
+		// claim recorded first would read back as indeterminate after a key
+		// outage, though nothing was registered.
+		if err := s.secrets.RequireUsable(ctx, tx, clientsecrets.OwnerOf(conv.ToPGText(b.OrganizationID), conv.ToNullUUID(b.ProjectID))); err != nil {
+			return nil, oops.E(oops.CodeUnavailable, err, "the client secret could not be stored right now; try again shortly")
+		}
 		// Only mutate the returned binding once the request can be persisted.
 		before := b
 		if changed {
@@ -372,7 +380,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		// Publishing/modifying inherited registrations affects other projects and
 		// therefore requires organization-level authority in addition to project write.
 		if !client.ProjectID.Valid {
-			if err = s.authz.Require(ctx, authz.Check{ResourceKind: "", Dimensions: nil, Scope: authz.ScopeOrgAdmin, ResourceID: org}); err != nil {
+			if err = s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(org)).Admin()); err != nil {
 				return nil, err
 			}
 		}

@@ -22,11 +22,29 @@ var mcpOpenAccessControlRoutes = []string{
 func CORSMiddleware(env string, serverURL string, platformOrigins []string, chatSessionValidator ChatSessionValidator) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if method, shared := sharedOAuthCORSMethod(r.URL.Path); shared {
+			path := channelsClassificationPath(r)
+			if isChannelsEndpoint(path, "mcp") {
+				// Channels MCP authenticates with bearer tokens, never cookies.
+				// Keep this exact: the dashboard API needs credentialed CORS.
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+				w.Header().Del("Access-Control-Allow-Credentials")
+				w.Header().Set("Access-Control-Allow-Methods", http.MethodPost)
+				w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Authorization, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Mcp-Session-Id, Last-Event-ID")
+				w.Header().Set("Access-Control-Expose-Headers", "WWW-Authenticate, Mcp-Session-Id, MCP-Protocol-Version, x-trace-id")
+				if r.Method == http.MethodOptions {
+					w.WriteHeader(http.StatusNoContent)
+					return
+				}
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			if method, shared := sharedOAuthCORSMethod(path); shared {
 				// OAuth browser navigation and unknown shared routes receive no
 				// CORS policy. Public endpoints never inherit platform credentials.
 				if method != "" {
 					w.Header().Set("Access-Control-Allow-Origin", "*")
+					w.Header().Del("Access-Control-Allow-Credentials")
 					w.Header().Set("Access-Control-Allow-Methods", method)
 					w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 					w.Header().Set("Access-Control-Expose-Headers", "x-trace-id")

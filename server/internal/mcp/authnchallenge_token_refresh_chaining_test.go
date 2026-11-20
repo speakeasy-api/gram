@@ -22,6 +22,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -89,7 +91,7 @@ func newChainedRefreshFixture(t *testing.T) (context.Context, chainedRefreshFixt
 	require.NoError(t, err)
 	secret, err := ti.enc.Encrypt([]byte("resource-secret"))
 	require.NoError(t, err)
-	resourceClient, err := rs.CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
+	resourceClient, err := rs.CreateRemoteSessionClientFixture(ctx, remotesessions_repo.CreateRemoteSessionClientFixtureParams{
 		OrganizationID: conv.ToPGText(org), RemoteSessionIssuerID: resourceIssuer.ID, ClientID: "chained-resource-client",
 		ClientSecretEncrypted: conv.ToPGText(secret), TokenEndpointAuthMethod: conv.ToPGText(oauthwire.AuthMethodClientSecretPost), Scope: []string{},
 	})
@@ -168,7 +170,7 @@ func (f chainedRefreshFixture) installNonProbingChainer(t *testing.T, cached fun
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
 	challenges := remotesessions.NewChallengeManager(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), f.ti.conn, f.ti.enc, policy, nil, f.ti.cacheAdapter, f.ti.serverURL)
-	chainer := identitychaining.New(logger, f.ti.conn, f.ti.enc, challenges, remotesessions.NewDelegationService(f.ti.conn, f.ti.enc, challenges), nil, f.ti.cacheAdapter)
+	chainer := identitychaining.New(logger, f.ti.conn, challenges.UpstreamTokens(), challenges, remotesessions.NewDelegationService(f.ti.conn, challenges), nil, f.ti.cacheAdapter)
 	chainer.SetResourceResolver(func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, error) {
 		t.Error("the token endpoint must never probe the upstream")
 		return protectedresource.EndpointResource{}, errors.New("unexpected probe")
@@ -185,7 +187,7 @@ func (f chainedRefreshFixture) retainDelegation(t *testing.T, ctx context.Contex
 	if status == "durable_credential_present" {
 		refresh = conv.ToPGText("encrypted-refresh")
 	}
-	_, err := remotesessions_repo.New(f.ti.conn).UpsertTrustedDelegationCredential(ctx, remotesessions_repo.UpsertTrustedDelegationCredentialParams{
+	_, err := remotesessions_repo.New(f.ti.conn).UpsertTrustedDelegationCredentialFixture(ctx, remotesessions_repo.UpsertTrustedDelegationCredentialFixtureParams{
 		OrganizationID: f.org, ClientID: f.idpClient, IssuerID: f.idpIssuer, SubjectUrn: urn.NewUserSubject(f.human).String(), ExpectedGeneration: 0,
 		CredentialConfigHash:       conv.ToPGText(f.configHash),
 		ObservationStatus:          conv.ToPGText(status),
@@ -254,11 +256,8 @@ func TestHandleToken_ChainedRefreshNeedsReconnectAfterTrustedRegistrationRotated
 	t.Parallel()
 	ctx, f := newChainedRefreshFixture(t)
 	f.retainDelegation(t, ctx, "durable_credential_present")
-	rotated, err := f.ti.enc.Encrypt([]byte("rotated-secret"))
-	require.NoError(t, err)
-	_, err = remotesessions_repo.New(f.ti.conn).UpdateOrganizationRemoteSessionClient(ctx, remotesessions_repo.UpdateOrganizationRemoteSessionClientParams{
-		ClientSecretEncrypted: conv.ToPGText(rotated), ID: f.idpClient, OrganizationID: conv.ToPGText(f.org),
-	})
+	owner := clientsecrets.OwnerOf(conv.ToPGText(f.org), uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	_, err := clientsecretstest.New(t, f.ti.conn, f.ti.enc).Set(ctx, f.ti.conn, f.idpClient, owner, []byte("rotated-secret"), pgtype.Timestamptz{})
 	require.NoError(t, err)
 	requireRefreshReconnect(t, f.refresh(t, ctx))
 }
@@ -374,11 +373,7 @@ func TestServePublic_ChainedDelegationFailureMessages(t *testing.T) {
 			name: "registration changed",
 			arrange: func(t *testing.T, ctx context.Context, f chainedRefreshFixture) {
 				t.Helper()
-				rotated, err := f.ti.enc.Encrypt([]byte("rotated-secret"))
-				require.NoError(t, err)
-				_, err = remotesessions_repo.New(f.ti.conn).UpdateOrganizationRemoteSessionClient(ctx, remotesessions_repo.UpdateOrganizationRemoteSessionClientParams{
-					ClientSecretEncrypted: conv.ToPGText(rotated), ID: f.idpClient, OrganizationID: conv.ToPGText(f.org),
-				})
+				_, err := clientsecretstest.New(t, f.ti.conn, f.ti.enc).Set(ctx, f.ti.conn, f.idpClient, clientsecrets.OwnerOf(conv.ToPGText(f.org), uuid.NullUUID{UUID: uuid.Nil, Valid: false}), []byte("rotated-secret"), pgtype.Timestamptz{})
 				require.NoError(t, err)
 			},
 			code: oops.CodeUnauthorized, message: reconnectDescription,

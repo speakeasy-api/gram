@@ -1,4 +1,5 @@
-import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import { waitForHookState as waitFor } from "@/test/waitForHookState";
+import { act, cleanup, renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { GramCore } from "@gram/client/core.js";
 import { HTTPClient, type Fetcher } from "@gram/client/lib/http.js";
@@ -10,13 +11,9 @@ import { useBillingState } from "./use-billing-state";
 
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
-  flag: vi.fn(),
   hasScope: vi.fn(),
 }));
 vi.mock("@/contexts/Auth", () => ({ useSession: () => mocks.session() }));
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => mocks.flag(),
-}));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: mocks.hasScope }),
 }));
@@ -88,7 +85,6 @@ function setup() {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.session.mockReturnValue(session);
-  mocks.flag.mockReturnValue({ status: "enabled" });
   mocks.hasScope.mockReturnValue(true);
 });
 afterEach(() => {
@@ -136,21 +132,6 @@ describe("useBillingState", () => {
       expect(fetcher).toHaveBeenCalledTimes(eligible ? 1 : 0);
     },
   );
-  it.each(["disabled", "loading", "error"])(
-    "blocks active trial checkout when the flag is %s",
-    (status) => {
-      mocks.flag.mockReturnValue({ status });
-      mocks.session.mockReturnValue({ ...session, trial: activeTrial });
-      const { wrapper, fetcher } = setup();
-      const { result } = renderHook(() => useBillingState(), { wrapper });
-      expect(result.current).toMatchObject({
-        status: "unavailable",
-        checkoutEligible: false,
-        checkoutConfirmed: false,
-      });
-      expect(fetcher).not.toHaveBeenCalled();
-    },
-  );
   it.each([
     { scopes: [] },
     { scopes: ["org:read"] },
@@ -166,8 +147,7 @@ describe("useBillingState", () => {
     expect(result.current.checkoutEligible).toBe(scopes.includes("org:admin"));
     expect(mocks.hasScope).toHaveBeenCalledWith("org:admin");
   });
-  it("retains PAYG management for read-only viewers without the rollout", async () => {
-    mocks.flag.mockReturnValue({ status: "disabled" });
+  it("retains PAYG management for read-only viewers", async () => {
     mocks.hasScope.mockImplementation((scope: string) => scope === "org:read");
     const { wrapper, fetcher } = setup();
     fetcher.mockResolvedValue(subscriptionResponse());
@@ -259,8 +239,8 @@ describe("useBillingState", () => {
     await waitFor(() => expect(result.current.status).toBe("error"));
     expect(result.current.checkoutConfirmed).toBe(false);
   });
-  it("does not offer setup on 404 when checkout is unavailable", async () => {
-    mocks.flag.mockReturnValue({ status: "disabled" });
+  it("does not offer setup on 404 for a read-only viewer", async () => {
+    mocks.hasScope.mockImplementation((scope: string) => scope === "org:read");
     const { wrapper, fetcher } = setup();
     fetcher.mockResolvedValue(errorResponse(404));
     const { result } = renderHook(() => useBillingState(), { wrapper });

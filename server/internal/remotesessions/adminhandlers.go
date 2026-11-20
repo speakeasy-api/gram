@@ -1057,16 +1057,8 @@ func (s *Service) CreateGlobalClient(ctx context.Context, payload *adminrsgen.Cr
 		return nil, oops.E(oops.CodeBadRequest, nil, "client_id is required").LogError(ctx, logger)
 	}
 
-	// Encrypt a supplied client secret before it touches the database; an absent
-	// or blank secret leaves the stored ciphertext NULL.
-	var secretCiphertext pgtype.Text
-	if payload.ClientSecret != nil && strings.TrimSpace(*payload.ClientSecret) != "" {
-		ciphertext, encErr := s.enc.Encrypt([]byte(*payload.ClientSecret))
-		if encErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, encErr, "encrypt client secret").LogError(ctx, logger)
-		}
-		secretCiphertext = conv.ToPGText(ciphertext)
-	}
+	// An absent or blank secret leaves the client without one.
+	hasSecret := payload.ClientSecret != nil && strings.TrimSpace(*payload.ClientSecret) != ""
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -1097,7 +1089,6 @@ func (s *Service) CreateGlobalClient(ctx context.Context, payload *adminrsgen.Cr
 		OrganizationID:                  pgtype.Text{String: "", Valid: false},
 		RemoteSessionIssuerID:           issuerID,
 		ClientID:                        clientID,
-		ClientSecretEncrypted:           secretCiphertext,
 		ClientIDIssuedAt:                conv.ToPGTimestamptz(time.Now().UTC()),
 		ClientSecretExpiresAt:           pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		TokenEndpointAuthMethod:         conv.PtrToPGText(payload.TokenEndpointAuthMethod),
@@ -1117,6 +1108,13 @@ func (s *Service) CreateGlobalClient(ctx context.Context, payload *adminrsgen.Cr
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create global remote session client").LogError(ctx, logger)
+	}
+
+	if hasSecret {
+		created, err = s.secrets.Set(ctx, dbtx, created.ID, clientOwner(created), []byte(*payload.ClientSecret), created.ClientSecretExpiresAt)
+		if err != nil {
+			return nil, clientSecretWriteError(ctx, logger, err)
+		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -1208,18 +1206,11 @@ func (s *Service) UpdateGlobalClient(ctx context.Context, payload *adminrsgen.Up
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_client id").LogError(ctx, logger)
 	}
 
-	// Encrypt a rotated client secret before it touches the database; an absent
-	// secret leaves the stored ciphertext untouched (narg NULL → COALESCE keeps).
-	var clientSecretEncrypted pgtype.Text
-	if payload.ClientSecret != nil {
-		if strings.TrimSpace(*payload.ClientSecret) == "" {
-			return nil, oops.E(oops.CodeBadRequest, nil, "client_secret cannot be empty").LogError(ctx, logger)
-		}
-		ciphertext, encErr := s.enc.Encrypt([]byte(*payload.ClientSecret))
-		if encErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, encErr, "encrypt client secret").LogError(ctx, logger)
-		}
-		clientSecretEncrypted = conv.ToPGText(ciphertext)
+	// A rotated client secret replaces the stored one; an absent secret leaves
+	// it untouched.
+	newSecret := payload.ClientSecret != nil
+	if newSecret && strings.TrimSpace(*payload.ClientSecret) == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "client_secret cannot be empty").LogError(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -1246,7 +1237,6 @@ func (s *Service) UpdateGlobalClient(ctx context.Context, payload *adminrsgen.Up
 	}
 
 	updated, err := repo.New(dbtx).UpdateGlobalRemoteSessionClient(ctx, repo.UpdateGlobalRemoteSessionClientParams{
-		ClientSecretEncrypted:           clientSecretEncrypted,
 		TokenEndpointAuthMethod:         conv.PtrToPGText(payload.TokenEndpointAuthMethod),
 		TokenEndpointAuthAudienceFormat: pgtype.Text{String: "", Valid: false},
 		Scope:                           payload.Scope,
@@ -1260,6 +1250,14 @@ func (s *Service) UpdateGlobalClient(ctx context.Context, payload *adminrsgen.Up
 			return nil, oops.E(oops.CodeNotFound, err, "global remote session client not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update global remote session client").LogError(ctx, logger)
+	}
+
+	// Global clients carry no issuer-reported secret expiry.
+	if newSecret {
+		updated, err = s.secrets.Set(ctx, dbtx, updated.ID, clientOwner(updated), []byte(*payload.ClientSecret), pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false})
+		if err != nil {
+			return nil, clientSecretWriteError(ctx, logger, err)
+		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {

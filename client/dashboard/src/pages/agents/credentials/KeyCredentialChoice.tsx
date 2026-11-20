@@ -71,8 +71,30 @@ export function KeyCredentialChoice({
       return;
     }
     // Nothing to choose between: the one credential is the choice.
-    if (sole && value !== sole.id) onChange(sole.id);
-  }, [choices.isSuccess, offered, sole, value, onChange]);
+    if (sole && value !== sole.id) {
+      onChange(sole.id);
+      return;
+    }
+    // A server that signs in each person starts on that personal connection,
+    // as a key with no pick is served anyway, so the picker never sits empty.
+    // Only before anything was picked: a pick cleared because the server
+    // stopped offering it stays visibly undecided.
+    if (
+      choices.isSuccess &&
+      accounts &&
+      options.length > 0 &&
+      value === undefined
+    )
+      onChange(ACCOUNT_CHOICE);
+  }, [
+    choices.isSuccess,
+    offered,
+    sole,
+    value,
+    onChange,
+    accounts,
+    options.length,
+  ]);
   if (choices.isError) {
     return (
       <div className={className}>
@@ -104,9 +126,7 @@ export function KeyCredentialChoice({
         </SelectTrigger>
         <SelectContent>
           {accounts && (
-            <SelectItem value={ACCOUNT_CHOICE}>
-              The account connected for this agent
-            </SelectItem>
+            <SelectItem value={ACCOUNT_CHOICE}>Personal connection</SelectItem>
           )}
           {options.map((option) => (
             <SelectItem key={option.id} value={option.id}>

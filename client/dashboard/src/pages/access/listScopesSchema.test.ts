@@ -14,6 +14,7 @@ describe("listScopes response schema", () => {
           category: "plugin",
           visibility: "user_visible",
           agent_eligible: true,
+          temporary_grantable: false,
           exclusion_scope: "plugin:blocked_write",
           sensitive: false,
           sub_scopes: [],
@@ -26,6 +27,7 @@ describe("listScopes response schema", () => {
           category: "plugin",
           visibility: "internal",
           agent_eligible: true,
+          temporary_grantable: false,
           sensitive: false,
           sub_scopes: [],
         },
@@ -40,6 +42,7 @@ describe("listScopes response schema", () => {
       category: "plugin",
       exclusionScope: "plugin:blocked_write",
       sensitive: false,
+      temporaryGrantable: false,
       subScopes: [],
     });
     expect(result.scopes).toHaveLength(2);
@@ -57,6 +60,7 @@ describe("listScopes response schema", () => {
           category: "session",
           visibility: "user_visible",
           agent_eligible: false,
+          temporary_grantable: true,
           sensitive: true,
           sensitivity: "conversations",
           sub_scopes: ["chat:read"],
@@ -71,6 +75,7 @@ describe("listScopes response schema", () => {
           category: "a_future_category",
           visibility: "user_visible",
           agent_eligible: false,
+          temporary_grantable: true,
           sensitive: true,
           sensitivity: "a_future_reason",
           sub_scopes: [],
@@ -86,6 +91,7 @@ describe("listScopes response schema", () => {
     });
 
     expect(result.scopes[0]).toMatchObject({
+      temporaryGrantable: true,
       sensitive: true,
       sensitivity: "conversations",
       subScopes: ["chat:read"],

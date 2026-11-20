@@ -170,3 +170,9 @@ func Resolve(ctx context.Context, issuers IssuerLister, organizationID string) (
 func URL(baseURL *url.URL, organizationSlug string) string {
 	return baseURL.JoinPath(mcproute.OrganizationGateway.String(), organizationSlug).String()
 }
+
+// ProjectURL is the MCP URL under baseURL of the organization gateway
+// restricted to one project.
+func ProjectURL(baseURL *url.URL, organizationSlug, projectSlug string) string {
+	return baseURL.JoinPath(mcproute.OrganizationGateway.String(), organizationSlug, "projects", projectSlug).String()
+}

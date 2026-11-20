@@ -1,4 +1,4 @@
-import { Badge } from "@/components/ui/Badge";
+import { McpKindBadge } from "./McpKindBadge";
 import { McpEntityCard } from "./McpEntityCard";
 import { Text } from "@/components/ui/Text";
 import { McpIconGroup } from "./McpIconGroup";
@@ -87,9 +87,7 @@ export function GatewayCard({
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-2">
         <div className="flex items-center gap-2">
-          <Badge variant="neutral">
-            <Badge.Text>Gateway</Badge.Text>
-          </Badge>
+          <McpKindBadge kind="gateway" />
         </div>
         <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
           <span>Open</span>

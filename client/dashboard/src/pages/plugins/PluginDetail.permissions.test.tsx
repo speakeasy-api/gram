@@ -12,6 +12,14 @@ import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
 import type { ReactNode } from "react";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import PluginDetail from "./PluginDetail";
+// The request button looks up the viewer's pending access requests when the
+// rollout is on.
+vi.mock("@gram/client/react-query/accessRequests.js", () => ({
+  useAccessRequests: () => ({
+    data: { requests: [] },
+    refetch: () => Promise.resolve(),
+  }),
+}));
 vi.mock("@gram/client/react-query/requestAccess", () => ({
   useRequestAccessMutation: () => ({ mutateAsync: vi.fn() }),
 }));
@@ -325,6 +333,29 @@ describe("plugin detail permission boundary", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sync changes" }));
     expect(publish).toHaveBeenCalled();
   });
+  it("turns automatic MCP servers on from settings, changing nothing else", () => {
+    state.pluginWrite = true;
+    renderAdmin("settings", [hostedServer], { autoAddServersEnabled: false });
+    const toggle = screen.getByRole("switch", {
+      name: "Add MCP servers automatically",
+    });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+
+    fireEvent.click(toggle);
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: {
+          updatePluginForm: {
+            id: "plugin-a",
+            name: "Example plugin",
+            slug: "example-plugin",
+            description: undefined,
+            autoAddServersEnabled: true,
+          },
+        },
+      }),
+    );
+  });
   // A failure that isn't the 412 for changes waiting to sync is a toast, with
   // no Sync changes beside the switch: a server fault, or a 400 a sync can't
   // fix such as packages that share a directory. handleError logs a 4xx as a
@@ -629,7 +660,4 @@ describe("plugin detail permission boundary", () => {
 
 vi.mock("@/components/sources/SourceCard", () => ({
   SourceMcpIcon: () => null,
-}));
-vi.mock("@/components/mcp/MCPToolsetIcon", () => ({
-  MCPToolsetIcon: () => null,
 }));

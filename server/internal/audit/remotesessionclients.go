@@ -18,6 +18,7 @@ const (
 	ActionRemoteSessionClientDuplicate               Action = "remote-session-client:duplicate"
 	ActionRemoteSessionClientUpdate                  Action = "remote-session-client:update"
 	ActionRemoteSessionClientDelete                  Action = "remote-session-client:delete"
+	ActionRemoteSessionClientAttachMcpServer         Action = "remote-session-client:attach-mcp-server"
 	ActionRemoteSessionClientDetachMcpServer         Action = "remote-session-client:detach-mcp-server"
 	ActionRemoteSessionClientRevokeSessions          Action = "remote-session-client:revoke-sessions"
 	ActionRemoteSessionClientAttachUserSessionIssuer Action = "remote-session-client:attach-user-session-issuer"
@@ -272,14 +273,28 @@ type LogRemoteSessionClientDetachMcpServerEvent struct {
 	McpServerName          string
 }
 
+// LogRemoteSessionClientAttachMcpServerEvent describes an administrator
+// associating a remote_session_client with one MCP server.
+type LogRemoteSessionClientAttachMcpServerEvent LogRemoteSessionClientDetachMcpServerEvent
+
+// LogRemoteSessionClientAttachMcpServer records that a remote_session_client was
+// associated with an MCP server through an explicit attach. The affected MCP
+// server is captured in metadata so the audit trail names the server whose
+// authentication changed.
+func (l *Logger) LogRemoteSessionClientAttachMcpServer(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientAttachMcpServerEvent) error {
+	return l.logRemoteSessionClientMcpServerChange(ctx, dbtx, ActionRemoteSessionClientAttachMcpServer, LogRemoteSessionClientDetachMcpServerEvent(event))
+}
+
 // LogRemoteSessionClientDetachMcpServer records that a remote_session_client
 // was detached from an MCP server, either by an organization admin removing
 // the binding from the server's user session issuer or by removing the
 // server's own client association. The affected MCP server is captured in
 // metadata so the audit trail names the server whose authentication changed.
 func (l *Logger) LogRemoteSessionClientDetachMcpServer(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientDetachMcpServerEvent) error {
-	action := ActionRemoteSessionClientDetachMcpServer
+	return l.logRemoteSessionClientMcpServerChange(ctx, dbtx, ActionRemoteSessionClientDetachMcpServer, event)
+}
 
+func (l *Logger) logRemoteSessionClientMcpServerChange(ctx context.Context, dbtx repo.DBTX, action Action, event LogRemoteSessionClientDetachMcpServerEvent) error {
 	metadata, err := marshalAuditPayload(map[string]any{
 		"mcp_server_id":   event.McpServerURN.ID.String(),
 		"mcp_server_name": event.McpServerName,

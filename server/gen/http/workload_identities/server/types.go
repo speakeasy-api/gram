@@ -227,6 +227,8 @@ type UpdateSubjectResponseBody struct {
 // WithdrawSubjectResponseBody is the type of the "workloadIdentities" service
 // "withdrawSubject" endpoint HTTP response body.
 type WithdrawSubjectResponseBody struct {
+	// The tier of the admission that was withdrawn: organization or project.
+	WithdrawnTier string `form:"withdrawn_tier" json:"withdrawn_tier" xml:"withdrawn_tier"`
 	// Trusted issuers, organization tier first.
 	Issuers []*WorkloadIssuerResponseBody `form:"issuers" json:"issuers" xml:"issuers"`
 	// Admitted subjects.
@@ -2979,8 +2981,10 @@ func NewUpdateSubjectResponseBody(res *workloadidentities.WorkloadIdentityPolicy
 
 // NewWithdrawSubjectResponseBody builds the HTTP response body from the result
 // of the "withdrawSubject" endpoint of the "workloadIdentities" service.
-func NewWithdrawSubjectResponseBody(res *workloadidentities.WorkloadIdentityPolicy) *WithdrawSubjectResponseBody {
-	body := &WithdrawSubjectResponseBody{}
+func NewWithdrawSubjectResponseBody(res *workloadidentities.WithdrawnWorkloadSubjectPolicy) *WithdrawSubjectResponseBody {
+	body := &WithdrawSubjectResponseBody{
+		WithdrawnTier: res.WithdrawnTier,
+	}
 	if res.Issuers != nil {
 		body.Issuers = make([]*WorkloadIssuerResponseBody, len(res.Issuers))
 		for i, val := range res.Issuers {

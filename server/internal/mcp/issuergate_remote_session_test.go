@@ -335,7 +335,7 @@ func TestHandleToken_RefreshChecksStoredUpstreamCredentials(t *testing.T) {
 	}{
 		{name: "expired refresh", accessLifetime: -time.Hour, refreshLifetime: -time.Hour, wantReconnect: true},
 		{name: "unreadable refresh", accessLifetime: -time.Hour, refreshLifetime: time.Hour, corruptRefresh: true, wantReconnect: true},
-		{name: "unreadable access", accessLifetime: time.Hour, refreshLifetime: time.Hour, corruptAccess: true, wantReconnect: true},
+		{name: "unreadable access renews with a readable refresh token", accessLifetime: time.Hour, refreshLifetime: time.Hour, corruptAccess: true},
 		{name: "live access with expired refresh", accessLifetime: time.Hour, refreshLifetime: -time.Hour},
 		{name: "live access with unreadable refresh", accessLifetime: time.Hour, refreshLifetime: time.Hour, corruptRefresh: true},
 		{name: "early refresh falls back to live access", accessLifetime: 25 * time.Second, refreshLifetime: time.Hour, corruptRefresh: true},
@@ -361,7 +361,7 @@ func TestHandleToken_RefreshChecksStoredUpstreamCredentials(t *testing.T) {
 				refreshCiphertext = "invalid-ciphertext"
 			}
 			now := time.Now()
-			_, err = remotesessions_repo.New(ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+			_, err = remotesessions_repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 				SubjectUrn:            subject,
 				UserSessionIssuerID:   issuer.ID,
 				RemoteSessionClientID: remoteClient.ID,
@@ -564,7 +564,7 @@ func upsertExpiredRefreshableRemoteSession(t *testing.T, ctx context.Context, ti
 	require.NoError(t, err)
 	refreshToken, err := ti.enc.Encrypt([]byte("live-upstream-refresh"))
 	require.NoError(t, err)
-	_, err = remotesessions_repo.New(ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	_, err = remotesessions_repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userSessionIssuerID,
 		RemoteSessionClientID: remoteSessionClientID,

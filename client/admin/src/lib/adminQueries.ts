@@ -10,8 +10,10 @@ import {
   type QueryKey,
 } from "@tanstack/react-query";
 import {
+  getHooksRollout,
   getOrganization,
   getOrganizationChatAnalysisSettings,
+  getOrganizationHooksRollout,
   getOrganizationStats,
   getInferenceSpendHistory,
   getPaygBillingSummary,
@@ -20,6 +22,8 @@ import {
   getSession,
   listOrganizationMembers,
   listOrganizationProjects,
+  listOrganizationAssistants,
+  listAssistantMigrationOrganizations,
   listOrganizations,
   listUsers,
   listUserOrganizations,
@@ -28,16 +32,21 @@ import {
   type AdminInferenceSpendMonth,
   type AdminOrganization,
   type AdminOrganizationChatAnalysisSettings,
+  type AdminOrganizationHooksRollout,
   type AdminProjectDetail,
   type AdminPaygBillingSummary,
   type AdminStripeSubscription,
   type ListOrganizationMembersResult,
   type ListOrganizationProjectsResult,
+  type AdminOrganizationAssistants,
   type ListOrganizationsParams,
   type ListOrganizationsResult,
   type ListProjectMcpServersResult,
 } from "@/lib/gramAdminApi";
 import { queryKeyAdminListOrganizationActivityInfinite } from "@gram/admin-client/react-query/adminListOrganizationActivity.core";
+import { buildAdminListCustomDomainsQuery } from "@gram/admin-client/react-query/adminListCustomDomains.core";
+import type { AdminListCustomDomainsRequest } from "@gram/admin-client/models/operations/adminlistcustomdomains";
+import { redirecting, redirectingClient } from "@/lib/adminSdkClient";
 
 // What queryOptions infers, named so the exports can carry the return type that
 // `typescript/explicit-module-boundary-types` demands. Writing the shape out by
@@ -122,6 +131,32 @@ export function organizationChatAnalysisSettingsQuery(
   });
 }
 
+// The platform-wide state, and every organization's state, change together
+// when the default pin moves, so a write invalidates both prefixes.
+export const hooksRolloutQuery = queryOptions({
+  queryKey: ["gram-admin-hooks-rollout"] as const,
+  queryFn: getHooksRollout,
+});
+
+const ORGANIZATION_HOOKS_ROLLOUT_KEY = "gram-admin-organization-hooks-rollout";
+
+export function organizationHooksRolloutQuery(
+  organizationID: string,
+): AdminQuery<
+  AdminOrganizationHooksRollout,
+  readonly ["gram-admin-organization-hooks-rollout", string]
+> {
+  return queryOptions({
+    queryKey: [ORGANIZATION_HOOKS_ROLLOUT_KEY, organizationID] as const,
+    queryFn: () => getOrganizationHooksRollout(organizationID),
+  });
+}
+
+export function invalidateHooksRollout(qc: QueryClient): void {
+  void qc.invalidateQueries({ queryKey: hooksRolloutQuery.queryKey });
+  void qc.invalidateQueries({ queryKey: [ORGANIZATION_HOOKS_ROLLOUT_KEY] });
+}
+
 export function organizationProjectsQuery(
   organizationID: string,
 ): AdminQuery<
@@ -131,6 +166,18 @@ export function organizationProjectsQuery(
   return queryOptions({
     queryKey: ["gram-admin-organization-projects", organizationID] as const,
     queryFn: () => listOrganizationProjects(organizationID),
+  });
+}
+
+export function organizationAssistantsQuery(
+  organizationID: string,
+): AdminQuery<
+  AdminOrganizationAssistants,
+  readonly ["gram-admin-organization-assistants", string]
+> {
+  return queryOptions({
+    queryKey: ["gram-admin-organization-assistants", organizationID] as const,
+    queryFn: () => listOrganizationAssistants(organizationID),
   });
 }
 
@@ -399,5 +446,36 @@ export function userOrganizationsListQuery(
   return queryOptions({
     queryKey: ["admin", "user-organizations", params] as const,
     queryFn: ({ signal }) => listUserOrganizations(params, signal),
+  });
+}
+
+function createAdminListCustomDomainsQuery(
+  request: AdminListCustomDomainsRequest,
+) {
+  const generated = buildAdminListCustomDomainsQuery(
+    redirectingClient(),
+    request,
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+// Every live custom domain, or the one an organization owns. Both filters are
+// applied by the server, so the query key carries them.
+export function adminListCustomDomainsQuery(
+  request: AdminListCustomDomainsRequest = {},
+): ReturnType<typeof createAdminListCustomDomainsQuery> {
+  return createAdminListCustomDomainsQuery(request);
+}
+
+export function assistantMigrationOrganizationsQuery(): AdminQuery<
+  Awaited<ReturnType<typeof listAssistantMigrationOrganizations>>,
+  readonly ["admin", "assistant-migration-organizations"]
+> {
+  return queryOptions({
+    queryKey: ["admin", "assistant-migration-organizations"] as const,
+    queryFn: listAssistantMigrationOrganizations,
   });
 }

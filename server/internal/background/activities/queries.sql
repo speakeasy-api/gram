@@ -1279,13 +1279,6 @@ WHERE candidates.indexed IS NULL
             AND definitions.deleted IS FALSE
       )
   )
-  -- An external MCP URN resolves to no tool definition, so a version that still
-  -- selects one has tools the index could never cover.
-  AND NOT EXISTS (
-      SELECT 1
-      FROM unnest(candidates.tool_urns) selected(tool_urn)
-      WHERE selected.tool_urn LIKE 'tools:externalmcp:%'
-  )
 -- Rotate the bounded scan each tick so already-running permanent-failure
 -- workflows cannot remain at the front and starve the rest of the backlog.
 ORDER BY hashtextextended(candidates.id::text, @rotation_seed), candidates.id

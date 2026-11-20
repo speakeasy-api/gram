@@ -41,7 +41,6 @@ type Fake struct {
 	appErrs    map[string]map[string]error
 
 	requiredSecret string
-	decrypter      SecretDecrypter
 	bearerOnly     bool
 	lastAuthMethod remotesessions.TokenEndpointAuthMethod
 }
@@ -63,21 +62,18 @@ func NewFake(fixtures Fixtures) *Fake {
 		methodErrs:     map[string]error{},
 		appErrs:        map[string]map[string]error{},
 		requiredSecret: "",
-		decrypter:      nil,
 		bearerOnly:     false,
 		lastAuthMethod: "",
 	}
 }
 
 // RequireClientSecret makes every call under a client_secret_basic Config
-// fail with invalid_client, as Okta's token endpoint does, unless decrypter
-// turns the Config's ClientSecretEncrypted into secret. An empty secret clears
-// the requirement.
-func (f *Fake) RequireClientSecret(secret string, decrypter SecretDecrypter) {
+// fail with invalid_client, as Okta's token endpoint does, unless the Config's
+// credential lease opens to secret. An empty secret clears the requirement.
+func (f *Fake) RequireClientSecret(secret string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.requiredSecret = secret
-	f.decrypter = decrypter
 }
 
 // SetBearerOnly makes VerifyScopes report a Bearer token (DPoPBound false),
@@ -97,31 +93,39 @@ func (f *Fake) LastAuthMethod() remotesessions.TokenEndpointAuthMethod {
 }
 
 // credentialError mirrors the token endpoint's refusal of a bad client
-// secret; a nil cfg skips the check. Callers must hold f.mu.
-func (f *Fake) credentialError(cfg *Config) error {
-	if cfg == nil {
-		return nil
-	}
-	method := cfg.AuthMethod
-	if method == "" {
-		method = remotesessions.TokenEndpointAuthMethodPrivateKeyJWT
-	}
-	f.lastAuthMethod = method
-	if method != remotesessions.TokenEndpointAuthMethodBasic || f.requiredSecret == "" {
+// secret, opening it through the Config's credential lease as the real client
+// does, against requiredSecret read under f.mu. It runs without f.mu held, so
+// a lease waiting on a database lock never blocks other fake calls.
+func (f *Fake) credentialError(ctx context.Context, cfg *Config, requiredSecret string) error {
+	if cfg == nil || requiredSecret == "" || authMethodOf(cfg) != remotesessions.TokenEndpointAuthMethodBasic {
 		return nil
 	}
 	rejected := &APIError{Method: http.MethodPost, Path: tokenEndpointPath, StatusCode: http.StatusUnauthorized, ErrorCode: oautherr.CodeInvalidClient, Summary: "Client authentication failed."}
-	if f.decrypter == nil || cfg.ClientSecretEncrypted == "" {
+	if cfg.Credentials == nil {
 		return rejected
 	}
-	secret, err := f.decrypter.Decrypt(cfg.ClientSecretEncrypted)
+	lease, err := cfg.Credentials.Acquire(ctx, *cfg)
 	if err != nil {
-		return fmt.Errorf("decrypt okta client secret: %w: %w", ErrClientSecretUndecryptable, err)
+		return fmt.Errorf("acquire okta credential: %w", err)
 	}
-	if secret != f.requiredSecret {
+	defer lease.Close()
+	secret, err := lease.ClientSecret(ctx)
+	if err != nil {
+		return fmt.Errorf("open okta client secret: %w", err)
+	}
+	if secret != requiredSecret {
 		return rejected
 	}
 	return nil
+}
+
+// authMethodOf is the Config's token endpoint auth method, private_key_jwt
+// when unset.
+func authMethodOf(cfg *Config) remotesessions.TokenEndpointAuthMethod {
+	if cfg.AuthMethod == "" {
+		return remotesessions.TokenEndpointAuthMethodPrivateKeyJWT
+	}
+	return cfg.AuthMethod
 }
 
 // SetFixtures replaces the in-memory data for subsequent calls.
@@ -190,21 +194,28 @@ func (f *Fake) Calls() []string {
 	return slices.Clone(f.calls)
 }
 
-func (f *Fake) record(name string, cfg *Config) error {
+func (f *Fake) record(ctx context.Context, name string, cfg *Config) error {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	f.calls = append(f.calls, name)
-	if f.err != nil {
-		return f.err
+	if cfg != nil {
+		f.lastAuthMethod = authMethodOf(cfg)
 	}
-	if err := f.credentialError(cfg); err != nil {
+	failure, requiredSecret := f.err, f.requiredSecret
+	f.mu.Unlock()
+	if failure != nil {
+		return failure
+	}
+	if err := f.credentialError(ctx, cfg, requiredSecret); err != nil {
 		return err
 	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return f.methodErrs[name]
 }
 
-func (f *Fake) listApps(cfg *Config, req ListAppsRequest) ([]App, error) {
-	if err := f.record("ListApps", cfg); err != nil {
+func (f *Fake) listApps(ctx context.Context, cfg *Config, req ListAppsRequest) ([]App, error) {
+	if err := f.record(ctx, "ListApps", cfg); err != nil {
 		return nil, err
 	}
 	f.mu.Lock()
@@ -222,8 +233,8 @@ func (f *Fake) listApps(cfg *Config, req ListAppsRequest) ([]App, error) {
 	return out, nil
 }
 
-func (f *Fake) getApp(cfg *Config, appID string) (*App, error) {
-	if err := f.record("GetApp", cfg); err != nil {
+func (f *Fake) getApp(ctx context.Context, cfg *Config, appID string) (*App, error) {
+	if err := f.record(ctx, "GetApp", cfg); err != nil {
 		return nil, err
 	}
 	if err := validateAppID(appID); err != nil {
@@ -246,8 +257,8 @@ func cloneApp(app App) App {
 	return app
 }
 
-func (f *Fake) listAppUsers(cfg *Config, req ListAppUsersRequest) ([]AppUser, error) {
-	if err := f.record("ListAppUsers", cfg); err != nil {
+func (f *Fake) listAppUsers(ctx context.Context, cfg *Config, req ListAppUsersRequest) ([]AppUser, error) {
+	if err := f.record(ctx, "ListAppUsers", cfg); err != nil {
 		return nil, err
 	}
 	if err := validateAppID(req.AppID); err != nil {
@@ -261,8 +272,8 @@ func (f *Fake) listAppUsers(cfg *Config, req ListAppUsersRequest) ([]AppUser, er
 	return slices.Clone(f.fixtures.AppUsers[req.AppID]), nil
 }
 
-func (f *Fake) listAppGroups(cfg *Config, req ListAppGroupsRequest) ([]AppGroup, error) {
-	if err := f.record("ListAppGroups", cfg); err != nil {
+func (f *Fake) listAppGroups(ctx context.Context, cfg *Config, req ListAppGroupsRequest) ([]AppGroup, error) {
+	if err := f.record(ctx, "ListAppGroups", cfg); err != nil {
 		return nil, err
 	}
 	if err := validateAppID(req.AppID); err != nil {
@@ -276,8 +287,8 @@ func (f *Fake) listAppGroups(cfg *Config, req ListAppGroupsRequest) ([]AppGroup,
 	return slices.Clone(f.fixtures.AppGroups[req.AppID]), nil
 }
 
-func (f *Fake) verifyScopes(cfg *Config, required []string) (*ScopeVerification, error) {
-	if err := f.record("VerifyScopes", cfg); err != nil {
+func (f *Fake) verifyScopes(ctx context.Context, cfg *Config, required []string) (*ScopeVerification, error) {
+	if err := f.record(ctx, "VerifyScopes", cfg); err != nil {
 		return nil, err
 	}
 	f.mu.Lock()
@@ -313,42 +324,42 @@ type configuredFake struct {
 
 var _ Client = (*configuredFake)(nil)
 
-func (f *Fake) ListApps(_ context.Context, req ListAppsRequest) ([]App, error) {
-	return f.listApps(nil, req)
+func (f *Fake) ListApps(ctx context.Context, req ListAppsRequest) ([]App, error) {
+	return f.listApps(ctx, nil, req)
 }
 
-func (f *Fake) GetApp(_ context.Context, appID string) (*App, error) {
-	return f.getApp(nil, appID)
+func (f *Fake) GetApp(ctx context.Context, appID string) (*App, error) {
+	return f.getApp(ctx, nil, appID)
 }
 
-func (f *Fake) ListAppUsers(_ context.Context, req ListAppUsersRequest) ([]AppUser, error) {
-	return f.listAppUsers(nil, req)
+func (f *Fake) ListAppUsers(ctx context.Context, req ListAppUsersRequest) ([]AppUser, error) {
+	return f.listAppUsers(ctx, nil, req)
 }
 
-func (f *Fake) ListAppGroups(_ context.Context, req ListAppGroupsRequest) ([]AppGroup, error) {
-	return f.listAppGroups(nil, req)
+func (f *Fake) ListAppGroups(ctx context.Context, req ListAppGroupsRequest) ([]AppGroup, error) {
+	return f.listAppGroups(ctx, nil, req)
 }
 
-func (f *Fake) VerifyScopes(_ context.Context, required []string) (*ScopeVerification, error) {
-	return f.verifyScopes(nil, required)
+func (f *Fake) VerifyScopes(ctx context.Context, required []string) (*ScopeVerification, error) {
+	return f.verifyScopes(ctx, nil, required)
 }
 
-func (c *configuredFake) ListApps(_ context.Context, req ListAppsRequest) ([]App, error) {
-	return c.fake.listApps(&c.cfg, req)
+func (c *configuredFake) ListApps(ctx context.Context, req ListAppsRequest) ([]App, error) {
+	return c.fake.listApps(ctx, &c.cfg, req)
 }
 
-func (c *configuredFake) GetApp(_ context.Context, appID string) (*App, error) {
-	return c.fake.getApp(&c.cfg, appID)
+func (c *configuredFake) GetApp(ctx context.Context, appID string) (*App, error) {
+	return c.fake.getApp(ctx, &c.cfg, appID)
 }
 
-func (c *configuredFake) ListAppUsers(_ context.Context, req ListAppUsersRequest) ([]AppUser, error) {
-	return c.fake.listAppUsers(&c.cfg, req)
+func (c *configuredFake) ListAppUsers(ctx context.Context, req ListAppUsersRequest) ([]AppUser, error) {
+	return c.fake.listAppUsers(ctx, &c.cfg, req)
 }
 
-func (c *configuredFake) ListAppGroups(_ context.Context, req ListAppGroupsRequest) ([]AppGroup, error) {
-	return c.fake.listAppGroups(&c.cfg, req)
+func (c *configuredFake) ListAppGroups(ctx context.Context, req ListAppGroupsRequest) ([]AppGroup, error) {
+	return c.fake.listAppGroups(ctx, &c.cfg, req)
 }
 
-func (c *configuredFake) VerifyScopes(_ context.Context, required []string) (*ScopeVerification, error) {
-	return c.fake.verifyScopes(&c.cfg, required)
+func (c *configuredFake) VerifyScopes(ctx context.Context, required []string) (*ScopeVerification, error) {
+	return c.fake.verifyScopes(ctx, &c.cfg, required)
 }

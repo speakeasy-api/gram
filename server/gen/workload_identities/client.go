@@ -269,13 +269,13 @@ func (c *Client) UpdateSubject(ctx context.Context, p *UpdateSubjectPayload) (re
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) WithdrawSubject(ctx context.Context, p *WithdrawSubjectPayload) (res *WorkloadIdentityPolicy, err error) {
+func (c *Client) WithdrawSubject(ctx context.Context, p *WithdrawSubjectPayload) (res *WithdrawnWorkloadSubjectPolicy, err error) {
 	var ires any
 	ires, err = c.WithdrawSubjectEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*WorkloadIdentityPolicy), nil
+	return ires.(*WithdrawnWorkloadSubjectPolicy), nil
 }
 
 // CreateDeviceJoinToken calls the "createDeviceJoinToken" endpoint of the

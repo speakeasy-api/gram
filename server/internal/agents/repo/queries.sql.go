@@ -320,6 +320,51 @@ func (q *Queries) DeleteConnectionBlockGrant(ctx context.Context, arg DeleteConn
 	return err
 }
 
+const ensurePermanentAgentPolicyGrant = `-- name: EnsurePermanentAgentPolicyGrant :one
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+VALUES ($1, concat('agent:', $2::uuid), $3, $4)
+ON CONFLICT (organization_id, principal_urn, scope, selectors)
+DO UPDATE SET
+  expires_at = NULL,
+  updated_at = clock_timestamp()
+RETURNING id, scope, selectors, created_at, updated_at
+`
+
+type EnsurePermanentAgentPolicyGrantParams struct {
+	OrganizationID string
+	AgentID        uuid.UUID
+	Scope          string
+	Selectors      []byte
+}
+
+type EnsurePermanentAgentPolicyGrantRow struct {
+	ID        uuid.UUID
+	Scope     string
+	Selectors []byte
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+// Creates a permanent grant, or takes over a temporary grant for the same
+// target by clearing its expiry.
+func (q *Queries) EnsurePermanentAgentPolicyGrant(ctx context.Context, arg EnsurePermanentAgentPolicyGrantParams) (EnsurePermanentAgentPolicyGrantRow, error) {
+	row := q.db.QueryRow(ctx, ensurePermanentAgentPolicyGrant,
+		arg.OrganizationID,
+		arg.AgentID,
+		arg.Scope,
+		arg.Selectors,
+	)
+	var i EnsurePermanentAgentPolicyGrantRow
+	err := row.Scan(
+		&i.ID,
+		&i.Scope,
+		&i.Selectors,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getAgentByID = `-- name: GetAgentByID :one
 SELECT id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 FROM agents
@@ -879,7 +924,7 @@ func (q *Queries) ListAgentOwnerProfiles(ctx context.Context, arg ListAgentOwner
 
 const listAgentPolicyGrants = `-- name: ListAgentPolicyGrants :many
 
-SELECT id, scope, selectors, created_at, updated_at
+SELECT id, scope, selectors, created_at, updated_at, expires_at
 FROM principal_grants
 WHERE organization_id = $1
   AND principal_urn = concat('agent:', $2::uuid)
@@ -897,6 +942,7 @@ type ListAgentPolicyGrantsRow struct {
 	Selectors []byte
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
+	ExpiresAt pgtype.Timestamptz
 }
 
 // Agent direct-policy queries construct the canonical principal from the typed
@@ -916,6 +962,7 @@ func (q *Queries) ListAgentPolicyGrants(ctx context.Context, arg ListAgentPolicy
 			&i.Selectors,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ExpiresAt,
 		); err != nil {
 			return nil, err
 		}
@@ -955,7 +1002,7 @@ WHERE a.organization_id = $1
     )
     OR (s.authorization_expires_at IS NOT NULL AND s.authorization_expires_at <= now())
     OR (s.access_expires_at IS NOT NULL AND s.access_expires_at <= now()
-      AND (s.refresh_token_encrypted IS NULL OR s.refresh_expires_at <= now()))
+      AND ((s.refresh_token_encrypted IS NULL AND s.refresh_token_org_encrypted IS NULL) OR s.refresh_expires_at <= now()))
   )
 `
 
@@ -1181,53 +1228,55 @@ func (q *Queries) ListManagedAgentSessions(ctx context.Context, arg ListManagedA
 const listManagedAgents = `-- name: ListManagedAgents :many
 SELECT id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted FROM agents
 WHERE organization_id = $1 AND deleted IS FALSE
+  AND ($2::uuid IS NULL OR project_id = $2::uuid)
   AND (
-    $2::text IS NULL
-    OR name ILIKE '%' || $2::text || '%'
+    $3::text IS NULL
+    OR name ILIKE '%' || $3::text || '%'
   )
   -- Lifecycle is derived from the same two columns the Go side derives it
   -- from, so a filter cannot disagree with the badge the row shows.
   AND (
-    cardinality($3::text[]) = 0
+    cardinality($4::text[]) = 0
     OR (CASE
           WHEN revoked_at IS NOT NULL THEN 'revoked'
           WHEN suspended_at IS NOT NULL THEN 'suspended'
           ELSE 'active'
-        END) = ANY($3::text[])
+        END) = ANY($4::text[])
   )
   AND (
-    cardinality($4::text[]) = 0
-    OR owner_user_id = ANY($4::text[])
-  )
-  AND (
-    $5::timestamptz IS NULL
-    OR created_at >= $5::timestamptz
+    cardinality($5::text[]) = 0
+    OR owner_user_id = ANY($5::text[])
   )
   AND (
     $6::timestamptz IS NULL
-    OR created_at < $6::timestamptz
+    OR created_at >= $6::timestamptz
   )
   AND (
-    $7::text IS NULL
+    $7::timestamptz IS NULL
+    OR created_at < $7::timestamptz
+  )
+  AND (
+    $8::text IS NULL
     OR (
-      $8::boolean IS FALSE
-      AND (LOWER(name), id) > ($7::text, $9::uuid)
+      $9::boolean IS FALSE
+      AND (LOWER(name), id) > ($8::text, $10::uuid)
     )
     OR (
-      $8::boolean IS TRUE
-      AND (LOWER(name), id) < ($7::text, $9::uuid)
+      $9::boolean IS TRUE
+      AND (LOWER(name), id) < ($8::text, $10::uuid)
     )
   )
 ORDER BY
-  CASE WHEN $8::boolean THEN LOWER(name) END DESC,
-  CASE WHEN NOT $8::boolean THEN LOWER(name) END ASC,
-  CASE WHEN $8::boolean THEN id END DESC,
-  CASE WHEN NOT $8::boolean THEN id END ASC
-LIMIT $10
+  CASE WHEN $9::boolean THEN LOWER(name) END DESC,
+  CASE WHEN NOT $9::boolean THEN LOWER(name) END ASC,
+  CASE WHEN $9::boolean THEN id END DESC,
+  CASE WHEN NOT $9::boolean THEN id END ASC
+LIMIT $11
 `
 
 type ListManagedAgentsParams struct {
 	OrganizationID   string
+	ProjectID        uuid.NullUUID
 	Search           pgtype.Text
 	Lifecycles       []string
 	OwnerUserIds     []string
@@ -1249,6 +1298,7 @@ type ListManagedAgentsParams struct {
 func (q *Queries) ListManagedAgents(ctx context.Context, arg ListManagedAgentsParams) ([]Agent, error) {
 	rows, err := q.db.Query(ctx, listManagedAgents,
 		arg.OrganizationID,
+		arg.ProjectID,
 		arg.Search,
 		arg.Lifecycles,
 		arg.OwnerUserIds,
@@ -1284,6 +1334,43 @@ func (q *Queries) ListManagedAgents(ctx context.Context, arg ListManagedAgentsPa
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOwnedAgentIDs = `-- name: ListOwnedAgentIDs :many
+SELECT a.id
+FROM agents a
+WHERE a.organization_id = $1
+  AND a.owner_user_id = $2
+  AND a.owner_reassignment_required_at IS NULL
+  AND a.deleted IS FALSE
+`
+
+type ListOwnedAgentIDsParams struct {
+	OrganizationID string
+	OwnerUserID    string
+}
+
+// The agents whose activity counts as the user's own. Ownership follows the
+// agent-management rule: an owner whose agent is latched for reassignment no
+// longer answers for it, so its sessions and logs stop being theirs.
+func (q *Queries) ListOwnedAgentIDs(ctx context.Context, arg ListOwnedAgentIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listOwnedAgentIDs, arg.OrganizationID, arg.OwnerUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

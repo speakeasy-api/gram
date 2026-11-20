@@ -1,11 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import type { NetworkIngressProvider } from "@gram/client/models/components/networkingress.js";
 import { unrecognized } from "@gram/client/types/unrecognized.js";
 
 import { PrivateNetworkSection } from "./PrivateNetworkSection";
 
 const state = vi.hoisted(() => ({
+  gatewayFlag: "enabled" as
+    | "enabled"
+    | "disabled"
+    | "missing"
+    | "error"
+    | "loading",
   isAdmin: true,
   entitled: true,
   productTier: "enterprise" as "enterprise" | "payg" | "base",
@@ -14,13 +26,20 @@ const state = vi.hoisted(() => ({
   featuresLoading: false,
   ingressError: false,
   ingressPending: false,
+  gatewayTag: "tag:speakeasy",
   ingressOptions: undefined as
     | {
         enabled?: boolean;
         refetchInterval?: (query: {
-          state: { data?: { ingress?: { status?: string } } };
+          state: {
+            data?: { ingress?: { status?: string; lastError?: string } };
+          };
         }) => number | false;
       }
+    | undefined,
+  createMutate: vi.fn(),
+  createOptions: undefined as
+    | { onSuccess?: (result: { runtime: string }) => Promise<void> }
     | undefined,
   deleteMutate: vi.fn(),
   healthMutate: vi.fn(),
@@ -36,10 +55,19 @@ const state = vi.hoisted(() => ({
         credentialsConfigured: boolean;
         status: string;
         lastError?: string;
+        statusDetail?: string;
+        runtime?: string;
         createdAt: Date;
         updatedAt: Date;
       }
     | undefined,
+}));
+
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: (flag: string) =>
+    flag === "private-network-gateway"
+      ? { status: state.gatewayFlag }
+      : { status: "disabled" },
 }));
 
 vi.mock("@/hooks/useProductTier", () => ({
@@ -76,7 +104,7 @@ vi.mock("@gram/client/react-query/networkIngress.js", () => ({
   useNetworkIngress: (...args: unknown[]) => {
     state.ingressOptions = args[2] as typeof state.ingressOptions;
     return {
-      data: { ingress: state.ingress },
+      data: { ingress: state.ingress, gatewayTag: state.gatewayTag },
       error: state.ingressError ? new Error("unavailable") : null,
       isLoading: false,
       isPending: state.ingressPending,
@@ -86,10 +114,14 @@ vi.mock("@gram/client/react-query/networkIngress.js", () => ({
 }));
 
 vi.mock("@gram/client/react-query/createNetworkIngress.js", () => ({
-  useCreateNetworkIngressMutation: () => ({
-    isPending: false,
-    mutate: vi.fn(),
-  }),
+  useCreateNetworkIngressMutation: (options: typeof state.createOptions) => {
+    state.createOptions = options;
+    return {
+      isPending: false,
+      mutate: state.createMutate,
+      reset: vi.fn(),
+    };
+  },
 }));
 vi.mock("@gram/client/react-query/updateNetworkIngress.js", () => ({
   useUpdateNetworkIngressMutation: () => ({
@@ -131,6 +163,7 @@ vi.mock("sonner", () => ({
 }));
 
 beforeEach(() => {
+  state.gatewayFlag = "enabled";
   state.isAdmin = true;
   state.entitled = true;
   state.productTier = "enterprise";
@@ -139,13 +172,47 @@ beforeEach(() => {
   state.featuresLoading = false;
   state.ingressError = false;
   state.ingressPending = false;
+  state.gatewayTag = "tag:speakeasy";
   state.ingressOptions = undefined;
+  state.createMutate.mockReset();
+  state.createOptions = undefined;
   state.deleteMutate.mockReset();
   state.healthMutate.mockReset();
   state.ingress = undefined;
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllEnvs();
+});
+
+function configuredIngress(
+  overrides: Partial<NonNullable<typeof state.ingress>>,
+): NonNullable<typeof state.ingress> {
+  return {
+    id: "ingress-1",
+    organizationId: "org-1",
+    provider: "tailscale",
+    hostname: "private-mcp",
+    endpointNamespaceKind: "platform",
+    enabled: true,
+    identityRequired: false,
+    credentialsConfigured: true,
+    status: "online",
+    createdAt: new Date(0),
+    updatedAt: new Date(1_000),
+    ...overrides,
+  };
+}
+
+function fillCredentials(): void {
+  fireEvent.change(screen.getByLabelText("OAuth client ID"), {
+    target: { value: "client-id" },
+  });
+  fireEvent.change(screen.getByLabelText("OAuth client secret"), {
+    target: { value: "client-secret" },
+  });
+}
 
 describe("PrivateNetworkSection", () => {
   it.each(["online", "deleting"])(
@@ -253,26 +320,322 @@ describe("PrivateNetworkSection", () => {
     },
   );
 
-  it("explains that the private hostname is shared across the organization", () => {
+  it("defaults the private hostname to speakeasy and shows the matching policy", () => {
+    render(<PrivateNetworkSection />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
+
+    const hostname = screen.getByRole("textbox", { name: "Private hostname" });
+    expect((hostname as HTMLInputElement).value).toBe("speakeasy");
+    expect(screen.getByText("speakeasy.<your tailnet>.ts.net")).toBeTruthy();
+    expect(
+      screen.getByText(/each MCP server keeps\s+its own path on it/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/"tag:speakeasy": \["autogroup:admin"\]/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/"svc:speakeasy": \["tag:speakeasy"\]/),
+    ).toBeTruthy();
+    expect(screen.getByText(/"dst": \["svc:speakeasy"\]/)).toBeTruthy();
+    expect(screen.getByText(/run Tailscale 1\.86 or later/)).toBeTruthy();
+  });
+
+  it("uses the environment's gateway tag in the policy and OAuth steps", () => {
+    state.gatewayTag = "tag:speakeasy-dev";
     render(<PrivateNetworkSection />);
     fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
 
     expect(
-      screen.getByRole("textbox", { name: "Organization private hostname" }),
+      screen.getByText(/"tag:speakeasy-dev": \["autogroup:admin"\]/),
     ).toBeTruthy();
     expect(
+      screen.getByText(/"svc:speakeasy": \["tag:speakeasy-dev"\]/),
+    ).toBeTruthy();
+    expect(screen.getAllByText("tag:speakeasy-dev")).toHaveLength(2);
+    expect(screen.queryByText(/"tag:speakeasy"/)).toBeNull();
+  });
+
+  it.each(["disabled", "missing", "error"] as const)(
+    "shows the operator setup steps when the gateway flag is %s",
+    (flag) => {
+      state.gatewayFlag = flag;
+      render(<PrivateNetworkSection />);
+      fireEvent.click(
+        screen.getByRole("button", { name: "Connect Tailscale" }),
+      );
+
+      expect(
+        screen.getByText(/"tag:gram-proxy": \["tag:k8s-operator"\]/),
+      ).toBeTruthy();
+      expect(screen.getByText("tag:k8s-operator")).toBeTruthy();
+      expect(screen.queryByText(/"tag:speakeasy"/)).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Limit access to a group" }),
+      ).toBeNull();
+    },
+  );
+
+  it("waits for the gateway flag before showing setup steps", () => {
+    state.gatewayFlag = "loading";
+    render(<PrivateNetworkSection />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
+
+    expect(
+      screen.getByText("Loading the setup steps for your organization..."),
+    ).toBeTruthy();
+    expect(screen.queryByText(/"tagOwners"/)).toBeNull();
+    const submit = screen
+      .getAllByRole("button", { name: "Connect Tailscale" })
+      .at(-1)!;
+    expect((submit as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("offers a group-restricted policy behind a collapsed section", () => {
+    render(<PrivateNetworkSection />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
+
+    expect(screen.getByText(/"src": \["autogroup:member"\]/)).toBeTruthy();
+    expect(screen.queryByText(/group:speakeasy-users/)).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Limit access to a group" }),
+    );
+    expect(screen.getByText(/"src": \["group:speakeasy-users"\]/)).toBeTruthy();
+    expect(
+      screen.getByText(/"group:speakeasy-users": \["alice@example\.com"\]/),
+    ).toBeTruthy();
+    expect(screen.getAllByText(/"dst": \["svc:speakeasy"\]/)).toHaveLength(2);
+  });
+
+  it("lets admins customize the private hostname and sends it on connect", () => {
+    render(<PrivateNetworkSection />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
+
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Private hostname" }),
+      {
+        target: { value: "Acme-MCP" },
+      },
+    );
+    expect(screen.getByText("acme-mcp.<your tailnet>.ts.net")).toBeTruthy();
+    expect(
+      screen.getByText(/"svc:acme-mcp": \["tag:speakeasy"\]/),
+    ).toBeTruthy();
+    expect(screen.getByText(/"dst": \["svc:acme-mcp"\]/)).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("OAuth client ID"), {
+      target: { value: "client-id" },
+    });
+    fireEvent.change(screen.getByLabelText("OAuth client secret"), {
+      target: { value: "client-secret" },
+    });
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Connect Tailscale" }).at(-1)!,
+    );
+
+    expect(state.createMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: {
+          createIngressRequestBody: expect.objectContaining({
+            hostname: "acme-mcp",
+          }),
+        },
+      }),
+    );
+  });
+
+  it("keeps connect disabled for an invalid private hostname", () => {
+    render(<PrivateNetworkSection />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
+
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Private hostname" }),
+      {
+        target: { value: "-not-a-label" },
+      },
+    );
+    fireEvent.change(screen.getByLabelText("OAuth client ID"), {
+      target: { value: "client-id" },
+    });
+    fireEvent.change(screen.getByLabelText("OAuth client secret"), {
+      target: { value: "client-secret" },
+    });
+    const connect = screen
+      .getAllByRole("button", { name: "Connect Tailscale" })
+      .at(-1) as HTMLButtonElement;
+    expect(connect.disabled).toBe(true);
+    // The snippet keeps naming a valid service while the label is invalid.
+    expect(
+      screen.getByText(/"svc:speakeasy": \["tag:speakeasy"\]/),
+    ).toBeTruthy();
+  });
+
+  it("warns that changing the hostname later moves every MCP server", () => {
+    render(<PrivateNetworkSection />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
+
+    expect(
       screen.getByText(
-        /MCP servers opt in separately and keep their own endpoint paths/,
+        /Changing it later moves\s+every MCP server to a new address/,
       ),
     ).toBeTruthy();
+  });
+
+  it("rejects the reserved local- prefix before submit", () => {
+    vi.stubEnv("DEV", false);
+    render(<PrivateNetworkSection />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
+
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Private hostname" }),
+      { target: { value: "local-mcp" } },
+    );
+    fillCredentials();
+    const connect = screen
+      .getAllByRole("button", { name: "Connect Tailscale" })
+      .at(-1) as HTMLButtonElement;
+    expect(connect.disabled).toBe(true);
+    expect(
+      screen.getByText(/Hostnames starting with "local-" are reserved/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/"svc:speakeasy": \["tag:speakeasy"\]/),
+    ).toBeTruthy();
+  });
+
+  it("accepts a local- hostname in development builds", () => {
+    vi.stubEnv("DEV", true);
+    render(<PrivateNetworkSection />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
+
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Private hostname" }),
+      { target: { value: "local-ab12-mcp" } },
+    );
+    fillCredentials();
+    const connect = screen
+      .getAllByRole("button", { name: "Connect Tailscale" })
+      .at(-1) as HTMLButtonElement;
+    expect(connect.disabled).toBe(false);
+    expect(
+      screen.getByText(/"svc:local-ab12-mcp": \["tag:speakeasy"\]/),
+    ).toBeTruthy();
+  });
+
+  it("keeps the sheet open on the created connection's steps when they differ", async () => {
+    render(<PrivateNetworkSection />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
+    expect(
+      screen.getByText(/"svc:speakeasy": \["tag:speakeasy"\]/),
+    ).toBeTruthy();
+
+    // The browser saw the gateway flag on, but the server created the
+    // connection on the operator.
+    await act(async () => {
+      await state.createOptions?.onSuccess?.({
+        ...configuredIngress({ hostname: "speakeasy", status: "pending" }),
+        runtime: "operator",
+      });
+    });
+
+    expect(screen.getByText("Tailscale setup steps")).toBeTruthy();
+    expect(screen.getByText(/needs different Tailscale steps/)).toBeTruthy();
+    expect(
+      screen.getByText(/"tag:gram-proxy": \["tag:k8s-operator"\]/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/"tag:speakeasy"/)).toBeNull();
+    expect(screen.queryByLabelText("OAuth client ID")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(screen.queryByText("Tailscale setup steps")).toBeNull();
+  });
+
+  it("closes the sheet when the created connection matches the steps shown", async () => {
+    render(<PrivateNetworkSection />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
+
+    await act(async () => {
+      await state.createOptions?.onSuccess?.({
+        ...configuredIngress({ hostname: "speakeasy", status: "pending" }),
+        runtime: "gateway",
+      });
+    });
+
+    expect(
+      screen.queryByRole("textbox", { name: "Private hostname" }),
+    ).toBeNull();
+    expect(screen.queryByText("Tailscale setup steps")).toBeNull();
+  });
+
+  it("reopens an existing connection's steps from its runtime, not the flag", () => {
+    state.gatewayFlag = "enabled";
+    state.ingress = configuredIngress({ runtime: "operator" });
+    render(<PrivateNetworkSection />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Setup steps" }));
+
+    expect(screen.getByText("Tailscale setup steps")).toBeTruthy();
+    expect(
+      screen.getByText(/"tag:gram-proxy": \["tag:k8s-operator"\]/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/needs different Tailscale steps/)).toBeNull();
+  });
+
+  it("shows a gateway connection's steps for its real hostname", () => {
+    state.gatewayFlag = "disabled";
+    state.ingress = configuredIngress({
+      runtime: "gateway",
+      hostname: "local-ab12-private",
+    });
+    render(<PrivateNetworkSection />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Setup steps" }));
+
+    expect(
+      screen.getByText(/"svc:local-ab12-private": \["tag:speakeasy"\]/),
+    ).toBeTruthy();
+  });
+
+  it.each([
+    {
+      code: "encryption_key_unavailable",
+      text: /can.t use your organization.s encryption\s+key/,
+    },
+    {
+      code: "provider_configuration_unavailable",
+      text: /because of a problem on\s+our side/,
+    },
+  ])("explains $code without offering a retry", ({ code, text }) => {
+    state.ingress = configuredIngress({ status: "error", lastError: code });
+    render(<PrivateNetworkSection />);
+
+    expect(screen.getByText(text)).toBeTruthy();
+    expect(screen.queryByText(/Tailscale could not be connected/)).toBeNull();
+    expect(screen.queryByText(/Latest check:/)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Retry provisioning" }),
+    ).toBeNull();
+    expect(screen.getByRole("link", { name: "Contact support" })).toBeTruthy();
+  });
+
+  it.each([
+    { code: "encryption_key_unavailable", interval: 30_000 },
+    { code: "provider_configuration_unavailable", interval: false },
+  ])("polls $code every $interval", ({ code, interval }) => {
+    state.ingress = configuredIngress({ status: "error", lastError: code });
+    render(<PrivateNetworkSection />);
+
+    expect(
+      state.ingressOptions?.refetchInterval?.({
+        state: { data: { ingress: { status: "error", lastError: code } } },
+      }),
+    ).toBe(interval);
   });
 
   it("closes a setup draft when an unsupported provider arrives", () => {
     const { rerender } = render(<PrivateNetworkSection />);
     fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
-    expect(
-      screen.getByRole("textbox", { name: "Organization private hostname" }),
-    ).toBeTruthy();
+    expect(screen.getByText("speakeasy.<your tailnet>.ts.net")).toBeTruthy();
     state.ingress = {
       id: "ingress-1",
       organizationId: "org-1",
@@ -287,9 +650,7 @@ describe("PrivateNetworkSection", () => {
       updatedAt: new Date(0),
     };
     rerender(<PrivateNetworkSection />);
-    expect(
-      screen.queryByRole("textbox", { name: "Organization private hostname" }),
-    ).toBeNull();
+    expect(screen.queryByText("speakeasy.<your tailnet>.ts.net")).toBeNull();
   });
 
   it.each([
@@ -384,6 +745,139 @@ describe("PrivateNetworkSection", () => {
     expect(state.deleteMutate).toHaveBeenCalledWith({
       security: { sessionHeaderGramSession: "" },
     });
+  });
+
+  it("tells admins how to approve the gateway when the tailnet has not", () => {
+    state.ingress = {
+      id: "ingress-1",
+      organizationId: "org-1",
+      provider: "tailscale",
+      hostname: "private-mcp",
+      endpointNamespaceKind: "platform",
+      enabled: true,
+      identityRequired: false,
+      credentialsConfigured: true,
+      status: "error",
+      lastError: "provider_service_not_approved",
+      createdAt: new Date(0),
+      updatedAt: new Date(1_000),
+    };
+
+    render(<PrivateNetworkSection />);
+
+    expect(screen.getByText(/hasn.t approved Speakeasy to host/)).toBeTruthy();
+    expect(screen.getByText("svc:private-mcp")).toBeTruthy();
+    expect(
+      screen.getByText(/"svc:private-mcp": \["tag:speakeasy"\]/),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Open Tailscale services" })
+        .getAttribute("href"),
+    ).toBe("https://login.tailscale.com/admin/services");
+    expect(screen.queryByText(/Latest check:/)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Retry provisioning" }),
+    ).toBeNull();
+    expect(
+      state.ingressOptions?.refetchInterval?.({
+        state: {
+          data: {
+            ingress: {
+              status: "error",
+              lastError: "provider_service_not_approved",
+            },
+          },
+        },
+      }),
+    ).toBe(10_000);
+    expect(
+      state.ingressOptions?.refetchInterval?.({
+        state: { data: { ingress: { status: "online" } } },
+      }),
+    ).toBe(false);
+  });
+
+  it("names the environment's gateway tag when asking for approval", () => {
+    state.gatewayTag = "tag:speakeasy-dev";
+    state.ingress = configuredIngress({
+      hostname: "private-mcp",
+      status: "error",
+      lastError: "provider_service_not_approved",
+    });
+
+    render(<PrivateNetworkSection />);
+
+    expect(
+      screen.getByText(/"svc:private-mcp": \["tag:speakeasy-dev"\]/),
+    ).toBeTruthy();
+  });
+
+  it("explains a missing certificate and waits instead of offering a retry", () => {
+    state.ingress = {
+      id: "ingress-1",
+      organizationId: "org-1",
+      provider: "tailscale",
+      hostname: "private-mcp",
+      endpointNamespaceKind: "platform",
+      enabled: true,
+      identityRequired: false,
+      credentialsConfigured: true,
+      status: "error",
+      lastError: "provider_certificate_unavailable",
+      createdAt: new Date(0),
+      updatedAt: new Date(1_000),
+    };
+
+    render(<PrivateNetworkSection />);
+
+    expect(
+      screen.getByText(/couldn.t get\s+a valid HTTPS certificate for/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Latest attempt:/)).toBeNull();
+    expect(screen.queryByText(/Latest check:/)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Retry provisioning" }),
+    ).toBeNull();
+    expect(
+      state.ingressOptions?.refetchInterval?.({
+        state: {
+          data: {
+            ingress: {
+              status: "error",
+              lastError: "provider_certificate_unavailable",
+            },
+          },
+        },
+      }),
+    ).toBe(30_000);
+  });
+
+  it("names why the certificate request was refused", () => {
+    state.ingress = {
+      id: "ingress-1",
+      organizationId: "org-1",
+      provider: "tailscale",
+      hostname: "private-mcp",
+      endpointNamespaceKind: "platform",
+      enabled: true,
+      identityRequired: false,
+      credentialsConfigured: true,
+      status: "error",
+      lastError: "provider_certificate_unavailable",
+      statusDetail:
+        "Let's Encrypt is rate limiting new certificates for this tailnet; retrying after 2026-11-12 22:53 UTC",
+      createdAt: new Date(0),
+      updatedAt: new Date(1_000),
+    };
+
+    render(<PrivateNetworkSection />);
+
+    expect(
+      screen.getByText(
+        "Latest attempt: Let's Encrypt is rate limiting new certificates for this tailnet; retrying after 2026-11-12 22:53 UTC",
+      ),
+    ).toBeTruthy();
   });
 
   it("keeps cached cleanup controls visible when polling fails", () => {

@@ -231,6 +231,18 @@ func scrubRawPayload(raw json.RawMessage, provider agenthooks.Provider) json.Raw
 		delete(obj, openclawMCPServersField)
 		changed = true
 	}
+	// Vibe nests the full tool arguments and results in top-level fields. The
+	// canonical Data already carries them (subject to the server-side
+	// redaction there), so the raw echo drops them rather than persisting a
+	// second, unredacted copy.
+	if provider == ProviderVibe {
+		for _, key := range []string{"tool_input", "tool_output", "tool_output_text", "tool_error"} {
+			if _, ok := obj[key]; ok {
+				delete(obj, key)
+				changed = true
+			}
+		}
+	}
 	if !changed {
 		return raw
 	}
@@ -375,12 +387,19 @@ func sessionOf(base *agenthooks.Event) *components.HookIngestSession {
 		turnID = agentTurnPrefix + adapterSlug(base.Provider) + ":" + turnID
 	}
 	s := &components.HookIngestSession{
-		ID:     optStr(base.Session.ID),
-		TurnID: optStr(turnID),
-		Cwd:    optStr(base.Session.CWD),
-		Model:  optStr(base.Session.Model),
+		ID:      optStr(base.Session.ID),
+		TurnID:  optStr(turnID),
+		Cwd:     optStr(base.Session.CWD),
+		Model:   optStr(base.Session.Model),
+		Surface: nil,
 	}
-	if s.ID == nil && s.TurnID == nil && s.Cwd == nil && s.Model == nil {
+	// The server handles Cowork events differently: their rows share keys
+	// with the transcript the Stop hook ships, and a warned prompt is
+	// confirmed by sending it again because Cowork cannot show the link.
+	if inCoworkVM(base) {
+		s.Surface = new(coworkSurface)
+	}
+	if s.ID == nil && s.TurnID == nil && s.Cwd == nil && s.Model == nil && s.Surface == nil {
 		return nil
 	}
 	return s

@@ -45,7 +45,7 @@ func TestHostedServerIssuerMoveAssociatesSoleConsumerClientsUnderEnforcement(t *
 			})
 			require.NoError(t, err)
 
-			issuer := uuid.MustParse(createShimIssuer(t, ctx, ti, "hosted-capture-"+uuid.NewString()[:8]))
+			issuer := createProjectIssuer(t, ctx, ti, "hosted-capture-"+uuid.NewString()[:8])
 			setIssuer := func(name string) uuid.UUID {
 				toolset := createMinimalPublicToolset(t, ctx, ti, name)
 				_, err := ti.service.UpdateHostedServer(ctx, hostedUpdate(toolset, "public", func(u *mcpservers.HostedServerUpdate) {

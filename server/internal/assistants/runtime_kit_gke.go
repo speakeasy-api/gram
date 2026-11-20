@@ -65,7 +65,7 @@ type KitGKEProvisionInput struct {
 	InferenceEndpoint                        string
 	WorkloadServiceAccount, WorkloadAudience string
 	Identity                                 KitGKEIdentity
-	Model                                    string
+	Model, ReasoningEffort                   string
 	Name, Image, IngressCIDR                 string
 	GuestPort                                int32
 	Command, Args                            []string
@@ -99,7 +99,7 @@ func kitObject(kind, version, name string, i KitGKEIdentity) *unstructured.Unstr
 // RenderKitGKEProvision is pure. Returned objects contain credentials and must
 // never be logged. KitGKERuntimeBackend.Ensure creates them in Secret -> Template -> WarmPool -> Claim order.
 //
-//nolint:exhaustruct,exhaustive // Only renderer-defined Kubernetes fields and CPU/memory budgets are set; optional fields retain API defaults.
+//nolint:exhaustruct_v5,exhaustive // Only renderer-defined Kubernetes fields and CPU/memory budgets are set; optional fields retain API defaults.
 func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	var out KitGKEObjects
 	if err := in.validate(); err != nil {
@@ -135,7 +135,7 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	if err := validateKitGatewayCommand(in.Command, in.Args, int(in.GuestPort)); err != nil {
 		return out, err
 	}
-	bootstrap := KitLocalBootstrap{Model: in.Model, Workload: in.Workload, AssertionFile: KitWorkloadAssertionPath, InferenceEndpoint: in.InferenceEndpoint, AgentsMD: in.AgentsMD, MCPJSON: in.MCPJSON, GatewayToken: in.GatewayToken}
+	bootstrap := KitLocalBootstrap{Model: in.Model, ReasoningEffort: in.ReasoningEffort, Workload: in.Workload, AssertionFile: KitWorkloadAssertionPath, InferenceEndpoint: in.InferenceEndpoint, AgentsMD: in.AgentsMD, MCPJSON: in.MCPJSON, GatewayToken: in.GatewayToken}
 	if err := validateKitBootstrap(bootstrap); err != nil {
 		return out, err
 	}

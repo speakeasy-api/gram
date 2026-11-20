@@ -102,21 +102,30 @@ func TestFindMCPToolRequiresProjectAuthContext(t *testing.T) {
 	require.ErrorContains(t, err, "project auth context")
 }
 
-func TestGetMCPToolRequiresBothIDs(t *testing.T) {
+func TestGetMCPToolRequiresMCPID(t *testing.T) {
 	t.Parallel()
-	ctx := orgAuthContext(t, "org_123", nil)
+	projectID := uuid.New()
+	ctx := orgAuthContext(t, "org_123", &projectID)
 	var out bytes.Buffer
-	err := NewGetMCPTool(&stubReader{}).Call(ctx, testToolCallEnv(), bytes.NewBufferString(`{"project_id":"p1"}`), &out)
-	require.ErrorContains(t, err, "project_id and mcp_id are required")
+	err := NewGetMCPTool(&stubReader{}).Call(ctx, testToolCallEnv(), bytes.NewBufferString(`{}`), &out)
+	require.ErrorContains(t, err, "mcp_id is required")
 }
 
-func TestGetMCPToolReturnsReaderOutput(t *testing.T) {
+func TestGetMCPToolRequiresProjectAuthContext(t *testing.T) {
 	t.Parallel()
-	reader := &stubReader{getOutput: platformmcp.MCP{ID: "m1", ProjectID: "p1", Name: "My MCP", Slug: "my-mcp", Visibility: "private", Model: "legacy", Readiness: platformmcp.MCPReadiness{State: "unsupported"}}}
-	ctx := orgAuthContext(t, "org_123", nil)
 	var out bytes.Buffer
-	require.NoError(t, NewGetMCPTool(reader).Call(ctx, testToolCallEnv(), bytes.NewBufferString(`{"project_id":"p1","mcp_id":"m1"}`), &out))
-	require.Equal(t, platformmcp.GetMCPInput{ProjectID: "p1", MCPID: "m1"}, reader.getInput)
+	err := NewGetMCPTool(&stubReader{}).Call(orgAuthContext(t, "org_123", nil), testToolCallEnv(), bytes.NewBufferString(`{"mcp_id":"m1"}`), &out)
+	require.ErrorContains(t, err, "project auth context")
+}
+
+func TestGetMCPToolPinsAssistantProject(t *testing.T) {
+	t.Parallel()
+	projectID := uuid.New()
+	reader := &stubReader{getOutput: platformmcp.MCP{ID: "m1", ProjectID: projectID.String(), Name: "My MCP", Slug: "my-mcp", Visibility: "private", Model: "legacy", Readiness: platformmcp.MCPReadiness{State: "unsupported"}}}
+	ctx := orgAuthContext(t, "org_123", &projectID)
+	var out bytes.Buffer
+	require.NoError(t, NewGetMCPTool(reader).Call(ctx, testToolCallEnv(), bytes.NewBufferString(`{"project_id":"another-project","mcp_id":"m1"}`), &out))
+	require.Equal(t, platformmcp.GetMCPInput{ProjectID: projectID.String(), MCPID: "m1"}, reader.getInput)
 }
 
 // A stale tool_cursor fails with a code the caller can recognise, the same
@@ -136,9 +145,10 @@ func TestGetMCPToolFailsAToolCursorRefusalWithItsCode(t *testing.T) {
 			reader := &stubReader{getErr: fmt.Errorf("read platform MCP tool exposure: %w", &platformmcp.MCPToolExposureError{
 				Code: tc.exposureCode, Message: "read the server again", Cause: platformmcp.ErrMCPToolExposureConflict,
 			})}
-			ctx := orgAuthContext(t, "org_123", nil)
+			projectID := uuid.New()
+			ctx := orgAuthContext(t, "org_123", &projectID)
 			var out bytes.Buffer
-			err := NewGetMCPTool(reader).Call(ctx, testToolCallEnv(), bytes.NewBufferString(`{"project_id":"p1","mcp_id":"m1","tool_cursor":"stale"}`), &out)
+			err := NewGetMCPTool(reader).Call(ctx, testToolCallEnv(), bytes.NewBufferString(`{"mcp_id":"m1","tool_cursor":"stale"}`), &out)
 			require.Equal(t, "stale", reader.getInput.ToolCursor)
 			shareable, ok := errors.AsType[*oops.ShareableError](err)
 			require.True(t, ok, "a cursor refusal is an error, not a result body")
@@ -152,9 +162,10 @@ func TestGetMCPToolFailsAToolCursorRefusalWithItsCode(t *testing.T) {
 func TestGetMCPToolKeepsOtherReadFailuresAsErrors(t *testing.T) {
 	t.Parallel()
 	reader := &stubReader{getErr: platformmcp.ErrUnavailable}
-	ctx := orgAuthContext(t, "org_123", nil)
+	projectID := uuid.New()
+	ctx := orgAuthContext(t, "org_123", &projectID)
 	var out bytes.Buffer
-	require.ErrorIs(t, NewGetMCPTool(reader).Call(ctx, testToolCallEnv(), bytes.NewBufferString(`{"project_id":"p1","mcp_id":"m1"}`), &out), platformmcp.ErrUnavailable)
+	require.ErrorIs(t, NewGetMCPTool(reader).Call(ctx, testToolCallEnv(), bytes.NewBufferString(`{"mcp_id":"m1"}`), &out), platformmcp.ErrUnavailable)
 	require.Zero(t, out.Len())
 }
 

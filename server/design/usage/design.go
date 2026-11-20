@@ -561,26 +561,6 @@ var _ = Service("usage", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "createCustomerSession"}`)
 	})
 
-	Method("createCheckout", func() {
-		Description("Create a checkout link for upgrading to the business plan")
-
-		Payload(func() {
-			security.SessionPayload()
-		})
-
-		Result(String)
-
-		HTTP(func() {
-			POST("/rpc/usage.createCheckout")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "createCheckout")
-		Meta("openapi:extension:x-speakeasy-name-override", "createCheckout")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "createCheckout"}`)
-	})
-
 	Method("getStripeCheckoutStatus", func() {
 		Description("Read the current status of a Stripe Checkout session owned by the active organization")
 		Payload(func() {

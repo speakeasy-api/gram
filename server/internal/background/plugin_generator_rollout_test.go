@@ -30,6 +30,8 @@ func TestPluginGeneratorRolloutWorkflow_ContinueAsNewCarriesPaginationCursor(t *
 	t.Parallel()
 
 	var suite testsuite.WorkflowTestSuite
+	metrics := newPublishOutcomeMetrics()
+	suite.SetMetricsHandler(metrics)
 	env := suite.NewTestWorkflowEnvironment()
 	registerPluginRolloutRepairNoop(env)
 
@@ -81,6 +83,7 @@ func TestPluginGeneratorRolloutWorkflow_ContinueAsNewCarriesPaginationCursor(t *
 	require.NotNil(t, nextInput.AfterProjectID)
 	require.Equal(t, id2, *nextInput.AfterProjectID, "cursor must advance to the last project of the processed page")
 	require.Equal(t, PluginGeneratorRolloutResult{Scanned: 2, Published: 2, Skipped: 0, Failed: 0}, nextInput.Carried)
+	require.Equal(t, map[string]int64{"published": 2}, metrics.counts.values, "count each project once, not the rollout or continuation")
 }
 
 // A continued run is started with the carried cursor and tallies. It must

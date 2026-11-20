@@ -17,11 +17,20 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Row, Section } from "./PanelSection";
+import {
+  REASONING_EFFORT_LABELS,
+  REASONING_EFFORT_HELP,
+  KIT_REASONING_EFFORT_HELP,
+  type ReasoningEffort,
+  reasoningEffortOrDefault,
+} from "./reasoning-effort";
+import { ReasoningEffortSelect } from "./ReasoningEffortSelect";
 import { AssistantRuntimeSettings } from "./AssistantRuntimeSettings";
 
 type OverviewDraft = {
   name: string;
   model: string;
+  reasoningEffort: ReasoningEffort;
   maxConcurrency: string;
   warmTtlSeconds: string;
 };
@@ -30,6 +39,7 @@ function draftFromAssistant(assistant: Assistant): OverviewDraft {
   return {
     name: assistant.name,
     model: assistant.model,
+    reasoningEffort: reasoningEffortOrDefault(assistant.reasoningEffort),
     maxConcurrency: String(assistant.maxConcurrency),
     warmTtlSeconds: String(assistant.warmTtlSeconds),
   };
@@ -59,6 +69,8 @@ export function AssistantOverviewSettings({
 
   const [draft, setDraft] = useState<OverviewDraft | null>(null);
   const editing = draft !== null;
+  const isKit = assistant.runtimeVersion === 3;
+  const incompatibleReasoning = isKit && draft?.reasoningEffort === "none";
 
   const update = useAssistantsUpdateMutation({
     onSuccess: () => {
@@ -74,6 +86,8 @@ export function AssistantOverviewSettings({
     editing &&
     (draft.name.trim() !== assistant.name ||
       draft.model !== assistant.model ||
+      draft.reasoningEffort !==
+        reasoningEffortOrDefault(assistant.reasoningEffort) ||
       draft.maxConcurrency !== String(assistant.maxConcurrency) ||
       draft.warmTtlSeconds !== String(assistant.warmTtlSeconds));
 
@@ -82,6 +96,9 @@ export function AssistantOverviewSettings({
   };
 
   const validate = (current: OverviewDraft): string | null => {
+    if (isKit && current.reasoningEffort === "none") {
+      return KIT_REASONING_EFFORT_HELP;
+    }
     if (current.name.trim() === "") {
       return "Name cannot be empty";
     }
@@ -107,7 +124,7 @@ export function AssistantOverviewSettings({
   };
 
   const save = () => {
-    if (!draft) return;
+    if (!draft || !canWrite || update.isPending) return;
     const problem = validate(draft);
     if (problem) {
       toast.error(problem);
@@ -116,6 +133,7 @@ export function AssistantOverviewSettings({
     const form: Omit<UpdateAssistantForm, "id"> = {
       name: draft.name.trim(),
       model: draft.model,
+      reasoningEffort: draft.reasoningEffort,
       maxConcurrency: Number(draft.maxConcurrency),
       warmTtlSeconds: Number(draft.warmTtlSeconds),
     };
@@ -150,7 +168,7 @@ export function AssistantOverviewSettings({
           size="sm"
           className="h-auto px-2 py-0.5 text-xs"
           onClick={save}
-          disabled={update.isPending}
+          disabled={update.isPending || incompatibleReasoning}
         >
           {update.isPending ? (
             <Spinner className="mr-0 h-3 w-3" label="Saving" />
@@ -217,6 +235,27 @@ export function AssistantOverviewSettings({
           <Text small>{modelLabel(assistant.model)}</Text>
         )}
       </Row>
+      <Row label="Reasoning effort">
+        {editing ? (
+          <ReasoningEffortSelect
+            disabledOff={isKit}
+            value={draft.reasoningEffort}
+            onValueChange={setField("reasoningEffort")}
+            disabled={update.isPending || !canWrite}
+          />
+        ) : (
+          <Text small>
+            {
+              REASONING_EFFORT_LABELS[
+                reasoningEffortOrDefault(assistant.reasoningEffort)
+              ]
+            }
+          </Text>
+        )}
+      </Row>
+      <Text small muted>
+        {isKit ? KIT_REASONING_EFFORT_HELP : REASONING_EFFORT_HELP}
+      </Text>
       <Row label="Owner">
         <AssistantOwner
           createdByUserId={assistant.createdByUserId}

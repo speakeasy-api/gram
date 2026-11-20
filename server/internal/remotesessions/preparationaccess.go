@@ -16,11 +16,11 @@ func (s *Service) preparationTenant(ctx context.Context, write bool) (uuid.UUID,
 	if !ok || a == nil || a.ProjectID == nil || *a.ProjectID == uuid.Nil || a.ActiveOrganizationID == "" {
 		return uuid.Nil, "", oops.C(oops.CodeUnauthorized)
 	}
-	scope := authz.ScopeProjectRead
+	check := authz.Project(authz.ProjectIDOf(*a.ProjectID)).Read()
 	if write {
-		scope = authz.ScopeProjectWrite
+		check = authz.Project(authz.ProjectIDOf(*a.ProjectID)).Write()
 	}
-	if err := s.authz.Require(ctx, authz.Check{ResourceKind: "", Dimensions: nil, Scope: scope, ResourceID: a.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, check); err != nil {
 		return uuid.Nil, "", err
 	}
 	return *a.ProjectID, a.ActiveOrganizationID, nil

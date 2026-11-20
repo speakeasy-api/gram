@@ -70,23 +70,24 @@ func TestDashboardToolErrorsAreReadable(t *testing.T) {
 func TestDashboardToolsWithoutAServiceAnswerUnavailable(t *testing.T) {
 	t.Parallel()
 
+	project := uuid.NewString()
 	reg := newRegistrar(newTestMCPServer())
+	reg.withProjects(slugProjects{"payments": uuid.MustParse(project)})
 	registerDashboardTools(reg, nil)
 	ctx := contextWithPrincipal(t.Context(), testPrincipal())
-	project := uuid.NewString()
 	// A create, a copy and an added card make another row per confirmed key.
 	idempotent := map[string]bool{
 		listDashboardsToolName: true, getDashboardToolName: true, deleteDashboardToolName: true, saveDashboardFiltersToolName: true,
 		saveDashboardToolName: false, duplicateDashboardToolName: false, editDashboardLayoutToolName: false,
 	}
 	for name, arguments := range map[string]string{
-		listDashboardsToolName:       `{"project_id":"` + project + `"}`,
-		getDashboardToolName:         `{"project_id":"` + project + `","dashboard_id":"mcp-tools"}`,
-		saveDashboardToolName:        `{"project_id":"` + project + `","name":"Usage","confirmed":false}`,
-		duplicateDashboardToolName:   `{"project_id":"` + project + `","dashboard_id":"mcp-tools","confirmed":false}`,
-		deleteDashboardToolName:      `{"project_id":"` + project + `","dashboard_id":"` + project + `","confirmed":false}`,
-		editDashboardLayoutToolName:  `{"project_id":"` + project + `","dashboard_id":"` + project + `","operations":[{"op":"remove_card","placement_id":"` + project + `"}],"confirmed":false}`,
-		saveDashboardFiltersToolName: `{"project_id":"` + project + `","dashboard_id":"` + project + `","filters":{},"confirmed":false}`,
+		listDashboardsToolName:       `{"project_slug":"payments"}`,
+		getDashboardToolName:         `{"project_slug":"payments","dashboard_id":"mcp-tools"}`,
+		saveDashboardToolName:        `{"project_slug":"payments","name":"Usage","confirmed":false}`,
+		duplicateDashboardToolName:   `{"project_slug":"payments","dashboard_id":"mcp-tools","confirmed":false}`,
+		deleteDashboardToolName:      `{"project_slug":"payments","dashboard_id":"` + project + `","confirmed":false}`,
+		editDashboardLayoutToolName:  `{"project_slug":"payments","dashboard_id":"` + project + `","operations":[{"op":"remove_card","placement_id":"` + project + `"}],"confirmed":false}`,
+		saveDashboardFiltersToolName: `{"project_slug":"payments","dashboard_id":"` + project + `","filters":{},"confirmed":false}`,
 	} {
 		descriptor := descriptorByName(t, reg, name)
 		require.Equal(t, externalOnly, descriptor.Meta.Audiences, name)

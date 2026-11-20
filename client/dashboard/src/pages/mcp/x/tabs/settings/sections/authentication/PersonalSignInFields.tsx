@@ -5,12 +5,14 @@ import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
 import { IssuerLogo, RadioRows } from "@/lib/remote-identity";
 import { useRoutes } from "@/routes";
+import { Check, Loader2 } from "lucide-react";
 import { Link } from "react-router";
 import { AuthorizationServerSelect } from "./AuthorizationServerSelect";
 import { ClientTypeFields, OverridesFields } from "./IssuerFormFields";
 import { TUNNELED_DCR_PERMISSION_MESSAGE } from "./issuerFormUtils";
 import { StartingClientFields } from "./StartingClientFields";
 import type {
+  DetectedSignIn,
   PersonalSignInDraft,
   PersonalSignInSource,
 } from "./usePersonalSignInDraft";
@@ -28,6 +30,10 @@ export function PersonalSignInFields({
 }): JSX.Element {
   const routes = useRoutes();
   const f = draft.fields;
+  const { detected } = f;
+  const detectedInUse =
+    (detected.state === "existing" || detected.state === "new") &&
+    detected.inUse;
   const { signIns } = f;
   const picked = f.templates.find(
     (choice) => choice.registration.id === f.templateId,
@@ -108,7 +114,7 @@ export function PersonalSignInFields({
   return (
     <div className="space-y-4">
       <RadioRows
-        label="Sign-in"
+        label="Sign-in (required)"
         value={f.source}
         onValueChange={(value) => f.setSource(value as PersonalSignInSource)}
         rows={[
@@ -129,7 +135,9 @@ export function PersonalSignInFields({
       {f.source === "existing" ? (
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="credential-starting-sign-in">Start from</Label>
+            <Label htmlFor="credential-starting-sign-in">
+              Start from (required)
+            </Label>
             {existingBody}
             {!signIns.isLoading &&
             !signIns.isError &&
@@ -182,18 +190,30 @@ export function PersonalSignInFields({
             selectedIssuer={f.issuer}
             pickFailed={f.issuerFailed}
             onChange={f.selectIssuer}
+            hint={
+              detected.state === "none" ? undefined : (
+                <DetectedNote detected={detected} onUse={f.useDetected} />
+              )
+            }
+            pendingLabel={
+              detected.state === "new" && detected.inUse
+                ? `${detected.serviceName} — ${detected.issuer}`
+                : undefined
+            }
           />
-          <Text muted small className="block">
-            Not listed? Add it in{" "}
-            <Link
-              className="font-medium underline underline-offset-2"
-              to={routes.remoteIdentityProviders.href()}
-            >
-              Authorization Servers
-            </Link>
-            , then come back.
-          </Text>
-          {f.issuer ? (
+          {detectedInUse ? null : (
+            <Text muted small className="block">
+              Not listed? Add it in{" "}
+              <Link
+                className="font-medium underline underline-offset-2"
+                to={routes.remoteIdentityProviders.href()}
+              >
+                Authorization Servers
+              </Link>
+              , then come back.
+            </Text>
+          )}
+          {f.issuer || (detected.state === "new" && detected.inUse) ? (
             <>
               <ClientTypeFields
                 availableTypes={f.clientTypes}
@@ -217,5 +237,51 @@ export function PersonalSignInFields({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * What the MCP server advertises about its sign-in, beside the authorization
+ * server picker: confirmation when the picker holds it, and a way back to it
+ * when someone picked another.
+ */
+function DetectedNote({
+  detected,
+  onUse,
+}: {
+  detected: DetectedSignIn;
+  onUse: () => void;
+}): JSX.Element | null {
+  if (detected.state === "none") return null;
+  if (detected.state === "checking") {
+    return (
+      <Text muted small className="flex items-center gap-1.5">
+        <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+        Checking which authorization server this server uses…
+      </Text>
+    );
+  }
+  if (!detected.inUse) {
+    return (
+      <Text muted small className="block">
+        This server advertises{" "}
+        {detected.state === "new" ? detected.serviceName : detected.name}.{" "}
+        <button
+          type="button"
+          className="font-medium underline underline-offset-2"
+          onClick={onUse}
+        >
+          Use it instead
+        </button>
+      </Text>
+    );
+  }
+  return (
+    <Text muted small className="flex items-start gap-1.5">
+      <Check aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+      {detected.state === "new"
+        ? `Detected from this server. ${detected.serviceName} isn't set up yet, so it's added to Authorization Servers when you save.`
+        : "Detected from this server."}
+    </Text>
   );
 }

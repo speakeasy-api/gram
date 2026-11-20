@@ -15,6 +15,8 @@ import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { ChatLaunchOverlay } from "./chat-launch-overlay.tsx";
 import { InsightsProvider } from "./insights-dock.tsx";
 import { OrgSidebar } from "./org-sidebar.tsx";
+import { AccessRequestWatcher } from "./access-request-watcher.tsx";
+import { TemporaryAccessPanel } from "./temporary-access-panel.tsx";
 import {
   SidePanelProvider,
   SidePanelSurface,
@@ -59,7 +61,14 @@ export const LoginCheck = (): JSX.Element => {
     return <Navigate to={authPagePath("/sign-up", location)} />;
   }
 
-  return <Outlet />;
+  // Every signed-in page, inside the app layout or not, hears when one of
+  // the viewer's access requests is decided.
+  return (
+    <>
+      <Outlet />
+      <AccessRequestWatcher />
+    </>
+  );
 };
 
 export const AppLayout = (): JSX.Element => {
@@ -197,6 +206,7 @@ const AppLayoutContent = ({
       {/* Above the outlet so the suggestion → chat bubble morph survives the
           navigation into the chat route. */}
       <ChatLaunchOverlay />
+      <TemporaryAccessPanel />
     </div>
   );
 };
@@ -291,6 +301,7 @@ export const OrgLayout = (): JSX.Element => {
             </MembershipSyncGuard>
           </SidebarInset>
         </ModeSurface>
+        <TemporaryAccessPanel />
       </div>
     </SidebarProvider>
   );

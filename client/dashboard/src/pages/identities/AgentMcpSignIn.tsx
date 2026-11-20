@@ -2,7 +2,7 @@ import { toast } from "sonner";
 
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Button } from "@/components/ui/Button";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { CredentialsWizard } from "@/pages/agents/credentials/CredentialsWizard";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import {

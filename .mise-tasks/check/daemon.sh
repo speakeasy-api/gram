@@ -17,7 +17,7 @@ probe_address() {
 }
 
 # Most probe targets below are plain-HTTP-only regardless of GRAM_HTTP_SCHEME:
-# the Go/Python control servers and mock-oidc never enable TLS. The Vite dev
+# the Go/Python control servers, mock-oidc and mock-mcp never enable TLS. The Vite dev
 # servers (dashboard, admin-dashboard) and dev-idp's public listener serve TLS
 # when GRAM_SSL_* is configured. Both Vite servers bind GRAM_BIND_IP, which is
 # not loopback under zero:tailscale, so they are probed at the host their TLS
@@ -32,6 +32,9 @@ case "$usage_name" in
     ;;
   mock-oidc)
     mise run check:http --url "http://$(probe_address "${MOCK_OIDC_ADDRESS:-localhost:$GRAM_ADMIN_OIDC_EMULATOR_PORT}")/healthz"
+    ;;
+  mock-mcp)
+    mise run check:http --url "http://$(probe_address "${GRAM_MOCK_MCP_ADDRESS:-localhost:$GRAM_MOCK_MCP_PORT}")/healthz"
     ;;
   server)
     mise run check:http --url "http://$(probe_address "${GRAM_CONTROL_ADDRESS:-localhost:$GRAM_CONTROL_PORT}")/healthz"
@@ -59,6 +62,17 @@ case "$usage_name" in
     ;;
   tunnel-gateway)
     mise run check:http --url "http://localhost:$TUNNEL_GATEWAY_PUBLIC_PORT/healthz"
+    ;;
+  tailnet-gateway)
+    mise run check:http --url "http://$(probe_address "${GRAM_TAILNET_GATEWAY_CONTROL_ADDRESS:-localhost:${GRAM_TAILNET_GATEWAY_CONTROL_PORT:-8093}}")/readyz"
+    ;;
+  # Both bind loopback at their control ports (see their start tasks). The
+  # listener's /healthz also reviews the gateway's local attestation token.
+  network-ingress-server)
+    mise run check:http --url "http://127.0.0.1:$GRAM_NETINGRESS_CONTROL_PORT/healthz"
+    ;;
+  network-ingress-worker)
+    mise run check:http --url "http://127.0.0.1:$GRAM_NETWORK_INGRESS_WORKER_CONTROL_PORT/healthz"
     ;;
   *)
     echo "error: unknown daemon name: $usage_name" >&2

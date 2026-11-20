@@ -117,6 +117,37 @@ func TestDNSTarget(t *testing.T) {
 	}
 }
 
+func TestParseDNSTarget(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		suffix    string
+		target    string
+		wantToken string
+		wantOK    bool
+	}{
+		{name: "token under suffix", suffix: "domains.speakeasy.com", target: "abcde23456.domains.speakeasy.com", wantToken: "abcde23456", wantOK: true},
+		{name: "short infrastructure label", suffix: "domains.speakeasy.com", target: "us1.domains.speakeasy.com", wantToken: "", wantOK: false},
+		{name: "label outside the token alphabet", suffix: "domains.speakeasy.com", target: "abcde23458.domains.speakeasy.com", wantToken: "", wantOK: false},
+		{name: "label longer than a token", suffix: "domains.speakeasy.com", target: "abcde234567.domains.speakeasy.com", wantToken: "", wantOK: false},
+		{name: "suffix unset", suffix: "", target: "abcde23456.domains.speakeasy.com", wantToken: "", wantOK: false},
+		{name: "suffix itself", suffix: "domains.speakeasy.com", target: "domains.speakeasy.com", wantToken: "", wantOK: false},
+		{name: "nested label", suffix: "domains.speakeasy.com", target: "abcde23456.dev.domains.speakeasy.com", wantToken: "", wantOK: false},
+		{name: "different parent", suffix: "domains.speakeasy.com", target: "abcde23456.domains.example.com", wantToken: "", wantOK: false},
+		{name: "suffix as label tail", suffix: "domains.speakeasy.com", target: "abcde23456xdomains.speakeasy.com", wantToken: "", wantOK: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			token, ok := customdomains.ParseDNSTarget(tc.suffix, tc.target)
+			require.Equal(t, tc.wantOK, ok)
+			require.Equal(t, tc.wantToken, token)
+		})
+	}
+}
+
 func TestEnsureDNSTargetToken_AssignsMissingToken(t *testing.T) {
 	t.Parallel()
 

@@ -165,12 +165,18 @@ func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, s
 		if enabledState != "enabled" {
 			mcp.Readiness = MCPReadiness{State: "unknown", CheckedAt: "", ExpiresAt: ""}
 		}
-		mcp.Operations = []string{"read", "dashboard_setup", "update_mcp_metadata"}
-		switch visibility {
-		case "disabled":
-			mcp.Operations = append(mcp.Operations, "enable_mcp")
-		case "private":
-			mcp.Operations = append(mcp.Operations, "disable_mcp")
+		mcp.Operations = []string{"read", "dashboard_setup"}
+		// The registration record is not serialized, so operations carry its
+		// completion: lifecycle writes refuse a pending or incomplete
+		// registration, and listing them would tell an agent the server is set up.
+		if mcp.Registration.Status == registrationStatusRegistered && mcp.Registration.ComponentsComplete {
+			mcp.Operations = append(mcp.Operations, "update_mcp_metadata")
+			switch visibility {
+			case "disabled":
+				mcp.Operations = append(mcp.Operations, "enable_mcp")
+			case "private":
+				mcp.Operations = append(mcp.Operations, "disable_mcp")
+			}
 		}
 		mcp.DashboardPath = "dashboard_mcp_settings"
 	case model == "dashboard_managed":

@@ -7,7 +7,9 @@ import {
   render,
   screen,
   within,
+  waitFor,
 } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IdentityChainingField } from "./IdentityChainingField";
@@ -33,29 +35,45 @@ const state = vi.hoisted(() => ({
   orgAdmin: true,
   orgRead: true,
   projectWrite: true,
-  oktaView: true,
   calls: [] as string[],
   prepare: vi.fn(),
   unlink: vi.fn(),
   prepareResult: undefined as Record<string, unknown> | undefined,
   oktaIssuerId: undefined as string | undefined,
+  realQueries: false,
+  readEMA: vi.fn(),
 }));
-vi.mock("@tanstack/react-query", () => ({
-  useQuery: ({ queryKey }: { queryKey: unknown[] }) =>
-    queryKey[3] === "stale"
-      ? {
-          isFetching: false,
-          data: (queryKey[6] as string[]).map((id) => staleRead.byIssuer[id]),
-        }
-      : { isFetching: false, data: read.data, error: read.error },
-  useQueryClient: () => ({
-    setQueryData: (
-      _key: unknown,
-      next: (prev: Record<string, unknown>) => Record<string, unknown>,
-    ) => {
-      read.data = next(read.data);
+vi.mock("@tanstack/react-query", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tanstack/react-query")>();
+  return {
+    ...actual,
+    useQuery: (options: Parameters<typeof actual.useQuery>[0]) => {
+      if (state.realQueries) return actual.useQuery(options);
+      const queryKey = options.queryKey;
+      return queryKey[3] === "stale"
+        ? {
+            isFetching: false,
+            data: (queryKey[6] as string[]).map((id) => staleRead.byIssuer[id]),
+          }
+        : { isFetching: false, data: read.data, error: read.error };
     },
-    invalidateQueries: () => Promise.resolve(),
+    useQueryClient: () =>
+      state.realQueries
+        ? actual.useQueryClient()
+        : {
+            setQueryData: (
+              _key: unknown,
+              next: (prev: Record<string, unknown>) => Record<string, unknown>,
+            ) => {
+              read.data = next(read.data);
+            },
+            invalidateQueries: () => Promise.resolve(),
+          },
+  };
+});
+vi.mock("@gram/client/react-query/remoteSessionClientsReadEMA.js", () => ({
+  buildRemoteSessionClientsReadEMAMutation: () => ({
+    mutationFn: state.readEMA,
   }),
 }));
 vi.mock("@/pages/org/identity-provider/services/useEmaServices", () => ({
@@ -92,14 +110,6 @@ vi.mock("@/hooks/useRBAC", () => ({
             : true,
   }),
 }));
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => ({
-    status: state.oktaView ? "enabled" : "disabled",
-  }),
-}));
-vi.mock("@/lib/featureFlags", () => ({
-  FEATURE_FLAGS: { oktaConnections: "okta-connections" },
-}));
 vi.mock("@/lib/remote-identity", () => ({
   useRemoteSessionIssuersByIds: () => issuerNames,
 }));
@@ -125,7 +135,7 @@ vi.mock("@/components/setup-steps/StepBlocks", () => ({
 const prmMock = vi.hoisted(() => ({
   value: {} as {
     status?: string;
-    metadata?: { authorizationServers?: string[] };
+    metadata?: { authorizationServers?: string[]; resource?: string };
   },
 }));
 vi.mock("@/lib/remote-identity/queries/useProtectedResourceMetadata", () => ({
@@ -204,13 +214,14 @@ beforeEach(() => {
   state.orgAdmin = true;
   state.orgRead = true;
   state.projectWrite = true;
-  state.oktaView = true;
   state.calls.length = 0;
   state.prepare.mockReset();
   state.unlink.mockReset();
   state.prepareResult = undefined;
   state.oktaIssuerId = undefined;
   prmMock.value = {};
+  state.realQueries = false;
+  state.readEMA.mockReset();
 });
 
 afterEach(() => {
@@ -539,6 +550,169 @@ describe("identity chaining vouched for by Speakeasy", () => {
       />
     );
   }
+  function renderWithQueries(
+    overrides: Partial<Parameters<typeof IdentityChainingField>[0]> = {},
+  ) {
+    state.realQueries = true;
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, throwOnError: true } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>{children}</MemoryRouter>
+      </QueryClientProvider>
+    );
+    return render(speakeasyField(overrides), { wrapper });
+  }
+
+  it("uses the exact advertised resource for current/stale reads, preparation and unlink", async () => {
+    const resource = "https://resource.example.com/Canonical/%2f/";
+    prmMock.value = {
+      status: "available",
+      metadata: {
+        resource,
+        authorizationServers: ["https://issuer.example.com"],
+      },
+    };
+    issuerNames.items = [
+      { id: "issuer", name: "Current", issuer: "https://issuer.example.com" },
+      { id: "stale", name: "Old", issuer: "https://old.example.com" },
+    ];
+    state.readEMA.mockImplementation(({ request }) =>
+      Promise.resolve(
+        request.readEMARequestBody.remoteSessionIssuerId === "stale"
+          ? bound("old-client")
+          : {
+              ...unlinked,
+              generation: 0,
+              emaProviders: providersOf(speakeasy),
+            },
+      ),
+    );
+    renderWithQueries({
+      resource: "https://endpoint.example.com/mcp?tenant=one",
+      remoteMcpServerId: "remote",
+      linkedClients: [
+        ...clients,
+        {
+          ...clients[0]!,
+          id: "old-client",
+          clientId: "old-client",
+          remoteSessionIssuerId: "stale",
+        },
+      ],
+    });
+    await waitFor(() => expect(state.readEMA).toHaveBeenCalledTimes(2));
+    for (const [variables] of state.readEMA.mock.calls)
+      expect(variables.request.readEMARequestBody.resource).toBe(resource);
+    await waitFor(() => expect(enableButton().disabled).toBe(false));
+    fireEvent.click(enableButton());
+    expect(
+      state.prepare.mock.calls[0]![0].request.prepareEMARequestBody.resource,
+    ).toBe(resource);
+    fireEvent.click(screen.getByRole("button", { name: "Turn off" }));
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Turn off",
+      }),
+    );
+    expect(
+      state.unlink.mock.calls[0]![0].request.unlinkEMARequestBody.resource,
+    ).toBe(resource);
+  });
+
+  it.each([
+    "https://example.com/mcp?tenant=one",
+    "https://example.com/mcp?",
+    "https://example.com/mcp#",
+    "https://user@example.com/mcp",
+    "https:///mcp",
+    "https:////mcp",
+    "http://example.com/mcp",
+    "http://[::ffff:128.0.0.1]/mcp",
+    "not a URL",
+  ])(
+    "blocks EMA for an endpoint without a canonical resource: %s",
+    (resource) => {
+      prmMock.value = { status: "unavailable" };
+      renderWithQueries({ resource, remoteMcpServerId: "remote" });
+      expect(
+        screen.getByText(/Identity chaining is unavailable for this server/),
+      ).toBeTruthy();
+      expect(state.readEMA).not.toHaveBeenCalled();
+      expect(screen.queryByRole("button", { name: "Turn on" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Turn off" })).toBeNull();
+      expect(state.prepare).not.toHaveBeenCalled();
+      expect(state.unlink).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    "https://example.com/mcp/",
+    "HTTPS://example.com/mcp/",
+    "http://[::ffff:127.0.0.1]/mcp",
+    "http://[::ffff:7fff:ffff]/mcp",
+    "http://localhost:8080/mcp",
+    "http://127.0.0.2/mcp",
+    "http://[::1]:8080/mcp",
+  ])("preserves a valid fallback resource: %s", async (resource) => {
+    prmMock.value = { status: "unavailable" };
+    state.readEMA.mockResolvedValue(unlinked);
+    renderWithQueries({ resource, remoteMcpServerId: "remote" });
+    await waitFor(() => expect(state.readEMA).toHaveBeenCalledTimes(1));
+    expect(
+      state.readEMA.mock.calls[0]![0].request.readEMARequestBody.resource,
+    ).toBe(resource);
+  });
+
+  it("keeps an invalid resource hidden when only on bindings should show", () => {
+    prmMock.value = { status: "unavailable" };
+    const { container } = renderWithQueries({
+      resource: "https://example.com/mcp?tenant=one",
+      remoteMcpServerId: "remote",
+      onlyWhenOn: true,
+      frame: (content) => <section>{content}</section>,
+    });
+    expect(container.querySelector("section")).toBeNull();
+    expect(screen.queryByText(/Identity chaining is unavailable/)).toBeNull();
+    expect(state.readEMA).not.toHaveBeenCalled();
+  });
+
+  it("does not replace an invalid advertised resource with the endpoint", () => {
+    prmMock.value = {
+      status: "available",
+      metadata: { resource: "https://resource.example.com/?" },
+    };
+    renderWithQueries();
+    expect(
+      screen.getByText(/Identity chaining is unavailable for this server/),
+    ).toBeTruthy();
+    expect(state.readEMA).not.toHaveBeenCalled();
+  });
+
+  it("waits for the metadata probe before any EMA read", async () => {
+    prmMock.value = { status: "loading" };
+    state.readEMA.mockResolvedValue(unlinked);
+    const view = renderWithQueries({ remoteMcpServerId: "remote" });
+    expect(state.readEMA).not.toHaveBeenCalled();
+    prmMock.value = {
+      status: "available",
+      metadata: { resource: "https://resource.example.com/" },
+    };
+    view.rerender(speakeasyField({ remoteMcpServerId: "remote" }));
+    await waitFor(() => expect(state.readEMA).toHaveBeenCalledTimes(1));
+    expect(
+      state.readEMA.mock.calls[0]![0].request.readEMARequestBody.resource,
+    ).toBe("https://resource.example.com/");
+  });
+
+  it("shows an EMA rejection inline even when query errors throw by default", async () => {
+    state.readEMA.mockRejectedValue(new Error("invalid canonical resource"));
+    renderWithQueries();
+    expect(await screen.findByText(/invalid canonical resource/)).toBeTruthy();
+    expect(state.readEMA).toHaveBeenCalledTimes(1);
+  });
+
   const enableButton = () =>
     screen.getByRole("button", {
       name: "Turn on",
@@ -1228,19 +1402,6 @@ describe("identity chaining vouched for by Speakeasy", () => {
     expect(
       screen.getByText("Set up example.com in Okta’s Cross App Access"),
     ).toBeTruthy();
-  });
-
-  it("doesn't link Cross App Access when the Okta view isn't available", () => {
-    state.oktaIssuerId = "okta";
-    state.oktaView = false;
-    read.data = {
-      ...bound("first"),
-      emaProviders: { ...providersOf(okta, speakeasyUnused), isDefault: false },
-    };
-    render(speakeasyField({ userSessionIssuer: trusting }), {
-      wrapper: MemoryRouter,
-    });
-    expect(screen.queryByRole("link", { name: /Cross App Access/ })).toBeNull();
   });
 
   it("says nothing about acceptance when it's withheld", () => {

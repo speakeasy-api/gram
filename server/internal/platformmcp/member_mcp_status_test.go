@@ -66,11 +66,18 @@ func TestMemberMCPAccessUsesLiveRBACAndTenantQualifiedTarget(t *testing.T) {
 	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, OrganizationSlug: "example-org"}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	input := GetMyMCPStatusInput{ProjectID: project.ID.String(), MCPID: mcpID.String()}
 
-	allowed := authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeMCPRead, mcpID.String())})
-	output, err := service.GetMyMCPAccess(allowed, principal, input)
+	readOnly := authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeMCPRead, mcpID.String())})
+	output, err := service.GetMyMCPAccess(readOnly, principal, input)
 	require.NoError(t, err)
 	require.True(t, output.CanRead)
-	require.True(t, output.CanConnect, "mcp:read implies mcp:connect")
+	require.False(t, output.CanConnect, "mcp:read does not imply mcp:connect")
+	require.Equal(t, "mcp:connect", output.RequiredScope)
+
+	allowed := authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeMCPRead, mcpID.String()), authz.NewGrant(authz.ScopeMCPConnect, mcpID.String())})
+	output, err = service.GetMyMCPAccess(allowed, principal, input)
+	require.NoError(t, err)
+	require.True(t, output.CanRead)
+	require.True(t, output.CanConnect)
 	require.Empty(t, output.RequiredScope)
 	require.Empty(t, output.RequestAccessURL)
 
@@ -391,6 +398,7 @@ func TestMemberMCPReauthorizationReasonIsBounded(t *testing.T) {
 		{name: "refresh lifetime", state: remotesessions.RemoteSessionState{AuthorizationExpiresAt: &future, RefreshExpiresAt: &expired}, reason: "refresh_expired"},
 		{name: "upstream validation", state: remotesessions.RemoteSessionState{ValidationStatus: remotesessions.ValidationOutcomeRejectedByMember, ValidationReason: "sensitive upstream detail"}, reason: "authorization_rejected"},
 		{name: "access lifetime", state: remotesessions.RemoteSessionState{}, reason: "access_expired"},
+		{name: "saved sign-in unreadable", state: remotesessions.RemoteSessionState{SignInUnreadable: true}, reason: "sign_in_unreadable"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()

@@ -1,6 +1,7 @@
 package platformtools
 
 import (
+	"context"
 	"net/url"
 
 	"github.com/google/uuid"
@@ -42,6 +43,11 @@ var platformToolsetNamespace = uuid.NewSHA1(uuid.NameSpaceURL, []byte("https://a
 type Toolset struct {
 	Slug  string
 	Tools []ExternalTool
+
+	// ActingContext, when set, returns the context a request to this toolset
+	// both lists and calls its tools in. Nil means the authenticated request
+	// context is used as is.
+	ActingContext func(ctx context.Context) (context.Context, error)
 }
 
 // ToolsetDependencies bundles the inputs required to materialize the static
@@ -53,7 +59,11 @@ type ToolsetDependencies struct {
 	AssistantTriggerTools         []ExternalTool
 	ManagedAssistantInsightsTools []ExternalTool
 	PlatformMCPReadTools          []ExternalTool
-	SpeakeasySlackTools           []ExternalTool
+
+	// PlatformMCPReadActingContext is the Platform MCP read toolset's
+	// ActingContext.
+	PlatformMCPReadActingContext func(ctx context.Context) (context.Context, error)
+	SpeakeasySlackTools          []ExternalTool
 }
 
 type toolsetBuilder func(deps ToolsetDependencies) Toolset
@@ -74,12 +84,14 @@ var toolsetRegistry = []toolsetBuilder{
 	func(deps ToolsetDependencies) Toolset {
 		tools := make([]ExternalTool, 0, len(deps.PlatformMCPReadTools))
 		tools = append(tools, deps.PlatformMCPReadTools...)
-		return NewPlatformMCPReadToolset(tools...)
+		toolset := NewPlatformMCPReadToolset(tools...)
+		toolset.ActingContext = deps.PlatformMCPReadActingContext
+		return toolset
 	},
 	func(deps ToolsetDependencies) Toolset {
 		tools := make([]ExternalTool, 0, len(deps.SpeakeasySlackTools))
 		tools = append(tools, deps.SpeakeasySlackTools...)
-		return Toolset{Slug: SpeakeasySlackPlatformToolsetSlug, Tools: tools}
+		return Toolset{Slug: SpeakeasySlackPlatformToolsetSlug, Tools: tools, ActingContext: nil}
 	},
 }
 
@@ -128,21 +140,21 @@ func PlatformToolsetName(slug string) string {
 // supplied tools. Exposed for tests and direct callers; production wiring
 // goes through BuildToolsets.
 func NewAssistantsToolset(tools ...ExternalTool) Toolset {
-	return Toolset{Slug: AssistantsPlatformToolsetSlug, Tools: tools}
+	return Toolset{Slug: AssistantsPlatformToolsetSlug, Tools: tools, ActingContext: nil}
 }
 
 // NewManagedAssistantToolset returns the platform toolset granted only to a
 // project's managed assistant. Exposed for tests and direct callers;
 // production wiring goes through BuildToolsets.
 func NewManagedAssistantToolset(tools ...ExternalTool) Toolset {
-	return Toolset{Slug: ManagedAssistantPlatformToolsetSlug, Tools: tools}
+	return Toolset{Slug: ManagedAssistantPlatformToolsetSlug, Tools: tools, ActingContext: nil}
 }
 
 // NewPlatformMCPReadToolset returns the platform toolset re-serving the
 // Platform MCP read tools to a project's managed assistant. Exposed for tests
 // and direct callers; production wiring goes through BuildToolsets.
 func NewPlatformMCPReadToolset(tools ...ExternalTool) Toolset {
-	return Toolset{Slug: PlatformMCPReadToolsetSlug, Tools: tools}
+	return Toolset{Slug: PlatformMCPReadToolsetSlug, Tools: tools, ActingContext: nil}
 }
 
 // PlatformToolsetURL builds the URL where a runtime reaches the named

@@ -3,6 +3,14 @@ import { useScopeCatalogue } from "@/hooks/useScopeCatalogue";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { RequestAccessFormScope } from "@gram/client/models/components/requestaccessform.js";
 import { useRequestAccessMutation } from "@gram/client/react-query/requestAccess.js";
+import {
+  invalidateAllAccessRequests,
+  useAccessRequests,
+} from "@gram/client/react-query/accessRequests.js";
+import { useQueryClient } from "@tanstack/react-query";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
@@ -26,6 +34,8 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/Collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/Tooltip";
+import { Popover, PopoverAnchor, PopoverContent } from "./ui/Popover";
+import { SelfGrantAccess } from "./temporary-access";
 
 type RenderFn = (props: { disabled: boolean }) => React.ReactNode;
 
@@ -122,6 +132,8 @@ export function RequireScope(
           className={props.className}
           scopes={scopes}
           all={all}
+          resourceId={resourceId}
+          projectId={projectId}
         >
           {resolveChildren(true)}
         </ScopeDisabled>
@@ -172,50 +184,77 @@ function requiredScopeLabel(
 
 /**
  * Wraps children in a visually-disabled state with a tooltip explaining why.
+ * Clicking the disabled control opens the same explanation with the way to get
+ * the permission: Request Access, or a temporary self-grant for an admin.
  */
 function ScopeDisabled({
   reason = "You don't have permission to perform this action.",
   className,
   scopes,
   all,
+  resourceId,
+  projectId,
   children,
 }: {
   reason?: string;
   className?: string;
   scopes: Scope[];
   all: boolean;
+  resourceId?: string;
+  projectId?: string;
   children: React.ReactNode;
 }) {
   const { catalogue } = useScopeCatalogue();
+  const [open, setOpen] = React.useState(false);
   const scopeHint = requiredScopeLabel(scopes, all, catalogue);
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <div
-          className={cn(
-            "pointer-events-none inline-flex opacity-50 select-none",
-            className,
-          )}
-        >
-          {/* Wrapper div that re-enables pointer events for the tooltip to work */}
-          <div
-            className="pointer-events-auto w-full cursor-not-allowed **:cursor-not-allowed"
-            onClickCapture={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-          >
-            {children}
-          </div>
-        </div>
-      </TooltipTrigger>
-      <TooltipContent>
-        <span>{reason}</span>
-        {scopeHint && (
-          <span className="mt-1 block opacity-80">{scopeHint}</span>
+    <Popover open={open} onOpenChange={setOpen}>
+      <Tooltip>
+        <PopoverAnchor asChild>
+          <TooltipTrigger asChild>
+            <div
+              className={cn(
+                "pointer-events-none inline-flex opacity-50 select-none",
+                className,
+              )}
+            >
+              {/* Wrapper div that re-enables pointer events for the tooltip to work */}
+              <div
+                className="pointer-events-auto w-full cursor-not-allowed **:cursor-not-allowed"
+                onClickCapture={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setOpen(true);
+                }}
+              >
+                {children}
+              </div>
+            </div>
+          </TooltipTrigger>
+        </PopoverAnchor>
+        {!open && (
+          <TooltipContent>
+            <span>{reason}</span>
+            {scopeHint && (
+              <span className="mt-1 block opacity-80">{scopeHint}</span>
+            )}
+          </TooltipContent>
         )}
-      </TooltipContent>
-    </Tooltip>
+      </Tooltip>
+      <PopoverContent align="start" className="w-80 space-y-3 text-sm">
+        <div className="space-y-1">
+          <p>{reason}</p>
+          {scopeHint && <p className="text-muted-foreground">{scopeHint}</p>}
+        </div>
+        <RequestScopeAccess
+          scopes={scopes}
+          all={all}
+          resourceId={resourceId}
+          projectId={projectId}
+          align="start"
+        />
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -228,6 +267,329 @@ function getRequestableScopes(scopes: Scope[]): RequestAccessFormScope[] {
   return scopes.filter((s): s is RequestAccessFormScope =>
     validScopes.includes(s as RequestAccessFormScope),
   );
+}
+
+type RequestScopeAccessProps = {
+  scopes: Scope[];
+  /** When true, every missing scope is requested, not only the first. */
+  all?: boolean;
+  resourceId?: string;
+  /** The project the gated resource belongs to, for project-wide grants. */
+  projectId?: string;
+  /**
+   * For an admin who can give themselves the access: names the resource for
+   * the "covers" choice (this one, or every one of its kind).
+   */
+  coverage?: { one: string; all: string };
+  /** Runs once an admin has given themselves the access. */
+  onGranted?: () => void;
+  /**
+   * Where the result lines up: centered under a full-page message, or with
+   * the start of a banner's text above it.
+   */
+  align?: "center" | "start";
+  className?: string;
+};
+
+/**
+ * The one missing scope an organization admin can give themselves for a
+ * limited time, or null. An all-scopes gate qualifies only when a single
+ * scope is missing: granting one of several would still leave the page shut.
+ */
+function useSelfGrantableScope(
+  scopes: Scope[],
+  all: boolean,
+  resourceId: string | undefined,
+  projectId: string | undefined,
+): Scope | null {
+  const { hasScope } = useRBAC();
+  const { catalogue } = useScopeCatalogue();
+  if (!hasScope("org:admin")) return null;
+  // A gate on "anything in this project" has no single resource to grant, and
+  // a grant on every resource would reach past the project. Ask instead.
+  if (projectId && (resourceId === undefined || resourceId === "*")) {
+    return null;
+  }
+  const missing = scopes.filter((s) => !hasScope(s, resourceId, projectId));
+  if (all && missing.length !== 1) return null;
+  return missing.find((s) => catalogue.get(s)?.temporaryGrantable) ?? null;
+}
+
+/**
+ * Gets the viewer the scopes they are missing. An organization admin gives
+ * themselves a scope for a few hours when the API allows it; anyone else asks
+ * an admin, and is told how that went. Renders nothing when every requestable
+ * scope is already held.
+ */
+export function RequestScopeAccess(
+  props: RequestScopeAccessProps,
+): React.JSX.Element | null {
+  const selfGrantScope = useSelfGrantableScope(
+    props.scopes,
+    props.all ?? false,
+    props.resourceId,
+    props.projectId,
+  );
+  if (selfGrantScope) {
+    return (
+      <SelfGrantAccess
+        scope={selfGrantScope}
+        resourceId={props.resourceId}
+        coverage={props.coverage}
+        onGranted={props.onGranted}
+        className={props.className}
+      />
+    );
+  }
+  // A request is for one resource and one set of scopes. The key remounts
+  // the form when either changes, so "Request sent" for one project does not
+  // carry over to the next.
+  return (
+    <RequestScopeAccessForm
+      key={`${props.projectId ?? ""}|${props.resourceId ?? ""}|${props.all ? "all" : "any"}|${props.scopes.join(",")}`}
+      {...props}
+    />
+  );
+}
+
+function RequestScopeAccessForm(
+  props: RequestScopeAccessProps,
+): React.JSX.Element | null {
+  // With stored access requests, an approval is a temporary grant, so only
+  // scopes that can be given temporarily can be asked for, and a request made
+  // earlier shows as pending.
+  const accessRequestsOn =
+    useFeatureFlag(FEATURE_FLAGS.accessRequests).status === "enabled";
+  if (accessRequestsOn) return <StoredRequestScopeAccess {...props} />;
+  return (
+    <RequestScopeAccessButton
+      {...props}
+      accessRequestsOn={false}
+      pending={NO_PENDING_REQUESTS}
+      pendingUpdatedAt={0}
+      onRequested={undefined}
+    />
+  );
+}
+
+const NO_PENDING_REQUESTS: PendingRequest[] = [];
+
+type PendingRequest = { scope: string; selector: { resourceId: string } };
+
+function StoredRequestScopeAccess(
+  props: RequestScopeAccessProps,
+): React.JSX.Element | null {
+  const queryClient = useQueryClient();
+  const myPending = useAccessRequests(
+    { status: "pending", mine: true },
+    undefined,
+    { throwOnError: false },
+  );
+  return (
+    <RequestScopeAccessButton
+      {...props}
+      accessRequestsOn
+      pending={myPending.data?.requests ?? NO_PENDING_REQUESTS}
+      pendingUpdatedAt={myPending.dataUpdatedAt ?? 0}
+      onRequested={() => invalidateAllAccessRequests(queryClient)}
+    />
+  );
+}
+
+function RequestScopeAccessButton({
+  scopes,
+  all = false,
+  resourceId,
+  projectId,
+  className,
+  align = "center",
+  accessRequestsOn,
+  pending,
+  pendingUpdatedAt,
+  onRequested,
+}: RequestScopeAccessProps & {
+  accessRequestsOn: boolean;
+  pending: PendingRequest[];
+  pendingUpdatedAt: number;
+  onRequested: (() => Promise<unknown>) | undefined;
+}): React.JSX.Element | null {
+  const [requestState, setRequestState] = React.useState<
+    | "idle"
+    | "sending"
+    | "sent"
+    | "pending"
+    | "not-requestable"
+    | "no-admin"
+    | "error"
+  >("idle");
+  const { hasScope } = useRBAC();
+  const { catalogue } = useScopeCatalogue();
+  const requestAccessMutation = useRequestAccessMutation();
+  // Only request scopes the user is actually missing — an all-scopes gate can
+  // trip on a partial grant, and admins shouldn't be asked for held scopes.
+  const missingScopes = scopes.filter(
+    (s) => !hasScope(s, resourceId, projectId),
+  );
+  // Members who can't read the organization can't load the catalogue either;
+  // a scope it does not describe is offered, and the server refuses it if it
+  // can't be given temporarily.
+  const askableScopes = getRequestableScopes(missingScopes);
+  const requestableScopes = accessRequestsOn
+    ? askableScopes.filter(
+        (s) => catalogue.get(s)?.temporaryGrantable !== false,
+      )
+    : askableScopes;
+  // A pending request for this access, from an earlier visit, shows as
+  // pending instead of offering to ask again.
+  const alreadyPending = pending.some(
+    (request) =>
+      requestableScopes.includes(request.scope as RequestAccessFormScope) &&
+      request.selector.resourceId === (resourceId ?? "*"),
+  );
+
+  // A request made here shows as pending until a pending list read after it
+  // was made no longer holds it: the app-wide watcher refreshes that list
+  // once the request is decided, even when that happens before any poll.
+  const [requestedAt, setRequestedAt] = React.useState(0);
+  React.useEffect(() => {
+    if (requestState !== "pending") return;
+    if (pendingUpdatedAt > requestedAt && !alreadyPending) {
+      setRequestState("idle");
+    }
+  }, [alreadyPending, pendingUpdatedAt, requestedAt, requestState]);
+
+  if (missingScopes.length === 0) return null;
+  // An all-scopes gate stays shut unless every missing scope can be asked for.
+  const cannotUnblock =
+    requestableScopes.length === 0 ||
+    (all && requestableScopes.length < missingScopes.length);
+  const stack = cn(
+    "flex flex-col gap-1",
+    align === "start" ? "items-start text-left" : "items-center text-center",
+    className,
+  );
+  if (cannotUnblock || requestState === "not-requestable") {
+    return (
+      <p className={cn("text-muted-foreground max-w-sm text-sm", stack)}>
+        This access can't be requested here. Ask an organization administrator
+        to give it to you.
+      </p>
+    );
+  }
+  const handleRequestAccess = async () => {
+    setRequestState("sending");
+    // An "any scope suffices" gate only needs the first requestable scope; an
+    // all-scopes gate must request every missing scope or granting one still
+    // leaves the user blocked. Judge on settled results so one failed request
+    // doesn't report failure when another admin notification went out.
+    const scopesToRequest = all ? requestableScopes : [requestableScopes[0]!];
+    const results = await Promise.allSettled(
+      scopesToRequest.map((scopeToRequest) =>
+        requestAccessMutation.mutateAsync({
+          request: {
+            requestAccessForm: {
+              scope: scopeToRequest,
+              resourceId,
+            },
+          },
+        }),
+      ),
+    );
+    const stored = results.some(
+      (r) => r.status === "fulfilled" && r.value.request !== undefined,
+    );
+    if (stored) {
+      // The app-wide watcher tells the viewer when it is decided.
+      setRequestedAt(Date.now());
+      setRequestState("pending");
+      void onRequested?.();
+      return;
+    }
+    const notified = results.some(
+      (r) => r.status === "fulfilled" && r.value.sentToCount > 0,
+    );
+    if (notified) {
+      setRequestState("sent");
+      return;
+    }
+    const refused = results.every(
+      (r) =>
+        r.status === "rejected" &&
+        r.reason instanceof GramError &&
+        r.reason.statusCode === 400,
+    );
+    if (accessRequestsOn && refused) {
+      setRequestState("not-requestable");
+      return;
+    }
+    const reachedServer = results.some((r) => r.status === "fulfilled");
+    setRequestState(reachedServer ? "no-admin" : "error");
+  };
+
+  const state =
+    requestState === "idle" && alreadyPending ? "pending" : requestState;
+  switch (state) {
+    case "pending":
+      return (
+        <div className={stack}>
+          <div className="text-default-success flex items-center gap-1.5 text-sm font-medium">
+            <Icon name="check" className="size-4" />
+            Request pending
+          </div>
+          <p className="text-muted-foreground text-xs">
+            An organization admin can approve it in Speakeasy or Slack. It
+            lapses after 24 hours.
+          </p>
+        </div>
+      );
+    case "idle":
+    case "sending":
+      return (
+        <Button
+          variant="secondary"
+          size="sm"
+          className={className}
+          onClick={() => void handleRequestAccess()}
+          disabled={state === "sending"}
+        >
+          {state === "sending" ? "Sending…" : "Request Access"}
+        </Button>
+      );
+    case "sent":
+      return (
+        <div className={stack}>
+          <div className="text-default-success flex items-center gap-1.5 text-sm font-medium">
+            <Icon name="check" className="size-4" />
+            Request sent
+          </div>
+          <p className="text-muted-foreground text-xs">
+            Your organization admins have been notified.
+          </p>
+        </div>
+      );
+    case "no-admin":
+      return (
+        <p className={cn("text-destructive max-w-sm text-sm", stack)}>
+          No organization administrator could be notified. Contact an
+          administrator directly to request access.
+        </p>
+      );
+    case "error":
+      return (
+        <div className={stack}>
+          <p className="text-destructive text-sm">
+            Failed to send request. Please try again.
+          </p>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setRequestState("idle")}
+          >
+            Retry
+          </Button>
+        </div>
+      );
+  }
 }
 
 /**
@@ -249,51 +611,9 @@ function Unauthorized({
   projectId?: string;
 }) {
   const [open, setOpen] = React.useState(false);
-  const [requestState, setRequestState] = React.useState<
-    "idle" | "sending" | "sent" | "no-admin" | "error"
-  >("idle");
 
   const { hasScope } = useRBAC();
   const { catalogue, tasks } = useScopeCatalogue();
-  const requestAccessMutation = useRequestAccessMutation();
-  // Only request scopes the user is actually missing — an all-scopes gate can
-  // trip on a partial grant, and admins shouldn't be asked for held scopes.
-  const requestableScopes = getRequestableScopes(scopes).filter(
-    (s) => !hasScope(s, resourceId),
-  );
-  const canRequestAccess = requestableScopes.length > 0;
-
-  const handleRequestAccess = async () => {
-    if (!canRequestAccess || requestableScopes.length === 0) return;
-
-    setRequestState("sending");
-    // An "any scope suffices" gate only needs the first requestable scope; an
-    // all-scopes gate must request every missing scope or granting one still
-    // leaves the user blocked. Judge on settled results so one failed request
-    // doesn't report failure when another admin notification went out.
-    const scopesToRequest = all ? requestableScopes : [requestableScopes[0]!];
-    const results = await Promise.allSettled(
-      scopesToRequest.map((scopeToRequest) =>
-        requestAccessMutation.mutateAsync({
-          request: {
-            requestAccessForm: {
-              scope: scopeToRequest,
-              resourceId,
-            },
-          },
-        }),
-      ),
-    );
-    const notified = results.some(
-      (r) => r.status === "fulfilled" && r.value.sentToCount > 0,
-    );
-    if (notified) {
-      setRequestState("sent");
-      return;
-    }
-    const reachedServer = results.some((r) => r.status === "fulfilled");
-    setRequestState(reachedServer ? "no-admin" : "error");
-  };
 
   return (
     <div className="flex h-full min-h-[400px] w-full items-center justify-center">
@@ -304,55 +624,12 @@ function Unauthorized({
         <h2 className="text-lg font-medium">{title}</h2>
         <p className="text-muted-foreground text-sm">{description}</p>
 
-        {/* Request Access Button */}
-        {canRequestAccess && requestState === "idle" && (
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => void handleRequestAccess()}
-            disabled={requestAccessMutation.isPending}
-          >
-            {requestAccessMutation.isPending ? "Sending..." : "Request Access"}
-          </Button>
-        )}
-
-        {requestState === "sending" && (
-          <p className="text-muted-foreground text-sm">Sending request...</p>
-        )}
-
-        {requestState === "sent" && (
-          <div className="flex flex-col items-center gap-1">
-            <div className="text-default-success flex items-center gap-1.5 text-sm font-medium">
-              <Icon name="check" className="size-4" />
-              Request sent
-            </div>
-            <p className="text-muted-foreground text-xs">
-              Your organization admins have been notified.
-            </p>
-          </div>
-        )}
-
-        {requestState === "no-admin" && (
-          <p className="text-destructive text-sm">
-            No organization administrator could be notified. Contact an
-            administrator directly to request access.
-          </p>
-        )}
-
-        {requestState === "error" && (
-          <div className="flex flex-col items-center gap-2">
-            <p className="text-destructive text-sm">
-              Failed to send request. Please try again.
-            </p>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setRequestState("idle")}
-            >
-              Retry
-            </Button>
-          </div>
-        )}
+        <RequestScopeAccess
+          scopes={scopes}
+          all={all}
+          resourceId={resourceId}
+          projectId={projectId}
+        />
 
         {scopes.length > 0 && (
           /* The wrapper keeps the collapsed height (h-7 == trigger height) in

@@ -17,7 +17,7 @@ import {
 import { Info } from "lucide-react";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { defineFilters, useFilterState } from "@/components/filters";
-import { useOrganization, useSession } from "@/contexts/Auth";
+import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { useSdkClient, useProjectSlugForRequests } from "@/contexts/Sdk";
 import { Page } from "@/components/page-layout";
@@ -554,6 +554,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   const routes = useRoutes();
   const organization = useOrganization();
   const projectSlug = useProjectSlugForRequests();
+  const { id: projectId } = useProject();
   const navigate = useNavigate();
   const client = useGramContext();
   const sdk = useSdkClient();
@@ -562,6 +563,11 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   const { hasScope } = useRBAC();
   const canReadOrganization = hasScope("org:read", organization.id);
   const canAdminOrganization = hasScope("org:admin", organization.id);
+  // Claude Tag signs in with workload identity, and trusting a platform is a
+  // write to the organization's workload identities. Without this the button
+  // opened a setup the wizard refused only at its Agent sign-in step. The
+  // command palette's platform setups gate on the same scope.
+  const canSetUpPlatforms = hasScope("workload:write");
   const inferenceSetupFlag = useFeatureFlag(
     FEATURE_FLAGS.inferenceWorkloadSetup,
   );
@@ -618,11 +624,13 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       ownerKey,
       registered,
       scopeOverride,
+      projectId,
     ],
     queryFn: ({ pageParam, signal }) =>
       fetchRegisteredAgents(
         sdk,
         {
+          projectId,
           cursor: pageParam,
           limit: PAGE_SIZE,
           search,
@@ -635,7 +643,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       ),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
-    enabled: agentsEnabled && kind === "agent",
+    enabled: agentsEnabled && kind === "agent" && Boolean(projectId),
     throwOnError: false,
     retry: false,
   });
@@ -654,8 +662,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
     enabled: peopleShown,
     throwOnError: false,
   });
-  // Usage is the only project-scoped read here, and it is what surfaces the
-  // identities the directory has never heard of.
+  // Project-scoped usage surfaces identities the directory has never heard of.
   //
   // Unwindowed on purpose: this is the roster, not a report. Someone who has
   // been quiet for a quarter is still an identity, and hiding them behind a
@@ -1225,18 +1232,20 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
             {/* The one platform with a guided setup, offered by name: it is
                 what most people come to this page to do, and the generic
                 flow makes them find it behind two more choices. */}
-            <Button asChild variant="secondary">
-              <Link
-                to={`${routes.identities.agents.new.href()}?platform=claude-tag`}
-              >
-                <img
-                  src="/access-hub/claude-tag.svg"
-                  alt=""
-                  className="size-4"
-                />
-                Set up Claude Tag
-              </Link>
-            </Button>
+            {canSetUpPlatforms && (
+              <Button asChild variant="secondary">
+                <Link
+                  to={`${routes.identities.agents.new.href()}?platform=claude-tag`}
+                >
+                  <img
+                    src="/access-hub/claude-tag.svg"
+                    alt=""
+                    className="size-4"
+                  />
+                  Set up Claude Tag
+                </Link>
+              </Button>
+            )}
             {inferenceSetupFlag.status === "enabled" && (
               <Button asChild variant="secondary">
                 <Link
@@ -1351,8 +1360,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
                 >
                   Agents
                 </Link>{" "}
-                page to see all agent identities configured on the platform, and
-                set up new ones.
+                page to see this project’s agent identities and set up new ones.
               </Text>
             </div>
           )}

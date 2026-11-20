@@ -59,7 +59,8 @@ type ActiveOperation = {
 
 // The secrets findings that existed when the guide started listening. A new
 // finding for the guide's policy that matches the synthetic secret is the
-// evidence; hook traces are not read because they need log:read.
+// evidence; hook traces are not read because, without log:read, the server
+// narrows them to the caller's own sessions and agents they own.
 type TelemetryBaseline = {
   capturedAtMs: number;
   syntheticSecretRedaction: string;

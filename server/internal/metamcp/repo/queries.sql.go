@@ -731,8 +731,6 @@ SELECT
     ms.id AS meta_mcp_server_id,
     ms.name,
     e.slug,
-    -- legacyalias: the caller checks deleted rows against aliases; drop with AIM-670.
-    e.custom_domain_id,
     e.deleted,
     e.is_domain_root,
     cd.domain AS custom_domain,
@@ -772,7 +770,6 @@ type ListMetaMCPEndpointsForTelemetryByProjectIDRow struct {
 	MetaMcpServerID uuid.UUID
 	Name            string
 	Slug            string
-	CustomDomainID  uuid.NullUUID
 	Deleted         bool
 	IsDomainRoot    pgtype.Bool
 	CustomDomain    pgtype.Text
@@ -780,9 +777,8 @@ type ListMetaMCPEndpointsForTelemetryByProjectIDRow struct {
 }
 
 // Gateway endpoints for classifying hook-observed calls by URL. Deleted rows keep
-// matching unless a live endpoint now holds the slug in that namespace (callers also
-// drop ones a legacy toolset alias holds); the existence check mirrors the global
-// unique index, so it is not project-scoped.
+// matching unless a live endpoint now holds the slug in that namespace; the
+// existence check mirrors the global unique index, so it is not project-scoped.
 func (q *Queries) ListMetaMCPEndpointsForTelemetryByProjectID(ctx context.Context, projectID uuid.UUID) ([]ListMetaMCPEndpointsForTelemetryByProjectIDRow, error) {
 	rows, err := q.db.Query(ctx, listMetaMCPEndpointsForTelemetryByProjectID, projectID)
 	if err != nil {
@@ -796,7 +792,6 @@ func (q *Queries) ListMetaMCPEndpointsForTelemetryByProjectID(ctx context.Contex
 			&i.MetaMcpServerID,
 			&i.Name,
 			&i.Slug,
-			&i.CustomDomainID,
 			&i.Deleted,
 			&i.IsDomainRoot,
 			&i.CustomDomain,
@@ -1599,7 +1594,10 @@ const lockUserSessionIssuerForMetaMCP = `-- name: LockUserSessionIssuerForMetaMC
 SELECT id
 FROM user_session_issuers
 WHERE id = $1
-  AND project_id = $2::uuid
+  AND (
+    project_id = $2::uuid
+    OR (project_id IS NULL AND organization_id = $3::text)
+  )
   AND deleted IS FALSE
 FOR UPDATE
 `
@@ -1607,13 +1605,14 @@ FOR UPDATE
 type LockUserSessionIssuerForMetaMCPParams struct {
 	UserSessionIssuerID uuid.UUID
 	ProjectID           uuid.UUID
+	OrganizationID      string
 }
 
-// Lock a live user session issuer in the caller's project. Meta MCP
-// create/update hold this lock while validating the reference so a concurrent
-// issuer delete cannot race the attach.
+// Lock a live issuer owned by the caller's project or shared by its organization.
+// Gateway create/update hold this lock while validating the reference so a
+// concurrent issuer delete cannot race the attach.
 func (q *Queries) LockUserSessionIssuerForMetaMCP(ctx context.Context, arg LockUserSessionIssuerForMetaMCPParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, lockUserSessionIssuerForMetaMCP, arg.UserSessionIssuerID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, lockUserSessionIssuerForMetaMCP, arg.UserSessionIssuerID, arg.ProjectID, arg.OrganizationID)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err

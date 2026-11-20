@@ -25,6 +25,7 @@ type Endpoints struct {
 	CommitServerIdentityConfiguration goa.Endpoint
 	GetServerIdentityImpact           goa.Endpoint
 	ListServerClientAssociations      goa.Endpoint
+	AttachServerClientAssociation     goa.Endpoint
 	DetachServerClientAssociation     goa.Endpoint
 	ListRemoteSessions                goa.Endpoint
 	CountRemoteSessions               goa.Endpoint
@@ -46,6 +47,7 @@ func NewEndpoints(s Service) *Endpoints {
 		CommitServerIdentityConfiguration: NewCommitServerIdentityConfigurationEndpoint(s, a.APIKeyAuth),
 		GetServerIdentityImpact:           NewGetServerIdentityImpactEndpoint(s, a.APIKeyAuth),
 		ListServerClientAssociations:      NewListServerClientAssociationsEndpoint(s, a.APIKeyAuth),
+		AttachServerClientAssociation:     NewAttachServerClientAssociationEndpoint(s, a.APIKeyAuth),
 		DetachServerClientAssociation:     NewDetachServerClientAssociationEndpoint(s, a.APIKeyAuth),
 		ListRemoteSessions:                NewListRemoteSessionsEndpoint(s, a.APIKeyAuth),
 		CountRemoteSessions:               NewCountRemoteSessionsEndpoint(s, a.APIKeyAuth),
@@ -65,6 +67,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CommitServerIdentityConfiguration = m(e.CommitServerIdentityConfiguration)
 	e.GetServerIdentityImpact = m(e.GetServerIdentityImpact)
 	e.ListServerClientAssociations = m(e.ListServerClientAssociations)
+	e.AttachServerClientAssociation = m(e.AttachServerClientAssociation)
 	e.DetachServerClientAssociation = m(e.DetachServerClientAssociation)
 	e.ListRemoteSessions = m(e.ListRemoteSessions)
 	e.CountRemoteSessions = m(e.CountRemoteSessions)
@@ -456,6 +459,65 @@ func NewListServerClientAssociationsEndpoint(s Service, authAPIKeyFn security.Au
 			return nil, err
 		}
 		return s.ListServerClientAssociations(ctx, p)
+	}
+}
+
+// NewAttachServerClientAssociationEndpoint returns an endpoint function that
+// calls the method "attachServerClientAssociation" of service "remoteSessions".
+func NewAttachServerClientAssociationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*AttachServerClientAssociationPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.AttachServerClientAssociation(ctx, p)
 	}
 }
 

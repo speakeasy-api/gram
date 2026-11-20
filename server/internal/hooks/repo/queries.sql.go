@@ -641,6 +641,43 @@ func (q *Queries) LinkChatUserAccount(ctx context.Context, arg LinkChatUserAccou
 	return result.RowsAffected(), nil
 }
 
+const listChatExternalMessageIDs = `-- name: ListChatExternalMessageIDs :many
+SELECT external_message_id::text
+FROM chat_messages
+WHERE chat_id = $1
+  AND project_id = $2
+  AND external_message_id = ANY($3::text[])
+`
+
+type ListChatExternalMessageIDsParams struct {
+	ChatID             uuid.UUID
+	ProjectID          uuid.NullUUID
+	ExternalMessageIds []string
+}
+
+// Which of these external message ids the chat already holds. The Claude
+// transcript upload uses it to tell the prompts it stores for the first time
+// from those a per-event hook stored before it.
+func (q *Queries) ListChatExternalMessageIDs(ctx context.Context, arg ListChatExternalMessageIDsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listChatExternalMessageIDs, arg.ChatID, arg.ProjectID, arg.ExternalMessageIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var external_message_id string
+		if err := rows.Scan(&external_message_id); err != nil {
+			return nil, err
+		}
+		items = append(items, external_message_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listHooksServerNameOverrides = `-- name: ListHooksServerNameOverrides :many
 SELECT id, raw_server_name, display_name, created_at, updated_at
 FROM hooks_server_name_overrides

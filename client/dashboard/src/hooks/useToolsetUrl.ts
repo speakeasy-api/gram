@@ -5,11 +5,7 @@ import type { DomainDNSConfig } from "@gram/client/models/components/domaindnsco
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { useListDomains } from "@gram/client/react-query/listDomains.js";
-import { useCallback, useMemo, useState } from "react";
-import { buildGetMcpServerQuery } from "@gram/client/react-query/getMcpServer.js";
-import { useGramContext } from "@gram/client/react-query/_context.js";
-import { useQuery } from "@tanstack/react-query";
-import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
+import { useMemo } from "react";
 
 export function useCustomDomain(enabled = true): {
   domain: CustomDomain | undefined;
@@ -206,103 +202,8 @@ export function useMcpUrl(
   };
 }
 
-type ToolsetConnectionSource = Pick<
-  ToolsetEntry,
-  "id" | "slug" | "mcpSlug" | "defaultEnvironmentSlug"
-> & { userSessionIssuerId?: string };
-
-/** Resolve identity before deriving URLs or minting. Never choose from an
- * authorization-filtered list, or alias a disabled canonical route to a sibling.
- * A 404 means no wrapper exists; only that case can retain the legacy route.
- */
-export function useToolsetMcpTarget(
-  toolset: ToolsetConnectionSource | undefined,
-): {
-  url: string | undefined;
-  serverId: string | undefined;
-  userSessionIssuerId: string | undefined;
-  legacy: boolean;
-  status: "idle" | "loading" | "error" | "unavailable" | "ready";
-  isLoading: boolean;
-  refetch: () => void;
-} {
-  const project = useProject();
-  const sdk = useGramContext();
-  const lookup = buildGetMcpServerQuery(sdk, { toolsetId: toolset?.id });
-  const server = useQuery({
-    // Keep the nullable result separate from the generated SDK's server cache,
-    // while retaining its key prefix for normal server invalidation.
-    queryKey: [...lookup.queryKey, "connectionTarget"],
-    queryFn: async (context) => {
-      try {
-        return await lookup.queryFn(context);
-      } catch (error) {
-        // Absence is a settled result, not a transient error. Caching it gives
-        // every observer the same legacy classification throughout refetches.
-        if (error instanceof ServiceError && error.statusCode === 404)
-          return null;
-        throw error;
-      }
-    },
-    enabled: !!toolset?.id,
-    retry: false,
-    throwOnError: false,
-  });
-  // Refetch failures may retain stale data; it must not supply a former issuer.
-  const selected = toolset && !server.isError ? server.data : undefined;
-  const enabledServer =
-    selected?.visibility !== "disabled" ? selected : undefined;
-  const [retrying, setRetrying] = useState<{ id: string }>();
-  const legacy = !!toolset && !server.isError && server.data === null;
-  const status = !toolset
-    ? "idle"
-    : server.isLoading ||
-        retrying?.id === toolset.id ||
-        (server.isFetching && server.isError)
-      ? "loading"
-      : server.isError
-        ? "error"
-        : selected?.visibility === "disabled"
-          ? "unavailable"
-          : enabledServer || legacy
-            ? "ready"
-            : "loading";
-  const refetchServer = server.refetch;
-  const refetch = useCallback(() => {
-    if (!toolset?.id) return;
-    const retry = { id: toolset.id };
-    setRetrying(retry);
-    void refetchServer({ throwOnError: false, cancelRefetch: false }).finally(
-      () => {
-        setRetrying((current) => (current === retry ? undefined : current));
-      },
-    );
-  }, [toolset?.id, refetchServer]);
-  const platformSlug = enabledServer?.platformEndpointSlug;
-  // Playground/connect require the platform origin (session cookie and CSP).
-  // Custom-only servers remain unavailable here; never reuse their slug there.
-  const url =
-    enabledServer && platformSlug
-      ? `${getServerURL()}/mcp/${platformSlug}`
-      : legacy
-        ? internalMcpUrl(project, toolset)
-        : undefined;
-  return {
-    url,
-    serverId: enabledServer?.id,
-    userSessionIssuerId:
-      enabledServer?.userSessionIssuerId ??
-      (legacy ? toolset.userSessionIssuerId : undefined),
-    legacy,
-    status,
-    isLoading: status === "loading",
-    refetch,
-  };
-}
-
 /**
  * Formats the legacy toolset address without resolving a server identity.
- * Live playground connections use useToolsetMcpTarget instead.
  * Returns undefined when the toolset has no routable MCP URL (no mcpSlug and
  * no default environment).
  */
@@ -325,4 +226,51 @@ export function customDomainMcpEndpointUrl(
   slug: string,
 ): string {
   return `https://${domain}/mcp/${slug}`;
+}
+
+/** One address a server answers on, and what kind it is. */
+export interface McpServerAddress {
+  url: string;
+  label: string;
+}
+
+/**
+ * Every public address a server's endpoints give it: its custom domains
+ * first, then the Speakeasy one. A custom domain still resolving is left out
+ * rather than shown on the wrong host.
+ */
+export function useMcpEndpointAddresses(
+  endpoints: McpEndpoint[],
+): McpServerAddress[] {
+  const hasCustom = endpoints.some((endpoint) => endpoint.customDomainId);
+  const { domains } = useCustomDomains(hasCustom);
+  return useMemo(() => {
+    const custom: McpServerAddress[] = [];
+    const platform: McpServerAddress[] = [];
+    for (const endpoint of endpoints) {
+      if (!endpoint.slug) continue;
+      if (endpoint.customDomainId) {
+        const match = domains.find((d) => d?.id === endpoint.customDomainId);
+        if (match) {
+          // A domain-root endpoint also answers at the domain itself.
+          if (endpoint.isDomainRoot) {
+            custom.push({
+              url: `https://${match.domain}/`,
+              label: "Custom domain",
+            });
+          }
+          custom.push({
+            url: customDomainMcpEndpointUrl(match.domain, endpoint.slug),
+            label: "Custom domain",
+          });
+        }
+      } else {
+        platform.push({
+          url: `${getServerURL()}/mcp/${endpoint.slug}`,
+          label: "Speakeasy URL",
+        });
+      }
+    }
+    return [...custom, ...platform];
+  }, [endpoints, domains]);
 }

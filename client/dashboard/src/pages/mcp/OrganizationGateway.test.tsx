@@ -21,17 +21,24 @@ const state = vi.hoisted(() => ({
   setOn: vi.fn(),
   error: false,
   admin: true,
+  orgRead: true,
+  projectRead: true,
   permissionsLoading: false,
   gatewayLoading: false,
   available: true,
   on: false as boolean | undefined,
 }));
 vi.mock("@/components/sessions/ClientsAndSessionsTab", () => ({
-  ClientsAndSessionsTab: () => {
+  ClientsAndSessionsTab: ({
+    gateway,
+  }: {
+    gateway?: { projectId?: string };
+  }) => {
     const [params] = useSearchParams();
     return (
       <div>
         Shared gateway connections<output>{params.toString()}</output>
+        <span aria-label="Connections scope">{gateway?.projectId}</span>
       </div>
     );
   },
@@ -40,12 +47,12 @@ vi.mock("./gateway/GatewayActivitySection", () => ({
   GatewayActivitySection: ({
     scope,
   }: {
-    scope: { kind: string; organizationId?: string };
+    scope: { kind: string; projectId?: string };
   }) => (
     <div>
-      Organization gateway activity
+      Project gateway activity
       <output aria-label="Activity scope">
-        {scope.kind}:{scope.organizationId}
+        {scope.kind}:{scope.projectId}
       </output>
     </div>
   ),
@@ -78,6 +85,7 @@ vi.mock("@/components/require-scope", () => ({
     scope: string;
     level: string;
   }) => {
+    if (scope === "project:read") return state.projectRead ? children : null;
     if (scope !== "org:admin" || (state.admin && !state.permissionsLoading))
       return <>{children}</>;
     if (level === "component")
@@ -97,13 +105,22 @@ vi.mock("@/components/require-scope", () => ({
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
-    hasScope: (scope: string, organizationId: string) =>
-      scope === "org:admin" && organizationId === "test-org" && state.admin,
+    hasScope: (scope: string, resourceId: string) =>
+      (scope === "org:admin" && resourceId === "test-org" && state.admin) ||
+      (scope === "org:read" && resourceId === "test-org" && state.orgRead) ||
+      (scope === "project:read" &&
+        resourceId === "test-project" &&
+        state.projectRead),
     isLoading: state.permissionsLoading,
   }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "test-org", slug: "test" }),
+  useProject: () => ({ id: "test-project", slug: "sales", name: "Sales" }),
+}));
+vi.mock("@/contexts/Sdk", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/contexts/Sdk")>()),
+  useProjectSlugForRequests: () => "sales",
 }));
 vi.mock("@/hooks/useIsCurrentOrganization", () => ({
   useIsCurrentOrganization: () => () => true,
@@ -126,6 +143,21 @@ vi.mock("@/components/mcp/useOrganizationGatewaySetting", () => ({
     isPending: false,
   }),
 }));
+vi.mock("@gram/client/react-query/projectGateway.js", () => ({
+  useProjectGateway: () => ({
+    isLoading: state.gatewayLoading,
+    isFetching: false,
+    error: null,
+    refetch: vi.fn(),
+    data:
+      state.on && state.available
+        ? {
+            available: true,
+            url: "https://api.example.test/mcp/gateway/test/projects/sales",
+          }
+        : { available: false, unavailableReason: "turned_off" },
+  }),
+}));
 vi.mock(
   "@/components/mcp/organization-gateway-setting",
   async (importOriginal) => ({
@@ -135,7 +167,7 @@ vi.mock(
     GatewayNotServed: () => null,
   }),
 );
-vi.mock("@/components/mcp/OrganizationGatewayCard", () => ({
+vi.mock("@/components/mcp/ProjectGatewayCard", () => ({
   SpeakeasyMark: () => null,
 }));
 vi.mock("@/pages/setup/components/platform-instrumentation-sheet", () => ({
@@ -146,11 +178,13 @@ vi.mock("../access/MCPAssignments", () => ({
     <button onClick={() => onReady?.(true)}>Assignments loaded</button>
   ),
 }));
-import OrganizationGateway from "./OrganizationGateway";
+import OrganizationGateway, { ProjectGatewayPage } from "./OrganizationGateway";
 afterEach(cleanup);
 beforeEach(() => {
   state.error = false;
   state.admin = true;
+  state.orgRead = true;
+  state.projectRead = true;
   state.permissionsLoading = false;
   state.gatewayLoading = false;
   state.available = true;
@@ -183,7 +217,7 @@ it.each([false, true])(
   "shows assignments from the gateway card destination when enabled=%s",
   async (on) => {
     state.on = on;
-    render(<OrganizationGateway />);
+    render(<ProjectGatewayPage />);
     expect(
       screen
         .getByRole("tab", { name: on ? "Install" : "View assignments" })
@@ -203,15 +237,19 @@ it.each([false, true])(
 
 it("keeps the copyable endpoint above both tabs", async () => {
   state.on = true;
-  render(<OrganizationGateway />);
+  render(<ProjectGatewayPage />);
   expect(screen.getByRole("region", { name: "Gateway endpoint" })).toBeTruthy();
   expect(
-    screen.getByText("https://api.example.test/mcp/gateway/test"),
+    screen.getByText(
+      "https://api.example.test/mcp/gateway/test/projects/sales",
+    ),
   ).toBeTruthy();
   expect(screen.getByRole("button", { name: "Copy endpoint" })).toBeTruthy();
   await userEvent.click(screen.getByRole("tab", { name: "View assignments" }));
   expect(
-    screen.getByText("https://api.example.test/mcp/gateway/test"),
+    screen.getByText(
+      "https://api.example.test/mcp/gateway/test/projects/sales",
+    ),
   ).toBeTruthy();
   expect(
     screen.getByRole("tab", { name: "Install" }).getAttribute("aria-selected"),
@@ -223,16 +261,16 @@ it("keeps the copyable endpoint above both tabs", async () => {
 
 it("selects assignments after a disabled setting loads, preserving an explicit tab choice", async () => {
   state.on = undefined;
-  const { rerender } = render(<OrganizationGateway />);
+  const { rerender } = render(<ProjectGatewayPage />);
   state.on = false;
-  rerender(<OrganizationGateway />);
+  rerender(<ProjectGatewayPage />);
   expect(
     screen
       .getByRole("tab", { name: "View assignments" })
       .getAttribute("aria-selected"),
   ).toBe("true");
   await userEvent.click(screen.getByRole("tab", { name: "Install" }));
-  rerender(<OrganizationGateway />);
+  rerender(<ProjectGatewayPage />);
   expect(
     screen.getByRole("tab", { name: "Install" }).getAttribute("aria-selected"),
   ).toBe("true");
@@ -241,13 +279,13 @@ it("selects assignments after a disabled setting loads, preserving an explicit t
 it("keeps non-admin members on install after the disabled setting loads", async () => {
   state.admin = false;
   state.on = undefined;
-  const { rerender } = render(<OrganizationGateway />);
+  const { rerender } = render(<ProjectGatewayPage />);
   state.on = false;
-  rerender(<OrganizationGateway />);
+  rerender(<ProjectGatewayPage />);
   expect(
     screen.getByRole("tab", { name: "Install" }).getAttribute("aria-selected"),
   ).toBe("true");
-  expect(screen.getByText(/An organization admin must enable/)).toBeTruthy();
+  expect(screen.getByText(/An organization admin must turn on/)).toBeTruthy();
   const gatewaySwitch = screen.getByRole("switch", {
     name: "Organization Gateway",
   });
@@ -264,12 +302,12 @@ it("keeps non-admin members on install after the disabled setting loads", async 
 
 it("waits for administrator permissions before defaulting to assignments", () => {
   state.permissionsLoading = true;
-  const { rerender } = render(<OrganizationGateway />);
+  const { rerender } = render(<ProjectGatewayPage />);
   expect(
     screen.getByRole("tab", { name: "Install" }).getAttribute("aria-selected"),
   ).toBe("true");
   state.permissionsLoading = false;
-  rerender(<OrganizationGateway />);
+  rerender(<ProjectGatewayPage />);
   expect(
     screen
       .getByRole("tab", { name: "View assignments" })
@@ -283,12 +321,12 @@ it.each([true, false])(
     state.on = true;
     state.gatewayLoading = loading;
     state.available = false;
-    render(<OrganizationGateway />);
-    expect(screen.queryByText(/Enable Organization Gateway to get/)).toBeNull();
+    render(<ProjectGatewayPage />);
+    expect(screen.queryByText(/Turn on gateways to get/)).toBeNull();
     expect(
       screen.getByText(
         loading
-          ? /Loading Organization Gateway installation/
+          ? /Loading Project Gateway installation/
           : /installation is unavailable/,
       ),
     ).toBeTruthy();
@@ -298,13 +336,16 @@ it.each([true, false])(
 it("offers shared connection history to non-admins while the gateway is off", async () => {
   state.on = false;
   state.admin = false;
-  render(<OrganizationGateway />);
+  render(<ProjectGatewayPage />);
   await userEvent.click(screen.getByRole("tab", { name: "Connections" }));
   expect(screen.getByText("Shared gateway connections")).toBeTruthy();
+  expect(screen.getByLabelText("Connections scope").textContent).toBe(
+    "test-project",
+  );
 });
 
 it("restores a shared Connections URL while the gateway is disabled", () => {
-  render(<OrganizationGateway />, "/?tab=connections&q=example&sort=expiry");
+  render(<ProjectGatewayPage />, "/?tab=connections&q=example&sort=expiry");
   expect(screen.getByRole("status").textContent).toBe(
     "tab=connections&q=example&sort=expiry",
   );
@@ -316,20 +357,82 @@ it("restores a shared Connections URL while the gateway is disabled", () => {
   ).toBe("true");
 });
 
-it("shows organization-wide activity to non-admins", async () => {
+it("shows the project's activity to non-admins", async () => {
   state.admin = false;
-  render(<OrganizationGateway />);
+  render(<ProjectGatewayPage />);
   await userEvent.click(screen.getByRole("tab", { name: "Activity" }));
-  expect(screen.getByText("Organization gateway activity")).toBeTruthy();
+  expect(screen.getByText("Project gateway activity")).toBeTruthy();
   expect(screen.getByLabelText("Activity scope").textContent).toBe(
-    "organization:test-org",
+    "project:test-project",
   );
 });
 
 it("restores a shared Activity URL", () => {
-  render(<OrganizationGateway />, "/?tab=activity&range=7d");
+  render(<ProjectGatewayPage />, "/?tab=activity&range=7d");
   expect(
     screen.getByRole("tab", { name: "Activity" }).getAttribute("aria-selected"),
   ).toBe("true");
-  expect(screen.getByText("Organization gateway activity")).toBeTruthy();
+  expect(screen.getByText("Project gateway activity")).toBeTruthy();
+});
+
+it("lets an admin turn every gateway off from a project page", () => {
+  state.on = true;
+  render(<ProjectGatewayPage />);
+  fireEvent.click(screen.getByRole("switch", { name: "Organization Gateway" }));
+  expect(
+    screen.getByText(/turns off every project's Project Gateway/),
+  ).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Turn off" }));
+  expect(state.setOn).toHaveBeenCalledWith(
+    false,
+    expect.objectContaining({ onSuccess: expect.any(Function) }),
+  );
+});
+
+it("explains the project page while every gateway is off", () => {
+  render(<ProjectGatewayPage />);
+  expect(screen.getByText(/Gateways are off for every project/)).toBeTruthy();
+});
+
+it("points the Organization Gateway page at Project Gateways", () => {
+  state.on = true;
+  render(<OrganizationGateway />);
+  expect(
+    screen.getByText("https://api.example.test/mcp/gateway/test"),
+  ).toBeTruthy();
+  expect(screen.getByText("Use Project Gateways instead")).toBeTruthy();
+  expect(
+    screen.getByRole("button", { name: "Open Project Gateway" }),
+  ).toBeTruthy();
+  expect(screen.queryByRole("tab")).toBeNull();
+});
+
+it("serves a project member without organization access their project's gateway", async () => {
+  state.on = true;
+  state.admin = false;
+  state.orgRead = false;
+  render(<ProjectGatewayPage />);
+  expect(
+    screen.getByText(
+      "https://api.example.test/mcp/gateway/test/projects/sales",
+    ),
+  ).toBeTruthy();
+  // The switch turns every gateway on or off, so it needs organization access.
+  expect(
+    screen.queryByRole("switch", { name: "Organization Gateway" }),
+  ).toBeNull();
+  await userEvent.click(screen.getByRole("tab", { name: "Activity" }));
+  expect(screen.getByText("Project gateway activity")).toBeTruthy();
+});
+
+it("keeps a project's gateway from people without access to the project", () => {
+  state.on = true;
+  state.projectRead = false;
+  render(<ProjectGatewayPage />);
+  expect(
+    screen.queryByText(
+      "https://api.example.test/mcp/gateway/test/projects/sales",
+    ),
+  ).toBeNull();
+  expect(screen.queryByRole("tab")).toBeNull();
 });

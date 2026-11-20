@@ -70,6 +70,7 @@ func (f pluginMetadataFixture) pluginCount(t *testing.T, ctx context.Context, pr
 func (f pluginMetadataFixture) descriptor(t *testing.T, name string) Descriptor {
 	t.Helper()
 	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "plugin-metadata", Version: "0.0.1"}, nil))
+	registrar.withProjects(&RegistrationStore{db: f.conn, icons: nil})
 	registerPluginMetadataTools(registrar, f.service)
 	return descriptorByName(t, registrar, name)
 }
@@ -210,7 +211,7 @@ func TestCreatePluginRefusesAnUnconfirmedRequest(t *testing.T) {
 	t.Parallel()
 	ctx, fixture := seedPluginMetadataFixture(t, "platform_mcp_create_plugin_unconfirmed")
 	payload := invokePluginMetadataRefusal(t, fixture.descriptor(t, operationCreatePlugin), map[string]any{
-		"project_id": fixture.project.ID.String(), "name": "Unconfirmed", "slug": "unconfirmed",
+		"project_slug": fixture.project.Slug, "name": "Unconfirmed", "slug": "unconfirmed",
 		"description": "", "idempotency_key": uuid.NewString(), "confirmed": false,
 	}, ContextWithPrincipal(ctx, fixture.principal))
 	var refusal pluginMetadataRefusal
@@ -238,7 +239,7 @@ func TestCreatePluginPreviewReportsTheSlugItCreates(t *testing.T) {
 		{name: "Chosen slug", slug: "chosen-slug"},
 	} {
 		payload := invokePluginMetadataRefusal(t, descriptor, map[string]any{
-			"project_id": fixture.project.ID.String(), "name": input.name, "slug": input.slug,
+			"project_slug": fixture.project.Slug, "name": input.name, "slug": input.slug,
 			"description": "", "idempotency_key": uuid.NewString(), "confirmed": false,
 		}, caller)
 		var preview pluginMetadataRefusal
@@ -293,9 +294,9 @@ func TestCreatePluginRefusesACallerWithoutPluginWrite(t *testing.T) {
 	reader := authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeProjectRead, fixture.project.ID.String())})
 	reader = ContextWithPrincipal(reader, fixture.principal)
 
-	for _, projectID := range []string{fixture.project.ID.String(), uuid.NewString()} {
+	for _, projectSlug := range []string{fixture.project.Slug, "no-such-project"} {
 		payload := invokePluginMetadataRefusal(t, fixture.descriptor(t, operationCreatePlugin), map[string]any{
-			"project_id": projectID, "name": "Forbidden", "slug": "forbidden",
+			"project_slug": projectSlug, "name": "Forbidden", "slug": "forbidden",
 			"description": "", "idempotency_key": uuid.NewString(), "confirmed": true,
 		}, reader)
 		var refusal externalAuthorizationRefusal
@@ -496,8 +497,19 @@ func TestPluginMetadataNeverReturnsDatabaseErrorText(t *testing.T) {
 	plugin := seedPlugin(t, ctx, fixture.conn, fixture.principal.OrganizationID, fixture.project.ID, "Existing", "existing")
 	var logs bytes.Buffer
 	fixture.service.WithMetadataMutations(slog.New(slog.NewTextHandler(&logs, nil)), fixture.service.metadataCore, testOperationBudget())
-	createTool := fixture.descriptor(t, operationCreatePlugin)
-	renameTool := fixture.descriptor(t, operationRenamePlugin)
+	// The slug resolves without the database, so each call reaches the plugin
+	// service and fails on its own queries rather than on the lookup.
+	describe := func(name string) Descriptor {
+		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "plugin-metadata-no-db-text", Version: "0.0.1"}, nil))
+		registrar.withProjects(slugProjects{fixture.project.Slug: fixture.project.ID})
+		registerPluginMetadataTools(registrar, fixture.service)
+		return descriptorByName(t, registrar, name)
+	}
+	createTool := describe(operationCreatePlugin)
+	renameTool := describe(operationRenamePlugin)
+	// The deployment's own resolver reads the same database, so a lookup on
+	// it fails too and must not leak either.
+	resolvingTool := fixture.descriptor(t, operationCreatePlugin)
 	fixture.conn.Close()
 	caller := ContextWithPrincipal(ctx, fixture.principal)
 
@@ -511,16 +523,20 @@ func TestPluginMetadataNeverReturnsDatabaseErrorText(t *testing.T) {
 	}
 	results := map[string]string{
 		"create": invoke(createTool, map[string]any{
-			"project_id": fixture.project.ID.String(), "name": "After close", "slug": "after-close",
+			"project_slug": fixture.project.Slug, "name": "After close", "slug": "after-close",
 			"description": "", "idempotency_key": uuid.NewString(), "confirmed": true,
 		}),
 		"rename": invoke(renameTool, map[string]any{
-			"project_id": fixture.project.ID.String(), "plugin": plugin.ID.String(), "name": "Renamed after close",
+			"project_slug": fixture.project.Slug, "plugin": plugin.ID.String(), "name": "Renamed after close",
 			"idempotency_key": uuid.NewString(), "confirmed": true,
 		}),
 		"preview": invoke(createTool, map[string]any{
-			"project_id": fixture.project.ID.String(), "name": "Preview after close", "slug": "",
+			"project_slug": fixture.project.Slug, "name": "Preview after close", "slug": "",
 			"description": "", "idempotency_key": uuid.NewString(), "confirmed": false,
+		}),
+		"resolve": invoke(resolvingTool, map[string]any{
+			"project_slug": fixture.project.Slug, "name": "Resolve after close", "slug": "resolve-after-close",
+			"description": "", "idempotency_key": uuid.NewString(), "confirmed": true,
 		}),
 	}
 	for name, text := range results {
@@ -532,6 +548,7 @@ func TestPluginMetadataNeverReturnsDatabaseErrorText(t *testing.T) {
 	require.Contains(t, results["create"], unavailableCode)
 	require.Contains(t, results["rename"], unavailableCode)
 	require.Contains(t, results["preview"], "confirmation_required", "a preview needs no database")
+	require.Contains(t, results["resolve"], unavailableCode)
 	require.Contains(t, logs.String(), "closed pool", "the server log records the underlying cause, not the sanitized message")
 }
 
@@ -542,6 +559,7 @@ func TestPluginMetadataUnavailableRegistrationMatchesLiveManifest(t *testing.T) 
 
 	describe := func(service *PluginsService) map[string]Descriptor {
 		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "plugin-metadata-manifest", Version: "0.0.1"}, nil))
+		registrar.withProjects(&RegistrationStore{db: fixture.conn, icons: nil})
 		registerPluginMetadataTools(registrar, service)
 		byName := map[string]Descriptor{}
 		for _, descriptor := range registrar.Descriptors() {
@@ -567,9 +585,9 @@ func TestPluginMetadataUnavailableRegistrationMatchesLiveManifest(t *testing.T) 
 	}
 
 	payload := invokePluginMetadataRefusal(t, unavailable[operationCreatePlugin], map[string]any{
-		"project_id": fixture.project.ID.String(), "name": "Unavailable", "slug": "unavailable",
+		"project_slug": fixture.project.Slug, "name": "Unavailable", "slug": "unavailable",
 		"description": "", "idempotency_key": uuid.NewString(), "confirmed": true,
-	}, t.Context())
+	}, ContextWithPrincipal(t.Context(), fixture.principal))
 	require.Contains(t, payload, pluginMetadataFeature)
 }
 

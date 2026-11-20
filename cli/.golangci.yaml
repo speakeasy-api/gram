@@ -19,7 +19,7 @@ linters:
     - errname
     - errorlint
     - exhaustive
-    - exhaustruct
+    - exhaustruct_v5
     - exptostd
     - forcetypeassert
     - gochecksumtype
@@ -88,8 +88,8 @@ linters:
             - pkg: "github.com/pkg/errors"
               desc: Should be replaced by standard lib errors package
 
-    exhaustruct:
-      exclude:
+    exhaustruct_v5:
+      ignore-patterns:
         - '^crypto/tls\.Config$'
         - '^net\.Dialer$'
         - '^net/url\.URL$'

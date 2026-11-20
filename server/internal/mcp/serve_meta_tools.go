@@ -14,6 +14,7 @@ import (
 	"maps"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -29,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -93,6 +95,13 @@ func (s *Service) handleMetaDescribeServerCall(
 		})
 	}
 
+	instructions := catalog.instructions
+	if member.backend == metaMemberBackendHosted && member.toolsetID.Valid {
+		instructions = hostedServerInstructions(ctx, logger, s.mcpMetadataRepo, member.projectID, member.toolsetID.UUID)
+	}
+	if strings.TrimSpace(instructions) == "" {
+		instructions = ""
+	}
 	structured, err := json.Marshal(metamcp.DescribeServerResult{
 		Server: metamcp.ListedServer{
 			Slug:      member.slug,
@@ -100,7 +109,8 @@ func (s *Service) handleMetaDescribeServerCall(
 			SortOrder: int(member.sortOrder),
 			Status:    s.memberStatus(ctx, member),
 		},
-		Tools: described,
+		Instructions: instructions,
+		Tools:        described,
 	})
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "serialize describe_server result").LogError(ctx, logger)
@@ -263,7 +273,12 @@ func (s *Service) handleMetaExecuteToolCall(
 // stamped with this gateway.
 func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember, req *rawRequest, qualified string, arguments json.RawMessage, meta *mcprequests.WireMeta) (json.RawMessage, error) {
 	attempt := newMetaToolCallAttempt(time.Now())
-	body, err := s.dispatchMetaMemberTool(context.WithValue(ctx, metaToolCallAttemptKey{}, attempt), logger, gate, members, req, qualified, arguments, meta, attempt)
+	// A row from earlier in the request is about something else, not this call.
+	callCtx := contextvalues.WithConnectionReferenceSlot(context.WithValue(ctx, metaToolCallAttemptKey{}, attempt))
+	body, err := s.dispatchMetaMemberTool(callCtx, logger, gate, members, req, qualified, arguments, meta, attempt)
+	if err != nil {
+		contextvalues.ReplaceConnectionReference(ctx, contextvalues.ConnectionReference(callCtx))
+	}
 	if attempt.logged || attempt.proxied || (err == nil && attempt.status == 0) {
 		return body, err
 	}
@@ -370,10 +385,19 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 		inputs, syntheticReq, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache,
 		s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger,
 		s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
-	if err != nil {
-		if code, ok := toolsCallRefusal(err); ok {
-			s.recordMemberFailure(ctx, gate, member, code)
+	// A refusal keeps its own code, as on a hosted server; otherwise the provider's rejection is recorded.
+	code, refused := toolsCallRefusal(err)
+	if !refused {
+		code = inputs.upstreamRejection
+		// An anonymous caller's rejected bearer says nothing about a person's access.
+		if code == mcpconnectionattempts.CodeProviderRejected && gate.resolvedSubject(ctx) == nil {
+			code = mcpconnectionattempts.Code{}
 		}
+	}
+	if code != (mcpconnectionattempts.Code{}) {
+		s.recordMemberFailure(ctx, gate, member, code)
+	}
+	if err != nil {
 		// A member's execution failure must degrade that member, not the
 		// call: on a multi-member gateway an aborted JSON-RPC call reads as
 		// a gateway fault. Internal faults (unexpected errors and server
@@ -400,6 +424,8 @@ type memberCatalog struct {
 	entries    []*toolListEntry
 	byName     map[string]*toolListEntry
 	incomplete bool
+	// From a live upstream handshake. Cached catalogs do not probe upstream.
+	instructions string
 }
 
 // describeMemberToolset loads the member's catalog via the same model view
@@ -430,7 +456,7 @@ func (s *Service) describeMemberToolset(
 		return nil, oops.E(oops.CodeUnexpected, err, "describe member toolset").LogError(ctx, logger)
 	}
 
-	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false}
+	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false, instructions: ""}
 	duplicates := map[string]bool{}
 	for _, tool := range described.Tools {
 		entry := toolToListEntry(tool)
@@ -596,6 +622,7 @@ func (s *Service) buildMemberDispatch(
 		identityCoverageRecorded: false,
 		toolSelection:            nil,
 		skillsOverMCP:            nil,
+		upstreamRejection:        mcpconnectionattempts.Code{},
 	}
 	return toolset, hosting, inputs, nil
 }
@@ -675,7 +702,7 @@ func (s *Service) loadMemberToolset(
 // and a call that named a private member already recorded the same check, so
 // the request keeps one.
 func (s *Service) memberToolsetConnectAllowed(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, authenticated bool, toolset *toolsets_repo.Toolset, public bool) (bool, error) {
-	connect := authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())
+	connect := authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(toolset.ProjectID)).Connect()
 	visibility := mcpservers.VisibilityPrivate
 	if public {
 		visibility = mcpservers.VisibilityPublic
@@ -735,6 +762,7 @@ func marshalMetaMemberFailure(ctx context.Context, logger *slog.Logger, id mcpjs
 // marshalMetaToolError emits a member-scoped failure as an isError tool
 // result rather than a protocol error.
 func marshalMetaToolError(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID, message string) (json.RawMessage, error) {
+	message = contextvalues.AppendConnectionReference(ctx, message)
 	if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok {
 		invocation.message = message
 		return nil, invocation.failure()

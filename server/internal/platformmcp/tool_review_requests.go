@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP SDK manifests intentionally rely on documented zero-value optional fields.
+//nolint:exhaustruct_v5 // MCP SDK manifests intentionally rely on documented zero-value optional fields.
 package platformmcp
 
 import (
@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -26,7 +25,9 @@ type MCPReviewProjectResolver interface {
 }
 
 type RequestMCPReviewInput struct {
-	ProjectID     string `json:"project_id" jsonschema:"explicit project ID returned by list_projects"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID     string `json:"-"`
 	TargetKind    string `json:"target_kind" jsonschema:"server_url or stdio_command"`
 	Target        string `json:"target" jsonschema:"server URL or command to review; credential-shaped values are redacted before storage"`
 	Justification string `json:"justification" jsonschema:"why you need this MCP server; required and visible to reviewers"`
@@ -45,7 +46,9 @@ type RequestMCPReviewOutput struct {
 }
 
 type GetMyMCPReviewRequestInput struct {
-	ProjectID string `json:"project_id" jsonschema:"explicit project ID returned by list_projects"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 	RequestID string `json:"request_id" jsonschema:"request ID returned by request_mcp_review"`
 }
 
@@ -147,11 +150,7 @@ func reviewRequestToolResult(err error) (*mcp.CallToolResult, bool) {
 	case oops.CodeNotFound:
 		result.Code, result.Message = "not_found", "That project or review request is not available to you."
 	case oops.CodeForbidden:
-		if strings.Contains(shareable.Error(), "MCP approval is not enabled") {
-			result.Code, result.Message = unavailableCode, "MCP review requests are not available for this organization."
-		} else {
-			result.Code, result.Message = "forbidden", "You do not have permission to submit or read this MCP review request."
-		}
+		result.Code, result.Message = "forbidden", "You do not have permission to submit or read this MCP review request."
 	case oops.CodeUnavailable:
 		result.Code, result.Message = unavailableCode, "MCP review requests are temporarily unavailable."
 	default:

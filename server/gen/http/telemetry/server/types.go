@@ -212,18 +212,18 @@ type GetMetaMcpServerUsageRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 }
 
-// GetOrganizationGatewayOverviewRequestBody is the type of the "telemetry"
-// service "getOrganizationGatewayOverview" endpoint HTTP request body.
-type GetOrganizationGatewayOverviewRequestBody struct {
+// GetProjectGatewayOverviewRequestBody is the type of the "telemetry" service
+// "getProjectGatewayOverview" endpoint HTTP request body.
+type GetProjectGatewayOverviewRequestBody struct {
 	// Start time in ISO 8601 format
 	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
 	// End time in ISO 8601 format
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 }
 
-// GetOrganizationGatewayUsageRequestBody is the type of the "telemetry"
-// service "getOrganizationGatewayUsage" endpoint HTTP request body.
-type GetOrganizationGatewayUsageRequestBody struct {
+// GetProjectGatewayUsageRequestBody is the type of the "telemetry" service
+// "getProjectGatewayUsage" endpoint HTTP request body.
+type GetProjectGatewayUsageRequestBody struct {
 	// Start time in ISO 8601 format
 	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
 	// End time in ISO 8601 format
@@ -1053,9 +1053,9 @@ type GetMetaMcpServerUsageResponseBody struct {
 	Members []*MetaMcpMemberUsageResponseBody `form:"members" json:"members" xml:"members"`
 }
 
-// GetOrganizationGatewayOverviewResponseBody is the type of the "telemetry"
-// service "getOrganizationGatewayOverview" endpoint HTTP response body.
-type GetOrganizationGatewayOverviewResponseBody struct {
+// GetProjectGatewayOverviewResponseBody is the type of the "telemetry" service
+// "getProjectGatewayOverview" endpoint HTTP response body.
+type GetProjectGatewayOverviewResponseBody struct {
 	// Current period summary metrics
 	Summary *ObservabilitySummaryResponseBody `form:"summary" json:"summary" xml:"summary"`
 	// Previous period summary metrics for trend calculation
@@ -1070,9 +1070,9 @@ type GetOrganizationGatewayOverviewResponseBody struct {
 	IntervalSeconds int64 `form:"interval_seconds" json:"interval_seconds" xml:"interval_seconds"`
 }
 
-// GetOrganizationGatewayUsageResponseBody is the type of the "telemetry"
-// service "getOrganizationGatewayUsage" endpoint HTTP response body.
-type GetOrganizationGatewayUsageResponseBody struct {
+// GetProjectGatewayUsageResponseBody is the type of the "telemetry" service
+// "getProjectGatewayUsage" endpoint HTTP response body.
+type GetProjectGatewayUsageResponseBody struct {
 	Funnel *MetaMcpDiscoveryFunnelResponseBody `form:"funnel" json:"funnel" xml:"funnel"`
 	// Per-member execution breakdown, most active first
 	Members []*MetaMcpMemberUsageResponseBody `form:"members" json:"members" xml:"members"`
@@ -1157,10 +1157,17 @@ type QueryTumDetailsResponseBody struct {
 // ListSessionsResponseBody is the type of the "telemetry" service
 // "listSessions" endpoint HTTP response body.
 type ListSessionsResponseBody struct {
-	// List of chat session summaries
+	// List of chat session summaries. Only sessions from projects the caller holds
+	// chat:read on are listed.
 	Sessions []*SessionSummaryResponseBody `form:"sessions" json:"sessions" xml:"sessions"`
 	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+	// True when sessions were withheld because the caller lacks chat:read on one
+	// or more projects. The totals still cover every matching session.
+	Scoped bool `form:"scoped" json:"scoped" xml:"scoped"`
+	// Aggregates over every matching session in the organization. Present only
+	// when scoped is true.
+	Totals *SessionTotalsResponseBody `form:"totals,omitempty" json:"totals,omitempty" xml:"totals,omitempty"`
 }
 
 // ListFilterOptionsResponseBody is the type of the "telemetry" service
@@ -3392,10 +3399,10 @@ type GetMetaMcpServerUsageGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationGatewayOverviewUnauthorizedResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
-// body for the "unauthorized" error.
-type GetOrganizationGatewayOverviewUnauthorizedResponseBody struct {
+// GetProjectGatewayOverviewUnauthorizedResponseBody is the type of the
+// "telemetry" service "getProjectGatewayOverview" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetProjectGatewayOverviewUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3411,10 +3418,10 @@ type GetOrganizationGatewayOverviewUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationGatewayOverviewForbiddenResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
-// body for the "forbidden" error.
-type GetOrganizationGatewayOverviewForbiddenResponseBody struct {
+// GetProjectGatewayOverviewForbiddenResponseBody is the type of the
+// "telemetry" service "getProjectGatewayOverview" endpoint HTTP response body
+// for the "forbidden" error.
+type GetProjectGatewayOverviewForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3430,10 +3437,10 @@ type GetOrganizationGatewayOverviewForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationGatewayOverviewBadRequestResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
-// body for the "bad_request" error.
-type GetOrganizationGatewayOverviewBadRequestResponseBody struct {
+// GetProjectGatewayOverviewBadRequestResponseBody is the type of the
+// "telemetry" service "getProjectGatewayOverview" endpoint HTTP response body
+// for the "bad_request" error.
+type GetProjectGatewayOverviewBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3449,10 +3456,10 @@ type GetOrganizationGatewayOverviewBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationGatewayOverviewNotFoundResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
-// body for the "not_found" error.
-type GetOrganizationGatewayOverviewNotFoundResponseBody struct {
+// GetProjectGatewayOverviewNotFoundResponseBody is the type of the "telemetry"
+// service "getProjectGatewayOverview" endpoint HTTP response body for the
+// "not_found" error.
+type GetProjectGatewayOverviewNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3468,10 +3475,10 @@ type GetOrganizationGatewayOverviewNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationGatewayOverviewConflictResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
-// body for the "conflict" error.
-type GetOrganizationGatewayOverviewConflictResponseBody struct {
+// GetProjectGatewayOverviewConflictResponseBody is the type of the "telemetry"
+// service "getProjectGatewayOverview" endpoint HTTP response body for the
+// "conflict" error.
+type GetProjectGatewayOverviewConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3487,10 +3494,10 @@ type GetOrganizationGatewayOverviewConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationGatewayOverviewUnsupportedMediaResponseBody is the type of
-// the "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP
-// response body for the "unsupported_media" error.
-type GetOrganizationGatewayOverviewUnsupportedMediaResponseBody struct {
+// GetProjectGatewayOverviewUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "getProjectGatewayOverview" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetProjectGatewayOverviewUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3506,10 +3513,10 @@ type GetOrganizationGatewayOverviewUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationGatewayOverviewInvalidResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
-// body for the "invalid" error.
-type GetOrganizationGatewayOverviewInvalidResponseBody struct {
+// GetProjectGatewayOverviewInvalidResponseBody is the type of the "telemetry"
+// service "getProjectGatewayOverview" endpoint HTTP response body for the
+// "invalid" error.
+type GetProjectGatewayOverviewInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3525,10 +3532,10 @@ type GetOrganizationGatewayOverviewInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationGatewayOverviewInvariantViolationResponseBody is the type of
-// the "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP
-// response body for the "invariant_violation" error.
-type GetOrganizationGatewayOverviewInvariantViolationResponseBody struct {
+// GetProjectGatewayOverviewInvariantViolationResponseBody is the type of the
+// "telemetry" service "getProjectGatewayOverview" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetProjectGatewayOverviewInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3544,10 +3551,10 @@ type GetOrganizationGatewayOverviewInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationGatewayOverviewUnexpectedResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
-// body for the "unexpected" error.
-type GetOrganizationGatewayOverviewUnexpectedResponseBody struct {
+// GetProjectGatewayOverviewUnexpectedResponseBody is the type of the
+// "telemetry" service "getProjectGatewayOverview" endpoint HTTP response body
+// for the "unexpected" error.
+type GetProjectGatewayOverviewUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3563,10 +3570,10 @@ type GetOrganizationGatewayOverviewUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationGatewayOverviewGatewayErrorResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
-// body for the "gateway_error" error.
-type GetOrganizationGatewayOverviewGatewayErrorResponseBody struct {
+// GetProjectGatewayOverviewGatewayErrorResponseBody is the type of the
+// "telemetry" service "getProjectGatewayOverview" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetProjectGatewayOverviewGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3582,10 +3589,10 @@ type GetOrganizationGatewayOverviewGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationGatewayUsageUnauthorizedResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
-// body for the "unauthorized" error.
-type GetOrganizationGatewayUsageUnauthorizedResponseBody struct {
+// GetProjectGatewayUsageUnauthorizedResponseBody is the type of the
+// "telemetry" service "getProjectGatewayUsage" endpoint HTTP response body for
+// the "unauthorized" error.
+type GetProjectGatewayUsageUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3601,10 +3608,10 @@ type GetOrganizationGatewayUsageUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationGatewayUsageForbiddenResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
-// body for the "forbidden" error.
-type GetOrganizationGatewayUsageForbiddenResponseBody struct {
+// GetProjectGatewayUsageForbiddenResponseBody is the type of the "telemetry"
+// service "getProjectGatewayUsage" endpoint HTTP response body for the
+// "forbidden" error.
+type GetProjectGatewayUsageForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3620,10 +3627,10 @@ type GetOrganizationGatewayUsageForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationGatewayUsageBadRequestResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
-// body for the "bad_request" error.
-type GetOrganizationGatewayUsageBadRequestResponseBody struct {
+// GetProjectGatewayUsageBadRequestResponseBody is the type of the "telemetry"
+// service "getProjectGatewayUsage" endpoint HTTP response body for the
+// "bad_request" error.
+type GetProjectGatewayUsageBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3639,10 +3646,10 @@ type GetOrganizationGatewayUsageBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationGatewayUsageNotFoundResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
-// body for the "not_found" error.
-type GetOrganizationGatewayUsageNotFoundResponseBody struct {
+// GetProjectGatewayUsageNotFoundResponseBody is the type of the "telemetry"
+// service "getProjectGatewayUsage" endpoint HTTP response body for the
+// "not_found" error.
+type GetProjectGatewayUsageNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3658,10 +3665,10 @@ type GetOrganizationGatewayUsageNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationGatewayUsageConflictResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
-// body for the "conflict" error.
-type GetOrganizationGatewayUsageConflictResponseBody struct {
+// GetProjectGatewayUsageConflictResponseBody is the type of the "telemetry"
+// service "getProjectGatewayUsage" endpoint HTTP response body for the
+// "conflict" error.
+type GetProjectGatewayUsageConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3677,10 +3684,10 @@ type GetOrganizationGatewayUsageConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationGatewayUsageUnsupportedMediaResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
-// body for the "unsupported_media" error.
-type GetOrganizationGatewayUsageUnsupportedMediaResponseBody struct {
+// GetProjectGatewayUsageUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "getProjectGatewayUsage" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetProjectGatewayUsageUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3696,10 +3703,10 @@ type GetOrganizationGatewayUsageUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationGatewayUsageInvalidResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
-// body for the "invalid" error.
-type GetOrganizationGatewayUsageInvalidResponseBody struct {
+// GetProjectGatewayUsageInvalidResponseBody is the type of the "telemetry"
+// service "getProjectGatewayUsage" endpoint HTTP response body for the
+// "invalid" error.
+type GetProjectGatewayUsageInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3715,10 +3722,10 @@ type GetOrganizationGatewayUsageInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationGatewayUsageInvariantViolationResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
-// body for the "invariant_violation" error.
-type GetOrganizationGatewayUsageInvariantViolationResponseBody struct {
+// GetProjectGatewayUsageInvariantViolationResponseBody is the type of the
+// "telemetry" service "getProjectGatewayUsage" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetProjectGatewayUsageInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3734,10 +3741,10 @@ type GetOrganizationGatewayUsageInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationGatewayUsageUnexpectedResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
-// body for the "unexpected" error.
-type GetOrganizationGatewayUsageUnexpectedResponseBody struct {
+// GetProjectGatewayUsageUnexpectedResponseBody is the type of the "telemetry"
+// service "getProjectGatewayUsage" endpoint HTTP response body for the
+// "unexpected" error.
+type GetProjectGatewayUsageUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3753,10 +3760,10 @@ type GetOrganizationGatewayUsageUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationGatewayUsageGatewayErrorResponseBody is the type of the
-// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
-// body for the "gateway_error" error.
-type GetOrganizationGatewayUsageGatewayErrorResponseBody struct {
+// GetProjectGatewayUsageGatewayErrorResponseBody is the type of the
+// "telemetry" service "getProjectGatewayUsage" endpoint HTTP response body for
+// the "gateway_error" error.
+type GetProjectGatewayUsageGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -9338,6 +9345,24 @@ type SessionSummaryResponseBody struct {
 	Status string `form:"status" json:"status" xml:"status"`
 }
 
+// SessionTotalsResponseBody is used to define fields on response body types.
+type SessionTotalsResponseBody struct {
+	// Number of matching chat sessions
+	SessionCount int64 `form:"session_count" json:"session_count" xml:"session_count"`
+	// Number of LLM completion messages across the sessions
+	MessageCount int64 `form:"message_count" json:"message_count" xml:"message_count"`
+	// Number of tool calls across the sessions
+	ToolCallCount int64 `form:"tool_call_count" json:"tool_call_count" xml:"tool_call_count"`
+	// Total input tokens used
+	TotalInputTokens int64 `form:"total_input_tokens" json:"total_input_tokens" xml:"total_input_tokens"`
+	// Total output tokens used
+	TotalOutputTokens int64 `form:"total_output_tokens" json:"total_output_tokens" xml:"total_output_tokens"`
+	// Total tokens used
+	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
+	// Total cost in USD
+	TotalCost float64 `form:"total_cost" json:"total_cost" xml:"total_cost"`
+}
+
 // FilterOptionResponseBody is used to define fields on response body types.
 type FilterOptionResponseBody struct {
 	// Unique identifier for the option
@@ -10247,11 +10272,11 @@ func NewGetMetaMcpServerUsageResponseBody(res *telemetry.GetMetaMcpServerUsageRe
 	return body
 }
 
-// NewGetOrganizationGatewayOverviewResponseBody builds the HTTP response body
-// from the result of the "getOrganizationGatewayOverview" endpoint of the
-// "telemetry" service.
-func NewGetOrganizationGatewayOverviewResponseBody(res *telemetry.GetObservabilityOverviewResult) *GetOrganizationGatewayOverviewResponseBody {
-	body := &GetOrganizationGatewayOverviewResponseBody{
+// NewGetProjectGatewayOverviewResponseBody builds the HTTP response body from
+// the result of the "getProjectGatewayOverview" endpoint of the "telemetry"
+// service.
+func NewGetProjectGatewayOverviewResponseBody(res *telemetry.GetObservabilityOverviewResult) *GetProjectGatewayOverviewResponseBody {
+	body := &GetProjectGatewayOverviewResponseBody{
 		IntervalSeconds: res.IntervalSeconds,
 	}
 	if res.Summary != nil {
@@ -10299,11 +10324,10 @@ func NewGetOrganizationGatewayOverviewResponseBody(res *telemetry.GetObservabili
 	return body
 }
 
-// NewGetOrganizationGatewayUsageResponseBody builds the HTTP response body
-// from the result of the "getOrganizationGatewayUsage" endpoint of the
-// "telemetry" service.
-func NewGetOrganizationGatewayUsageResponseBody(res *telemetry.GetMetaMcpServerUsageResult) *GetOrganizationGatewayUsageResponseBody {
-	body := &GetOrganizationGatewayUsageResponseBody{}
+// NewGetProjectGatewayUsageResponseBody builds the HTTP response body from the
+// result of the "getProjectGatewayUsage" endpoint of the "telemetry" service.
+func NewGetProjectGatewayUsageResponseBody(res *telemetry.GetMetaMcpServerUsageResult) *GetProjectGatewayUsageResponseBody {
+	body := &GetProjectGatewayUsageResponseBody{}
 	if res.Funnel != nil {
 		body.Funnel = marshalTelemetryMetaMcpDiscoveryFunnelToMetaMcpDiscoveryFunnelResponseBody(res.Funnel)
 	}
@@ -10502,6 +10526,7 @@ func NewQueryTumDetailsResponseBody(res *telemetry.TumDetailsResult) *QueryTumDe
 func NewListSessionsResponseBody(res *telemetry.ListSessionsResult) *ListSessionsResponseBody {
 	body := &ListSessionsResponseBody{
 		NextCursor: res.NextCursor,
+		Scoped:     res.Scoped,
 	}
 	if res.Sessions != nil {
 		body.Sessions = make([]*SessionSummaryResponseBody, len(res.Sessions))
@@ -10514,6 +10539,9 @@ func NewListSessionsResponseBody(res *telemetry.ListSessionsResult) *ListSession
 		}
 	} else {
 		body.Sessions = []*SessionSummaryResponseBody{}
+	}
+	if res.Totals != nil {
+		body.Totals = marshalTelemetrySessionTotalsToSessionTotalsResponseBody(res.Totals)
 	}
 	return body
 }
@@ -12674,11 +12702,11 @@ func NewGetMetaMcpServerUsageGatewayErrorResponseBody(res *goa.ServiceError) *Ge
 	return body
 }
 
-// NewGetOrganizationGatewayOverviewUnauthorizedResponseBody builds the HTTP
-// response body from the result of the "getOrganizationGatewayOverview"
-// endpoint of the "telemetry" service.
-func NewGetOrganizationGatewayOverviewUnauthorizedResponseBody(res *goa.ServiceError) *GetOrganizationGatewayOverviewUnauthorizedResponseBody {
-	body := &GetOrganizationGatewayOverviewUnauthorizedResponseBody{
+// NewGetProjectGatewayOverviewUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "getProjectGatewayOverview" endpoint of
+// the "telemetry" service.
+func NewGetProjectGatewayOverviewUnauthorizedResponseBody(res *goa.ServiceError) *GetProjectGatewayOverviewUnauthorizedResponseBody {
+	body := &GetProjectGatewayOverviewUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -12689,161 +12717,11 @@ func NewGetOrganizationGatewayOverviewUnauthorizedResponseBody(res *goa.ServiceE
 	return body
 }
 
-// NewGetOrganizationGatewayOverviewForbiddenResponseBody builds the HTTP
-// response body from the result of the "getOrganizationGatewayOverview"
-// endpoint of the "telemetry" service.
-func NewGetOrganizationGatewayOverviewForbiddenResponseBody(res *goa.ServiceError) *GetOrganizationGatewayOverviewForbiddenResponseBody {
-	body := &GetOrganizationGatewayOverviewForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetOrganizationGatewayOverviewBadRequestResponseBody builds the HTTP
-// response body from the result of the "getOrganizationGatewayOverview"
-// endpoint of the "telemetry" service.
-func NewGetOrganizationGatewayOverviewBadRequestResponseBody(res *goa.ServiceError) *GetOrganizationGatewayOverviewBadRequestResponseBody {
-	body := &GetOrganizationGatewayOverviewBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetOrganizationGatewayOverviewNotFoundResponseBody builds the HTTP
-// response body from the result of the "getOrganizationGatewayOverview"
-// endpoint of the "telemetry" service.
-func NewGetOrganizationGatewayOverviewNotFoundResponseBody(res *goa.ServiceError) *GetOrganizationGatewayOverviewNotFoundResponseBody {
-	body := &GetOrganizationGatewayOverviewNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetOrganizationGatewayOverviewConflictResponseBody builds the HTTP
-// response body from the result of the "getOrganizationGatewayOverview"
-// endpoint of the "telemetry" service.
-func NewGetOrganizationGatewayOverviewConflictResponseBody(res *goa.ServiceError) *GetOrganizationGatewayOverviewConflictResponseBody {
-	body := &GetOrganizationGatewayOverviewConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetOrganizationGatewayOverviewUnsupportedMediaResponseBody builds the
-// HTTP response body from the result of the "getOrganizationGatewayOverview"
-// endpoint of the "telemetry" service.
-func NewGetOrganizationGatewayOverviewUnsupportedMediaResponseBody(res *goa.ServiceError) *GetOrganizationGatewayOverviewUnsupportedMediaResponseBody {
-	body := &GetOrganizationGatewayOverviewUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetOrganizationGatewayOverviewInvalidResponseBody builds the HTTP
-// response body from the result of the "getOrganizationGatewayOverview"
-// endpoint of the "telemetry" service.
-func NewGetOrganizationGatewayOverviewInvalidResponseBody(res *goa.ServiceError) *GetOrganizationGatewayOverviewInvalidResponseBody {
-	body := &GetOrganizationGatewayOverviewInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetOrganizationGatewayOverviewInvariantViolationResponseBody builds the
-// HTTP response body from the result of the "getOrganizationGatewayOverview"
-// endpoint of the "telemetry" service.
-func NewGetOrganizationGatewayOverviewInvariantViolationResponseBody(res *goa.ServiceError) *GetOrganizationGatewayOverviewInvariantViolationResponseBody {
-	body := &GetOrganizationGatewayOverviewInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetOrganizationGatewayOverviewUnexpectedResponseBody builds the HTTP
-// response body from the result of the "getOrganizationGatewayOverview"
-// endpoint of the "telemetry" service.
-func NewGetOrganizationGatewayOverviewUnexpectedResponseBody(res *goa.ServiceError) *GetOrganizationGatewayOverviewUnexpectedResponseBody {
-	body := &GetOrganizationGatewayOverviewUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetOrganizationGatewayOverviewGatewayErrorResponseBody builds the HTTP
-// response body from the result of the "getOrganizationGatewayOverview"
-// endpoint of the "telemetry" service.
-func NewGetOrganizationGatewayOverviewGatewayErrorResponseBody(res *goa.ServiceError) *GetOrganizationGatewayOverviewGatewayErrorResponseBody {
-	body := &GetOrganizationGatewayOverviewGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetOrganizationGatewayUsageUnauthorizedResponseBody builds the HTTP
-// response body from the result of the "getOrganizationGatewayUsage" endpoint
-// of the "telemetry" service.
-func NewGetOrganizationGatewayUsageUnauthorizedResponseBody(res *goa.ServiceError) *GetOrganizationGatewayUsageUnauthorizedResponseBody {
-	body := &GetOrganizationGatewayUsageUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetOrganizationGatewayUsageForbiddenResponseBody builds the HTTP response
-// body from the result of the "getOrganizationGatewayUsage" endpoint of the
+// NewGetProjectGatewayOverviewForbiddenResponseBody builds the HTTP response
+// body from the result of the "getProjectGatewayOverview" endpoint of the
 // "telemetry" service.
-func NewGetOrganizationGatewayUsageForbiddenResponseBody(res *goa.ServiceError) *GetOrganizationGatewayUsageForbiddenResponseBody {
-	body := &GetOrganizationGatewayUsageForbiddenResponseBody{
+func NewGetProjectGatewayOverviewForbiddenResponseBody(res *goa.ServiceError) *GetProjectGatewayOverviewForbiddenResponseBody {
+	body := &GetProjectGatewayOverviewForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -12854,26 +12732,11 @@ func NewGetOrganizationGatewayUsageForbiddenResponseBody(res *goa.ServiceError) 
 	return body
 }
 
-// NewGetOrganizationGatewayUsageBadRequestResponseBody builds the HTTP
-// response body from the result of the "getOrganizationGatewayUsage" endpoint
-// of the "telemetry" service.
-func NewGetOrganizationGatewayUsageBadRequestResponseBody(res *goa.ServiceError) *GetOrganizationGatewayUsageBadRequestResponseBody {
-	body := &GetOrganizationGatewayUsageBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetOrganizationGatewayUsageNotFoundResponseBody builds the HTTP response
-// body from the result of the "getOrganizationGatewayUsage" endpoint of the
+// NewGetProjectGatewayOverviewBadRequestResponseBody builds the HTTP response
+// body from the result of the "getProjectGatewayOverview" endpoint of the
 // "telemetry" service.
-func NewGetOrganizationGatewayUsageNotFoundResponseBody(res *goa.ServiceError) *GetOrganizationGatewayUsageNotFoundResponseBody {
-	body := &GetOrganizationGatewayUsageNotFoundResponseBody{
+func NewGetProjectGatewayOverviewBadRequestResponseBody(res *goa.ServiceError) *GetProjectGatewayOverviewBadRequestResponseBody {
+	body := &GetProjectGatewayOverviewBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -12884,11 +12747,11 @@ func NewGetOrganizationGatewayUsageNotFoundResponseBody(res *goa.ServiceError) *
 	return body
 }
 
-// NewGetOrganizationGatewayUsageConflictResponseBody builds the HTTP response
-// body from the result of the "getOrganizationGatewayUsage" endpoint of the
+// NewGetProjectGatewayOverviewNotFoundResponseBody builds the HTTP response
+// body from the result of the "getProjectGatewayOverview" endpoint of the
 // "telemetry" service.
-func NewGetOrganizationGatewayUsageConflictResponseBody(res *goa.ServiceError) *GetOrganizationGatewayUsageConflictResponseBody {
-	body := &GetOrganizationGatewayUsageConflictResponseBody{
+func NewGetProjectGatewayOverviewNotFoundResponseBody(res *goa.ServiceError) *GetProjectGatewayOverviewNotFoundResponseBody {
+	body := &GetProjectGatewayOverviewNotFoundResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -12899,26 +12762,11 @@ func NewGetOrganizationGatewayUsageConflictResponseBody(res *goa.ServiceError) *
 	return body
 }
 
-// NewGetOrganizationGatewayUsageUnsupportedMediaResponseBody builds the HTTP
-// response body from the result of the "getOrganizationGatewayUsage" endpoint
-// of the "telemetry" service.
-func NewGetOrganizationGatewayUsageUnsupportedMediaResponseBody(res *goa.ServiceError) *GetOrganizationGatewayUsageUnsupportedMediaResponseBody {
-	body := &GetOrganizationGatewayUsageUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetOrganizationGatewayUsageInvalidResponseBody builds the HTTP response
-// body from the result of the "getOrganizationGatewayUsage" endpoint of the
+// NewGetProjectGatewayOverviewConflictResponseBody builds the HTTP response
+// body from the result of the "getProjectGatewayOverview" endpoint of the
 // "telemetry" service.
-func NewGetOrganizationGatewayUsageInvalidResponseBody(res *goa.ServiceError) *GetOrganizationGatewayUsageInvalidResponseBody {
-	body := &GetOrganizationGatewayUsageInvalidResponseBody{
+func NewGetProjectGatewayOverviewConflictResponseBody(res *goa.ServiceError) *GetProjectGatewayOverviewConflictResponseBody {
+	body := &GetProjectGatewayOverviewConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -12929,11 +12777,11 @@ func NewGetOrganizationGatewayUsageInvalidResponseBody(res *goa.ServiceError) *G
 	return body
 }
 
-// NewGetOrganizationGatewayUsageInvariantViolationResponseBody builds the HTTP
-// response body from the result of the "getOrganizationGatewayUsage" endpoint
-// of the "telemetry" service.
-func NewGetOrganizationGatewayUsageInvariantViolationResponseBody(res *goa.ServiceError) *GetOrganizationGatewayUsageInvariantViolationResponseBody {
-	body := &GetOrganizationGatewayUsageInvariantViolationResponseBody{
+// NewGetProjectGatewayOverviewUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getProjectGatewayOverview" endpoint of
+// the "telemetry" service.
+func NewGetProjectGatewayOverviewUnsupportedMediaResponseBody(res *goa.ServiceError) *GetProjectGatewayOverviewUnsupportedMediaResponseBody {
+	body := &GetProjectGatewayOverviewUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -12944,11 +12792,11 @@ func NewGetOrganizationGatewayUsageInvariantViolationResponseBody(res *goa.Servi
 	return body
 }
 
-// NewGetOrganizationGatewayUsageUnexpectedResponseBody builds the HTTP
-// response body from the result of the "getOrganizationGatewayUsage" endpoint
-// of the "telemetry" service.
-func NewGetOrganizationGatewayUsageUnexpectedResponseBody(res *goa.ServiceError) *GetOrganizationGatewayUsageUnexpectedResponseBody {
-	body := &GetOrganizationGatewayUsageUnexpectedResponseBody{
+// NewGetProjectGatewayOverviewInvalidResponseBody builds the HTTP response
+// body from the result of the "getProjectGatewayOverview" endpoint of the
+// "telemetry" service.
+func NewGetProjectGatewayOverviewInvalidResponseBody(res *goa.ServiceError) *GetProjectGatewayOverviewInvalidResponseBody {
+	body := &GetProjectGatewayOverviewInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -12959,11 +12807,191 @@ func NewGetOrganizationGatewayUsageUnexpectedResponseBody(res *goa.ServiceError)
 	return body
 }
 
-// NewGetOrganizationGatewayUsageGatewayErrorResponseBody builds the HTTP
-// response body from the result of the "getOrganizationGatewayUsage" endpoint
-// of the "telemetry" service.
-func NewGetOrganizationGatewayUsageGatewayErrorResponseBody(res *goa.ServiceError) *GetOrganizationGatewayUsageGatewayErrorResponseBody {
-	body := &GetOrganizationGatewayUsageGatewayErrorResponseBody{
+// NewGetProjectGatewayOverviewInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getProjectGatewayOverview" endpoint of
+// the "telemetry" service.
+func NewGetProjectGatewayOverviewInvariantViolationResponseBody(res *goa.ServiceError) *GetProjectGatewayOverviewInvariantViolationResponseBody {
+	body := &GetProjectGatewayOverviewInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayOverviewUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getProjectGatewayOverview" endpoint of the
+// "telemetry" service.
+func NewGetProjectGatewayOverviewUnexpectedResponseBody(res *goa.ServiceError) *GetProjectGatewayOverviewUnexpectedResponseBody {
+	body := &GetProjectGatewayOverviewUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayOverviewGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "getProjectGatewayOverview" endpoint of
+// the "telemetry" service.
+func NewGetProjectGatewayOverviewGatewayErrorResponseBody(res *goa.ServiceError) *GetProjectGatewayOverviewGatewayErrorResponseBody {
+	body := &GetProjectGatewayOverviewGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayUsageUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getProjectGatewayUsage" endpoint of the
+// "telemetry" service.
+func NewGetProjectGatewayUsageUnauthorizedResponseBody(res *goa.ServiceError) *GetProjectGatewayUsageUnauthorizedResponseBody {
+	body := &GetProjectGatewayUsageUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayUsageForbiddenResponseBody builds the HTTP response body
+// from the result of the "getProjectGatewayUsage" endpoint of the "telemetry"
+// service.
+func NewGetProjectGatewayUsageForbiddenResponseBody(res *goa.ServiceError) *GetProjectGatewayUsageForbiddenResponseBody {
+	body := &GetProjectGatewayUsageForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayUsageBadRequestResponseBody builds the HTTP response
+// body from the result of the "getProjectGatewayUsage" endpoint of the
+// "telemetry" service.
+func NewGetProjectGatewayUsageBadRequestResponseBody(res *goa.ServiceError) *GetProjectGatewayUsageBadRequestResponseBody {
+	body := &GetProjectGatewayUsageBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayUsageNotFoundResponseBody builds the HTTP response body
+// from the result of the "getProjectGatewayUsage" endpoint of the "telemetry"
+// service.
+func NewGetProjectGatewayUsageNotFoundResponseBody(res *goa.ServiceError) *GetProjectGatewayUsageNotFoundResponseBody {
+	body := &GetProjectGatewayUsageNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayUsageConflictResponseBody builds the HTTP response body
+// from the result of the "getProjectGatewayUsage" endpoint of the "telemetry"
+// service.
+func NewGetProjectGatewayUsageConflictResponseBody(res *goa.ServiceError) *GetProjectGatewayUsageConflictResponseBody {
+	body := &GetProjectGatewayUsageConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayUsageUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getProjectGatewayUsage" endpoint of
+// the "telemetry" service.
+func NewGetProjectGatewayUsageUnsupportedMediaResponseBody(res *goa.ServiceError) *GetProjectGatewayUsageUnsupportedMediaResponseBody {
+	body := &GetProjectGatewayUsageUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayUsageInvalidResponseBody builds the HTTP response body
+// from the result of the "getProjectGatewayUsage" endpoint of the "telemetry"
+// service.
+func NewGetProjectGatewayUsageInvalidResponseBody(res *goa.ServiceError) *GetProjectGatewayUsageInvalidResponseBody {
+	body := &GetProjectGatewayUsageInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayUsageInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getProjectGatewayUsage" endpoint of
+// the "telemetry" service.
+func NewGetProjectGatewayUsageInvariantViolationResponseBody(res *goa.ServiceError) *GetProjectGatewayUsageInvariantViolationResponseBody {
+	body := &GetProjectGatewayUsageInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayUsageUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getProjectGatewayUsage" endpoint of the
+// "telemetry" service.
+func NewGetProjectGatewayUsageUnexpectedResponseBody(res *goa.ServiceError) *GetProjectGatewayUsageUnexpectedResponseBody {
+	body := &GetProjectGatewayUsageUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayUsageGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getProjectGatewayUsage" endpoint of the
+// "telemetry" service.
+func NewGetProjectGatewayUsageGatewayErrorResponseBody(res *goa.ServiceError) *GetProjectGatewayUsageGatewayErrorResponseBody {
+	body := &GetProjectGatewayUsageGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -17081,26 +17109,28 @@ func NewGetMetaMcpServerUsagePayload(body *GetMetaMcpServerUsageRequestBody, api
 	return v
 }
 
-// NewGetOrganizationGatewayOverviewPayload builds a telemetry service
-// getOrganizationGatewayOverview endpoint payload.
-func NewGetOrganizationGatewayOverviewPayload(body *GetOrganizationGatewayOverviewRequestBody, sessionToken *string) *telemetry.GetOrganizationGatewayOverviewPayload {
-	v := &telemetry.GetOrganizationGatewayOverviewPayload{
+// NewGetProjectGatewayOverviewPayload builds a telemetry service
+// getProjectGatewayOverview endpoint payload.
+func NewGetProjectGatewayOverviewPayload(body *GetProjectGatewayOverviewRequestBody, sessionToken *string, projectSlugInput *string) *telemetry.GetProjectGatewayOverviewPayload {
+	v := &telemetry.GetProjectGatewayOverviewPayload{
 		From: *body.From,
 		To:   *body.To,
 	}
 	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
-// NewGetOrganizationGatewayUsagePayload builds a telemetry service
-// getOrganizationGatewayUsage endpoint payload.
-func NewGetOrganizationGatewayUsagePayload(body *GetOrganizationGatewayUsageRequestBody, sessionToken *string) *telemetry.GetOrganizationGatewayUsagePayload {
-	v := &telemetry.GetOrganizationGatewayUsagePayload{
+// NewGetProjectGatewayUsagePayload builds a telemetry service
+// getProjectGatewayUsage endpoint payload.
+func NewGetProjectGatewayUsagePayload(body *GetProjectGatewayUsageRequestBody, sessionToken *string, projectSlugInput *string) *telemetry.GetProjectGatewayUsagePayload {
+	v := &telemetry.GetProjectGatewayUsagePayload{
 		From: *body.From,
 		To:   *body.To,
 	}
 	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
@@ -18816,9 +18846,9 @@ func ValidateGetMetaMcpServerUsageRequestBody(body *GetMetaMcpServerUsageRequest
 	return
 }
 
-// ValidateGetOrganizationGatewayOverviewRequestBody runs the validations
-// defined on GetOrganizationGatewayOverviewRequestBody
-func ValidateGetOrganizationGatewayOverviewRequestBody(body *GetOrganizationGatewayOverviewRequestBody) (err error) {
+// ValidateGetProjectGatewayOverviewRequestBody runs the validations defined on
+// GetProjectGatewayOverviewRequestBody
+func ValidateGetProjectGatewayOverviewRequestBody(body *GetProjectGatewayOverviewRequestBody) (err error) {
 	if body.From == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
 	}
@@ -18834,9 +18864,9 @@ func ValidateGetOrganizationGatewayOverviewRequestBody(body *GetOrganizationGate
 	return
 }
 
-// ValidateGetOrganizationGatewayUsageRequestBody runs the validations defined
-// on GetOrganizationGatewayUsageRequestBody
-func ValidateGetOrganizationGatewayUsageRequestBody(body *GetOrganizationGatewayUsageRequestBody) (err error) {
+// ValidateGetProjectGatewayUsageRequestBody runs the validations defined on
+// GetProjectGatewayUsageRequestBody
+func ValidateGetProjectGatewayUsageRequestBody(body *GetProjectGatewayUsageRequestBody) (err error) {
 	if body.From == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
 	}

@@ -40,6 +40,7 @@ function def(
     category: resourceType as ScopeDefinition["category"],
     visibility: slug.includes(":blocked_") ? "internal" : "user_visible",
     agentEligible: true,
+    temporaryGrantable: false,
     sensitive: false,
     subScopes: [],
     ...extra,

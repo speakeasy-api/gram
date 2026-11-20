@@ -117,7 +117,7 @@ func mintSelectionSession(t *testing.T, ctx context.Context, ti *testInstance, t
 	subject := urn.NewAnonymousSubject(uuid.NewString())
 	access, jti, err := signer.Mint(usersessions.MintParams{
 		Subject:  subject,
-		Audience: urn.NewToolset(toolset.ID).String(),
+		Audience: urn.NewUserSessionIssuer(toolset.UserSessionIssuerID.UUID).String(),
 		Issuer:   "https://test.example",
 		Lifetime: time.Hour,
 		ClientID: "test-client",
@@ -154,12 +154,27 @@ func TestToolSelection_NullSelectionServesAllTools(t *testing.T) {
 	require.ElementsMatch(t, []string{"reader", "writer", "eraser"}, names)
 }
 
-func TestToolSelection_NameSnapshotNarrowsListAndCall(t *testing.T) {
+// A session whose selection was stored against the toolset resource still serves its server.
+func TestToolSelection_StoredToolsetResourceStillServes(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
 	toolset, issuer := seedSelectionToolset(t, ctx, ti)
 	selection := fmt.Appendf(nil, `{"resource":"toolset:%s","grant_id":"%s","allow":[{"type":"tool","name":"writer"}]}`, toolset.ID, uuid.NewString())
+	access := mintSelectionSession(t, ctx, ti, toolset, issuer, selection)
+
+	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsListBody(), access, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, []string{"writer"}, toolNames(parseToolsListResponse(t, w.Body.Bytes())))
+}
+
+func TestToolSelection_NameSnapshotNarrowsListAndCall(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset, issuer := seedSelectionToolset(t, ctx, ti)
+	selection := fmt.Appendf(nil, `{"resource":"mcp_server:%s","grant_id":"%s","allow":[{"type":"tool","name":"writer"}]}`, toolset.ID, uuid.NewString())
 	access := mintSelectionSession(t, ctx, ti, toolset, issuer, selection)
 
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsListBody(), access, nil)
@@ -194,7 +209,7 @@ func TestToolSelection_LegacyFlatDocumentFailsClosed(t *testing.T) {
 	// fails closed into reauthorization, never into all tools.
 	ctx, ti := newTestMCPService(t)
 	toolset, issuer := seedSelectionToolset(t, ctx, ti)
-	selection := fmt.Appendf(nil, `{"annotations":["read_only"],"tools":["eraser"],"resource":"toolset:%s"}`, toolset.ID)
+	selection := fmt.Appendf(nil, `{"annotations":["read_only"],"tools":["eraser"],"resource":"mcp_server:%s"}`, toolset.ID)
 	access := mintSelectionSession(t, ctx, ti, toolset, issuer, selection)
 
 	_, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsListBody(), access, nil)
@@ -209,7 +224,7 @@ func TestToolSelection_LiveAnnotationGrantTracksHints(t *testing.T) {
 	// grant document names no tools at all.
 	ctx, ti := newTestMCPService(t)
 	toolset, issuer := seedSelectionToolset(t, ctx, ti)
-	selection := fmt.Appendf(nil, `{"resource":"toolset:%s","grant_id":"%s","allow":[{"type":"annotation","name":"read_only","mode":"live"}]}`, toolset.ID, uuid.NewString())
+	selection := fmt.Appendf(nil, `{"resource":"mcp_server:%s","grant_id":"%s","allow":[{"type":"annotation","name":"read_only","mode":"live"}]}`, toolset.ID, uuid.NewString())
 	access := mintSelectionSession(t, ctx, ti, toolset, issuer, selection)
 
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsListBody(), access, nil)
@@ -226,7 +241,7 @@ func TestToolSelection_SnapshotAnnotationGrantIsFrozen(t *testing.T) {
 	// reader stays out unless its NAME is in the frozen list.
 	ctx, ti := newTestMCPService(t)
 	toolset, issuer := seedSelectionToolset(t, ctx, ti)
-	selection := fmt.Appendf(nil, `{"resource":"toolset:%s","grant_id":"%s","allow":[{"type":"annotation","name":"read_only","mode":"snapshot","tools":["eraser"]}]}`, toolset.ID, uuid.NewString())
+	selection := fmt.Appendf(nil, `{"resource":"mcp_server:%s","grant_id":"%s","allow":[{"type":"annotation","name":"read_only","mode":"snapshot","tools":["eraser"]}]}`, toolset.ID, uuid.NewString())
 	access := mintSelectionSession(t, ctx, ti, toolset, issuer, selection)
 
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsListBody(), access, nil)
@@ -241,7 +256,7 @@ func TestToolSelection_EmptyPolicyMeansZeroTools(t *testing.T) {
 
 	ctx, ti := newTestMCPService(t)
 	toolset, issuer := seedSelectionToolset(t, ctx, ti)
-	selection := fmt.Appendf(nil, `{"resource":"toolset:%s","grant_id":"%s","allow":[]}`, toolset.ID, uuid.NewString())
+	selection := fmt.Appendf(nil, `{"resource":"mcp_server:%s","grant_id":"%s","allow":[]}`, toolset.ID, uuid.NewString())
 	access := mintSelectionSession(t, ctx, ti, toolset, issuer, selection)
 
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsListBody(), access, nil)
@@ -257,7 +272,7 @@ func TestToolSelection_ResourceMismatchRejects(t *testing.T) {
 	toolset, issuer := seedSelectionToolset(t, ctx, ti)
 	// Bound to a different endpoint sharing the issuer: must 401 into
 	// reauth, never be reinterpreted against this endpoint's inventory.
-	selection := fmt.Appendf(nil, `{"resource":"toolset:%s","grant_id":"%s","allow":[{"type":"tool","name":"writer"}]}`, uuid.NewString(), uuid.NewString())
+	selection := fmt.Appendf(nil, `{"resource":"mcp_server:%s","grant_id":"%s","allow":[{"type":"tool","name":"writer"}]}`, uuid.NewString(), uuid.NewString())
 	access := mintSelectionSession(t, ctx, ti, toolset, issuer, selection)
 
 	_, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsListBody(), access, nil)
@@ -289,7 +304,7 @@ func TestToolSelection_MissingSessionRowRejects(t *testing.T) {
 	signer := usersessions.NewSigner("test-jwt-secret")
 	access, _, err := signer.Mint(usersessions.MintParams{
 		Subject:  urn.NewAnonymousSubject(uuid.NewString()),
-		Audience: urn.NewToolset(toolset.ID).String(),
+		Audience: urn.NewUserSessionIssuer(toolset.UserSessionIssuerID.UUID).String(),
 		Issuer:   "https://test.example",
 		Lifetime: time.Hour,
 		ClientID: "test-client",

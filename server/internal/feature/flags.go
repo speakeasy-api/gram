@@ -3,6 +3,8 @@ package feature
 type Flag string
 
 const (
+	// FlagChannels gates the Channels rollout for an organization.
+	FlagChannels Flag = "channels"
 	// FlagPromptPolicies gates the natural-language / LLM-judge ("prompt
 	// based") risk policy MVP. While set, only opted-in organizations can
 	// create or update nl-type risk policies and have them enforced. The
@@ -23,6 +25,23 @@ const (
 	// cannot see the feature. Targeted by PostHog organization group (org
 	// slug), the same way the dashboard evaluates it.
 	FlagBudgets Flag = "gram-budgets"
+	// FlagPrivateNetworkGateway chooses which runtime hosts an organization's
+	// new private network connection: the tsnet tailnet gateway when enabled,
+	// the Tailscale Kubernetes operator otherwise. Evaluated server-side when a
+	// connection is created, and by the dashboard to show the matching setup
+	// steps until one exists. Targeted by PostHog organization group (org
+	// slug). Fails closed to the operator. Existing connections keep the
+	// runtime they were created with. Removed once the gateway is the default.
+	FlagPrivateNetworkGateway Flag = "private-network-gateway"
+	// FlagAccessRequests gates stored access requests: requestAccess records
+	// a request an admin can approve as a temporary grant or deny, from the
+	// dashboard or a Slack DM, and refuses scopes that cannot be given
+	// temporarily. Evaluated server-side in requestAccess and in the
+	// dashboard; targeted by PostHog organization group (org slug). Fails
+	// closed: requestAccess then only emails the admins, as before, and the
+	// request listing answers not found. Requests already stored stay
+	// decidable and withdrawable. Removed once access requests are GA.
+	FlagAccessRequests Flag = "access-requests"
 	// FlagRiskEnforcementPubsub routes applicable realtime scanner lanes over Pub/Sub.
 	FlagRiskEnforcementPubsub Flag = "risk-enforcement-pubsub"
 	// FlagRiskEnforcementMaxContentBytes overrides the realtime enforcement
@@ -51,6 +70,20 @@ const (
 	FlagPlatformMCPPluginAssignmentMutations Flag = "platform-mcp-plugin-assignment-mutations"
 	// FlagGatewayPluginMembership gates new gateway attachments to plugins.
 	FlagGatewayPluginMembership Flag = "gateway-plugin-membership"
+	// FlagShadowMCPAutoLink links a Shadow MCP server automatically to the
+	// project MCP server that proxies its URL, so direct calls are sent there
+	// without an administrator linking the two. Evaluated server-side by the
+	// hook guard and the Shadow MCP inventory; targeted by PostHog
+	// organization group (org slug) or project slug group. Fails closed: off,
+	// only links an administrator made redirect, as before. Removed once
+	// automatic links are GA.
+	FlagShadowMCPAutoLink Flag = "shadow-mcp-auto-link"
+	// FlagStoredGatewayMachineAccess lets admitted agents and workloads use
+	// stored gateways. The server evaluates it per organization and fails closed.
+	FlagStoredGatewayMachineAccess Flag = "stored-gateway-machine-access"
+	// FlagProjectGatewayMachineAccess lets admitted agents and workloads use
+	// project gateways. The server evaluates it per organization and fails closed.
+	FlagProjectGatewayMachineAccess Flag = "project-gateway-machine-access"
 	// FlagPlatformMCPAccessRoleMutations is the exact-project kill switch for
 	// creating and updating custom MCP-only access roles through Platform MCP.
 	// It is evaluated at invocation time and fails closed.
@@ -92,25 +125,6 @@ const (
 	// entitlement if the analyzer becomes a sold capability.
 	FlagRiskLLMAnalyzer Flag = "gram-risk-llm-analyzer"
 
-	// FlagCanonicalIdentityFold serves cost analytics (telemetry.query /
-	// telemetry.listSessions) email filters and group-bys through the
-	// ClickHouse identity_map fold, so one employee's directory, personal,
-	// and case-variant emails read as one identity. Targeted by PostHog
-	// organization group (org slug), like FlagBudgets. Removed once the fold
-	// is GA (DNO-856).
-	FlagCanonicalIdentityFold Flag = "canonical-identity-fold"
-	// FlagCanonicalIdentityFoldShadow runs the folded variant of the
-	// telemetry.query table read alongside the literal one — serving the
-	// literal result — and logs divergence, validating the fold on real
-	// traffic before FlagCanonicalIdentityFold enables it anywhere. Ignored
-	// when the fold flag is on. Same targeting; removed with the fold flag.
-	FlagCanonicalIdentityFoldShadow Flag = "canonical-identity-fold-shadow"
-
-	// FlagPaygSelfServeBilling gates the self-serve Stripe Checkout rollout.
-	// Targeted by PostHog organization group (org slug) and removed once PAYG
-	// billing is generally available.
-	FlagPaygSelfServeBilling Flag = "gram-payg-self-serve-billing"
-
 	// FlagAssistantOAuthCIMD gates outbound Client ID Metadata Document
 	// (CIMD) support for assistant MCP OAuth clients. When on, and the
 	// upstream authorization server advertises
@@ -123,29 +137,9 @@ const (
 	// (org slug). Removed once CIMD is GA.
 	FlagAssistantOAuthCIMD Flag = "assistant-oauth-cimd"
 
-	// FlagMCPApproval gates the MCP approval workflow end to end: the
-	// approval queue, evidence gathering, deciding, and the promotion of
-	// blocked-server redemptions into approval requests (orgs off the flag
-	// fall back to legacy bypass requests). Targeted by PostHog organization
-	// group (org slug), like FlagBudgets. A rollout gate while the workflow
-	// is dogfooded; if approval becomes a sold capability the durable
-	// entitlement returns through productfeatures alongside this flag.
-	FlagMCPApproval Flag = "gram-mcp-approval"
-
-	// FlagMCPResearch gates the MCP research agent within an approval-enabled
-	// organization: starting runs and executing queued ones. Targeted by
-	// PostHog organization group like FlagMCPApproval, and separate from it
-	// so research — the spend-heavy, web-facing piece — rolls out to a
-	// narrower set than the approval workflow. Fails closed: a flag-service
-	// error reads as off.
-	FlagMCPResearch Flag = "gram-mcp-research"
-
 	// FlagMCPResearchKill is the research kill switch: affirmatively on means
-	// no research runs anywhere, checked before the rollout flag. It exists
-	// apart from FlagMCPResearch so an emergency stop never touches the
-	// rollout flag's org targeting — un-killing restores exactly the release
-	// state from before. Fails closed: research must not run while the state
-	// of its stop control is unknown.
+	// no research runs anywhere. Fails closed: research must not run while
+	// the state of its stop control is unknown.
 	FlagMCPResearchKill Flag = "gram-mcp-research-kill"
 
 	// FlagSkillsOverMCP gates serving managed skills over MCP (the
@@ -160,21 +154,16 @@ const (
 	// client support matures; removed once the extension is GA.
 	FlagSkillsOverMCP Flag = "skills-over-mcp"
 
-	// FlagHooksRollout gates the phased rollout of new observability (hooks)
-	// plugin generator versions. Unlike the other flags it is consulted via its
-	// PAYLOAD, not its boolean state: the flag carries a JSON payload
-	// {"version": N} naming the highest hooksGeneratorVersion the matched org is
-	// cleared to receive. An org gets a new hooks version only when its cleared
-	// version reaches it; a code-side version bump never touches the payload, so
-	// nothing auto-rolls — promoting a version is the deliberate act of raising
-	// the pin in PostHog. The always-immediate canary set lives in code (see
-	// plugins.canaryHooksOrgSlugs), independent of this flag, so a PostHog outage
-	// can't strand it on stale hooks.
+	// FlagHooksRollout is the legacy control for the phased rollout of new
+	// observability (hooks) plugin generator versions, superseded by the
+	// rollout pins staff set in the admin dashboard (package hooksrollout). It
+	// is consulted via its PAYLOAD, not its boolean state: JSON {"version": N}
+	// naming the highest hooksGeneratorVersion the matched org is cleared to
+	// receive. The plugin publisher reads it only for orgs no admin pin covers,
+	// which is every non-canary org without an override until a platform-wide
+	// default pin is set. Evaluated server-side with the org groups; fails closed. Remove it
+	// once the default pin is set in production.
 	FlagHooksRollout Flag = "hooks-rollout"
-
-	// FlagOktaConnections gates the Okta integration while it is dogfooded:
-	// creating connections, resource connections and server suggestions.
-	FlagOktaConnections Flag = "okta-connections"
 
 	// FlagSignInEnforcement turns on, per organization (keyed by its id),
 	// linking MCP grants to sign-ins, sign-in evidence lookups, sign out
@@ -184,6 +173,17 @@ const (
 	// the PostHog flag must be person-aggregated and match distinct_id in a
 	// list of organization ids; a group-aggregated flag never matches.
 	FlagSignInEnforcement Flag = "sign-in-enforcement"
+
+	// FlagMCPConsentAccountSwitch lets a person whose personal account company
+	// sign-in refused switch to their company account from the MCP connect
+	// page: the offer and the switch action, the spent-page message, and the
+	// browser binding /authorize sets on the WorkOS sign-in path. Evaluated
+	// locally for the organization that owns the MCP server, with its id as
+	// the distinct id and no groups, so the PostHog flag must be
+	// person-aggregated and match distinct_id in a list of organization ids.
+	// Off, missing or failing, the connect page behaves as before. Removed
+	// once the switch is GA.
+	FlagMCPConsentAccountSwitch Flag = "mcp-consent-account-switch"
 
 	// FlagEMAProviders gates changing a vendor's EMA provider order while the
 	// Speakeasy issuer is dogfooded. Targeted by PostHog organization group.

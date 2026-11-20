@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const getKeyByIDForUpdate = `-- name: GetKeyByIDForUpdate :one
@@ -64,14 +65,14 @@ type GetKeyForResolutionParams struct {
 	PreferredSlot string
 }
 
-func (q *Queries) GetKeyForResolution(ctx context.Context, arg GetKeyForResolutionParams) (string, error) {
+func (q *Queries) GetKeyForResolution(ctx context.Context, arg GetKeyForResolutionParams) (pgtype.Text, error) {
 	row := q.db.QueryRow(ctx, getKeyForResolution,
 		arg.ProjectID,
 		arg.Slots,
 		arg.Provider,
 		arg.PreferredSlot,
 	)
-	var api_key_encrypted string
+	var api_key_encrypted pgtype.Text
 	err := row.Scan(&api_key_encrypted)
 	return api_key_encrypted, err
 }
@@ -89,7 +90,7 @@ INSERT INTO model_provider_keys (
   , $2
   , $3
   , $4
-  , $5
+  , $5::text
   , $6
 )
 RETURNING id, organization_id, project_id, slot, provider, api_key_encrypted, api_key_org_encrypted, enabled, created_at, updated_at, deleted_at, deleted

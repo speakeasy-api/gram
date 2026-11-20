@@ -82,6 +82,7 @@ export function buildGatewaySessionsQuery(
   return {
     queryKey: queryKeyGatewaySessions({
       gatewayId: request?.gatewayId,
+      projectId: request?.projectId,
       search: request?.search,
       serverId: request?.serverId,
       providerId: request?.providerId,
@@ -132,6 +133,7 @@ export function buildGatewaySessionsInfiniteQuery(
   return {
     queryKey: queryKeyGatewaySessionsInfinite({
       gatewayId: request?.gatewayId,
+      projectId: request?.projectId,
       search: request?.search,
       serverId: request?.serverId,
       providerId: request?.providerId,
@@ -179,6 +181,7 @@ export function buildGatewaySessionsInfiniteQuery(
 export function queryKeyGatewaySessions(
   parameters: {
     gatewayId?: string | undefined;
+    projectId?: string | undefined;
     search?: string | undefined;
     serverId?: string | undefined;
     providerId?: string | undefined;
@@ -198,6 +201,7 @@ export function queryKeyGatewaySessions(
 export function queryKeyGatewaySessionsInfinite(
   parameters: {
     gatewayId?: string | undefined;
+    projectId?: string | undefined;
     search?: string | undefined;
     serverId?: string | undefined;
     providerId?: string | undefined;

@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
+  assistantsAvailable: true,
   canRead: true,
   canWrite: false,
   data: undefined as { id: string } | undefined,
@@ -27,6 +28,9 @@ vi.mock("@/hooks/useRBAC", () => ({
       scope === "assistant:read" ? state.canRead : state.canWrite,
     isLoading: false,
   }),
+}));
+vi.mock("@/hooks/useAssistantsAvailability", () => ({
+  useAssistantsAvailable: () => state.assistantsAvailable,
 }));
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => state.client,
@@ -79,6 +83,7 @@ function wrapper({ children }: { children: ReactNode }) {
 beforeEach(() => {
   vi.clearAllMocks();
   queryClient = new QueryClient();
+  state.assistantsAvailable = true;
   state.canRead = true;
   state.canWrite = false;
   state.data = { id: "assistant-a" };
@@ -184,6 +189,29 @@ describe("managed assistant authorization", () => {
     expect(state.mutateAsync).toHaveBeenCalledTimes(2);
   });
 
+  it("retries a failed ensure in place and clears the error", async () => {
+    state.data = undefined;
+    state.error = 404;
+    state.canWrite = true;
+    const ensures = deferEnsures();
+    const { result } = renderHook(
+      () => useServerAssistantTransport("example", true),
+      { wrapper },
+    );
+    await act(async () => {
+      ensures[0]!.reject(new Error("conflict"));
+    });
+    expect(result.current.error).toBe("Project assistant is unavailable.");
+
+    act(() => result.current.retry());
+    expect(result.current.error).toBeNull();
+    expect(state.mutateAsync).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      ensures[1]!.resolve({ id: "provisioned-a" });
+    });
+    expect(result.current.assistantId).toBe("provisioned-a");
+  });
+
   it("does not provision from a cached 404 without read access", () => {
     state.data = undefined;
     state.error = 404;
@@ -194,6 +222,23 @@ describe("managed assistant authorization", () => {
       { wrapper },
     );
     expect(result.current.ready).toBe(false);
+    expect(state.mutateAsync).not.toHaveBeenCalled();
+  });
+  it("neither reads nor provisions the assistant on a deployment without assistants", () => {
+    state.assistantsAvailable = false;
+    state.data = undefined;
+    state.error = 404;
+    state.canWrite = true;
+    const { result } = renderHook(
+      () => useServerAssistantTransport("example", true),
+      { wrapper },
+    );
+    expect(result.current).toMatchObject({
+      allowed: false,
+      ready: false,
+      needsAdmin: false,
+    });
+    expect(state.getManaged.mock.lastCall?.[2].enabled).toBe(false);
     expect(state.mutateAsync).not.toHaveBeenCalled();
   });
 });

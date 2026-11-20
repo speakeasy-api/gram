@@ -127,9 +127,19 @@ func GetShadowMCPInventoryServerAccessPath() string {
 	return "/rpc/access.getShadowMCPInventoryServer"
 }
 
+// FindShadowMCPInventoryServersAccessPath returns the URL path to the access service findShadowMCPInventoryServers HTTP endpoint.
+func FindShadowMCPInventoryServersAccessPath() string {
+	return "/rpc/access.findShadowMCPInventoryServers"
+}
+
 // UpdateShadowMCPInventoryServerNameAccessPath returns the URL path to the access service updateShadowMCPInventoryServerName HTTP endpoint.
 func UpdateShadowMCPInventoryServerNameAccessPath() string {
 	return "/rpc/access.updateShadowMCPInventoryServerName"
+}
+
+// SetShadowMCPOfficialServerAccessPath returns the URL path to the access service setShadowMCPOfficialServer HTTP endpoint.
+func SetShadowMCPOfficialServerAccessPath() string {
+	return "/rpc/access.setShadowMCPOfficialServer"
 }
 
 // ListShadowMCPInventoryUsersAccessPath returns the URL path to the access service listShadowMCPInventoryUsers HTTP endpoint.
@@ -230,4 +240,19 @@ func RenewTemporaryGrantAccessPath() string {
 // RevokeTemporaryGrantAccessPath returns the URL path to the access service revokeTemporaryGrant HTTP endpoint.
 func RevokeTemporaryGrantAccessPath() string {
 	return "/rpc/access.revokeTemporaryGrant"
+}
+
+// ListAccessRequestsAccessPath returns the URL path to the access service listAccessRequests HTTP endpoint.
+func ListAccessRequestsAccessPath() string {
+	return "/rpc/access.listAccessRequests"
+}
+
+// DecideAccessRequestAccessPath returns the URL path to the access service decideAccessRequest HTTP endpoint.
+func DecideAccessRequestAccessPath() string {
+	return "/rpc/access.decideAccessRequest"
+}
+
+// WithdrawAccessRequestAccessPath returns the URL path to the access service withdrawAccessRequest HTTP endpoint.
+func WithdrawAccessRequestAccessPath() string {
+	return "/rpc/access.withdrawAccessRequest"
 }

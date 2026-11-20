@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -121,18 +122,17 @@ func describeHostedServer(ctx context.Context, logger *slog.Logger, metadataRepo
 
 	description.cacheHints = hostedListCacheHints(!payload.effectiveMCPPrivate(payload.toolsetIsPublic), payload.authenticated)
 
-	metadata, err := metadataRepo.GetMetadataByBackendID(ctx, metadata_repo.GetMetadataByBackendIDParams{ProjectID: payload.projectID, BackendID: payload.toolsetID.UUID, ToolsetBackend: true})
+	description.instructions = hostedServerInstructions(ctx, logger, metadataRepo, payload.projectID, payload.toolsetID.UUID)
+	return description
+}
+
+func hostedServerInstructions(ctx context.Context, logger *slog.Logger, metadataRepo *metadata_repo.Queries, projectID, toolsetID uuid.UUID) string {
+	metadata, err := metadataRepo.GetMetadataByBackendID(ctx, metadata_repo.GetMetadataByBackendIDParams{ProjectID: projectID, BackendID: toolsetID, ToolsetBackend: true})
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			logger.WarnContext(ctx, "failed to fetch MCP metadata for instructions", attr.SlogError(err))
 		}
-		return description
+		return ""
 	}
-
-	if !metadata.Instructions.Valid {
-		return description
-	}
-
-	description.instructions = metadata.Instructions.String
-	return description
+	return conv.FromPGTextOrEmpty[string](metadata.Instructions)
 }

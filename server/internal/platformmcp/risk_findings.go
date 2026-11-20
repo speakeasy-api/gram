@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Optional MCP response fields use their zero values.
+//nolint:exhaustruct_v5 // Optional MCP response fields use their zero values.
 package platformmcp
 
 import (
@@ -53,7 +53,8 @@ func (s *RiskFindingsService) valid() bool {
 }
 
 type ListRiskFindingsInput struct {
-	ProjectID   string   `json:"project_id,omitempty"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID   string   `json:"-"`
 	ProjectSlug string   `json:"project_slug,omitempty"`
 	From        string   `json:"from,omitempty"`
 	To          string   `json:"to,omitempty"`

@@ -22,6 +22,7 @@ import (
 	metarepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -334,4 +335,53 @@ func TestGatewaySessionsHideDeletedUserMetadata(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, filtered.Items)
 	}
+}
+
+func TestGatewaySessionsProjectGateway(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	org, err := orgrepo.New(ti.conn).GetOrganizationMetadata(ctx, auth.ActiveOrganizationID)
+	require.NoError(t, err)
+	project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, *auth.ProjectID)
+	require.NoError(t, err)
+	sibling := createSiblingProject(t, ctx, ti.conn, "project-gateway-sibling")
+	issuer := seedOrganizationTierIssuer(t, ctx, ti.conn, "project-gateway-workforce")
+
+	gatewayBase := testServerURL + "/mcp/gateway/" + org.Slug
+	seed := func(resource pgtype.Text) string {
+		subject := urn.NewUserSubject(uuid.NewString())
+		row, err := seedUserSession(t, ctx, ti.conn, issuer, subject)
+		require.NoError(t, err)
+		require.NoError(t, testrepo.New(ti.conn).SetGatewaySessionListFixture(ctx, testrepo.SetGatewaySessionListFixtureParams{
+			ID: row.ID, OrganizationID: conv.ToPGText(auth.ActiveOrganizationID), Resource: resource,
+			CreatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}, RefreshExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+		}))
+		seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(*auth.ProjectID), issuer, subject, uuid.NewString()[:8]+".example.test")
+		seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(sibling), issuer, subject, uuid.NewString()[:8]+".example.test")
+		return row.ID.String()
+	}
+	projectSession := seed(conv.ToPGText(gatewayBase + "/projects/" + project.Slug))
+	// Issuer-wide authorizations cover every endpoint on the issuer.
+	issuerSession := seed(pgtype.Text{String: "", Valid: false})
+	seed(conv.ToPGText(gatewayBase))
+	seed(conv.ToPGText(gatewayBase + "/projects/project-gateway-sibling"))
+
+	projectCtx := withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeProjectRead, auth.ProjectID.String()))
+	result, err := ti.service.ListGatewaySessions(projectCtx, &gen.ListGatewaySessionsPayload{ProjectID: new(auth.ProjectID.String())})
+	require.NoError(t, err)
+	var actual []string
+	for _, session := range result.Items {
+		actual = append(actual, session.ID)
+		require.Len(t, session.Upstreams, 1, "only the project's upstream accounts are listed")
+	}
+	require.ElementsMatch(t, []string{projectSession, issuerSession}, actual)
+
+	_, err = ti.service.ListGatewaySessions(projectCtx, &gen.ListGatewaySessionsPayload{ProjectID: new(sibling.String())})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.ListGatewaySessions(ctx, &gen.ListGatewaySessionsPayload{ProjectID: new(uuid.NewString())})
+	requireOopsCode(t, err, oops.CodeNotFound)
+	_, err = ti.service.ListGatewaySessions(ctx, &gen.ListGatewaySessionsPayload{ProjectID: new(auth.ProjectID.String()), GatewayID: new(uuid.NewString())})
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }

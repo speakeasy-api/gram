@@ -22,19 +22,26 @@ func TestCORSMiddleware_SharedOAuthPublicEndpoints(t *testing.T) {
 			{"/oauth/usi/issuer/token", http.MethodPost},
 			{"/oauth/usi/issuer/register", http.MethodPost},
 			{"/oauth/usi/issuer/revoke", http.MethodPost},
+			{"/.well-known/oauth-authorization-server/channels/oauth", http.MethodGet},
+			{"/.well-known/oauth-protected-resource/channels/example-org/example-project/mcp", http.MethodGet},
+			{"/channels/oauth/register", http.MethodPost},
+			{"/channels/oauth/token", http.MethodPost},
+			{"/channels/oauth/revoke", http.MethodPost},
 		} {
 			for _, method := range []string{tc.method, http.MethodOptions} {
 				t.Run(env+"/"+method+tc.path, func(t *testing.T) {
 					t.Parallel()
 
 					reached := false
-					handler := CORSMiddleware(env, "https://platform.example", []string{"https://other-platform.example"}, nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					handler := CORSMiddleware(env, "https://platform.example", []string{"https://other-platform.example"}, nil)(newMCPSecurity(t)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 						reached = true
 						// OAuth errors must be readable too.
 						w.WriteHeader(http.StatusBadRequest)
-					}))
+					})))
 					req := httptest.NewRequest(method, tc.path, nil)
 					req.Header.Set("Origin", "https://client.example")
+					req.Header.Set("Sec-Fetch-Site", "cross-site")
+					req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 					req.Header.Set("Access-Control-Request-Method", tc.method)
 					req.Header.Set("Access-Control-Request-Headers", "content-type, authorization")
 					w := httptest.NewRecorder()
@@ -138,5 +145,91 @@ func TestCORSMiddleware_SharedOAuthLeavesOtherRoutesUnchanged(t *testing.T) {
 			require.Equal(t, "https://platform.example", w.Header().Get("Access-Control-Allow-Origin"))
 			require.Equal(t, "true", w.Header().Get("Access-Control-Allow-Credentials"))
 		})
+	}
+}
+
+func TestCORSMiddleware_ChannelsConsentAndUnknownRoutesHaveNoCORS(t *testing.T) {
+	t.Parallel()
+
+	for _, env := range []string{"local", "dev", "prod"} {
+		for _, path := range []string{
+			"/channels/mcp",
+			"/channels/api",
+			"/channels/api/",
+			"/channels/example-org/example-project/mcp/",
+			"/channels/example-org/example-project/mcp/extra",
+			"/channels/example-org/example-project/api/",
+			"/channels/example-org/example-project/api/extra",
+			"/channels//example-project/mcp",
+			"/channels/example-org//mcp",
+			"/channels/./example-project/mcp",
+			"/channels/../example-project/api",
+			"/channels/example-org/example-project/%6dcp",
+			"/channels/example-org/example-project/%61pi",
+			"/channels/example%2Dorg/example-project/mcp",
+			"/channels/example%2Forg/example-project/mcp",
+			"/channels/example%252Forg/example-project/mcp",
+			"/channels/example%5Corg/example-project/api",
+			"/%63hannels/example-org/example-project/mcp",
+			"/.well-known/oauth-protected-resource/channels/mcp",
+			"/.well-known/oauth-protected-resource/channels/example-org/example-project/mcp/",
+			"/.well-known/oauth-protected-resource/channels/example-org/example-project/mcp/extra",
+			"/.well-known/oauth-protected-resource/channels//example-project/mcp",
+			"/.well-known/oauth-protected-resource/channels/example-org/example-project/%6dcp",
+			"/channels",
+			"/channels/",
+			"/channels/oauth",
+			"/channels/oauth/",
+			"/channels/oauth/authorize",
+			"/channels/oauth/connect",
+			"/channels/oauth/future-endpoint",
+			"/channels/oauth/token/",
+			"/channels/oauth/token/extra",
+			"/channels/oauth/tokenize",
+			"/channels/oauth//token",
+			"/channels//oauth/token",
+			"/channels/oauth-other/token",
+			"/channels/mcp/",
+			"/channels/mcp/extra",
+			"/channels/mcpx",
+			"/channels/api/extra",
+			"/.well-known/oauth-authorization-server/channels",
+			"/.well-known/oauth-authorization-server/channels/oauth/",
+			"/.well-known/oauth-authorization-server/channels/oauth/extra",
+			"/.well-known/oauth-authorization-server/channels//oauth",
+			"/.well-known/oauth-protected-resource/channels",
+			"/.well-known/oauth-protected-resource/channels/mcp/",
+			"/.well-known/oauth-protected-resource/channels/mcp/extra",
+			"/.well-known/oauth-protected-resource/channels//mcp",
+		} {
+			for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodOptions} {
+				t.Run(env+"/"+method+path, func(t *testing.T) {
+					t.Parallel()
+					for _, origin := range []string{"https://client.example", "https://other-platform.example"} {
+						reached := false
+						handler := CORSMiddleware(env, "https://platform.example", []string{"https://other-platform.example"}, nil)(newMCPSecurity(t)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+							reached = true
+							w.WriteHeader(http.StatusNotFound)
+						})))
+						req := httptest.NewRequest(method, path, nil)
+						req.Header.Set("Origin", origin)
+						req.Header.Set("Sec-Fetch-Site", "cross-site")
+						req.Header.Set("Access-Control-Request-Method", http.MethodPost)
+						w := httptest.NewRecorder()
+						handler.ServeHTTP(w, req)
+
+						for name := range w.Header() {
+							require.False(t, strings.HasPrefix(name, "Access-Control-"), "unexpected CORS header %s for origin %s", name, origin)
+						}
+						require.Equal(t, method != http.MethodOptions, reached)
+						if method == http.MethodOptions {
+							require.Equal(t, http.StatusNoContent, w.Code)
+						} else {
+							require.Equal(t, http.StatusNotFound, w.Code)
+						}
+					}
+				})
+			}
+		}
 	}
 }

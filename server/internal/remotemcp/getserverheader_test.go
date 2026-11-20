@@ -9,9 +9,12 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/remote_mcp"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestGetServerHeader_RedactsSecret(t *testing.T) {
@@ -34,6 +37,36 @@ func TestGetServerHeader_RedactsSecret(t *testing.T) {
 	require.True(t, header.IsSecret)
 	require.NotNil(t, header.Value)
 	require.Equal(t, "***", *header.Value)
+}
+
+func TestHeaders_RedactedReadsDoNotDecrypt(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := createTestServer(t, ctx, ti)
+	created := createSecretHeader(t, ctx, ti, server.ID, "Authorization", "Bearer token123")
+
+	// A client holding a different key cannot open the stored ciphertext, so
+	// any read that tries to decrypt fails.
+	wrongKey, err := encryption.NewWithBytes([]byte("a-different-32-byte-test-key-000"))
+	require.NoError(t, err)
+	headers := remotemcp.NewHeaders(testenv.NewLogger(t), ti.conn, wrongKey)
+
+	serverID := uuid.MustParse(server.ID)
+	projectID := uuid.MustParse(server.ProjectID)
+	headerID := uuid.MustParse(created.ID)
+
+	_, err = headers.GetServerHeader(ctx, headerID, projectID, false)
+	require.Error(t, err, "an unredacted read must decrypt")
+
+	header, err := headers.GetServerHeader(ctx, headerID, projectID, true)
+	require.NoError(t, err)
+	require.Equal(t, pgtype.Text{String: "***", Valid: true}, header.Value)
+
+	listed, err := headers.ListServerHeaders(ctx, serverID, projectID, true)
+	require.NoError(t, err)
+	require.Len(t, listed, 1)
+	require.Equal(t, pgtype.Text{String: "***", Valid: true}, listed[0].Value)
 }
 
 func TestGetServerHeader_NonSecretValueVisible(t *testing.T) {

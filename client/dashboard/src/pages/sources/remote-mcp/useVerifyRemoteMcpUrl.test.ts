@@ -104,3 +104,17 @@ it("replaces a successful verdict when the next probe has an unknown outcome", a
   });
   expect(hook.result.current.result?.outcome).toBeUndefined();
 });
+
+it("passes on the name a reachable server reports for itself", async () => {
+  mocks.probe.mockResolvedValue({
+    outcome: "mcp_available",
+    serverName: "Acme Wiki",
+  });
+  const hook = renderHook(() =>
+    useVerifyRemoteMcpUrl("https://mcp.acme-wiki.example/mcp"),
+  );
+  await act(async () => {
+    await hook.result.current.trigger();
+  });
+  expect(hook.result.current.result?.serverName).toBe("Acme Wiki");
+});

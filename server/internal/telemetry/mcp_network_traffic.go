@@ -16,7 +16,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/telemetryerrs"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+// MCPNetworkRequestEventURN identifies the telemetry row the MCP serve path
+// writes once per resolved inbound MCP HTTP request. The
+// mcp_network_traffic_hourly_summaries materialized view behind
+// GetMcpNetworkTraffic filters on this exact value.
+var MCPNetworkRequestEventURN = urn.NewTelemetryEvent(urn.TelemetryEventOriginGramService, urn.TelemetryEventKindLog, "mcp_network_request").String()
 
 const (
 	mcpNetworkTrafficSurfacePublic  = "public"
@@ -39,7 +46,7 @@ func (s *Service) GetMcpNetworkTraffic(ctx context.Context, payload *telem_gen.G
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -51,7 +58,7 @@ func (s *Service) GetMcpNetworkTraffic(ctx context.Context, payload *telem_gen.G
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, resourceID, authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDFrom(resourceID), authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 

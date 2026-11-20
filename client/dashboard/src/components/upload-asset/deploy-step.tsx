@@ -131,7 +131,7 @@ export default function DeployStep({
   }, [tools, stepper.meta]);
 
   // Auto-create toolset after tools are loaded (regardless of overall deployment status)
-  // The deployment may fail due to unrelated issues (e.g., external MCP), but if tools
+  // The deployment may fail due to unrelated issues, but if tools
   // were created for this asset, we should still create a toolset for them.
   React.useEffect(() => {
     if (gateway?.gatewayId && (deploymentError || deploymentPending)) return;

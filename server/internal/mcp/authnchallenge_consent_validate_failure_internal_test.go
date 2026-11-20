@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,7 +16,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
+	otellog "go.opentelemetry.io/otel/log"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -121,6 +124,24 @@ func TestProbeRemoteSession_FailedCheckWritesOneRow(t *testing.T) {
 	row := rec.RequireStep(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeCredentialMisconfigured)
 	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
 	require.Equal(t, string(remotesessionmetrics.ValidationTriggerVerify), row.SubReason)
+}
+
+func TestProbeRemoteSession_NoVerdictExportOmitsProviderHost(t *testing.T) {
+	t.Parallel()
+
+	sink := &verdictExportSink{mu: sync.Mutex{}, records: nil}
+	logsOn := func(context.Context, string) (bool, error) { return true, nil }
+	recorder := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), storingConn{}, logsOn, mcpconnectionattempts.WithExport(sink))
+	err := probeOnOrganizationGateway(t, t.Context(), &Service{connections: recorder}, uuid.NullUUID{UUID: uuid.New(), Valid: true}, remotesessionmetrics.ValidationTriggerVerify)
+	require.Error(t, err)
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	require.Len(t, sink.records, 1)
+	sink.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		require.NotEqual(t, string(attr.ServerAddressKey), kv.Key)
+		require.NotEqual(t, string(attr.ServerPortKey), kv.Key)
+		return true
+	})
 }
 
 func TestProbeRemoteSession_CanceledCheckWritesNothing(t *testing.T) {

@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -93,7 +94,7 @@ func newTestUpstreamRevoker(t *testing.T, ti *testInstance, signers ...remoteses
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		ti.conn,
-		testenv.NewEncryptionClient(t),
+		testenv.NewEncryptionClient(t), clientsecretstest.New(t, ti.conn, testenv.NewEncryptionClient(t)), nil,
 		policy,
 		nil,
 		signers...,
@@ -610,7 +611,7 @@ func seedRefreshableSharedGrant(t *testing.T, slug string, handler http.HandlerF
 	require.NoError(t, err)
 	refreshEncStr := refreshEnc
 	subject := urn.NewUserSubject(slug + "-subject")
-	session, err := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	session, err := q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:             subject,
 		UserSessionIssuerID:    issuerA,
 		RemoteSessionClientID:  clientID,
@@ -700,11 +701,11 @@ func newResourceCapturingRefreshHandler(refreshCount *atomic.Int64, captured *at
 // fixture's session via the same upsert the code-exchange callback uses.
 func setStoredSessionResource(t *testing.T, ctx context.Context, fx sharedGrantFixture, resource string) {
 	t.Helper()
-	_, err := repo.New(fx.ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	_, err := repo.New(fx.ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:             fx.subject,
 		UserSessionIssuerID:    fx.session.UserSessionIssuerID,
 		RemoteSessionClientID:  fx.clientID,
-		AccessTokenEncrypted:   fx.session.AccessTokenEncrypted,
+		AccessTokenEncrypted:   fx.session.AccessTokenEncrypted.String,
 		AccessExpiresAt:        fx.session.AccessExpiresAt,
 		RefreshTokenEncrypted:  fx.session.RefreshTokenEncrypted,
 		AuthorizationExpiresAt: fx.session.AuthorizationExpiresAt,

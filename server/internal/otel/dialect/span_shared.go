@@ -2,6 +2,15 @@ package dialect
 
 import otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 
+func getSpanResourceAttr(span *otelv1.InboundSpan, desired string) (string, string) {
+	for _, kv := range span.GetResource().GetAttributes() {
+		if kv.GetKey() == desired && kv.GetValue().HasStringValue() && kv.GetValue().GetStringValue() != "" {
+			return desired, kv.GetValue().GetStringValue()
+		}
+	}
+	return "", ""
+}
+
 func getOneAttr(span *otelv1.InboundSpan, keys ...string) (key string, value string) {
 	for _, desired := range keys {
 		for _, kv := range span.GetAttributes() {

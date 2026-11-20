@@ -10,11 +10,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featuresrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -129,4 +132,36 @@ func TestService_GetGateway_TurnedOff(t *testing.T) {
 	require.Nil(t, res.URL)
 	require.NotNil(t, res.UnavailableReason)
 	require.Equal(t, "turned_off", *res.UnavailableReason)
+}
+
+func TestService_GetProjectGateway(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	// Reading a project's gateway needs only access to that project.
+	projectCtx := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectRead, authCtx.ProjectID.String()))
+
+	res, err := ti.service.GetProjectGateway(projectCtx, &gen.GetProjectGatewayPayload{})
+	require.NoError(t, err)
+	require.False(t, res.Available)
+	require.Nil(t, res.URL)
+	require.NotNil(t, res.UnavailableReason)
+	require.Equal(t, "turned_off", *res.UnavailableReason)
+
+	createGatewayIssuer(t, ctx, ti, authCtx.ActiveOrganizationID)
+	res, err = ti.service.GetProjectGateway(projectCtx, &gen.GetProjectGatewayPayload{})
+	require.NoError(t, err)
+	require.True(t, res.Available)
+	require.NotNil(t, res.URL)
+	require.Equal(t, "http://localhost:35291/mcp/gateway/"+authCtx.OrganizationSlug+"/projects/"+project.Slug, *res.URL)
+	require.Nil(t, res.UnavailableReason)
+
+	otherProjectCtx := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectRead, uuid.NewString()))
+	_, err = ti.service.GetProjectGateway(otherProjectCtx, &gen.GetProjectGatewayPayload{})
+	require.Error(t, err)
 }

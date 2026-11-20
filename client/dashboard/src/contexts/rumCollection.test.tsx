@@ -69,7 +69,11 @@ describe.each(["dashboard", "elements"] as const)(
         vi.mocked(getServerURL).mockReturnValue(url);
         await initialize();
         expect(datadogRum.init).toHaveBeenCalledWith(
-          expect.objectContaining({ env: "prod", sessionSampleRate: 100 }),
+          expect.objectContaining({
+            env: "prod",
+            sessionSampleRate: 100,
+            sessionReplaySampleRate: 0,
+          }),
         );
       },
     );
@@ -82,7 +86,11 @@ it("initializes Elements collection with the production environment alias", asyn
   const { initErrorTracking } = await import("@/elements/lib/errorTracking");
   initErrorTracking();
   expect(datadogRum.init).toHaveBeenCalledWith(
-    expect.objectContaining({ env: "production", sessionSampleRate: 100 }),
+    expect.objectContaining({
+      env: "production",
+      sessionSampleRate: 100,
+      sessionReplaySampleRate: 0,
+    }),
   );
 });
 

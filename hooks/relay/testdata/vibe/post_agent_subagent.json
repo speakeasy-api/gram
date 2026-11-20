@@ -1,0 +1,8 @@
+{
+  "hook_event_name": "post_agent",
+  "session_id": "vibe-subagent-9",
+  "parent_session_id": "vibe-session-1",
+  "transcript_path": "/tmp/vibe-sessions/vibe-subagent-9.jsonl",
+  "cwd": "/tmp/vibe-project",
+  "agent_name": "reviewer"
+}

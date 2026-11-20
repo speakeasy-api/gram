@@ -6,7 +6,6 @@ const state = vi.hoisted(() => ({
   isLoading: false,
   grants: [] as Array<{
     scope: string;
-    effect?: string;
     selectors?: Array<Record<string, string>>;
   }>,
 }));
@@ -96,17 +95,6 @@ describe("plugin write capability", () => {
         { scope: "plugin:write" },
         { scope: "org:admin" },
         { scope },
-      ];
-      expect(allowed()).toBe(false);
-    },
-  );
-  it.each(["plugin:write", "org:admin"])(
-    "honors a legacy deny of %s",
-    (scope) => {
-      state.grants = [
-        { scope: "plugin:write" },
-        { scope: "org:admin" },
-        { scope, effect: "deny" },
       ];
       expect(allowed()).toBe(false);
     },

@@ -20,7 +20,7 @@ import (
 
 // KitLocalBootstrap uses the verified Kit filesystem configuration contract. Secrets travel only through an in-memory archive into a stopped guest.
 type KitLocalBootstrap struct {
-	Model                            string
+	Model, ReasoningEffort           string
 	Workload                         *KitWorkloadBinding
 	AssertionFile, InferenceEndpoint string
 	AgentsMD, MCPJSON, GatewayToken  []byte

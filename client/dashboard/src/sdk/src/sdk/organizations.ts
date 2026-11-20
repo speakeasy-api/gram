@@ -9,6 +9,7 @@ import { organizationsGenerateWorkOSAdminPortalLink } from "../funcs/organizatio
 import { organizationsGet } from "../funcs/organizationsGet.js";
 import { organizationsGetGateway } from "../funcs/organizationsGetGateway.js";
 import { organizationsGetOnboardingStatus } from "../funcs/organizationsGetOnboardingStatus.js";
+import { organizationsGetProjectGateway } from "../funcs/organizationsGetProjectGateway.js";
 import { organizationsListInvites } from "../funcs/organizationsListInvites.js";
 import { organizationsListSetupTasks } from "../funcs/organizationsListSetupTasks.js";
 import { organizationsListUsers } from "../funcs/organizationsListUsers.js";
@@ -31,6 +32,7 @@ import { OnboardingStatusResult } from "../models/components/onboardingstatusres
 import { Organization } from "../models/components/organization.js";
 import { OrganizationGateway } from "../models/components/organizationgateway.js";
 import { OrganizationInvitation } from "../models/components/organizationinvitation.js";
+import { ProjectGateway } from "../models/components/projectgateway.js";
 import { RevokeSignInsResult } from "../models/components/revokesigninsresult.js";
 import { SendEnterpriseAdminOnboardingEmailResult } from "../models/components/sendenterpriseadminonboardingemailresult.js";
 import { SetupTask } from "../models/components/setuptask.js";
@@ -63,6 +65,10 @@ import {
   GetOrganizationGatewayRequest,
   GetOrganizationGatewaySecurity,
 } from "../models/operations/getorganizationgateway.js";
+import {
+  GetProjectGatewayRequest,
+  GetProjectGatewaySecurity,
+} from "../models/operations/getprojectgateway.js";
 import {
   ListInvitesRequest,
   ListInvitesSecurity,
@@ -240,6 +246,25 @@ export class Organizations extends ClientSDK {
     options?: RequestOptions,
   ): Promise<OnboardingStatusResult> {
     return unwrapAsync(organizationsGetOnboardingStatus(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getProjectGateway organizations
+   *
+   * @remarks
+   * Get the selected project's Project Gateway: the organization's gateway limited to that project's MCP servers. It is served under the same conditions as the organization's gateway. Requires project:read.
+   */
+  async getProjectGateway(
+    request?: GetProjectGatewayRequest | undefined,
+    security?: GetProjectGatewaySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ProjectGateway> {
+    return unwrapAsync(organizationsGetProjectGateway(
       this,
       request,
       security,

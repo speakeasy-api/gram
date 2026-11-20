@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -55,7 +56,7 @@ func (c *Chainer) cachedToken(ctx context.Context, logger *slog.Logger, req Requ
 		}
 		return none, false
 	}
-	value, err := c.enc.Decrypt(row.AccessTokenEncrypted.String)
+	value, err := openCredential(ctx, c.tokens, row)
 	if err != nil || value == "" {
 		logger.ErrorContext(ctx, "decrypt identity chaining credential", attr.SlogError(err))
 		return none, false
@@ -104,10 +105,6 @@ func (c *Chainer) publish(ctx context.Context, logger *slog.Logger, req Request,
 func (c *Chainer) publishSlot(ctx context.Context, logger *slog.Logger, req Request, sel selection, cred credential) (publishedSlot, error) {
 	var none publishedSlot
 	var slot publishedSlot
-	encrypted, err := c.enc.Encrypt([]byte(cred.accessToken))
-	if err != nil {
-		return none, fmt.Errorf("encrypt chained access token: %w", err)
-	}
 	tx, err := c.db.Begin(ctx)
 	if err != nil {
 		return none, fmt.Errorf("begin chained credential publish: %w", err)
@@ -124,7 +121,7 @@ func (c *Chainer) publishSlot(ctx context.Context, logger *slog.Logger, req Requ
 			SubjectUrn: urn.NewUserSubject(req.UserID).String(), BindingID: sel.bindingID, BindingGeneration: sel.generation,
 			InternalSessionIssuerID: sel.provider.InternalSessionIssuerID, InternalSessionIssuerUpdatedAt: conv.ToPGTimestamptz(sel.internalIssuerVersion),
 			InternalSessionIssuerKeyID: sel.internalKeyID, SignInID: sel.signInID, UserSessionID: grantSlot(req, sel),
-			RequestedScopes: storedScopes(sel.scopes), GrantedScopes: storedScopes(cred.grantedScopes), AccessTokenEncrypted: encrypted,
+			RequestedScopes: storedScopes(sel.scopes), GrantedScopes: storedScopes(cred.grantedScopes),
 			AccessExpiresAt: conv.ToPGTimestamptz(cred.expiresAt), DownstreamRefreshTokenObserved: cred.refreshObserved,
 		})
 	} else {
@@ -143,7 +140,6 @@ func (c *Chainer) publishSlot(ctx context.Context, logger *slog.Logger, req Requ
 			TrustedCredentialObtainedAt:    conv.PtrToPGTimestamptz(conv.PtrEmpty(cred.trustedObtainedAt)),
 			RequestedScopes:                storedScopes(sel.scopes),
 			GrantedScopes:                  storedScopes(cred.grantedScopes),
-			AccessTokenEncrypted:           encrypted,
 			AccessExpiresAt:                pgtype.Timestamptz{Time: cred.expiresAt, Valid: true, InfinityModifier: pgtype.Finite},
 			DownstreamRefreshTokenObserved: cred.refreshObserved,
 		})
@@ -154,6 +150,10 @@ func (c *Chainer) publishSlot(ctx context.Context, logger *slog.Logger, req Requ
 	}
 	if err != nil {
 		return none, fmt.Errorf("publish chained credential: %w", err)
+	}
+	// The slot's organization is the request's, which the publish wrote.
+	if _, err := c.tokens.SetEMACredential(ctx, tx, slot.id, conv.ToPGText(req.OrganizationID), cred.accessToken); err != nil {
+		return none, fmt.Errorf("store chained access token: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return none, fmt.Errorf("commit chained credential: %w", err)
@@ -261,6 +261,16 @@ func storedScopes(scopes []string) []string {
 		return []string{}
 	}
 	return scopes
+}
+
+// openCredential opens a credential slot's access token with the key its
+// organization's transition state reads.
+func openCredential(ctx context.Context, tokens *upstreamtokens.Tokens, row repo.GetEMACredentialForUseRow) (string, error) {
+	value, err := tokens.Open(ctx, nil, row.OrganizationID, upstreamtokens.EMACredentialAccessToken, upstreamtokens.Stored(row.AccessTokenEncrypted, row.AccessTokenOrgEncrypted))
+	if err != nil {
+		return "", fmt.Errorf("open EMA credential access token: %w", err)
+	}
+	return value, nil
 }
 
 // readCredential shares provider-specific storage checks between runtime and status.

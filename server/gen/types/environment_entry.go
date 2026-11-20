@@ -11,12 +11,16 @@ package types
 type EnvironmentEntry struct {
 	// The name of the environment variable
 	Name string
-	// The value of the environment variable. Cleartext when is_secret is false,
-	// redacted otherwise.
+	// The value of the environment variable. Cleartext when is_secret is false.
+	// For a secret, a fixed mask ("***") when it has a value or "<EMPTY>" when it
+	// does not; use has_value to tell whether a value is set.
 	Value string
 	// Whether the value is a secret. Secret values are redacted in reads;
 	// non-secret values are returned in cleartext.
 	IsSecret bool
+	// Whether the entry holds a non-empty value. Secret entries can be empty
+	// placeholders waiting for a value.
+	HasValue bool
 	// The creation date of the environment entry
 	CreatedAt string
 	// When the environment entry was last updated

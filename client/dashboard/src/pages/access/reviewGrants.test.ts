@@ -23,6 +23,7 @@ function def(
     category: slug.split(":")[0] as ScopeDefinition["category"],
     visibility: "user_visible",
     agentEligible: true,
+    temporaryGrantable: false,
     sensitive: false,
     subScopes: [],
     ...extra,

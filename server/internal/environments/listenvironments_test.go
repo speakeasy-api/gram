@@ -86,7 +86,8 @@ func TestEnvironmentsService_ListEnvironments(t *testing.T) {
 				require.Equal(t, "First environment", *env.Description)
 				require.Len(t, env.Entries, 1)
 				require.Equal(t, "KEY1", env.Entries[0].Name)
-				require.Contains(t, env.Entries[0].Value, "*") // Should be redacted
+				require.Equal(t, "***", env.Entries[0].Value)
+				require.True(t, env.Entries[0].HasValue)
 			}
 			if env.ID == env2.ID {
 				require.Equal(t, "env-2", env.Name)

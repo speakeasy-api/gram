@@ -1,6 +1,7 @@
 package demoseed
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -34,6 +35,25 @@ var demoUsers = []demoUser{
 	{"hana", "Hana Sato", "Customer Experience", "Billing Operations", "Billing Analyst", "part-time", "CC-OPS-3300", "Billing Ops", "hana-mbp.local"},
 	{"lucas", "Lucas Meyer", "R&D", "Engineering Leadership", "Engineering Manager", "full-time", "CC-ENG-2200", "Leadership", "lucas-mbp.local"},
 }
+
+// demoAgentOwner is a member outside the directory roster who owns one agent
+// and holds no organization-wide chat or log scope, so what they can inspect
+// of sessions and tool logs comes from that ownership alone. No directory
+// profile or device backs them, so only the handle and name are set.
+var demoAgentOwner = demoUser{
+	handle:     "kwame",
+	name:       "Kwame Mensah",
+	division:   "",
+	department: "",
+	title:      "",
+	empType:    "",
+	costCenter: "",
+	team:       "",
+	hostname:   "",
+}
+
+// demoMembers is everyone with a membership: the roster plus the agent owner.
+func demoMembers() []demoUser { return slices.Concat(demoUsers, []demoUser{demoAgentOwner}) }
 
 // demoDirectoryPerson is a directory profile with no Speakeasy member behind
 // it, so the directory people view shows more than members. Profiles that
@@ -96,6 +116,13 @@ var (
 		"search_logs", "get_metrics", "query_db", "get_customer",
 		"list_deploys", "process_refund", "fetch_traces", "check_health",
 	}
+	// toolPaths are the operations' paths in openapi.yaml, so a call reaches
+	// the local MCP fixture's stub of the same document.
+	toolPaths = map[string]string{
+		"search_logs": "/logs/search", "get_metrics": "/metrics/get", "query_db": "/db/query",
+		"get_customer": "/customers/get", "list_deploys": "/deploys/list", "process_refund": "/refunds/process",
+		"fetch_traces": "/traces/fetch", "check_health": "/health/check",
+	}
 	auditActions = []string{
 		"toolset:create", "deployments:create", "api_key:create",
 		"toolset:update", "toolset:update", "plugin:publish",
@@ -147,13 +174,16 @@ func (s *seeder) exclFixture() uuid.UUID    { return s.fixed("0000-4000-a000-000
 func (s *seeder) exclTestcard() uuid.UUID   { return s.fixed("0000-4000-a000-00000000ec02") }
 func (s *seeder) exclExamplekey() uuid.UUID { return s.fixed("0000-4000-a000-00000000ec03") }
 
-func (s *seeder) assetID() uuid.UUID        { return s.fixed("0000-4000-a000-00000000a001") }
-func (s *seeder) deployID() uuid.UUID       { return s.fixed("0000-4000-a000-00000000d001") }
-func (s *seeder) doaID() uuid.UUID          { return s.fixed("0000-4000-a000-00000000da01") }
-func (s *seeder) toolset1() uuid.UUID       { return s.fixed("0000-4000-a000-000000005e01") }
-func (s *seeder) toolset2() uuid.UUID       { return s.fixed("0000-4000-a000-000000005e02") }
-func (s *seeder) toolset3() uuid.UUID       { return s.fixed("0000-4000-a000-000000005e03") }
-func (s *seeder) toolset4() uuid.UUID       { return s.fixed("0000-4000-a000-000000005e04") }
+func (s *seeder) assetID() uuid.UUID  { return s.fixed("0000-4000-a000-00000000a001") }
+func (s *seeder) deployID() uuid.UUID { return s.fixed("0000-4000-a000-00000000d001") }
+func (s *seeder) doaID() uuid.UUID    { return s.fixed("0000-4000-a000-00000000da01") }
+func (s *seeder) toolset1() uuid.UUID { return s.fixed("0000-4000-a000-000000005e01") }
+
+// supportServer is the OpenAPI Server: the canonical MCP server wrapping
+// toolset 1 (a hosted toolset's wrapper shares the toolset's id). It is the
+// only server over that toolset: every grant, gateway member, plugin, finding
+// and telemetry row about the OpenAPI Server points at it.
+func (s *seeder) supportServer() uuid.UUID  { return s.toolset1() }
 func (s *seeder) usIssuer() uuid.UUID       { return s.fixed("0000-4000-a000-000000005a01") }
 func (s *seeder) chainingIssuer() uuid.UUID { return s.fixed("0000-4000-a000-000000005a11") }
 func (s *seeder) chainingClient() uuid.UUID { return s.fixed("0000-4000-a000-000000005c11") }

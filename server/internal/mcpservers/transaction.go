@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionbindings "github.com/speakeasy-api/gram/server/internal/usersessions/bindings"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/serverissuer"
@@ -107,6 +108,16 @@ func createMCPServerInLockedTransaction(ctx context.Context, tx pgx.Tx, auditLog
 		return repo.McpServer{}, err
 	}
 
+	if input.RemoteMCPServerID.Valid && input.Visibility != VisibilityDisabled {
+		source, err := remotemcprepo.New(tx).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{ID: input.RemoteMCPServerID.UUID, ProjectID: input.ProjectID})
+		if err != nil {
+			return repo.McpServer{}, fmt.Errorf("load remote source before enabling: %w", err)
+		}
+		if isPendingProviderSetupURL(source.Url) {
+			return repo.McpServer{}, errProviderSetupPending
+		}
+	}
+
 	serverID, err := uuid.NewV7()
 	if err != nil {
 		return repo.McpServer{}, fmt.Errorf("generate MCP server ID: %w", err)
@@ -179,11 +190,6 @@ func createMCPServerInLockedTransaction(ctx context.Context, tx pgx.Tx, auditLog
 			return repo.McpServer{}, fmt.Errorf("derive server upstream issuer: %w", err)
 		}
 		if err := upstreamclients.ReconcileInLockedTransaction(ctx, tx, input.OrganizationID, input.ProjectID, []uuid.UUID{issuerID.UUID}); err != nil {
-			return repo.McpServer{}, fmt.Errorf("capture server upstream clients: %w", err)
-		}
-		// Choosing the issuer configures the server's sign-in, so a server that
-		// is the issuer's only consumer offers the clients bound there.
-		if err := upstreamclients.CaptureSoleConsumers(ctx, tx, input.OrganizationID, input.ProjectID, []uuid.UUID{issuerID.UUID}, nil); err != nil {
 			return repo.McpServer{}, fmt.Errorf("capture server upstream clients: %w", err)
 		}
 		// Choosing the issuer configures the server's sign-in, so a server that

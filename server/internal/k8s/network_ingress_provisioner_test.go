@@ -45,6 +45,12 @@ func TestNetworkIngressResourceNamesStableAndRoundTrip(t *testing.T) {
 	drifted := first
 	drifted.Ingress = "valid-but-wrong"
 	require.ErrorIs(t, drifted.Validate(), ErrNetworkIngressInvalidDesiredState)
+
+	for _, runtime := range []string{"operator", "gateway"} {
+		withRuntime := first
+		withRuntime.Runtime = runtime
+		require.NoError(t, withRuntime.Validate(), "the runtime comes from the row, not the owner id")
+	}
 }
 
 func TestNetworkIngressResourceNamesRejectIncompleteState(t *testing.T) {

@@ -62,7 +62,7 @@ func NewOIDCClient(cfg OIDCClientOptions) *OIDCClient {
 		allowedHDs:      cfg.AllowedHDs,
 		httpClient:      cfg.HTTPClient,
 		provider:        cfg.Provider,
-		idTokenverifier: cfg.Provider.Verifier(&oidc.Config{ClientID: cfg.ClientID}), //nolint:exhaustruct // third-party struct; only ClientID is relevant
+		idTokenverifier: cfg.Provider.Verifier(&oidc.Config{ClientID: cfg.ClientID}), //nolint:exhaustruct_v5 // third-party struct; only ClientID is relevant
 	}
 }
 

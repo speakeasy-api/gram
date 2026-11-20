@@ -344,7 +344,7 @@ func (r *RoleManager) CreateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 	}
 	description := conv.PtrValOr(payload.Description, "")
 	grants := roleGrantPayloads(payload.Grants)
-	if err := authz.ValidateGrantSurface(authz.GrantSurfaceAccess, grants); err != nil {
+	if err := authz.ValidateGrantSource(authz.GrantSourceRoles, grants); err != nil {
 		return RoleCreateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, err, "invalid access role grant: %s", err).LogError(ctx, r.logger)
 	}
 
@@ -537,10 +537,10 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 	}
 	addGrants := roleGrantPayloads(payload.AddGrants)
 	removeGrants := roleGrantPayloads(payload.RemoveGrants)
-	if err := authz.ValidateGrantSurface(authz.GrantSurfaceAccess, addGrants); err != nil {
+	if err := authz.ValidateGrantSource(authz.GrantSourceRoles, addGrants); err != nil {
 		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, err, "invalid access role grant: %s", err).LogError(ctx, r.logger)
 	}
-	if err := authz.ValidateGrantSurface(authz.GrantSurfaceAccess, removeGrants); err != nil {
+	if err := authz.ValidateGrantSource(authz.GrantSourceRoles, removeGrants); err != nil {
 		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, err, "invalid access role grant: %s", err).LogError(ctx, r.logger)
 	}
 

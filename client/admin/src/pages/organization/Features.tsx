@@ -12,7 +12,6 @@ import {
 } from "@/lib/adminQueries";
 import {
   organizationFeaturesQuery,
-  setAdminOrganizationProviderSetup,
   setAdminOrganizationFeature,
 } from "@/lib/gramAdminClient";
 import {
@@ -23,6 +22,7 @@ import {
   type AdminOrganization,
   type AdminOrganizationChatAnalysisSettings,
 } from "@/lib/gramAdminApi";
+import { HooksRolloutOverride } from "@/pages/organization/HooksRolloutOverride";
 import type { ProductFeatures } from "@gram/admin-client/models/components/productfeatures";
 import type { FeatureName } from "@gram/admin-client/models/components/setorganizationfeaturerequestbody";
 
@@ -40,16 +40,7 @@ type ProductFeatureDecision =
     }
   | { kind: "omitted"; where: string };
 
-type AdminFeatureName = FeatureName | "provider_setup";
-
 const PRODUCT_FEATURES = {
-  provider_setup: {
-    kind: "toggle",
-    enabledKey: "providerSetupEnabled",
-    label: "MCP provider setup",
-    description:
-      "Enables guided OAuth app setup for supported MCP providers in this organization.",
-  },
   ai_platform_push_integrations: {
     kind: "toggle",
     enabledKey: "aiPlatformPushIntegrationsEnabled",
@@ -177,7 +168,7 @@ const PRODUCT_FEATURES = {
     kind: "omitted",
     where: "Dashboard Gateway settings",
   },
-} satisfies Record<AdminFeatureName, ProductFeatureDecision>;
+} satisfies Record<FeatureName, ProductFeatureDecision>;
 
 export function FeaturesRoute(): JSX.Element | null {
   const { idOrSlug } = useParams({ from: "/organizations/$idOrSlug" });
@@ -191,6 +182,7 @@ export function Features({ org }: { org: AdminOrganization }): JSX.Element {
     <div className="space-y-6">
       <ProductFeatures org={org} />
       <ChatAnalysis org={org} />
+      <HooksRolloutOverride org={org} />
     </div>
   );
 }
@@ -233,12 +225,9 @@ function ProductFeatures({ org }: { org: AdminOrganization }): JSX.Element {
       enabled,
     }: {
       organizationId: string;
-      featureName: AdminFeatureName;
+      featureName: FeatureName;
       enabled: boolean;
-    }) =>
-      featureName === "provider_setup"
-        ? setAdminOrganizationProviderSetup({ organizationId, enabled })
-        : setAdminOrganizationFeature({ organizationId, featureName, enabled }),
+    }) => setAdminOrganizationFeature({ organizationId, featureName, enabled }),
     onMutate: async ({ featureName, enabled }) => {
       await queryClient.cancelQueries({ queryKey: query.queryKey });
       const previous = queryClient.getQueryData<ProductFeatures>(
@@ -297,7 +286,7 @@ function ProductFeatures({ org }: { org: AdminOrganization }): JSX.Element {
         <div className="divide-border divide-y">
           {Object.entries(PRODUCT_FEATURES).map(([featureName, feature]) => {
             if (feature.kind === "omitted") return null;
-            const typedFeatureName = featureName as AdminFeatureName;
+            const typedFeatureName = featureName as FeatureName;
             const rowError =
               mutation.isError &&
               mutation.variables.featureName === typedFeatureName
@@ -340,13 +329,19 @@ function ProductFeatures({ org }: { org: AdminOrganization }): JSX.Element {
   );
 }
 
+// Mirrors analysis.DefaultJudgeDailyCap on the server: the cap a judge gets
+// when it is switched on without one stored.
+const DEFAULT_DAILY_CAP = 100;
+
 type ChatAnalysisDefinition = {
   judge: AdminChatAnalysisJudge;
   enabledKey: "work_units_enabled" | "business_memory_enabled";
   capKey: "work_units_daily_cap" | "business_memory_daily_cap";
   label: string;
   description: string;
-  capLabel: string;
+  // A judge without a cap label is a plain on/off switch: staff never edit its
+  // cap, which is kept as stored or set to DEFAULT_DAILY_CAP when switched on.
+  capLabel?: string;
 };
 
 const CHAT_ANALYSIS_CONTROLS: ChatAnalysisDefinition[] = [
@@ -363,10 +358,9 @@ const CHAT_ANALYSIS_CONTROLS: ChatAnalysisDefinition[] = [
     judge: "business_memory",
     enabledKey: "business_memory_enabled",
     capKey: "business_memory_daily_cap",
-    label: "Business Memory Extraction",
+    label: "Organizational Memory",
     description:
-      "Extracts reusable glossary entries, procedures, and prior results from quiet chat sessions.",
-    capLabel: "Business memory daily extraction cap",
+      "Extracts reusable facts and masked session summaries from quiet chat sessions and turns on the team memory tools.",
   },
 ];
 
@@ -458,6 +452,56 @@ function ChatAnalysis({ org }: { org: AdminOrganization }): JSX.Element {
         <div className="divide-border divide-y">
           {CHAT_ANALYSIS_CONTROLS.map((control) => {
             const enabled = data[control.enabledKey];
+            if (!control.capLabel) {
+              const storedCap = data[control.capKey];
+              // A zero cap admits no work, so the switch shows off for it.
+              const on = enabled && storedCap > 0;
+              const rowError =
+                mutation.isError && mutation.variables.judge === control.judge
+                  ? errorMessage(mutation.error)
+                  : undefined;
+              return (
+                <div className="px-4 py-3" key={control.judge}>
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium">{control.label}</p>
+                        <Badge variant="outline">
+                          {on ? "Enabled" : "Disabled"}
+                        </Badge>
+                      </div>
+                      <p className="text-muted-foreground text-sm">
+                        {control.description}
+                      </p>
+                      {on && (
+                        <p className="text-muted-foreground text-sm">
+                          Up to {storedCap.toLocaleString()} sessions per UTC
+                          day.
+                        </p>
+                      )}
+                    </div>
+                    <Switch
+                      checked={on}
+                      disabled={mutation.isPending}
+                      onCheckedChange={(checked) =>
+                        mutation.mutate({
+                          judge: control.judge,
+                          enabled: checked,
+                          dailyCap:
+                            checked && storedCap === 0
+                              ? DEFAULT_DAILY_CAP
+                              : storedCap,
+                        })
+                      }
+                      aria-label={`Toggle ${control.label}`}
+                    />
+                  </div>
+                  {rowError && (
+                    <p className="text-destructive mt-1 text-sm">{rowError}</p>
+                  )}
+                </div>
+              );
+            }
             const capValue =
               capOverrides[control.judge] ?? String(data[control.capKey]);
             const cap = validDailyCap(capValue);
@@ -516,7 +560,8 @@ function ChatAnalysis({ org }: { org: AdminOrganization }): JSX.Element {
                       disabled={mutation.isPending || cap === undefined}
                       onClick={() => {
                         if (cap === undefined) return;
-                        const dailyCap = !enabled && cap === 0 ? 100 : cap;
+                        const dailyCap =
+                          !enabled && cap === 0 ? DEFAULT_DAILY_CAP : cap;
                         if (dailyCap !== cap) {
                           setCapOverrides((current) => ({
                             ...current,

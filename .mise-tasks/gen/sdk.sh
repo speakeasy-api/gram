@@ -3,6 +3,7 @@
 #MISE description="Generate SDK from OpenAPI spec"
 
 #USAGE flag "-c --check" help="Check if the Gram-Internal and Gram-Admin OpenAPI outputs are up-to-date"
+#USAGE flag "-t --target <target>" help="Generate only this workflow target (CI runs one target per job)"
 
 set -e
 
@@ -70,8 +71,17 @@ check_inputs() {
 
 if [[ "${usage_check:-}" == "true" ]]; then
   check_inputs
+  exit
+fi
+
+target=${usage_target:-}
+if [[ -n "$target" ]]; then
+  generate --target "$target"
 else
   generate
+fi
+
+if [[ -z "$target" || "$target" == "hooks-go" ]]; then
   (
     cd hooks/sdk
     go mod tidy

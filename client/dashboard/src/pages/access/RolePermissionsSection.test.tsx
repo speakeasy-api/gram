@@ -17,6 +17,7 @@ function scope(
     category: resourceType as ScopeDefinition["category"],
     description: `${slug} description`,
     agentEligible: true,
+    temporaryGrantable: false,
     visibility: "user_visible",
     sensitive: false,
     subScopes: [],

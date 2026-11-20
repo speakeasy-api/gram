@@ -146,7 +146,7 @@ func TestListDelegableGrantsPreservesCallerConstraints(t *testing.T) {
 			t.Parallel()
 			f := newDelegableFixture(t)
 			for _, principal := range []string{"agent", "owner", "caller"} {
-				selector := authz.NewSelector(authz.ScopeMCPRead, "server-one")
+				selector := authz.NewSelector(authz.ScopeMCPConnect, "server-one")
 				if principal == "caller" {
 					selector[authz.SelectorKeyTool] = "tool-one"
 					selector[authz.SelectorKeyProjectID] = "project-one"
@@ -154,7 +154,7 @@ func TestListDelegableGrantsPreservesCallerConstraints(t *testing.T) {
 				if incompatible && principal == "owner" {
 					selector[authz.SelectorKeyTool] = "tool-two"
 				}
-				f.grant(t, principal, authz.ScopeMCPRead, selector)
+				f.grant(t, principal, authz.ScopeMCPConnect, selector)
 			}
 			result := f.list(t, "caller")
 			if incompatible {
@@ -162,10 +162,8 @@ func TestListDelegableGrantsPreservesCallerConstraints(t *testing.T) {
 				return
 			}
 			require.NotEmpty(t, result)
-			foundRead := false
 			for _, grant := range result {
-				require.Contains(t, []string{string(authz.ScopeMCPRead), string(authz.ScopeMCPConnect)}, grant.Scope)
-				foundRead = foundRead || grant.Scope == string(authz.ScopeMCPRead)
+				require.Equal(t, string(authz.ScopeMCPConnect), grant.Scope)
 				require.Equal(t, authz.ResourceKindMCP, grant.Selector.ResourceKind)
 				require.Equal(t, "server-one", grant.Selector.ResourceID)
 				require.NotNil(t, grant.Selector.Tool)
@@ -173,7 +171,6 @@ func TestListDelegableGrantsPreservesCallerConstraints(t *testing.T) {
 				require.NotNil(t, grant.Selector.ProjectID)
 				require.Equal(t, "project-one", *grant.Selector.ProjectID)
 			}
-			require.True(t, foundRead)
 		})
 	}
 }
@@ -318,13 +315,18 @@ func TestListDelegableGrantsScopedToolset(t *testing.T) {
 			other := f.toolset(t, "org-delegable", "other")
 			for _, principal := range []string{"agent", "owner", "caller"} {
 				f.grant(t, principal, authz.ScopeMCPWrite, authz.NewSelector(authz.ScopeMCPWrite, "*"))
+				f.grant(t, principal, authz.ScopeMCPConnect, authz.NewSelector(authz.ScopeMCPConnect, "*"))
 			}
 			// Both server and project exclusions on unrelated resources must be disjoint.
 			f.grant(t, excludedBy, authz.ScopeMCPBlockedConnect, authz.NewSelector(authz.ScopeMCPBlockedConnect, other.ID.String()))
 			exclusion := authz.NewSelector(authz.ScopeMCPBlockedConnect, "*")
 			exclusion[authz.SelectorKeyProjectID] = other.ProjectID.String()
 			f.grant(t, excludedBy, authz.ScopeMCPBlockedConnect, exclusion)
-			require.Empty(t, f.list(t, "caller"), "unscoped broad grants still overlap exclusions")
+			unscoped := f.list(t, "caller")
+			require.Len(t, unscoped, 2, "unscoped broad connect still overlaps exclusions; read and write do not")
+			for _, grant := range unscoped {
+				require.NotEqual(t, string(authz.ScopeMCPConnect), grant.Scope)
+			}
 			ctx := validatedHumanContext(t, "org-delegable", "caller")
 			grants, err := f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{
 				AgentID: f.agentID.String(), ToolsetID: new(selected.ID.String()),
@@ -340,7 +342,10 @@ func TestListDelegableGrantsScopedToolset(t *testing.T) {
 				AgentID: f.agentID.String(), ToolsetID: new(other.ID.String()),
 			})
 			require.NoError(t, err)
-			require.Empty(t, grants)
+			require.Len(t, grants, 2, "a connect exclusion withdraws connect only")
+			for _, grant := range grants {
+				require.NotEqual(t, string(authz.ScopeMCPConnect), grant.Scope)
+			}
 		})
 	}
 }
@@ -353,6 +358,7 @@ func TestListDelegableGrantsBatchedToolsets(t *testing.T) {
 	blocked := f.toolset(t, "org-delegable", "blocked")
 	for _, principal := range []string{"agent", "owner", "caller"} {
 		f.grant(t, principal, authz.ScopeMCPWrite, authz.NewSelector(authz.ScopeMCPWrite, "*"))
+		f.grant(t, principal, authz.ScopeMCPConnect, authz.NewSelector(authz.ScopeMCPConnect, "*"))
 	}
 	f.grant(t, "owner", authz.ScopeMCPBlockedConnect, authz.NewSelector(authz.ScopeMCPBlockedConnect, blocked.ID.String()))
 	ctx := validatedHumanContext(t, "org-delegable", "caller")
@@ -374,7 +380,9 @@ func TestListDelegableGrantsBatchedToolsets(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, want, grants)
 	for _, grant := range grants {
-		require.NotEqual(t, blocked.ID.String(), grant.Selector.ResourceID)
+		if grant.Scope == string(authz.ScopeMCPConnect) {
+			require.NotEqual(t, blocked.ID.String(), grant.Selector.ResourceID)
+		}
 	}
 }
 

@@ -56,6 +56,9 @@ func EncodeListGatewaySessionsRequest(encoder func(*http.Request) goahttp.Encode
 		if p.GatewayID != nil {
 			values.Add("gateway_id", *p.GatewayID)
 		}
+		if p.ProjectID != nil {
+			values.Add("project_id", *p.ProjectID)
+		}
 		if p.Search != nil {
 			values.Add("search", *p.Search)
 		}
@@ -316,6 +319,9 @@ func EncodeListGatewaySessionFacetsRequest(encoder func(*http.Request) goahttp.E
 		values := req.URL.Query()
 		if p.GatewayID != nil {
 			values.Add("gateway_id", *p.GatewayID)
+		}
+		if p.ProjectID != nil {
+			values.Add("project_id", *p.ProjectID)
 		}
 		req.URL.RawQuery = values.Encode()
 		return nil

@@ -46,10 +46,14 @@ func (s *seeder) chCheckArgs() []any {
 		clickhouse.Named("org", s.orgID()),
 		clickhouse.Named("proj", s.projectID().String()),
 		clickhouse.Named("marker", s.spec.Marker),
-		clickhouse.Named("github", s.det("mcpserver-github").String()),
+		clickhouse.Named("gone_member", s.det("mcpserver-linear-app").String()),
+		clickhouse.Named("linear_app", s.det("mcpserver-linear-app").String()),
+		clickhouse.Named("notion_app", s.det("mcpserver-notion-app").String()),
+		clickhouse.Named("directgateway", s.directGatewayID().String()),
 		clickhouse.Named("orggateway", orggateway.GatewayID(s.orgID()).String()),
 		clickhouse.Named("gateway_suffix", "/mcp/"+s.spec.OrgSlug+"-gateway"),
-		clickhouse.Named("tunnel_source", s.tunnelSourceID().String()),
+		clickhouse.Named("owner_agent", s.ownerAgentID().String()),
+		clickhouse.Named("owner_user", s.userID(demoAgentOwner.handle)),
 	}
 }
 
@@ -125,9 +129,28 @@ func (s *seeder) chTelemetryChecks() []chCheck {
    WHERE gram_project_id = toUUID(@proj)
      AND meta_mcp_server_id != ''
      AND event_source = 'tool_call'
-     AND mcp_server_id = @github) < 24`,
+     AND mcp_server_id = @gone_member) < 24`,
 			settings: "",
 			msg:      "demo seed postflight: removed gateway member dispatches missing",
+		},
+		// The Inspect tab's per-tool health for Linear and Notion reads direct
+		// calls (no gateway) by mcp_server_id.
+		{
+			cond: `(SELECT count() FROM telemetry_logs
+   WHERE gram_project_id = toUUID(@proj)
+     AND meta_mcp_server_id = ''
+     AND event_source = 'tool_call'
+     AND mcp_server_id IN (@linear_app, @notion_app)) != ` + strconv.Itoa(directCallCount(inspectRemoteTools["linear-app"])+directCallCount(inspectRemoteTools["notion-app"])),
+			settings: "",
+			msg:      "demo seed postflight: direct remote server calls missing or duplicated",
+		},
+		{
+			cond: `(SELECT uniqExact(mcp_server_id) FROM telemetry_logs
+   WHERE gram_project_id = toUUID(@proj)
+     AND meta_mcp_server_id = @directgateway
+     AND event_source = 'tool_call') < 2`,
+			settings: "",
+			msg:      "demo seed postflight: direct gateway member dispatches missing",
 		},
 		{
 			cond: `(SELECT count() FROM telemetry_logs
@@ -172,6 +195,23 @@ func (s *seeder) chTelemetryChecks() []chCheck {
    GROUP BY gram_project_id, user_email, hostname, harness)) != 7`,
 			settings: "",
 			msg:      "demo seed postflight: expected 7 hooks fleet installs",
+		},
+		// The owner-scoped Tool Logs read matches the persona's agent by
+		// actor id and the persona by user id; a row that lost either, or
+		// that still named a human on an agent call, would fall outside it.
+		{
+			cond: `(SELECT uniqExact(trace_id) FROM trace_summaries
+   WHERE gram_project_id = toUUID(@proj)
+     AND agent_id = @owner_agent AND user_email = '' AND user_id = '') != ` + strconv.Itoa(ownerAgentTraces()),
+			settings: "",
+			msg:      "demo seed postflight: agent owner's agent tool calls missing or attributed to a person",
+		},
+		{
+			cond: `(SELECT uniqExact(trace_id) FROM trace_summaries
+   WHERE gram_project_id = toUUID(@proj)
+     AND user_id = @owner_user AND event_source = 'tool_call') != ` + strconv.Itoa(ownerHumanTraces()),
+			settings: "",
+			msg:      "demo seed postflight: agent owner's own tool calls missing",
 		},
 		{
 			cond:     `(SELECT uniqExact(chat_id) FROM chat_session_summaries WHERE gram_project_id = toUUID(@proj)) < 180`,
@@ -391,6 +431,14 @@ func chAgentEventChecks() []chCheck {
 			settings: "",
 			msg:      "demo seed postflight: Claude tool rows name the three demo skills and Codex rows name none",
 		},
+		{
+			cond: `(SELECT countIf(product = '') FROM agent_events
+   WHERE organization_id = @org) != 0
+  OR (SELECT countIf(agent_id != '') FROM agent_events
+      WHERE organization_id = @org) = 0`,
+			settings: "",
+			msg:      "demo seed postflight: every demo agent event names its product, and some ran as an agent",
+		},
 	}
 }
 
@@ -414,8 +462,8 @@ const (
 const agentEventInsert = `INSERT INTO agent_events
   (organization_id, project_id, occurred_at_unix_nano, observed_at_unix_nano,
    record_id, session_id, turn_id, event_id, event_type, raw_event_name,
-   source, provider, surface, user_id, user_email, external_user_id,
-   account_type, billing_mode, external_org_id, device_id,
+   source, provider, surface, product, client, user_id, user_email,
+   external_user_id, agent_id, account_type, billing_mode, external_org_id, device_id,
    department_name, division_name, job_title, employee_type, cost_center_name,
    roles, groups, model, query_source, skill_name, agent_name,
    mcp_server_name, mcp_tool_name, tool_name, text, outcome, outcome_message,
@@ -446,6 +494,9 @@ type agentSession struct {
 	turns    int
 	onClaude bool
 	surface  string
+	product  string
+	client   string
+	agentID  string
 	provider string
 	model    string
 	id       string
@@ -465,6 +516,19 @@ func (s *seeder) agentSession(i int) agentSession {
 	if onClaude {
 		surface, provider = "claude-code", "anthropic"
 	}
+	// A third of Claude Code sessions ran in an editor; Codex states no client.
+	client := ""
+	if onClaude {
+		client = "cli"
+		if (i/6)%3 == 0 {
+			client = "ide"
+		}
+	}
+	// Every twelfth session from the fifth on ran as the release assistant, as Speakeasy hooks would attribute it.
+	agentID := ""
+	if i%12 == 4 {
+		agentID = s.det("managed-agent-1").String()
+	}
 	model := "claude-sonnet-5"
 	switch {
 	case !onClaude:
@@ -479,6 +543,9 @@ func (s *seeder) agentSession(i int) agentSession {
 		turns:    2 + i%4,
 		onClaude: onClaude,
 		surface:  surface,
+		product:  surface,
+		client:   client,
+		agentID:  agentID,
 		provider: provider,
 		model:    model,
 		id:       s.det("agent-session-" + strconv.Itoa(i)).String(),
@@ -528,9 +595,12 @@ func (s *seeder) appendAgentEvent(batch driver.Batch, sess agentSession, f agent
 		sess.surface, // source
 		sess.provider,
 		sess.surface,
+		sess.product,
+		sess.client,
 		s.userID(sess.user.handle),
 		s.email(sess.user.handle),
 		"", // external_user_id
+		sess.agentID,
 		"", // account_type
 		"", // billing_mode
 		"", // external_org_id
@@ -824,8 +894,8 @@ func (s *seeder) chInsertMCPNetworkRequests(ctx context.Context, ch driver.Conn)
 	targets := []struct {
 		kind, surface, serverID string
 	}{
-		{"mcp", "public", s.det("mcpserver-support").String()},
-		{"mcp", "private", s.det("mcpserver-ops").String()},
+		{"mcp", "public", s.supportServer().String()},
+		{"mcp", "private", s.det("mcpserver-linear").String()},
 		{"meta", "public", s.det("metamcp-1").String()},
 		{"meta", "private", s.det("metamcp-1").String()},
 	}

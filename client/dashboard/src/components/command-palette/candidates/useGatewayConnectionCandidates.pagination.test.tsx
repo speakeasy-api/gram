@@ -1,4 +1,5 @@
-import { cleanup, renderHook, waitFor, act } from "@testing-library/react";
+import { waitForHookState as waitFor } from "@/test/waitForHookState";
+import { cleanup, renderHook, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { GramCore } from "@gram/client/core.js";
 import { HTTPClient } from "@gram/client/lib/http.js";
@@ -9,6 +10,7 @@ import { useGatewayConnectionCandidates } from "./useGatewayConnectionCandidates
 const state = vi.hoisted(() => ({
   sdk: undefined as unknown,
   navigate: vi.fn(),
+  gatewayRequests: 0,
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-one" }),
@@ -30,21 +32,25 @@ vi.mock("react-router", async (importOriginal) => ({
 vi.mock("@gram/client/react-query/metaMcpServers.js", () => ({
   buildMetaMcpServersQuery: () => ({
     queryKey: ["gateways"],
-    queryFn: async () => ({
-      metaMcpServers: [
-        {
-          id: "gateway-one",
-          name: "Example gateway",
-          userSessionIssuerId: "issuer-one",
-        },
-      ],
-    }),
+    queryFn: async () => {
+      state.gatewayRequests += 1;
+      return {
+        metaMcpServers: [
+          {
+            id: "gateway-one",
+            name: "Example gateway",
+            userSessionIssuerId: "issuer-one",
+          },
+        ],
+      };
+    },
   }),
 }));
 afterEach(cleanup);
 
 it("requests the SDK next cursor before exposing a later-page registration", async () => {
   const requests: URL[] = [];
+  state.gatewayRequests = 0;
   const release = Promise.withResolvers<void>();
   state.sdk = new GramCore({
     serverURL: "https://api.example.test",
@@ -88,9 +94,11 @@ it("requests the SDK next cursor before exposing a later-page registration", asy
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  const { result, unmount } = renderHook(
-    () => useGatewayConnectionCandidates({ enabled: true, inProject: true }),
+  const { result, rerender, unmount } = renderHook(
+    ({ enabled }) =>
+      useGatewayConnectionCandidates({ enabled, inProject: true }),
     {
+      initialProps: { enabled: true },
       wrapper: ({ children }: { children: ReactNode }) => (
         <QueryClientProvider client={client}>{children}</QueryClientProvider>
       ),
@@ -120,6 +128,12 @@ it("requests the SDK next cursor before exposing a later-page registration", asy
       "/acme/projects/project-one/mcp/gateway/gateway-one/sessions?registration=later-page",
     );
     expect(requests).toHaveLength(2);
+
+    rerender({ enabled: false });
+    rerender({ enabled: true });
+    await act(async () => Promise.resolve());
+    expect(requests).toHaveLength(2);
+    expect(state.gatewayRequests).toBe(1);
   } finally {
     release.resolve();
     unmount();

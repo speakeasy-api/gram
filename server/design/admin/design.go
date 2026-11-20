@@ -206,6 +206,7 @@ var AdminMcpServer = Type("AdminMcpServer", func() {
 	Attribute("id", String, "The mcp_servers row ID, or the toolset ID for a toolset-only server.")
 	Attribute("name", String, "Display name of the server.")
 	Attribute("url", String, "The URL clients connect to. Omitted when the server has no routable address.")
+	Attribute("upstream_url", String, "The upstream URL for a remote MCP server. Omitted for other server types.")
 	Attribute("visibility", String, "The visibility of the server.", func() {
 		Enum("disabled", "private", "public")
 	})
@@ -568,21 +569,6 @@ var _ = Service("admin", func() {
 		HTTP(func() { GET("/admin/organization.features"); Param("organization_id"); Response(StatusOK) })
 		Meta("openapi:operationId", "adminGetOrganizationFeatures")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"AdminOrganizationFeatures"}`)
-	})
-
-	Method("setOrganizationProviderSetup", func() {
-		Description("Enable or disable the temporary provider setup rollout for one organization. Staff only; disabled by default. Existing credential storage and OAuth flows are unaffected.")
-		Payload(func() {
-			Meta("openapi:typename", "SetOrganizationProviderSetupRequestBody")
-			security.AdminAuthPayload()
-			Attribute("organization_id", String)
-			Attribute("enabled", Boolean)
-			Required("organization_id", "enabled")
-		})
-		Result(shared.ProductFeatures)
-		HTTP(func() { POST("/admin/organization.providerSetup"); Response(StatusOK) })
-		Meta("openapi:operationId", "adminSetOrganizationProviderSetup")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"SetAdminOrganizationProviderSetup"}`)
 	})
 
 	Method("setOrganizationFeature", func() {
@@ -1499,4 +1485,9 @@ var _ = Service("admin", func() {
 	mcpAuthBackfillMethods()
 	mcpConnectBackfillMethods()
 	projectRedeployMethods()
+	customDomainMethods()
+	platformExternalCredentialMethods()
+	memoryEvalMethods()
+	assistantMethods()
+	hooksRolloutMethods()
 })

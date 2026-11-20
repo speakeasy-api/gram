@@ -235,6 +235,7 @@ func TestGetMCPAdvertisesToolPagingAndRefusesAStaleToolCursor(t *testing.T) {
 	server, registrar := newServer(reader, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	bindExternalTestPrincipal(server)
 	registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})
+	registrar.withProjects(slugProjects{"payments": uuid.New()})
 
 	var getMCP *mcp.Tool
 	for _, tool := range listAdvertisedTools(t, server) {
@@ -270,7 +271,7 @@ func TestGetMCPAdvertisesToolPagingAndRefusesAStaleToolCursor(t *testing.T) {
 	t.Cleanup(func() { _ = session.Close() })
 
 	result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "get_mcp", Arguments: map[string]any{
-		"project_id": uuid.NewString(), "mcp_id": uuid.NewString(), "tool_cursor": "stale",
+		"project_slug": "payments", "mcp_id": uuid.NewString(), "tool_cursor": "stale",
 	}})
 	require.NoError(t, err)
 	require.True(t, result.IsError)

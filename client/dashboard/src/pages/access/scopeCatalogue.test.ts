@@ -14,6 +14,7 @@ function def(slug: string, subScopes: string[] = []): ScopeDefinition {
     category: "mcp",
     visibility: "user_visible",
     agentEligible: true,
+    temporaryGrantable: false,
     sensitive: false,
     subScopes: subScopes as ScopeDefinition["subScopes"],
   };

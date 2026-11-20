@@ -115,6 +115,35 @@ vi.mock("./UserSessionDurationField", () => ({
   ),
 }));
 
+// The session controls own the footer Save; these cases cover what renders.
+vi.mock("@gram/client/react-query/updateUserSessionIssuer.js", () => ({
+  useUpdateUserSessionIssuerMutation: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  }),
+}));
+
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
+  useQueryClient: () => ({}),
+}));
+
+vi.mock("@/components/require-scope", () => ({
+  RequireScope: ({
+    children,
+  }: {
+    children: ReactNode | ((props: { disabled: boolean }) => ReactNode);
+  }) => (
+    <>
+      {typeof children === "function"
+        ? children({ disabled: false })
+        : children}
+    </>
+  ),
+}));
+
 vi.mock("./CimdAdmissionModeField", () => ({
   CimdAdmissionModeField: ({
     onDraftModeChange,

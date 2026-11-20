@@ -60,10 +60,13 @@ func TestEnvironmentsService_CreateEnvironment(t *testing.T) {
 			require.NotEmpty(t, entry.UpdatedAt)
 			entriesByName[entry.Name] = entry
 		}
-		require.Equal(t, "sec*****", entriesByName["API_KEY"].Value)
+		require.Equal(t, "***", entriesByName["API_KEY"].Value)
 		require.True(t, entriesByName["API_KEY"].IsSecret)
+		require.True(t, entriesByName["API_KEY"].HasValue)
 		require.Equal(t, "postgres://localhost:5432/testdb", entriesByName["DATABASE_URL"].Value)
 		require.False(t, entriesByName["DATABASE_URL"].IsSecret)
+		require.True(t, entriesByName["DATABASE_URL"].HasValue)
+		require.Equal(t, "secret-key-123", ti.plaintextValues(t, ctx, env)["API_KEY"])
 
 		afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionEnvironmentCreate)
 		require.NoError(t, err)
@@ -126,6 +129,38 @@ func TestEnvironmentsService_CreateEnvironment(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, beforeCount+1, afterCount)
 	})
+}
+
+func TestEnvironmentsService_CreateEnvironment_EmptySecretHasNoValue(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestEnvironmentService(t)
+
+	env, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		OrganizationID:   "",
+		Name:             "placeholder-env",
+		Description:      nil,
+		Entries: []*gen.EnvironmentEntryInput{
+			{Name: "SLACK_BOT_TOKEN", Value: new(""), IsSecret: new(true)},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, env.Entries, 1)
+	require.Equal(t, "<EMPTY>", env.Entries[0].Value)
+	require.False(t, env.Entries[0].HasValue)
+
+	// The stored placeholder reads back the same way.
+	list, err := ti.service.ListEnvironments(ctx, &gen.ListEnvironmentsPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, list.Environments, 1)
+	require.Len(t, list.Environments[0].Entries, 1)
+	require.Equal(t, "<EMPTY>", list.Environments[0].Entries[0].Value)
+	require.False(t, list.Environments[0].Entries[0].HasValue)
 }
 
 func TestEnvironmentsService_CreateEnvironment_RequiresEntryValue(t *testing.T) {

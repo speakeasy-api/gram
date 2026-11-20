@@ -38,6 +38,14 @@ vi.mock("@/components/sessions/useOAuthPopup", async (importOriginal) => {
   };
 });
 
+// The picker reads the server's credentials itself; here it only has to show
+// where it sits.
+vi.mock("./KeyCredentialChoice", () => ({
+  KeyCredentialChoice: ({ serverName }: { serverName: string }) => (
+    <div>Credential picker for {serverName}</div>
+  ),
+}));
+
 vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({ user: { id: "editor", displayName: "Example Editor" } }),
 }));
@@ -129,6 +137,90 @@ describe("authentication assignment warnings", () => {
       { wrapper: MemoryRouter },
     );
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+describe("a server still missing other sign-ins", () => {
+  it("names them on the row, not only that it requires a connection", () => {
+    render(
+      <StepAuthentication
+        servers={[server]}
+        allServers={false}
+        onRemove={vi.fn<(id: string) => void>()}
+        connections={{
+          byServer: new Map([
+            [
+              server.id,
+              {
+                status: "missing",
+                signIns: [
+                  { id: "stripe", credentialOwner: "subject", name: "Stripe" },
+                  { id: "vercel", credentialOwner: "subject", name: "Vercel" },
+                ],
+              },
+            ],
+          ]),
+          refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+        }}
+      />,
+      { wrapper: MemoryRouter },
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Example server.*Requires connection/,
+      }),
+    );
+    expect(
+      screen.getByText("Still needs a connection to Stripe and Vercel."),
+    ).toBeTruthy();
+  });
+});
+
+describe("the credential the agent's keys use", () => {
+  const remote = { ...server, kind: "Remote" } as InventoryServer;
+  const row = (value: string | undefined) =>
+    render(
+      <StepAuthentication
+        servers={[remote]}
+        allServers={false}
+        onRemove={vi.fn<(id: string) => void>()}
+        credentialChoice={{
+          show: () => true,
+          value: () => value,
+          onChange: vi.fn<(serverId: string, authClientId: string) => void>(),
+        }}
+        connections={{
+          byServer: new Map([[remote.id, { status: "missing" }]]),
+          refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+        }}
+      />,
+      { wrapper: MemoryRouter },
+    );
+
+  it("asks only once the server's row is open", () => {
+    row("account");
+    expect(
+      screen.queryByText("Credential picker for Example server"),
+    ).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Example server.*Requires connection/,
+      }),
+    );
+    expect(
+      screen.getByText("Credential picker for Example server"),
+    ).toBeTruthy();
+  });
+
+  it("needs no personal connection once a shared credential is chosen", () => {
+    row("token_shared");
+    fireEvent.click(
+      screen.getByRole("button", { name: /Example server.*Shared credential/ }),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Connect account" }),
+    ).toBeNull();
+    expect(screen.getByText(/No personal connection is needed/)).toBeTruthy();
   });
 });
 

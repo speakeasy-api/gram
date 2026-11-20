@@ -385,6 +385,7 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 			AuthorizerImpersonated:   nil,
 			SignInID:                 nil,
 			FreshLoginForced:         false,
+			AccountSwitches:          0,
 			AgentAuthorizationTarget: nil,
 			Endpoint:                 ref,
 			ClientID:                 "",
@@ -476,7 +477,7 @@ func (s *Service) placeRemoteSessionRecheck(ctx context.Context, logger *slog.Lo
 	}
 	if err != nil {
 		logger.InfoContext(ctx, "remote session re-check endpoint not resolved", attr.SlogError(err))
-		return EndpointRef{}, nil //nolint:exhaustruct // no placement
+		return EndpointRef{}, nil //nolint:exhaustruct_v5 // no placement
 	}
 	return ref, endpoint
 }

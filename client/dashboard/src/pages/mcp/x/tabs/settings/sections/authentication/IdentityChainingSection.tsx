@@ -1,3 +1,4 @@
+import { scrollWithinPage } from "@/lib/scroll-within-page";
 import { useEffect, useRef, type ReactNode } from "react";
 import { Link, useLocation } from "react-router";
 
@@ -45,9 +46,8 @@ function useScrollWhenReady(ready: boolean) {
     if (location.hash !== `#${IDENTITY_CHAINING_SECTION_ID}`) return;
     done.current = true;
     const frame = window.requestAnimationFrame(() => {
-      document
-        .getElementById(IDENTITY_CHAINING_SECTION_ID)
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      const target = document.getElementById(IDENTITY_CHAINING_SECTION_ID);
+      if (target) scrollWithinPage(target);
     });
     return () => window.cancelAnimationFrame(frame);
   }, [ready, location.hash]);
@@ -173,7 +173,6 @@ export function IdentityChainingSection({
     undefined,
     { enabled: remoteMcpServerId !== "", throwOnError: false },
   );
-  const externalFlag = useFeatureFlag(FEATURE_FLAGS.oktaConnections);
   const emaProvidersFlag = useFeatureFlag(FEATURE_FLAGS.emaProviders);
   const speakeasyIssuer = useSpeakeasyIssuerStatus();
   const orgRoutes = useOrgRoutes();
@@ -191,7 +190,6 @@ export function IdentityChainingSection({
   const speakeasyUnreadable =
     speakeasyIssuer.isPending && speakeasyIssuer.fetchStatus === "idle";
   const rollouts = {
-    externalRollout: externalFlag.status === "enabled",
     speakeasyRollout,
     speakeasyIssuer: speakeasyIssuer.data,
   };
@@ -220,15 +218,7 @@ export function IdentityChainingSection({
     userSessionIssuer.projectId !== "" &&
     !!chainingVouchers(userSessionIssuer, rollouts);
 
-  // With neither rollout on nothing can vouch, so stay off the page entirely.
-  const rolloutsOff =
-    externalFlag.status !== "loading" &&
-    emaProvidersFlag.status !== "loading" &&
-    !speakeasyIssuer.isLoading &&
-    !rollouts.externalRollout &&
-    !speakeasyRollout;
-  const applies =
-    !!userSessionIssuerId && remoteMcpServerId !== "" && !rolloutsOff;
+  const applies = !!userSessionIssuerId && remoteMcpServerId !== "";
   const failed =
     issuerQuery.isError ||
     sourceQuery.isError ||
@@ -245,7 +235,6 @@ export function IdentityChainingSection({
       registrationsQuery.isLoading ||
       upstreamAuth === "loading" ||
       (enforced && credentialsQuery.isLoading) ||
-      externalFlag.status === "loading" ||
       emaProvidersFlag.status === "loading" ||
       speakeasyIssuer.isLoading);
   const shown =

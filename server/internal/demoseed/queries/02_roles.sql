@@ -27,9 +27,9 @@ INSERT INTO principal_grants
   (organization_id, principal_urn, scope, selectors)
 SELECT @organization_id::text, @principal_urn::text, scope,
        jsonb_build_object(
-         'resource_kind', CASE WHEN scope IN ('plugin:write', 'log:read') THEN 'project'
+         'resource_kind', CASE WHEN scope IN ('plugin:write', 'log:read', 'channels:connect', 'channels:admin', 'channels:read_all') THEN 'project'
                                ELSE split_part(scope, ':', 1) END,
-         'resource_id', CASE WHEN scope = 'log:read' THEN @project_id::text ELSE '*' END)
+         'resource_id', CASE WHEN scope IN ('log:read', 'channels:connect', 'channels:admin', 'channels:read_all') THEN @project_id::text ELSE '*' END)
 FROM unnest(@scopes::text[]) AS scope;
 
 -- name: RolesInsertRoleAssignment :exec
@@ -73,8 +73,11 @@ WHERE organization_id = @organization_id AND project_id = @project_id AND delete
 ORDER BY created_at, id LIMIT 1;
 
 -- name: RolesInsertRolePlugin :one
-INSERT INTO plugins (organization_id, project_id, name, slug, auto_created)
-VALUES (@organization_id, @project_id, @name, @slug, true)
+-- Role plugins opt in to automatic server adding, so the seeded role server
+-- contents match what role delivery would keep in them. Engineering Essentials
+-- and Default stay off to show a hand-managed server list.
+INSERT INTO plugins (organization_id, project_id, name, slug, auto_created, auto_add_servers_enabled)
+VALUES (@organization_id, @project_id, @name, @slug, true, true)
 RETURNING id;
 
 -- name: RolesInsertRolePluginAssignment :exec
@@ -358,3 +361,18 @@ INSERT INTO billing_metadata (organization_id, tum_monthly_token_limit, billing_
 VALUES (@organization_id, 50000000, 1)
 ON CONFLICT (organization_id) DO UPDATE
   SET tum_monthly_token_limit = EXCLUDED.tum_monthly_token_limit;
+
+-- Access requests: one pending, one denied, so the Access Requests tab and
+-- the grant dialog's approval choices have something to show. Messages
+-- cascade with their request.
+-- name: RolesDeleteAccessRequests :exec
+DELETE FROM access_requests WHERE organization_id = @organization_id;
+
+-- name: RolesInsertAccessRequest :exec
+INSERT INTO access_requests
+  (id, organization_id, requester_user_id, scope, selector, resource_name, message,
+   status, decided_by_user_id, decided_via, decided_at, expires_at, created_at, updated_at)
+VALUES
+  (@id, @organization_id, @requester_user_id, @scope, @selector, @resource_name, @message,
+   @status, sqlc.narg(decided_by_user_id), sqlc.narg(decided_via), sqlc.narg(decided_at),
+   @expires_at, @created_at, @created_at);
