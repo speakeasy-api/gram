@@ -33,7 +33,7 @@ func validTestType(kind Kind, permissions ...Permission) ResourceType {
 		Kind:        kind,
 		Parent:      "",
 		Category:    ScopeCategoryProject,
-		Match:       MatchLoose,
+		Match:       MatchStandard,
 		Dimensions:  nil,
 		Permissions: permissions,
 	}
@@ -338,11 +338,11 @@ func TestRegistryValidate_RequiresParentDimension(t *testing.T) {
 	}
 	project := validTestType("project", validTestPermission("read"))
 
-	err := validTestRegistry(project, inProject(MatchLoose, false)).Validate()
+	err := validTestRegistry(project, inProject(MatchStandard, false)).Validate()
 	require.Error(t, err)
 	require.Contains(t, err.Error(), `thing: dimension "project_id" names the parent project, so it must be Required`)
 
-	require.NoError(t, validTestRegistry(project, inProject(MatchLoose, true)).Validate())
+	require.NoError(t, validTestRegistry(project, inProject(MatchStandard, true)).Validate())
 	require.NoError(t, validTestRegistry(project, inProject(MatchStrict, false)).Validate())
 }
 
