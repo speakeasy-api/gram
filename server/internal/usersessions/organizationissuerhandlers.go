@@ -711,7 +711,7 @@ func (s *Service) DeleteIssuer(ctx context.Context, payload *orggen.DeleteIssuer
 
 	orphanCreds, err := s.revoker.RetireDeletedUserSessionIssuer(ctx, dbtx, deleted.ID, uuid.Nil, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "detach remote session clients from organization user session issuer").LogError(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "retire grants for deleted organization user session issuer").LogError(ctx, logger)
 	}
 	if _, err := txRepo.SoftDeleteUserSessionsByIssuerID(ctx, deleted.ID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete child user sessions").LogError(ctx, logger)
