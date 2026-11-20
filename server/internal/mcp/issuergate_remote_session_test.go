@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -511,10 +512,13 @@ func TestServePublic_IssuerGate_ChainingProviderRefusalChallengesTheChosenClient
 func seedTypedSessionClient(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID, serverID, registrationID uuid.UUID, clientType string, subject urn.SessionSubject) uuid.UUID {
 	t.Helper()
 	q := authclientbackfill.New(ti.conn)
-	clientID, err := q.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: organizationID, ProjectID: conv.ToNullUUID(projectID), ClientType: clientType, Source: "admin", RemoteSessionClientID: conv.ToNullUUID(registrationID)})
+	registration := uuid.NullUUID{UUID: registrationID, Valid: registrationID != uuid.Nil}
+	clientID, err := q.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: organizationID, ProjectID: conv.ToNullUUID(projectID), ClientType: clientType, Source: "admin", RemoteSessionClientID: registration})
 	require.NoError(t, err)
 	require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: organizationID, McpServerID: serverID, AuthClientID: clientID, Source: "admin"}))
 	if subject.Kind == urn.SessionSubjectKindUser {
+		_, err := organizationsrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, organizationsrepo.UpsertOrganizationUserRelationshipParams{OrganizationID: organizationID, UserID: conv.ToPGText(subject.ID)})
+		require.NoError(t, err)
 		seedPrincipalGrant(t, ctx, ti, organizationID, urn.NewPrincipal(urn.PrincipalTypeUser, subject.ID), authz.ScopeMCPAuth, clientID.String())
 	}
 	return clientID
@@ -524,7 +528,8 @@ func seedTypedSessionChoice(t *testing.T, ctx context.Context, ti *testInstance,
 	t.Helper()
 	policy, err := usersessionsrepo.New(ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuerID, Jti: jti})
 	require.NoError(t, err)
-	written, err := upstreamclientsrepo.New(ti.conn).RecordAuthClientChoice(ctx, upstreamclientsrepo.RecordAuthClientChoiceParams{CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: policy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, OrganizationID: organizationID, McpServerID: serverID, AuthClientID: conv.ToNullUUID(clientID)})
+	client := uuid.NullUUID{UUID: clientID, Valid: clientID != uuid.Nil}
+	written, err := upstreamclientsrepo.New(ti.conn).RecordAuthClientChoice(ctx, upstreamclientsrepo.RecordAuthClientChoiceParams{CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: policy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, OrganizationID: organizationID, McpServerID: serverID, AuthClientID: client})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), written)
 }

@@ -322,7 +322,7 @@ func TestUpstreamClientSelection_GatewayMembers(t *testing.T) {
 	f.associate(t, ctx, memberC, clientA)
 	text, isError = metaToolResultText(t, executeMetaTool(t, f.ti, metaSlug, bearer, "member-c--ping"))
 	require.True(t, isError, "a member without a choice must not be served: %s", text)
-	require.Contains(t, text, "signed in to again")
+	require.Contains(t, text, "no sign-in set up yet")
 	require.Zero(t, upstreamC.requestCount())
 
 	text, isError = metaToolResultText(t, executeMetaTool(t, f.ti, metaSlug, bearer, "member-a--ping"))

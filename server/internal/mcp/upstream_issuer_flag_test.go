@@ -15,11 +15,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -85,6 +87,8 @@ func TestUpstreamIssuerFlag_TunneledGatewayMemberUnderEitherSource(t *testing.T)
 	require.Equal(t, agreeing.AssociationConfigurationHash, disagreeing.AssociationConfigurationHash, "clearing the column leaves the association hash alone")
 
 	typed := serverAuthClientID(t, ctx, ti, orgID, member.McpServerID, "remote_session")
+	_, err = organizationsrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, organizationsrepo.UpsertOrganizationUserRelationshipParams{OrganizationID: orgID, UserID: conv.ToPGText(subject.ID)})
+	require.NoError(t, err)
 	seedPrincipalGrant(t, ctx, ti, orgID, urn.NewPrincipal(urn.PrincipalTypeUser, subject.ID), authz.ScopeMCPAuth, typed.String())
 	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject, metaServingChoice{organizationID: orgID, serverID: member.McpServerID, clientID: typed})
 

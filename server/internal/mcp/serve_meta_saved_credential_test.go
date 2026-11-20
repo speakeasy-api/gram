@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -243,6 +244,9 @@ func TestAgentGateway_SavedKeyRefusedAsksAnAdmin(t *testing.T) {
 	_, err := mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{ID: serverID, ProjectID: projectID, Name: conv.ToPGText(fx.granted), Slug: conv.ToPGText(fx.granted), RemoteMcpServerID: conv.ToNullUUID(remote.ID), UserSessionIssuerID: conv.ToNullUUID(issuerID), Visibility: mcpservers.VisibilityPrivate})
 	require.NoError(t, err)
 	saveServerKey(t, ti, projectID, remote.ID, "saved-key")
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, authclientbackfill.SyncRemoteSource(ctx, tx, ac.ActiveOrganizationID, remote.ID))
+	require.NoError(t, tx.Commit(ctx))
 	fx.token = issueMemberAuthRegressionKey(t, ctx, ti, fx, serverID)
 	rec := mcpconnectionattemptstest.New(t)
 	ti.service.SetConnectionRecorder(rec.Recorder)

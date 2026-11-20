@@ -241,9 +241,8 @@ func TestServePublic_MetaEndpoint_ExecuteTool_TunneledIdentifierNeverHarvestsSib
 	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject, metaServingChoice{organizationID: orgID, serverID: member, clientID: typed})
 
 	rpc := executeMetaTool(t, ti, metaSlug, bearer, "member-tunnel--ping")
-	text, isError := metaToolResultText(t, rpc)
-	require.True(t, isError, "a chosen member with no usable connection must fail closed: %s", text)
-	require.Empty(t, gateway.forwardFor(`"tools/call"`), "no tool call dials the tunnel with a different credential")
+	require.NotEmpty(t, rpc["error"], "a chosen member with no usable connection must fail closed")
+	require.Zero(t, gateway.forwardCount(), "no tool call dials the tunnel with a different credential")
 }
 
 // The partial-resolution leak guard: a tunneled member whose own provider the
@@ -295,7 +294,6 @@ func TestServePublic_MetaEndpoint_ExecuteTool_TunneledMemberNeverBorrowsSiblingT
 		"the connected member must receive its own bearer")
 
 	rpc = executeMetaTool(t, ti, metaSlug, bearer, "member-tunnel-b--ping")
-	text, isError = metaToolResultText(t, rpc)
-	require.True(t, isError, "the unconnected member fails closed: %s", text)
-	require.Empty(t, gatewayB.forwardFor(`"tools/call"`), "member B must not dial with another member's connection")
+	require.NotEmpty(t, rpc["error"], "the unconnected member fails closed")
+	require.Zero(t, gatewayB.forwardCount(), "member B must not dial with another member's connection")
 }
