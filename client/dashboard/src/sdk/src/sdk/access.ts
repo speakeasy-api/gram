@@ -9,6 +9,7 @@ import { accessDecideAccessRequest } from "../funcs/accessDecideAccessRequest.js
 import { accessDeleteDirectoryRoleMapping } from "../funcs/accessDeleteDirectoryRoleMapping.js";
 import { accessDeleteRole } from "../funcs/accessDeleteRole.js";
 import { accessExplainResourceAccess } from "../funcs/accessExplainResourceAccess.js";
+import { accessFindShadowMCPInventoryServers } from "../funcs/accessFindShadowMCPInventoryServers.js";
 import { accessGetDirectoryReviewSettings } from "../funcs/accessGetDirectoryReviewSettings.js";
 import { accessGetRole } from "../funcs/accessGetRole.js";
 import { accessGetShadowMCPInventoryServer } from "../funcs/accessGetShadowMCPInventoryServer.js";
@@ -58,6 +59,7 @@ import { DirectoryReviewSettings } from "../models/components/directoryreviewset
 import { DirectoryRoleMapping } from "../models/components/directoryrolemapping.js";
 import { DirectoryRoleSetupPreviewResult } from "../models/components/directoryrolesetuppreviewresult.js";
 import { ExplainResourceAccessResult } from "../models/components/explainresourceaccessresult.js";
+import { FindShadowMCPInventoryServersResult } from "../models/components/findshadowmcpinventoryserversresult.js";
 import { ListAccessRequestsResult } from "../models/components/listaccessrequestsresult.js";
 import { ListAgentPolicyScopesResult } from "../models/components/listagentpolicyscopesresult.js";
 import { ListAIDetectionsResult } from "../models/components/listaidetectionsresult.js";
@@ -114,6 +116,10 @@ import {
   ExplainResourceAccessRequest,
   ExplainResourceAccessSecurity,
 } from "../models/operations/explainresourceaccess.js";
+import {
+  FindShadowMCPInventoryServersRequest,
+  FindShadowMCPInventoryServersSecurity,
+} from "../models/operations/findshadowmcpinventoryservers.js";
 import {
   GetDirectoryReviewSettingsRequest,
   GetDirectoryReviewSettingsSecurity,
@@ -196,6 +202,7 @@ import {
 } from "../models/operations/listscopes.js";
 import {
   ListShadowMCPInventoryRequest,
+  ListShadowMCPInventoryResponse,
   ListShadowMCPInventorySecurity,
 } from "../models/operations/listshadowmcpinventory.js";
 import {
@@ -279,6 +286,7 @@ import {
   WithdrawAccessRequestSecurity,
 } from "../models/operations/withdrawaccessrequest.js";
 import { unwrapAsync } from "../types/fp.js";
+import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
 export class Access extends ClientSDK {
   /**
@@ -407,6 +415,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ExplainResourceAccessResult> {
     return unwrapAsync(accessExplainResourceAccess(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * findShadowMCPInventoryServers access
+   *
+   * @remarks
+   * Find the Shadow MCP servers in use whose upstream URL matches one of the given URLs, for example the endpoints of a server about to be added from the catalog. URLs match when they name the same upstream (case, default ports and a trailing slash are ignored). Requires an authenticated session authorized for org:admin on the active organization.
+   */
+  async findShadowMCPInventoryServers(
+    request: FindShadowMCPInventoryServersRequest,
+    security?: FindShadowMCPInventoryServersSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<FindShadowMCPInventoryServersResult> {
+    return unwrapAsync(accessFindShadowMCPInventoryServers(
       this,
       request,
       security,
@@ -804,8 +831,8 @@ export class Access extends ClientSDK {
     request: ListShadowMCPInventoryRequest,
     security?: ListShadowMCPInventorySecurity | undefined,
     options?: RequestOptions,
-  ): Promise<ListShadowMCPInventoryResult> {
-    return unwrapAsync(accessListShadowMCPInventory(
+  ): Promise<PageIterator<ListShadowMCPInventoryResponse, { cursor: string }>> {
+    return unwrapResultIterator(accessListShadowMCPInventory(
       this,
       request,
       security,
