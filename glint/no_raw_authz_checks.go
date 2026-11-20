@@ -93,6 +93,18 @@ var noRawAuthzChecksPackages = []string{
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations",
 	"github.com/speakeasy-api/gram/server/internal/hooks",
 	"github.com/speakeasy-api/gram/server/internal/businessmemory",
+	"github.com/speakeasy-api/gram/server/internal/telemetry",
+	"github.com/speakeasy-api/gram/server/internal/usage",
+	"github.com/speakeasy-api/gram/server/internal/spendrules",
+	"github.com/speakeasy-api/gram/server/internal/dashboards",
+	"github.com/speakeasy-api/gram/server/internal/widgets",
+	"github.com/speakeasy-api/gram/server/internal/dataexports",
+	"github.com/speakeasy-api/gram/server/internal/sigint",
+	"github.com/speakeasy-api/gram/server/internal/triggers",
+	"github.com/speakeasy-api/gram/server/internal/aiintegrations",
+	"github.com/speakeasy-api/gram/server/internal/modelkeys",
+	"github.com/speakeasy-api/gram/server/internal/litellm",
+	"github.com/speakeasy-api/gram/server/internal/otel",
 }
 
 // noRawAuthzCheckConstructors are the authz constructors a typed ref
