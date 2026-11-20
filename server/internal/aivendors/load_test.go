@@ -174,8 +174,31 @@ func TestRefreshRejectsEmptyCatalog(t *testing.T) {
 	require.ErrorIs(t, store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog), aivendors.ErrInvalidCatalog)
 	require.Same(t, initial, store.Snapshot(), "an empty load never replaces a good snapshot")
 	loaded, err := aivendors.Load(t.Context(), db, logger, aitargets.ValidateCatalog)
-	require.ErrorIs(t, err, aivendors.ErrInvalidCatalog)
-	require.Nil(t, loaded)
+	require.NoError(t, err)
+	require.Same(t, aivendors.CompiledSnapshot(), loaded, "an empty catalog falls back to the built-in one")
+}
+
+func TestLoadFallsBackToTheBuiltInCatalogBeforeTheSeedRuns(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	loaded, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
+	require.NoError(t, err)
+	require.Same(t, aivendors.CompiledSnapshot(), loaded)
+}
+
+func TestRefreshReplacesTheBuiltInCatalogOnceALoadValidates(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	logger := testenv.NewLogger(t)
+	store := aivendors.NewStore(aivendors.CompiledSnapshot())
+	require.ErrorIs(t, store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog), aivendors.ErrInvalidCatalog)
+	require.Same(t, aivendors.CompiledSnapshot(), store.Snapshot())
+	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
+	require.NoError(t, store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog))
+	require.NotSame(t, aivendors.CompiledSnapshot(), store.Snapshot(), "a validated load replaces the built-in catalog even with equal content")
+	require.Equal(t, aivendors.CompiledSnapshot().Fingerprint(), store.Snapshot().Fingerprint())
 }
 
 func TestRefreshRejectsOverlappingPatternsOfTwoProducts(t *testing.T) {
@@ -261,8 +284,8 @@ func TestInvalidDeviceDefinitionsDoNotReplaceCatalog(t *testing.T) {
 			require.ErrorContains(t, err, tc.want)
 			require.Same(t, initial, store.Snapshot(), "a bad definition must not replace the usable catalog")
 			loaded, err := aivendors.Load(t.Context(), db, logger, aitargets.ValidateCatalog)
-			require.ErrorIs(t, err, wantErr)
-			require.Nil(t, loaded, "initial reads reject the same invalid definitions")
+			require.NoError(t, err)
+			require.Same(t, aivendors.CompiledSnapshot(), loaded, "initial reads fall back on the same invalid definitions")
 		})
 	}
 }
@@ -368,8 +391,8 @@ func TestRejectedCatalogIsNotPublished(t *testing.T) {
 	errRejected := errors.New("rejected")
 	reject := func(*aivendors.Snapshot) error { return errRejected }
 	snapshot, err := aivendors.Load(t.Context(), db, logger, reject)
-	require.ErrorIs(t, err, errRejected)
-	require.Nil(t, snapshot)
+	require.NoError(t, err)
+	require.Same(t, aivendors.CompiledSnapshot(), snapshot)
 	initial, err := aivendors.Load(t.Context(), db, logger, aitargets.ValidateCatalog)
 	require.NoError(t, err)
 	store := aivendors.NewStore(initial)

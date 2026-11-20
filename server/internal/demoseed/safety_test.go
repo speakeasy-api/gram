@@ -72,7 +72,7 @@ func TestDemoSeedSafety(t *testing.T) {
 
 	// Provision the other tenant with the seed itself, including realistic MCP
 	// server dependents that the demo cleanup must not touch.
-	otherSeed, err := seedPostgres(ctx, logger, db, blob, testenv.NewEncryptionClient(t), testAssistantIssuerURL, testServerURL, otherTenantSpec)
+	otherSeed, err := seedPostgres(ctx, logger, db, blob, testenv.NewEncryptionClient(t), testAssistantIssuerURL, testServerURL, otherTenantSpec, aivendors.CompiledSnapshot())
 	require.NoError(t, err)
 	require.NoError(t, migrateUpstreamAuth(ctx, logger, db, otherTenantSpec.OrgID))
 	planted, err := repo.New(db).OrgPlantCustomDomainDependents(ctx, repo.OrgPlantCustomDomainDependentsParams{
@@ -121,7 +121,7 @@ func TestDemoSeedSafety(t *testing.T) {
 	require.Equal(t, pgBeforeNoServer, pgAfterNoServer,
 		"MCP dependent fixture created orphan rows without a target server")
 
-	require.NoError(t, otherSeed.runClickHouse(ctx, ch, aivendors.CompiledSnapshot()))
+	require.NoError(t, otherSeed.runClickHouse(ctx, ch))
 
 	demoProjects := []string{DefaultSpec().ProjectID()}
 

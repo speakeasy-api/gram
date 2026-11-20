@@ -5,7 +5,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	seedrepo "github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
@@ -13,17 +13,17 @@ import (
 
 func TestAICatalogStartupRefusesUnavailableDatabase(t *testing.T) {
 	t.Parallel()
-	// A closed pool rejects bootstrap immediately without opening a connection.
+	// A closed pool fails the read without opening a connection.
 	db, err := pgxpool.New(t.Context(), "postgresql://localhost:1/catalog_test?sslmode=disable")
 	require.NoError(t, err)
 	db.Close()
 	catalog, stop, err := startAICatalog(t.Context(), db, testenv.NewLogger(t), testenv.NewMeterProvider(t))
-	require.ErrorContains(t, err, "bootstrap AI catalog")
+	require.ErrorContains(t, err, "load initial AI catalog")
 	require.Nil(t, catalog)
 	require.Nil(t, stop, "no refresh loop starts before a successful initial load")
 }
 
-func TestAICatalogStartupRefusesInvalidDeviceDefinition(t *testing.T) {
+func TestAICatalogStartupServesTheBuiltInCatalogForAnInvalidDefinition(t *testing.T) {
 	t.Parallel()
 	infra, cleanup, err := testenv.Launch(t.Context(), testenv.LaunchOptions{Postgres: true})
 	require.NoError(t, err)
@@ -37,8 +37,7 @@ func TestAICatalogStartupRefusesInvalidDeviceDefinition(t *testing.T) {
 	})
 	require.NoError(t, err)
 	catalog, stop, err := startAICatalog(t.Context(), db, testenv.NewLogger(t), testenv.NewMeterProvider(t))
-	require.ErrorIs(t, err, aitargets.ErrInvalidTarget)
-	require.ErrorContains(t, err, "unknown category")
-	require.Nil(t, catalog)
-	require.Nil(t, stop, "invalid initial data must not start a refresh loop")
+	require.NoError(t, err)
+	t.Cleanup(stop)
+	require.Same(t, aivendors.CompiledSnapshot(), catalog.Snapshot())
 }

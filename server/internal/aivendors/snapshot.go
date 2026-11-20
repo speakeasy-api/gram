@@ -44,6 +44,7 @@ type Snapshot struct {
 	patterns    []Preset
 	vendors     map[string]int
 	fingerprint string
+	builtIn     bool
 }
 
 // NewSnapshot builds indexes over validated catalog data and takes ownership of
@@ -57,6 +58,7 @@ func NewSnapshot(products []Product) *Snapshot {
 		patterns:    nil,
 		vendors:     make(map[string]int),
 		fingerprint: "",
+		builtIn:     false,
 	}
 	for _, p := range products {
 		p = p.clone()
@@ -148,7 +150,9 @@ var compiledSnapshot = sync.OnceValue(func() *Snapshot {
 		slices.SortFunc(products[i].Documents, func(a, b Document) int { return strings.Compare(a.URL, b.URL) })
 	}
 	slices.SortFunc(products, func(a, b Product) int { return strings.Compare(a.ID, b.ID) })
-	return NewSnapshot(products)
+	s := NewSnapshot(products)
+	s.builtIn = true
+	return s
 })
 
 // Fingerprint hashes the complete snapshot, including product and document

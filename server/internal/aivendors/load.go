@@ -2,6 +2,7 @@ package aivendors
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -23,14 +24,18 @@ const (
 	loadTimeout = 10 * time.Second
 )
 
-// Load reads one consistent database revision. Invalid pattern rows are
-// omitted from every projection and logged; database or validation errors
-// reject the entire replacement. Validate and the required consumer validator
-// both run before a snapshot is returned.
+// errRejected marks a catalog that was read but is empty or invalid.
+var errRejected = errors.New("AI catalog rejected")
+
+// Load reads the catalog, falling back to the built-in one when it is empty or invalid; only a failed read is an error.
 func Load(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, validate func(*Snapshot) error) (*Snapshot, error) {
 	snapshot, skipped, err := load(ctx, db, validate)
 	for _, row := range skipped {
 		logger.WarnContext(ctx, "skip AI catalog row", attr.SlogError(row))
+	}
+	if errors.Is(err, errRejected) {
+		logger.ErrorContext(ctx, "AI catalog rejected; serving the built-in catalog", attr.SlogError(err))
+		return CompiledSnapshot(), nil
 	}
 	return snapshot, err
 }
@@ -102,10 +107,10 @@ func load(ctx context.Context, db *pgxpool.Pool, validate func(*Snapshot) error)
 	}
 	snapshot := NewSnapshot(products)
 	if err := Validate(snapshot); err != nil {
-		return nil, skipped, fmt.Errorf("validate AI catalog: %w", err)
+		return nil, skipped, fmt.Errorf("%w: %w", errRejected, err)
 	}
 	if err := validate(snapshot); err != nil {
-		return nil, skipped, fmt.Errorf("validate AI catalog: %w", err)
+		return nil, skipped, fmt.Errorf("%w: %w", errRejected, err)
 	}
 	return snapshot, skipped, nil
 }
@@ -131,7 +136,7 @@ func (s *Store) Refresh(ctx context.Context, db *pgxpool.Pool, logger *slog.Logg
 	s.confirmed.Store(time.Now().UnixNano())
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.snapshot.Fingerprint() != next.Fingerprint() {
+	if s.snapshot.builtIn || s.snapshot.Fingerprint() != next.Fingerprint() {
 		s.snapshot = next
 	}
 	return nil
