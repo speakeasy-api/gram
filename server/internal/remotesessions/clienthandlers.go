@@ -1186,6 +1186,14 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 
 	txRepo := repo.New(dbtx)
 
+	// Check project ownership before discovering or locking a registration's
+	// potentially organization-wide writer scope.
+	if _, err := txRepo.GetProjectOwnedRegistrationForDelete(ctx, repo.GetProjectOwnedRegistrationForDeleteParams{ID: clientID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID}); errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	} else if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check registration ownership").LogError(ctx, logger)
+	}
+
 	// Lock the projects and registration gates of actual association/offer
 	// writers, before locking the registration and checking for scope growth.
 	associationScope, err := upstreamclients.LockClientAssociationScope(ctx, dbtx, authCtx.ActiveOrganizationID, clientID, []uuid.UUID{*authCtx.ProjectID})
@@ -1224,7 +1232,7 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 		return oops.E(oops.CodeUnexpected, err, "delete remote session client").LogError(ctx, logger)
 	}
 
-	if err := txRepo.RetirePrincipalAttachmentsForDeletedRegistration(ctx, deleted.ID); err != nil {
+	if err := txRepo.RetirePrincipalAttachmentsForDeletedRegistration(ctx, repo.RetirePrincipalAttachmentsForDeletedRegistrationParams{ID: deleted.ID, OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID), ProjectID: conv.ToNullUUID(*authCtx.ProjectID)}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "retire principal attachments for deleted client").LogError(ctx, logger)
 	}
 
@@ -1247,10 +1255,12 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 
 	// The deleted client's associations and the typed links derived from them
 	// go with it, in every project that used it.
+	// Prune rechecks the same association/offer discovery under the client
+	// lock, before deriving stamps in any of those projects.
 	if err := associationScope.PruneInLockedTransaction(ctx, dbtx); err != nil {
 		return bindingSyncError(ctx, logger, err)
 	}
-	if err := txRepo.RetireOffersForDeletedRegistration(ctx, deleted.ID); err != nil {
+	if err := txRepo.RetireOffersForDeletedRegistration(ctx, repo.RetireOffersForDeletedRegistrationParams{ID: deleted.ID, OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID), ProjectID: conv.ToNullUUID(*authCtx.ProjectID)}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "retire typed offers for deleted client").LogError(ctx, logger)
 	}
 	if err := stamps.Derive(ctx, dbtx); err != nil {

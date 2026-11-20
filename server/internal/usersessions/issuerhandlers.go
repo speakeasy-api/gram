@@ -348,8 +348,8 @@ func (s *Service) GetUserSessionIssuer(ctx context.Context, payload *gen.GetUser
 	return s.issuerView(ctx, row), nil
 }
 
-// Soft-deletes an issuer and cascades to its user_sessions and
-// user_session_consents.
+// DeleteUserSessionIssuer retires the issuer, its sessions and consents, and
+// its explicit attachment and orphaned grant targets.
 func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.DeleteUserSessionIssuerPayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {

@@ -79,14 +79,13 @@ func TestRemoteSessionStatuses_UnboundIssuerSeesNothing(t *testing.T) {
 	require.NotContains(t, statuses, fx.clientID, "an issuer with no client binding must not see the credential")
 }
 
-func TestDisconnectRemoteSession_SiblingIssuerDestroysSharedCredentialGlobally(t *testing.T) {
+func TestDisconnectAuthClientRemoteSession_RetiresSameSubjectSharedGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	spy := &revocationSpy{}
 	upstream := newRevocationUpstream(t, spy)
 	fx := seedRevocableSession(t, ctx, ti, "shared-disconnect", upstream.URL, "s3cret", true)
-	bindSiblingIssuer(t, ctx, ti, fx.clientID, "usi-shared-disconnect-sibling")
 
 	n, err := newDisconnectChallengeManager(t, ti).DisconnectAuthClientRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.clientID)
 	require.NoError(t, err)
@@ -122,16 +121,15 @@ func TestDisconnectRemoteSession_UnboundIssuerFailsClosed(t *testing.T) {
 	require.Zero(t, calls, "nothing was disconnected, so nothing may be revoked upstream")
 }
 
-func TestSetRemoteSessionAutoRefresh_SiblingIssuerUpdatesSharedCredential(t *testing.T) {
+func TestSetAuthClientRemoteSessionAutoRefresh_UpdatesSameSubjectSharedGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	fx := seedRevocableSession(t, ctx, ti, "shared-autorefresh", "", "s3cret", true)
-	bindSiblingIssuer(t, ctx, ti, fx.clientID, "usi-shared-autorefresh-sibling")
 
 	n, err := newDisconnectChallengeManager(t, ti).SetAuthClientRemoteSessionAutoRefresh(ctx, fx.subject, fx.projectID, fx.organizationID, fx.clientID, true)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), n, "a preference set from any bound surface must land on the shared credential")
+	require.Equal(t, int64(1), n, "a tenant-authorized preference updates the shared credential")
 
 	session, err := repo.New(ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
 		SubjectUrn:            fx.subject,

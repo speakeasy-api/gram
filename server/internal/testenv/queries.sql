@@ -2797,4 +2797,4 @@ DELETE FROM remote_session_client_user_session_issuers AS link
 USING remote_session_clients AS c
 WHERE link.remote_session_client_id = c.id
   AND c.id = @remote_session_client_id
-  AND c.project_id = @project_id;
+  AND c.project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid;

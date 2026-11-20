@@ -5783,8 +5783,9 @@ type LockUserSessionIssuerParams struct {
 // guarantees the follow-up ownership statements read a snapshot that
 // includes any reference committed by a concurrent attach.
 //
-// FOR NO KEY UPDATE conflicts with issuer-dependent publication's FOR SHARE,
-// without blocking unrelated foreign-key checks.
+// FOR NO KEY UPDATE conflicts with upstream callback publication's issuer
+// FOR SHARE. It stays compatible with the KEY SHARE used by CreateUserSession
+// and by foreign-key checks, including when a writer holds a registration.
 func (q *Queries) LockUserSessionIssuer(ctx context.Context, arg LockUserSessionIssuerParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, lockUserSessionIssuer, arg.ID, arg.ProjectID)
 	var id uuid.UUID

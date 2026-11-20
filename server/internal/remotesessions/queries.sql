@@ -946,10 +946,18 @@ SELECT EXISTS (
 -- publication locks the live source issuer before taking this client lock.
 SELECT c.id
 FROM remote_session_clients c
-WHERE NOT c.deleted AND EXISTS (
+JOIN user_session_issuers issuer ON issuer.id = @user_session_issuer_id::uuid AND issuer.deleted
+WHERE NOT c.deleted
+  AND (issuer.project_id = @project_id::uuid OR (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text))
+  AND (
+    (c.project_id IS NOT NULL AND EXISTS (SELECT 1 FROM projects p WHERE p.id = c.project_id AND p.organization_id = @organization_id::text
+      AND (issuer.project_id IS NULL OR issuer.project_id = p.id)))
+    OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text))
+  )
+  AND EXISTS (
     SELECT 1 FROM remote_sessions s
-    WHERE s.remote_session_client_id = c.id AND s.user_session_issuer_id = @user_session_issuer_id::uuid AND NOT s.deleted
-)
+    WHERE s.remote_session_client_id = c.id AND s.user_session_issuer_id = issuer.id AND NOT s.deleted
+  )
 ORDER BY c.id
 FOR UPDATE OF c;
 
@@ -1040,12 +1048,12 @@ WHERE NOT s.deleted AND s.user_session_issuer_id IS NOT NULL
     EXISTS (
       SELECT 1 FROM mcp_server_remote_session_clients a
       WHERE a.mcp_server_id = s.id AND a.project_id = s.project_id AND a.organization_id = p.organization_id
-        AND a.remote_session_client_id = @remote_session_client_id::uuid
+        AND NOT a.deleted AND a.remote_session_client_id = @remote_session_client_id::uuid
     ) OR EXISTS (
       SELECT 1 FROM mcp_server_auth_clients offer
       JOIN mcp_auth_clients auth ON auth.id = offer.auth_client_id AND auth.organization_id = p.organization_id
       WHERE offer.mcp_server_id = s.id AND offer.project_id = s.project_id AND offer.organization_id = p.organization_id
-        AND NOT offer.deleted AND auth.remote_session_client_id = @remote_session_client_id::uuid
+        AND NOT offer.deleted AND NOT auth.deleted AND auth.remote_session_client_id = @remote_session_client_id::uuid
     )
   )
 ORDER BY p.organization_id, s.project_id, s.user_session_issuer_id;
@@ -1060,7 +1068,16 @@ WHERE c.id = @id::uuid AND c.deleted AND auth.remote_session_client_id = c.id
   AND server.id = offer.mcp_server_id AND server.project_id = offer.project_id AND NOT server.deleted
   AND p.id = offer.project_id AND p.organization_id = offer.organization_id AND NOT p.deleted
   AND auth.id = offer.auth_client_id AND auth.organization_id = offer.organization_id
-  AND NOT offer.deleted;
+  AND (sqlc.narg('organization_id')::text IS NULL OR offer.organization_id = sqlc.narg('organization_id')::text)
+  AND NOT offer.deleted
+  AND (sqlc.narg('project_id')::uuid IS NULL OR c.project_id = sqlc.narg('project_id')::uuid)
+  AND (
+    (sqlc.narg('organization_id')::text IS NULL AND c.project_id IS NULL AND c.organization_id IS NULL)
+    OR (sqlc.narg('organization_id')::text IS NOT NULL AND (
+      (c.project_id IS NULL AND c.organization_id = sqlc.narg('organization_id')::text)
+      OR EXISTS (SELECT 1 FROM projects owner WHERE owner.id = c.project_id AND owner.organization_id = sqlc.narg('organization_id')::text)
+    ))
+  );
 
 -- name: RetirePrincipalAttachmentsForDeletedRegistration :exec
 -- A true registration deletion retires all pinned attachments. Do not
@@ -1068,7 +1085,16 @@ WHERE c.id = @id::uuid AND c.deleted AND auth.remote_session_client_id = c.id
 UPDATE principal_remote_session_bindings b
 SET revoked_at = clock_timestamp(), updated_at = clock_timestamp()
 FROM remote_session_clients c
-WHERE c.id = @id::uuid AND c.deleted AND b.remote_session_client_id = c.id AND b.revoked_at IS NULL;
+WHERE c.id = @id::uuid AND c.deleted AND b.remote_session_client_id = c.id AND b.revoked_at IS NULL
+  AND (sqlc.narg('organization_id')::text IS NULL OR b.organization_id = sqlc.narg('organization_id')::text)
+  AND (sqlc.narg('project_id')::uuid IS NULL OR c.project_id = sqlc.narg('project_id')::uuid)
+  AND (
+    (sqlc.narg('organization_id')::text IS NULL AND c.project_id IS NULL AND c.organization_id IS NULL)
+    OR (sqlc.narg('organization_id')::text IS NOT NULL AND (
+      (c.project_id IS NULL AND c.organization_id = sqlc.narg('organization_id')::text)
+      OR EXISTS (SELECT 1 FROM projects owner WHERE owner.id = c.project_id AND owner.organization_id = sqlc.narg('organization_id')::text)
+    ))
+  );
 
 -- name: GetRemoteSessionClientForClientMetadataDocument :one
 -- Public CIMD document endpoint lookup. Intentionally NOT project-scoped: the
@@ -1297,6 +1323,13 @@ WHERE t.id = @id
 --
 -- Tenancy-scoped rather than by id alone, so a caller cannot lock another
 -- tenant's client for a transaction before the ownership check rejects them.
+-- name: GetProjectOwnedRegistrationForDelete :one
+-- An ownership precheck before discovering delete writer scope. The live row
+-- is rechecked by the project-scoped writer lock before mutation.
+SELECT c.id FROM remote_session_clients c
+JOIN projects p ON p.id = c.project_id AND p.organization_id = @organization_id::text AND NOT p.deleted
+WHERE c.id = @id::uuid AND c.project_id = @project_id::uuid AND NOT c.deleted;
+
 -- name: LockRemoteSessionClientForAuthMethodWrite :one
 SELECT id
 FROM remote_session_clients

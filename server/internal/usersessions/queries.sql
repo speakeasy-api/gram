@@ -226,8 +226,9 @@ SELECT pg_advisory_xact_lock(hashtextextended((@user_session_issuer_id::uuid)::t
 -- guarantees the follow-up ownership statements read a snapshot that
 -- includes any reference committed by a concurrent attach.
 --
--- FOR NO KEY UPDATE conflicts with issuer-dependent publication's FOR SHARE,
--- without blocking unrelated foreign-key checks.
+-- FOR NO KEY UPDATE conflicts with upstream callback publication's issuer
+-- FOR SHARE. It stays compatible with the KEY SHARE used by CreateUserSession
+-- and by foreign-key checks, including when a writer holds a registration.
 SELECT id
 FROM user_session_issuers
 WHERE id = @id

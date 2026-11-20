@@ -82,6 +82,9 @@ func (s *Service) CompleteBindingRefresh(ctx context.Context, payload *gen.Compl
 	if !attempt.Started || attempt.GrantGeneration == 0 {
 		return &gen.BindingRefreshResult{Completed: false, Binding: nil}, nil
 	}
+	if err := op.lockAttachmentIssuer(ctx); err != nil {
+		return nil, err
+	}
 	if err := op.lockAttachmentRegistration(ctx, attempt.ClientID); err != nil {
 		return nil, err
 	}

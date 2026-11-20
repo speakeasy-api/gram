@@ -306,7 +306,7 @@ func TestRemoteSessionStatuses_FindsGrantAfterMintingIssuerSoftDeleted(t *testin
 	require.Equal(t, remotesessions.RemoteSessionActive, statuses[fx.clientID].Status)
 }
 
-func TestSetRemoteSessionAutoRefresh_FindsGrantAfterMintingIssuerSoftDeleted(t *testing.T) {
+func TestSetAuthClientRemoteSessionAutoRefresh_FindsGrantAfterMintingIssuerSoftDeleted(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx := seedSharedGrantThenSoftDeleteMintingIssuer(t)
@@ -326,7 +326,7 @@ func TestSetRemoteSessionAutoRefresh_FindsGrantAfterMintingIssuerSoftDeleted(t *
 	require.True(t, active.AutoRefresh)
 }
 
-func TestDisconnectRemoteSession_FindsGrantAfterMintingIssuerSoftDeleted(t *testing.T) {
+func TestDisconnectAuthClientRemoteSession_FindsGrantAfterMintingIssuerSoftDeleted(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx := seedSharedGrantThenSoftDeleteMintingIssuer(t)

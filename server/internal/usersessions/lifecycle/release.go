@@ -24,9 +24,9 @@ type ReleaseActor struct {
 }
 
 // ReleaseUnownedIssuer deletes the project user session issuer issuerID once
-// the caller's deletion leaves no live MCP server or gateway using it: its
-// client bindings, sessions and consents go with it, and any grant whose client
-// it was the last binding of is tombstoned. It returns those grants'
+// the caller's deletion leaves no live MCP server or gateway using it. It
+// retires that issuer's sessions, consents, attachments and orphaned grants by
+// provenance, leaving compatibility parents intact. It returns the grants'
 // credentials for [remotesessions.UpstreamRevoker.RevokeAllDetached] once the
 // transaction commits. An issuer that is missing, organization-level or still
 // owned is left alone. Call it after the owner is soft-deleted.

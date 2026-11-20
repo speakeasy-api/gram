@@ -246,7 +246,7 @@ func (r *UpstreamRevoker) softDeleteSubjectSessions(ctx context.Context, tx repo
 // It retires explicit attachment and grant targets without unlinking an FK parent.
 func (r *UpstreamRevoker) RetireDeletedUserSessionIssuer(ctx context.Context, tx repo.DBTX, userSessionIssuerID uuid.UUID, projectID uuid.UUID, organizationID string) ([]RevokedCredentials, error) {
 	q := repo.New(tx)
-	if _, err := q.LockRemoteSessionClientsForIssuerRetirement(ctx, userSessionIssuerID); err != nil {
+	if _, err := q.LockRemoteSessionClientsForIssuerRetirement(ctx, repo.LockRemoteSessionClientsForIssuerRetirementParams{UserSessionIssuerID: userSessionIssuerID, ProjectID: projectID, OrganizationID: organizationID}); err != nil {
 		return nil, fmt.Errorf("lock registrations for issuer retirement: %w", err)
 	}
 	if err := q.RetirePrincipalAttachmentsForDeletedIssuer(ctx, repo.RetirePrincipalAttachmentsForDeletedIssuerParams{

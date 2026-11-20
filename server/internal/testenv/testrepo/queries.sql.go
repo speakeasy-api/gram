@@ -1497,7 +1497,7 @@ DELETE FROM remote_session_client_user_session_issuers AS link
 USING remote_session_clients AS c
 WHERE link.remote_session_client_id = c.id
   AND c.id = $1
-  AND c.project_id = $2
+  AND c.project_id IS NOT DISTINCT FROM $2::uuid
 `
 
 type DeleteRegistrationJunctionFixtureParams struct {

@@ -723,7 +723,7 @@ func (s *Service) abandonConnection(ctx context.Context, logger *slog.Logger, or
 			logger.ErrorContext(ctx, "failed to tombstone client of abandoned connection", attr.SlogError(err))
 			return
 		}
-		if err := rq.RetirePrincipalAttachmentsForDeletedRegistration(cleanupCtx, managed.ClientRowID); err != nil {
+		if err := rq.RetirePrincipalAttachmentsForDeletedRegistration(cleanupCtx, remotesessionsrepo.RetirePrincipalAttachmentsForDeletedRegistrationParams{ID: managed.ClientRowID, OrganizationID: conv.ToPGText(organizationID), ProjectID: conv.ToNullUUID(uuid.Nil)}); err != nil {
 			logger.ErrorContext(ctx, "failed to unbind client of abandoned connection", attr.SlogError(err))
 			return
 		}
@@ -731,7 +731,7 @@ func (s *Service) abandonConnection(ctx context.Context, logger *slog.Logger, or
 			logger.ErrorContext(ctx, "failed to prune associations of abandoned connection client", attr.SlogError(err))
 			return
 		}
-		if err := rq.RetireOffersForDeletedRegistration(cleanupCtx, managed.ClientRowID); err != nil {
+		if err := rq.RetireOffersForDeletedRegistration(cleanupCtx, remotesessionsrepo.RetireOffersForDeletedRegistrationParams{ID: managed.ClientRowID, OrganizationID: conv.ToPGText(organizationID), ProjectID: conv.ToNullUUID(uuid.Nil)}); err != nil {
 			logger.ErrorContext(ctx, "failed to retire offers of abandoned connection client", attr.SlogError(err))
 			return
 		}

@@ -1,6 +1,5 @@
-// Pins the issuer-delete cascade for orphaned upstream grants: sessions on a
-// client whose only live binding was the deleted issuer are tombstoned and
-// revoked upstream; a client with a live sibling binding is left alone.
+// Issuer retirement uses exact grant provenance, not the registration's
+// compatibility links, and calls the upstream only after commit.
 
 package usersessions_test
 
@@ -553,11 +552,8 @@ func TestDeleteUserSessionIssuer_RebindMintsFreshSessionWithoutResurrection(t *t
 	require.Equal(t, 1, countActiveClientSessions(t, ctx, ti, clientID), "exactly one live grant after the re-bind")
 }
 
-// Write-skew guard: a sibling delete that commits between this delete's issuer
-// tombstone and its orphan scan must still be observed. The fixture
-// transaction holds the client-row lock the cascade takes, so the service
-// delete deterministically blocks until the sibling is already dead — the
-// exact schedule the FOR UPDATE lock exists to serialize.
+// Issuer retirement serializes with an in-flight registration write. Once
+// that writer releases the registration, retirement rechecks the grant.
 func TestDeleteUserSessionIssuer_WaitsForRegistrationWriterBeforeRetiringGrant(t *testing.T) {
 	t.Parallel()
 

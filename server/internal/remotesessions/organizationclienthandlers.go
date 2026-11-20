@@ -1008,7 +1008,7 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 		return oops.E(oops.CodeUnexpected, err, "delete organization admin remote session client").LogError(ctx, logger)
 	}
 
-	if err := txRepo.RetirePrincipalAttachmentsForDeletedRegistration(ctx, deleted.ID); err != nil {
+	if err := txRepo.RetirePrincipalAttachmentsForDeletedRegistration(ctx, repo.RetirePrincipalAttachmentsForDeletedRegistrationParams{ID: deleted.ID, OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID), ProjectID: conv.ToNullUUID(uuid.Nil)}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "retire principal attachments for deleted client").LogError(ctx, logger)
 	}
 
@@ -1028,7 +1028,7 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 	if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, affectedServers...); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "sync auth clients of the deleted client's servers").LogError(ctx, logger)
 	}
-	if err := txRepo.RetireOffersForDeletedRegistration(ctx, deleted.ID); err != nil {
+	if err := txRepo.RetireOffersForDeletedRegistration(ctx, repo.RetireOffersForDeletedRegistrationParams{ID: deleted.ID, OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID), ProjectID: conv.ToNullUUID(uuid.Nil)}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "retire typed offers for deleted client").LogError(ctx, logger)
 	}
 	if err := bindingServers.Derive(ctx, dbtx); err != nil {
