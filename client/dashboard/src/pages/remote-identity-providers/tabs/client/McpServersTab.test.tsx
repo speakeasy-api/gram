@@ -36,7 +36,7 @@ afterEach(() => {
   queryClients.length = 0;
 });
 
-function setup() {
+function setup(url = "https://upstream.example.test/mcp") {
   const requests: Request[] = [];
   const client = new GramCore({
     serverURL: "https://api.example.test",
@@ -54,7 +54,7 @@ function setup() {
                 project_slug: "proj",
                 name: "Example server",
                 slug: "example-server",
-                url: "https://upstream.example.test/mcp",
+                url,
               },
             ],
           }),
@@ -101,5 +101,15 @@ it("links to the server's own Identity", async () => {
   await user.click(await screen.findByText("Manage in Identity"));
   expect(screen.getByTestId("location").textContent).toBe(
     "/org/projects/proj/mcp/example-server/settings#authentication",
+  );
+});
+
+it("opens settings without guessing an Identity anchor when usage has no remote URL", async () => {
+  const { user } = setup("");
+  await openRowMenu(user);
+  expect(screen.queryByText("Manage in Identity")).toBeNull();
+  await user.click(await screen.findByText("Open server settings"));
+  expect(screen.getByTestId("location").textContent).toBe(
+    "/org/projects/proj/mcp/example-server/settings",
   );
 });

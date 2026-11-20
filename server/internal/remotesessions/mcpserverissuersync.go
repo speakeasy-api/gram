@@ -167,3 +167,27 @@ func bestEffortResyncProject(ctx context.Context, logger *slog.Logger, db mcpser
 		logger.ErrorContext(ctx, "resync mcp server remote session issuers", attr.SlogError(err), attr.SlogProjectID(projectID.String()))
 	}
 }
+
+// BestEffortRestampMCPServerRemoteSessionIssuers refreshes the routing stamp
+// after a server mutation. It never captures or prunes OAuth offers.
+func BestEffortRestampMCPServerRemoteSessionIssuers(ctx context.Context, logger *slog.Logger, db mcpserversrepo.DBTX, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), issuerResyncTimeout)
+	defer cancel()
+	if err := RestampMCPServerRemoteSessionIssuers(ctx, db, organizationID, projectID, userIssuerIDs); err != nil {
+		logger.ErrorContext(ctx, "restamp mcp server remote session issuers", attr.SlogError(err), attr.SlogProjectID(projectID.String()))
+	}
+}
+
+// RestampMCPServerRemoteSessionIssuers updates the routing copy without using
+// issuer links to capture or prune server offers.
+func RestampMCPServerRemoteSessionIssuers(ctx context.Context, db mcpserversrepo.DBTX, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID) error {
+	if len(userIssuerIDs) == 0 {
+		return nil
+	}
+	if _, err := mcpserversrepo.New(db).ResyncMCPServerRemoteSessionIssuers(ctx, mcpserversrepo.ResyncMCPServerRemoteSessionIssuersParams{
+		OrganizationID: organizationID, ProjectID: projectID, UserSessionIssuerIds: userIssuerIDs,
+	}); err != nil {
+		return fmt.Errorf("restamp server remote session issuers: %w", err)
+	}
+	return nil
+}

@@ -422,7 +422,18 @@ func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, proje
 	if kind == identityChangeReplace {
 		// The preview cannot tell automatic registration from typed credentials,
 		// so naming no client reads as the automatic form the commit reuses for.
-		decision, err := decideBoundClients(ctx, q, boundClientsRequest{
+		if targetID.Valid {
+			var err error
+			visible, err = q.ListIdentityOfferClients(ctx, repo.ListIdentityOfferClientsParams{McpServerID: targetID.UUID, ProjectID: projectID, OrganizationID: orgID})
+			if err != nil {
+				return fmt.Errorf("list server identity offers: %w", err)
+			}
+		}
+		decide := decideBoundClients
+		if targetID.Valid {
+			decide = decideOfferedClients
+		}
+		decision, err := decide(ctx, q, boundClientsRequest{
 			OrganizationID:      orgID,
 			UserSessionIssuerID: userIssuerID,
 			MCPServerID:         targetID.UUID,

@@ -1323,12 +1323,25 @@ SELECT
     r.metadata_fetched_at AS issuer_metadata_fetched_at,
     r.metadata_last_error_at AS issuer_metadata_last_error_at,
     r.jwks_last_error_at AS issuer_jwks_last_error_at
-FROM remote_session_client_user_session_issuers a
-JOIN remote_session_clients c ON c.id = a.remote_session_client_id AND c.deleted IS FALSE
+FROM user_session_issuers AS usi
+JOIN remote_session_clients AS c ON c.deleted IS FALSE AND (
+  c.id = usi.trusted_remote_session_client_id OR EXISTS (
+    SELECT 1 FROM remote_sessions AS s
+    WHERE s.remote_session_client_id = c.id AND s.user_session_issuer_id = usi.id
+  )
+)
 JOIN remote_session_issuers r ON r.id = c.remote_session_issuer_id AND r.deleted IS FALSE
-WHERE a.user_session_issuer_id = $1
+WHERE usi.id = $1
+  AND (c.project_id = $2::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $3::text)))
+  AND (r.project_id = $2::uuid OR (r.project_id IS NULL AND (r.organization_id IS NULL OR r.organization_id = $3::text)))
 ORDER BY c.created_at, c.id
 `
+
+type AdminListIssuerRemoteSessionClientsParams struct {
+	UserSessionIssuerID uuid.UUID
+	ProjectID           uuid.UUID
+	OrganizationID      string
+}
 
 type AdminListIssuerRemoteSessionClientsRow struct {
 	ID                                  uuid.UUID
@@ -1357,11 +1370,11 @@ type AdminListIssuerRemoteSessionClientsRow struct {
 	IssuerJwksLastErrorAt               pgtype.Timestamptz
 }
 
-// Live remote session clients attached to the issuer, with their upstream
-// issuer. Only the columns the health report exposes: no secrets, JWKS bodies
-// or error text.
-func (q *Queries) AdminListIssuerRemoteSessionClients(ctx context.Context, userSessionIssuerID uuid.UUID) ([]AdminListIssuerRemoteSessionClientsRow, error) {
-	rows, err := q.db.Query(ctx, adminListIssuerRemoteSessionClients, userSessionIssuerID)
+// Live registrations with consent provenance under this downstream issuer,
+// or used directly for its trusted login. Offered clients are reported by the
+// separate upstream authentication section. Never expose secrets or errors.
+func (q *Queries) AdminListIssuerRemoteSessionClients(ctx context.Context, arg AdminListIssuerRemoteSessionClientsParams) ([]AdminListIssuerRemoteSessionClientsRow, error) {
+	rows, err := q.db.Query(ctx, adminListIssuerRemoteSessionClients, arg.UserSessionIssuerID, arg.ProjectID, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -2626,8 +2639,14 @@ SELECT
     min(created_at)::timestamptz AS first_linked_at
 FROM remote_sessions
 WHERE remote_session_client_id = ANY($1::uuid[])
+  AND user_session_issuer_id = $2
 GROUP BY remote_session_client_id
 `
+
+type AdminRemoteSessionStatsParams struct {
+	RemoteSessionClientIds []uuid.UUID
+	UserSessionIssuerID    uuid.UUID
+}
 
 type AdminRemoteSessionStatsRow struct {
 	RemoteSessionClientID uuid.UUID
@@ -2637,11 +2656,10 @@ type AdminRemoteSessionStatsRow struct {
 }
 
 // Per client: distinct users with a live upstream session, fresh
-// authorizations beyond each session's first, and the first link. Keyed on
-// the client alone: a session is one per (subject, client), and its
-// user_session_issuer_id records only which issuer first linked it.
-func (q *Queries) AdminRemoteSessionStats(ctx context.Context, remoteSessionClientIds []uuid.UUID) ([]AdminRemoteSessionStatsRow, error) {
-	rows, err := q.db.Query(ctx, adminRemoteSessionStats, remoteSessionClientIds)
+// authorizations beyond each session's first, and the first link. Scope
+// the stats to this downstream issuer's recorded consent provenance.
+func (q *Queries) AdminRemoteSessionStats(ctx context.Context, arg AdminRemoteSessionStatsParams) ([]AdminRemoteSessionStatsRow, error) {
+	rows, err := q.db.Query(ctx, adminRemoteSessionStats, arg.RemoteSessionClientIds, arg.UserSessionIssuerID)
 	if err != nil {
 		return nil, err
 	}
@@ -2672,10 +2690,16 @@ SELECT
     count(*)::bigint AS sessions
 FROM remote_sessions
 WHERE remote_session_client_id = ANY($1::uuid[])
+  AND user_session_issuer_id = $2
   AND deleted IS FALSE
   AND validation_status IS NOT NULL
 GROUP BY remote_session_client_id, validation_status
 `
+
+type AdminRemoteSessionValidationCountsParams struct {
+	RemoteSessionClientIds []uuid.UUID
+	UserSessionIssuerID    uuid.UUID
+}
 
 type AdminRemoteSessionValidationCountsRow struct {
 	RemoteSessionClientID uuid.UUID
@@ -2684,10 +2708,10 @@ type AdminRemoteSessionValidationCountsRow struct {
 }
 
 // Live sessions per client and last validation status. Sessions never
-// validated have a NULL status and are left out. Keyed on the client alone,
-// as AdminRemoteSessionStats is.
-func (q *Queries) AdminRemoteSessionValidationCounts(ctx context.Context, remoteSessionClientIds []uuid.UUID) ([]AdminRemoteSessionValidationCountsRow, error) {
-	rows, err := q.db.Query(ctx, adminRemoteSessionValidationCounts, remoteSessionClientIds)
+// validated have a NULL status and are left out. Use the same provenance
+// scope as AdminRemoteSessionStats.
+func (q *Queries) AdminRemoteSessionValidationCounts(ctx context.Context, arg AdminRemoteSessionValidationCountsParams) ([]AdminRemoteSessionValidationCountsRow, error) {
+	rows, err := q.db.Query(ctx, adminRemoteSessionValidationCounts, arg.RemoteSessionClientIds, arg.UserSessionIssuerID)
 	if err != nil {
 		return nil, err
 	}
