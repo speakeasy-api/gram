@@ -174,7 +174,7 @@ func TestRecorderSubmitStoresTheReportAndQueuesBothDeliveries(t *testing.T) {
 	require.Equal(t, "2.1.0", row.ClientVersion.String)
 
 	// The webhook event is delivered under an id derived from the report, and
-	// carries the member's email although the row does not.
+	// names the member by id only.
 	webhooks := queuedFor(t, ctx, ti, webhookTopic)
 	require.Len(t, webhooks, 1)
 	require.Equal(t, events.McpFeedbackSubmittedEventID(receipt.ID), webhooks[0].PublicID)
@@ -198,13 +198,13 @@ func TestRecorderSubmitStoresTheReportAndQueuesBothDeliveries(t *testing.T) {
 		Model:          "Claude in Claude Code",
 		SessionID:      "session-1",
 		UserID:         "user-1",
-		UserEmail:      "priya@acme.example",
-		ExternalUserID: "idp|priya",
 		ClientName:     "claude-code",
 		ClientVersion:  "2.1.0",
 		CreatedAt:      payload.CreatedAt,
 	}, payload)
 	require.True(t, payload.CreatedAt.Equal(row.CreatedAt.Time))
+	require.NotContains(t, string(envelope.GetPayload()), "priya@acme.example")
+	require.NotContains(t, string(envelope.GetPayload()), "idp|priya")
 
 	// The log record is stamped with the feedback provenance source, which is
 	// what routes it to the MCP feedback export, under the server's tenant.

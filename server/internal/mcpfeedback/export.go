@@ -132,8 +132,6 @@ func webhookPayload(stored storedReport) events.McpFeedbackSubmittedPayloadV1 {
 		Model:          stored.report.Model,
 		SessionID:      stored.caller.SessionID,
 		UserID:         stored.caller.UserID,
-		UserEmail:      stored.caller.UserEmail,
-		ExternalUserID: stored.caller.ExternalUserID,
 		ClientName:     stored.caller.ClientName,
 		ClientVersion:  stored.caller.ClientVersion,
 		CreatedAt:      stored.createdAt,
