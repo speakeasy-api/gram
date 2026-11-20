@@ -119,6 +119,13 @@ func firstScanned(products []aivendors.Product) int {
 	return slices.IndexFunc(products, aivendors.Product.IsScanned)
 }
 
+func otherCategory(c aivendors.Category) aivendors.Category {
+	if c == aivendors.CategoryAssistant {
+		return aivendors.CategoryHarness
+	}
+	return aivendors.CategoryAssistant
+}
+
 func servedFor(products []aivendors.Product, entries []aitargets.Entry) *aitargets.Snapshot {
 	return aitargets.NewOrganizationList(aivendors.NewSnapshot(products), entries).Snapshot
 }
@@ -175,15 +182,29 @@ func TestOrganizationListVersionFollowsTheServedBuiltIns(t *testing.T) {
 		})
 	}
 
-	t.Run("scanned signature changed", func(t *testing.T) {
-		t.Parallel()
-		products := compiledProducts()
-		i := firstScanned(products)
-		products[i].Signatures.Binaries = append(products[i].Signatures.Binaries, "added-binary")
-		got := servedFor(products, nil)
-		require.NotEqual(t, base.ListVersion, got.ListVersion)
-		require.NotEqual(t, base.ETag, got.ETag)
-	})
+	changed := map[string]func(p *aivendors.Product){
+		"display name": func(p *aivendors.Product) { p.DisplayName += " (renamed)" },
+		"category":     func(p *aivendors.Product) { p.Category = otherCategory(p.Category) },
+		"bundle ids": func(p *aivendors.Product) {
+			p.Signatures.BundleIDs = append(p.Signatures.BundleIDs, "com.example.added")
+		},
+		"binaries":    func(p *aivendors.Product) { p.Signatures.Binaries = append(p.Signatures.Binaries, "added-binary") },
+		"config dirs": func(p *aivendors.Product) { p.Signatures.ConfigDirs = append(p.Signatures.ConfigDirs, "~/.added") },
+		"process names": func(p *aivendors.Product) {
+			p.Signatures.ProcessNames = append(p.Signatures.ProcessNames, "added-process")
+		},
+		"version plist key": func(p *aivendors.Product) { p.VersionPlistKey += "Added" },
+	}
+	for name, mutate := range changed {
+		t.Run("served field changed: "+name, func(t *testing.T) {
+			t.Parallel()
+			products := compiledProducts()
+			mutate(&products[firstScanned(products)])
+			got := servedFor(products, nil)
+			require.NotEqual(t, base.ListVersion, got.ListVersion)
+			require.NotEqual(t, base.ETag, got.ETag)
+		})
+	}
 
 	t.Run("organization edit", func(t *testing.T) {
 		t.Parallel()
