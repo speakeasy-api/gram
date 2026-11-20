@@ -24,8 +24,11 @@ jobs:
     name: Normalize the lockfile
     outputs:
       changed: ${{ steps.normalize.outputs.changed }}
+    # Reopening is not a branch update. Allow a maintainer to retry the
+    # original one-commit PR, but never process our own synchronize event.
     if: >-
-      github.event.sender.id == 49699333 &&
+      (github.event.sender.id == 49699333 ||
+        (github.event.action == 'reopened' && github.event.pull_request.commits == 1)) &&
       github.event.pull_request.user.id == 49699333 &&
       github.event.pull_request.head.repo.full_name == github.repository
     permissions:
