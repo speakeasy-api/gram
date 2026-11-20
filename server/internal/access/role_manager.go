@@ -319,7 +319,7 @@ type accessAuditActor = RoleAuditActor
 // limited to one tool is refused here: tools only limit mcp:connect.
 func validateRoleGrants(grants []*authz.RoleGrant) error {
 	if err := authz.ValidateGrantSource(authz.GrantSourceRoles, grants); err != nil {
-		return err
+		return fmt.Errorf("check grant source: %w", err)
 	}
 	for _, grant := range grants {
 		if grant == nil {
