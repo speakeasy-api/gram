@@ -1,9 +1,10 @@
 ---
 name: frontend
-description: Use when building, designing, redesigning, or reviewing any UI in the dashboard React frontend (client/dashboard, including the inlined Speakeasy Elements code) — a new page, tab, card, table, form, dialog, sheet, empty or error state, settings section, or UI copy — when writing or optimizing dashboard hook/component tests, and when addressing design feedback or Gutternote comments on a preview. Triggers: "build a page for", "add UI for", "make this look better", "redesign", "the UX is confusing", "layout shift", "overflow", "add a tab", "dashboard component".
+description: Use when building, designing, redesigning, or reviewing any UI in the dashboard React frontend (client/dashboard, including the inlined Speakeasy Elements code) — a new page, tab, card, table, form, dialog, sheet, empty or error state, settings section, or UI copy — when writing or optimizing frontend hook/component tests, and when addressing design feedback or Gutternote comments on a preview. Triggers: "build a page for", "add UI for", "make this look better", "redesign", "the UX is confusing", "layout shift", "overflow", "add a tab", "dashboard component".
 metadata:
   relevant_files:
     - "client/dashboard/**"
+    - "client/**/*.test.{ts,tsx}"
 ---
 
 # Dashboard frontend
@@ -362,7 +363,23 @@ import { SkeletonTable } from "@/components/ui/SkeletonTable";
 - When rebasing, preserve main's behavior and migrate any new callers to these entry points. Check stories and mocks as well as production imports.
 - Preserve the import-boundary regression tests in `client/dashboard/src/components/ui/Skeleton/imports.test.tsx` and `client/dashboard/src/lib/dates.imports.test.ts`. They load the real lightweight modules and fail if the heavy dependencies are evaluated; mocking the module under test defeats the guard.
 
+## Efficient component tests
+
+- Reuse the package's render helpers. Await asynchronous `act` when flushing React work started by setup or an operation; it does not guarantee that pending requests have completed. Keep real route integration where it is part of the coverage, and preserve a fresh mount, router, and query state per test.
+- Scope queries to the relevant dialog, region, or row with `within`, preserving role, accessible-name, and visibility checks. Portaled options may live outside the triggering dialog. Reuse references only while their nodes remain mounted; reacquire after reopening or navigation. Do not substitute test IDs or `hidden: true` to make accessible queries cheaper.
+- Await an operation's completion promise when available. Keep `findBy*` and ordinary `waitFor` for later DOM or focus changes. Loading-state tests must control request completion explicitly and assert both pending and completed behavior; setup must not silently wait past the state under test.
+- Measure before expanding an optimization. Compare the full affected suite on the same runner with identical worker and cache settings, preserving cases and assertions. Report before/after times with variability; a lower median alone does not establish a reliable gain.
+
+```typescript
+const dialog = await screen.findByRole("dialog", { name: "Filters" });
+const fields = within(dialog);
+const apply = fields.getByRole("button", { name: "Apply" });
+// Reuse only during this opening; query again after closing and reopening.
+```
+
 ## Await hook state without polling delays
+
+The `waitForHookState` helper below lives in `client/dashboard`; check the package before importing it.
 
 `renderHook` state changes need not mutate the DOM, so ordinary Testing Library `waitFor` can repeatedly pay its default 50ms polling interval. Choose the wait by what the assertion observes:
 
