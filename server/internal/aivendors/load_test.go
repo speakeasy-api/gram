@@ -514,11 +514,12 @@ func TestBuiltInFallbackKeepsDatabaseRemovals(t *testing.T) {
 		readdURL bool
 	}{
 		{name: "soft-deleted product", remove: func(t *testing.T, db *pgxpool.Pool) {
+			t.Helper()
 			require.NoError(t, testrepo.New(db).EditProductFixture(t.Context(), testrepo.EditProductFixtureParams{ID: "zed", DisplayName: "Zed", DeletedAt: deletedAt}))
 		}},
-		{name: "disabled document", remove: func(t *testing.T, db *pgxpool.Pool) { editZedDocument(t, db, false, pgtype.Timestamptz{}) }, listed: true},
-		{name: "soft-deleted document", remove: func(t *testing.T, db *pgxpool.Pool) { editZedDocument(t, db, true, deletedAt) }},
-		{name: "soft-deleted then re-added document", remove: func(t *testing.T, db *pgxpool.Pool) { editZedDocument(t, db, true, deletedAt) }, readdURL: true},
+		{name: "disabled document", remove: func(t *testing.T, db *pgxpool.Pool) { t.Helper(); editZedDocument(t, db, false, pgtype.Timestamptz{}) }, listed: true},
+		{name: "soft-deleted document", remove: func(t *testing.T, db *pgxpool.Pool) { t.Helper(); editZedDocument(t, db, true, deletedAt) }},
+		{name: "soft-deleted then re-added document", remove: func(t *testing.T, db *pgxpool.Pool) { t.Helper(); editZedDocument(t, db, true, deletedAt) }, readdURL: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
