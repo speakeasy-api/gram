@@ -944,6 +944,9 @@ func validateInput(c Check) error {
 		if err := validateCheckIdentity(c); err != nil {
 			return err
 		}
+		if err := validateCheckOperation(c); err != nil {
+			return err
+		}
 		if err := validateCheckDimensions(c); err != nil {
 			return err
 		}
