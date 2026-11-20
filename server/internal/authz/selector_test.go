@@ -2,6 +2,7 @@ package authz
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -34,7 +35,10 @@ func TestResourceKindForScope_undeclaredScopesFallBackToTheirPrefix(t *testing.T
 		{"mcp_auth_client:x", ResourceKindWildcard},
 		{"unknown:read", ResourceKindWildcard},
 	} {
-		require.Equal(t, tc.want, ResourceKindForScope(tc.scope), tc.scope)
+		t.Run(string(tc.scope), func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, ResourceKindForScope(tc.scope))
+		})
 	}
 }
 
@@ -359,10 +363,16 @@ func TestValidateSelector_LimitsAreForConnectOnly(t *testing.T) {
 	limits := map[string]string{SelectorKeyTool: "search", SelectorKeyDisposition: DispositionReadOnly}
 	for key, value := range limits {
 		for _, scope := range []Scope{ScopeMCPConnect, ScopeMCPBlockedConnect} {
-			require.NoError(t, ValidateSelector(scope, limitedSelector(scope, key, value)), "%s limited by %s", scope, key)
+			t.Run(fmt.Sprintf("%s limited by %s is allowed", scope, key), func(t *testing.T) {
+				t.Parallel()
+				require.NoError(t, ValidateSelector(scope, limitedSelector(scope, key, value)))
+			})
 		}
 		for _, scope := range []Scope{ScopeMCPRead, ScopeMCPWrite, ScopeMCPBlockedRead, ScopeMCPBlockedWrite} {
-			require.ErrorContains(t, ValidateSelector(scope, limitedSelector(scope, key, value)), "is not allowed for scope", "%s limited by %s", scope, key)
+			t.Run(fmt.Sprintf("%s limited by %s is refused", scope, key), func(t *testing.T) {
+				t.Parallel()
+				require.ErrorContains(t, ValidateSelector(scope, limitedSelector(scope, key, value)), "is not allowed for scope")
+			})
 		}
 	}
 }
