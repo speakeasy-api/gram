@@ -2,12 +2,15 @@ package aiproviderkeys_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption/orgencryptiontest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -28,6 +31,23 @@ func TestQueriesFenceEveryKeyWrite(t *testing.T) {
 		queries, err := os.ReadFile(check.path)
 		require.NoError(t, err)
 		orgencryptiontest.RequireFencedWrites(t, string(queries), check.columns...)
+	}
+}
+
+func TestErrorMapsKeyProblemsToAPICodes(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		err  error
+		want oops.Code
+	}{
+		{err: fmt.Errorf("open: %w", orgencryption.ErrSuspended), want: oops.CodeFailedPrecondition},
+		{err: fmt.Errorf("open: %w", orgencryption.ErrInvalidKey), want: oops.CodeFailedPrecondition},
+		{err: fmt.Errorf("open: %w", orgencryption.ErrKeyUnavailable), want: oops.CodeUnavailable},
+		{err: fmt.Errorf("open: %w", orgencryption.ErrUnreadable), want: oops.CodeUnexpected},
+		{err: errors.New("connection reset"), want: oops.CodeUnexpected},
+	} {
+		require.Equal(t, tc.want, aiproviderkeys.Error(tc.err, "store key").Code, "%v", tc.err)
 	}
 }
 

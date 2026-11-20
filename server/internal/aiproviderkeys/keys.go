@@ -93,7 +93,7 @@ func Error(err error, msg string) *oops.ShareableError {
 	case IsCustomerKeyProblem(err):
 		return oops.E(oops.CodeFailedPrecondition, err, "This organization's encryption key is suspended or invalid, so the key can't be used until it is fixed.")
 	case orgencryption.IsKeyProblem(err):
-		return oops.E(oops.CodeUnavailable, err, "This organization's encryption key is unavailable. Try again shortly.")
+		return oops.E(oops.CodeUnavailable, err, "Encryption is temporarily unavailable. Try again shortly.")
 	default:
 		return oops.E(oops.CodeUnexpected, err, "%s", msg)
 	}
