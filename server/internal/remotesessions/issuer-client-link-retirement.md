@@ -8,9 +8,11 @@ These RPCs manage or report links between downstream sign-in issuers and upstrea
 
 These links are not a source of truth for a server's typed upstream offers. Choose a replacement based on the operation, not the old link:
 
-- Keep downstream sign-in issuer configuration and hosted OAuth separate from upstream offers.
-- Use a server's typed choices to inspect its upstream offers. Use the typed attach and detach operations only when editing offers on that specific proxied server. A member offer can also be visible through other gateways; do not use it to emulate gateway-local access. Do not delete a registration to remove an offer or a downstream association.
-- Use the principal binding API for an agent's exact session attachment. Detaching an upstream offer is not an agent-session detach.
+- Downstream sign-in: `POST /rpc/mcpServers.update` attaches or clears the downstream issuer on a server (including a hosted server); `POST /rpc/metaMcp.update` sets the gateway's downstream issuer. These operations do not remove a single upstream provider. Hosted external OAuth has its own `toolsets.addExternalOAuthServer`, `toolsets.updateExternalOAuthServer`, and `toolsets.removeOAuthServer` RPCs.
+- Typed upstream offers: read `GET /rpc/authClients.listMcpServerChoices` for a proxied server. Use `POST /rpc/authClients.attachToMcpServer` and `POST /rpc/authClients.detachFromMcpServer` only to edit offers on that server. A member offer can also be visible through other gateways; do not use it to emulate gateway-local access. Do not delete a registration to remove an offer or a downstream association.
+- Agent session attachments: use `GET /rpc/remoteSessions.listBindings`, `POST /rpc/remoteSessions.attachBinding`, and `POST /rpc/remoteSessions.detachBinding` for an agent's exact session attachment. Detaching an upstream offer is not an agent-session detach.
+
+These are capability-specific routes, not drop-in replacements for the remaining gateway and hosted link controls. Keep those controls on the old contract until migration preserves their scope and behavior.
 
 ## Rollout order
 
