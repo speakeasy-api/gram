@@ -312,8 +312,6 @@ func TestLocalTool_ACallItRefusesIsAnsweredAsARejection(t *testing.T) {
 	require.Zero(t, requests.Load())
 }
 
-// A call nobody waits on has no reply to put a result in, so it is forwarded
-// like any other.
 // A call without an id is owed no reply, and is still never the remote server's to run.
 func TestLocalTool_ACallWithoutAnIDIsAcceptedAndDropped(t *testing.T) {
 	t.Parallel()
