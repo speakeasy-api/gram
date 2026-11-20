@@ -18,14 +18,6 @@ function LocationProbe() {
     <span data-testid="location">{`${location.pathname}${location.hash}`}</span>
   );
 }
-import type { UpstreamAuthEnforcementStatus } from "@/hooks/useUpstreamAuthEnforcement";
-
-const enforcement = vi.hoisted(() => ({
-  status: "legacy" as UpstreamAuthEnforcementStatus,
-}));
-vi.mock("@/hooks/useUpstreamAuthEnforcement", () => ({
-  useUpstreamAuthEnforcement: () => enforcement.status,
-}));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
@@ -42,7 +34,6 @@ afterEach(() => {
   cleanup();
   queryClients.forEach((client) => client.clear());
   queryClients.length = 0;
-  enforcement.status = "legacy";
 });
 
 function setup() {
@@ -99,21 +90,12 @@ async function openRowMenu(user: ReturnType<typeof userEvent.setup>) {
   if (trigger) await user.click(trigger);
 }
 
-it("offers the legacy removal when the organization is not enforced", async () => {
-  enforcement.status = "legacy";
-  const { user } = setup();
-  await openRowMenu(user);
-  expect(await screen.findByText("Remove from server")).toBeTruthy();
-  expect(screen.queryByText("Manage in Identity")).toBeNull();
-});
-
-it("sends an enforced organization to the server's own Identity", async () => {
-  enforcement.status = "enforced";
+it("links to the server's own Identity", async () => {
   const { user } = setup();
   await openRowMenu(user);
   expect(
     screen.queryByText("Remove from server"),
-    "an enforced organization never sees the legacy binding control",
+    "never offers the legacy binding control",
   ).toBeNull();
 
   await user.click(await screen.findByText("Manage in Identity"));
@@ -121,17 +103,3 @@ it("sends an enforced organization to the server's own Identity", async () => {
     "/org/projects/proj/mcp/example-server/settings#authentication",
   );
 });
-
-it.each(["loading", "error"] as const)(
-  "offers neither action while the state is %s",
-  async (status) => {
-    enforcement.status = status;
-    const { user } = setup();
-    await openRowMenu(user);
-    expect(
-      screen.queryByText("Remove from server"),
-      "an unknown state never offers the legacy binding control",
-    ).toBeNull();
-    expect(screen.queryByText("Manage in Identity")).toBeNull();
-  },
-);

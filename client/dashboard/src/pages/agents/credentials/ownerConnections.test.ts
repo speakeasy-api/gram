@@ -324,7 +324,15 @@ function api(options: {
   const getMcpServerAuthentication = vi.fn(
     ({ mcpServerId }: { mcpServerId: string }) =>
       options.auth?.(mcpServerId) ??
-      Promise.resolve(authentication([authClient("remote_session")])),
+      Promise.resolve(
+        authentication([
+          {
+            ...authClient("remote_session"),
+            personal: true,
+            remoteSessionClientId: "client_one",
+          },
+        ]),
+      ),
   );
   const fake = {
     authClients: { getMcpServerAuthentication },
@@ -382,32 +390,38 @@ describe("attachOwnerConnections", () => {
       personal: true,
       remoteSessionClientId: "client_one",
     } as AuthClient;
-    const shared = () =>
-      api({
+
+    it("attaches a gateway-made session for an offered registration without a target issuer link", async () => {
+      const { fake, attachBinding } = api({
         auth: () => Promise.resolve(authentication([own])),
-        clients: [client("client_other_server")],
-        candidates: [session({})],
+        clients: [],
+        candidates: [session({ userSessionIssuerId: "gateway_issuer" })],
         bindings: [],
       });
-
-    it("attaches the server's own sign-in when upstream auth is enforced", async () => {
-      const { fake, attachBinding } = shared();
       const missing = await attachOwnerConnections(
         fake,
         "agent_new",
         [server],
         undefined,
         false,
-        true,
       );
       expect(missing).toEqual([]);
       expect(attachBinding.mock.calls[0]?.[0]).toMatchObject({
         attachBindingRequestBody: { remoteSessionId: "session_mine" },
       });
       expect(fake.remoteSessionClients.list).not.toHaveBeenCalled();
+      expect(fake.remoteSessions.list).toHaveBeenCalledWith(
+        {
+          gramProject: "project-one",
+          principalId: "agent_new",
+          userSessionIssuerId: "issuer_one",
+        },
+        undefined,
+        expect.anything(),
+      );
     });
 
-    it("asks for the issuer's sign-ins when enforced but its personal sign-in names no registration", async () => {
+    it("requires repair when a personal offer names no registration", async () => {
       const { fake, attachBinding } = api({
         auth: () =>
           Promise.resolve(
@@ -417,22 +431,14 @@ describe("attachOwnerConnections", () => {
         candidates: [session({})],
         bindings: [],
       });
-      const missing = await attachOwnerConnections(
-        fake,
-        "agent_new",
-        [server],
-        undefined,
-        false,
-        true,
-      );
-      expect(missing).toEqual([]);
-      expect(fake.remoteSessionClients.list).toHaveBeenCalled();
-      expect(attachBinding.mock.calls[0]?.[0]).toMatchObject({
-        attachBindingRequestBody: { remoteSessionId: "session_mine" },
-      });
+      await expect(
+        attachOwnerConnections(fake, "agent_new", [server]),
+      ).rejects.toThrow(/Finish upstream credential setup/);
+      expect(fake.remoteSessionClients.list).not.toHaveBeenCalled();
+      expect(attachBinding).not.toHaveBeenCalled();
     });
 
-    it("attaches the one connected sign-in when enforced and the server has two", async () => {
+    it("attaches the one connected sign-in when the server has two", async () => {
       const { fake, attachBinding } = api({
         auth: () =>
           Promise.resolve(
@@ -455,13 +461,12 @@ describe("attachOwnerConnections", () => {
         [server],
         undefined,
         false,
-        true,
       );
       expect(missing).toEqual([]);
       expect(attachBinding).toHaveBeenCalledTimes(1);
     });
 
-    it("needs one of each server's own sign-ins when enforced servers share the issuer", async () => {
+    it("needs one of each server's own sign-ins when servers share the issuer", async () => {
       // client_one serves this server; the second server signs in only
       // through client_two, which the caller never connected.
       const second = { ...server, id: "server_second", name: "Second" };
@@ -488,7 +493,6 @@ describe("attachOwnerConnections", () => {
           [server, second],
           undefined,
           skipMissing,
-          true,
         );
       await expect(run(true)).resolves.toEqual(["Second"]);
       await expect(run(false)).rejects.toThrow(
@@ -508,35 +512,7 @@ describe("attachOwnerConnections", () => {
       await expect(
         attachOwnerConnections(fake, "agent_new", [hostedServer]),
       ).rejects.toThrow(/no longer available/);
-      expect(
-        fake.remoteSessions.listServerClientAssociations,
-      ).not.toHaveBeenCalled();
       expect(attachBinding).not.toHaveBeenCalled();
-    });
-
-    it("asks for the sign-ins the runtime requires when it is not", async () => {
-      const { fake, attachBinding } = shared();
-      await expect(
-        attachOwnerConnections(fake, "agent_new", [server]),
-      ).rejects.toThrow(/no longer available/);
-      expect(attachBinding).not.toHaveBeenCalled();
-    });
-
-    it("does not ask for another server's registration the runtime does not require", async () => {
-      // The issuer lists both; the runtime requires only this server's own.
-      const { fake, attachBinding } = api({
-        auth: () => Promise.resolve(authentication([own])),
-        clients: [client("client_other_server"), client("client_one")],
-        candidates: [session({})],
-        bindings: [],
-        required: { [server.id]: ["client_one"] },
-      });
-      const missing = await attachOwnerConnections(fake, "agent_new", [server]);
-      expect(missing).toEqual([]);
-      expect(attachBinding).toHaveBeenCalledTimes(1);
-      expect(attachBinding.mock.calls[0]?.[0]).toMatchObject({
-        attachBindingRequestBody: { remoteSessionId: "session_mine" },
-      });
     });
   });
 
@@ -667,7 +643,15 @@ describe("attachOwnerConnections", () => {
       auth: (id) =>
         id === "server_linear"
           ? Promise.reject(new Error("network down"))
-          : Promise.resolve(authentication([authClient("remote_session")])),
+          : Promise.resolve(
+              authentication([
+                {
+                  ...authClient("remote_session"),
+                  personal: true,
+                  remoteSessionClientId: "client_one",
+                },
+              ]),
+            ),
       clients: [client("client_one")],
       candidates: [session({})],
       bindings: [],

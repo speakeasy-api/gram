@@ -30,6 +30,8 @@ import { invalidateAuthClientQueries } from "./authClientQueries";
 import { AuthRow } from "./AuthRow";
 import { HeadlessCallersSection } from "./HeadlessCallersSection";
 
+import { useSetupStep } from "./useSetupStep";
+
 export const UPSTREAM_CREDENTIALS_SECTION_ID = "upstream-credentials";
 
 /**
@@ -44,9 +46,16 @@ export function UpstreamCredentialsSection({
 }): JSX.Element {
   const { hasScope } = useRBAC();
   const canManage = hasScope("org:admin");
-  const query = useMcpServerAuthentication({ mcpServerId: mcpServer.id });
+  const query = useMcpServerAuthentication(
+    { mcpServerId: mcpServer.id },
+    undefined,
+    { throwOnError: false },
+  );
   const [openClientId, setOpenClientId] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
+  const setupStep = useSetupStep();
+  const [adding, setAdding] = useState(
+    canManage && (setupStep === "credentials" || setupStep === "oauth-client"),
+  );
   const openClient =
     query.data?.clients.find((client) => client.id === openClientId) ?? null;
 
@@ -69,10 +78,19 @@ export function UpstreamCredentialsSection({
             </AuthRow>
           ) : query.isError || !query.data ? (
             <AuthRow label="Credentials">
-              <FieldError>
-                The upstream credentials could not be loaded. Refresh the page
-                to try again.
-              </FieldError>
+              <div className="flex items-center gap-2">
+                <FieldError>
+                  The upstream credentials could not be loaded.
+                </FieldError>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={query.isFetching}
+                  onClick={() => void query.refetch()}
+                >
+                  <Button.Text>Retry</Button.Text>
+                </Button>
+              </div>
             </AuthRow>
           ) : (
             <>

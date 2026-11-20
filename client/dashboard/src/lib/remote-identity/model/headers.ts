@@ -74,14 +74,3 @@ export type ManagedHeader = {
   /** Null when the mode owns the name but no row exists yet. */
   readonly headerId: string | null;
 };
-
-export function managedAuthorizationHeader(
-  mode: IdentityMode,
-  headers: readonly RemoteMcpServerHeader[],
-): ManagedHeader | null {
-  if (mode === "none") return null;
-  return {
-    ownedBy: mode,
-    headerId: findStaticAuthorizationHeader(headers)?.id ?? null,
-  };
-}

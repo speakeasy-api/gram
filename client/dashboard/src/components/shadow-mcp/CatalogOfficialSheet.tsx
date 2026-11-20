@@ -38,9 +38,8 @@ import {
   type ServerConfig,
   useRemoteMcpInstallWorkflow,
 } from "@/pages/catalog/useRemoteMcpInstallWorkflow";
-import { AuthenticationSectionBody } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
-import { useMcpServerAuthTarget } from "@/pages/mcp/x/tabs/settings/sections/authentication/authTarget";
 import { CreationIdentityChoice } from "@/pages/mcp/x/tabs/settings/sections/authentication/CreationIdentityChoice";
+import { UpstreamCredentialsSection } from "@/pages/mcp/x/tabs/settings/sections/authentication/UpstreamCredentialsSection";
 import type { RemoteMcpCreationIdentity } from "@/pages/sources/remote-mcp/configureCreatedIdentity";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -130,6 +129,7 @@ export function CatalogOfficialSheet({
   const link = useSaveShadowMCPOfficialServer();
   const project = useProject();
   const { hasScope, isLoading: rbacLoading } = useRBAC();
+  const canManageCredentials = hasScope("org:admin");
   const canCreateIdentity =
     !rbacLoading && hasScope("project:write", project.id);
   const agentCredential = useAgentCredentialFields();
@@ -338,7 +338,9 @@ export function CatalogOfficialSheet({
             {stage.kind === "done"
               ? shadowMCPCreatedDescription(stage.created, shadowName)
               : stage.kind === "sign-in"
-                ? `${entryTitle} is added but stays off until people can sign in. Enter the client you registered with its provider, save it, then turn the server on.`
+                ? canManageCredentials
+                  ? `${entryTitle} is added but stays off until people can sign in. Add an upstream credential, then turn the server on.`
+                  : `${entryTitle} is added but needs an organization admin to add its upstream credential.`
                 : `Speakeasy adds the catalog version of ${entryTitle} and links it as the official version of ${shadowName}.`}
           </SheetDescription>
         </SheetHeader>
@@ -353,6 +355,12 @@ export function CatalogOfficialSheet({
               <Alert variant="warning" dismissible={false}>
                 {stage.message}
               </Alert>
+              {!canManageCredentials && (
+                <Alert variant="warning" dismissible={false}>
+                  Ask an organization admin to open this server’s Settings and
+                  finish setup under Identity.
+                </Alert>
+              )}
               <SignInSetup mcpServerId={stage.mcpServerId} />
             </Stack>
           ) : null}
@@ -547,6 +555,20 @@ function SignInSetup({ mcpServerId }: { mcpServerId: string }) {
   const serverQuery = useGetMcpServer({ id: mcpServerId }, undefined, {
     throwOnError: false,
   });
+  if (serverQuery.isError) {
+    return (
+      <div className="flex items-center gap-2">
+        <Text small>The server could not be loaded.</Text>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => void serverQuery.refetch()}
+        >
+          <Button.Text>Retry</Button.Text>
+        </Button>
+      </div>
+    );
+  }
   if (!serverQuery.data) {
     return (
       <div className="text-muted-foreground flex items-center gap-2 text-sm">
@@ -555,12 +577,7 @@ function SignInSetup({ mcpServerId }: { mcpServerId: string }) {
       </div>
     );
   }
-  return <SignInSetupBody mcpServer={serverQuery.data} />;
-}
-
-function SignInSetupBody({ mcpServer }: { mcpServer: McpServer }) {
-  const target = useMcpServerAuthTarget(mcpServer);
-  return <AuthenticationSectionBody target={target} />;
+  return <UpstreamCredentialsSection mcpServer={serverQuery.data} />;
 }
 
 /**
@@ -579,15 +596,14 @@ function TurnOnAndLink({
   const update = useUpdateMcpServerMutation();
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
-  // The same readiness the server's settings page shows. A check that could
-  // not run is not an open step, so it does not hold the admin back.
+  // A failed check is unknown, not a definitive open setup step.
   const serverQuery = useGetMcpServer({ id: mcpServerId }, undefined, {
     throwOnError: false,
   });
   const readiness = useMcpServerAuthenticationReadiness(serverQuery.data);
   const checking = serverQuery.isLoading || readiness.loading;
-  const signInOpen =
-    !serverQuery.isError && !readiness.unavailable && !readiness.ready;
+  const unavailable = serverQuery.isError || readiness.unavailable;
+  const signInOpen = !unavailable && !readiness.ready;
 
   const turnOn = async () => {
     setPending(true);
@@ -625,9 +641,11 @@ function TurnOnAndLink({
     <div className="flex w-full items-center justify-between gap-3">
       <Text muted small className={failed ? "text-destructive" : undefined}>
         {failed ??
-          (signInOpen && !checking
-            ? "Save the sign-in settings above to turn it on."
-            : "")}
+          (unavailable
+            ? "Could not verify upstream sign-in."
+            : signInOpen && !checking
+              ? "Save the sign-in settings above to turn it on."
+              : "")}
       </Text>
       <Button
         variant="primary"
