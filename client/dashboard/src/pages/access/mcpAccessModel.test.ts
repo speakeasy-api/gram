@@ -52,10 +52,10 @@ describe("tool limits", () => {
 });
 
 describe("ticking tools on a rule limited to kinds", () => {
-  const readOnly = {
+  const readOnly: Extract<ToolLimit, { kind: "annotations" }> = {
     kind: "annotations",
     dispositions: ["read_only"],
-  } as const;
+  };
 
   it("keeps the kinds and names the ticked tool beside them", () => {
     // Read-only tools stay covered, including ones added later.
