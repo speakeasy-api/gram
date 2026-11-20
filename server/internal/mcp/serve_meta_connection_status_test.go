@@ -125,20 +125,34 @@ func TestServePublic_MetaEndpoint_ConnectionStatus_HostedUsesAssignedGrant(t *te
 	signIn := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 	slug := "meta-hosted-status-" + uuid.NewString()[:8]
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, slug, signIn)
-	member := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted status", 0, mcpservers.VisibilityPublic)
-	assigned := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "assigned-hosted", "", nil)
-	sibling := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "sibling-hosted", "", []uuid.UUID{signIn})
-	_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
-		OrganizationID: orgID, ProjectID: projectID, McpServerID: member.serverID, RemoteSessionClientID: assigned,
-	})
-	require.NoError(t, err)
+	first := seedHostedMetaMember(t, ctx, ti, gateway.ID, "First hosted", 0, mcpservers.VisibilityPublic)
+	sibling := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Second hosted", 1, mcpservers.VisibilityPublic)
+	missing := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Missing placement", 2, mcpservers.VisibilityPublic)
+	open := seedHostedMetaMember(t, ctx, ti, gateway.ID, "No upstream", 3, mcpservers.VisibilityPublic)
+	firstClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "assigned-hosted", "", nil)
+	siblingClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "sibling-hosted", "", []uuid.UUID{signIn})
+	placements := upstreamclientsrepo.New(ti.conn)
+	for memberID, clientID := range map[uuid.UUID]uuid.UUID{first.serverID: firstClient, sibling.serverID: siblingClient} {
+		_, err := placements.AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
+			OrganizationID: orgID, ProjectID: projectID, McpServerID: memberID, RemoteSessionClientID: clientID,
+		})
+		require.NoError(t, err)
+	}
+	require.NoError(t, placements.RequireHostedUpstreamAssignment(ctx, upstreamclientsrepo.RequireHostedUpstreamAssignmentParams{
+		ServerID: missing.serverID, ProjectID: projectID,
+	}))
+	markHostedDownstreamOnly(t, ctx, ti.conn, open.serverID)
 	subject := createTestUser(t, ctx, ti, "hosted-status-"+uuid.NewString())
 	bearer := mintMetaIssuerBearer(t, ti, slug, signIn, subject)
-	insertQualifiedRemoteSessionToken(t, ctx, ti, signIn, sibling, subject, "sibling-token", "")
-	require.Equal(t, metamcp.SignInNotConnected, callConnectionStatus(t, ti, context.Background(), slug, bearer).statuses[member.slug])
+	insertQualifiedRemoteSessionToken(t, ctx, ti, signIn, siblingClient, subject, "sibling-token", "")
+	statuses := callConnectionStatus(t, ti, context.Background(), slug, bearer).statuses
+	require.Equal(t, metamcp.SignInNotConnected, statuses[first.slug], "the legacy issuer link must not select the sibling's grant")
+	require.Equal(t, metamcp.SignInConnected, statuses[sibling.slug])
+	require.Equal(t, metamcp.SignInError, statuses[missing.slug], "a required but missing placement is not no-upstream")
+	require.Equal(t, metamcp.SignInNotRequired, statuses[open.slug])
 
-	insertQualifiedRemoteSessionToken(t, ctx, ti, signIn, assigned, subject, "assigned-token", "")
-	require.Equal(t, metamcp.SignInConnected, callConnectionStatus(t, ti, context.Background(), slug, bearer).statuses[member.slug])
+	insertQualifiedRemoteSessionToken(t, ctx, ti, signIn, firstClient, subject, "assigned-token", "")
+	require.Equal(t, metamcp.SignInConnected, callConnectionStatus(t, ti, context.Background(), slug, bearer).statuses[first.slug])
 }
 
 // A remote member bound to no sign-in provider still receives a grant routed
