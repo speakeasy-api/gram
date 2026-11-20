@@ -65,7 +65,7 @@ export function useMcpServerReachability({
     issuerId: userSessionIssuerId,
     serverId: mcpServerId,
   });
-  const usesChatSession = !isIssuerGated;
+  const usesChatSession = !isIssuerGated && !publicTunnel;
   const chat = useChatSessionHeaders(enabled && usesChatSession);
   const headers = useMemo(
     () =>
@@ -103,13 +103,14 @@ export function useMcpServerReachability({
   );
 
   if (!enabled) return { kind: "off" };
+  // Without the viewer's own grant there is nothing to ask the server with,
+  // and a listing cached from an earlier grant doesn't speak for this one.
+  if (requiresToken && !accessToken) return { kind: "unverified" };
   if (listing.tools) return { kind: "reachable", driftCount };
   if (listing.needsAuth) return { kind: "reachable", driftCount: 0 };
   if (listing.isError) {
     return { kind: "unreachable", detail: listing.error?.message };
   }
-  // Without the viewer's own grant there is nothing to ask the server with.
-  if (requiresToken && !accessToken) return { kind: "unverified" };
   // No session to list with says nothing about the server itself.
   if (usesChatSession && !!chat.error && !chat.headers) {
     return { kind: "unknown" };

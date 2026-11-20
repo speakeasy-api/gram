@@ -22,8 +22,11 @@ vi.mock("@/hooks/useRBAC", () => ({
 vi.mock("@/hooks/useToolMetadata", () => ({
   useToolMetadata: () => ({ metadataByTool: {} }),
 }));
+const chatSession = vi.hoisted(() =>
+  vi.fn(() => ({ headers: undefined, error: null })),
+);
 vi.mock("@/pages/mcp/inspect/useChatSessionHeaders", () => ({
-  useChatSessionHeaders: () => ({ headers: undefined, error: null }),
+  useChatSessionHeaders: chatSession,
 }));
 vi.mock("@/lib/utils", () => ({
   getServerURL: () => "https://app.example",
@@ -84,11 +87,27 @@ describe("useMcpServerReachability", () => {
     expect(result.current).toEqual({ kind: "reachable", driftCount: 0 });
   });
 
-  it("probes a public tunnel anonymously", () => {
+  it("ignores a cached listing when the viewer has no grant", () => {
+    listing.mockReturnValue({ tools: {}, needsAuth: false });
+
+    const { result } = renderHook(() => useMcpServerReachability(options));
+
+    expect(result.current).toEqual({ kind: "unverified" });
+  });
+
+  it.each([
+    ["with", "issuer"],
+    ["without", undefined],
+  ])("probes a public tunnel %s an issuer anonymously", (_, issuer) => {
     renderHook(() =>
-      useMcpServerReachability({ ...options, publicTunnel: true }),
+      useMcpServerReachability({
+        ...options,
+        userSessionIssuerId: issuer,
+        publicTunnel: true,
+      }),
     );
 
+    expect(chatSession).toHaveBeenLastCalledWith(false);
     expect(listing).toHaveBeenLastCalledWith(
       "https://app.example/mcp/server",
       expect.objectContaining({ enabled: true, headers: undefined }),
