@@ -717,6 +717,58 @@ func TestMerge_PartialCompactionWithInferenceFirst(t *testing.T) {
 	require.Empty(t, mustNode(t, tr, line("u4")).Children, "the old tree ends where it ended")
 }
 
+func TestMerge_PartialCompactionWithAKeptToolCallAndInferenceFirst(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	_, err := tr.Merge(transcriptDelivery(
+		transcriptPrompt("u1", "", "p1", "first"),
+		transcriptReply("u2", "u1", "one"),
+		transcriptPrompt("u3", "u2", "p2", "second"),
+		transcriptToolUse("u4", "u3", "toolu_kept"),
+		transcriptToolResult("u5", "u4", "toolu_kept", "kept output"),
+		transcriptReply("u6", "u5", "two"),
+	))
+	require.NoError(t, err)
+	oldTwo := mustNode(t, tr, line("u6"))
+
+	// The frame after the compaction starts with the summary, which inference
+	// stores as a plain root, then repeats the kept messages and the tool call.
+	frame := inferenceFrame(
+		user("summary of first and one"),
+		user("second"),
+		Message{Role: RoleAssistant, Blocks: []Block{{Type: "tool_use", ID: "toolu_kept", Name: "Bash", Input: []byte(`{"command":"ls"}`)}}},
+		Message{Role: RoleUser, Blocks: []Block{{Type: "tool_result", ToolUseID: "toolu_kept", Text: "kept output"}}},
+		assistant("two"),
+		user("third"),
+		assistant("three"),
+	)
+	res, err := tr.Merge(frame)
+	require.NoError(t, err)
+	require.Len(t, res.Added, 7, "the frame stays in its own tree")
+	require.Empty(t, oldTwo.Children, "nothing is hung off the old tree")
+
+	res, err = tr.Merge(Delivery{
+		Source: SourceClaudeTranscript,
+		Links:  []Link{{ID: line("b1"), To: parentLine("u6"), Compaction: true}},
+		Entries: []Entry{
+			{Role: RoleUser, Text: "summary of first and one", Synthetic: true, IDs: []NaturalID{line("s1")}, Parent: parentLine("b1")},
+			transcriptPrompt("u3", "s1", "p2", "second"),
+			transcriptToolUse("u4", "u3", "toolu_kept"),
+			transcriptToolResult("u5", "u4", "toolu_kept", "kept output"),
+			transcriptReply("u6", "u5", "two"),
+			transcriptPrompt("u7", "u6", "p7", "third"),
+			transcriptReply("u8", "u7", "three"),
+		},
+	})
+	require.NoError(t, err)
+	require.Empty(t, res.Added, "the transcript joins the frame's tree")
+	require.Empty(t, oldTwo.Children)
+
+	res, err = tr.Merge(frame)
+	require.NoError(t, err)
+	require.Empty(t, res.Added, "a re-sent frame adds nothing")
+}
+
 func TestSplit_DropsEmptyAndReminderOnlyTextBlocks(t *testing.T) {
 	t.Parallel()
 	entries := Split(Message{Role: RoleUser, Blocks: []Block{

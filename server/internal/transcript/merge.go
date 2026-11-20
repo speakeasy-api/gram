@@ -204,7 +204,7 @@ func (t *Transcript) Merge(d Delivery) (Result, error) {
 			return Result{Added: nil, Seen: nil, Aliases: nil}, err
 		}
 
-		n, copied := t.find(parent, continues, e, d.Entries[i+1:])
+		n, copied := t.find(parent, continues, e, explicit, d.Entries[i+1:])
 		if n != nil {
 			ids := e.IDs
 			if copied {
@@ -334,16 +334,27 @@ func (t *Transcript) resolve(ref NaturalID, links map[NaturalID]Link, scope *Nod
 // match, the one whose line keeps matching the rest of the delivery wins,
 // then the newest. A new compaction root only matches a root that continues
 // from the same old leaf, or a root whose continuation is not known yet.
-func (t *Transcript) find(parent, continues *Node, e Entry, rest []Entry) (n *Node, copied bool) {
+//
+// An entry that does not name its parent continues the trajectory of the
+// delivery (an inference frame), and one trajectory never crosses trees. So
+// when such an entry's ID points into another tree, the entry repeats that
+// older entry in this tree: inference stores a summary as a plain root before
+// it can know it is one, and a kept message after it must stay in its tree.
+func (t *Transcript) find(parent, continues *Node, e Entry, explicit bool, rest []Entry) (n *Node, copied bool) {
 	scope := t.treeRoot(parent)
-	for _, id := range e.IDs {
-		if scope != nil {
+	if scope != nil {
+		// A copy in this tree wins over the original, through any of the
+		// entry's IDs, and the entry's other IDs join it in scoped form.
+		for _, id := range e.IDs {
 			if c, ok := t.byID[scoped(id, scope)]; ok {
-				return c, false
+				return c, true
 			}
 		}
+	}
+	for _, id := range e.IDs {
 		if found, ok := t.byID[id]; ok {
-			if t.repeatsOlderTree(found, scope) {
+			crossesTrees := !explicit && scope != nil && t.treeRoot(found) != nil && t.treeRoot(found) != scope
+			if crossesTrees || t.repeatsOlderTree(found, scope) {
 				// Inference may have stored this entry in the newer tree
 				// already, without IDs: look for it by content below.
 				copied = true
