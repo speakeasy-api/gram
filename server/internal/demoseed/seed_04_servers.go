@@ -397,7 +397,7 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		if key, ok := personalOffers[server]; ok {
 			return uuid.NullUUID{UUID: s.det(key), Valid: true}
 		}
-		return uuid.NullUUID{}
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	}
 
 	choices := []struct {
@@ -656,7 +656,7 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 	proj := s.projectID()
 
 	clients := []repo.ServersInsertAuthClientParams{
-		{ID: s.sharedSourceAuthClient(), OrgID: org, ProjectID: proj, ClientType: "static_credential", Source: "backfill", Name: "Static credential", RemoteSessionClientID: uuid.NullUUID{}},
+		{ID: s.sharedSourceAuthClient(), OrgID: org, ProjectID: proj, ClientType: "static_credential", Source: "backfill", Name: "Static credential", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
 		{ID: s.det("auth-client-linear"), OrgID: org, ProjectID: proj, ClientType: "remote_session", Source: "backfill", Name: "Fixture OAuth sign-in", RemoteSessionClientID: uuid.NullUUID{UUID: s.det("remote-identity-client-linear"), Valid: true}},
 		{ID: s.det("auth-client-ema-wiki"), OrgID: org, ProjectID: proj, ClientType: "ema", Source: "backfill", Name: "Acme Wiki", RemoteSessionClientID: uuid.NullUUID{UUID: s.det("ema-client-wiki"), Valid: true}},
 		{ID: s.det("auth-client-github-token"), OrgID: org, ProjectID: proj, ClientType: "static_credential", Source: "admin", Name: "Shared service token", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"slices"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -42,8 +41,6 @@ func (s *Service) GetUpstreamOAuthMigrationStatus(ctx context.Context, p *gen.Ge
 	}
 	return s.upstreamOAuthMigrationStatus(ctx, organizationID)
 }
-
-const authClientStatusTimeout = 2 * time.Minute
 
 // RunUpstreamOAuthMigration keeps the old staff contract non-mutating.
 func (s *Service) RunUpstreamOAuthMigration(ctx context.Context, _ *gen.RunUpstreamOAuthMigrationPayload) (*gen.AdminUpstreamOAuthMigrationRun, error) {

@@ -22,7 +22,10 @@ import (
 // fixture has already inserted in this transaction.
 func seedUpstreamAuthGrants(ctx context.Context, tx pgx.Tx, organizationID string) error {
 	ctx = authz.WithUpstreamSelectorWriteGate(ctx, seededSelectorWrites(organizationID))
-	return authclientbackfill.ProvisionFromTypedOffers(ctx, tx, organizationID)
+	if err := authclientbackfill.ProvisionFromTypedOffers(ctx, tx, organizationID); err != nil {
+		return fmt.Errorf("provision fixture auth grants: %w", err)
+	}
+	return nil
 }
 
 // upstreamAuthReadiness checks for missing or unusable typed state after seeding.
