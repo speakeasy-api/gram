@@ -1,12 +1,13 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
-import { GatewayMemberSignInField } from "./GatewayMemberSignInField";
+import { GatewayAuthorizationServersField } from "./GatewayMemberSignInField";
 
 const mocks = vi.hoisted(() => ({
   admin: true,
   read: vi.fn(),
   retry: vi.fn(),
+  rows: vi.fn(),
 }));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ scope, children }: { scope: string; children: unknown }) =>
@@ -18,29 +19,43 @@ vi.mock("@/routes", () => ({
   }),
 }));
 vi.mock("./useGatewayMemberRows", () => ({
-  useGatewayMemberRows: () => ({
-    rows: [
-      {
-        classification: "proxied",
-        server: { id: "configured", name: "Configured member" },
-      },
-      {
-        classification: "proxied",
-        server: { id: "incomplete", name: "Incomplete member" },
-      },
-      {
-        classification: "proxied",
-        server: { id: "failed", name: "Unavailable member" },
-      },
-      {
-        classification: "hosted",
-        server: { id: "hosted", name: "Hosted member" },
-      },
-    ],
-    isLoading: false,
-    isError: false,
-  }),
+  useGatewayMemberRows: () => {
+    mocks.rows();
+    return {
+      rows: [
+        {
+          classification: "proxied",
+          server: { id: "configured", name: "Configured member" },
+        },
+        {
+          classification: "proxied",
+          server: { id: "incomplete", name: "Incomplete member" },
+        },
+        {
+          classification: "proxied",
+          server: { id: "failed", name: "Unavailable member" },
+        },
+        {
+          classification: "hosted",
+          server: { id: "hosted", name: "Hosted member" },
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    };
+  },
 }));
+vi.mock("@gram/client/react-query/_context.js", () => ({
+  useGramContext: () => ({}),
+}));
+vi.mock("@tanstack/react-query", () => ({ useQueries: () => [] }));
+vi.mock(
+  "@/pages/mcp/x/tabs/settings/sections/authentication/RemoteIdentityProvidersField",
+  () => ({
+    RemoteIdentityProvidersField: ({ members }: { members: unknown }) =>
+      members,
+  }),
+);
 vi.mock("@gram/client/react-query/mcpServerAuthentication.js", () => ({
   useMcpServerAuthentication: ({ mcpServerId }: { mcpServerId: string }) => {
     mocks.read(mcpServerId);
@@ -58,7 +73,16 @@ vi.mock("@gram/client/react-query/mcpServerAuthentication.js", () => ({
 function renderField() {
   render(
     <MemoryRouter>
-      <GatewayMemberSignInField metaMcpServerId="gateway" />
+      <GatewayAuthorizationServersField
+        metaMcpServerId="gateway"
+        associatedIssuers={[]}
+        allowAdditionalProviders
+        projectId="project"
+        isLoading={false}
+        onAdd={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />
     </MemoryRouter>,
   );
 }
@@ -71,6 +95,7 @@ afterEach(() => {
 
 it("reads typed state per proxied member without offering a gateway mutation", () => {
   renderField();
+  expect(mocks.rows).toHaveBeenCalledOnce();
   expect(mocks.read.mock.calls).toEqual([
     ["configured"],
     ["incomplete"],

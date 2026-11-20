@@ -21,35 +21,32 @@ export function GatewayAuthorizationServersField({
   ComponentProps<typeof RemoteIdentityProvidersField>,
   "members" | "hiddenIssuerIds"
 > & { metaMcpServerId: string }): JSX.Element {
-  const legacy = useLegacyProviderVisibility(metaMcpServerId);
+  const { rows, isLoading, isError, refetch } =
+    useGatewayMemberRows(metaMcpServerId);
+  const servers = rows.flatMap((row) =>
+    row.classification === "proxied" && row.server ? [row.server] : [],
+  );
+  const legacy = useLegacyProviderVisibility(servers);
   return (
     <RemoteIdentityProvidersField
       {...field}
-      isLoading={field.isLoading || legacy.isLoading}
+      isLoading={field.isLoading || isLoading || legacy.isLoading}
       hiddenIssuerIds={legacy.issuerIds}
-      members={<GatewayMemberSignInField metaMcpServerId={metaMcpServerId} />}
+      members={
+        <GatewayMemberSignInField
+          servers={servers}
+          isLoading={isLoading}
+          isError={isError}
+          refetch={refetch}
+        />
+      }
     />
   );
 }
 
-/** The gateway's proxied members: the ones that can sign people in upstream. */
-function useProxiedMembers(metaMcpServerId: string): {
-  servers: McpServer[];
-  isLoading: boolean;
-} {
-  const { rows, isLoading } = useGatewayMemberRows(metaMcpServerId);
-  return {
-    servers: rows.flatMap((row) =>
-      row.classification === "proxied" && row.server ? [row.server] : [],
-    ),
-    isLoading,
-  };
-}
-
 /** Preserve the legacy provider controls' visibility until hosted migration. */
-function useLegacyProviderVisibility(metaMcpServerId: string) {
+function useLegacyProviderVisibility(servers: McpServer[]) {
   const client = useGramContext();
-  const { servers, isLoading } = useProxiedMembers(metaMcpServerId);
   const results = useQueries({
     queries: servers.map((server) => ({
       ...buildServerClientAssociationsQuery(client, {
@@ -66,24 +63,23 @@ function useLegacyProviderVisibility(metaMcpServerId: string) {
   // oxlint-disable-next-line react-hooks/exhaustive-deps -- keyed by content, not by the per-render array
   const issuerIds = useMemo(() => new Set(ids), [key]);
   return {
-    servers,
     issuerIds,
-    isLoading: isLoading || results.some((result) => result.isLoading),
+    isLoading: results.some((result) => result.isLoading),
   };
 }
 
 /** A proxied member brings its own upstream offers to the gateway. */
-export function GatewayMemberSignInField({
-  metaMcpServerId,
+function GatewayMemberSignInField({
+  servers,
+  isLoading,
+  isError,
+  refetch,
 }: {
-  metaMcpServerId: string;
+  servers: McpServer[];
+  isLoading: boolean;
+  isError: boolean;
+  refetch: () => Promise<unknown>;
 }): JSX.Element {
-  const { rows, isLoading, isError, refetch } =
-    useGatewayMemberRows(metaMcpServerId);
-  const servers = rows.flatMap((row) =>
-    row.classification === "proxied" && row.server ? [row.server] : [],
-  );
-
   return (
     <>
       {isLoading ? (
