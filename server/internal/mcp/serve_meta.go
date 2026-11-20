@@ -791,7 +791,10 @@ func (s *Service) handleMetaListServersCall(
 	for _, member := range unapproved {
 		result.Unapproved = append(result.Unapproved, metamcp.UnapprovedServer{Slug: member.slug, Name: member.name})
 	}
-	notes := make([]string, 0, 3)
+	notes := make([]string, 0, 4)
+	if len(result.Servers) > 0 {
+		notes = append(notes, metamcp.DescribeServerNote)
+	}
 	if len(result.Hidden) > 0 && gate.connectURL != "" {
 		result.ConnectURL = gate.connectURL
 		notes = append(notes, metamcp.HiddenNote)
