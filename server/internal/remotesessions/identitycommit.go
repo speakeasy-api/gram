@@ -592,7 +592,7 @@ func (c *IdentityCommit) checkNewOfferMirror(ctx context.Context, q *repo.Querie
 	return c.checkNewOfferMirrorBindings(bound)
 }
 
-func (c *IdentityCommit) checkNewOfferMirrorBindings(bound []repo.ListRemoteSessionClientsForUserSessionIssuerRow) error {
+func (c *IdentityCommit) checkNewOfferMirrorBindings(bound []repo.RemoteSessionClient) error {
 	if c.provider.ID != uuid.Nil && countProviderClients(bound, c.provider.ID) != 0 {
 		return identityRefusal(ErrIdentityConflict, nil, "offer an existing User Identity client on this MCP server before retrying")
 	}
