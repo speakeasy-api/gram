@@ -2627,7 +2627,11 @@ jobs:
         run: aube store prune
 
   client-test:
-    name: client-test
+    name: client-test (${{ matrix.app }})
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [dashboard, admin]
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
     if: |
@@ -2667,6 +2671,8 @@ jobs:
       - name: Vitest cache key
         id: vitest-cache-key
         uses: ./.github/workflows/composite/vitest-cache-key # zizmor: ignore[self-repository]
+        with:
+          suite: ${{ matrix.app }}
 
       - name: Restore Vitest module cache
         id: vitest-cache
@@ -2675,7 +2681,9 @@ jobs:
         with:
           path: node_modules/.vitest-cache
           key: ${{ steps.vitest-cache-key.outputs.prefix }}${{ github.sha }}
-          restore-keys: ${{ steps.vitest-cache-key.outputs.prefix }}
+          restore-keys: |
+            ${{ steps.vitest-cache-key.outputs.prefix }}
+            ${{ steps.vitest-cache-key.outputs.legacy-prefix }}
 
       # A pull request run only executes the test files whose module graph
       # reaches a file the pull request changed (vitest --changed). The whole
@@ -2710,18 +2718,21 @@ jobs:
           echo "args=--changed HEAD^1 --passWithNoTests" >> "$GITHUB_OUTPUT"
 
       - name: Test
+        if: matrix.app == 'dashboard'
         run: aube exec vitest -- run ${VITEST_ARGS}
         working-directory: client/dashboard
         env:
           VITEST_ARGS: ${{ steps.select.outputs.args }}
 
       - name: Test admin
+        if: matrix.app == 'admin'
         run: aube exec vitest -- run ${VITEST_ARGS}
         working-directory: client/admin
         env:
           VITEST_ARGS: ${{ steps.select.outputs.args }}
 
       - name: Test registry editor in Chrome
+        if: matrix.app == 'admin'
         working-directory: e2e
         run: |
           # /usr/bin/google-chrome is the image browser (see
@@ -2758,7 +2769,11 @@ jobs:
   # Like the image retagging jobs, publish the queue's output for this exact
   # main commit rather than repeating work. No required check depends on this.
   vitest-module-cache:
-    name: Publish main Vitest module cache
+    name: Publish main Vitest module cache (${{ matrix.app }})
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [dashboard, admin]
     runs-on: blacksmith-4vcpu-ubuntu-2404
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
@@ -2783,12 +2798,15 @@ jobs:
       - name: Vitest cache key
         id: vitest-cache-key
         uses: ./.github/workflows/composite/vitest-cache-key # zizmor: ignore[self-repository]
+        with:
+          suite: ${{ matrix.app }}
 
       - name: Find verified queue artifact
         id: source
         env:
           GH_TOKEN: ${{ github.token }}
           CACHE_PREFIX: ${{ steps.vitest-cache-key.outputs.prefix }}
+          CACHE_SUITE: ${{ matrix.app }}
         run: node .github/scripts/vitest-cache-source.mjs
 
       - name: Download verified module transforms
