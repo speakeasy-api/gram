@@ -152,6 +152,9 @@ func TestRemoveMetaMcpMember_PreservesOffersAcrossSharedIssuer(t *testing.T) {
 	_, serverB, offerB := add(metaB.ID, "registration-b")
 
 	require.NoError(t, ti.service.RemoveMetaMcpMember(ctx, &gen.RemoveMetaMcpMemberPayload{ID: memberA}))
+	listed, err := ti.service.ListMetaMcpMembers(ctx, &gen.ListMetaMcpMembersPayload{MetaMcpServerID: metaA.ID})
+	require.NoError(t, err)
+	require.Empty(t, listed.Members)
 	requireMemberOffers(t, ctx, ti, serverA, offerA)
 	requireMemberOffers(t, ctx, ti, serverB, offerB)
 }

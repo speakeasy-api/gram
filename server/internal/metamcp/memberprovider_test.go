@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 )
 
@@ -43,7 +44,18 @@ func TestMemberProvider_UsesExplicitTypedOffers(t *testing.T) {
 	third := createRemoteSessionClient(t, ctx, ti.conn, projectID, orgID, otherProvider, "third-offer")
 	unoffered := createRemoteSessionClient(t, ctx, ti.conn, projectID, orgID, provider, "not-offered")
 	firstOffer := seedMemberOffer(t, ctx, ti.conn, projectID, orgID, server, first)
-	secondOffer := seedMemberOffer(t, ctx, ti.conn, projectID, orgID, server, second)
+	q := authclientbackfill.New(ti.conn)
+	secondOffer, err := q.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{
+		OrganizationID: orgID, ProjectID: conv.ToNullUUID(projectID), ClientType: authclientbackfill.TypeEMA,
+		Source: "admin", RemoteSessionClientID: conv.ToNullUUID(second),
+	})
+	require.NoError(t, err)
+	require.NoError(t, q.SeedAuthClientEMAFixture(ctx, authclientbackfill.SeedAuthClientEMAFixtureParams{
+		AuthClientID: secondOffer, Resource: "https://test.example.com/mcp",
+	}))
+	require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{
+		OrganizationID: orgID, ProjectID: projectID, McpServerID: server, AuthClientID: secondOffer, Source: "admin",
+	}))
 	thirdOffer := seedMemberOffer(t, ctx, ti.conn, projectID, orgID, sibling, third)
 
 	eligibleMembers := func(registration uuid.UUID) []uuid.UUID {
@@ -81,4 +93,12 @@ func TestMemberProvider_UsesExplicitTypedOffers(t *testing.T) {
 	require.Equal(t, []uuid.UUID{server}, eligibleMembers(first), "rejoining makes the original offer reachable again")
 	require.Equal(t, []uuid.UUID{server}, eligibleMembers(second))
 	requireMemberOffers(t, ctx, ti, server, firstOffer, secondOffer)
+
+	require.NoError(t, q.SetAuthClientEnabledFixture(ctx, authclientbackfill.SetAuthClientEnabledFixtureParams{ID: firstOffer, Enabled: false}))
+	require.Empty(t, eligibleMembers(first), "a disabled client cannot qualify its member")
+	require.Equal(t, []uuid.UUID{server}, eligibleMembers(second), "an enabled EMA offer still qualifies its member")
+	require.Equal(t, []uuid.UUID{sibling}, eligibleMembers(third), "the sibling remains eligible until its offer is deleted")
+
+	require.NoError(t, q.SoftDeleteServerAuthClientLinksFixture(ctx, sibling))
+	require.Empty(t, eligibleMembers(third), "a soft-deleted offer cannot qualify its member")
 }
