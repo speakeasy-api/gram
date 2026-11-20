@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -133,10 +132,7 @@ func TestResyncIgnoresAttachmentCompatibilityParents(t *testing.T) {
 	target, _ := sourceBackedTarget(t, ctx, ti, "typed-capture-target", userIssuerID)
 	providerID := createServerIdentityProvider(t, ctx, ti, "typed-capture-provider", "", false, []string{"none"})
 	registration := createServerIdentityClient(t, ctx, ti, "typed-capture-client", providerID, false)
-	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: registration,
-		UserSessionIssuerID:   userIssuerID,
-	}))
+	ensureAttachmentParent(t, ctx, ti.conn, registration, userIssuerID)
 
 	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{userIssuerID}))
 
@@ -204,7 +200,7 @@ func (tx *failedAssociationTx) Exec(ctx context.Context, sql string, args ...any
 	return tag, nil
 }
 
-func TestReconcileCaptureRollsBackWhenTypedStateFails(t *testing.T) {
+func TestExplicitCaptureRollsBackWhenTypedStateFails(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{"exhausted race", "write failure"} {
 		t.Run(name, func(t *testing.T) {
@@ -217,14 +213,11 @@ func TestReconcileCaptureRollsBackWhenTypedStateFails(t *testing.T) {
 			target, _ := sourceBackedTarget(t, ctx, ti, "rollback-target", issuer)
 			provider := createServerIdentityProvider(t, ctx, ti, "rollback-provider", "", false, []string{"none"})
 			registration := createServerIdentityClient(t, ctx, ti, "rollback-client", provider, false)
-			require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-				RemoteSessionClientID: registration, UserSessionIssuerID: issuer,
-			}))
 			pool := &failedAssociationPool{Pool: ti.conn}
 			if name == "write failure" {
 				pool.linkErr = errors.New("injected link failure")
 			}
-			err := upstreamclients.Reconcile(ctx, pool, orgID, projectID, []uuid.UUID{issuer})
+			err := upstreamclients.CaptureSoleConsumers(ctx, pool, orgID, projectID, []uuid.UUID{issuer}, []uuid.UUID{registration})
 			require.Error(t, err)
 			if pool.linkErr != nil {
 				require.ErrorIs(t, err, pool.linkErr)
@@ -242,7 +235,7 @@ func TestReconcileCaptureRollsBackWhenTypedStateFails(t *testing.T) {
 			require.ErrorIs(t, err, pgx.ErrNoRows, "typed client inserted before the failed link must roll back")
 			// Capture uses ON CONFLICT DO NOTHING RETURNING. If the failed capture
 			// had committed, this retry would not synchronize that association again.
-			require.NoError(t, upstreamclients.Reconcile(ctx, ti.conn, orgID, projectID, []uuid.UUID{issuer}))
+			require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, ti.conn, orgID, projectID, []uuid.UUID{issuer}, []uuid.UUID{registration}))
 			require.Equal(t, []uuid.UUID{registration}, associatedClients(t, ctx, ti.conn, projectID, target))
 			require.Equal(t, clientID, requireTypedClient(t, ctx, ti, registration, target))
 			requireReady(t, ctx, ti)

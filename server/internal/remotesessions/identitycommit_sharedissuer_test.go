@@ -456,8 +456,8 @@ func TestGetServerIdentityImpactSaysWhichClientsLeavingRemoves(t *testing.T) {
 	soleTarget, soleIssuer := createServerIdentityTarget(t, ctx, ti, "leaving-sole-target")
 	first := createServerIdentityProvider(t, ctx, ti, "leaving-sole-first", "", false, []string{"none"})
 	second := createServerIdentityProvider(t, ctx, ti, "leaving-sole-second", "", false, []string{"none"})
-	firstClient := bindServerIdentityClient(t, ctx, ti, "leaving-sole-first-client", first, soleIssuer, false)
-	secondClient := bindServerIdentityClient(t, ctx, ti, "leaving-sole-second-client", second, soleIssuer, false)
+	firstClient := bindServerIdentityClient(t, ctx, ti, "leaving-sole-first-client", first, soleTarget, false)
+	secondClient := bindServerIdentityClient(t, ctx, ti, "leaving-sole-second-client", second, soleTarget, false)
 
 	result, err = ti.service.GetServerIdentityImpact(ctx, impactPayload(soleIssuer, &soleTarget, "detach", nil, nil))
 	require.NoError(t, err)
@@ -603,7 +603,7 @@ func TestCommitExplicitReplaceRefusesAServerInAnotherProject(t *testing.T) {
 	})
 	require.NoError(t, err)
 	provider := orgProvider.ID
-	client := bindServerIdentityClient(t, ctx, ti, "replace-project-client", provider, issuer, true)
+	client := bindServerIdentityClient(t, ctx, ti, "replace-project-client", provider, target, true)
 	for _, association := range []upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
 		{OrganizationID: activeOrganizationID(t, ctx), RemoteSessionClientID: client, McpServerID: target, ProjectID: projectIDFromContext(t, ctx)},
 		{OrganizationID: activeOrganizationID(t, ctx), RemoteSessionClientID: client, McpServerID: other, ProjectID: otherProject},

@@ -31,7 +31,7 @@ func TestIdentityCommitBindRefusesDetachingOrgClientOnOrgIssuer(t *testing.T) {
 	ctx, ti := newTestService(t)
 	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "identity-commit-detach-issuer")
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "identity-commit-detach-current", "", false, []string{"none"})
-	orgClientID := bindServerIdentityClient(t, ctx, ti, "identity-commit-detach-org-client", currentProviderID, userIssuerID, true)
+	orgClientID := createServerIdentityClient(t, ctx, ti, "identity-commit-detach-org-client", currentProviderID, true)
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "identity-commit-detach-next", "", false, []string{"none"})
 	nextClientID := createServerIdentityClient(t, ctx, ti, "identity-commit-detach-next-client", nextProviderID, false)
 
@@ -68,7 +68,7 @@ func TestIdentityCommitBindRefusesDetachingClientWithLiveAgentBinding(t *testing
 	ctx, ti := newTestService(t)
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "identity-commit-agent-issuer")
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "identity-commit-agent-current", "", false, []string{"none"})
-	clientID := bindServerIdentityClient(t, ctx, ti, "identity-commit-agent-client", currentProviderID, userIssuerID, false)
+	clientID := createServerIdentityClient(t, ctx, ti, "identity-commit-agent-client", currentProviderID, false)
 	seedLiveAgentBinding(t, ctx, ti, clientID, userIssuerID)
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "identity-commit-agent-next", "", false, []string{"none"})
 	nextClientID := createServerIdentityClient(t, ctx, ti, "identity-commit-agent-next-client", nextProviderID, false)
@@ -115,7 +115,7 @@ func TestIdentityCommitReuseBoundSkipsRegistrationForBoundClient(t *testing.T) {
 	t.Cleanup(registrationServer.Close)
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "identity-commit-reuse-issuer")
 	providerID := createServerIdentityProvider(t, ctx, ti, "identity-commit-reuse-provider", registrationServer.URL, false, []string{"client_secret_basic"})
-	clientID := bindServerIdentityClient(t, ctx, ti, "identity-commit-reuse-client", providerID, userIssuerID, false)
+	clientID := createServerIdentityClient(t, ctx, ti, "identity-commit-reuse-client", providerID, false)
 
 	plan := linkPlan(t, ctx, ti, userIssuerID, providerID, uuid.Nil)
 	associate(t, ctx, ti.conn, activeOrganizationID(t, ctx), projectIDFromContext(t, ctx), plan.MCPServerID, clientID)
@@ -154,6 +154,7 @@ func seedLiveAgentBinding(t *testing.T, ctx context.Context, ti *testInstance, c
 	require.NoError(t, err)
 	subject := urn.NewUserSubject(authCtx.UserID)
 	session := insertRemoteSession(t, ctx, ti.conn, subject, userIssuerID.String(), clientID.String())
+	ensureAttachmentParent(t, ctx, ti.conn, clientID, userIssuerID)
 	_, err = testrepo.New(ti.conn).InsertPrincipalRemoteSessionBindingFixture(ctx, testrepo.InsertPrincipalRemoteSessionBindingFixtureParams{
 		ProjectID:             *authCtx.ProjectID,
 		OrganizationID:        authCtx.ActiveOrganizationID,

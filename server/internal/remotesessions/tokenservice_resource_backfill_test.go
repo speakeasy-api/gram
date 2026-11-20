@@ -297,7 +297,8 @@ func TestResolveAccessTokens_RefreshingRequestCarriesBackfilledResource(t *testi
 	const derived = "https://mcp.example.com/mcp"
 	// The refreshing client's sole attached upstream, so RefreshNow derives
 	// this resource: the value under test is never a caller-supplied string.
-	seedRemoteMCPServerForIssuer(t, ctx, ti, row.UserSessionIssuerID, "backfill-same-request-mcp", derived)
+	serverID := seedRemoteMCPServerForIssuer(t, ctx, ti, row.UserSessionIssuerID, "backfill-same-request-mcp", derived)
+	associateClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, clientID)
 
 	tokens, err := mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, *authCtx.ProjectID, authCtx.ActiveOrganizationID, row.UserSessionIssuerID, subject)
 	require.NoError(t, err)
@@ -349,11 +350,8 @@ func attachClientUpstream(t *testing.T, ctx context.Context, ti *testInstance, c
 	t.Helper()
 
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-"+slug)
-	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   issuerID,
-	}))
-	seedRemoteMCPServerForIssuer(t, ctx, ti, issuerID, slug+"-mcp", mcpURL)
+	serverID := seedRemoteMCPServerForIssuer(t, ctx, ti, issuerID, slug+"-mcp", mcpURL)
+	associateClient(t, ctx, ti.conn, activeOrganizationID(t, ctx), projectIDFromContext(t, ctx), serverID, clientID)
 }
 
 // Two clients bound to one issuer, each fronting a different upstream: the

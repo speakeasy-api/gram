@@ -57,7 +57,7 @@ func TestListClients_OrgLevelClientFromOtherOrgNotResolved(t *testing.T) {
 	otherOrg := createOrganization(t, ctx, ti.conn, "other-org")
 	otherOrgIssuer := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, otherOrg, "other-org-issuer")
 	userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "cross-org-usi")
-	seedOrgLevelRemoteClient(t, ctx, ti.conn, otherOrg, otherOrgIssuer, "other-org-cid", userIssuer)
+	seedOrgLevelRemoteClient(t, ctx, ti.conn, otherOrg, otherOrgIssuer, "other-org-cid")
 
 	mgr := newResolveManager(t, ti.conn, testenv.NewEncryptionClient(t))
 	clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuer)
@@ -108,7 +108,8 @@ func TestGetRemoteSessionClient_OrgLevelClientHidesOtherProjectsUserSessionIssue
 	callerUserIssuer := createUserSessionIssuer(t, ctx, ti.conn, "p2-caller-usi")
 	otherProject := createProject(t, ctx, ti.conn, "p2-other-project")
 	otherUserIssuer := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProject, "p2-other-usi")
-	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "p2-cid", callerUserIssuer, otherUserIssuer)
+	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "p2-cid", callerUserIssuer)
+	placeClientForSignInInProject(t, ctx, ti.conn, otherProject, authCtx.ActiveOrganizationID, orgClient, otherUserIssuer)
 
 	view, err := ti.service.GetRemoteSessionClient(ctx, &clientsgen.GetRemoteSessionClientPayload{ID: orgClient.String()})
 	require.NoError(t, err)
@@ -134,7 +135,8 @@ func TestDetachUserSessionIssuer_RejectsOtherProjectsBindingOnOrgLevelClient(t *
 	// org-level client is bound to.
 	otherProject := createProject(t, ctx, ti.conn, "detach-boundary-other-project")
 	otherUserIssuer := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProject, "detach-boundary-other-usi")
-	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "detach-boundary-cid", otherUserIssuer)
+	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "detach-boundary-cid")
+	placeClientForSignInInProject(t, ctx, ti.conn, otherProject, authCtx.ActiveOrganizationID, orgClient, otherUserIssuer)
 
 	// The caller (the auth context's own project) must not be able to detach the
 	// other project's binding.

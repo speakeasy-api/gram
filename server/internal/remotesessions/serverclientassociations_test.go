@@ -292,9 +292,9 @@ func TestMCPServerUpstreamClientAssociations(t *testing.T) {
 		otherServer := seedServerOnIssuer(t, ctx, ti.conn, otherProjectID, otherIssuerID, "assoc-orgclient-b")
 
 		remoteIssuerID := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, orgID, "rsi-assoc-orgclient")
-		clientID := seedOrgLevelRemoteClient(t, ctx, ti.conn, orgID, remoteIssuerID, "cid-assoc-orgclient", ownIssuerID, otherIssuerID)
-		resync(t, ctx, ti.conn, orgID, projectID, ownIssuerID)
-		resync(t, ctx, ti.conn, orgID, otherProjectID, otherIssuerID)
+		clientID := seedOrgLevelRemoteClient(t, ctx, ti.conn, orgID, remoteIssuerID, "cid-assoc-orgclient")
+		associateClient(t, ctx, ti.conn, orgID, projectID, ownServer, clientID)
+		associateClient(t, ctx, ti.conn, orgID, otherProjectID, otherServer, clientID)
 		require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, ownServer))
 		require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, otherProjectID, otherServer))
 

@@ -40,6 +40,7 @@ func TestPreparationCIMDPreservesInteractiveGrants(t *testing.T) {
 					user := createUserSessionIssuer(t, ctx, ti.conn, "interactive-human")
 					client := createCimdClient(t, ctx, ti, issuer.String(), user.String(), []string{"openid"})
 					in := remotesessions.PreparationInput{UserSessionIssuerID: user, RemoteSessionIssuerID: issuer, ClientID: uuid.MustParse(client.ID), Resource: "https://resource.example.com/", Mechanism: mechanism, Scopes: []string{"openid"}, ConfirmGrants: tc.confirmed}
+					placeClientForSignIn(t, ctx, ti.conn, in.ClientID, user)
 					preparationConfidentialClient(t, ctx, ti, issuer, in.ClientID)
 					original := []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken}
 					if legacy {
@@ -84,7 +85,7 @@ func TestPreparationCIMDPreservesInteractiveGrants(t *testing.T) {
 					require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &doc))
 					require.ElementsMatch(t, combined, doc.GrantTypes)
 					require.Equal(t, []string{oauthwire.ResponseTypeCode}, doc.ResponseTypes)
-					require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, in.ClientID, user))
+					requireClientBound(t, ctx, ti, in.ClientID, user, true)
 				})
 			}
 		}

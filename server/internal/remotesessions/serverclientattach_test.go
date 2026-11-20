@@ -537,12 +537,8 @@ func TestHostedServerAssociationDoesNotRequireOrCreateIssuerLink(t *testing.T) {
 	issuer := f.issuer(t, ctx, "hosted-exact-unlinked")
 	first := f.hostedServer(t, ctx, "hosted-exact-a", conv.ToNullUUID(issuer))
 	second := f.hostedServer(t, ctx, "hosted-exact-b", conv.ToNullUUID(issuer))
-	client, _ := f.client(t, ctx, "hosted-exact", issuer)
+	client, _ := f.client(t, ctx, "hosted-exact", uuid.Nil)
 	q := repo.New(f.ti.conn)
-	_, err := q.DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachProjectRemoteSessionClientFromUserSessionIssuerParams{
-		OrganizationID: f.orgID, ProjectID: f.projectID, RemoteSessionClientID: client, UserSessionIssuerID: issuer,
-	})
-	require.NoError(t, err)
 	for _, server := range []uuid.UUID{first, second} {
 		result, err := f.attach(ctx, server, client)
 		require.NoError(t, err)

@@ -122,6 +122,7 @@ func TestBindingsAttachWaitsOnConcurrentRevocation(t *testing.T) {
 	client := createRemoteClient(t, ctx, ti, issuer, config.String(), "binding-revoke-client")
 	source := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), config.String(), client)
 
+	ensureAttachmentParent(t, ctx, ti.conn, source.RemoteSessionClientID, config)
 	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: only establishes the test transaction.
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = tx.Rollback(context.WithoutCancel(ctx)) })
