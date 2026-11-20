@@ -336,6 +336,31 @@ func TestRefreshSweep_OfferedRegistrationConsentedThroughAnotherSignIn(t *testin
 	require.Equal(t, o.organization, rows[0].OrganizationID)
 }
 
+// An organization registration can be consented through another project
+// in the same organization, just as in the typed token resolver.
+func TestRefreshSweep_OrganizationOfferPreservesSiblingProjectConsent(t *testing.T) {
+	t.Parallel()
+	ctx, o := seedOfferedRegistration(t, "sweep-sibling-project", "https://issuer.example.com/sweep-sibling-project")
+	enableOrgAutoRefreshFeature(t, ctx, o.ti, o.organization, productfeatures.FeatureRemoteSessionAutoRefreshEnforced)
+	issuer := seedOrgLevelRemoteIssuer(t, ctx, o.ti.conn, o.organization, "sweep-sibling-project-issuer")
+	o.registration = seedOrgLevelRemoteClient(t, ctx, o.ti.conn, o.organization, issuer, "sweep-sibling-project-cid")
+	offerRegistration(t, ctx, o.ti.conn, o.organization, o.projectID, o.serverID, o.registration)
+	otherProject := createProject(t, ctx, o.ti.conn, "sweep-other-project")
+	mintedBy := createUserSessionIssuerInProject(t, ctx, o.ti.conn, otherProject, "sweep-sibling-signin")
+	sessionID := o.grant(t, ctx, mintedBy, true, false)
+	seedGramSession(t, ctx, o.ti, o.subject, mintedBy, "sweep-sibling-project", 24*time.Hour)
+	window := newSweepWindow()
+	window.keepaliveCutoff = time.Now().Add(time.Hour)
+	q := repo.New(o.ti.conn)
+	rows, err := q.ClaimDueRemoteSessionRefreshCandidates(ctx, window.claimParams())
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, sessionID, rows[0].ID)
+	candidate, err := q.GetDueRemoteSessionRefreshCandidate(ctx, window.candidateParams(sessionID, o.organization))
+	require.NoError(t, err)
+	require.Equal(t, []string{o.upstream}, candidate.Resources)
+}
+
 // An offer only reaches issuers of the organization it belongs to, and only for
 // a grant consented in that organization.
 func TestRefreshSweep_OfferedRegistrationStaysInItsOrganization(t *testing.T) {

@@ -272,7 +272,6 @@ WITH due AS (
       JOIN user_session_issuers AS reached ON reached.id IN (offering.user_session_issuer_id, minted_by.id) AND reached.deleted IS FALSE
       LEFT JOIN projects AS reached_project ON reached_project.id = reached.project_id
       WHERE minted_by.id = s.user_session_issuer_id
-        AND (minted_by.project_id IS NULL OR (minted_project.deleted IS FALSE AND minted_by.project_id = offer.project_id))
         AND COALESCE(reached_project.organization_id, reached.organization_id) = ac.organization_id
         AND (c.project_id = offer.project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = ac.organization_id)))
         AND (i.project_id = offer.project_id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = ac.organization_id)))
@@ -422,7 +421,6 @@ WITH due AS (
       JOIN user_session_issuers AS reached ON reached.id IN (offering.user_session_issuer_id, minted_by.id) AND reached.deleted IS FALSE
       LEFT JOIN projects AS reached_project ON reached_project.id = reached.project_id
       WHERE minted_by.id = s.user_session_issuer_id
-        AND (minted_by.project_id IS NULL OR (minted_project.deleted IS FALSE AND minted_by.project_id = offer.project_id))
         AND COALESCE(reached_project.organization_id, reached.organization_id) = ac.organization_id
         AND (c.project_id = offer.project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = ac.organization_id)))
         AND (i.project_id = offer.project_id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = ac.organization_id)))
@@ -896,7 +894,6 @@ WHERE s.id = $1
       JOIN user_session_issuers AS reached ON reached.id IN (offering.user_session_issuer_id, minted_by.id) AND reached.deleted IS FALSE
       LEFT JOIN projects AS reached_project ON reached_project.id = reached.project_id
       WHERE minted_by.id = s.user_session_issuer_id
-        AND (minted_by.project_id IS NULL OR (minted_project.deleted IS FALSE AND minted_by.project_id = offer.project_id))
         AND COALESCE(reached_project.organization_id, reached.organization_id) = ac.organization_id
         AND (c.project_id = offer.project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = ac.organization_id)))
         AND (i.project_id = offer.project_id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = ac.organization_id)))
@@ -3878,7 +3875,6 @@ WHERE s.id = $1
       JOIN user_session_issuers AS reached ON reached.id IN (offering.user_session_issuer_id, minted_by.id) AND reached.deleted IS FALSE
       LEFT JOIN projects AS reached_project ON reached_project.id = reached.project_id
       WHERE minted_by.id = s.user_session_issuer_id
-        AND (minted_by.project_id IS NULL OR (minted_project.deleted IS FALSE AND minted_by.project_id = offer.project_id))
         AND COALESCE(reached_project.organization_id, reached.organization_id) = ac.organization_id
         AND (c.project_id = offer.project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = ac.organization_id)))
         AND (i.project_id = offer.project_id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = ac.organization_id)))
@@ -4014,7 +4010,6 @@ CROSS JOIN LATERAL (
       JOIN user_session_issuers AS reached ON reached.id IN (offering.user_session_issuer_id, minted_by.id) AND reached.deleted IS FALSE
       LEFT JOIN projects AS reached_project ON reached_project.id = reached.project_id
       WHERE minted_by.id = s.user_session_issuer_id
-        AND (minted_by.project_id IS NULL OR (minted_project.deleted IS FALSE AND minted_by.project_id = offer.project_id))
         AND COALESCE(reached_project.organization_id, reached.organization_id) = ac.organization_id
         AND (c.project_id = offer.project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = ac.organization_id)))
         AND (i.project_id = offer.project_id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = ac.organization_id)))
@@ -6618,7 +6613,6 @@ WITH bound AS (
     JOIN user_session_issuers AS reached ON reached.id IN (offering.user_session_issuer_id, minted_by.id) AND reached.deleted IS FALSE
     LEFT JOIN projects AS reached_project ON reached_project.id = reached.project_id
     WHERE minted_by.id = s.user_session_issuer_id
-        AND (minted_by.project_id IS NULL OR (minted_project.deleted IS FALSE AND minted_by.project_id = offer.project_id))
       AND COALESCE(reached_project.organization_id, reached.organization_id) = ac.organization_id
       AND (c.project_id = offer.project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = ac.organization_id)))
       AND (i.project_id = offer.project_id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = ac.organization_id)))
