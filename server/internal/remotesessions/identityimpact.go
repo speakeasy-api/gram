@@ -215,6 +215,10 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 		return nil, identityOopsError(err, "preview identity change").LogError(ctx, logger)
 	}
 
+	if targetID.Valid && payload.Change == identityChangeReplace {
+		return s.previewOfferReplacement(ctx, logger, projectID, orgID, change.moved)
+	}
+
 	servers, err := q.ListOrganizationMCPServersForUserSessionIssuer(ctx, repo.ListOrganizationMCPServersForUserSessionIssuerParams{
 		UserSessionIssuerID: uuid.NullUUID{UUID: userIssuerID, Valid: true},
 		OrganizationID:      orgID,
@@ -302,6 +306,41 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 		if !listed[serverID] {
 			result.HiddenServerCount++
 		}
+	}
+	return result, nil
+}
+
+// previewOfferReplacement shows the actual servers that would move, even if
+// they sign in through another issuer. Sharing sign-in alone is not an impact.
+func (s *Service) previewOfferReplacement(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, orgID string, moved []uuid.UUID) (*gen.ServerIdentityImpactResult, error) {
+	result := &gen.ServerIdentityImpactResult{Servers: []*gen.ServerIdentityImpactServer{}, HiddenServerCount: 0, DetachClientIds: []string{}, ReleaseClientIds: []string{}}
+	if len(moved) == 0 {
+		return result, nil
+	}
+	servers, err := repo.New(s.db).ListIdentityReplacementTargets(ctx, repo.ListIdentityReplacementTargetsParams{
+		OrganizationID: orgID, ProjectID: projectID, ServerIds: moved,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list servers for identity offer replacement").LogError(ctx, logger)
+	}
+	result.HiddenServerCount = len(moved) - len(servers)
+	checks := make([]authz.Check, 0, len(servers))
+	for _, server := range servers {
+		checks = append(checks, authz.MCPCheck(authz.ScopeMCPRead, mcpGrantResourceID(server.ID, server.ToolsetID), projectID.String()))
+	}
+	readable, err := s.authz.FindMatched(ctx, checks)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check MCP server read access").LogError(ctx, logger)
+	}
+	for i, server := range servers {
+		if !readable[i] {
+			result.HiddenServerCount++
+			continue
+		}
+		result.Servers = append(result.Servers, &gen.ServerIdentityImpactServer{
+			ID: server.ID.String(), Kind: identityImpactKindServer, Name: conv.FromPGText[string](server.Name), Slug: conv.PtrEmpty(server.Slug.String),
+			ProjectID: projectID.String(), ProjectName: server.ProjectName, Impact: identityImpactResignin,
+		})
 	}
 	return result, nil
 }
@@ -413,8 +452,10 @@ func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, proje
 		}
 	}
 	if !alreadyBound {
-		if err := refuseOrgWideBinding(userIssuerOrgLevel, orgAdmin, added.projectID); err != nil {
-			return err
+		if !targetID.Valid || kind != identityChangeReplace {
+			if err := refuseOrgWideBinding(userIssuerOrgLevel, orgAdmin, added.projectID); err != nil {
+				return err
+			}
 		}
 		change.added = &added
 	}
@@ -454,6 +495,9 @@ func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, proje
 			return err
 		}
 		change.moved = decision.moved
+		if targetID.Valid {
+			change.added = nil // An offer is not an attachment to the issuer.
+		}
 		for _, client := range decision.detach {
 			if err := refuseOrgWideBinding(userIssuerOrgLevel, orgAdmin, client.ProjectID); err != nil {
 				return err

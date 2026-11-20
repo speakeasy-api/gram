@@ -18,14 +18,11 @@ merely because it can use a credential.
 - `offer_mcp_upstream_credential` accepts an exact project, server, and typed
   `auth_client_id`. `AccessRoleMutationService.OfferUpstreamCredential` uses
   `authclients.AttachToServer`, which creates an administrator-owned link.
-- The compatibility detach accepts a legacy `remote_session_client_id`, not a
-  typed credential or link ID. For an enforced sole consumer, it retires only
-  backfill-owned links derived from that registration, preserves the underlying
-  association and sign-in binding, and returns 404 when nothing remains to retire.
+- The compatibility detach accepts a `remote_session_client_id`, not a typed
+  credential or link ID. It tombstones the server-registration association and
+  retires the derived typed offers without changing any issuer-client binding.
   Administrator-owned links, including links to backfilled credentials, survive.
-- For a non-sole consumer, the same endpoint removes an association or records an
-  unclaimed-client exclusion and synchronizes its derived links. It therefore
-  cannot promise the same typed-link-only mutation for every target.
+  Use the typed API to manage those links directly.
 - `get_mcp_connection_settings` returns typed credential IDs, types, enabled state,
   personal/shared status and sharing counts. `MCPUpstreamAuthClient` does not expose
   the legacy registration mapping, per-link provenance, or a link version. Its
@@ -103,7 +100,7 @@ deployed and validated, not merely merged.
   `TestPlatformMCPOffersUpstreamCredentialOnAnotherServer` exercises the actual
   offer workflow and preserves the source server's offer.
 - `../remotesessions/serverclientassociations_test.go`:
-  `TestDetachServerClientAssociation_EnforcedSoleConsumer` proves link retirement,
-  preserved association, link-only audit, durable resync and repeated 404;
+  `TestDetachServerClientAssociation_EnforcedSoleConsumer` proves association and derived-offer retirement,
+  preserved issuer links, audit, durable resync, and repeated 404;
   `TestDetachServerClientAssociation_KeepsAdministratorLinkToBackfilledClient`
   proves an administrator-owned link is not retired through this endpoint.

@@ -9319,6 +9319,56 @@ func (q *Queries) ListIdentityOfferClients(ctx context.Context, arg ListIdentity
 	return items, nil
 }
 
+const listIdentityReplacementTargets = `-- name: ListIdentityReplacementTargets :many
+SELECT s.id, s.toolset_id, s.name, s.slug, p.name AS project_name
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id AND NOT p.deleted
+WHERE p.organization_id = $1::text AND s.project_id = $2::uuid
+  AND s.id = ANY($3::uuid[]) AND NOT s.deleted
+ORDER BY s.id
+`
+
+type ListIdentityReplacementTargetsParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ServerIds      []uuid.UUID
+}
+
+type ListIdentityReplacementTargetsRow struct {
+	ID          uuid.UUID
+	ToolsetID   uuid.NullUUID
+	Name        pgtype.Text
+	Slug        pgtype.Text
+	ProjectName string
+}
+
+// The affected servers in the caller's project. Callers still check read grants.
+func (q *Queries) ListIdentityReplacementTargets(ctx context.Context, arg ListIdentityReplacementTargetsParams) ([]ListIdentityReplacementTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listIdentityReplacementTargets, arg.OrganizationID, arg.ProjectID, arg.ServerIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListIdentityReplacementTargetsRow
+	for rows.Next() {
+		var i ListIdentityReplacementTargetsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ToolsetID,
+			&i.Name,
+			&i.Slug,
+			&i.ProjectName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOnlyOrganizationUserSessionIssuer = `-- name: ListOnlyOrganizationUserSessionIssuer :many
 SELECT issuer.id
 FROM user_session_issuers AS issuer

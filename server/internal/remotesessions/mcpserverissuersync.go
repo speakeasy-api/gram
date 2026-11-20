@@ -133,48 +133,49 @@ func ResyncMCPServerRemoteSessionIssuersForConsolidation(ctx context.Context, tx
 // change those bindings from one project, and every project's servers share
 // them.
 func BestEffortResyncMCPServerRemoteSessionIssuers(ctx context.Context, logger *slog.Logger, db mcpserversrepo.DBTX, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID) {
-	// Detached from request cancellation like RevokeAllDetached: already committed.
-	ctx = context.WithoutCancel(ctx)
+	bestEffortUpdateMCPServerRemoteSessionIssuers(context.WithoutCancel(ctx), logger, db, organizationID, projectID, userIssuerIDs, ResyncMCPServerRemoteSessionIssuers)
+}
 
-	bestEffortResyncProject(ctx, logger, db, organizationID, projectID, userIssuerIDs)
+// BestEffortRestampMCPServerRemoteSessionIssuers refreshes routing in each
+// sharing project without capture or pruning of OAuth offers.
+func BestEffortRestampMCPServerRemoteSessionIssuers(ctx context.Context, logger *slog.Logger, db mcpserversrepo.DBTX, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID) {
+	if len(userIssuerIDs) == 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), issuerResyncTimeout)
+	defer cancel()
+	bestEffortUpdateMCPServerRemoteSessionIssuers(ctx, logger, db, organizationID, projectID, userIssuerIDs, RestampMCPServerRemoteSessionIssuers)
+}
+
+func bestEffortUpdateMCPServerRemoteSessionIssuers(ctx context.Context, logger *slog.Logger, db mcpserversrepo.DBTX, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID, update func(context.Context, mcpserversrepo.DBTX, string, uuid.UUID, []uuid.UUID) error) {
+	// Each update is bounded by both its own and any aggregate deadline.
+	updateProject := func(id uuid.UUID) {
+		projectCtx, cancel := context.WithTimeout(ctx, issuerResyncTimeout)
+		defer cancel()
+		if err := update(projectCtx, db, organizationID, id, userIssuerIDs); err != nil {
+			logger.ErrorContext(ctx, "refresh mcp server remote session issuers", attr.SlogError(err), attr.SlogProjectID(id.String()))
+		}
+	}
+	updateProject(projectID)
 	if len(userIssuerIDs) == 0 {
 		return
 	}
 	listCtx, cancel := context.WithTimeout(ctx, issuerResyncTimeout)
 	sharing, err := mcpserversrepo.New(db).ListProjectsSharingOrganizationUserSessionIssuers(listCtx, mcpserversrepo.ListProjectsSharingOrganizationUserSessionIssuersParams{
-		UserSessionIssuerIds: userIssuerIDs,
-		OrganizationID:       organizationID,
+		UserSessionIssuerIds: userIssuerIDs, OrganizationID: organizationID,
 	})
 	cancel()
 	if err != nil {
 		logger.ErrorContext(ctx, "list projects sharing organization user session issuers", attr.SlogError(err))
 		return
 	}
-	for _, sharingProjectID := range sharing {
-		if sharingProjectID == projectID {
-			continue
+	for _, id := range sharing {
+		if ctx.Err() != nil {
+			break
 		}
-		bestEffortResyncProject(ctx, logger, db, organizationID, sharingProjectID, userIssuerIDs)
-	}
-}
-
-// bestEffortResyncProject gives each project its own deadline, so one slow
-// project cannot starve the ones after it.
-func bestEffortResyncProject(ctx context.Context, logger *slog.Logger, db mcpserversrepo.DBTX, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID) {
-	ctx, cancel := context.WithTimeout(ctx, issuerResyncTimeout)
-	defer cancel()
-	if err := ResyncMCPServerRemoteSessionIssuers(ctx, db, organizationID, projectID, userIssuerIDs); err != nil {
-		logger.ErrorContext(ctx, "resync mcp server remote session issuers", attr.SlogError(err), attr.SlogProjectID(projectID.String()))
-	}
-}
-
-// BestEffortRestampMCPServerRemoteSessionIssuers refreshes the routing stamp
-// after a server mutation. It never captures or prunes OAuth offers.
-func BestEffortRestampMCPServerRemoteSessionIssuers(ctx context.Context, logger *slog.Logger, db mcpserversrepo.DBTX, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID) {
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), issuerResyncTimeout)
-	defer cancel()
-	if err := RestampMCPServerRemoteSessionIssuers(ctx, db, organizationID, projectID, userIssuerIDs); err != nil {
-		logger.ErrorContext(ctx, "restamp mcp server remote session issuers", attr.SlogError(err), attr.SlogProjectID(projectID.String()))
+		if id != projectID {
+			updateProject(id)
+		}
 	}
 }
 

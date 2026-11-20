@@ -149,8 +149,9 @@ func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload
 	return result, nil
 }
 
-// authorizeServerIdentityTarget loads the MCP server and requires write access
-// to it and to every server sharing its user session issuer.
+// authorizeServerIdentityTarget requires write access to the target and any
+// servers explicitly named for replacement. Sharing sign-in does not confer
+// ownership of, or imply a write to, a sibling's offers.
 func (s *Service) authorizeServerIdentityTarget(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, req serverIdentityRequest) (mcpserversrepo.McpServer, error) {
 	mcpRepo := mcpserversrepo.New(s.db)
 	target, err := mcpRepo.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{

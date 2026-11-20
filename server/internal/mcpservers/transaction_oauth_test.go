@@ -18,9 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-// Choosing an issuer no other server or gateway uses configures the server's
-// sign-in, so the server offers the clients already bound there, with and
-// without upstream auth enforcement.
+// Selecting a downstream issuer does not configure its registrations as upstream offers.
 func TestCreateMCPServerInTransaction_DoesNotInheritOAuthBeforeCommit(t *testing.T) {
 	t.Parallel()
 	for _, enforced := range []bool{false, true} {

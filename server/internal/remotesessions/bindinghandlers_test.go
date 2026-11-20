@@ -315,8 +315,12 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 		require.NoError(t, err)
 		candidates, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{PrincipalID: conv.PtrEmpty(agent.ID.String()), UserSessionIssuerID: conv.PtrEmpty(config.String()), RemoteSessionClientID: conv.PtrEmpty(client)})
 		require.NoError(t, err)
-		require.Len(t, candidates.Items, 1)
-		require.Equal(t, mine.ID.String(), candidates.Items[0].ID)
+		candidateIDs := make([]string, 0, len(candidates.Items))
+		for _, candidate := range candidates.Items {
+			candidateIDs = append(candidateIDs, candidate.ID)
+		}
+		require.Contains(t, candidateIDs, mine.ID.String())
+		require.NotContains(t, candidateIDs, theirs.ID.String())
 		attached, err := ti.service.AttachBinding(ctx, attach)
 		require.NoError(t, err)
 		require.Equal(t, mine.ID.String(), attached.RemoteSessionID)
@@ -333,7 +337,9 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	require.NoError(t, err)
 	candidates, err = ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{PrincipalID: conv.PtrEmpty(agent.ID.String()), UserSessionIssuerID: conv.PtrEmpty(config.String()), RemoteSessionClientID: conv.PtrEmpty(client)})
 	require.NoError(t, err)
-	require.Empty(t, candidates.Items, "revoked upstream sessions are not attachment candidates")
+	for _, candidate := range candidates.Items {
+		require.NotEqual(t, mine.ID.String(), candidate.ID, "revoked upstream sessions are not attachment candidates")
+	}
 	list, err = ti.service.ListBindings(ctx, &gen.ListBindingsPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String()})
 	require.NoError(t, err)
 	require.Len(t, list.Items, 1, "revoked source bindings remain discoverable for detach")

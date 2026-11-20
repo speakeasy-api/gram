@@ -7429,3 +7429,12 @@ WHERE offer.organization_id = @organization_id::text AND offer.mcp_server_id <> 
   AND NOT offer.deleted AND NOT ac.deleted AND ac.enabled
   AND ac.client_type IN ('remote_session', 'service_account') AND ac.remote_session_client_id = @remote_session_client_id::uuid
 ORDER BY offer.mcp_server_id;
+
+-- name: ListIdentityReplacementTargets :many
+-- The affected servers in the caller's project. Callers still check read grants.
+SELECT s.id, s.toolset_id, s.name, s.slug, p.name AS project_name
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id AND NOT p.deleted
+WHERE p.organization_id = @organization_id::text AND s.project_id = @project_id::uuid
+  AND s.id = ANY(@server_ids::uuid[]) AND NOT s.deleted
+ORDER BY s.id;

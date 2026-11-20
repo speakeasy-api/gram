@@ -88,8 +88,8 @@ func TestMixedOAuthEMA_OpposingWriterScope(t *testing.T) {
 				copies = int(fixtureValue6)
 				require.Equal(t, 2, copies)
 				if operation == "reconcile_inherited_tx" {
-					// Restore sole-consumer evidence and remove only the legacy association.
-					// Reconcile must really capture a missing row, not take its no-op path.
+					// Remove the association but keep the typed setup. Scope
+					// acquisition must still precede reconciliation.
 					err = repo.New(ti.conn).LockingFixtureClearUserIssuer(ctx, repo.LockingFixtureClearUserIssuerParams{ProjectID: projectID, ServerID: detachedServer})
 					require.NoError(t, err)
 					deleted, err := repo.New(ti.conn).LockingFixtureDeleteLegacyChoice(ctx, repo.LockingFixtureDeleteLegacyChoiceParams{ProjectID: projectID, ServerID: serverID, ClientID: in.ClientID})
@@ -187,7 +187,7 @@ func TestMixedOAuthEMA_OpposingWriterScope(t *testing.T) {
 					fixtureValue8, err := repo.New(ti.conn).LockingFixtureCountLegacyChoice(ctx, repo.LockingFixtureCountLegacyChoiceParams{ProjectID: projectID, ServerID: serverID, ClientID: in.ClientID})
 					require.NoError(t, err)
 					captured = int(fixtureValue8)
-					require.Equal(t, 1, captured, "direct reconciliation must capture after acquiring its own preflight scope")
+					require.Zero(t, captured, "reconciliation must not manufacture a server offer")
 				}
 				require.Equal(t, grantsBefore, snapshot(), "configuration synchronization must not change permissions")
 				require.Equal(t, emaID, assertPreparationTypedClient(t, ctx, ti, in.ClientID, in.Resource))
