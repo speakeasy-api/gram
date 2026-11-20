@@ -5747,9 +5747,6 @@ eligible AS (
     JOIN remote_session_clients AS c
       ON c.id = a.remote_session_client_id
      AND c.deleted IS FALSE
-    JOIN remote_session_client_user_session_issuers AS link
-      ON link.remote_session_client_id = a.remote_session_client_id
-     AND link.user_session_issuer_id = $4
     WHERE a.deleted IS FALSE
       AND NOT $10::boolean
     UNION ALL
@@ -5771,9 +5768,6 @@ eligible AS (
     JOIN remote_session_issuers AS rsi
       ON rsi.id = c.remote_session_issuer_id
      AND rsi.deleted IS FALSE
-    JOIN remote_session_client_user_session_issuers AS binding
-      ON binding.remote_session_client_id = ac.remote_session_client_id
-     AND binding.user_session_issuer_id = $4
     WHERE l.deleted IS FALSE
       AND l.organization_id = (SELECT organization_id FROM session_issuer)
       AND $10::boolean
@@ -6179,9 +6173,6 @@ eligible AS (
     JOIN remote_session_clients AS c
       ON c.id = a.remote_session_client_id
      AND c.deleted IS FALSE
-    JOIN remote_session_client_user_session_issuers AS link
-      ON link.remote_session_client_id = a.remote_session_client_id
-     AND link.user_session_issuer_id = $5
     WHERE a.deleted IS FALSE
       AND NOT $10::boolean
     UNION ALL
@@ -6209,11 +6200,6 @@ eligible AS (
       AND l.project_id = r.project_id
       AND (c.project_id = r.project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = l.organization_id)))
       AND (rsi.project_id = r.project_id OR (rsi.project_id IS NULL AND (rsi.organization_id IS NULL OR rsi.organization_id = l.organization_id)))
-      AND ($3::boolean OR EXISTS (
-        SELECT 1 FROM remote_session_client_user_session_issuers AS binding
-        WHERE binding.remote_session_client_id = ac.remote_session_client_id
-          AND binding.user_session_issuer_id = $5
-      ))
     GROUP BY l.mcp_server_id, ac.remote_session_client_id,
              CASE WHEN $3::boolean THEN ac.id END
     HAVING $3::boolean OR count(DISTINCT ac.id) = 1
