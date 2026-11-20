@@ -1,41 +1,21 @@
+import { findPassThroughAuthorizationHeader } from "@/lib/remote-identity/model/headers";
+import { useRemoteMcpServerHeaders } from "@gram/client/react-query/remoteMcpServerHeaders.js";
 import {
-  deriveIdentityMode,
-  findPassThroughAuthorizationHeader,
-  type IdentityMode,
   useAllRemoteSessionClients,
   useUpstreamProbe,
 } from "@/lib/remote-identity";
-import { useUpstreamAuthEnforcement } from "@/hooks/useUpstreamAuthEnforcement";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useMcpServerAuthentication } from "@gram/client/react-query/mcpServerAuthentication.js";
-import { useRemoteMcpServerHeaders } from "@gram/client/react-query/remoteMcpServerHeaders.js";
-import { useServerClientAssociations } from "@gram/client/react-query/serverClientAssociations.js";
 
-/**
- * Whether an MCP server's Authentication setup step is done, and the line that
- * describes it. The server sidebar's readiness bar and the settings page's
- * setup banner both read this, so they never disagree about what is left.
- */
+/** Shared by the setup banner, server overview, and official catalog setup. */
 export interface McpServerAuthenticationReadiness {
-  /** Whether the Authentication step is done. */
   ready: boolean;
-  /** Whether `ready` can still change once the identity queries settle. */
   loading: boolean;
-  /**
-   * Whether readiness cannot be known because an identity query failed. When
-   * true, `ready: false` means "unknown", not "the step is open".
-   */
+  /** A failed read is unknown, not an open setup step. */
   unavailable: boolean;
-  /** One line on the step's state, as the readiness bar shows it. */
   description: string;
-  remoteIdentityMode: IdentityMode;
-  passThroughAuthorization: ReturnType<
-    typeof findPassThroughAuthorizationHeader
-  >;
-  identityUnavailable: boolean;
-  isLoadingRemoteIdentity: boolean;
-  upstreamAuth: ReturnType<typeof useUpstreamAuthEnforcement>;
   upstreamAuthQuery: ReturnType<typeof useMcpServerAuthentication>;
+  needsHeaderCleanup: boolean;
   identityProbeStatus: ReturnType<typeof useUpstreamProbe>;
 }
 
@@ -43,177 +23,96 @@ export function useMcpServerAuthenticationReadiness(
   mcpServer: McpServer | undefined,
 ): McpServerAuthenticationReadiness {
   const remoteMcpServerId = mcpServer?.remoteMcpServerId ?? "";
+  const remote = remoteMcpServerId !== "";
+  const tunneled = !!mcpServer?.tunneledMcpServerId;
+  const unproxied = !!mcpServer?.unproxiedMcpServerId;
+  const hosted = !!mcpServer && !remote && !tunneled && !unproxied;
   const userSessionIssuerId = mcpServer?.userSessionIssuerId;
-  // A remote identity provider is attached when this server's issuer has at
-  // least one remote session client pairing.
-  const {
-    items: remoteSessionClients,
-    isLoading: isLoadingRemoteSessionClients,
-    isError: isRemoteSessionClientsError,
-  } = useAllRemoteSessionClients(
+  // This remains a downstream sign-in read for hosted servers only.
+  const hostedSignIn = useAllRemoteSessionClients(
     { userSessionIssuerId },
-    { enabled: !!userSessionIssuerId },
-  );
-  // The issuer's clients may belong to other servers sharing it. A remote
-  // server's identity is the clients it says its callers need, as Settings
-  // reads it, so the two never disagree.
-  const associations = useServerClientAssociations(
-    { mcpServerId: mcpServer?.id ?? "" },
-    undefined,
     {
-      enabled: remoteMcpServerId !== "" && !!mcpServer?.id,
-      throwOnError: false,
+      enabled: hosted && !!userSessionIssuerId,
     },
   );
-  const requiredClientIds =
-    remoteMcpServerId !== ""
-      ? new Set(associations.data?.requiredClientIds)
-      : null;
-  const ownClients = requiredClientIds
-    ? remoteSessionClients.filter((client) => requiredClientIds.has(client.id))
-    : remoteSessionClients;
-  // A service account client is the Shared credential choice, not a
-  // per-user sign-in.
-  const selfClient = ownClients.find(
-    (client) => client.credentialOwner === "self",
-  );
-  const subjectClientCount = ownClients.filter(
-    (client) => client.credentialOwner !== "self",
-  ).length;
-  const hasRemoteIdentityProvider = ownClients.length > 0;
-  const {
-    data: remoteHeadersResult,
-    isLoading: isLoadingRemoteHeaders,
-    isError: isRemoteHeadersError,
-  } = useRemoteMcpServerHeaders({ remoteMcpServerId }, undefined, {
-    enabled: remoteMcpServerId !== "",
-  });
-  const remoteHeaders = remoteHeadersResult?.headers ?? [];
-  const remoteIdentityMode: IdentityMode = selfClient
-    ? "agent"
-    : deriveIdentityMode(subjectClientCount, remoteHeaders);
-  const passThroughAuthorization =
-    findPassThroughAuthorizationHeader(remoteHeaders);
-  const identityUnavailable =
-    isRemoteSessionClientsError ||
-    isRemoteHeadersError ||
-    (remoteMcpServerId !== "" && associations.isError);
-  // Enforcing organizations configure upstream identity through credentials,
-  // so the summary reads their status instead of the legacy identity mode.
-  const upstreamAuth = useUpstreamAuthEnforcement();
-  const enforcedIdentity =
-    remoteMcpServerId !== "" && upstreamAuth === "enforced";
-  // Tunneled servers list their credentials in Settings too, so the header
-  // reads them; only a remote server's readiness step depends on them.
+  const hostedReady =
+    hosted &&
+    !!userSessionIssuerId &&
+    !hostedSignIn.isError &&
+    hostedSignIn.items.length > 0;
   const upstreamAuthQuery = useMcpServerAuthentication(
     { mcpServerId: mcpServer?.id ?? "" },
     undefined,
+    { enabled: remote || tunneled, throwOnError: false },
+  );
+  const status = upstreamAuthQuery.data?.status;
+  // Legacy source headers are diagnostic only; they do not decide readiness.
+  const sourceHeaders = useRemoteMcpServerHeaders(
+    { remoteMcpServerId },
+    undefined,
     {
       enabled:
-        (enforcedIdentity ||
-          (!!mcpServer?.tunneledMcpServerId && upstreamAuth === "enforced")) &&
-        !!mcpServer?.id,
+        remote &&
+        (status === "setup_incomplete" || status === "no_auth_required"),
       throwOnError: false,
     },
   );
-  // Only worth probing when nothing is configured: that is the one state where
-  // the upstream's answer changes what the pill should say.
+  const needsHeaderCleanup =
+    remote &&
+    !sourceHeaders.isError &&
+    !upstreamAuthQuery.isError &&
+    (status === "setup_incomplete" || status === "no_auth_required") &&
+    !!findPassThroughAuthorizationHeader(sourceHeaders.data?.headers ?? []);
   const identityProbeStatus = useUpstreamProbe(
     remoteMcpServerId,
-    enforcedIdentity
-      ? upstreamAuthQuery.data?.status === "no_auth_required"
-      : upstreamAuth === "legacy" &&
-          !identityUnavailable &&
-          remoteIdentityMode === "none" &&
-          !passThroughAuthorization &&
-          !isLoadingRemoteSessionClients &&
-          !isLoadingRemoteHeaders,
+    remote && !upstreamAuthQuery.isError && status === "no_auth_required",
   );
-
-  const isRemoteBacked = !!mcpServer?.remoteMcpServerId;
-  const isTunneledBacked = !!mcpServer?.tunneledMcpServerId;
-  const isUnproxied = !!mcpServer?.unproxiedMcpServerId;
-
-  // A Remote MCP server's identity is derived, so the readiness item reads the
-  // same answer the pill does. Judging it on a bound client alone reported
-  // every working Service Account as incomplete while the pill said Service Account.
-  // Under enforcement it reads the credentials status instead, and a remote
-  // server is not settled until the enforcement state is known.
-  const legacyRemoteIdentity = !isRemoteBacked || upstreamAuth === "legacy";
-  const enforcedStatus = upstreamAuthQuery.data?.status;
-  const remoteIdentitySettled =
-    isRemoteBacked &&
-    (enforcedIdentity
-      ? enforcedStatus === "configured" ||
-        (enforcedStatus === "no_auth_required" &&
-          identityProbeStatus === "available")
-      : legacyRemoteIdentity &&
-        !identityUnavailable &&
-        (remoteIdentityMode !== "none" || identityProbeStatus === "available"));
+  const knownStatus =
+    status === "configured" ||
+    status === "setup_incomplete" ||
+    status === "no_auth_required";
+  const configured = !upstreamAuthQuery.isError && status === "configured";
+  const acceptsAnonymous =
+    !upstreamAuthQuery.isError &&
+    status === "no_auth_required" &&
+    identityProbeStatus === "available";
 
   let description =
     "Attach an authorization server so users can access the upstream service.";
-  if (isUnproxied) {
+  if (unproxied) {
     description =
       "Not applicable — the customer connects directly using the vendor's own credentials.";
-  } else if (enforcedIdentity) {
-    if (enforcedStatus === "configured") {
-      description = "Credentials are set up for the upstream service.";
-    } else if (remoteIdentitySettled) {
-      description =
-        "The upstream service accepts requests without credentials.";
-    } else {
-      description =
-        "Add a credential so Speakeasy can sign in to the upstream service.";
-    }
-  } else if (!legacyRemoteIdentity) {
-    description = "The identity status is not available yet.";
-  } else if (remoteIdentityMode === "user" && hasRemoteIdentityProvider) {
+  } else if (remote) {
+    description = configured
+      ? "Credentials are set up for the upstream service."
+      : acceptsAnonymous
+        ? "The upstream service accepts requests without credentials."
+        : "Add a credential so Speakeasy can sign in to the upstream service.";
+  } else if (hostedReady) {
     description = "An authorization server is attached to this server.";
-  } else if (remoteIdentityMode === "agent" && isRemoteBacked) {
-    description = "A shared credential is configured for the upstream service.";
-  } else if (remoteIdentitySettled) {
-    description = "The upstream service accepts requests without credentials.";
-  } else if (isTunneledBacked) {
+  } else if (tunneled) {
     description =
       "Speakeasy authentication is configured; upstream authorization servers are optional.";
   }
 
-  const ready =
-    isUnproxied ||
-    remoteIdentitySettled ||
-    (legacyRemoteIdentity && hasRemoteIdentityProvider) ||
-    (isTunneledBacked && !!userSessionIssuerId);
-
-  const isLoadingRemoteIdentity =
-    isLoadingRemoteSessionClients ||
-    isLoadingRemoteHeaders ||
-    (remoteMcpServerId !== "" && associations.isLoading);
-  // Whether the answer can still change once the queries settle, so a caller
-  // never reports a step as open, or done, before the data is in.
-  const loading =
-    isRemoteBacked &&
-    (upstreamAuth === "loading" ||
-      (enforcedIdentity
-        ? upstreamAuthQuery.isPending
-        : isLoadingRemoteIdentity) ||
-      identityProbeStatus === "loading");
-  const unavailable =
-    isRemoteBacked &&
-    (upstreamAuth === "error" ||
-      (enforcedIdentity ? upstreamAuthQuery.isError : identityUnavailable));
-
   return {
-    ready,
-    loading,
-    unavailable,
+    ready:
+      unproxied ||
+      hostedReady ||
+      (remote && (configured || acceptsAnonymous)) ||
+      (tunneled && !!mcpServer?.userSessionIssuerId),
+    loading:
+      remote &&
+      !upstreamAuthQuery.isError &&
+      (upstreamAuthQuery.isPending || identityProbeStatus === "loading"),
+    unavailable:
+      remote &&
+      (upstreamAuthQuery.isError ||
+        identityProbeStatus === "unknown" ||
+        (status !== undefined && !knownStatus)),
     description,
-    remoteIdentityMode,
-    passThroughAuthorization,
-    identityUnavailable,
-    isLoadingRemoteIdentity,
-    upstreamAuth,
     upstreamAuthQuery,
+    needsHeaderCleanup,
     identityProbeStatus,
   };
 }

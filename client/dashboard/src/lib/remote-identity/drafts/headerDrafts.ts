@@ -1,4 +1,3 @@
-import type { ExternalMCPRemoteHeader } from "@gram/client/models/components/externalmcpremoteheader.js";
 import type { RemoteMcpServerHeader } from "@gram/client/models/components/remotemcpserverheader.js";
 import { authorizationHeaderGuard } from "../model/headers";
 import type { IdentityMode } from "../model/identity";
@@ -225,20 +224,6 @@ export function newHeaderDraft(): HeaderDraft {
     isRequired: false,
     isSecret: true,
     hadSecret: false,
-  };
-}
-
-export function headerDraftFromCatalog(
-  header: ExternalMCPRemoteHeader,
-): HeaderDraft {
-  return {
-    ...newHeaderDraft(),
-    fromCatalog: true,
-    name: header.name,
-    isRequired: header.isRequired ?? false,
-    // Registries omit is_secret inconsistently; default suggested headers to
-    // secret so an API key never lands in plain text by accident.
-    isSecret: header.isSecret ?? true,
   };
 }
 

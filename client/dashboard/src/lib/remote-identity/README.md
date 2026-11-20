@@ -77,7 +77,6 @@ lib/remote-identity/
 
   components/               the shared UI of the concept
     IdentityModeCards.tsx   User Identity / Shared credential / Manual
-    ProviderRow.tsx         the provider and registration choice
     CredentialFields.tsx    format, fields, live Authorization preview
     IdentityExplainer.tsx   content and inline callout
     ProviderLink.tsx        deep link to the CRUD surface
@@ -90,8 +89,7 @@ components stay free of query wiring.
 
 ## What does not live here
 
-- **Page composition.** `RemoteMcpIdentitySection` arranges these pieces into
-  a settings panel; it stays in `pages/`.
+- **Page composition.** Proxied server settings show typed offers in `UpstreamCredentialsSection` under `pages/`.
 - **Provider CRUD.** The sheets and pages under
   `pages/remote-identity-providers/` edit an issuer _as an issuer_. They
   consume `model/` but keep their own forms — AIM-230 deliberately keeps the
@@ -146,14 +144,12 @@ Done. The table records where each piece came from.
 | ----------------------------------------------------- | ----------------------------------------- |
 | `…/authentication/remoteMcpIdentity.ts`               | `model/identity.ts`                       |
 | `…/authentication/useUserIdentityDraft.ts`            | `drafts/useIdentityDraft.ts`              |
-| `…/authentication/useAgentCredentialDraft.ts`         | `drafts/useCredentialDraft.ts`            |
 | `…/authentication/useAllRemoteSessionClients.ts`      | `queries/useAllRemoteSessionClients.ts`   |
 | `…/authentication/useProtectedResourceMetadata.ts`    | `queries/useProtectedResourceMetadata.ts` |
 | `…/authentication/useRemoteMcpAuthenticationProbe.ts` | `queries/useUpstreamProbe.ts`             |
 | `…/authentication/identityModes.tsx`                  | `components/IdentityModeCards.tsx`        |
 | `…/authentication/IdentityExplainer.tsx`              | `components/IdentityExplainer.tsx`        |
 | `…/authentication/AgentIdentityRow.tsx`               | `components/CredentialFields.tsx`         |
-| `…/authentication/UserIdentityRow.tsx`                | `components/ProviderRow.tsx`              |
 | `pages/remote-identity-providers/clientDisplay.ts`    | `model/provider.ts`                       |
 | `pages/remote-identity-providers/IssuerLink.tsx`      | `components/ProviderLink.tsx`             |
 | `pages/remote-identity-providers/ScopeBadge.tsx`      | `components/ScopeBadge.tsx`               |

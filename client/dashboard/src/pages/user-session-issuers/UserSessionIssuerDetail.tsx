@@ -36,7 +36,6 @@ import { ConsolidateIssuerDialog } from "./ConsolidateIssuerDialog";
 import { EnterpriseManagedAuthSection } from "./EnterpriseManagedAuthSection";
 import { MakeOrganizationWideDialog } from "./MakeOrganizationWideDialog";
 import { ClientAccessSection } from "./ClientAccessSection";
-import { ClientDriftWarning } from "./ClientDriftWarning";
 import { SessionLengthSection } from "./SessionLengthSection";
 import {
   authorizationServerModeLabel,
@@ -360,20 +359,8 @@ export function McpServersSection({
     );
   }
 
-  const drift = <ClientDriftWarning issuerId={issuer.id} />;
-  if (!titled) {
-    return (
-      <div className="flex flex-col gap-2">
-        <div className="flex justify-end">{drift}</div>
-        {body}
-      </div>
-    );
-  }
-  return (
-    <InfoSection title="MCP servers" adornment={drift}>
-      {body}
-    </InfoSection>
-  );
+  if (!titled) return body;
+  return <InfoSection title="MCP servers">{body}</InfoSection>;
 }
 
 export function ActionsSection({
