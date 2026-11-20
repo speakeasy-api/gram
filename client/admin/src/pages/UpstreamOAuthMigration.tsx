@@ -5,7 +5,7 @@ import {
   useQueryClient,
   type UseQueryResult,
 } from "@tanstack/react-query";
-import { CheckCircle2Icon, CircleDashedIcon, Loader2Icon } from "lucide-react";
+import { Loader2Icon } from "lucide-react";
 import { toast } from "sonner";
 
 import type { AdminUpstreamOAuthMigrationOrganization } from "@gram/admin-client/models/components/adminupstreamoauthmigrationorganization";
@@ -32,7 +32,7 @@ import {
   upstreamOAuthMigrationStatusQuery,
 } from "@/lib/gramAdminClient";
 
-// Each status is a dry run of both backfills, so only a few load at once.
+// Limit concurrent typed readiness checks.
 const STATUS_CONCURRENCY = 4;
 
 export function UpstreamOAuthMigrationPage(): JSX.Element {
@@ -235,82 +235,10 @@ function MigrationStatus({
       <EnforcementStatus status={s} />
     </>
   );
-  const reconnect =
-    s.reconnectCredentials > 0
-      ? `${s.reconnectCredentials} ${s.reconnectCredentials === 1 ? "credential" : "credentials"} will be asked to reconnect`
-      : null;
-  const consentScopedSelections = s.consentScopedSelections ?? 0;
-  const consentScoped =
-    consentScopedSelections > 0
-      ? `${consentScopedSelections} ${consentScopedSelections === 1 ? "choice" : "choices"} outside what a gateway connection approved, no action needed`
-      : null;
-  if (s.migrated) {
-    return (
-      <div className="space-y-1">
-        <span className="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
-          <CheckCircle2Icon aria-hidden="true" className="size-4" />
-          Migrated
-        </span>
-        {reconnect ? (
-          <p className="text-muted-foreground text-xs">{reconnect}</p>
-        ) : null}
-        {consentScoped ? (
-          <p className="text-muted-foreground text-xs">{consentScoped}</p>
-        ) : null}
-        {authClients}
-      </div>
-    );
-  }
-  return (
-    <div className="space-y-1">
-      <span className="text-muted-foreground inline-flex items-center gap-1.5">
-        <CircleDashedIcon aria-hidden="true" className="size-4" />
-        Not migrated
-      </span>
-      <div className="flex flex-wrap gap-1.5">
-        {s.pendingAssociations > 0 ? (
-          <Badge variant="secondary">
-            {s.pendingAssociations}{" "}
-            {s.pendingAssociations === 1 ? "association" : "associations"} to
-            record
-          </Badge>
-        ) : null}
-        {s.pendingSelections > 0 ? (
-          <Badge variant="secondary">
-            {s.pendingSelections} credential{" "}
-            {s.pendingSelections === 1 ? "choice" : "choices"} to record
-          </Badge>
-        ) : null}
-        {s.unresolvedServers.length > 0 ? (
-          <Badge variant="destructive">
-            {s.unresolvedServers.length}{" "}
-            {s.unresolvedServers.length === 1 ? "server needs" : "servers need"}{" "}
-            a client configured
-          </Badge>
-        ) : null}
-      </div>
-      {s.unresolvedServers.length > 0 ? (
-        <ul className="text-muted-foreground font-mono text-xs">
-          {s.unresolvedServers.map((server) => (
-            <li key={server.mcpServerId}>
-              server {server.mcpServerId} in project {server.projectId}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {reconnect ? (
-        <p className="text-muted-foreground text-xs">{reconnect}</p>
-      ) : null}
-      {consentScoped ? (
-        <p className="text-muted-foreground text-xs">{consentScoped}</p>
-      ) : null}
-      {authClients}
-    </div>
-  );
+  return <div className="space-y-1">{authClients}</div>;
 }
 
-// Typed auth clients are reported apart from the migration: they never decide
-// whether an organization is migrated.
+// Report typed auth client readiness and the specific choices that need repair.
 function AuthClientStatus({
   status,
 }: {
