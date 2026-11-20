@@ -89,29 +89,29 @@ func TestInvalidCheckOnUnenforcedPathIsLoggedInProduction(t *testing.T) {
 	require.Empty(t, logs.String())
 }
 
-// In tests and local dev the same invalid check fails, through every entry
-// point, so the handler bug is caught before it ships.
-func TestInvalidCheckOnUnenforcedPathFailsInTestsAndDev(t *testing.T) {
+// In tests the same invalid check fails, through every entry point, so the
+// handler bug is caught before it ships. Local dev turns on the same flag
+// through EngineOpts.DevMode; a test binary cannot show that path on its own,
+// because testing.Testing() is always true here.
+func TestInvalidCheckOnUnenforcedPathFailsInTests(t *testing.T) {
 	t.Parallel()
 
-	for _, devMode := range []bool{false, true} {
-		engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient(), EngineOpts{DevMode: devMode})
-		ctx := unenforcedContext(t)
-		typo := Check{Scope: Scope("project:reed"), ResourceID: "project-one"}
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	ctx := unenforcedContext(t)
+	typo := Check{Scope: Scope("project:reed"), ResourceID: "project-one"}
 
-		require.Error(t, engine.Require(ctx, typo))
-		require.Error(t, engine.RequireAny(ctx, typo))
-		_, err := engine.Evaluate(ctx, typo)
-		require.Error(t, err)
-		_, err = engine.Can(ctx, AnyOf(typo, typo))
-		require.Error(t, err)
-		_, err = engine.Filter(ctx, []Check{typo})
-		require.Error(t, err)
-		_, err = engine.FindMatched(ctx, []Check{typo})
-		require.Error(t, err)
+	require.Error(t, engine.Require(ctx, typo))
+	require.Error(t, engine.RequireAny(ctx, typo))
+	_, err := engine.Evaluate(ctx, typo)
+	require.Error(t, err)
+	_, err = engine.Can(ctx, AnyOf(typo, typo))
+	require.Error(t, err)
+	_, err = engine.Filter(ctx, []Check{typo})
+	require.Error(t, err)
+	_, err = engine.FindMatched(ctx, []Check{typo})
+	require.Error(t, err)
 
-		require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "project-one"}))
-	}
+	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "project-one"}))
 }
 
 // unenforcedContext is a caller without a dashboard session, which the
