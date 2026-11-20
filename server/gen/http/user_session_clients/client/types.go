@@ -13,6 +13,94 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// CreateUserSessionClientRequestBody is the type of the "userSessionClients"
+// service "createUserSessionClient" endpoint HTTP request body.
+type CreateUserSessionClientRequestBody struct {
+	// The issuer the client signs in through.
+	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
+	// Display name shown in client listings and on the consent screen.
+	ClientName string `form:"client_name" json:"client_name" xml:"client_name"`
+	// Redirect URIs validated on every /authorize. At least one is required.
+	RedirectUris []string `form:"redirect_uris" json:"redirect_uris" xml:"redirect_uris"`
+	// How the client presents its secret at the token endpoint (RFC 7591).
+	TokenEndpointAuthMethod string `form:"token_endpoint_auth_method" json:"token_endpoint_auth_method" xml:"token_endpoint_auth_method"`
+}
+
+// UpdateUserSessionClientRedirectURIsRequestBody is the type of the
+// "userSessionClients" service "updateUserSessionClientRedirectURIs" endpoint
+// HTTP request body.
+type UpdateUserSessionClientRedirectURIsRequestBody struct {
+	// The user_session_client id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The complete new list of redirect URIs. At least one is required.
+	RedirectUris []string `form:"redirect_uris" json:"redirect_uris" xml:"redirect_uris"`
+}
+
+// CreateUserSessionClientResponseBody is the type of the "userSessionClients"
+// service "createUserSessionClient" endpoint HTTP response body.
+type CreateUserSessionClientResponseBody struct {
+	Client *UserSessionClientResponseBody `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
+	// The minted client secret. Not retrievable again.
+	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
+}
+
+// UpdateUserSessionClientRedirectURIsResponseBody is the type of the
+// "userSessionClients" service "updateUserSessionClientRedirectURIs" endpoint
+// HTTP response body.
+type UpdateUserSessionClientRedirectURIsResponseBody struct {
+	// The user_session_client id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The owning user_session_issuer id.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The client_id. Minted by Speakeasy for a DCR registration; for a CIMD client
+	// it is the metadata document URL and equals client_id_metadata_uri.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// When set, the client was resolved from a Client ID Metadata Document (CIMD)
+	// hosted at this URL rather than registered via RFC 7591 DCR. Null for DCR
+	// clients. The URL is the client's identity, so its origin -- not client_name,
+	// which the client chooses -- is the trustworthy label.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+	// When the metadata document was last successfully read. A 304 revalidation
+	// counts as a read, so this is not necessarily when the body was last fetched.
+	// Null for DCR clients.
+	ClientIDMetadataFetchedAt *string `form:"client_id_metadata_fetched_at,omitempty" json:"client_id_metadata_fetched_at,omitempty" xml:"client_id_metadata_fetched_at,omitempty"`
+	// When the cached metadata document lapses and the next /authorize revalidates
+	// it against the host. Null for DCR clients, and null after a refresh purge
+	// until the re-read lands.
+	ClientIDMetadataCacheExpiresAt *string `form:"client_id_metadata_cache_expires_at,omitempty" json:"client_id_metadata_cache_expires_at,omitempty" xml:"client_id_metadata_cache_expires_at,omitempty"`
+	// ETag the document host returned on the last full read; sent as If-None-Match
+	// when revalidating. Null when the host offers no validator, and null for DCR
+	// clients.
+	ClientIDMetadataEtag *string `form:"client_id_metadata_etag,omitempty" json:"client_id_metadata_etag,omitempty" xml:"client_id_metadata_etag,omitempty"`
+	// Display name the client supplied at registration, or the client_name
+	// extracted from its metadata document. Client-controlled and unverified; do
+	// not present it as an identity.
+	ClientName *string `form:"client_name,omitempty" json:"client_name,omitempty" xml:"client_name,omitempty"`
+	// What the client must present to authenticate: 'public' (nothing), 'secret'
+	// (a client secret), 'key' (an assertion signed by its published key), or
+	// 'misconfigured'. Derived by the same rule the token endpoint enforces, so it
+	// reads what the client will actually be held to rather than what it declared.
+	// 'misconfigured' means the registration contradicts itself and the client
+	// cannot authenticate at all.
+	CredentialKind *string `form:"credential_kind,omitempty" json:"credential_kind,omitempty" xml:"credential_kind,omitempty"`
+	// The raw RFC 7591 token_endpoint_auth_method the client declared, for
+	// debugging against the spec. Null for a client registered before the value
+	// was recorded, which is not the same as declaring 'none' -- credential_kind
+	// resolves both cases and is what should be displayed.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Validated on every /authorize.
+	RedirectUris     []string `form:"redirect_uris,omitempty" json:"redirect_uris,omitempty" xml:"redirect_uris,omitempty"`
+	ClientIDIssuedAt *string  `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
+	// Null when the secret does not expire.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	CreatedAt             *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt             *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// How many live user_sessions this client currently holds. Counted the same
+	// way the sessions listing's active filter counts: not revoked, and the
+	// refresh token has not expired.
+	ActiveSessionCount *int `form:"active_session_count,omitempty" json:"active_session_count,omitempty" xml:"active_session_count,omitempty"`
+}
+
 // ListUserSessionClientsResponseBody is the type of the "userSessionClients"
 // service "listUserSessionClients" endpoint HTTP response body.
 type ListUserSessionClientsResponseBody struct {
@@ -132,6 +220,387 @@ type RefreshUserSessionClientCIMDResponseBody struct {
 	// way the sessions listing's active filter counts: not revoked, and the
 	// refresh token has not expired.
 	ActiveSessionCount *int `form:"active_session_count,omitempty" json:"active_session_count,omitempty" xml:"active_session_count,omitempty"`
+}
+
+// CreateUserSessionClientUnauthorizedResponseBody is the type of the
+// "userSessionClients" service "createUserSessionClient" endpoint HTTP
+// response body for the "unauthorized" error.
+type CreateUserSessionClientUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateUserSessionClientForbiddenResponseBody is the type of the
+// "userSessionClients" service "createUserSessionClient" endpoint HTTP
+// response body for the "forbidden" error.
+type CreateUserSessionClientForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateUserSessionClientBadRequestResponseBody is the type of the
+// "userSessionClients" service "createUserSessionClient" endpoint HTTP
+// response body for the "bad_request" error.
+type CreateUserSessionClientBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateUserSessionClientNotFoundResponseBody is the type of the
+// "userSessionClients" service "createUserSessionClient" endpoint HTTP
+// response body for the "not_found" error.
+type CreateUserSessionClientNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateUserSessionClientConflictResponseBody is the type of the
+// "userSessionClients" service "createUserSessionClient" endpoint HTTP
+// response body for the "conflict" error.
+type CreateUserSessionClientConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateUserSessionClientUnsupportedMediaResponseBody is the type of the
+// "userSessionClients" service "createUserSessionClient" endpoint HTTP
+// response body for the "unsupported_media" error.
+type CreateUserSessionClientUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateUserSessionClientInvalidResponseBody is the type of the
+// "userSessionClients" service "createUserSessionClient" endpoint HTTP
+// response body for the "invalid" error.
+type CreateUserSessionClientInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateUserSessionClientInvariantViolationResponseBody is the type of the
+// "userSessionClients" service "createUserSessionClient" endpoint HTTP
+// response body for the "invariant_violation" error.
+type CreateUserSessionClientInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateUserSessionClientUnexpectedResponseBody is the type of the
+// "userSessionClients" service "createUserSessionClient" endpoint HTTP
+// response body for the "unexpected" error.
+type CreateUserSessionClientUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateUserSessionClientGatewayErrorResponseBody is the type of the
+// "userSessionClients" service "createUserSessionClient" endpoint HTTP
+// response body for the "gateway_error" error.
+type CreateUserSessionClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateUserSessionClientRedirectURIsUnauthorizedResponseBody is the type of
+// the "userSessionClients" service "updateUserSessionClientRedirectURIs"
+// endpoint HTTP response body for the "unauthorized" error.
+type UpdateUserSessionClientRedirectURIsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateUserSessionClientRedirectURIsForbiddenResponseBody is the type of the
+// "userSessionClients" service "updateUserSessionClientRedirectURIs" endpoint
+// HTTP response body for the "forbidden" error.
+type UpdateUserSessionClientRedirectURIsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateUserSessionClientRedirectURIsBadRequestResponseBody is the type of the
+// "userSessionClients" service "updateUserSessionClientRedirectURIs" endpoint
+// HTTP response body for the "bad_request" error.
+type UpdateUserSessionClientRedirectURIsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateUserSessionClientRedirectURIsNotFoundResponseBody is the type of the
+// "userSessionClients" service "updateUserSessionClientRedirectURIs" endpoint
+// HTTP response body for the "not_found" error.
+type UpdateUserSessionClientRedirectURIsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateUserSessionClientRedirectURIsConflictResponseBody is the type of the
+// "userSessionClients" service "updateUserSessionClientRedirectURIs" endpoint
+// HTTP response body for the "conflict" error.
+type UpdateUserSessionClientRedirectURIsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateUserSessionClientRedirectURIsUnsupportedMediaResponseBody is the type
+// of the "userSessionClients" service "updateUserSessionClientRedirectURIs"
+// endpoint HTTP response body for the "unsupported_media" error.
+type UpdateUserSessionClientRedirectURIsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateUserSessionClientRedirectURIsInvalidResponseBody is the type of the
+// "userSessionClients" service "updateUserSessionClientRedirectURIs" endpoint
+// HTTP response body for the "invalid" error.
+type UpdateUserSessionClientRedirectURIsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateUserSessionClientRedirectURIsInvariantViolationResponseBody is the
+// type of the "userSessionClients" service
+// "updateUserSessionClientRedirectURIs" endpoint HTTP response body for the
+// "invariant_violation" error.
+type UpdateUserSessionClientRedirectURIsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateUserSessionClientRedirectURIsUnexpectedResponseBody is the type of the
+// "userSessionClients" service "updateUserSessionClientRedirectURIs" endpoint
+// HTTP response body for the "unexpected" error.
+type UpdateUserSessionClientRedirectURIsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateUserSessionClientRedirectURIsGatewayErrorResponseBody is the type of
+// the "userSessionClients" service "updateUserSessionClientRedirectURIs"
+// endpoint HTTP response body for the "gateway_error" error.
+type UpdateUserSessionClientRedirectURIsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
 // ListUserSessionClientsUnauthorizedResponseBody is the type of the
@@ -950,6 +1419,394 @@ type UserSessionClientResponseBody struct {
 	ActiveSessionCount *int `form:"active_session_count,omitempty" json:"active_session_count,omitempty" xml:"active_session_count,omitempty"`
 }
 
+// NewCreateUserSessionClientRequestBody builds the HTTP request body from the
+// payload of the "createUserSessionClient" endpoint of the
+// "userSessionClients" service.
+func NewCreateUserSessionClientRequestBody(p *usersessionclients.CreateUserSessionClientPayload) *CreateUserSessionClientRequestBody {
+	body := &CreateUserSessionClientRequestBody{
+		UserSessionIssuerID:     p.UserSessionIssuerID,
+		ClientName:              p.ClientName,
+		TokenEndpointAuthMethod: p.TokenEndpointAuthMethod,
+	}
+	if p.RedirectUris != nil {
+		body.RedirectUris = make([]string, len(p.RedirectUris))
+		for i, val := range p.RedirectUris {
+			body.RedirectUris[i] = val
+		}
+	} else {
+		body.RedirectUris = []string{}
+	}
+	{
+		var zero string
+		if body.TokenEndpointAuthMethod == zero {
+			body.TokenEndpointAuthMethod = "client_secret_basic"
+		}
+	}
+	return body
+}
+
+// NewUpdateUserSessionClientRedirectURIsRequestBody builds the HTTP request
+// body from the payload of the "updateUserSessionClientRedirectURIs" endpoint
+// of the "userSessionClients" service.
+func NewUpdateUserSessionClientRedirectURIsRequestBody(p *usersessionclients.UpdateUserSessionClientRedirectURIsPayload) *UpdateUserSessionClientRedirectURIsRequestBody {
+	body := &UpdateUserSessionClientRedirectURIsRequestBody{
+		ID: p.ID,
+	}
+	if p.RedirectUris != nil {
+		body.RedirectUris = make([]string, len(p.RedirectUris))
+		for i, val := range p.RedirectUris {
+			body.RedirectUris[i] = val
+		}
+	} else {
+		body.RedirectUris = []string{}
+	}
+	return body
+}
+
+// NewCreateUserSessionClientResultOK builds a "userSessionClients" service
+// "createUserSessionClient" endpoint result from a HTTP "OK" response.
+func NewCreateUserSessionClientResultOK(body *CreateUserSessionClientResponseBody) *usersessionclients.CreateUserSessionClientResult {
+	v := &usersessionclients.CreateUserSessionClientResult{
+		ClientSecret: *body.ClientSecret,
+	}
+	v.Client = unmarshalUserSessionClientResponseBodyToTypesUserSessionClient(body.Client)
+
+	return v
+}
+
+// NewCreateUserSessionClientUnauthorized builds a userSessionClients service
+// createUserSessionClient endpoint unauthorized error.
+func NewCreateUserSessionClientUnauthorized(body *CreateUserSessionClientUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateUserSessionClientForbidden builds a userSessionClients service
+// createUserSessionClient endpoint forbidden error.
+func NewCreateUserSessionClientForbidden(body *CreateUserSessionClientForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateUserSessionClientBadRequest builds a userSessionClients service
+// createUserSessionClient endpoint bad_request error.
+func NewCreateUserSessionClientBadRequest(body *CreateUserSessionClientBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateUserSessionClientNotFound builds a userSessionClients service
+// createUserSessionClient endpoint not_found error.
+func NewCreateUserSessionClientNotFound(body *CreateUserSessionClientNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateUserSessionClientConflict builds a userSessionClients service
+// createUserSessionClient endpoint conflict error.
+func NewCreateUserSessionClientConflict(body *CreateUserSessionClientConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateUserSessionClientUnsupportedMedia builds a userSessionClients
+// service createUserSessionClient endpoint unsupported_media error.
+func NewCreateUserSessionClientUnsupportedMedia(body *CreateUserSessionClientUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateUserSessionClientInvalid builds a userSessionClients service
+// createUserSessionClient endpoint invalid error.
+func NewCreateUserSessionClientInvalid(body *CreateUserSessionClientInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateUserSessionClientInvariantViolation builds a userSessionClients
+// service createUserSessionClient endpoint invariant_violation error.
+func NewCreateUserSessionClientInvariantViolation(body *CreateUserSessionClientInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateUserSessionClientUnexpected builds a userSessionClients service
+// createUserSessionClient endpoint unexpected error.
+func NewCreateUserSessionClientUnexpected(body *CreateUserSessionClientUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateUserSessionClientGatewayError builds a userSessionClients service
+// createUserSessionClient endpoint gateway_error error.
+func NewCreateUserSessionClientGatewayError(body *CreateUserSessionClientGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateUserSessionClientRedirectURIsUserSessionClientOK builds a
+// "userSessionClients" service "updateUserSessionClientRedirectURIs" endpoint
+// result from a HTTP "OK" response.
+func NewUpdateUserSessionClientRedirectURIsUserSessionClientOK(body *UpdateUserSessionClientRedirectURIsResponseBody) *types.UserSessionClient {
+	v := &types.UserSessionClient{
+		ID:                             *body.ID,
+		UserSessionIssuerID:            *body.UserSessionIssuerID,
+		ClientID:                       *body.ClientID,
+		ClientIDMetadataURI:            body.ClientIDMetadataURI,
+		ClientIDMetadataFetchedAt:      body.ClientIDMetadataFetchedAt,
+		ClientIDMetadataCacheExpiresAt: body.ClientIDMetadataCacheExpiresAt,
+		ClientIDMetadataEtag:           body.ClientIDMetadataEtag,
+		ClientName:                     *body.ClientName,
+		CredentialKind:                 *body.CredentialKind,
+		TokenEndpointAuthMethod:        body.TokenEndpointAuthMethod,
+		ClientIDIssuedAt:               *body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:          body.ClientSecretExpiresAt,
+		CreatedAt:                      *body.CreatedAt,
+		UpdatedAt:                      *body.UpdatedAt,
+		ActiveSessionCount:             *body.ActiveSessionCount,
+	}
+	v.RedirectUris = make([]string, len(body.RedirectUris))
+	for i, val := range body.RedirectUris {
+		v.RedirectUris[i] = val
+	}
+
+	return v
+}
+
+// NewUpdateUserSessionClientRedirectURIsUnauthorized builds a
+// userSessionClients service updateUserSessionClientRedirectURIs endpoint
+// unauthorized error.
+func NewUpdateUserSessionClientRedirectURIsUnauthorized(body *UpdateUserSessionClientRedirectURIsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateUserSessionClientRedirectURIsForbidden builds a userSessionClients
+// service updateUserSessionClientRedirectURIs endpoint forbidden error.
+func NewUpdateUserSessionClientRedirectURIsForbidden(body *UpdateUserSessionClientRedirectURIsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateUserSessionClientRedirectURIsBadRequest builds a userSessionClients
+// service updateUserSessionClientRedirectURIs endpoint bad_request error.
+func NewUpdateUserSessionClientRedirectURIsBadRequest(body *UpdateUserSessionClientRedirectURIsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateUserSessionClientRedirectURIsNotFound builds a userSessionClients
+// service updateUserSessionClientRedirectURIs endpoint not_found error.
+func NewUpdateUserSessionClientRedirectURIsNotFound(body *UpdateUserSessionClientRedirectURIsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateUserSessionClientRedirectURIsConflict builds a userSessionClients
+// service updateUserSessionClientRedirectURIs endpoint conflict error.
+func NewUpdateUserSessionClientRedirectURIsConflict(body *UpdateUserSessionClientRedirectURIsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateUserSessionClientRedirectURIsUnsupportedMedia builds a
+// userSessionClients service updateUserSessionClientRedirectURIs endpoint
+// unsupported_media error.
+func NewUpdateUserSessionClientRedirectURIsUnsupportedMedia(body *UpdateUserSessionClientRedirectURIsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateUserSessionClientRedirectURIsInvalid builds a userSessionClients
+// service updateUserSessionClientRedirectURIs endpoint invalid error.
+func NewUpdateUserSessionClientRedirectURIsInvalid(body *UpdateUserSessionClientRedirectURIsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateUserSessionClientRedirectURIsInvariantViolation builds a
+// userSessionClients service updateUserSessionClientRedirectURIs endpoint
+// invariant_violation error.
+func NewUpdateUserSessionClientRedirectURIsInvariantViolation(body *UpdateUserSessionClientRedirectURIsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateUserSessionClientRedirectURIsUnexpected builds a userSessionClients
+// service updateUserSessionClientRedirectURIs endpoint unexpected error.
+func NewUpdateUserSessionClientRedirectURIsUnexpected(body *UpdateUserSessionClientRedirectURIsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateUserSessionClientRedirectURIsGatewayError builds a
+// userSessionClients service updateUserSessionClientRedirectURIs endpoint
+// gateway_error error.
+func NewUpdateUserSessionClientRedirectURIsGatewayError(body *UpdateUserSessionClientRedirectURIsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListUserSessionClientsResultOK builds a "userSessionClients" service
 // "listUserSessionClients" endpoint result from a HTTP "OK" response.
 func NewListUserSessionClientsResultOK(body *ListUserSessionClientsResponseBody) *usersessionclients.ListUserSessionClientsResult {
@@ -1626,6 +2483,88 @@ func NewRevokeUserSessionClientGatewayError(body *RevokeUserSessionClientGateway
 	return v
 }
 
+// ValidateCreateUserSessionClientResponseBody runs the validations defined on
+// CreateUserSessionClientResponseBody
+func ValidateCreateUserSessionClientResponseBody(body *CreateUserSessionClientResponseBody) (err error) {
+	if body.Client == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client", "body"))
+	}
+	if body.ClientSecret == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_secret", "body"))
+	}
+	if body.Client != nil {
+		if err2 := ValidateUserSessionClientResponseBody(body.Client); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateUpdateUserSessionClientRedirectURIsResponseBody runs the validations
+// defined on UpdateUserSessionClientRedirectURIsResponseBody
+func ValidateUpdateUserSessionClientRedirectURIsResponseBody(body *UpdateUserSessionClientRedirectURIsResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.UserSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	}
+	if body.ClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
+	if body.ClientName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_name", "body"))
+	}
+	if body.CredentialKind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credential_kind", "body"))
+	}
+	if body.RedirectUris == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("redirect_uris", "body"))
+	}
+	if body.ClientIDIssuedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ActiveSessionCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("active_session_count", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
+	if body.ClientIDMetadataFetchedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_metadata_fetched_at", *body.ClientIDMetadataFetchedAt, goa.FormatDateTime))
+	}
+	if body.ClientIDMetadataCacheExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_metadata_cache_expires_at", *body.ClientIDMetadataCacheExpiresAt, goa.FormatDateTime))
+	}
+	if body.CredentialKind != nil {
+		if !(*body.CredentialKind == "public" || *body.CredentialKind == "secret" || *body.CredentialKind == "key" || *body.CredentialKind == "misconfigured") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.credential_kind", *body.CredentialKind, []any{"public", "secret", "key", "misconfigured"}))
+		}
+	}
+	if body.ClientIDIssuedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_issued_at", *body.ClientIDIssuedAt, goa.FormatDateTime))
+	}
+	if body.ClientSecretExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
 // ValidateListUserSessionClientsResponseBody runs the validations defined on
 // ListUserSessionClientsResponseBody
 func ValidateListUserSessionClientsResponseBody(body *ListUserSessionClientsResponseBody) (err error) {
@@ -1768,6 +2707,498 @@ func ValidateRefreshUserSessionClientCIMDResponseBody(body *RefreshUserSessionCl
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateCreateUserSessionClientUnauthorizedResponseBody runs the validations
+// defined on createUserSessionClient_unauthorized_response_body
+func ValidateCreateUserSessionClientUnauthorizedResponseBody(body *CreateUserSessionClientUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateUserSessionClientForbiddenResponseBody runs the validations
+// defined on createUserSessionClient_forbidden_response_body
+func ValidateCreateUserSessionClientForbiddenResponseBody(body *CreateUserSessionClientForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateUserSessionClientBadRequestResponseBody runs the validations
+// defined on createUserSessionClient_bad_request_response_body
+func ValidateCreateUserSessionClientBadRequestResponseBody(body *CreateUserSessionClientBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateUserSessionClientNotFoundResponseBody runs the validations
+// defined on createUserSessionClient_not_found_response_body
+func ValidateCreateUserSessionClientNotFoundResponseBody(body *CreateUserSessionClientNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateUserSessionClientConflictResponseBody runs the validations
+// defined on createUserSessionClient_conflict_response_body
+func ValidateCreateUserSessionClientConflictResponseBody(body *CreateUserSessionClientConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateUserSessionClientUnsupportedMediaResponseBody runs the
+// validations defined on
+// createUserSessionClient_unsupported_media_response_body
+func ValidateCreateUserSessionClientUnsupportedMediaResponseBody(body *CreateUserSessionClientUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateUserSessionClientInvalidResponseBody runs the validations
+// defined on createUserSessionClient_invalid_response_body
+func ValidateCreateUserSessionClientInvalidResponseBody(body *CreateUserSessionClientInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateUserSessionClientInvariantViolationResponseBody runs the
+// validations defined on
+// createUserSessionClient_invariant_violation_response_body
+func ValidateCreateUserSessionClientInvariantViolationResponseBody(body *CreateUserSessionClientInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateUserSessionClientUnexpectedResponseBody runs the validations
+// defined on createUserSessionClient_unexpected_response_body
+func ValidateCreateUserSessionClientUnexpectedResponseBody(body *CreateUserSessionClientUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateUserSessionClientGatewayErrorResponseBody runs the validations
+// defined on createUserSessionClient_gateway_error_response_body
+func ValidateCreateUserSessionClientGatewayErrorResponseBody(body *CreateUserSessionClientGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateUserSessionClientRedirectURIsUnauthorizedResponseBody runs the
+// validations defined on
+// updateUserSessionClientRedirectURIs_unauthorized_response_body
+func ValidateUpdateUserSessionClientRedirectURIsUnauthorizedResponseBody(body *UpdateUserSessionClientRedirectURIsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateUserSessionClientRedirectURIsForbiddenResponseBody runs the
+// validations defined on
+// updateUserSessionClientRedirectURIs_forbidden_response_body
+func ValidateUpdateUserSessionClientRedirectURIsForbiddenResponseBody(body *UpdateUserSessionClientRedirectURIsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateUserSessionClientRedirectURIsBadRequestResponseBody runs the
+// validations defined on
+// updateUserSessionClientRedirectURIs_bad_request_response_body
+func ValidateUpdateUserSessionClientRedirectURIsBadRequestResponseBody(body *UpdateUserSessionClientRedirectURIsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateUserSessionClientRedirectURIsNotFoundResponseBody runs the
+// validations defined on
+// updateUserSessionClientRedirectURIs_not_found_response_body
+func ValidateUpdateUserSessionClientRedirectURIsNotFoundResponseBody(body *UpdateUserSessionClientRedirectURIsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateUserSessionClientRedirectURIsConflictResponseBody runs the
+// validations defined on
+// updateUserSessionClientRedirectURIs_conflict_response_body
+func ValidateUpdateUserSessionClientRedirectURIsConflictResponseBody(body *UpdateUserSessionClientRedirectURIsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateUserSessionClientRedirectURIsUnsupportedMediaResponseBody runs
+// the validations defined on
+// updateUserSessionClientRedirectURIs_unsupported_media_response_body
+func ValidateUpdateUserSessionClientRedirectURIsUnsupportedMediaResponseBody(body *UpdateUserSessionClientRedirectURIsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateUserSessionClientRedirectURIsInvalidResponseBody runs the
+// validations defined on
+// updateUserSessionClientRedirectURIs_invalid_response_body
+func ValidateUpdateUserSessionClientRedirectURIsInvalidResponseBody(body *UpdateUserSessionClientRedirectURIsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateUserSessionClientRedirectURIsInvariantViolationResponseBody
+// runs the validations defined on
+// updateUserSessionClientRedirectURIs_invariant_violation_response_body
+func ValidateUpdateUserSessionClientRedirectURIsInvariantViolationResponseBody(body *UpdateUserSessionClientRedirectURIsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateUserSessionClientRedirectURIsUnexpectedResponseBody runs the
+// validations defined on
+// updateUserSessionClientRedirectURIs_unexpected_response_body
+func ValidateUpdateUserSessionClientRedirectURIsUnexpectedResponseBody(body *UpdateUserSessionClientRedirectURIsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateUserSessionClientRedirectURIsGatewayErrorResponseBody runs the
+// validations defined on
+// updateUserSessionClientRedirectURIs_gateway_error_response_body
+func ValidateUpdateUserSessionClientRedirectURIsGatewayErrorResponseBody(body *UpdateUserSessionClientRedirectURIsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
 	}
 	return
 }

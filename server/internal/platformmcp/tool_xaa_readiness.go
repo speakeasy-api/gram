@@ -145,7 +145,7 @@ func (s *postgresXAAServerReader) Server(ctx context.Context, organizationID str
 		return none, false, nil
 	}
 	// org:admin does not imply mcp:read, as in the dashboard's readiness list.
-	allowed, err := engine.Filter(ctx, []authz.Check{authz.MCPCheck(authz.ScopeMCPRead, serverID.String(), projectID.String())})
+	allowed, err := engine.Filter(ctx, []authz.Check{authz.MCPServer(authz.MCPServerIDOf(serverID), authz.ProjectIDOf(projectID)).Read()})
 	if err != nil {
 		return none, false, fmt.Errorf("filter XAA readiness server: %w", err)
 	}

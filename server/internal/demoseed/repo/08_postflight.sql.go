@@ -11,6 +11,18 @@ import (
 	"github.com/google/uuid"
 )
 
+const postflightCountAccessRequests = `-- name: PostflightCountAccessRequests :one
+SELECT count(*) FROM access_requests
+WHERE organization_id = $1::text AND deleted IS FALSE
+`
+
+func (q *Queries) PostflightCountAccessRequests(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountAccessRequests, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountActiveQuarantines = `-- name: PostflightCountActiveQuarantines :one
 SELECT count(*) FROM session_quarantines
 WHERE organization_id = $1::text AND project_id = $2::uuid AND released_at IS NULL

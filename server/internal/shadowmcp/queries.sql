@@ -1,9 +1,12 @@
 -- name: ListShadowMCPOfficialServerChoices :many
 -- An administrator's choices about official servers in one project. The
 -- chosen server comes back only while it is live and enabled, so a choice
--- whose server was removed falls back to the server found by URL.
+-- whose server was removed falls back to the server found by URL. A choice
+-- with no server (link_mcp_server_id NULL) keeps the Shadow MCP server in
+-- direct use: nothing is linked, not even automatically.
 SELECT
     c.server_url,
+    c.mcp_server_id AS link_mcp_server_id,
     m.id AS chosen_mcp_server_id,
     m.name AS chosen_mcp_server_name,
     m.slug AS chosen_mcp_server_slug
@@ -20,6 +23,7 @@ WHERE c.project_id = @project_id
 -- One choice, read the same way as ListShadowMCPOfficialServerChoices.
 SELECT
     c.server_url,
+    c.mcp_server_id AS link_mcp_server_id,
     m.id AS chosen_mcp_server_id,
     m.name AS chosen_mcp_server_name,
     m.slug AS chosen_mcp_server_slug

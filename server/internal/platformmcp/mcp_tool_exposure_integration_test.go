@@ -479,8 +479,8 @@ func TestChangeMCPToolsAuthorizesEveryServerSharingTheToolList(t *testing.T) {
 
 // Nothing in the schema pairs mcp_servers.toolset_id with project_id, so a
 // server in a different project can front this toolset. Authorizing such an id
-// from here is not possible: authz.MCPCheck injects the named project as a
-// selector dimension precisely so project-scoped grants match, which means a
+// from here is not possible: an MCP server check carries the named project as
+// a selector dimension precisely so project-scoped grants match, which means a
 // project-wide mcp:write in THIS project satisfies the check for a foreign
 // server id. So the foreign server must be excluded from the authorized set
 // AND the change must be refused, because the write would otherwise move it

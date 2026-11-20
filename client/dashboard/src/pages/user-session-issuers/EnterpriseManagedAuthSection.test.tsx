@@ -1,9 +1,17 @@
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ProviderLookupError } from "./ema";
 import { EnterpriseManagedAuthSection } from "./EnterpriseManagedAuthSection";
 
 vi.mock("@/components/require-scope", () => ({
@@ -41,6 +49,18 @@ vi.mock("@/lib/remote-identity/components/ProviderLink", () => ({
     <a href={`/remote-identity-providers/${issuer.id}`}>{issuer.name}</a>
   ),
 }));
+const ema = vi.hoisted(() => ({
+  lookUpProvider: vi.fn(),
+  turnOnEma: vi.fn(),
+}));
+vi.mock("./ema", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./ema")>()),
+  lookUpProvider: ema.lookUpProvider,
+  turnOnEma: ema.turnOnEma,
+}));
+vi.mock("./invalidateIssuers", () => ({
+  invalidateIssuers: () => Promise.resolve(),
+}));
 vi.mock("./MakeOrganizationWideDialog", () => ({
   MakeOrganizationWideDialog: () => <div role="dialog">Make wide</div>,
 }));
@@ -59,34 +79,83 @@ function show(
 ) {
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <MemoryRouter initialEntries={[path]}>
-        <EnterpriseManagedAuthSection issuer={issuer} />
-      </MemoryRouter>
+      <TooltipProvider>
+        <MemoryRouter initialEntries={[path]}>
+          <EnterpriseManagedAuthSection issuer={issuer} />
+        </MemoryRouter>
+      </TooltipProvider>
     </QueryClientProvider>,
   );
 }
 
 beforeEach(() => {
   trusted.state = okta;
+  ema.lookUpProvider.mockReset();
+  ema.turnOnEma.mockReset();
 });
+
+function lookUp(address: string) {
+  fireEvent.click(screen.getByRole("button", { name: "Set up EMA" }));
+  fireEvent.change(screen.getByLabelText("Issuer URL"), {
+    target: { value: address },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Look up" }));
+}
 afterEach(cleanup);
 
 describe("EnterpriseManagedAuthSection", () => {
-  it("offers setup when off, with Speakeasy shown but not choosable", () => {
+  it("sets up with just the issuer URL, no provider choice", () => {
     show(base);
     expect(screen.getByText("Off")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Set up EMA" }));
-    expect(
-      screen.getByRole("radio", { name: /Speakeasy/ }).hasAttribute("disabled"),
-    ).toBe(true);
-    const okta = screen.getByRole("link", { name: "Continue with Okta" });
-    const href = new URL(okta.getAttribute("href") ?? "", "https://x");
-    expect(href.pathname).toBe("/acme/identity");
-    expect(href.searchParams.get("provider")).toBe("okta");
-    expect(href.searchParams.get("emaFor")).toBe("acme-workforce");
-    expect(href.searchParams.get("emaReturn")).toBe(
-      "/acme/mcp-authentication/usi-1",
+    expect(screen.queryByRole("radio")).toBeNull();
+    expect(screen.getByLabelText("Issuer URL")).toBeDefined();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("turns EMA on with an Okta org URL", async () => {
+    const found = {
+      issuer: "https://acme.okta.com",
+      draft: { issuer: "https://acme.okta.com" },
+    };
+    ema.lookUpProvider.mockResolvedValue(found);
+    ema.turnOnEma.mockResolvedValue(undefined);
+    show(base);
+    lookUp("https://acme.okta.com");
+    await screen.findByText(/acme\.okta\.com publishes its signing keys/);
+    expect(ema.lookUpProvider).toHaveBeenCalledWith(
+      expect.anything(),
+      "https://acme.okta.com",
     );
+    fireEvent.click(screen.getByRole("button", { name: "Turn on EMA" }));
+    await waitFor(() => {
+      expect(ema.turnOnEma).toHaveBeenCalledWith(
+        expect.anything(),
+        base,
+        found,
+      );
+    });
+  });
+
+  it("shows why a lookup failed and keeps EMA off", async () => {
+    ema.lookUpProvider.mockRejectedValue(
+      new ProviderLookupError("This provider doesn't publish signing keys."),
+    );
+    show(base);
+    lookUp("https://login.example.com");
+    await screen.findByText("This provider doesn't publish signing keys.");
+    expect(
+      screen
+        .getByRole("button", { name: "Turn on EMA" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  it("offers the issuer URL field again to change the provider", () => {
+    show({ ...base, trustedRemoteSessionIssuerId: "remote-1" });
+    fireEvent.click(screen.getByRole("button", { name: "Change provider" }));
+    expect(screen.getByLabelText("Issuer URL")).toBeDefined();
+    expect(screen.queryByRole("radio")).toBeNull();
   });
 
   it("names the trusted provider and offers to turn it off", () => {
@@ -155,19 +224,6 @@ describe("EnterpriseManagedAuthSection", () => {
     expect(
       screen.getByText(/Couldn't load this identity provider/),
     ).toBeDefined();
-  });
-
-  it("won't swap the provider from a return link while browser sign-in uses it", () => {
-    show(
-      {
-        ...base,
-        trustedRemoteSessionIssuerId: "remote-1",
-        trustedRemoteSessionClientId: "client-1",
-      },
-      "/acme/mcp-authentication/usi-1?ema=https%3A%2F%2Fother.example.com",
-    );
-    expect(screen.queryByRole("button", { name: "Turn on EMA" })).toBeNull();
-    expect(screen.getByRole("link", { name: "Okta connection" })).toBeDefined();
   });
 
   it("asks a project-specific provider to become organization-wide first", () => {

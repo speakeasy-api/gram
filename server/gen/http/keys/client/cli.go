@@ -10,6 +10,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"unicode/utf8"
 
 	keys "github.com/speakeasy-api/gram/server/gen/keys"
@@ -276,13 +277,58 @@ func BuildExtendAgentKeysPayload(keysExtendAgentKeysBody string, keysExtendAgent
 
 // BuildListKeysPayload builds the payload for the keys listKeys endpoint from
 // CLI flags.
-func BuildListKeysPayload(keysListKeysAgentID string, keysListKeysSessionToken string) (*keys.ListKeysPayload, error) {
+func BuildListKeysPayload(keysListKeysAgentID string, keysListKeysCursor string, keysListKeysLimit string, keysListKeysSearch string, keysListKeysSessionToken string) (*keys.ListKeysPayload, error) {
 	var err error
 	var agentID *string
 	{
 		if keysListKeysAgentID != "" {
 			agentID = &keysListKeysAgentID
 			err = goa.MergeErrors(err, goa.ValidateFormat("agent_id", *agentID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var cursor *string
+	{
+		if keysListKeysCursor != "" {
+			cursor = &keysListKeysCursor
+			if utf8.RuneCountInString(*cursor) > 512 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("cursor", *cursor, utf8.RuneCountInString(*cursor), 512, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var limit *int
+	{
+		if keysListKeysLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(keysListKeysLimit, 10, strconv.IntSize)
+			val := int(v)
+			limit = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
+			}
+			if *limit > 100 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 100, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var search *string
+	{
+		if keysListKeysSearch != "" {
+			search = &keysListKeysSearch
+			if utf8.RuneCountInString(*search) > 255 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("search", *search, utf8.RuneCountInString(*search), 255, false))
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -296,6 +342,9 @@ func BuildListKeysPayload(keysListKeysAgentID string, keysListKeysSessionToken s
 	}
 	v := &keys.ListKeysPayload{}
 	v.AgentID = agentID
+	v.Cursor = cursor
+	v.Limit = limit
+	v.Search = search
 	v.SessionToken = sessionToken
 
 	return v, nil

@@ -66,6 +66,9 @@ type Server struct {
 	ListTemporaryGrants                  http.Handler
 	RenewTemporaryGrant                  http.Handler
 	RevokeTemporaryGrant                 http.Handler
+	ListAccessRequests                   http.Handler
+	DecideAccessRequest                  http.Handler
+	WithdrawAccessRequest                http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -142,6 +145,9 @@ func New(
 			{"ListTemporaryGrants", "GET", "/rpc/access.listTemporaryGrants"},
 			{"RenewTemporaryGrant", "POST", "/rpc/access.renewTemporaryGrant"},
 			{"RevokeTemporaryGrant", "POST", "/rpc/access.revokeTemporaryGrant"},
+			{"ListAccessRequests", "GET", "/rpc/access.listAccessRequests"},
+			{"DecideAccessRequest", "POST", "/rpc/access.decideAccessRequest"},
+			{"WithdrawAccessRequest", "POST", "/rpc/access.withdrawAccessRequest"},
 		},
 		ListRoles:                            NewListRolesHandler(e.ListRoles, mux, decoder, encoder, errhandler, formatter),
 		GetRole:                              NewGetRoleHandler(e.GetRole, mux, decoder, encoder, errhandler, formatter),
@@ -190,6 +196,9 @@ func New(
 		ListTemporaryGrants:                  NewListTemporaryGrantsHandler(e.ListTemporaryGrants, mux, decoder, encoder, errhandler, formatter),
 		RenewTemporaryGrant:                  NewRenewTemporaryGrantHandler(e.RenewTemporaryGrant, mux, decoder, encoder, errhandler, formatter),
 		RevokeTemporaryGrant:                 NewRevokeTemporaryGrantHandler(e.RevokeTemporaryGrant, mux, decoder, encoder, errhandler, formatter),
+		ListAccessRequests:                   NewListAccessRequestsHandler(e.ListAccessRequests, mux, decoder, encoder, errhandler, formatter),
+		DecideAccessRequest:                  NewDecideAccessRequestHandler(e.DecideAccessRequest, mux, decoder, encoder, errhandler, formatter),
+		WithdrawAccessRequest:                NewWithdrawAccessRequestHandler(e.WithdrawAccessRequest, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -245,6 +254,9 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListTemporaryGrants = m(s.ListTemporaryGrants)
 	s.RenewTemporaryGrant = m(s.RenewTemporaryGrant)
 	s.RevokeTemporaryGrant = m(s.RevokeTemporaryGrant)
+	s.ListAccessRequests = m(s.ListAccessRequests)
+	s.DecideAccessRequest = m(s.DecideAccessRequest)
+	s.WithdrawAccessRequest = m(s.WithdrawAccessRequest)
 }
 
 // MethodNames returns the methods served.
@@ -299,6 +311,9 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListTemporaryGrantsHandler(mux, h.ListTemporaryGrants)
 	MountRenewTemporaryGrantHandler(mux, h.RenewTemporaryGrant)
 	MountRevokeTemporaryGrantHandler(mux, h.RevokeTemporaryGrant)
+	MountListAccessRequestsHandler(mux, h.ListAccessRequests)
+	MountDecideAccessRequestHandler(mux, h.DecideAccessRequest)
+	MountWithdrawAccessRequestHandler(mux, h.WithdrawAccessRequest)
 }
 
 // Mount configures the mux to serve the access endpoints.
@@ -2792,6 +2807,165 @@ func NewRevokeTemporaryGrantHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "revokeTemporaryGrant")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListAccessRequestsHandler configures the mux to serve the "access"
+// service "listAccessRequests" endpoint.
+func MountListAccessRequestsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listAccessRequests", f)
+}
+
+// NewListAccessRequestsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "listAccessRequests" endpoint.
+func NewListAccessRequestsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListAccessRequestsRequest(mux, decoder)
+		encodeResponse = EncodeListAccessRequestsResponse(encoder)
+		encodeError    = EncodeListAccessRequestsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listAccessRequests")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDecideAccessRequestHandler configures the mux to serve the "access"
+// service "decideAccessRequest" endpoint.
+func MountDecideAccessRequestHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.decideAccessRequest", f)
+}
+
+// NewDecideAccessRequestHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "decideAccessRequest" endpoint.
+func NewDecideAccessRequestHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDecideAccessRequestRequest(mux, decoder)
+		encodeResponse = EncodeDecideAccessRequestResponse(encoder)
+		encodeError    = EncodeDecideAccessRequestError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "decideAccessRequest")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountWithdrawAccessRequestHandler configures the mux to serve the "access"
+// service "withdrawAccessRequest" endpoint.
+func MountWithdrawAccessRequestHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.withdrawAccessRequest", f)
+}
+
+// NewWithdrawAccessRequestHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "withdrawAccessRequest" endpoint.
+func NewWithdrawAccessRequestHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeWithdrawAccessRequestRequest(mux, decoder)
+		encodeResponse = EncodeWithdrawAccessRequestResponse(encoder)
+		encodeError    = EncodeWithdrawAccessRequestError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "withdrawAccessRequest")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {

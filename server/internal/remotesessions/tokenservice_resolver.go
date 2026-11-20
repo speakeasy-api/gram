@@ -222,7 +222,7 @@ func (m *ChallengeManager) workloadCredentialOwner(ctx context.Context, projectI
 	if err != nil {
 		return zero, fmt.Errorf("admit workload credential owner: %w", err)
 	}
-	allowed, err := authz.GrantsAuthorize(admission.Owner, authz.Check{Scope: authz.ScopeProjectRead, ResourceID: projectID.String(), ResourceKind: "", Dimensions: nil})
+	allowed, err := authz.GrantsAuthorize(admission.Owner, authz.Project(authz.ProjectIDOf(projectID)).Read())
 	if err != nil {
 		return zero, fmt.Errorf("authorize workload owner project access: %w", err)
 	}

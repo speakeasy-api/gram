@@ -32,6 +32,7 @@ export const Dispositions = {
   Destructive: "destructive",
   Idempotent: "idempotent",
   OpenWorld: "open_world",
+  Unannotated: "unannotated",
 } as const;
 export type Dispositions = OpenEnum<typeof Dispositions>;
 

@@ -113,13 +113,17 @@ type Service interface {
 	// Update or clear the administrator-defined display name for one
 	// project-scoped Shadow MCP inventory server URL.
 	UpdateShadowMCPInventoryServerName(context.Context, *UpdateShadowMCPInventoryServerNamePayload) (err error)
-	// Link one project-scoped Shadow MCP server to its official version, or remove
-	// the link. While a link exists, direct connections are blocked wherever a
-	// Shadow MCP policy applies and agents are pointed at the linked server. With
-	// mcp_server_id the link is added (or restored, when it was removed before) or
-	// pointed at that server; omitting mcp_server_id removes the link. Each add,
-	// change and removal is recorded in the audit log. Requires an authenticated
-	// session authorized for org:admin on the active organization.
+	// Choose the official version of one project-scoped Shadow MCP server. By
+	// default a project MCP server that proxies to the Shadow MCP server's URL is
+	// linked automatically (the oldest, when several do). While a link exists and
+	// the linked server has an address, direct connections are blocked wherever a
+	// Shadow MCP policy applies and agents are pointed at the linked server; a
+	// linked server with no address yet leaves direct connections on the ordinary
+	// rules. With mcp_server_id that server is linked instead; with keep_shadow no
+	// server is linked, so direct use follows the ordinary Shadow MCP rules; with
+	// neither, the automatic link applies again. Each change is recorded in the
+	// audit log. Requires an authenticated session authorized for org:admin on the
+	// active organization.
 	SetShadowMCPOfficialServer(context.Context, *SetShadowMCPOfficialServerPayload) (err error)
 	// List users with observed telemetry usage for one project-scoped Shadow MCP
 	// server URL.
@@ -182,8 +186,10 @@ type Service interface {
 	// only: API keys are not checked against grants and would see any member's
 	// rules.
 	ExplainResourceAccess(context.Context, *ExplainResourceAccessPayload) (res *ExplainResourceAccessResult, err error)
-	// Request access to a scope by sending an email notification to organization
-	// administrators.
+	// Request access to a scope. Organization administrators are emailed. With the
+	// access requests rollout on, a signed-in member's request is also stored, so
+	// an administrator can approve it as temporary access or deny it from the
+	// dashboard or Slack.
 	RequestAccess(context.Context, *RequestAccessPayload) (res *RequestAccessResult, err error)
 	// List authz challenge events from ClickHouse, enriched with resolution state
 	// from PostgreSQL.
@@ -227,6 +233,19 @@ type Service interface {
 	// other grants giving the same access are left alone. Requires org:admin,
 	// except that a member may end a grant given directly to themselves.
 	RevokeTemporaryGrant(context.Context, *RevokeTemporaryGrantPayload) (res *TemporaryGrant, err error)
+	// List access requests in the organization, newest first. Organization
+	// administrators see every request; anyone else sees only their own. Requires
+	// the access requests rollout for the organization.
+	ListAccessRequests(context.Context, *ListAccessRequestsPayload) (res *ListAccessRequestsResult, err error)
+	// Approve or deny a pending access request. Approving gives the requester the
+	// scope as a temporary grant until expires_at, with the same limits as
+	// createTemporaryGrant, and resolves the denials the request covers. Requires
+	// org:admin; the requester cannot decide their own request. Session only: the
+	// decision is attributed to the person who made it.
+	DecideAccessRequest(context.Context, *DecideAccessRequestPayload) (res *AccessRequest, err error)
+	// Withdraw a pending access request you made. Only the requester can withdraw
+	// it.
+	WithdrawAccessRequest(context.Context, *WithdrawAccessRequestPayload) (res *AccessRequest, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -249,7 +268,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [47]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "listDirectoryPeople", "syncDirectoryGroups", "setDirectoryRoleMapping", "setDirectoryRoleMappings", "deleteDirectoryRoleMapping", "previewDirectoryRoleSetup", "applyDirectoryRoleSetup", "listDirectoryReviewItems", "resolveDirectoryReviewItem", "getDirectoryReviewSettings", "updateDirectoryReviewSettings", "listScopes", "listAgentPolicyScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "findShadowMCPInventoryServers", "updateShadowMCPInventoryServerName", "setShadowMCPOfficialServer", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "explainResourceAccess", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess", "createTemporaryGrant", "listTemporaryGrants", "renewTemporaryGrant", "revokeTemporaryGrant"}
+var MethodNames = [50]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "listDirectoryPeople", "syncDirectoryGroups", "setDirectoryRoleMapping", "setDirectoryRoleMappings", "deleteDirectoryRoleMapping", "previewDirectoryRoleSetup", "applyDirectoryRoleSetup", "listDirectoryReviewItems", "resolveDirectoryReviewItem", "getDirectoryReviewSettings", "updateDirectoryReviewSettings", "listScopes", "listAgentPolicyScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "findShadowMCPInventoryServers", "updateShadowMCPInventoryServerName", "setShadowMCPOfficialServer", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "explainResourceAccess", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess", "createTemporaryGrant", "listTemporaryGrants", "renewTemporaryGrant", "revokeTemporaryGrant", "listAccessRequests", "decideAccessRequest", "withdrawAccessRequest"}
 
 // One AI detection target aggregated across an organization's device-agent
 // scan reports.
@@ -359,6 +378,44 @@ type AccessMemberDirectoryRoleSource struct {
 	SourceKind string
 	// The mapped directory group. Set when source_kind is group.
 	DirectoryGroupID *string
+}
+
+// AccessRequest is the result type of the access service decideAccessRequest
+// method.
+type AccessRequest struct {
+	// Access request ID.
+	ID string
+	// The member who asked.
+	RequesterUserID string
+	// The requester's display name, or their email when they have none.
+	RequesterName string
+	// The scope asked for.
+	Scope string
+	// The resource or activity boundary asked for.
+	Selector *Selector
+	// Name of the resource, as it was when the request was made.
+	ResourceName *string
+	// The requester's note to the administrators.
+	Message *string
+	// pending: waiting for a decision. approved: a temporary grant was given.
+	// denied, expired or withdrawn: no access was given.
+	Status string
+	// The administrator who approved or denied the request.
+	DecidedByUserID *string
+	// The deciding administrator's display name, or their email.
+	DecidedByName *string
+	// Where the decision was made: dashboard or slack.
+	DecidedVia *string
+	DecidedAt  *string
+	// The temporary grant an approval gave.
+	TemporaryGrantID *string
+	// When the temporary grant an approval gave stops, or stopped, authorizing
+	// requests.
+	GrantExpiresAt *string
+	// When a pending request lapses.
+	ExpiresAt string
+	CreatedAt string
+	UpdatedAt string
 }
 
 // An MCP server an identity is authorized to reach.
@@ -622,6 +679,19 @@ type CreateTemporaryGrantPayload struct {
 	// temporary_grant in the same transaction. Only accepted with a grant to one
 	// member (user:<id>).
 	ChallengeIds []string
+}
+
+// DecideAccessRequestPayload is the payload type of the access service
+// decideAccessRequest method.
+type DecideAccessRequestPayload struct {
+	SessionToken *string
+	// The access request to decide.
+	ID string
+	// True gives the access as a temporary grant; false denies the request.
+	Approve bool
+	// When the temporary grant stops authorizing new requests. Required to
+	// approve: at least five minutes and at most 24 hours from now.
+	ExpiresAt *string
 }
 
 // DeleteDirectoryRoleMappingPayload is the payload type of the access service
@@ -1029,6 +1099,24 @@ type ListAIDetectionsResult struct {
 	Detections []*AIDetection
 }
 
+// ListAccessRequestsPayload is the payload type of the access service
+// listAccessRequests method.
+type ListAccessRequestsPayload struct {
+	// Only requests with this status: pending, approved, denied, expired or
+	// withdrawn.
+	Status *string
+	// Only requests made by the signed-in member, even for an administrator.
+	Mine         bool
+	SessionToken *string
+}
+
+// ListAccessRequestsResult is the result type of the access service
+// listAccessRequests method.
+type ListAccessRequestsResult struct {
+	// Access requests, newest first. At most 200 are returned.
+	Requests []*AccessRequest
+}
+
 // ListAgentPolicyScopesPayload is the payload type of the access service
 // listAgentPolicyScopes method.
 type ListAgentPolicyScopesPayload struct {
@@ -1398,8 +1486,14 @@ type RequestAccessPayload struct {
 // RequestAccessResult is the result type of the access service requestAccess
 // method.
 type RequestAccessResult struct {
-	// Number of administrators who were notified.
+	// Number of administrators who were emailed.
 	SentToCount int
+	// The stored request administrators decide, returned when the access requests
+	// rollout is on for the organization and the caller is a signed-in member. API
+	// keys and agents get no stored request. Its id is the request id. Asking
+	// again while a request for the same access is pending returns that request
+	// without notifying anyone again.
+	Request *AccessRequest
 }
 
 // ResolveChallengePayload is the payload type of the access service
@@ -1740,8 +1834,12 @@ type SetShadowMCPOfficialServerPayload struct {
 	ProjectID    string
 	// The Shadow MCP server's URL.
 	ServerURL string
-	// The MCP server to link as the official version. Omit it to remove the link.
+	// The MCP server to link as the official version. Omit it, with keep_shadow
+	// unset, to go back to the automatic link.
 	McpServerID *string
+	// Keep using the Shadow MCP server directly: no official server is linked, not
+	// even automatically. Cannot be combined with mcp_server_id.
+	KeepShadow *bool
 }
 
 // The enforcement verdict for a shadow MCP server, computed server-side from
@@ -1827,6 +1925,11 @@ type ShadowMCPInventoryServer struct {
 	LastSeen         string
 	LastCalled       *string
 	ObservedUseCount int
+	// Calls to this server that a Speakeasy hook blocked, within the telemetry
+	// retention window. Included in observed_use_count. Optional for one release
+	// so a dashboard deployed ahead of the server still loads the inventory; the
+	// server always sends it.
+	BlockedCallCount int
 	// Distinct users who reached this server.
 	UserCount int
 	// The users who reached this server most.
@@ -1856,6 +1959,9 @@ type ShadowMCPInventoryServer struct {
 	// A project MCP server that proxies to the same upstream URL, offered as the
 	// server to link. Present only while no official server is linked.
 	SuggestedOfficialServer *ShadowMCPSuggestedOfficialServer
+	// True when an administrator chose to keep using the Shadow MCP server
+	// directly, so no official server is linked automatically.
+	OfficialServerDeclined *bool
 }
 
 // A Shadow MCP server in use whose upstream URL matches one of the URLs looked
@@ -1903,8 +2009,8 @@ type ShadowMCPInventoryUserSource struct {
 	ObservedUseCount int
 }
 
-// The official, Speakeasy-served version of a Shadow MCP server, linked by an
-// administrator.
+// The official, Speakeasy-served version of a Shadow MCP server: a project MCP
+// server that proxies to its URL, or one an administrator chose.
 type ShadowMCPOfficialServer struct {
 	McpServerID string
 	// The official server's display name.
@@ -1916,6 +2022,9 @@ type ShadowMCPOfficialServer struct {
 	URL *string
 	// The gateway that serves the official server, when url is a gateway's address.
 	GatewayName *string
+	// True when the link was made automatically because the server proxies to the
+	// Shadow MCP server's URL; false when an administrator chose it.
+	Automatic *bool
 	// Deprecated: links no longer have an on/off switch, so this is always false.
 	// Kept one release so older dashboards, which require it, keep rendering, then
 	// removed.
@@ -2028,6 +2137,14 @@ type UpdateShadowMCPInventoryServerNamePayload struct {
 	ProjectID    string
 	ServerURL    string
 	Name         string
+}
+
+// WithdrawAccessRequestPayload is the payload type of the access service
+// withdrawAccessRequest method.
+type WithdrawAccessRequestPayload struct {
+	// The access request to withdraw.
+	ID           string
+	SessionToken *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

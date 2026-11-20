@@ -150,28 +150,30 @@ func TestGatewayProxyListsServersAsTheCaller(t *testing.T) {
 
 // The gateway's note names connection_status, which this connection does not
 // offer, so list_my_servers says how sign-in surfaces here instead.
-func TestGatewayProxyRewritesTheUncheckedStatusNote(t *testing.T) {
+func TestGatewayProxyRewritesGatewayDiscoveryNotes(t *testing.T) {
 	t.Parallel()
 	ctx, service, proxy, principal := newGatewayProxyFixture(t, true, true)
-	note, err := json.Marshal(metamcp.HiddenNote + " " + metamcp.UnknownNote)
+	note, err := json.Marshal(metamcp.DescribeServerNote + " " + metamcp.HiddenNote + " " + metamcp.UnknownNote)
 	require.NoError(t, err)
 	proxy.results[metamcp.ToolListServers] = `{"content":[],"structuredContent":{"servers":[{"slug":"crm","name":"CRM","sortOrder":0,"status":"unknown"}],"note":` + string(note) + `}}`
 
 	output, err := service.ListMyServers(ctx, principal)
 
 	require.NoError(t, err)
-	require.Equal(t, metamcp.HiddenNote+" "+myServersUnknownNote, output.Note)
+	require.Equal(t, myServersDescribeNote+" "+metamcp.HiddenNote+" "+myServersUnknownNote, output.Note)
+	require.NotContains(t, output.Note, "describe_server")
 	require.NotContains(t, output.Note, "connection_status")
 }
 
 func TestGatewayProxyDescribesToolsByPlainName(t *testing.T) {
 	t.Parallel()
 	ctx, service, proxy, principal := newGatewayProxyFixture(t, true, true)
-	proxy.results[metamcp.ToolDescribeServer] = `{"content":[],"structuredContent":{"server":{"slug":"crm","sortOrder":0,"status":"available"},"tools":[{"name":"crm--find_contact","description":"Find a contact"}]}}`
+	proxy.results[metamcp.ToolDescribeServer] = `{"content":[],"structuredContent":{"server":{"slug":"crm","sortOrder":0,"status":"available"},"instructions":"Look up the account before finding a contact.","tools":[{"name":"crm--find_contact","description":"Find a contact"}]}}`
 	proxy.results[metamcp.ToolDescribeTools] = `{"content":[],"structuredContent":{"tools":[{"name":"crm--find_contact","inputSchema":{"type":"object"}}],"not_found":["crm--missing"]}}`
 
 	catalog, err := service.DescribeTools(ctx, principal, DescribeToolsInput{Server: "crm", Tools: nil})
 	require.NoError(t, err)
+	require.Equal(t, "Look up the account before finding a contact.", catalog.Instructions)
 	require.Equal(t, []DescribedTool{{Name: "find_contact", Description: "Find a contact", InputSchema: nil}}, catalog.Tools)
 	require.Equal(t, map[string]any{"server": "crm"}, proxy.calls[0].arguments)
 
@@ -179,6 +181,7 @@ func TestGatewayProxyDescribesToolsByPlainName(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []DescribedTool{{Name: "find_contact", Description: "", InputSchema: map[string]any{"type": "object"}}}, schemas.Tools)
 	require.Equal(t, []string{"missing"}, schemas.NotFound)
+	require.Empty(t, schemas.Instructions)
 	require.Equal(t, map[string]any{"tools": []any{"crm--find_contact", "crm--missing"}}, proxy.calls[1].arguments)
 }
 
@@ -341,6 +344,7 @@ func TestMyServersInstructionsFitTheBudget(t *testing.T) {
 
 	require.NotEmpty(t, paragraph)
 	require.LessOrEqual(t, len(paragraph), remaining)
+	require.Contains(t, paragraph, "describe_tools")
 	require.Contains(t, paragraph, "more")
 	require.Empty(t, myServersInstructions(servers, 10))
 	require.Empty(t, myServersInstructions(servers, -5))

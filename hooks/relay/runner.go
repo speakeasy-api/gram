@@ -533,7 +533,18 @@ func cursorMCPEcho(base *agenthooks.Event, toolName string) bool {
 
 func (r *Relay) onStop(ctx context.Context, e *agenthooks.StopEvent) (agenthooks.StopDecision, error) {
 	if inCoworkVM(&e.Event) {
-		warnings := r.shipTranscript(ctx, e)
+		warnings, noTranscript := r.shipTranscript(ctx, e)
+		// Some Cowork sessions run Claude Code only as a tool server
+		// (`claude mcp serve`): the conversation lives on claude.ai, no
+		// transcript is written and transcript_path is empty. The reply then
+		// reaches the server only as an event carrying Stop's
+		// last_assistant_message, as it does outside Cowork. Any transcript
+		// path the binary refuses counts, not only an empty one: no line of
+		// that path can ever ship, so the reply cannot also arrive from the
+		// transcript. A session whose transcript ships never sends the event.
+		if noTranscript {
+			r.deliver(ctx, e)
+		}
 		// A Stop that follows a warning continuation ships the reply but never
 		// continues again, so a replayed upload cannot loop Claude.
 		if len(warnings) == 0 || e.PreviouslyContinued {

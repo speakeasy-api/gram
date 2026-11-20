@@ -66,6 +66,7 @@ func usageRow(url string, calls, users uint64) telemetryrepo.ShadowMCPInventoryU
 		FirstCalled:        &first,
 		LastCalled:         &last,
 		CallCount:          calls,
+		BlockedCallCount:   0,
 		UserCount:          users,
 		TopUsers:           nil,
 	}

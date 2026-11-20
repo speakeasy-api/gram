@@ -11,9 +11,21 @@ export type ListAPIKeysSecurity = {
 
 export type ListAPIKeysRequest = {
   /**
-   * When set, list keys for this first-class agent
+   * When set, list keys for this first-class agent. Cannot be combined with cursor, limit or search.
    */
   agentId?: string | undefined;
+  /**
+   * Opaque cursor from a previous response's next_cursor. Returns the keys after that page.
+   */
+  cursor?: string | undefined;
+  /**
+   * Page size. When omitted, every matching key is returned and next_cursor is never set.
+   */
+  limit?: number | undefined;
+  /**
+   * Only return keys whose name contains this text, ignoring case.
+   */
+  search?: string | undefined;
   /**
    * Session header
    */
@@ -51,6 +63,9 @@ export function listAPIKeysSecurityToJSON(
 /** @internal */
 export type ListAPIKeysRequest$Outbound = {
   agent_id?: string | undefined;
+  cursor?: string | undefined;
+  limit?: number | undefined;
+  search?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
 
@@ -61,6 +76,9 @@ export const ListAPIKeysRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     agentId: z.optional(z.string()),
+    cursor: z.optional(z.string()),
+    limit: z.optional(z.int()),
+    search: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {

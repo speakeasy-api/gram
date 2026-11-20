@@ -151,7 +151,7 @@ func (s *Service) requireLinkTargetWrite(ctx context.Context, authCtx *contextva
 		case err != nil:
 			return nil, oops.E(oops.CodeUnexpected, err, "resolve mcp server for skill link").LogError(ctx, logger)
 		}
-		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, mcpGrantResourceID(server.ID, server.ToolsetID), projectID.String())); err != nil {
+		if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDFrom(mcpGrantResourceID(server.ID, server.ToolsetID)), authz.ProjectIDOf(projectID)).Write()); err != nil {
 			return nil, err
 		}
 		return &server.Name, nil
@@ -183,7 +183,7 @@ func (s *Service) requireLinkTargetWrite(ctx context.Context, authCtx *contextva
 // that already exists, whose target row may since have been removed.
 func (s *Service) requireStoredLinkTargetWrite(ctx context.Context, projectID uuid.UUID, link mcpskillsrepo.McpSkillLink, toolsetID uuid.NullUUID) error {
 	if link.TargetKind == string(skilllink.TargetMCPServer) && link.McpServerID.Valid {
-		return s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, mcpGrantResourceID(link.McpServerID.UUID, toolsetID), projectID.String()))
+		return s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDFrom(mcpGrantResourceID(link.McpServerID.UUID, toolsetID)), authz.ProjectIDOf(projectID)).Write())
 	}
 	if link.TargetKind == string(skilllink.TargetMetaMCPServer) {
 		return s.requireProjectMCPWrite(ctx, projectID)
@@ -193,11 +193,11 @@ func (s *Service) requireStoredLinkTargetWrite(ctx context.Context, projectID uu
 
 // requireProjectMCPWrite matches the check the gateway write APIs make.
 func (s *Service) requireProjectMCPWrite(ctx context.Context, projectID uuid.UUID) error {
-	return s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, projectID.String(), projectID.String()))
+	return s.authz.Require(ctx, authz.MCPServers(authz.ProjectIDOf(projectID)).Write())
 }
 
 func (s *Service) requireProjectWrite(ctx context.Context, projectID uuid.UUID) error {
-	return s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil})
+	return s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(projectID)).Write())
 }
 
 func buildSkillLinkAuditSnapshot(link mcpskillsrepo.McpSkillLink) *audit.SkillLinkSnapshot {
@@ -217,8 +217,15 @@ func buildSkillLinkAuditSnapshot(link mcpskillsrepo.McpSkillLink) *audit.SkillLi
 }
 
 func (s *Service) Link(ctx context.Context, payload *gen.LinkPayload) (*types.SkillLink, error) {
-	authCtx, logger, err := s.requireSkillAccess(ctx, authz.ScopeSkillRead, payload.ID)
-	if err != nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+	if err := s.requireSkillReadAccess(ctx, authCtx, payload.ID); err != nil {
 		return nil, err
 	}
 	if err := s.requireSkillsOverMCP(ctx, authCtx, logger); err != nil {
@@ -387,7 +394,7 @@ func (s *Service) Unlink(ctx context.Context, payload *gen.UnlinkPayload) error 
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "get skill link").LogError(ctx, logger)
 	}
-	if _, _, err := s.requireSkillAccess(ctx, authz.ScopeSkillRead, current.McpSkillLink.SkillID.String()); err != nil {
+	if err := s.requireSkillReadAccess(ctx, authCtx, current.McpSkillLink.SkillID.String()); err != nil {
 		return err
 	}
 	if err := s.requireStoredLinkTargetWrite(ctx, *authCtx.ProjectID, current.McpSkillLink, current.McpServerToolsetID); err != nil {
@@ -444,8 +451,15 @@ func (s *Service) Unlink(ctx context.Context, payload *gen.UnlinkPayload) error 
 }
 
 func (s *Service) ListLinks(ctx context.Context, payload *gen.ListLinksPayload) (*gen.ListSkillLinksResult, error) {
-	authCtx, logger, err := s.requireSkillAccess(ctx, authz.ScopeSkillRead, conv.PtrValOr(payload.SkillID, ""))
-	if err != nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+	if err := s.requireSkillReadAccess(ctx, authCtx, conv.PtrValOr(payload.SkillID, "")); err != nil {
 		return nil, err
 	}
 	if err := s.requireSkillsOverMCP(ctx, authCtx, logger); err != nil {
@@ -535,10 +549,10 @@ func (s *Service) readableLinkTargets(ctx context.Context, projectID uuid.UUID, 
 		link := row.McpSkillLink
 		switch {
 		case link.TargetKind == string(skilllink.TargetMCPServer) && link.McpServerID.Valid:
-			checks = append(checks, authz.MCPCheck(authz.ScopeMCPRead, mcpGrantResourceID(link.McpServerID.UUID, row.McpServerToolsetID), projectID.String()))
+			checks = append(checks, authz.MCPServer(authz.MCPServerIDFrom(mcpGrantResourceID(link.McpServerID.UUID, row.McpServerToolsetID)), authz.ProjectIDOf(projectID)).Read())
 			checkRows = append(checkRows, i)
 		case link.TargetKind == string(skilllink.TargetMetaMCPServer) && link.MetaMcpServerID.Valid:
-			checks = append(checks, authz.MCPCheck(authz.ScopeMCPRead, projectID.String(), projectID.String()))
+			checks = append(checks, authz.MCPServers(authz.ProjectIDOf(projectID)).Read())
 			checkRows = append(checkRows, i)
 		default:
 			readable[i] = true

@@ -19,6 +19,6 @@ func TestGrantsContainSelectorWildcards(t *testing.T) {
 	candidate[SelectorKeyTool] = "other-tool"
 	require.False(t, GrantsContainSelector([]Grant{broad}, ScopeMCPConnect, candidate))
 	// Delegation support must not relax runtime's concrete-resource requirement.
-	_, err := GrantsAuthorize([]Grant{broad}, MCPCheck(ScopeMCPConnect, "*", "example-project"))
+	_, err := GrantsAuthorize([]Grant{broad}, mcpCheck(ScopeMCPConnect, "*", "example-project"))
 	require.ErrorIs(t, err, ErrInvalidCheck)
 }

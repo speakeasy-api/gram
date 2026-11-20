@@ -19,11 +19,45 @@ func TestDenialReasons_SkipsValidationWhenRBACIsNotEnforced(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, enforce, "a sessionless context skips RBAC")
 
-	valid := MCPCheck(ScopeMCPConnect, "toolset_1", authProjectP)
+	valid := MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(authProjectP)).Connect()
 	invalid := Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: "", Dimensions: nil}
 	authClient := MCPAuthClientCheck("ac_1", MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: authProjectP, ConnectionOwner: "", UpstreamClient: ""})
 
 	reasons, err := engine.DenialReasons(ctx, []Check{valid, invalid, authClient})
 	require.NoError(t, err, "unenforced callers get the unenforced result, like FindMatched")
 	require.Equal(t, []DenialReason{DenialReasonNone, DenialReasonNone, DenialReasonNotGranted}, reasons)
+}
+
+// A call refused only because the caller's grant names another disposition
+// than read_only is reported as a disposition refusal, even though a missing
+// key never matches on a decision.
+func TestDenialReasons_OtherDispositionIsReported(t *testing.T) {
+	t.Parallel()
+
+	selector := NewSelector(ScopeMCPConnect, "toolset_1")
+	selector[SelectorKeyDisposition] = DispositionIdempotent
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrantWithSelector(ScopeMCPConnect, selector)})
+
+	call := MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(authProjectP)).ToolCall("delete_all", DispositionDestructive)
+	reasons, err := engine.DenialReasons(ctx, []Check{call})
+	require.NoError(t, err)
+	require.Equal(t, []DenialReason{DenialReasonDisposition}, reasons)
+}
+
+// A call refused because it names no tool while the grant is limited to one
+// is not a disposition refusal: no other disposition would allow it.
+func TestDenialReasons_MissingToolIsNotADispositionRefusal(t *testing.T) {
+	t.Parallel()
+
+	selector := NewSelector(ScopeMCPConnect, "toolset_1")
+	selector[SelectorKeyTool] = "search"
+	selector[SelectorKeyDisposition] = DispositionIdempotent
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrantWithSelector(ScopeMCPConnect, selector)})
+
+	call := MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(authProjectP)).ToolCall("", DispositionDestructive)
+	reasons, err := engine.DenialReasons(ctx, []Check{call})
+	require.NoError(t, err)
+	require.Equal(t, []DenialReason{DenialReasonNotGranted}, reasons)
 }

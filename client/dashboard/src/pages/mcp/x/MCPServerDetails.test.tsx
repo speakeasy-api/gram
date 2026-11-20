@@ -25,6 +25,14 @@ const mocks = vi.hoisted(() => ({
   hostedToolset: undefined as unknown,
 }));
 
+// The request button looks up the viewer's pending access requests when the
+// rollout is on.
+vi.mock("@gram/client/react-query/accessRequests.js", () => ({
+  useAccessRequests: () => ({
+    data: { requests: [] },
+    refetch: () => Promise.resolve(),
+  }),
+}));
 // The detail frame's chrome loads its own data; these tests cover routing.
 vi.mock("@/components/mcp/useMcpServerDetailChrome", () => ({
   useMcpServerDetailChrome: () => null,
