@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -123,7 +124,20 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// trusted — and a document fetch failure aborts the request per
 	// draft-ietf-oauth-client-id-metadata-document-02 §5.1 (fail closed,
 	// no stale fallback).
-	client, err := s.resolveUserSessionClient(ctx, logger, endpoint, req.ClientID, resolveClientCIMD)
+	var client *usersessions_repo.UserSessionClient
+	if req.ClientID == dashboardInspectClientID {
+		redirectURIs := s.dashboardInspectRedirectURIs()
+		if !slices.Contains(redirectURIs, req.RedirectURI) {
+			// This client ID is recognized by the server before it has a row.
+			t.Scope(connectionScope(endpoint, mcpconnectionattempts.AppOf(req.ClientID, mcpconnectionattempts.ClientIDAdmitted)))
+			t.Refuse(ctx, mcpconnectionattempts.CodeRedirectURIMismatch)
+			page.Reason = oauthui.ReasonInvalidClient
+			return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, page, "invalid_request", "redirect_uri is not registered for this client")
+		}
+		client, err = s.registerDashboardInspectClient(ctx, logger, endpoint, redirectURIs)
+	} else {
+		client, err = s.resolveUserSessionClient(ctx, logger, endpoint, req.ClientID, resolveClientCIMD)
+	}
 	if err != nil {
 		if admissionErr, ok := errors.AsType[*admission.DenialError](err); ok {
 			page.Reason = oauthui.ReasonOrganizationBlocked

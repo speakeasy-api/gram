@@ -9,6 +9,9 @@ export const FEATURE_FLAGS = {
   emaProviders: "ema-providers",
   explore: "gram-explore",
   headlessModeSwitcher: "headless-mode-switcher",
+  // UI-only rollout gate for the Intune package download on the Windows
+  // device agent setup step.
+  intunePackageDownload: "intune-package-download",
   killswitches: "gram-killswitches",
   // Gates MCP Sessions connection health (Overview, Connection Logs); the server checks the same key.
   mcpConnectionHealth: "mcp-connection-health",

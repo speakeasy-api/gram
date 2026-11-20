@@ -195,3 +195,40 @@ func TestPrepareContext_loadsGrantsForNonEnterpriseOrgs(t *testing.T) {
 	require.Len(t, grants, 1)
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "project_non_enterprise"}))
 }
+
+func TestWithoutCredentialCeilingKeepsLivePolicies(t *testing.T) {
+	t.Parallel()
+	ceiling := []Grant{{Scope: ScopeMCPConnect, Selector: Selector{SelectorKeyResourceID: "gateway"}}}
+	agent := []Grant{{Scope: ScopeMCPConnect, Selector: Selector{SelectorKeyResourceID: "member"}}}
+	owner := []Grant{{Scope: ScopeMCPConnect, Selector: Selector{SelectorKeyResourceID: "member"}}}
+	ctx := admittedPoliciesToContext(t.Context(), RepresentedUserPolicy{}, true, ceiling, agent, owner)
+
+	ctx = WithoutCredentialCeiling(ctx)
+
+	policies, ok := currentGrantAuthorizationFromContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, [][]Grant{agent, owner}, policies.policies)
+	require.False(t, policies.legacyAuthCeiling)
+	got, ok := CredentialCeilingFromContext(ctx)
+	require.True(t, ok)
+	require.Empty(t, got)
+}
+
+func TestCredentialCeilingFromContextIsImmutable(t *testing.T) {
+	t.Parallel()
+	source := []Grant{{
+		Scope:    ScopeMCPConnect,
+		Selector: Selector{SelectorKeyProjectID: "project-original"},
+	}}
+	ctx := admittedPoliciesToContext(t.Context(), RepresentedUserPolicy{}, false, source)
+
+	source[0].Selector[SelectorKeyProjectID] = "project-mutated-source"
+	first, ok := CredentialCeilingFromContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, "project-original", first[0].Selector[SelectorKeyProjectID])
+
+	first[0].Selector[SelectorKeyProjectID] = "project-mutated-return"
+	second, ok := CredentialCeilingFromContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, "project-original", second[0].Selector[SelectorKeyProjectID])
+}

@@ -132,10 +132,7 @@ needs and the shared demo org must never have:
   it is a genuinely hardcoded credential, deliberately, scoped to one
   developer's database.
 - **A default environment**, the global `Gram Recommended` MCP registry row
-  (not tenant-scoped, so it cannot live in the seed proper), and the
-  Playground's MCP App: a Speakeasy Function zipped in-memory from
-  `server/internal/demoseed/mcpapp/` and hung off the seeded deployment, so the
-  demo org never gets a functions deployment production would have to run.
+  (not tenant-scoped, so it cannot live in the seed proper).
 - **Working upstream servers.** The seed has five working MCP servers: three
   named for the configuration they test, plus Linear and Notion, real
   vendors. (The local fixtures add an Enterprise Sign-In (ID-JAG) Server,

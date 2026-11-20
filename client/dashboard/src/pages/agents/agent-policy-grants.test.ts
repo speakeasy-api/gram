@@ -816,7 +816,8 @@ describe("round trip through the editor", () => {
 
   it("reproduces every editable grant exactly", () => {
     const view = agentPolicyViewFromGrants(ceiling);
-    expect(view.preservedScopes).toEqual(["mcp:auth"]);
+    // Credential rules are edited in their own panel, not kept here.
+    expect(view.preservedScopes).toEqual([]);
     expect(view.editable.map((grant) => grant.id)).toEqual([
       "read_server",
       "read_server_two",

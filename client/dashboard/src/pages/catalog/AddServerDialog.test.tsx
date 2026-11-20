@@ -12,6 +12,7 @@ import {
 import { MemoryRouter } from "react-router";
 import { catalogPresetState } from "@/pages/security/server-guardrails/server-guardrail-policy";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useState } from "react";
 import { AddServerDialog, GuardrailOutcomeNotice } from "./AddServerDialog";
 
 const mocks = vi.hoisted(() => ({
@@ -28,6 +29,7 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   updateServerConfig: vi.fn(),
   workflow: vi.fn(),
+  shadowReplacement: vi.fn(),
 }));
 
 vi.mock("sonner", () => ({
@@ -67,6 +69,40 @@ vi.mock("./useRemoteMcpInstallWorkflow", () => ({
   ) => `${serverIndex}:${remoteUrl}:${headerName}`,
   useRemoteMcpInstallWorkflow: (options: unknown) => mocks.workflow(options),
 }));
+
+vi.mock("./useShadowMCPReplacement", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./useShadowMCPReplacement")>()),
+  useShadowMCPReplacement: (options: unknown) =>
+    mocks.shadowReplacement(options),
+}));
+
+const shadowCandidate = {
+  projectId: "project-1",
+  remoteUrl: "https://mcp.example.test/mcp",
+  shadowServerUrl: "https://mcp.example.test/mcp",
+  shadowName: "Example Tools",
+  shadowServerSlug: "mcp-example-test-mcp-12345678",
+  userCount: 4,
+};
+
+/** Stands in for the lookup with the hook's own choice state, so clicking
+ *  the checkbox changes what the install is told to replace. */
+function mockShadowReplacement(
+  candidates: (typeof shadowCandidate)[] = [],
+  { isLoading = false }: { isLoading?: boolean } = {},
+): void {
+  mocks.shadowReplacement.mockImplementation(() => {
+    const [replace, setReplace] = useState(true);
+    return {
+      candidates,
+      selected: replace ? candidates : [],
+      isSelected: () => replace,
+      setSelected: (_: unknown, selected: boolean) => setReplace(selected),
+      isLoading,
+      reset: vi.fn(),
+    };
+  });
+}
 
 const server = {
   description: "A test server",
@@ -163,6 +199,7 @@ beforeEach(() => {
   sessionStorage.clear();
   mocks.hasScope.mockReturnValue(false);
   mockConfigureWorkflow();
+  mockShadowReplacement();
 });
 
 afterEach(() => {
@@ -875,3 +912,96 @@ describe.each(["snowflake", "okta"] as const)(
     );
   },
 );
+
+describe("AddServerDialog Shadow MCP replacement", () => {
+  it("asks nothing when no Shadow MCP server matches", async () => {
+    renderDialog();
+    await screen.findByRole("button", { name: "Add to Project" });
+    expect(screen.queryByText("Replace the Shadow MCP version")).toBeNull();
+    expect(mocks.workflow).toHaveBeenLastCalledWith(
+      expect.objectContaining({ shadowMCPReplacements: [] }),
+    );
+  });
+
+  it("replaces a matching Shadow MCP server by default, and adds only when switched off", async () => {
+    mockShadowReplacement([shadowCandidate]);
+    renderDialog();
+
+    const option = await screen.findByRole("checkbox", {
+      name: "Replace the Shadow MCP version of Example Tools",
+    });
+    expect(option.getAttribute("aria-checked")).toBe("true");
+    expect(
+      screen.getByText(/4 people use Example Tools directly today/),
+    ).toBeDefined();
+    expect(mocks.workflow).toHaveBeenLastCalledWith(
+      expect.objectContaining({ shadowMCPReplacements: [shadowCandidate] }),
+    );
+
+    fireEvent.click(option);
+    await waitFor(() =>
+      expect(option.getAttribute("aria-checked")).toBe("false"),
+    );
+    expect(mocks.workflow).toHaveBeenLastCalledWith(
+      expect.objectContaining({ shadowMCPReplacements: [] }),
+    );
+
+    fireEvent.click(option);
+    await waitFor(() =>
+      expect(mocks.workflow).toHaveBeenLastCalledWith(
+        expect.objectContaining({ shadowMCPReplacements: [shadowCandidate] }),
+      ),
+    );
+  });
+
+  it("asks nothing for an endpoint the admin left out", async () => {
+    mockShadowReplacement([
+      { ...shadowCandidate, remoteUrl: "https://other.example.test/mcp" },
+    ]);
+    renderDialog();
+    await screen.findByRole("button", { name: "Add to Project" });
+    expect(screen.queryByText("Replace the Shadow MCP version")).toBeNull();
+  });
+
+  it("waits for the Shadow MCP lookup before adding", async () => {
+    mocks.hasScope.mockReturnValue(true);
+    mockShadowReplacement([], { isLoading: true });
+    renderDialog();
+    const add = await screen.findByRole("button", { name: "Add to Project" });
+    expect((add as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("leaves unproxied servers out of the lookup", () => {
+    const figma = {
+      ...server,
+      registrySpecifier: "com.figma.mcp/mcp",
+      remotes: [
+        {
+          url: "https://mcp.figma.com/mcp",
+          transportType: "streamable-http" as const,
+        },
+      ],
+    };
+    mockConfigureWorkflow(figma);
+    renderDialog(figma);
+    expect(mocks.shadowReplacement).toHaveBeenLastCalledWith(
+      expect.objectContaining({ servers: [] }),
+    );
+  });
+
+  it("does not look for Shadow MCP servers in a headless install", () => {
+    render(
+      <AddServerDialog
+        servers={[server]}
+        open
+        headless
+        onOpenChange={(open) => {
+          mocks.onOpenChange(open);
+        }}
+      />,
+    );
+    expect(mocks.shadowReplacement).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: false }),
+    );
+  });
+});

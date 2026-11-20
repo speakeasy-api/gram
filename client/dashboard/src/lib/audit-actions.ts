@@ -309,7 +309,10 @@ export const AUDIT_ACTIONS = [
   "risk_result:unmask",
   "session_quarantine:open",
   "session_quarantine:release",
+  "shadow_mcp_official_server:create",
+  "shadow_mcp_official_server:delete",
   "shadow_mcp_official_server:set",
+  "shadow_mcp_official_server:update",
   "sigint-sensor:create",
   "sigint-sensor:delete",
   "sigint-sensor:update",
@@ -362,7 +365,9 @@ export const AUDIT_ACTIONS = [
   "unproxied-mcp:create",
   "unproxied-mcp:delete",
   "user-session-client:cimd-refresh",
+  "user-session-client:create",
   "user-session-client:revoke",
+  "user-session-client:update-redirect-uris",
   "user-session-consent:revoke",
   "user-session-issuer-cimd-client:add",
   "user-session-issuer-cimd-client:remove",
@@ -1016,8 +1021,14 @@ export function staticActionPhrase(action: AuditAction): string {
     case "risk_policy:eval_review_delete":
       return "deleted an evaluation review for";
 
-    // One action records linking, switching the link off or on, and
-    // removing it, so the phrase names the link rather than one of them.
+    case "shadow_mcp_official_server:create":
+      return "linked an official server to Shadow MCP server";
+    case "shadow_mcp_official_server:update":
+      return "changed the official server linked to Shadow MCP server";
+    case "shadow_mcp_official_server:delete":
+      return "removed the official server link of Shadow MCP server";
+    // Entries written before links lost their on/off switch: one action
+    // covered every change, so the phrase names the link.
     case "shadow_mcp_official_server:set":
       return "changed the official server link of Shadow MCP server";
 
@@ -1157,8 +1168,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "revoked user session";
     case "user-session-client:cimd-refresh":
       return "refreshed the client metadata document for";
+    case "user-session-client:create":
+      return "registered user session client";
     case "user-session-client:revoke":
       return "revoked user session client";
+    case "user-session-client:update-redirect-uris":
+      return "updated user session client redirect URIs";
     case "user-session-consent:revoke":
       return "revoked consent for";
     case "user-session-issuer:create":

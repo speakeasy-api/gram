@@ -148,7 +148,7 @@ func newTestServiceWithHosts(t *testing.T, hosts authserver.Hosts, revoker users
 		audit.NewLogger(),
 		guardianPolicy,
 		nil,
-		testenv.NewEncryptionClient(t), clientsecretstest.New(t, conn, testenv.NewEncryptionClient(t)),
+		testenv.NewEncryptionClient(t), clientsecretstest.New(t, conn, testenv.NewEncryptionClient(t)), nil,
 		usersessions.NewSigner("test-jwt-secret"),
 		testServerURL,
 		hosts,

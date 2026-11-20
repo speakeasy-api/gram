@@ -809,6 +809,7 @@ func newWorkerCommand() *cli.Command {
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
+			assistantsCore.SetTurnStream(chat.NewTurnStream(redisClient))
 			if err := installKitLocalRuntimeFromCLI(logger, c, assistantsCore, db, auditLogger, redisClient, serverURL); err != nil {
 				return err
 			}
@@ -896,6 +897,7 @@ func newWorkerCommand() *cli.Command {
 				DB:                             db,
 				EncryptionClient:               encryptionClient,
 				ClientSecrets:                  orgEncryption.ClientSecrets(logger, encryptionClient),
+				UpstreamTokens:                 orgEncryption.UpstreamTokens(logger, encryptionClient),
 				FeatureProvider:                featureFlags,
 				AssetStorage:                   assetStorage,
 				SlackClient:                    slackClient,

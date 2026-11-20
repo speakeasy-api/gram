@@ -1,7 +1,7 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { MemberFacepile } from "@/components/member-facepile";
 import { Button } from "@/components/ui/Button";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { pluralize } from "@/lib/format";

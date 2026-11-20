@@ -311,7 +311,7 @@ func seedAgentOutageConnection(t *testing.T, ctx context.Context, ti *testInstan
 	require.NoError(t, err)
 	refresh, err := ti.enc.Encrypt([]byte("live-refresh"))
 	require.NoError(t, err)
-	_, err = remotesessionsrepo.New(ti.conn).UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+	_, err = remotesessionsrepo.New(ti.conn).UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn: urn.NewUserSubject(fx.userID), UserSessionIssuerID: fx.client.UserSessionIssuerID, RemoteSessionClientID: clientID,
 		AccessTokenEncrypted: access, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true, InfinityModifier: pgtype.Finite},
 		RefreshTokenEncrypted: conv.ToPGText(refresh), Scopes: []string{},

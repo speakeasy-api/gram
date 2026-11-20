@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { handleError, toError } from "@/lib/errors";
 import { DEFAULT_MODEL } from "@/lib/models";
-import { PlaygroundChat } from "@/pages/playground/PlaygroundChat";
+import { InspectChat } from "@/pages/mcp/inspect-chat/InspectChat";
 import { getServerURL } from "@/lib/utils";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { useMemo, type ReactNode } from "react";
@@ -61,11 +61,9 @@ type RemoteMcpToolsSectionProps = {
  * Inspect for one MCP server: the tools this viewer's agents get, why any are
  * missing, and a panel to run one or chat with the server.
  *
- * Issuer-gated servers connect with a minted user-session JWT. With no upstream
- * session yet the listing 401s into `needsAuth`, and Connect opens the
- * first-party connect page in a new tab; returning focus lists again. That page
- * 404s unless the server is issuer-gated on a Speakeasy-hosted address, so a 401
- * from any other server points at authentication settings instead.
+ * For issuer-gated servers, Connect takes this tab through OAuth consent and
+ * returns with the grant needed to list tools. Without a supported sign-in
+ * target, point users to authentication settings instead.
  *
  * Expected fetch failures render inline. The surrounding ErrorBoundary is the
  * defensive layer for unexpected render-time throws.
@@ -168,6 +166,7 @@ function RemoteMcpToolsSectionInner({
     tunneledMcpServerId,
     visibility,
     chatSession: true,
+    inspectOAuth: true,
   });
   const {
     tools: listed,
@@ -259,7 +258,7 @@ function RemoteMcpToolsSectionInner({
   // The chat prefers the Speakeasy origin. A server reachable only on a
   // custom domain chats at the address Inspect resolved for it.
   const chatUrl = platformSlug
-    ? `${getServerURL()}/mcp/${platformSlug}`
+    ? `${getServerURL()}/mcp/${encodeURIComponent(platformSlug)}`
     : mcpUrl;
 
   return (
@@ -284,13 +283,10 @@ function RemoteMcpToolsSectionInner({
       }
       chat={
         canChat && chatUrl ? (
-          // Reuses this tab's connection: the same Speakeasy-origin URL and
-          // the same session token, so chatting never asks to connect again.
-          <PlaygroundChat
+          // Reuses this tab's endpoint and access token.
+          <InspectChat
             mcpUrl={chatUrl}
             gatewayToken={headers?.Authorization?.replace(/^Bearer /, "")}
-            environmentSlug={null}
-            compact
             model={DEFAULT_MODEL}
           />
         ) : undefined
@@ -299,11 +295,6 @@ function RemoteMcpToolsSectionInner({
   );
 }
 
-/**
- * The needs-connect state. Connecting opens the first-party connect page;
- * returning focus lists again, which saves any tools new to the project, so
- * the copy says so.
- */
 function ConnectPrompt({ onConnect }: { onConnect: () => void }): JSX.Element {
   return (
     <InspectState

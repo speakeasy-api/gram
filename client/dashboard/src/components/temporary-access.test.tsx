@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 import type React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import { SelfGrantAccess } from "./temporary-access";
 
 const createGrant = vi.hoisted(() => ({ mutate: vi.fn() }));
@@ -52,7 +53,9 @@ vi.mock("@gram/client/react-query/createTemporaryGrant.js", () => ({
 function renderWithClient(ui: React.ReactElement) {
   const client = new QueryClient();
   return render(
-    <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
+    <QueryClientProvider client={client}>
+      <TooltipProvider>{ui}</TooltipProvider>
+    </QueryClientProvider>,
   );
 }
 
@@ -65,13 +68,34 @@ function openAndFill(reason: string) {
   });
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 beforeEach(() => {
   createGrant.mutate.mockReset();
   challenges.value = [];
 });
 
 describe("SelfGrantAccess", () => {
+  it("keeps end-of-day access unavailable near midnight", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 0, 1, 23, 55));
+    renderWithClient(<SelfGrantAccess scope="chat:read" resourceId="chat-1" />);
+    openAndFill("Investigate");
+
+    const endOfDay = screen.getByRole("button", { name: "End of day" });
+    expect(endOfDay.getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(endOfDay);
+    expect(endOfDay.getAttribute("aria-pressed")).toBe("false");
+    expect(
+      screen
+        .getByRole("button", { name: "2 hours" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(createGrant.mutate).not.toHaveBeenCalled();
+  });
+
   it("needs a reason before granting", () => {
     renderWithClient(<SelfGrantAccess scope="chat:read" resourceId="chat-1" />);
     fireEvent.click(

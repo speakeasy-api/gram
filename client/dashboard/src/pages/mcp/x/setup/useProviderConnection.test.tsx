@@ -1,9 +1,10 @@
+import { waitForHookState as waitFor } from "@/test/waitForHookState";
 import { accountSetupUrls } from "@/pages/catalog/account-provider";
 import { snowflakeSetupUrl } from "@/pages/catalog/snowflake-install";
 import { loadProviderProgress, saveProviderProgress } from "./provider-setup";
 import { queryKeyRemoteSessionClient } from "@gram/client/react-query/remoteSessionClient";
 import { useReducer, type PropsWithChildren } from "react";
-import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import { act, cleanup, renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GramError } from "@gram/client/models/errors/gramerror";
@@ -1849,7 +1850,9 @@ describe("Snowflake shared actions", () => {
       );
       await waitFor(() => expect(result.current.loading).toBe(false));
       expect(result.current.state.saved).toBe(false);
-      expect(result.current.state.configChanged).toBe(true);
+      await waitFor(() =>
+        expect(result.current.state.configChanged).toBe(true),
+      );
       act(() => {
         result.current.signIn();
         result.current.testConnection();
@@ -2293,7 +2296,9 @@ describe("Snowflake shared actions", () => {
       );
       await waitFor(() => expect(result.current.loading).toBe(false));
       expect(result.current.state.saved).toBe(false);
-      expect(result.current.state.configChanged).toBe(true);
+      await waitFor(() =>
+        expect(result.current.state.configChanged).toBe(true),
+      );
       act(() => {
         result.current.signIn();
         result.current.testConnection();

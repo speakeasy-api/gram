@@ -39,7 +39,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import { invalidateAuthClientQueries } from "./authClientQueries";
@@ -162,6 +162,20 @@ export function AddCredentialSheet({
     remoteMcpServerId,
     enabled: choice === "remote_session",
   });
+  // A personal credential is named after the service people sign in to,
+  // once it is detected; a name someone typed is never replaced.
+  const detectedService =
+    choice === "remote_session" &&
+    (personal.fields.detected.state === "existing" ||
+      personal.fields.detected.state === "new")
+      ? personal.fields.detected.serviceName
+      : "";
+  const [nameEdited, setNameEdited] = useState(false);
+  useEffect(() => {
+    // Switching to another kind clears a name this sheet filled in.
+    if (!nameEdited) setName(detectedService);
+  }, [nameEdited, detectedService]);
+
   // A sign-in made for an attempt whose credential then failed to save. A
   // retry of the same form reuses it; anything else discards it, so a failed
   // save leaves nothing behind.
@@ -401,7 +415,10 @@ export function AddCredentialSheet({
                       : "e.g. Engineering automation token"
                   }
                   value={name}
-                  onChange={setName}
+                  onChange={(value) => {
+                    setNameEdited(true);
+                    setName(value);
+                  }}
                 />
               </div>
 

@@ -97,19 +97,24 @@ func MCPAuthClientCheck(clientID string, dims MCPAuthClientDimensions) Check {
 	return Check{Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: clientID, Dimensions: dimensions, selectorMatch: selectorMatchStrict, representedUser: "", probe: false, anyOf: nil}
 }
 
-// requiredCheckDimensions lists, per resource kind, the dimensions every check
-// of that kind must carry: the Required dimensions in Model. Selector matching
-// skips grant keys a check omits, so a check without a dimension that grants
-// of its kind can be bounded by would pass such a grant whatever value the
-// grant names. MCP grants can be bounded to a project
-// ({"resource_id":"*","project_id":P}), so every MCP check must name the
-// project of the resource it targets.
-var requiredCheckDimensions = Model.deriveRequiredCheckDimensions()
-
 // RequiredCheckDimensions returns the dimensions a check of resourceKind must
 // carry, or nil when the kind requires none.
 func RequiredCheckDimensions(resourceKind string) []string {
 	return slices.Clone(requiredCheckDimensions[resourceKind])
+}
+
+// validateCheckDimensions rejects dimension values no concrete request can
+// carry: an empty string, the wildcard and the represented-user marker.
+func validateCheckDimensions(c Check) error {
+	for key, value := range c.Dimensions {
+		switch value {
+		case "":
+			return invalidCheckReason(c.Scope, c.ResourceID, "dimension "+key+" is empty")
+		case WildcardResource, SelectorValueRepresentedUser:
+			return invalidCheckReason(c.Scope, c.ResourceID, "dimension "+key+" must be concrete")
+		}
+	}
+	return nil
 }
 
 // validateRequiredDimensions rejects a check that omits, or wildcards, a

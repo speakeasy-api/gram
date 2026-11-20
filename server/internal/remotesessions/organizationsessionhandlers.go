@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/sessionlist"
 	"strings"
 	"time"
@@ -171,7 +173,7 @@ func (s *Service) ListClientSessions(ctx context.Context, payload *orgsessionsge
 			case "expiry":
 				at = time.Date(9999, 12, 31, 0, 0, 0, 0, time.UTC)
 				grantExpiry := last.AccessExpiresAt
-				if last.RefreshTokenEncrypted.Valid {
+				if upstreamtokens.Has(upstreamtokens.Stored(last.RefreshTokenEncrypted, last.RefreshTokenOrgEncrypted)) {
 					grantExpiry = last.RefreshExpiresAt
 				}
 				for _, deadline := range []pgtype.Timestamptz{last.AuthorizationExpiresAt, grantExpiry} {
@@ -252,8 +254,9 @@ func (s *Service) RevokeSession(ctx context.Context, payload *orgsessionsgen.Rev
 	// project-scoped RevokeRemoteSession; see upstreamrevoke.go.
 	s.revoker.RevokeDetached(ctx, RevokedCredentials{
 		RemoteSessionClientID: revoked.RemoteSessionClientID,
-		AccessTokenEncrypted:  revoked.AccessTokenEncrypted.String,
-		RefreshTokenEncrypted: revoked.RefreshTokenEncrypted,
+		OrganizationID:        revoked.OrganizationID,
+		AccessToken:           upstreamtokens.Stored(revoked.AccessTokenEncrypted, revoked.AccessTokenOrgEncrypted),
+		RefreshToken:          upstreamtokens.Stored(revoked.RefreshTokenEncrypted, revoked.RefreshTokenOrgEncrypted),
 	})
 
 	return nil
@@ -296,7 +299,7 @@ func (s *Service) RefreshSession(ctx context.Context, payload *orgsessionsgen.Re
 
 	// Defense in depth: the UI hides the action for sessions without a refresh
 	// token, but the gate is not authoritative.
-	if !row.RemoteSession.RefreshTokenEncrypted.Valid || row.RemoteSession.RefreshTokenEncrypted.String == "" {
+	if !hasRefreshToken(row.RemoteSession) {
 		return nil, oops.E(oops.CodeBadRequest, nil, "remote session has no refresh token").LogError(ctx, logger)
 	}
 
@@ -309,6 +312,11 @@ func (s *Service) RefreshSession(ctx context.Context, payload *orgsessionsgen.Re
 	// access token remains connected.
 	result, err := s.refresher.RefreshNow(ctx, row.RemoteSession, "", remotesessionmetrics.RefreshTriggerManual, RefreshIn(mcpconnectionattempts.ProviderSessionScope(authCtx.ActiveOrganizationID, row.ClientProjectID.UUID, mcpconnectionattempts.AppFirstParty)))
 	if err != nil {
+		// The organization's key cannot store a refreshed pair right now. The
+		// request itself is fine and succeeds once the key is usable again.
+		if orgencryption.IsKeyProblem(err) {
+			return nil, oops.E(oops.CodeUnavailable, err, "the session's tokens cannot be stored right now; try again shortly").LogWarn(ctx, logger)
+		}
 		// Operator-actionable failures carry a public-safe reason; surface it so
 		// the admin sees why the refresh failed instead of a generic error.
 		if refreshErr, ok := errors.AsType[*TokenRefreshError](err); ok {
