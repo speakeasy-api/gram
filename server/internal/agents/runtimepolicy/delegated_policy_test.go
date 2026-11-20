@@ -16,7 +16,6 @@ func TestNewDelegatedPolicyV1CanonicalizesAndClosesImplications(t *testing.T) {
 		{Scope: authz.ScopeMCPWrite, Selector: authz.Selector{
 			authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
 			authz.SelectorKeyResourceID:   "server-one",
-			authz.SelectorKeyTool:         "tool-one",
 		}},
 	})
 	require.NoError(t, err)
@@ -168,4 +167,39 @@ func TestDelegatedPolicyV3AdmitsAssistantScopes(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, allowed, scope)
 	}
+}
+
+// A new policy may not limit viewing or managing a server to some tools or
+// dispositions, but a stored one from before that rule still decodes.
+func TestDelegatedPolicyLimitsOnViewAreStoredOnly(t *testing.T) {
+	t.Parallel()
+
+	for _, limit := range []authz.Selector{
+		{authz.SelectorKeyTool: "tool-one"},
+		{authz.SelectorKeyDisposition: authz.DispositionReadOnly},
+	} {
+		selector := authz.NewSelector(authz.ScopeMCPRead, "server-one")
+		for key, value := range limit {
+			selector[key] = value
+		}
+		_, err := NewDelegatedPolicyV1([]authz.Grant{{Scope: authz.ScopeMCPRead, Selector: selector}})
+		require.ErrorContains(t, err, "is not allowed for scope")
+
+		_, err = DecodeDelegatedPolicy(DelegatedPolicyVersion1, storedPolicyJSON(t, selector))
+		require.NoError(t, err)
+	}
+
+	selector := authz.NewSelector(authz.ScopeMCPRead, "server-one")
+	selector[authz.SelectorKeyDisposition] = "not-a-disposition"
+	_, err := DecodeDelegatedPolicy(DelegatedPolicyVersion1, storedPolicyJSON(t, selector))
+	require.Error(t, err)
+}
+
+// storedPolicyJSON is a v1 policy as stored, viewing one server under selector.
+func storedPolicyJSON(t *testing.T, selector authz.Selector) []byte {
+	t.Helper()
+	requested := []DelegatedPolicyGrant{{Scope: authz.ScopeMCPRead, Selector: selector}}
+	effective, err := delegatedPolicyClosure(DelegatedPolicyVersion1, requested)
+	require.NoError(t, err)
+	return mustPolicyJSON(t, DelegatedPolicy{Requested: requested, Effective: effective})
 }
