@@ -43,7 +43,10 @@ func upstreamAuthReadiness(ctx context.Context, logger *slog.Logger, db *pgxpool
 	if err != nil {
 		return fmt.Errorf("check typed auth clients: %w", err)
 	}
-	clients, err := authclientbackfill.Run(ctx, db, authclientbackfill.Options{OrganizationID: organizationID, Apply: false, PageSize: 0, TypedOnly: enforced})
+	if !enforced {
+		return errors.New("demo seed requires typed upstream authentication")
+	}
+	clients, err := authclientbackfill.Run(ctx, db, authclientbackfill.Options{OrganizationID: organizationID, Apply: false, PageSize: 0, TypedOnly: true})
 	if err != nil {
 		return fmt.Errorf("check typed auth clients: %w", err)
 	}

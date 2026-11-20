@@ -21,8 +21,7 @@ type remoteSessionClientWithIssuers struct {
 // listRemoteSessionClientsByProjectID reads the project's own clients plus
 // organization-level clients (project_id NULL) belonging to organizationID.
 // When filtering by user_session_issuer_id it resolves the client / user
-// session issuer relationship solely through the
-// remote_session_client_user_session_issuers join table.
+// session issuer relationship through live server associations.
 func (s *Service) listRemoteSessionClientsByProjectID(
 	ctx context.Context,
 	projectID uuid.UUID,

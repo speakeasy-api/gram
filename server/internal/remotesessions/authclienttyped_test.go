@@ -120,10 +120,9 @@ func TestCommitServerIdentityConfigurationRecordsTheTypedClientAfterMigration(t 
 	requireReady(t, ctx, ti)
 }
 
-// Binding a client to a server's user session issuer associates it with the
-// server when the server is the issuer's only consumer; that capture records
-// the typed client too, from the post-commit resync's own transaction.
-func TestResyncCaptureRecordsTheTypedClientAfterMigration(t *testing.T) {
+// An FK compatibility row does not configure a server, even when it is the
+// sign-in issuer's only consumer.
+func TestResyncIgnoresAttachmentCompatibilityParents(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -141,10 +140,9 @@ func TestResyncCaptureRecordsTheTypedClientAfterMigration(t *testing.T) {
 
 	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{userIssuerID}))
 
-	require.Equal(t, []uuid.UUID{registration}, associatedClients(t, ctx, ti.conn, projectID, target))
-	authClientID := requireTypedClient(t, ctx, ti, registration, target)
-	require.Equal(t, uuid.NullUUID{UUID: authClientID, Valid: true}, recordSelectionFixture(t, ctx, ti, userIssuerID, target, registration, authClientID))
-	requireReady(t, ctx, ti)
+	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, target))
+	require.Empty(t, offeredAuthClients(t, ctx, ti.conn, target))
+	require.False(t, storedIssuer(t, ctx, ti.conn, projectID, target).Valid)
 }
 
 // Another organization's servers are never named by a write in this one.
