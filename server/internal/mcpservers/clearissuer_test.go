@@ -194,12 +194,6 @@ func createOrganizationIssuer(t *testing.T, ctx context.Context, ti *testInstanc
 
 // linkRemoteClient configures an upstream OAuth client on a user session issuer and resyncs, so servers carrying the
 // issuer get a derived remote issuer.
-func linkRemoteClient(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID uuid.UUID, issuerID string) uuid.UUID {
-	t.Helper()
-	issuer, _ := linkRemoteClientWithID(t, ctx, ti, organizationID, projectID, issuerID)
-	return issuer
-}
-
 func linkRemoteClientWithID(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID uuid.UUID, issuerID string) (uuid.UUID, uuid.UUID) {
 	t.Helper()
 

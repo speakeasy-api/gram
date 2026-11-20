@@ -31,6 +31,8 @@ type organizationGatewayAssociation struct {
 	organizationIssuer uuid.UUID
 	projectID          uuid.UUID
 	serverID           uuid.UUID
+	registrationID     uuid.UUID
+	authClientID       uuid.UUID
 }
 
 func seedOrganizationGatewayAssociation(t *testing.T, ctx context.Context, ti *testInstance, slug string) organizationGatewayAssociation {
@@ -108,7 +110,7 @@ func seedOrganizationGatewayAssociation(t *testing.T, ctx context.Context, ti *t
 	require.NoError(t, authclientbackfill.SyncServerAssociations(ctx, tx, orgID, server.ID))
 	require.NoError(t, tx.Commit(ctx))
 
-	seeded := organizationGatewayAssociation{organizationIssuer: organizationIssuer, projectID: projectID, serverID: server.ID}
+	seeded := organizationGatewayAssociation{organizationIssuer: organizationIssuer, projectID: projectID, serverID: server.ID, registrationID: client.ID, authClientID: authclientbackfill.OAuthClientID(orgID, client.ID, authclientbackfill.TypeRemoteSession)}
 	require.NoError(t, upstreamclients.Reconcile(ctx, ti.conn, orgID, projectID, nil))
 	requireOrganizationGatewayAssociation(t, ctx, ti, seeded, true)
 	return seeded
@@ -125,7 +127,8 @@ func requireOrganizationGatewayAssociation(t *testing.T, ctx context.Context, ti
 	require.NoError(t, err)
 	if present {
 		require.Len(t, rows, 1)
-		require.Len(t, links, 1)
+		require.Equal(t, seeded.registrationID, rows[0].RemoteSessionClientID)
+		require.Equal(t, []uuid.UUID{seeded.authClientID}, links)
 		return
 	}
 	require.Empty(t, rows, "the organization gateway no longer fronts the server")
