@@ -58,7 +58,9 @@ export function UpstreamCredentialsSection({
     addOverride ??
     (!query.isError &&
       !!query.data &&
-      (setupStep === "credentials" || setupStep === "oauth-client"));
+      (setupStep === "credentials" ||
+        setupStep === "oauth-client" ||
+        setupStep === "sign-in"));
   const openClient =
     query.data?.clients.find((client) => client.id === openClientId) ?? null;
 
