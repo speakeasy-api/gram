@@ -82,8 +82,12 @@ pull_images() {
 # not fail setup: the cache only saves time, and the error surfaces where the
 # code is built.
 warm_go_build_cache() {
-  if ! mise run build:server-cache; then
-    echo "⚠️ Server build failed; continuing without a warm build cache"
+  local label="Warming Go build cache" start=$SECONDS
+  echo "⏳ $label"
+  if mise run build:server-cache; then
+    echo "✅ $label ($((SECONDS - start))s)"
+  else
+    echo "⚠️ $label failed; continuing without a warm build cache"
   fi
 }
 
@@ -96,5 +100,5 @@ step "Persisting mise PATH" persist_path
 step "Installing pinned tools" install_tools
 step "Installing Go, Node, and Python dependencies" mise run install
 step "Installing git hooks" mise run zero:hk --yes
-step "Warming Go build cache" warm_go_build_cache
+warm_go_build_cache
 step "Pulling missing local stack images" pull_images
