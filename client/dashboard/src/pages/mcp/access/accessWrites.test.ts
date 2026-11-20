@@ -774,6 +774,29 @@ describe("an annotation choice is stored as a block", () => {
       },
     ]);
   });
+
+  // Connect does not come with manage, so blocks alone would leave this row
+  // with no connect at all: the choice has to be the grant.
+  it("grants the chosen annotations when nothing else grants connect", () => {
+    const { direct, rows } = state([
+      entry({ principalUrn: "user:1", level: "manage" }),
+    ]);
+
+    const written = narrowWrite(
+      direct,
+      rows[0]!,
+      { tools: [], dispositions: ["read_only"] },
+      undefined,
+    ).entries;
+
+    expect(written).toContainEqual({
+      principalUrn: "user:1",
+      level: "use",
+      tools: [],
+      dispositions: ["read_only"],
+    });
+    expect(written.some((rule) => rule.level === "blocked")).toBe(false);
+  });
 });
 
 describe("subtracting by name without a catalogue", () => {
