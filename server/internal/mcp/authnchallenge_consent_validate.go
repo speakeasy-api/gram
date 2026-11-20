@@ -573,9 +573,10 @@ func describeNoUsableCredential(state remotesessions.RemoteSessionState, connect
 // recheckMemberScope restricts the scheduled probe to the project that
 // supplied its offer or attachment. Interactive consent passes nil.
 type recheckMemberScope struct {
-	projectID  uuid.UUID
-	typedOffer bool
-	serverID   uuid.UUID
+	projectID      uuid.UUID
+	typedOffer     bool
+	serverID       uuid.UUID
+	registrationID uuid.UUID
 }
 
 func (s *Service) resolveValidationTarget(

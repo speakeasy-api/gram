@@ -427,6 +427,11 @@ func (s *Service) resolveOrganizationMemberSnapshotWithRecheck(
 			return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "load gateway auth offers").LogError(ctx, logger)
 		}
 	}
+	if recheck != nil && recheck.typedOffer {
+		if offer, known := offers[recheck.serverID]; known {
+			offers[recheck.serverID] = offer.forPersonalRegistration(recheck.registrationID)
+		}
+	}
 	if offers != nil {
 		offerMetadata, err = s.loadGatewayOfferMetadata(ctx, organizationID, members, offers)
 		if err != nil {

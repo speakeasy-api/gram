@@ -421,7 +421,7 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 		memberTokens := func(context.Context, metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 			return tokens, nil
 		}
-		scope := recheckMemberScope{projectID: placement.ReachProjectID, typedOffer: placement.TypedOffer, serverID: placement.ServerID}
+		scope := recheckMemberScope{projectID: placement.ReachProjectID, typedOffer: placement.TypedOffer, serverID: placement.ServerID, registrationID: sess.RemoteSessionClientID}
 		probeCtx, target, err := s.resolveValidationTarget(ctx, logger, endpoint, state, client, tokens, memberTokens, &scope)
 		if err != nil {
 			logger.InfoContext(ctx, "remote session re-check endpoint cannot present this grant", attr.SlogError(err))
