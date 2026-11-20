@@ -339,7 +339,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	scopeProjectID uuid.UUID,
 	serving bool,
 ) (context.Context, []metaMember, []metaMember, error) {
-	return s.resolveOrganizationMemberSnapshotWithRecheck(ctx, logger, authzSurface, organizationID, organizationGateway, userSessionIssuerID, scopeProjectID, nil)
+	return s.resolveOrganizationMemberSnapshotWithRecheck(ctx, logger, authzSurface, organizationID, organizationGateway, userSessionIssuerID, scopeProjectID, serving, nil)
 }
 
 func (s *Service) resolveOrganizationMemberSnapshotWithRecheck(
@@ -350,6 +350,7 @@ func (s *Service) resolveOrganizationMemberSnapshotWithRecheck(
 	organizationGateway bool,
 	userSessionIssuerID uuid.UUID,
 	scopeProjectID uuid.UUID,
+	serving bool,
 	recheck *recheckMemberScope,
 ) (context.Context, []metaMember, []metaMember, error) {
 	// Unconditional for the same reason resolveMetaMemberSnapshot prepares it.

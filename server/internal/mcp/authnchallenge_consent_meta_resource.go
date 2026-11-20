@@ -105,7 +105,7 @@ func (s *Service) claimingMetaMembers(
 		return nil, false, nil
 	}
 
-	return s.claimingMetaMembersForValidation(ctx, endpoint, client, typedOffers)
+	return s.claimingMetaMembersForValidation(ctx, endpoint, client, usesTypedConsentInventory(ctx))
 }
 
 func (s *Service) claimingMetaMembersForValidation(ctx context.Context, endpoint *ResolvedMcpEndpoint, client remotesessions.Client, typedOffers bool) ([]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow, bool, error) {
@@ -116,7 +116,7 @@ func (s *Service) claimingMetaMembersForValidation(ctx context.Context, endpoint
 		organizationRows, err := metamcprepo.New(s.db).ListOrganizationMCPServersForRemoteSessionClient(ctx, metamcprepo.ListOrganizationMCPServersForRemoteSessionClientParams{
 			OrganizationID:        endpoint.OrganizationID,
 			ProjectID:             client.ProjectID,
-			TypedOffers:           usesTypedConsentInventory(ctx),
+			TypedOffers:           typedOffers,
 			RemoteSessionClientID: client.ID,
 		})
 		if err != nil {
@@ -137,7 +137,7 @@ func (s *Service) claimingMetaMembersForValidation(ctx context.Context, endpoint
 		storedRows, err := metamcprepo.New(s.db).ListMetaMCPMembersForRemoteSessionClient(ctx, metamcprepo.ListMetaMCPMembersForRemoteSessionClientParams{
 			MetaMcpServerID:       endpoint.MetaMcpServerID.UUID,
 			ProjectID:             endpoint.ProjectID,
-			TypedOffers:           usesTypedConsentInventory(ctx),
+			TypedOffers:           typedOffers,
 			RemoteSessionClientID: client.ID,
 		})
 		if err != nil {
