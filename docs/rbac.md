@@ -260,7 +260,7 @@ The table below is rendered from the catalogue. `TestScopeCatalog_DocTableIsCurr
 
 #### Tasks
 
-A task usually needs more than one scope, and a person who is refused one of them is better told "this is part of setting up an agent, which also needs `environment:read`" than shown a slug. `server/internal/authz/tasks.go` lists those tasks by hand: a slug, a label, and every scope the task needs end to end. `access.listScopes` serves the list as `tasks`, and the dashboard uses it in the access-restricted page and in the grant dialog. `TestTasks_StayInsideTheCatalogue` keeps every listed scope catalogued, user-visible and not already implied by another scope in the same task. The handlers that call `Require` are the source of truth for what a task needs; update the list when a flow starts or stops enforcing a scope.
+A task usually needs more than one scope, and a person who is refused one of them is better told "this is part of setting up an agent, which also needs `environment:read`" than shown a slug. `server/internal/authz/catalog.go` lists those tasks by hand (`scopeTasks`): a slug, a label, and every scope the task needs end to end. `access.listScopes` serves the list as `tasks`, and the dashboard uses it in the access-restricted page and in the grant dialog. `TestTasks_StayInsideTheCatalogue` keeps every listed scope catalogued, user-visible and not already implied by another scope in the same task. The handlers that call `Require` are the source of truth for what a task needs; update the list when a flow starts or stops enforcing a scope.
 
 #### Explaining a 403
 
