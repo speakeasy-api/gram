@@ -512,7 +512,10 @@ func toTriggerError(ctx context.Context, logger *slog.Logger, err error, message
 		// secret whose sender keeps retrying.
 		return oops.E(oops.CodeUnauthorized, fmt.Errorf("trigger webhook authentication failed: %w", err), "%s", public).LogWarn(ctx, logger)
 	case errors.Is(err, pgx.ErrNoRows):
-		code = oops.CodeNotFound
+		// Unknown trigger ids are client faults: a 404 on a public endpoint,
+		// commonly an external sender (e.g. a Slack app's event subscription)
+		// that still targets a deleted trigger and keeps retrying.
+		return oops.E(oops.CodeNotFound, err, "%s", public).LogWarn(ctx, logger)
 	}
 	return oops.E(code, err, "%s", public).LogError(ctx, logger)
 }
