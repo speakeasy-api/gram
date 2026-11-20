@@ -225,6 +225,10 @@ func TestSharedAuthorizationServerDoesNotShareResourceBranding(t *testing.T) {
 	clientsA := attachmentTestClients(t, conn, principal, project, usiA)
 	require.Len(t, clientsA, 1)
 	require.Equal(t, "Resource A", conv.FromPGTextOrEmpty[string](clientsA[0].ResourceName))
+	require.Equal(t, resourceA.Resource, conv.FromPGTextOrEmpty[string](clientsA[0].ResourceIdentifier))
+	require.Equal(t, issuer.ID, clientsA[0].RemoteSessionIssuerID)
+	require.Equal(t, issuer.ID, clientsB[0].RemoteSessionIssuerID)
+	require.NotEqual(t, clientsA[0].ClientID, clientsB[0].ClientID, "sharing an authorization server does not merge resource offers")
 }
 
 // A document read from the origin-style well-known path may describe a
