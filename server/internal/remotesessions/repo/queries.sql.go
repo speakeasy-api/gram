@@ -10820,7 +10820,7 @@ WHERE m.project_id = $2
     JOIN mcp_auth_clients AS ac ON ac.id = offer.auth_client_id
       AND ac.organization_id = offer.organization_id
       AND (ac.project_id IS NULL OR ac.project_id = offer.project_id)
-      AND ac.deleted IS FALSE AND ac.enabled AND ac.client_type IN ('remote_session', 'ema')
+      AND ac.deleted IS FALSE AND ac.enabled AND ac.client_type IN ('remote_session', 'service_account', 'ema')
     WHERE offer.mcp_server_id = m.id AND offer.project_id = m.project_id
       AND offer.organization_id = p.organization_id AND offer.deleted IS FALSE
       AND ac.remote_session_client_id = $5

@@ -333,11 +333,18 @@ func (s *Service) recordResourceDisplay(ctx context.Context, dbtx pgx.Tx, authCt
 		return fmt.Errorf("update client resource display: %w", err)
 	}
 
-	beforeView, err := mv.BuildRemoteSessionClientView(before, nil)
+	// Keep existing audit snapshot semantics while compatibility links exist.
+	// This read projects the relationship into the audit event; the locked
+	// typed offer and client above are the only authority for the write.
+	auditClient, err := q.GetRemoteSessionClientByID(ctx, remotesessionsrepo.GetRemoteSessionClientByIDParams{ID: before.ID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
+	if err != nil {
+		return fmt.Errorf("read client attachment audit context: %w", err)
+	}
+	beforeView, err := mv.BuildRemoteSessionClientView(before, auditClient.UserSessionIssuerIds)
 	if err != nil {
 		return fmt.Errorf("build client view: %w", err)
 	}
-	afterView, err := mv.BuildRemoteSessionClientView(updated, nil)
+	afterView, err := mv.BuildRemoteSessionClientView(updated, auditClient.UserSessionIssuerIds)
 	if err != nil {
 		return fmt.Errorf("build client view: %w", err)
 	}
