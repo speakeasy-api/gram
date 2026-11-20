@@ -102,9 +102,9 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
-    "@storybook/addon-docs": "^10.6.6",
-    "@storybook/addon-themes": "^10.6.6",
-    "@storybook/react-vite": "^10.6.6",
+    "@storybook/addon-docs": "^10.6.7",
+    "@storybook/addon-themes": "^10.6.7",
+    "@storybook/react-vite": "^10.6.7",
     "@tailwindcss/typography": "^0.5.20",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
@@ -120,7 +120,7 @@
     "knip": "^6.20.0",
     "oxlint": "^1.94.0",
     "react-grab": "^0.2.0",
-    "storybook": "^10.6.6",
+    "storybook": "^10.6.7",
     "svix": "2.10.0",
     "svix-react": "^1.13.9",
     "tsrs": "0.25.0-ts7.1.0-beta",
