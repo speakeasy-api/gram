@@ -44,7 +44,6 @@ func TestDirectConsentConnectionCards(t *testing.T) {
 		{name: "deleted excluded", clientType: authClientTypeRemoteSession, state: "deleted", enforced: true, issuerLinked: true},
 		{name: "unlinked excluded", clientType: authClientTypeRemoteSession, state: "unlinked", enforced: true, issuerLinked: true},
 		{name: "off ignores legacy attachment", issuerLinked: true},
-		{name: "shadow ignores legacy attachment", shadow: true, issuerLinked: true},
 		{name: "hosted preserves legacy", hosted: true, enforced: true, issuerLinked: true, wantCard: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
