@@ -34,6 +34,7 @@ const authzPkgPath = "github.com/speakeasy-api/gram/server/internal/authz"
 // matched, so subpackages inherit the rule.
 var noRawAuthzChecksPackages = []string{
 	"github.com/speakeasy-api/gram/server/internal/environments",
+	"github.com/speakeasy-api/gram/server/internal/remotesessions",
 }
 
 // noRawAuthzCheckConstructors are the authz constructors a typed ref
