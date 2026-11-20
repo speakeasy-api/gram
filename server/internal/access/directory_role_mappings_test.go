@@ -826,6 +826,8 @@ func TestLoadUserGrants_IncludesDirectoryMappedRoles(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			principals, err := authz.ResolveUserPrincipals(ctx, ti.conn, orgID, tc.userID)
 			require.NoError(t, err)
 			want, err := authz.LoadGrants(ctx, ti.conn, orgID, principals)
