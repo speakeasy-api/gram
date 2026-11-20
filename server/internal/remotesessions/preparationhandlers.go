@@ -11,7 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -80,7 +79,7 @@ func (s *Service) reportConnectionScopes(ctx context.Context, userSessionIssuerI
 	if err != nil {
 		return err
 	}
-	if err := reportConnectionScopes(ctx, s.db, project, org, userSessionIssuerID, s.resources != nil, feature.UpstreamIssuerFromAssociations(ctx, s.featureFlags, org), r); err != nil {
+	if err := reportConnectionScopes(ctx, s.db, project, org, userSessionIssuerID, uuid.Nil, s.resources != nil, r); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "read identity chaining connection scopes").LogError(ctx, s.logger)
 	}
 	return nil
