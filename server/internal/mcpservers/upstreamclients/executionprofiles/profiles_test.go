@@ -13,8 +13,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -151,6 +149,9 @@ func TestBindDecidesOnlyWhatConfigurationDecides(t *testing.T) {
 	sharedClient := f.authClient(shared, typeServiceAccount, f.registration(shared))
 	headers := f.server(unstored)
 	headerClient := f.authClient(headers, typeStaticCredential, uuid.Nil)
+	// Catalog rows for disabled links cannot count as competing offers.
+	disabledHeader := f.authClient(headers, typePassThrough, uuid.Nil)
+	require.NoError(t, f.q.DisableAuthClientFixture(t.Context(), DisableAuthClientFixtureParams{ID: disabledHeader, OrganizationID: f.orgID}))
 	open := f.server(unstored)
 	// A stored requirement is never read: a server with no auth client needs
 	// none.
@@ -187,7 +188,7 @@ func TestBindDecidesOnlyWhatConfigurationDecides(t *testing.T) {
 	}, binding.Gaps)
 }
 
-func TestBindTreatsEMAAsPersonal(t *testing.T) {
+func TestBindRequiresExplicitEMAChoiceForUserBackedTurns(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	server := f.server(unstored)
@@ -199,8 +200,13 @@ func TestBindTreatsEMAAsPersonal(t *testing.T) {
 	require.Equal(t, []Gap{{MCPServerID: server, Reason: GapPersonalRequiresUser}}, userless.Gaps)
 
 	userBacked := f.bind(ContextUserBacked)
-	require.Equal(t, map[uuid.UUID]uuid.UUID{server: emaClient}, f.choices(userBacked.VersionID))
+	require.Empty(t, f.choices(userBacked.VersionID))
+	require.Equal(t, []Gap{{MCPServerID: server, Reason: GapSelectionRequired}}, userBacked.Gaps)
 
+	_, err := f.setChoice(ContextUserBacked, server, client(emaClient))
+	require.NoError(t, err)
+	require.Equal(t, map[uuid.UUID]uuid.UUID{server: emaClient}, f.choices(f.bind(ContextUserBacked).VersionID))
+	require.Empty(t, f.choices(userBacked.VersionID), "choosing EMA does not alter a running turn")
 }
 
 func TestBindTreatsAnEMAAndAPersonalClientAsAmbiguous(t *testing.T) {
@@ -332,15 +338,6 @@ func TestBindKeepsEveryChoiceAndVersionsOnlyNewOnes(t *testing.T) {
 	require.Equal(t, map[uuid.UUID]uuid.UUID{first: firstClient}, f.choices(v1.VersionID), "an earlier version never changes")
 }
 
-func (f *fixture) enforce() {
-	f.t.Helper()
-	_, err := productfeaturesrepo.New(f.pool).EnableFeature(f.t.Context(), productfeaturesrepo.EnableFeatureParams{
-		OrganizationID: f.orgID,
-		FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
-	})
-	require.NoError(f.t, err)
-}
-
 // offerOnly seeds an auth client linked to serverID whose upstream OAuth
 // client the server has no association with.
 func (f *fixture) offerOnly(serverID uuid.UUID, clientType string) uuid.UUID {
@@ -348,7 +345,7 @@ func (f *fixture) offerOnly(serverID uuid.UUID, clientType string) uuid.UUID {
 	return f.authClient(serverID, clientType, f.registration(f.server(unstored)))
 }
 
-func TestBindDecidesFromOfferedClientsUnderEnforcement(t *testing.T) {
+func TestBindDecidesFromTypedOffersWithoutEnforcement(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	// An OAuth client the server offers with no association.
@@ -384,19 +381,6 @@ func TestBindDecidesFromOfferedClientsUnderEnforcement(t *testing.T) {
 		return out
 	}
 
-	before := f.bind(ContextUserless)
-	require.Equal(t, map[uuid.UUID]GapReason{
-		offered:  GapSelectionRequired,
-		leftover: GapNoClient,
-		several:  GapSelectionRequired,
-		personal: GapSelectionRequired,
-		mixed:    GapSelectionRequired,
-		// The associated OAuth client is the server's own, and only a user can
-		// use the personal one.
-		personalOrHeaders: GapPersonalRequiresUser,
-	}, reasons(before), "associations decide while the organization does not enforce")
-
-	f.enforce()
 	binding := f.bind(ContextUserless)
 	choices := f.choices(binding.VersionID)
 	require.Equal(t, offeredClient, choices[offered])
