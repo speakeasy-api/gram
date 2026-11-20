@@ -276,7 +276,8 @@ type Envelope struct {
 	// SchemaVersion is SchemaVersion at the time of serving.
 	SchemaVersion int `json:"schema_version"`
 
-	// ListVersion is the catalog revision the targets were read at.
+	// ListVersion identifies the built-in scan list devices are served; not
+	// ordered.
 	ListVersion int32 `json:"list_version"`
 
 	// ETag fingerprints the list.

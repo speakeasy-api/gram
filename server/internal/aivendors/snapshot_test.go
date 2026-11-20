@@ -31,7 +31,6 @@ func TestSnapshotSpecificityAndExplicitPatternFlag(t *testing.T) {
 	require.False(t, snapshot.BlockableVendorKey("shared"))
 	require.True(t, snapshot.BlockableVendorKey("exact"))
 	require.Equal(t, snapshot.Fingerprint(), NewSnapshot(products).Fingerprint())
-	require.Positive(t, snapshot.Version())
 }
 
 func TestSnapshotEqualSpecificityIsStable(t *testing.T) {

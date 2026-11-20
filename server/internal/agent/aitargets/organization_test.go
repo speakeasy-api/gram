@@ -147,6 +147,17 @@ func TestOrganizationListVersionFollowsTheServedBuiltIns(t *testing.T) {
 		"unscanned product added": func(products []aivendors.Product) []aivendors.Product {
 			return append(products, aivendors.Product{ID: "admission-only", VendorKey: "admission-only", DisplayName: "Admission Only"})
 		},
+		"family and aliases set": func(products []aivendors.Product) []aivendors.Product {
+			i := firstScanned(products)
+			products[i].Family = "added-family"
+			products[i].Aliases = []aivendors.Alias{{Name: "added alias", Client: aivendors.ClientUnknown}}
+			return products
+		},
+		"vendor key changed": func(products []aivendors.Product) []aivendors.Product {
+			i := firstScanned(products)
+			products[i].VendorKey = "renamed-vendor"
+			return products
+		},
 		"input order reversed": func(products []aivendors.Product) []aivendors.Product {
 			slices.Reverse(products)
 			for i := range products {

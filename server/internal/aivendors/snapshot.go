@@ -3,7 +3,6 @@ package aivendors
 import (
 	"cmp"
 	"crypto/sha256"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"slices"
@@ -43,7 +42,6 @@ type Snapshot struct {
 	patterns    []Preset
 	vendors     map[string]int
 	fingerprint string
-	version     int32
 }
 
 // NewSnapshot builds indexes over validated catalog data and takes ownership of
@@ -57,7 +55,6 @@ func NewSnapshot(products []Product) *Snapshot {
 		patterns:    nil,
 		vendors:     make(map[string]int),
 		fingerprint: "",
-		version:     0,
 	}
 	for _, p := range products {
 		p = p.clone()
@@ -100,13 +97,6 @@ func NewSnapshot(products []Product) *Snapshot {
 	data, _ := json.Marshal(canonical)
 	hash := sha256.Sum256(data)
 	s.fingerprint = hex.EncodeToString(hash[:])
-	// The wire contract is a positive int32; zero denotes device fallback.
-	// This is an opaque identifier, not an ordered or collision-free revision.
-	const versionMask = uint32(1<<31 - 1)
-	s.version = int32(binary.BigEndian.Uint32(hash[:4]) & versionMask)
-	if s.version == 0 {
-		s.version = 1
-	}
 	return s
 }
 
@@ -162,9 +152,6 @@ var compiledSnapshot = sync.OnceValue(func() *Snapshot {
 // Fingerprint hashes the complete snapshot, including product and document
 // order, which is listing order.
 func (s *Snapshot) Fingerprint() string { return s.fingerprint }
-
-// Version is the positive, opaque wire identifier echoed by device agents.
-func (s *Snapshot) Version() int32 { return s.version }
 
 // ScanProducts returns isolated copies of the live products devices scan for.
 func (s *Snapshot) ScanProducts() []Product {
