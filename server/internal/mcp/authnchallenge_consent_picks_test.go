@@ -78,39 +78,16 @@ func approveConsent(t *testing.T, ctx context.Context, fx consentActionFixture) 
 	return grant
 }
 
-// The card a person goes through is the server's pick, whether they connected
-// it interactively or identity chaining serves it; with several, the server
-// gets no pick.
-func TestConsentPost_RecordsTheUpstreamClientPicked(t *testing.T) {
+// A registration linked to the sign-in is not a typed offer and cannot pick
+// upstream authentication for a newly approved credential.
+func TestConsentPost_DoesNotInferChoiceFromSignInLink(t *testing.T) {
 	t.Parallel()
+	ctx, fx := seedTwoClientConsentEndpoint(t, "pick-linked")
+	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.shared, fx.clientB, fx.subject, "token-b", consentChainedUpstream)
 
-	t.Run("connected card", func(t *testing.T) {
-		t.Parallel()
-		ctx, fx := seedTwoClientConsentEndpoint(t, "pick-connected")
-		insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.shared, fx.clientB, fx.subject, "token-b", consentChainedUpstream)
-
-		grant := approveConsent(t, ctx, fx)
-		require.Equal(t, map[uuid.UUID]uuid.UUID{fx.endpoint.McpServerID.UUID: fx.clientB}, grant.UpstreamClientPicks)
-	})
-
-	t.Run("chained card", func(t *testing.T) {
-		t.Parallel()
-		ctx, fx := seedTwoClientConsentEndpoint(t, "pick-chained")
-		setConsentGovernor(t, fx, clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.clientA), consentChainedUpstream)
-
-		grant := approveConsent(t, ctx, fx)
-		require.Equal(t, map[uuid.UUID]uuid.UUID{fx.endpoint.McpServerID.UUID: fx.clientA}, grant.UpstreamClientPicks)
-	})
-
-	t.Run("several usable cards", func(t *testing.T) {
-		t.Parallel()
-		ctx, fx := seedTwoClientConsentEndpoint(t, "pick-several")
-		insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.shared, fx.clientA, fx.subject, "token-a", consentChainedUpstream)
-		insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.shared, fx.clientB, fx.subject, "token-b", consentChainedUpstream)
-
-		grant := approveConsent(t, ctx, fx)
-		require.Empty(t, grant.UpstreamClientPicks)
-	})
+	grant := approveConsent(t, ctx, fx)
+	require.Empty(t, grant.AuthClientPicks)
+	require.Empty(t, grant.UpstreamClientPicks)
 }
 
 // Redeeming the authorization code records the grant's pick as the new
@@ -235,10 +212,7 @@ func TestHandleToken_RecordsChoicesFromAuthClientsUnderEnforcement(t *testing.T)
 	require.Equal(t, uuid.NullUUID{UUID: authClientID, Valid: true}, choice.AuthClientID)
 }
 
-// Where typed auth clients are enforced, a personal client an administrator
-// offered on the server is connected and chosen on its consent page even
-// though the sign-in does not link its registration and no older association
-// names it.
+// A personal client offered on the server is available without legacy links.
 func TestConsentPost_ChoosesAnAdministratorOfferedPersonalClient(t *testing.T) {
 	t.Parallel()
 	ctx, fx := standaloneConsent(t, "typed-offered", consentChainedUpstream, func(ctx context.Context, ti *testInstance, projectID, issuerID uuid.UUID, slug string) uuid.UUID {
@@ -252,8 +226,6 @@ func TestConsentPost_ChoosesAnAdministratorOfferedPersonalClient(t *testing.T) {
 	authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: fx.orgID, ProjectID: uuid.NullUUID{UUID: fx.projectID, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
 	require.NoError(t, err)
 	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: fx.projectID, OrganizationID: fx.orgID, McpServerID: serverID, AuthClientID: authClientID, Source: "admin"}))
-	_, err = productfeaturesrepo.New(fx.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: fx.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
-	require.NoError(t, err)
 	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.shared, registration, fx.subject, "token-typed", consentChainedUpstream)
 
 	grant := approveConsent(t, ctx, fx)

@@ -155,7 +155,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 	// offered maps each registration the endpoint offers through a typed auth
 	// client to the project it is served in. Actions on those run from that
 	// offer, which authorizes them whether or not the sign-in links the
-	// registration; it is empty where typed auth clients are not enforced.
+	// registration; hosted sign-in still uses the endpoint issuer.
 	bound, offered, err := s.listEndpointClientsAndRegistrations(ctx, endpoint, challengeState)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, logger)

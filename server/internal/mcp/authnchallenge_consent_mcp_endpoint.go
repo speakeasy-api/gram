@@ -377,6 +377,9 @@ func (s *Service) serveConsentProxiedMCP(
 	}
 	auth, err := s.consentDirectPreviewAuth(ctx, endpoint, challengeState, postedAuthClient)
 	if err != nil {
+		if errors.Is(err, errConsentNoUsableConnection) {
+			return oops.E(oops.CodeFailedPrecondition, err, "Connect a credential before previewing tools.").LogWarn(ctx, logger)
+		}
 		if errors.Is(err, errConsentConfigurationChanged) {
 			return oops.E(oops.CodeFailedPrecondition, err, "The credential you chose can no longer be used. Reload this page to choose again.").LogWarn(ctx, logger)
 		}

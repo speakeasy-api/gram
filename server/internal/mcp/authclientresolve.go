@@ -725,11 +725,9 @@ func (s *Service) refuseForeignCaller(ctx context.Context, organizationID string
 }
 
 // authClientPermitFor is how use of a resolved client is decided for
-// organizationID: the mandatory mcp:auth check once the organization enforces
-// and authz is configured, and the connect-equivalent rule otherwise, so a
-// serving path that resolves typed auth clients before enforcement (a
-// connection catalog, consent) keeps today's access. A test override decides
-// every organization.
+// organizationID. Interactive typed choices always require mcp:auth. Runtime
+// callers still follow the organization's enforcement state. A test override
+// applies in either case.
 func (s *Service) authClientPermitFor(ctx context.Context, organizationID string) (authClientPermitter, error) {
 	if s.authClientPermitter != nil {
 		return s.authClientPermitter, nil

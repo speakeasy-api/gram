@@ -379,8 +379,8 @@ func preselectionRank(clientType string) int {
 
 // directConsentAuthChoice is the upstream credential choice of a direct
 // proxied server's consent page, with picked selected when it is usable. It
-// is nil for gateways, hosted servers, first-party pages and organizations
-// not using browser consent.
+// is nil for gateways, hosted servers, first-party pages, and challenges
+// without a subject.
 func (s *Service) directConsentAuthChoice(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, cards []remoteSessionCard, picked uuid.UUID) (*consentServerAuth, error) {
 	if challengeState.FirstParty || challengeState.Subject == nil || !endpoint.McpServerID.Valid || endpoint.ToolsetID.Valid || endpoint.MetaMcpServerID.Valid {
 		return nil, nil
@@ -492,7 +492,8 @@ func (s *Service) resolveMemberAuthChoice(ctx context.Context, endpoint *Resolve
 	case auth == nil:
 		return gapResolution(authClientReasonMissingChoice), nil
 	case auth.Status == consentAuthNoAuth:
-		return s.resolveNoAuthChoice(withTypedConsentAuth(ctx), endpoint.OrganizationID, member.serverID)
+		resolved, err := s.resolveNoAuthChoice(withTypedConsentAuth(ctx), endpoint.OrganizationID, member.serverID)
+		return enforcedCompatibility(resolved), err
 	case auth.Status == consentAuthNoAccess:
 		res := gapResolution(authClientReasonNotPermitted)
 		res.outcome = authClientNoAccess

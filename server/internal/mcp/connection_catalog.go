@@ -98,6 +98,9 @@ type connectionCatalogMember struct {
 	// where typed auth clients choose upstream authentication; an approval
 	// stored before it was recorded has none.
 	TypedBackendHash string `json:"typed_backend_hash,omitempty"`
+	// TypedApproval means consent captured this member through typed offers.
+	// Older catalogs still compare using their original rollout compatibility.
+	TypedApproval bool `json:"typed_approval,omitempty"`
 	// Auth binds a proxied member's shared-runtime choice; hosted members use
 	// their toolset's authentication and leave this nil.
 	Auth *connectionCatalogAuth `json:"auth,omitempty"`
@@ -117,7 +120,7 @@ func (m connectionCatalogMember) configurationChanged(current memberConfiguratio
 // fingerprint: the organization chooses upstream authentication through typed
 // auth clients and the approval recorded one.
 func (m connectionCatalogMember) typedCompared(typed bool) bool {
-	return typed && m.TypedBackendHash != ""
+	return (typed || m.TypedApproval) && m.TypedBackendHash != ""
 }
 
 // approvedHash is the approved fingerprint the member is compared on.
@@ -302,6 +305,7 @@ func (s *Service) freezeConnectionCatalog(ctx context.Context, endpoint *Resolve
 				return nil, err
 			}
 		}
+		member.TypedApproval = true
 		members[slug] = member
 	}
 	var shown []uuid.UUID
@@ -770,7 +774,7 @@ func (s *Service) validateCatalogMemberAuth(ctx context.Context, endpoint *Resol
 		if err != nil {
 			return err
 		}
-		if resolved.outcome != authClientNoAuth || member.Auth.RegistrationID.Valid {
+		if enforcedCompatibility(resolved).outcome != authClientNoAuth || member.Auth.RegistrationID.Valid {
 			return errConsentConfigurationChanged
 		}
 		return nil

@@ -60,14 +60,12 @@ func (s *Service) withTypedMemberRegistrations(ctx context.Context, organization
 	return nil
 }
 
-// typedConsentRegistrations maps each registration the endpoint's servers
-// offer through typed auth clients to the project it is served in: the
-// endpoint's own for a direct server, each member's for a gateway. It is
-// empty for hosted endpoints.
 func directProxiedConsent(endpoint *ResolvedMcpEndpoint) bool {
 	return endpoint.McpServerID.Valid && !endpoint.ToolsetID.Valid && !endpoint.MetaMcpServerID.Valid && !endpoint.IsOrganizationGateway()
 }
 
+// typedConsentRegistrations maps each registration the endpoint offers to
+// the project that serves it. Hosted endpoints have no typed registrations.
 func (s *Service) typedConsentRegistrations(ctx context.Context, endpoint *ResolvedMcpEndpoint, loadMembers func() ([]metaMember, error)) (map[uuid.UUID]uuid.UUID, error) {
 	if (!endpoint.McpServerID.Valid || endpoint.ToolsetID.Valid) && !endpoint.MetaMcpServerID.Valid && !endpoint.IsOrganizationGateway() {
 		return nil, nil

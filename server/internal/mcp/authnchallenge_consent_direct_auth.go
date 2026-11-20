@@ -25,6 +25,7 @@ func (s *Service) consentDirectPreviewAuth(ctx context.Context, endpoint *Resolv
 		if err != nil {
 			return nil, err
 		}
+		res = enforcedCompatibility(res)
 		if res.outcome != authClientNoAuth {
 			return nil, errConsentConfigurationChanged
 		}

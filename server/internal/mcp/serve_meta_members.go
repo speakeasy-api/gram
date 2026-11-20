@@ -246,7 +246,7 @@ func (s *Service) resolveEndpointMemberSnapshot(ctx context.Context, logger *slo
 		return ctx, nil, err
 	}
 	switch {
-	case surface == mandatorySurfaceConsent:
+	case surface == mandatorySurfaceConsent && !endpoint.IsOrganizationGateway():
 		if err := s.withTypedMemberRegistrations(ctx, endpoint.OrganizationID, members); err != nil {
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load gateway member offers").LogError(ctx, logger)
 		}
@@ -430,6 +430,11 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 
 	var clients []remotesessions.Client
 	if userSessionIssuerID != uuid.Nil {
+		if authzSurface == mandatorySurfaceConsent {
+			if err := s.withTypedMemberRegistrations(ctx, organizationID, members); err != nil {
+				return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "load gateway member offers").LogError(ctx, logger)
+			}
+		}
 		// The agent gateway signs nobody in, so its callers never read
 		// associations and its members keep the derived match.
 		if authzSurface != mandatorySurfaceConsent {
