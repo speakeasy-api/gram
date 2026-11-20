@@ -503,7 +503,8 @@ func TestCommitExplicitReplaceMovesEveryServerToTheNewClient(t *testing.T) {
 	provider := createServerIdentityProvider(t, ctx, ti, "replace-provider", "", false, []string{"none"})
 	first := createCapturingServer(t, ctx, ti, "replace-first", issuer)
 	oldClient := commitManualClient(t, ctx, ti, first, provider, "replace-old-client")
-	second := createCapturingServer(t, ctx, ti, "replace-second", issuer)
+	separateIssuer := createUserSessionIssuer(t, ctx, ti.conn, "replace-second-issuer")
+	second := createCapturingServer(t, ctx, ti, "replace-second", separateIssuer)
 	_, err := ti.service.CommitServerIdentityConfiguration(ctx, existingServerIdentityPayload(second, provider, oldClient))
 	require.NoError(t, err)
 
