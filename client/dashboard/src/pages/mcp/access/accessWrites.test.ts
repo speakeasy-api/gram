@@ -35,9 +35,9 @@ function state(entries: ResourceAudienceEntry[]) {
 }
 
 const catalog: ToolSelectionTool[] = [
-  { name: "search", annotations: ["read_only"] },
-  { name: "fetch", annotations: ["read_only"] },
-  { name: "delete", annotations: ["destructive"] },
+  { name: "search", disposition: "read_only" },
+  { name: "fetch", disposition: "read_only" },
+  { name: "delete", disposition: "destructive" },
 ];
 
 const role = (overrides: Partial<ResourceAudienceEntry> = {}) =>
@@ -1163,7 +1163,7 @@ it("keeps unannotated tools when an existing direct grant already overrides the 
   expect(
     reachableTools(updated.cells.use, [
       ...catalog,
-      { name: "unannotated", annotations: [] },
+      { name: "unannotated", disposition: "unannotated" },
     ]),
   ).toEqual(["search", "fetch", "unannotated"]);
 });

@@ -26,7 +26,7 @@ describe("ToolSelectionPanel tool rows", () => {
                 id: "server",
                 name: "Example server",
                 status: "ready",
-                tools: [{ name: "search_records", annotations: [] }],
+                tools: [{ name: "search_records", disposition: "unannotated" }],
               },
             ]}
             mode="tools"
@@ -72,4 +72,35 @@ describe("ToolSelectionPanel tool rows", () => {
       });
     },
   );
+});
+
+describe("ToolSelectionPanel annotation rows", () => {
+  it("counts each tool once, under the disposition the server matches it by", () => {
+    // list_records declares read-only and idempotent, so the server treats it
+    // as read-only and an idempotent rule would not cover it.
+    render(
+      <ToolSelectionPanel
+        servers={[
+          {
+            id: "server",
+            name: "Example server",
+            status: "ready",
+            tools: [
+              { name: "list_records", disposition: "read_only" },
+              { name: "create_record", disposition: "unannotated" },
+            ],
+          },
+        ]}
+        mode="annotations"
+        selectedAnnotations={[]}
+        selectedTools={[]}
+        onSelectionChange={() => {}}
+      />,
+    );
+
+    expect(
+      screen.getByRole("checkbox", { name: /Read-only.*1 tools/ }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("checkbox", { name: /Idempotent/ })).toBeNull();
+  });
 });

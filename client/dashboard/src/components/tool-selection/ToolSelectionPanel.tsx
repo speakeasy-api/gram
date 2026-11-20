@@ -10,7 +10,13 @@ import {
 } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
 
-import { ANNOTATION_OPTIONS, type ToolAnnotation } from "./annotations";
+import type { Disposition } from "@gram/client/models/components/selector.js";
+
+import {
+  ANNOTATION_OPTIONS,
+  isToolAnnotation,
+  type ToolAnnotation,
+} from "./annotations";
 
 export type { ToolAnnotation };
 
@@ -18,7 +24,14 @@ export type ToolSelectionMode = "annotations" | "tools";
 
 export interface ToolSelectionTool {
   name: string;
-  annotations: ToolAnnotation[];
+  /**
+   * The one disposition the server matches the tool by (toolDisposition). A
+   * tool that is both read-only and idempotent is read-only, so an
+   * idempotent rule does not cover it and it is not counted under idempotent.
+   * Undefined when the kind is not known, such as a tool a rule names on a
+   * server with no catalogue here; no kind rule covers it then.
+   */
+  disposition: Disposition | undefined;
 }
 
 export interface ToolSelectionServer {
@@ -132,8 +145,9 @@ export function ToolSelectionPanel({
     const counts = new Map<ToolAnnotation, number>();
     for (const server of servers) {
       for (const tool of server.tools) {
-        for (const annotation of tool.annotations) {
-          counts.set(annotation, (counts.get(annotation) ?? 0) + 1);
+        const disposition = tool.disposition;
+        if (isToolAnnotation(disposition)) {
+          counts.set(disposition, (counts.get(disposition) ?? 0) + 1);
         }
       }
     }

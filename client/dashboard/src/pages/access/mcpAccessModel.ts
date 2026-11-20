@@ -55,17 +55,13 @@ export type ToolLimit =
 
 export type ToolLimitKind = ToolLimit["kind"];
 
-/**
- * The order the backend picks a tool's one disposition in when it carries
- * several (DispositionFromAnnotations in server/internal/conv/tools.go). A
- * tool that is both read-only and idempotent counts as read-only.
- */
-export const DISPOSITION_PRECEDENCE = [
-  "read_only",
-  "destructive",
-  "idempotent",
-  "open_world",
-] as const satisfies readonly Disposition[];
+/** The MCP hints a tool declares, as the API and tool metadata carry them. */
+interface ToolHints {
+  readOnlyHint?: boolean | undefined;
+  destructiveHint?: boolean | undefined;
+  idempotentHint?: boolean | undefined;
+  openWorldHint?: boolean | undefined;
+}
 
 /**
  * The one disposition the server assigns a tool (authz.DispositionFromHints):
@@ -74,7 +70,9 @@ export const DISPOSITION_PRECEDENCE = [
  * is unannotated. disposition-cases.gen.json holds the server's answers, and
  * the tests check this function against them.
  */
-export function toolDisposition(tool: ServerTool): Disposition {
+export function toolDisposition(tool: {
+  annotations?: ToolHints | undefined;
+}): Disposition {
   const hints = tool.annotations;
   if (hints?.readOnlyHint && hints.destructiveHint) return "destructive";
   if (hints?.readOnlyHint) return "read_only";

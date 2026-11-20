@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
+import { toolDisposition } from "@/pages/access/mcpAccessModel";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import { describe, expect, it } from "vitest";
 import {
@@ -195,7 +196,7 @@ describe("principal precedence", () => {
     ];
 
     const reach = effectiveReach(reaching, [
-      { name: "search", annotations: [] },
+      { name: "search", disposition: "unannotated" },
     ]);
     expect(reach?.capabilities).toEqual(["use"]);
     expect(reach?.toolsLabel).toBe("Search");
@@ -211,8 +212,8 @@ describe("principal precedence", () => {
 describe("effective tool counts with direct overrides", () => {
   const user = "user:1";
   const catalog: ToolSelectionTool[] = [
-    { name: "search", annotations: ["read_only"] },
-    { name: "delete", annotations: ["destructive"] },
+    { name: "search", disposition: "read_only" },
+    { name: "delete", disposition: "destructive" },
   ];
   const direct = entry({
     principalUrn: user,
@@ -371,8 +372,8 @@ describe("effectiveReach without an explicit connect rule", () => {
   // a server reaches none of its tools.
   it("does not count view or manage as connect", () => {
     const tools: ToolSelectionTool[] = [
-      { name: "search", annotations: [] },
-      { name: "deploy", annotations: [] },
+      { name: "search", disposition: "unannotated" },
+      { name: "deploy", disposition: "unannotated" },
     ];
     for (const level of ["view", "manage"] as const) {
       const rules = [entry({ principalUrn: "role:organization:gtm", level })];
@@ -388,31 +389,33 @@ describe("effectiveReach without an explicit connect rule", () => {
 });
 
 describe("coversTool", () => {
-  // The server matches a tool by one annotation, read-only first, so a tool
-  // that is both read-only and idempotent is a read-only tool.
+  // The server matches a tool by one disposition, read-only first, so a tool
+  // that declares both read-only and idempotent is a read-only tool.
   const readOnlyAndIdempotent: ToolSelectionTool = {
     name: "list",
-    annotations: ["idempotent", "read_only"],
+    disposition: toolDisposition({
+      annotations: { readOnlyHint: true, idempotentHint: true },
+    }),
   };
 
-  it("matches a tool by the annotation the server picks for it", () => {
+  it("matches a tool by the disposition the server picks for it", () => {
     expect(
       coversTool({ dispositions: ["read_only"] }, readOnlyAndIdempotent),
     ).toBe(true);
   });
 
-  it("does not match a tool by an annotation the server passes over", () => {
+  it("does not match a tool by a hint the server passes over", () => {
     expect(
       coversTool({ dispositions: ["idempotent"] }, readOnlyAndIdempotent),
     ).toBe(false);
   });
 
-  it("matches no tool without annotations by annotation", () => {
-    expect(
-      coversTool(
-        { dispositions: ["read_only"] },
-        { name: "create", annotations: [] },
-      ),
-    ).toBe(false);
+  it("matches a tool without annotations only by an unannotated rule", () => {
+    const create: ToolSelectionTool = {
+      name: "create",
+      disposition: "unannotated",
+    };
+    expect(coversTool({ dispositions: ["read_only"] }, create)).toBe(false);
+    expect(coversTool({ dispositions: ["unannotated"] }, create)).toBe(true);
   });
 });
