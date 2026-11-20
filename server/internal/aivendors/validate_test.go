@@ -98,3 +98,14 @@ func TestPatternWithin(t *testing.T) {
 	require.False(t, patternWithin("https://example.com/oauth/*/client.json", "https://example.com/*/fixed/client.json"))
 	require.False(t, patternWithin("https://example.com/oauth/*/client.json", "https://other.example.com/oauth/*/client.json"))
 }
+
+func TestValidateCapsEnabledPatterns(t *testing.T) {
+	t.Parallel()
+	products := make([]Product, 0, maxPatterns+1)
+	for i := range maxPatterns + 1 {
+		products = append(products, Product{ID: fmt.Sprintf("p-%d", i), VendorKey: "v", Documents: []Document{{URL: fmt.Sprintf("https://p%d.example.com/*/client.json", i), Enabled: true, Pattern: true}}})
+	}
+	err := validateCatalog(NewSnapshot(products))
+	require.ErrorIs(t, err, errInvalidCatalog)
+	require.ErrorContains(t, err, "enabled patterns")
+}

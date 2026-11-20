@@ -162,52 +162,60 @@ func matchesPattern(pattern, clientID string) bool {
 	return true
 }
 
-// PatternsOverlap reports whether one client ID can match both valid patterns:
-// same scheme and authority, same suffix, same segment count, and no position
-// where both segments are literal and differ.
-func PatternsOverlap(a, b string) bool {
-	aPrefix, aRest, ok := splitAuthorityAndPath(a)
+// parsedPattern is a pattern split once into the parts overlap checks compare.
+type parsedPattern struct {
+	prefix, suffix string
+	segments       []string
+}
+
+func parsePattern(pattern string) (parsedPattern, bool) {
+	prefix, rest, ok := splitAuthorityAndPath(pattern)
 	if !ok {
+		return parsedPattern{prefix: "", suffix: "", segments: nil}, false
+	}
+	path, suffix := splitPathAndSuffix(rest)
+	return parsedPattern{prefix: prefix, suffix: suffix, segments: strings.Split(path, "/")}, true
+}
+
+// overlaps reports whether one client ID can match both: same scheme, authority,
+// suffix and segment count, and no position where both segments are literal and differ.
+func (a parsedPattern) overlaps(b parsedPattern) bool {
+	if a.prefix != b.prefix || a.suffix != b.suffix || len(a.segments) != len(b.segments) {
 		return false
 	}
-	bPrefix, bRest, ok := splitAuthorityAndPath(b)
-	if !ok || aPrefix != bPrefix {
-		return false
-	}
-	aPath, aSuffix := splitPathAndSuffix(aRest)
-	bPath, bSuffix := splitPathAndSuffix(bRest)
-	if aSuffix != bSuffix {
-		return false
-	}
-	aSegments := strings.Split(aPath, "/")
-	bSegments := strings.Split(bPath, "/")
-	if len(aSegments) != len(bSegments) {
-		return false
-	}
-	for i, segment := range aSegments {
-		if segment != "*" && bSegments[i] != "*" && segment != bSegments[i] {
+	for i, segment := range a.segments {
+		if segment != "*" && b.segments[i] != "*" && segment != b.segments[i] {
 			return false
 		}
 	}
 	return true
 }
 
-// patternWithin reports whether valid pattern b matches every client ID valid pattern a matches.
-func patternWithin(a, b string) bool {
-	if !PatternsOverlap(a, b) {
+// within reports whether b matches every client ID a matches.
+func (a parsedPattern) within(b parsedPattern) bool {
+	if !a.overlaps(b) {
 		return false
 	}
-	_, aRest, _ := splitAuthorityAndPath(a)
-	_, bRest, _ := splitAuthorityAndPath(b)
-	aPath, _ := splitPathAndSuffix(aRest)
-	bPath, _ := splitPathAndSuffix(bRest)
-	bSegments := strings.Split(bPath, "/")
-	for i, segment := range strings.Split(aPath, "/") {
-		if bSegments[i] != "*" && bSegments[i] != segment {
+	for i, segment := range a.segments {
+		if b.segments[i] != "*" && b.segments[i] != segment {
 			return false
 		}
 	}
 	return true
+}
+
+// PatternsOverlap reports whether one client ID can match both valid patterns.
+func PatternsOverlap(a, b string) bool {
+	pa, okA := parsePattern(a)
+	pb, okB := parsePattern(b)
+	return okA && okB && pa.overlaps(pb)
+}
+
+// patternWithin reports whether valid pattern b matches every client ID valid pattern a matches.
+func patternWithin(a, b string) bool {
+	pa, okA := parsePattern(a)
+	pb, okB := parsePattern(b)
+	return okA && okB && pa.within(pb)
 }
 
 // splitPathAndSuffix cuts the remainder returned by splitAuthorityAndPath

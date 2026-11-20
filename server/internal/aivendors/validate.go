@@ -14,6 +14,9 @@ const (
 
 	// aitargets bounds scanned products' client info names at 16; this holds every product to the same.
 	maxClientInfoNames = 16
+
+	// The overlap check compares every pair of enabled patterns; today there are 4.
+	maxPatterns = 64
 )
 
 var errInvalidCatalog = errors.New("invalid AI client catalog")
@@ -34,12 +37,20 @@ func validateCatalog(s *Snapshot) error {
 			return fmt.Errorf("%w: product %q has %d client info names, over the maximum of %d", errInvalidCatalog, p.ID, len(p.ClientInfoNames), maxClientInfoNames)
 		}
 	}
+	if len(s.patterns) > maxPatterns {
+		return fmt.Errorf("%w: %d enabled patterns exceeds the maximum of %d", errInvalidCatalog, len(s.patterns), maxPatterns)
+	}
+	parsed := make([]parsedPattern, len(s.patterns))
+	for i, p := range s.patterns {
+		parsed[i], _ = parsePattern(p.URL)
+	}
 	for i, a := range s.patterns {
-		for _, b := range s.patterns[i+1:] {
-			if a.ProductID == b.ProductID || !PatternsOverlap(a.URL, b.URL) {
+		for j := i + 1; j < len(s.patterns); j++ {
+			b := s.patterns[j]
+			if a.ProductID == b.ProductID || !parsed[i].overlaps(parsed[j]) {
 				continue
 			}
-			if a.URL != b.URL && (patternWithin(a.URL, b.URL) || patternWithin(b.URL, a.URL)) {
+			if a.URL != b.URL && (parsed[i].within(parsed[j]) || parsed[j].within(parsed[i])) {
 				continue
 			}
 			return fmt.Errorf("%w: patterns %q (%s) and %q (%s) overlap and neither is narrower", errInvalidCatalog, a.URL, a.ProductID, b.URL, b.ProductID)
