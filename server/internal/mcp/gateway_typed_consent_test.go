@@ -49,7 +49,7 @@ func TestGatewayConnectFollowsTypedOffers(t *testing.T) {
 		{name: "typed offer linked to the sign-in", typed: true, signInLink: true, wantTyped: true},
 		{name: "typed offer with an older association", typed: true, associated: true, signInLink: true, wantTyped: true},
 		{name: "older association without a typed offer", associated: true, signInLink: true, wantErr: "unknown remote session client"},
-		{name: "hosted member's sign-in client", hosted: true, signInLink: true},
+		{name: "hosted member's placed registration", hosted: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -100,7 +100,10 @@ func TestGatewayConnectFollowsTypedOffers(t *testing.T) {
 			}
 			if tc.hosted {
 				hosted := seedHostedMetaMember(t, ctx, fx.ti, metaServerID, "Hosted", 1, "public")
-				stampRemoteSessionIssuer(t, ctx, fx.ti.conn, fx.projectID, hosted.serverID, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, registration)))
+				_, err := authclientfixtures.New(fx.ti.conn).SeedAssociationFixture(ctx, authclientfixtures.SeedAssociationFixtureParams{
+					ProjectID: fx.projectID, OrganizationID: fx.orgID, McpServerID: hosted.serverID, RemoteSessionClientID: registration,
+				})
+				require.NoError(t, err)
 			}
 
 			if tc.resourceDisplay {
@@ -145,7 +148,9 @@ func TestGatewayConnectFollowsTypedOffers(t *testing.T) {
 			loc := postConnectAction(t, fx, registration)
 			state := mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state"))
 			if !tc.wantTyped {
-				require.Nil(t, state.TypedAuthorization, "a hosted member signs in through its authorization server's client")
+				require.Nil(t, state.TypedAuthorization)
+				require.NotNil(t, state.HostedPlacement)
+				require.Equal(t, registration, state.HostedPlacement.RemoteSessionClientID)
 				return
 			}
 			require.Equal(t, upstream, loc.Query().Get("resource"), "the grant is qualified to the member offering the registration")

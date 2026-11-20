@@ -1183,7 +1183,7 @@ func TestHostedReconnectIgnoresRefreshableSibling(t *testing.T) {
 	ti.service.SetConnectionRecorder(rec.Recorder)
 	authCtx := requireProjectAuthContext(t, ctx)
 	fixture := createRemoteSessionResolverFixture(t, ctx, ti, authCtx, "fresh-outranked")
-	sibling := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "hosted-refresh-sibling-"+uuid.NewString()[:8], "", nil)
+	sibling := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "hosted-refresh-sibling-"+uuid.NewString()[:8], "", []uuid.UUID{fixture.UserSessionIssuer.ID})
 
 	neverLinked := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, urn.NewUserSubject("gate-user-"+uuid.NewString()))
 	want, wantErr := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), neverLinked, nil)

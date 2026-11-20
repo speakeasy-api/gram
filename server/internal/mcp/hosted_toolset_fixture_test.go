@@ -104,7 +104,11 @@ func setToolsetIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, pro
 
 	issuer := uuid.NullUUID{UUID: issuerID, Valid: true}
 	testenv.SetHostedMCP(t, ctx, conn, projectID, toolset.ID, testenv.HostedMCP{UserSessionIssuerID: &issuer})
-	markHostedDownstreamOnly(t, ctx, conn, toolset.ID)
+	server, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: projectID})
+	require.NoError(t, err)
+	if !server.RequiresUpstreamAuth.Valid {
+		markHostedDownstreamOnly(t, ctx, conn, toolset.ID)
+	}
 	toolset.UserSessionIssuerID = issuer
 	return toolset
 }

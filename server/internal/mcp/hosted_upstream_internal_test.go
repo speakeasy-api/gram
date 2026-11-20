@@ -41,6 +41,7 @@ func TestHostedAssignmentsDoNotBorrowSiblingRegistration(t *testing.T) {
 		{name: "missing server", server: uuid.New(), misconfigured: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := assignments[tc.server].registration(project)
 			if tc.misconfigured {
 				require.ErrorIs(t, err, remotesessions.ErrRemoteSessionMisconfigured)
@@ -51,6 +52,7 @@ func TestHostedAssignmentsDoNotBorrowSiblingRegistration(t *testing.T) {
 		})
 	}
 	t.Run("wrong project", func(t *testing.T) {
+		t.Parallel()
 		_, err := assignments[first].registration(uuid.New())
 		require.ErrorIs(t, err, remotesessions.ErrRemoteSessionMisconfigured)
 	})

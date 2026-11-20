@@ -202,15 +202,6 @@ func TestTypedRemoteLoginConsentCallback(t *testing.T) {
 				// Simulate a provider callback issued by an old binary. This
 				// is separate from accepting a stale gateway approval preview.
 				state.TypedAuthorization = nil
-				if scenario == "gateway_legacy" {
-					state.ResourceMcpServerID = uuid.NullUUID{}
-					wrongResource := state
-					wrongResource.Resource = consentUpstreamB
-					require.ErrorIs(t, ti.service.ValidateRemoteLoginTypedAuthorization(ctx, wrongResource), remotesessions.ErrTypedAuthorizationChanged)
-					unqualified := state
-					unqualified.Resource = ""
-					require.ErrorIs(t, ti.service.ValidateRemoteLoginTypedAuthorization(ctx, unqualified), remotesessions.ErrTypedAuthorizationChanged)
-				}
 			}
 			if scenario == "tenant_mismatch" || scenario == "legacy_unlinked" || scenario == "legacy" || scenario == "gateway_legacy" {
 				// Mutate trusted cached provenance to exercise compatibility and tamper checks.
@@ -222,7 +213,7 @@ func TestTypedRemoteLoginConsentCallback(t *testing.T) {
 			w := httptest.NewRecorder()
 			callbackErr := mgr.HandleRemoteLoginCallback(w, req)
 			session, sessionErr := remotesessionsrepo.New(ti.conn).GetActiveRemoteSession(ctx, remotesessionsrepo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: registration})
-			if scenario != "typed" && !strings.HasPrefix(scenario, "typed_alternatives") && scenario != "ema" && scenario != "gateway" && scenario != "gateway_denied_member" && scenario != "legacy" && scenario != "gateway_legacy" {
+			if scenario != "typed" && !strings.HasPrefix(scenario, "typed_alternatives") && scenario != "ema" && scenario != "gateway" && scenario != "gateway_denied_member" && scenario != "legacy" {
 				require.Error(t, callbackErr)
 				if scenario != "legacy_unlinked" && scenario != "deleted_sign_in" {
 					require.Nil(t, posted.Load(), "revocation must fail before exchanging the code")

@@ -604,14 +604,11 @@ func (m *ChallengeManager) validateRemoteLoginAuthorization(ctx context.Context,
 	if state.TypedAuthorization != nil {
 		return m.validateTypedAuthorization(ctx, state)
 	}
-	// A legacy gateway callback can finish only when its cached resource or
-	// member identifies a live proxied placement. It may never recover a
-	// hosted placement from issuer inventory.
+	// A cached gateway callback without exact placement cannot be committed
+	// safely. Require a new consent instead of reconstructing it from live
+	// inventory that may describe a different placement.
 	if state.MetaMcpServerID.Valid || state.RouteBase == mcproute.OrganizationGateway {
-		if m.typedAuthorizationValidator == nil {
-			return ErrTypedAuthorizationChanged
-		}
-		return m.typedAuthorizationValidator(ctx, state)
+		return ErrTypedAuthorizationChanged
 	}
 	if state.McpServerID.Valid {
 		srv, err := mcpserversrepo.New(m.db).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: state.McpServerID.UUID, OrganizationID: state.OrganizationID})

@@ -22,10 +22,11 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -827,10 +828,11 @@ func TestSharedAuthorizationServer_ModeSwitchClosesInFlightFlows(t *testing.T) {
 func placeHostedConsentRegistration(t *testing.T, ctx context.Context, ti *testInstance, slug string, registration uuid.UUID) {
 	t.Helper()
 	auth := requireProjectAuthContext(t, ctx)
-	server, err := mcpserversrepo.New(ti.conn).GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{ProjectID: *auth.ProjectID, Slug: conv.ToPGText(slug)})
+	server, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, testenv.NewLogger(t), slug, mcproute.MCP)
 	require.NoError(t, err)
 	require.True(t, server.ToolsetID.Valid)
-	_, err = authclientbackfill.New(ti.conn).SeedAssociationFixture(ctx, authclientbackfill.SeedAssociationFixtureParams{ProjectID: server.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: server.ID, RemoteSessionClientID: registration})
+	require.True(t, server.McpServerID.Valid)
+	_, err = authclientbackfill.New(ti.conn).SeedAssociationFixture(ctx, authclientbackfill.SeedAssociationFixtureParams{ProjectID: server.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: server.McpServerID.UUID, RemoteSessionClientID: registration})
 	require.NoError(t, err)
 }
 

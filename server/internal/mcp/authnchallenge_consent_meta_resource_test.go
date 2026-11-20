@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -24,6 +26,7 @@ import (
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	tunneledmcp_repo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 )
@@ -225,6 +228,11 @@ func seedMetaConsentEndpoint(t *testing.T, slug string) (context.Context, consen
 	t.Helper()
 
 	ctx, ti := newTestMCPService(t)
+	return seedMetaConsentEndpointWithService(t, ctx, ti, slug)
+}
+
+func seedMetaConsentEndpointWithService(t *testing.T, ctx context.Context, ti *testInstance, slug string) (context.Context, consentActionFixture, uuid.UUID) {
+	t.Helper()
 	projectID, orgID := consentTestTenant(t, ctx)
 
 	shared := createUserSessionIssuer(t, ctx, ti.conn, projectID)
@@ -292,9 +300,8 @@ func TestServeConsentAction_MetaMCPConnectRefusesAClientNoMemberIsAssociatedWith
 	requireConnectRefused(t, fx, clientID, "a member with no derived authorization server is associated with no client, rather than with every one")
 }
 
-// A hosted member keeps the issuer-derived path, so a client only a hosted
-// member uses still connects through the gateway rather than being refused
-// as configured for no member.
+// A hosted member must explicitly place the registration. A sign-in issuer
+// link on its own does not authorize the gateway to start a hosted login.
 func TestServeConsentAction_MetaMCPConnectAllowsAClientOnlyAHostedMemberUses(t *testing.T) {
 	t.Parallel()
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-hosted-gw")
@@ -625,31 +632,38 @@ func requireConnectRefused(t *testing.T, fx consentActionFixture, clientID uuid.
 	require.Error(t, err, msg)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeBadRequest, oopsErr.Code, msg)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code, "%s: %+v", msg, err)
 	require.Empty(t, w.Header().Get("Location"), msg)
+}
+
+type metaMemberLookupFailureTracer struct{}
+
+func (metaMemberLookupFailureTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	if strings.HasPrefix(data.SQL, "-- name: ListServableMetaMCPMembers ") {
+		canceled, cancel := context.WithCancel(ctx)
+		cancel()
+		return canceled
+	}
+	return ctx
+}
+
+func (metaMemberLookupFailureTracer) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {
 }
 
 // A member lookup that faults must fail the connect closed. Treating the fault
 // as "no member claimed this" would hand the question to the weaker per-client
 // derivation, which answers for a different reason entirely.
 func TestServeConsentAction_MetaMCPConnectLookupErrorFailsClosed(t *testing.T) {
-	// CI may reuse the shard database. Do not change its schema concurrently.
-
-	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-lookup-fault-gw")
+	t.Parallel()
+	ctx, ti := newTestMCPServiceWithPoolConfig(t, testenv.NewLogger(t), testenv.NewMeterProvider(t),
+		&mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil,
+		func(config *pgxpool.Config) { config.ConnConfig.Tracer = metaMemberLookupFailureTracer{} }, mcp.MetaRuntimeConfig{})
+	ctx, fx, metaServerID := seedMetaConsentEndpointWithService(t, ctx, ti, "aim87-lookup-fault-gw")
 
 	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-lookup-fault", "", []uuid.UUID{fx.shared})
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 	member := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-lookup-fault-member", "https://lookup-fault.example.com/mcp", conv.ToNullUUID(issuerID), 0)
 	seedAuthorizedMetaConsentOffer(t, ctx, fx, member, clientID)
-
-	// Break only the member lookup's table and restore it before other tests run.
-	_, err := fx.ti.conn.Exec(ctx, "ALTER TABLE meta_mcp_server_members RENAME TO meta_mcp_server_members_unavailable") //nolint:glint // notestingrawsql: deliberate DDL breakage to force a member-lookup DB error; not expressible as an SQLc query
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		_, err := fx.ti.conn.Exec(context.WithoutCancel(ctx), "ALTER TABLE meta_mcp_server_members_unavailable RENAME TO meta_mcp_server_members") //nolint:glint // notestingrawsql: restore the deliberate DDL fault above
-		require.NoError(t, err)
-	})
 
 	_ = requireConnectActionFailsClosed(t, fx, clientID, oops.CodeUnexpected)
 }

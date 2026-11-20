@@ -12,8 +12,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
-	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -28,9 +26,6 @@ var errTypedLoginNotOffered = fmt.Errorf("%w: server does not offer this connect
 func (s *Service) ValidateRemoteLoginTypedAuthorization(ctx context.Context, state remotesessions.RemoteLoginState) error {
 	if state.HostedPlacement != nil {
 		return s.validateHostedLoginSubject(ctx, state)
-	}
-	if state.TypedAuthorization == nil && (state.MetaMcpServerID.Valid || state.RouteBase == mcproute.OrganizationGateway) {
-		return s.validateLegacyProxiedGatewayLogin(ctx, state)
 	}
 	a := state.TypedAuthorization
 	if a == nil || state.Subject == nil || a.Subject.IsZero() ||
@@ -103,66 +98,6 @@ func (s *Service) authorizeRemoteLoginServer(ctx context.Context, state remotese
 		return ctx, fmt.Errorf("%w: remote login server access is no longer authorized", remotesessions.ErrTypedAuthorizationDenied)
 	}
 	return ctx, nil
-}
-
-// validateLegacyProxiedGatewayLogin is only for cached pre-cutover state.
-// The downstream issuer binding still gates the grant write. In addition,
-// require live gateway and proxied client provenance for the exact resource.
-func (s *Service) validateLegacyProxiedGatewayLogin(ctx context.Context, state remotesessions.RemoteLoginState) error {
-	if state.Subject == nil || state.Subject.IsZero() || state.McpServerID.Valid ||
-		(state.Resource == "" && !state.ResourceMcpServerID.Valid) {
-		return remotesessions.ErrTypedAuthorizationChanged
-	}
-	//nolint:exhaustruct_v5 // Only member resolution and admission fields are needed.
-	endpoint := &ResolvedMcpEndpoint{OrganizationID: state.OrganizationID, ProjectID: state.ProjectID, UserSessionIssuerID: state.UserSessionIssuerID, MetaMcpServerID: state.MetaMcpServerID, RouteBase: state.RouteBase}
-	if endpoint.IsOrganizationGateway() {
-		gateway, err := s.loadOrganizationGateway(ctx, state.McpSlug)
-		if err != nil {
-			var shareable *oops.ShareableError
-			if errors.As(err, &shareable) && shareable.Code == oops.CodeNotFound {
-				return remotesessions.ErrTypedAuthorizationChanged
-			}
-			return fmt.Errorf("load legacy login organization gateway: %w", err)
-		}
-		endpoint = gateway.resolved
-		if endpoint.OrganizationID != state.OrganizationID || endpoint.UserSessionIssuerID != state.UserSessionIssuerID ||
-			(state.MetaMcpServerID.Valid && state.MetaMcpServerID != endpoint.MetaMcpServerID) ||
-			(endpoint.ProjectID != uuid.Nil && endpoint.ProjectID != state.ProjectID) {
-			return remotesessions.ErrTypedAuthorizationChanged
-		}
-	} else {
-		gateway, err := metamcprepo.New(s.db).GetMetaMCPServerByIDAndProjectID(ctx, metamcprepo.GetMetaMCPServerByIDAndProjectIDParams{ID: state.MetaMcpServerID.UUID, ProjectID: state.ProjectID})
-		if errors.Is(err, pgx.ErrNoRows) || (err == nil && (gateway.OrganizationID != state.OrganizationID || !gateway.UserSessionIssuerID.Valid || gateway.UserSessionIssuerID.UUID != state.UserSessionIssuerID)) {
-			return remotesessions.ErrTypedAuthorizationChanged
-		}
-		if err != nil {
-			return fmt.Errorf("load legacy login stored gateway: %w", err)
-		}
-	}
-	clients, err := s.remoteChallengeMgr.ListAuthClientRegistrations(ctx, state.ProjectID, state.OrganizationID, []uuid.UUID{state.RemoteSessionClientID})
-	if err != nil {
-		return fmt.Errorf("load legacy gateway login registration: %w", err)
-	}
-	if len(clients) != 1 || clients[0].CredentialOwner == remotesessions.CredentialOwnerSelf ||
-		(state.RemoteSessionIssuerID != uuid.Nil && clients[0].RemoteSessionIssuerID != state.RemoteSessionIssuerID) {
-		return remotesessions.ErrTypedAuthorizationChanged
-	}
-	memberCtx, err := s.contextForSessionSubject(ctx, endpoint, *state.Subject, "remote-login:"+state.ParentChallengeID, "")
-	if err != nil {
-		return fmt.Errorf("admit legacy gateway login subject: %w", err)
-	}
-	rows, _, err := s.claimingMetaMembers(memberCtx, endpoint, clients[0])
-	if err != nil {
-		return fmt.Errorf("qualify legacy gateway login resource: %w", err)
-	}
-	for _, row := range rows {
-		if row.ProjectID == state.ProjectID && row.UpstreamUrl == state.Resource &&
-			(row.McpServerVisibility == mcpservers.VisibilityPublic || row.McpServerVisibility == mcpservers.VisibilityPrivate) &&
-			(!state.ResourceMcpServerID.Valid || state.ResourceMcpServerID.UUID == row.McpServerID) {
-			return nil
-		}
-	}
-	return remotesessions.ErrTypedAuthorizationChanged
 }
 
 // validateHostedLoginSubject checks the exact live gateway member or direct
