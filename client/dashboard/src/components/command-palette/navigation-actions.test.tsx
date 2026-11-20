@@ -98,6 +98,7 @@ describe("organization navigation registration", () => {
       "nav-org-access-members",
       "nav-org-access-roles",
       "nav-org-access-challenges",
+      "nav-org-access-requests",
       "nav-org-access-assignments",
       "nav-org-deviceAgent-configuration",
       "nav-org-deviceAgent-mdm-integrations",

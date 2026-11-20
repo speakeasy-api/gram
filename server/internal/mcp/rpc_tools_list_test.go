@@ -308,19 +308,11 @@ func TestServePublic_RBAC_ToolsList_FiltersToGrantedTools(t *testing.T) {
 	})
 
 	// allowed_tool should pass.
-	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
-		Tool:        "allowed_tool",
-		Disposition: "",
-		ProjectID:   toolset.ProjectID.String(),
-	}))
+	err := authzEngine.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(toolset.ProjectID)).ToolCall("allowed_tool", ""))
 	require.NoError(t, err)
 
 	// forbidden_tool should be denied.
-	err = authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
-		Tool:        "forbidden_tool",
-		Disposition: "",
-		ProjectID:   toolset.ProjectID.String(),
-	}))
+	err = authzEngine.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(toolset.ProjectID)).ToolCall("forbidden_tool", ""))
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
@@ -341,18 +333,10 @@ func TestServePublic_RBAC_ToolsList_ServerLevelGrantReturnsAll(t *testing.T) {
 	})
 
 	// Any tool should pass with a server-level grant.
-	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
-		Tool:        "tool_one",
-		Disposition: "",
-		ProjectID:   toolset.ProjectID.String(),
-	}))
+	err := authzEngine.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(toolset.ProjectID)).ToolCall("tool_one", ""))
 	require.NoError(t, err)
 
-	err = authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
-		Tool:        "tool_two",
-		Disposition: "",
-		ProjectID:   toolset.ProjectID.String(),
-	}))
+	err = authzEngine.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(toolset.ProjectID)).ToolCall("tool_two", ""))
 	require.NoError(t, err)
 }
 
@@ -370,11 +354,7 @@ func TestServePublic_RBAC_ToolsList_NoGrantsDenied(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeMCPConnect, uuid.NewString()),
 	})
 
-	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
-		Tool:        "tool_x",
-		Disposition: "",
-		ProjectID:   toolset.ProjectID.String(),
-	}))
+	err := authzEngine.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(toolset.ProjectID)).ToolCall("tool_x", ""))
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
@@ -409,11 +389,11 @@ func TestServePublic_RBAC_ToolsList_MultipleToolGrants(t *testing.T) {
 	)
 
 	// tool_a and tool_c pass.
-	require.NoError(t, authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{Tool: "tool_a", Disposition: "", ProjectID: toolset.ProjectID.String()})))
-	require.NoError(t, authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{Tool: "tool_c", Disposition: "", ProjectID: toolset.ProjectID.String()})))
+	require.NoError(t, authzEngine.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(toolset.ProjectID)).ToolCall("tool_a", "")))
+	require.NoError(t, authzEngine.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(toolset.ProjectID)).ToolCall("tool_c", "")))
 
 	// tool_b denied.
-	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{Tool: "tool_b", Disposition: "", ProjectID: toolset.ProjectID.String()}))
+	err := authzEngine.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(toolset.ProjectID)).ToolCall("tool_b", ""))
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
@@ -442,19 +422,11 @@ func TestServePublic_RBAC_ToolsList_DispositionGrant_AllowsMatchingDisposition(t
 	})
 
 	// read_only tool should pass.
-	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
-		Tool:        "safe_tool",
-		Disposition: "read_only",
-		ProjectID:   toolset.ProjectID.String(),
-	}))
+	err := authzEngine.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(toolset.ProjectID)).ToolCall("safe_tool", "read_only"))
 	require.NoError(t, err)
 
 	// destructive tool should be denied.
-	err = authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
-		Tool:        "dangerous_tool",
-		Disposition: "destructive",
-		ProjectID:   toolset.ProjectID.String(),
-	}))
+	err = authzEngine.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(toolset.ProjectID)).ToolCall("dangerous_tool", "destructive"))
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
@@ -474,11 +446,7 @@ func TestServePublic_RBAC_ToolsList_DispositionGrant_ServerLevelAllowsAll(t *tes
 		Selector: authz.NewSelector(authz.ScopeMCPConnect, toolset.ID.String()),
 	})
 
-	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
-		Tool:        "any_tool",
-		Disposition: "destructive",
-		ProjectID:   toolset.ProjectID.String(),
-	}))
+	err := authzEngine.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(toolset.ProjectID)).ToolCall("any_tool", "destructive"))
 	require.NoError(t, err)
 }
 

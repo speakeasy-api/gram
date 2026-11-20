@@ -330,7 +330,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter), chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker), nil, telemLogger)
 	memoryService := memory.NewMemoryService(logger, tracerProvider, meterProvider, db, completions, auditLogger)
 	ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completions)
-	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL)
+	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL).WithFeatureFlags(featureFlags)
 	approvalService := approval.NewService(logger, db, serverURL, auditLogger)
 	mcpRiskEvaluator, mcpRiskScanner, err := newMCPRiskEvaluator(
 		c, logger, tracerProvider, meterProvider, db, enc, redisClient, featureFlags, enforcementDispatcher, completions, guardianPolicy, openRouter, publishers, shadowMCPClient, toolIOLogsEnabled,

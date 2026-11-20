@@ -1,5 +1,25 @@
 # dashboard
 
+## 0.152.0
+
+### Minor Changes
+
+- 1f606ba: Catalog cards now show how much your team already uses each server, from Shadow MCP: "Used by 5 people · 51 calls". The table view has a matching "Your team" column, and a "Most used by your team" sort puts those servers first. Org admins see this. The usage loads after the catalog, so the cards never wait for it.
+- b0ce6aa: Remove the Playground page in favor of each MCP server's Inspect tab, which has the same test chat. Old Playground links open the MCP page, and a tool's "Test in Playground" action is now "Test in Inspect". The unlinked SDKs page is also removed. The "Playground" model key slot is now labelled "Dashboard chat" and keeps covering the same completions.
+- 4e0ba52: Adding a credential for people's own accounts now detects the authorization server the MCP server advertises. When the project already has it, it is preselected; when it does not, it is added when the credential is saved, so there is no trip to Authorization Servers first. New MCP servers, credentials and authorization servers also get a readable name when none is typed: the name the server reports for itself when it can be reached without signing in, or one read from its address, such as "Canva" for mcp.canva.com.
+- 6bd7deb: The Windows device agent setup now has a "Download Intune package" button. It builds the three Win32 apps Intune needs (the identity config, the agent msi and the tray startup shortcut) as ready-to-upload `.intunewin` files, with a fresh agent token and the org's settings already filled in. A README in the bundle lists each app's install commands and detection rules, so admins no longer need IntuneWinAppUtil.
+- cb66876: An MCP Authentication Provider's Connections tab, under Identity > MCP Sessions, has a Register agent button for agents that cannot register themselves. It asks for a name, redirect URIs and the token endpoint auth method, then shows the minted client ID and secret once. The tab now also lists the provider's registered agents before they have signed in. A registration's redirect URIs can be edited from its detail sheet, except for CIMD agents, whose metadata document sets them. Both are shown only to people who can manage the provider's agents.
+- c8f8efd: Roles and agents can now be limited to particular upstream credentials. The role editor and an agent's Permissions page show every credential by kind, with a tick on all credentials, one kind, or one credential, and a block that wins over any tick. A wide tick can be split into one per kind or per credential so one can be taken away while the rest stay, and unticking a credential that comes from a wider tick splits it for you. The role editor's MCP server grid shows how many of each server's credentials the role can use and flags servers it can connect to but not sign in to, and a server's Check access shows which credentials a member can sign in with and which rule decides each one.
+
+### Patch Changes
+
+- ee3d0aa: A sign-in made through a team gateway now counts for each member server whose own sign-in issuer binds the same OAuth client. The agent credentials wizard shows those servers as connected, and attaching the connection to an agent succeeds. A connection for a client the server does not bind still does not count.
+- 617fb1d: MCP server Inspect now signs in through the server's OAuth consent page. It lets you choose an upstream credential before listing or running tools, including when no credential is bound to the authorization server.
+- 945db76: MCP server detail pages give more room to the tab content on short screens. The header is shorter, with its controls in one row, and it scrolls away while the tabs stay at the top.
+- 9ca1606: The Shadow MCP server table loads every page with "Load more". The control now sits below the last row instead of floating over the rows as you scroll, and new rows append in the server's order. The list endpoint is declared as cursor-paginated, so SDK clients get page iterators.
+- b337155: The Shadow MCP default-mode dialog now closes as soon as the change is saved, instead of waiting for the server inventory to reload.
+- b5aaecd: Simplify the Shadow MCP page. The header is one short line and the Project Assistant no longer floats over these pages. The table's two date columns become one Last active column: the last call, with when an agent last listed the server under it, sorted by the later of the two. A server's page now leads with its status, then a pending access review, the official server, and who uses it, with the gathered evidence and web research behind one Evidence row.
+
 ## 0.151.0
 
 ### Minor Changes

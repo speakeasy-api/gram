@@ -3803,7 +3803,7 @@ SELECT
     -- The project predicate is load-bearing, not tidiness. mcp_servers.
     -- toolset_id has no composite constraint pairing it with project_id, so a
     -- server in another project can front this toolset. Each id here is
-    -- authorized with authz.MCPCheck(ScopeMCPWrite, id, <this project>), and
+    -- authorized with authz.MCPServer(id, <this project>).Write(), and
     -- that check injects the project as a selector dimension so a
     -- project-scoped grant matches — which means a project-wide mcp:write in
     -- THIS project would wave through a server id belonging to another one.

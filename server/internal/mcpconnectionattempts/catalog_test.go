@@ -133,6 +133,7 @@ var frozenCodes = []string{
 	"address_not_allowed",
 	"address_not_found",
 	"unmanaged_account",
+	"gateway_machine_access_disabled",
 }
 
 // frozenResults pins each result's stored name, append-only like the codes.

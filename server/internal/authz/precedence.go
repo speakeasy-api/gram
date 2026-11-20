@@ -133,11 +133,11 @@ func directOverride(grants []Grant, check Check) (*Grant, *Check, error) {
 // directOverrideCheck returns the check a direct grant must satisfy to outrank
 // an inherited exclusion. A server-level check is proven by any direct grant on
 // the server, but a tool call only by one whose every constraint the call
-// carries. Loose matching would let a disposition-scoped grant reach a tool
-// with no derivable disposition, past a block that otherwise covers it.
+// carries, so a disposition-scoped grant never reaches a tool with no
+// derivable disposition, past a block that otherwise covers it.
 func directOverrideCheck(check Check) Check {
-	if _, toolCall := check.Dimensions[SelectorKeyTool]; toolCall {
-		return check.WithStrictSelectorMatch()
+	if check.isToolCall() {
+		check.exact = true
 	}
 	return check
 }

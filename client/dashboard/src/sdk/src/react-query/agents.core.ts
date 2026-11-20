@@ -83,6 +83,7 @@ export function buildAgentsQuery(
     queryKey: queryKeyAgents({
       cursor: request?.cursor,
       limit: request?.limit,
+      projectId: request?.projectId,
       search: request?.search,
       nameOrder: request?.nameOrder,
       lifecycle: request?.lifecycle,
@@ -128,6 +129,7 @@ export function buildAgentsInfiniteQuery(
     queryKey: queryKeyAgentsInfinite({
       cursor: request?.cursor,
       limit: request?.limit,
+      projectId: request?.projectId,
       search: request?.search,
       nameOrder: request?.nameOrder,
       lifecycle: request?.lifecycle,
@@ -170,6 +172,7 @@ export function queryKeyAgents(
   parameters: {
     cursor?: string | undefined;
     limit?: number | undefined;
+    projectId?: string | undefined;
     search?: string | undefined;
     nameOrder?: NameOrder | undefined;
     lifecycle?: Array<Lifecycle> | undefined;
@@ -186,6 +189,7 @@ export function queryKeyAgentsInfinite(
   parameters: {
     cursor?: string | undefined;
     limit?: number | undefined;
+    projectId?: string | undefined;
     search?: string | undefined;
     nameOrder?: NameOrder | undefined;
     lifecycle?: Array<Lifecycle> | undefined;

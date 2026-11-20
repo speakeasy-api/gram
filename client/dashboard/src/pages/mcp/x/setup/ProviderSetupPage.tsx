@@ -17,6 +17,7 @@ import {
 } from "@/pages/catalog/provider-setup/salesforce";
 import type { State } from "@/pages/catalog/provider-setup/state";
 import { useEffect, useReducer, useState } from "react";
+import { toast } from "sonner";
 import { invalidateMcpServerQueries } from "@/lib/mcp-server-visibility";
 import { useProviderConnection } from "./useProviderConnection";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
@@ -54,22 +55,15 @@ export function ProviderSetupPage({
     mcpServerRouteParam(mcpServer),
   );
   if (!remoteId) return <Navigate to={overview} replace />;
-  if (remote.isLoading)
-    return (
-      <>
-        <Skeleton className="h-64 w-full" />
-      </>
-    );
+  if (remote.isLoading) return <Skeleton className="h-64 w-full" />;
   if (remote.isError)
     return (
-      <>
-        <Alert variant="error">
-          Couldn’t load this server’s setup.{" "}
-          <Button variant="secondary" onClick={() => void remote.refetch()}>
-            <Button.Text>Retry</Button.Text>
-          </Button>
-        </Alert>
-      </>
+      <Alert variant="error">
+        Couldn’t load this server’s setup.{" "}
+        <Button variant="secondary" onClick={() => void remote.refetch()}>
+          <Button.Text>Retry</Button.Text>
+        </Button>
+      </Alert>
     );
   const provider = setupProviderForUrl(remote.data?.url);
   // Providers without a guided flow get their written guide, full page.
@@ -133,22 +127,15 @@ function SalesforceSetupEntry({
     undefined,
     { throwOnError: false },
   );
-  if (headers.isPending)
-    return (
-      <>
-        <Skeleton className="h-64 w-full" />
-      </>
-    );
+  if (headers.isPending) return <Skeleton className="h-64 w-full" />;
   if (headers.isError)
     return (
-      <>
-        <Alert variant="error">
-          Couldn’t load Salesforce connection configuration.{" "}
-          <Button variant="secondary" onClick={() => void headers.refetch()}>
-            <Button.Text>Retry</Button.Text>
-          </Button>
-        </Alert>
-      </>
+      <Alert variant="error">
+        Couldn’t load Salesforce connection configuration.{" "}
+        <Button variant="secondary" onClick={() => void headers.refetch()}>
+          <Button.Text>Retry</Button.Text>
+        </Button>
+      </Alert>
     );
   let instanceUrl;
   try {
@@ -157,21 +144,19 @@ function SalesforceSetupEntry({
     ).instanceUrl;
   } catch (error) {
     return (
-      <>
-        <Alert variant="error">
-          {error instanceof Error
-            ? error.message
-            : "Review the MCP-Instance-URL header in identity settings."}{" "}
-          <Link
-            to={
-              routes.mcp.details.settings.href(mcpServerRouteParam(mcpServer)) +
-              "#authentication"
-            }
-          >
-            Open identity settings
-          </Link>
-        </Alert>
-      </>
+      <Alert variant="error">
+        {error instanceof Error
+          ? error.message
+          : "Review the MCP-Instance-URL header in identity settings."}{" "}
+        <Link
+          to={
+            routes.mcp.details.settings.href(mcpServerRouteParam(mcpServer)) +
+            "#authentication"
+          }
+        >
+          Open identity settings
+        </Link>
+      </Alert>
     );
   }
   return (
@@ -361,12 +346,10 @@ function LiveSetupConnection({
     routes.mcp.details.settings.href(mcpServerRouteParam(mcpServer)) +
     "#authentication";
   const [completing, setCompleting] = useState(false);
-  const [completionError, setCompletionError] = useState<string | null>(null);
   // Record completion before leaving so a reopened Setup starts at its
   // connection check; a failed write keeps the user here to retry.
   const complete = async () => {
     setCompleting(true);
-    setCompletionError(null);
     try {
       await sdk.mcpServers.setSetupGuideCompleted({
         setSetupGuideCompletedRequestBody: {
@@ -375,7 +358,7 @@ function LiveSetupConnection({
         },
       });
     } catch {
-      setCompletionError("Unable to save setup status.");
+      toast.error("Unable to save setup status. Try again.");
       setCompleting(false);
       return;
     }
@@ -394,7 +377,6 @@ function LiveSetupConnection({
           settingsHref,
           complete: () => void complete(),
           completing,
-          completionError,
         },
       }}
     >

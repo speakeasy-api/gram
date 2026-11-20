@@ -263,8 +263,42 @@ func validateStoredDelegatedPolicyGrant(version DelegatedPolicyVersion, grant De
 	if definition.safeSince == 0 || definition.safeSince > RuntimeScopeRegistryVersion(version) {
 		return fmt.Errorf("scope %q is not agent-runtime-safe", grant.Scope)
 	}
-	if err := authz.ValidateSelector(grant.Scope, grant.Selector); err != nil {
+	if err := validateStoredDelegatedSelector(grant.Scope, grant.Selector); err != nil {
 		return fmt.Errorf("validate delegated policy selector: %w", err)
+	}
+	return nil
+}
+
+// storedOnlyLimitScopes are the scopes a stored delegated policy may still
+// carry a tool or disposition limit on, from before limits moved to connect.
+var storedOnlyLimitScopes = []authz.Scope{authz.ScopeMCPRead, authz.ScopeMCPWrite, authz.ScopeMCPBlockedRead, authz.ScopeMCPBlockedWrite}
+
+// validateStoredDelegatedSelector is authz.ValidateSelector for a policy read
+// back from a key or session. A stored policy must keep decoding at its
+// version, so it may still limit viewing or managing a server to some tools
+// or dispositions. A new policy cannot: NewDelegatedPolicy uses
+// authz.ValidateSelector.
+func validateStoredDelegatedSelector(scope authz.Scope, selector authz.Selector) error {
+	if !slices.Contains(storedOnlyLimitScopes, scope) {
+		if err := authz.ValidateSelector(scope, selector); err != nil {
+			return fmt.Errorf("validate selector: %w", err)
+		}
+		return nil
+	}
+	unlimited := maps.Clone(selector)
+	delete(unlimited, authz.SelectorKeyTool)
+	if disposition, ok := unlimited[authz.SelectorKeyDisposition]; ok {
+		if err := authz.ValidateSelector(authz.ScopeMCPConnect, authz.Selector{
+			authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
+			authz.SelectorKeyResourceID:   authz.WildcardResource,
+			authz.SelectorKeyDisposition:  disposition,
+		}); err != nil {
+			return fmt.Errorf("validate stored disposition limit: %w", err)
+		}
+		delete(unlimited, authz.SelectorKeyDisposition)
+	}
+	if err := authz.ValidateSelector(scope, unlimited); err != nil {
+		return fmt.Errorf("validate selector without stored limits: %w", err)
 	}
 	return nil
 }

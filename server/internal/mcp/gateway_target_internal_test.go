@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 )
 
@@ -45,23 +46,34 @@ func TestGatewayTargetFromEndpoint(t *testing.T) {
 
 func TestGatewayTargetAdmission(t *testing.T) {
 	t.Parallel()
-	gatewayID := uuid.New()
+	gatewayID, projectID, otherProjectID := uuid.New(), uuid.New(), uuid.New()
 	target := gatewayTarget{kind: gatewayKindStored, id: gatewayID}
 	for _, tc := range []struct {
-		name   string
-		target gatewayTarget
-		caller gatewayCaller
-		want   bool
+		name          string
+		target        gatewayTarget
+		caller        gatewayCaller
+		projectID     uuid.UUID
+		machineAccess bool
+		want          bool
 	}{
-		{name: "person", target: target, caller: gatewayCaller{kind: gatewayCallerPerson}, want: true},
-		{name: "stored refuses agent in phase one", target: target, caller: gatewayCaller{kind: gatewayCallerAgent}, want: false},
-		{name: "project refuses workload in phase one", target: gatewayTarget{kind: gatewayKindProject, id: gatewayID}, caller: gatewayCaller{kind: gatewayCallerWorkload}, want: false},
-		{name: "organization refuses machine", target: gatewayTarget{kind: gatewayKindOrganization, id: gatewayID}, caller: gatewayCaller{kind: gatewayCallerWorkload}, want: false},
-		{name: "agent refuses machine", target: gatewayTarget{kind: gatewayKindAgent, id: gatewayID}, caller: gatewayCaller{kind: gatewayCallerAgent}, want: false},
+		{name: "person", target: target, caller: gatewayCaller{kind: gatewayCallerPerson}, projectID: projectID, want: true},
+		{name: "stored agent flag off", target: target, caller: gatewayCaller{kind: gatewayCallerAgent}, projectID: projectID, want: false},
+		{name: "stored agent flag on", target: target, caller: gatewayCaller{kind: gatewayCallerAgent}, projectID: projectID, machineAccess: true, want: true},
+		{name: "stored agent wrong project", target: target, caller: gatewayCaller{kind: gatewayCallerAgent, projectScope: &otherProjectID}, projectID: projectID, machineAccess: true, want: false},
+		{name: "stored issuer workload", target: target, caller: gatewayCaller{kind: gatewayCallerWorkload, ceiling: []authz.Grant{{Scope: authz.ScopeMCPConnect, Selector: authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCP, authz.SelectorKeyResourceID: authz.WildcardResource, authz.SelectorKeyProjectID: projectID.String()}}}}, projectID: projectID, machineAccess: true, want: true},
+		{name: "stored gateway workload", target: target, caller: gatewayCaller{kind: gatewayCallerWorkload, ceiling: []authz.Grant{{Scope: authz.ScopeMCPConnect, Selector: authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCP, authz.SelectorKeyResourceID: gatewayID.String(), authz.SelectorKeyProjectID: projectID.String()}}}}, projectID: projectID, machineAccess: true, want: true},
+		{name: "stored workload another gateway", target: target, caller: gatewayCaller{kind: gatewayCallerWorkload, ceiling: []authz.Grant{{Scope: authz.ScopeMCPConnect, Selector: authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCP, authz.SelectorKeyResourceID: uuid.NewString(), authz.SelectorKeyProjectID: projectID.String()}}}}, projectID: projectID, machineAccess: true, want: false},
+		{name: "project agent flag off", target: gatewayTarget{kind: gatewayKindProject, id: gatewayID}, caller: gatewayCaller{kind: gatewayCallerAgent, projectScope: &projectID}, projectID: projectID, want: false},
+		{name: "project agent flag on", target: gatewayTarget{kind: gatewayKindProject, id: gatewayID}, caller: gatewayCaller{kind: gatewayCallerAgent, projectScope: &projectID}, projectID: projectID, machineAccess: true, want: true},
+		{name: "project agent wrong project", target: gatewayTarget{kind: gatewayKindProject, id: gatewayID}, caller: gatewayCaller{kind: gatewayCallerAgent, projectScope: &otherProjectID}, projectID: projectID, machineAccess: true, want: false},
+		{name: "project workload", target: gatewayTarget{kind: gatewayKindProject, id: gatewayID}, caller: gatewayCaller{kind: gatewayCallerWorkload, ceiling: []authz.Grant{{Scope: authz.ScopeMCPConnect, Selector: authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCP, authz.SelectorKeyResourceID: gatewayID.String(), authz.SelectorKeyProjectID: projectID.String()}}}}, projectID: projectID, machineAccess: true, want: true},
+		{name: "project refuses workload without target ceiling", target: gatewayTarget{kind: gatewayKindProject, id: gatewayID}, caller: gatewayCaller{kind: gatewayCallerWorkload}, projectID: projectID, machineAccess: true, want: false},
+		{name: "organization refuses machine", target: gatewayTarget{kind: gatewayKindOrganization, id: gatewayID}, caller: gatewayCaller{kind: gatewayCallerWorkload}, machineAccess: true, want: false},
+		{name: "agent gateway refuses machine", target: gatewayTarget{kind: gatewayKindAgent, id: gatewayID}, caller: gatewayCaller{kind: gatewayCallerAgent}, projectID: projectID, machineAccess: true, want: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := tc.target.admits(tc.caller)
+			got, err := tc.target.admits(tc.caller, tc.projectID, tc.machineAccess)
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got)
 		})

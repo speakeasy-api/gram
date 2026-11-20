@@ -329,8 +329,8 @@ func TestService_UpdateRole_RevokedAssistantGrantsStayRevoked(t *testing.T) {
 
 	// GetAssistant and SendMessage both require assistant:read on the
 	// assistant within its project; update and delete require assistant:write.
-	readCheck := authz.AssistantCheck(authz.ScopeAssistantRead, "assistant_1", "project_1")
-	writeCheck := authz.AssistantCheck(authz.ScopeAssistantWrite, "assistant_1", "project_1")
+	readCheck := authz.Assistant(authz.AssistantIDFrom("assistant_1"), authz.ProjectIDFrom("project_1")).Read()
+	writeCheck := authz.Assistant(authz.AssistantIDFrom("assistant_1"), authz.ProjectIDFrom("project_1")).Write()
 	member := urn.NewPrincipal(urn.PrincipalTypeUser, "ordinary_member")
 
 	for _, tc := range []struct {

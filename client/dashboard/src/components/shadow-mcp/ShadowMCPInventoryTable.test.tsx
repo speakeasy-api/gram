@@ -364,6 +364,7 @@ function inventoryServer(
     firstSeen: new Date("2026-01-01T10:00:00Z"),
     lastCalled: undefined,
     lastSeen: new Date("2026-01-02T10:00:00Z"),
+    blockedCallCount: 0,
     observedUseCount: 0,
     requestCount: 0,
     serverName: undefined,
@@ -536,6 +537,7 @@ describe("ShadowMCPInventoryTable", () => {
           // The server computes the verdict now: a URL a deny-by-default
           // policy blocks arrives as blocked, not as none-plus-page-state.
           access: "blocked",
+          blockedCallCount: 5,
           canonicalServerUrl: "https://unused.example.com/mcp",
           lastCalled: undefined,
           lastSeen: new Date("2026-01-03T11:30:00Z"),
@@ -550,8 +552,10 @@ describe("ShadowMCPInventoryTable", () => {
     });
     expect(screen.getByText("https://github.example.com/mcp")).toBeTruthy();
     expect(screen.getByText("Allowed")).toBeTruthy();
-    expect(screen.getByText("Blocked")).toBeTruthy();
+    // The Blocked column header and the blocked row's status badge.
+    expect(screen.getAllByText("Blocked")).toHaveLength(2);
     expect(screen.getByText("42 calls")).toBeTruthy();
+    expect(screen.getByText("5 calls")).toBeTruthy();
     expect(screen.getByText("3 users")).toBeTruthy();
     expect(screen.getByText("Never called")).toBeTruthy();
     expect(screen.getByText("https://unused.example.com/mcp")).toBeTruthy();
@@ -729,8 +733,9 @@ describe("ShadowMCPInventoryTable", () => {
       throw new Error("Row context menu was not rendered");
     }
     const actions = lastCall[0];
+    // Servers are blocked by default here, so the row offers approval.
     expect(actions.map((action) => action.label)).toEqual([
-      "Decide access",
+      "Approve server",
       "Make official",
     ]);
 
@@ -792,6 +797,7 @@ describe("ShadowMCPInventoryTable", () => {
     const labelLists = calls.map(([actions]) =>
       actions.map((action) => action.label),
     );
+    // The policy is unknown, so the label stays neutral rather than guessing.
     expect(labelLists).toContainEqual(["Decide access", "Make official"]);
     expect(labelLists).toContainEqual(["Decide access"]);
 

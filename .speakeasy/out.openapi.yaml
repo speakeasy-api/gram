@@ -567,6 +567,95 @@ paths:
       x-speakeasy-react-hook:
         name: CreateTemporaryGrant
         type: mutation
+  /rpc/access.decideAccessRequest:
+    post:
+      description: 'Approve or deny a pending access request. Approving gives the requester the scope as a temporary grant until expires_at, with the same limits as createTemporaryGrant, and resolves the denials the request covers. Requires org:admin; the requester cannot decide their own request. Session only: the decision is attributed to the person who made it.'
+      operationId: decideAccessRequest
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecideAccessRequestForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRequest'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: decideAccessRequest access
+      tags:
+        - access
+      x-speakeasy-name-override: decideAccessRequest
+      x-speakeasy-react-hook:
+        name: DecideAccessRequest
+        type: mutation
   /rpc/access.deleteDirectoryRoleMapping:
     delete:
       description: Remove a directory role mapping.
@@ -1444,6 +1533,103 @@ paths:
       x-speakeasy-name-override: listAIDetections
       x-speakeasy-react-hook:
         name: AIDetections
+  /rpc/access.listAccessRequests:
+    get:
+      description: List access requests in the organization, newest first. Organization administrators see every request; anyone else sees only their own. Requires the access requests rollout for the organization.
+      operationId: listAccessRequests
+      parameters:
+        - allowEmptyValue: true
+          description: 'Only requests with this status: pending, approved, denied, expired or withdrawn.'
+          in: query
+          name: status
+          schema:
+            description: 'Only requests with this status: pending, approved, denied, expired or withdrawn.'
+            type: string
+        - allowEmptyValue: true
+          description: Only requests made by the signed-in member, even for an administrator.
+          in: query
+          name: mine
+          schema:
+            default: false
+            description: Only requests made by the signed-in member, even for an administrator.
+            type: boolean
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAccessRequestsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listAccessRequests access
+      tags:
+        - access
+      x-speakeasy-name-override: listAccessRequests
+      x-speakeasy-react-hook:
+        name: AccessRequests
   /rpc/access.listAgentPolicyScopes:
     get:
       description: 'List the scopes an agent policy may hold, as the catalogue describes them. Needs a session and no organization grant: an owner configuring their own agent holds no RBAC grant, and the list is product configuration.'
@@ -3519,7 +3705,7 @@ paths:
         type: mutation
   /rpc/access.requestAccess:
     post:
-      description: Request access to a scope by sending an email notification to organization administrators.
+      description: Request access to a scope. Organization administrators are emailed. With the access requests rollout on, a signed-in member's request is also stored, so an administrator can approve it as temporary access or deny it from the dashboard or Slack.
       operationId: requestAccess
       parameters:
         - allowEmptyValue: true
@@ -4272,7 +4458,7 @@ paths:
         type: mutation
   /rpc/access.setShadowMCPOfficialServer:
     post:
-      description: Link one project-scoped Shadow MCP server to its official version, or remove the link. While a link exists, direct connections are blocked wherever a Shadow MCP policy applies and agents are pointed at the linked server. With mcp_server_id the link is added (or restored, when it was removed before) or pointed at that server; omitting mcp_server_id removes the link. Each add, change and removal is recorded in the audit log. Requires an authenticated session authorized for org:admin on the active organization.
+      description: Choose the official version of one project-scoped Shadow MCP server. By default a project MCP server that proxies to the Shadow MCP server's URL is linked automatically (the oldest, when several do). While a link exists and the linked server has an address, direct connections are blocked wherever a Shadow MCP policy applies and agents are pointed at the linked server; a linked server with no address yet leaves direct connections on the ordinary rules. With mcp_server_id that server is linked instead; with keep_shadow no server is linked, so direct use follows the ordinary Shadow MCP rules; with neither, the automatic link applies again. Each change is recorded in the audit log. Requires an authenticated session authorized for org:admin on the active organization.
       operationId: setShadowMCPOfficialServer
       parameters:
         - allowEmptyValue: true
@@ -4819,6 +5005,95 @@ paths:
       x-speakeasy-name-override: updateShadowMCPInventoryServerName
       x-speakeasy-react-hook:
         name: UpdateShadowMCPInventoryServerName
+        type: mutation
+  /rpc/access.withdrawAccessRequest:
+    post:
+      description: Withdraw a pending access request you made. Only the requester can withdraw it.
+      operationId: withdrawAccessRequest
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskIDRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRequest'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: withdrawAccessRequest access
+      tags:
+        - access
+      x-speakeasy-name-override: withdrawAccessRequest
+      x-speakeasy-react-hook:
+        name: WithdrawAccessRequest
         type: mutation
   /rpc/adminAssets.uploadImage:
     post:
@@ -9374,6 +9649,14 @@ paths:
             maximum: 200
             minimum: 1
             type: integer
+        - allowEmptyValue: true
+          description: Keep only agents assigned to this project in the active organization.
+          in: query
+          name: project_id
+          schema:
+            description: Keep only agents assigned to this project in the active organization.
+            format: uuid
+            type: string
         - allowEmptyValue: true
           description: Case-insensitive substring match on the agent name.
           in: query
@@ -33519,16 +33802,42 @@ paths:
         name: ExtendAgentAPIKeys
   /rpc/keys.list:
     get:
-      description: List all api keys for an organization
+      description: List an organization's api keys, newest first. Send limit to get one page at a time and follow next_cursor for the rest. Without limit, every matching key is returned in one response.
       operationId: listAPIKeys
       parameters:
         - allowEmptyValue: true
-          description: When set, list keys for this first-class agent
+          description: When set, list keys for this first-class agent. Cannot be combined with cursor, limit or search.
           in: query
           name: agent_id
           schema:
-            description: When set, list keys for this first-class agent
+            description: When set, list keys for this first-class agent. Cannot be combined with cursor, limit or search.
             format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Opaque cursor from a previous response's next_cursor. Returns the keys after that page.
+          in: query
+          name: cursor
+          schema:
+            description: Opaque cursor from a previous response's next_cursor. Returns the keys after that page.
+            maxLength: 512
+            type: string
+        - allowEmptyValue: true
+          description: Page size. When omitted, every matching key is returned and next_cursor is never set.
+          in: query
+          name: limit
+          schema:
+            description: Page size. When omitted, every matching key is returned and next_cursor is never set.
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Only return keys whose name contains this text, ignoring case.
+          in: query
+          name: search
+          schema:
+            description: Only return keys whose name contains this text, ignoring case.
+            maxLength: 255
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -83620,6 +83929,111 @@ paths:
       x-speakeasy-name-override: setSpendCap
       x-speakeasy-react-hook:
         name: setSpendCap
+  /rpc/userSessionClients.create:
+    post:
+      description: Register a confidential client against a user-session issuer on an operator's behalf, for a client that cannot register itself. Speakeasy mints the client_id and client_secret; the secret is returned once and only its hash is stored. Requires project:write on the issuer's project, or org:admin for an organization-owned issuer.
+      operationId: createUserSessionClient
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserSessionClientRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateUserSessionClientResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: createUserSessionClient userSessionClients
+      tags:
+        - userSessionClients
+      x-speakeasy-name-override: create
+      x-speakeasy-react-hook:
+        name: CreateUserSessionClient
   /rpc/userSessionClients.get:
     get:
       description: Get a user_session_client by id.
@@ -84071,6 +84485,111 @@ paths:
       x-speakeasy-name-override: revoke
       x-speakeasy-react-hook:
         name: RevokeUserSessionClient
+  /rpc/userSessionClients.updateRedirectURIs:
+    post:
+      description: Replace a client's redirect URIs. Applies to the next /authorize; sessions already issued are unaffected. Rejected for CIMD clients, whose metadata document owns their redirect URIs. Requires project:write on the issuer's project, or org:admin for an organization-owned issuer.
+      operationId: updateUserSessionClientRedirectURIs
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserSessionClientRedirectURIsRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSessionClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: updateUserSessionClientRedirectURIs userSessionClients
+      tags:
+        - userSessionClients
+      x-speakeasy-name-override: updateRedirectURIs
+      x-speakeasy-react-hook:
+        name: UpdateUserSessionClientRedirectURIs
   /rpc/userSessionConsents.list:
     get:
       description: List consent records for the caller's project.
@@ -89224,6 +89743,74 @@ components:
         - role_id
         - mapping_id
         - source_kind
+    AccessRequest:
+      type: object
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        decided_at:
+          type: string
+          format: date-time
+        decided_by_name:
+          type: string
+          description: The deciding administrator's display name, or their email.
+        decided_by_user_id:
+          type: string
+          description: The administrator who approved or denied the request.
+        decided_via:
+          type: string
+          description: 'Where the decision was made: dashboard or slack.'
+        expires_at:
+          type: string
+          description: When a pending request lapses.
+          format: date-time
+        grant_expires_at:
+          type: string
+          description: When the temporary grant an approval gave stops, or stopped, authorizing requests.
+          format: date-time
+        id:
+          type: string
+          description: Access request ID.
+          format: uuid
+        message:
+          type: string
+          description: The requester's note to the administrators.
+        requester_name:
+          type: string
+          description: The requester's display name, or their email when they have none.
+        requester_user_id:
+          type: string
+          description: The member who asked.
+        resource_name:
+          type: string
+          description: Name of the resource, as it was when the request was made.
+        scope:
+          type: string
+          description: The scope asked for.
+        selector:
+          $ref: '#/components/schemas/Selector'
+        status:
+          type: string
+          description: 'pending: waiting for a decision. approved: a temporary grant was given. denied, expired or withdrawn: no access was given.'
+        temporary_grant_id:
+          type: string
+          description: The temporary grant an approval gave.
+          format: uuid
+        updated_at:
+          type: string
+          format: date-time
+      description: A member's request for access they were denied, decided by an organization administrator.
+      required:
+        - id
+        - requester_user_id
+        - requester_name
+        - scope
+        - selector
+        - status
+        - expires_at
+        - created_at
+        - updated_at
     AccessibleMCPServer:
       type: object
       properties:
@@ -90073,6 +90660,7 @@ components:
             - destructive
             - idempotent
             - open_world
+            - unannotated
         project_id:
           type: string
           description: Project filter (MCP, environment, assistant, inference, mcp:auth and mcp:blocked_auth scopes).
@@ -96181,6 +96769,48 @@ components:
       description: Form for creating a new unproxied MCP server
       required:
         - url
+    CreateUserSessionClientRequestBody:
+      type: object
+      properties:
+        client_name:
+          type: string
+          description: Display name shown in client listings and on the consent screen.
+          minLength: 1
+          maxLength: 255
+        redirect_uris:
+          type: array
+          items:
+            type: string
+          description: Redirect URIs validated on every /authorize. At least one is required.
+          minItems: 1
+          maxItems: 32
+        token_endpoint_auth_method:
+          type: string
+          description: How the client presents its secret at the token endpoint (RFC 7591).
+          default: client_secret_basic
+          enum:
+            - client_secret_basic
+            - client_secret_post
+        user_session_issuer_id:
+          type: string
+          description: The issuer the client signs in through.
+          format: uuid
+      required:
+        - user_session_issuer_id
+        - client_name
+        - redirect_uris
+    CreateUserSessionClientResult:
+      type: object
+      properties:
+        client:
+          $ref: '#/components/schemas/UserSessionClient'
+        client_secret:
+          type: string
+          description: The minted client secret. Not retrievable again.
+      description: A newly registered client and its secret. The secret is returned only here.
+      required:
+        - client
+        - client_secret
     CreateUserSessionIssuerCimdClientForm:
       type: object
       properties:
@@ -96719,6 +97349,23 @@ components:
         - operation_id
         - prescription_id
         - expected_version
+    DecideAccessRequestForm:
+      type: object
+      properties:
+        approve:
+          type: boolean
+          description: True gives the access as a temporary grant; false denies the request.
+        expires_at:
+          type: string
+          description: 'When the temporary grant stops authorizing new requests. Required to approve: at least five minutes and at most 24 hours from now.'
+          format: date-time
+        id:
+          type: string
+          description: The access request to decide.
+          format: uuid
+      required:
+        - id
+        - approve
     DeclineRiskPolicyChallengeResponseBody:
       type: object
       properties:
@@ -98735,6 +99382,7 @@ components:
               - destructive
               - idempotent
               - open_world
+              - unannotated
           description: Tool annotations the rule is narrowed to, when it is not the whole resource.
         effect:
           type: string
@@ -103695,6 +104343,16 @@ components:
         - organization_id
         - provider
         - schedules
+    ListAccessRequestsResult:
+      type: object
+      properties:
+        requests:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccessRequest'
+          description: Access requests, newest first. At most 200 are returned.
+      required:
+        - requests
     ListActorAttributesResult:
       type: object
       properties:
@@ -104592,6 +105250,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Key'
+        next_cursor:
+          type: string
+          description: Cursor for the next page of keys.list. Absent on the last page and when no limit was sent.
       required:
         - keys
     ListMCPPlatformToolsetsResult:
@@ -112790,9 +113451,11 @@ components:
     RequestAccessResult:
       type: object
       properties:
+        request:
+          $ref: '#/components/schemas/AccessRequest'
         sent_to_count:
           type: integer
-          description: Number of administrators who were notified.
+          description: Number of administrators who were emailed.
           format: int64
       required:
         - sent_to_count
@@ -113100,6 +113763,7 @@ components:
               - destructive
               - idempotent
               - open_world
+              - unannotated
           description: Tool annotations the rule is narrowed to, when it is not the whole resource.
         kind:
           type: string
@@ -116055,6 +116719,7 @@ components:
             - destructive
             - idempotent
             - open_world
+            - unannotated
         project_id:
           type: string
           description: Project filter (MCP, environment, assistant, inference, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.
@@ -117090,6 +117755,7 @@ components:
               - destructive
               - idempotent
               - open_world
+              - unannotated
           description: Narrow the access to tools carrying these annotations. Omit for the whole resource.
         level:
           type: string
@@ -117202,9 +117868,12 @@ components:
     SetShadowMCPOfficialServerForm:
       type: object
       properties:
+        keep_shadow:
+          type: boolean
+          description: 'Keep using the Shadow MCP server directly: no official server is linked, not even automatically. Cannot be combined with mcp_server_id.'
         mcp_server_id:
           type: string
-          description: The MCP server to link as the official version. Omit it to remove the link.
+          description: The MCP server to link as the official version. Omit it, with keep_shadow unset, to go back to the automatic link.
           format: uuid
         project_id:
           type: string
@@ -117573,6 +118242,11 @@ components:
             type: string
         approval_request:
           $ref: '#/components/schemas/ShadowMCPInventoryApprovalRequest'
+        blocked_call_count:
+          type: integer
+          description: Calls to this server that a Speakeasy hook blocked, within the telemetry retention window. Included in observed_use_count. Optional for one release so a dashboard deployed ahead of the server still loads the inventory; the server always sends it.
+          default: 0
+          format: int64
         blocked_policy_ids:
           type: array
           items:
@@ -117596,6 +118270,9 @@ components:
           format: int64
         official_server:
           $ref: '#/components/schemas/ShadowMCPOfficialServer'
+        official_server_declined:
+          type: boolean
+          description: True when an administrator chose to keep using the Shadow MCP server directly, so no official server is linked automatically.
         request_count:
           type: integer
           format: int64
@@ -117718,6 +118395,9 @@ components:
     ShadowMCPOfficialServer:
       type: object
       properties:
+        automatic:
+          type: boolean
+          description: True when the link was made automatically because the server proxies to the Shadow MCP server's URL; false when an administrator chose it.
         direct_access_allowed:
           type: boolean
           description: 'Deprecated: links no longer have an on/off switch, so this is always false. Kept one release so older dashboards, which require it, keep rendering, then removed.'
@@ -117736,7 +118416,7 @@ components:
         url:
           type: string
           description: Where agents connect. A gateway's address when the server is a gateway member. Absent while the server has no endpoint.
-      description: The official, Speakeasy-served version of a Shadow MCP server, linked by an administrator.
+      description: 'The official, Speakeasy-served version of a Shadow MCP server: a project MCP server that proxies to its URL, or one an administrator chose.'
       required:
         - mcp_server_id
         - name
@@ -124745,6 +125425,23 @@ components:
       description: Form for updating a tunneled MCP server source
       required:
         - id
+    UpdateUserSessionClientRedirectURIsRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The user_session_client id.
+          format: uuid
+        redirect_uris:
+          type: array
+          items:
+            type: string
+          description: The complete new list of redirect URIs. At least one is required.
+          minItems: 1
+          maxItems: 32
+      required:
+        - id
+        - redirect_uris
     UpdateUserSessionIssuerForm:
       type: object
       properties:
@@ -127220,7 +127917,7 @@ tags:
   - name: usage
     description: Read usage for gram.
   - name: userSessionClients
-    description: Operator visibility into MCP clients registered against a user-session issuer (user_session_clients). Read + revoke. Registrations are written by /mcp/{slug}/register (RFC 7591 DCR) or resolved from a Client ID Metadata Document on /mcp/{slug}/authorize (CIMD); client_id_metadata_uri distinguishes the two.
+    description: Operator management of MCP clients registered against a user-session issuer (user_session_clients). Registrations are written by /mcp/{slug}/register (RFC 7591 DCR), resolved from a Client ID Metadata Document on /mcp/{slug}/authorize (CIMD), or created by an operator through createUserSessionClient; client_id_metadata_uri distinguishes CIMD clients from the rest.
   - name: userSessionConsents
     description: Operator visibility into user_session_consents — persistent consent records per (subject, user_session_client). List + revoke.
   - name: userSessionIssuersCimdClients
