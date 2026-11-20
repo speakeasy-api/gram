@@ -19,8 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -60,11 +58,11 @@ func typedCatalogServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, f
 	return server.ID
 }
 
-// With upstream auth enforcement on, readiness comes from the registrations
+// Readiness comes from the registrations
 // the source's server offers through personal auth clients. A registration
 // the sign-in does not bind still makes the caller's missing connection the
 // finding, and several offered providers are a choice, not a misconfiguration.
-func TestRemoteMCPReadinessFollowsTypedOffersUnderEnforcement(t *testing.T) {
+func TestRemoteMCPReadinessFollowsTypedOffers(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -80,9 +78,7 @@ func TestRemoteMCPReadinessFollowsTypedOffersUnderEnforcement(t *testing.T) {
 			conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_catalog_readiness_typed")
 			require.NoError(t, err)
 			fixture := seedChainedCatalogFixtureClient(t, ctx, conn, false)
-			_, err = productfeaturesrepo.New(conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: fixture.principal.OrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
-			require.NoError(t, err)
-			typedCatalogServer(t, ctx, conn, fixture, tc.offered)
+			fixture.serverID = typedCatalogServer(t, ctx, conn, fixture, tc.offered)
 
 			result := fixture.probe(t, conn, nil)
 			require.Equal(t, ReadinessNeedsGramAuthorization, result.State)
@@ -92,42 +88,33 @@ func TestRemoteMCPReadinessFollowsTypedOffersUnderEnforcement(t *testing.T) {
 	}
 }
 
-// The setup connection test asks for the user's own grant on the server's
-// User Identity client. With upstream auth enforcement on that client is the
-// registration the server offers through a personal auth client, so an
-// unconnected user is told to sign in; while the sign-in link decides, the
-// same server has no client to test.
-func TestSetupConnectionFollowsTypedOffersUnderEnforcement(t *testing.T) {
+func TestCatalogReadinessRejectsStaleRegisteredTarget(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_catalog_readiness_stale")
+	require.NoError(t, err)
+	f := seedChainedCatalogFixtureClient(t, ctx, conn, false)
+	serverID := typedCatalogServer(t, ctx, conn, f, 1)
+	prober := NewRemoteMCPReadinessProber(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), f.policy, f.sessions)
+	_, err = prober.ProbeCatalogReadiness(ctx, f.principal, f.projectID, f.registrationID, serverID, f.remoteID, uuid.New(), uuid.New(), uuid.New())
+	require.ErrorIs(t, err, ErrReadinessInvalid)
+}
 
-	for _, tc := range []struct {
-		name     string
-		enforced bool
-		status   string
-		code     string
-	}{
-		{name: "typed auth clients enforced", enforced: true, status: "authorization_required", code: "upstream_authorization_required"},
-		{name: "sign-in link decides", enforced: false, status: "configuration_required", code: "user_identity_client_required"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			ctx := t.Context()
-			conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_setup_connection_typed")
-			require.NoError(t, err)
-			fixture := seedChainedCatalogFixtureClient(t, ctx, conn, false)
-			if tc.enforced {
-				_, err = productfeaturesrepo.New(conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: fixture.principal.OrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
-				require.NoError(t, err)
-			}
-			serverID := typedCatalogServer(t, ctx, conn, fixture, 1)
+func TestSetupConnectionFollowsTypedOffers(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_setup_connection_typed")
+	require.NoError(t, err)
+	f := seedChainedCatalogFixtureClient(t, ctx, conn, false)
+	serverID := typedCatalogServer(t, ctx, conn, f, 1)
+	prober := NewRemoteMCPReadinessProber(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), f.policy, f.sessions)
+	result, err := prober.TestUserConnection(ctx, f.principal.OrganizationID, f.principal.UserID, f.projectID, serverID, f.remoteID, f.userSessionIssuerID)
+	require.NoError(t, err)
+	require.Equal(t, "authorization_required", result.Status)
+	require.Equal(t, "upstream_authorization_required", result.Code)
 
-			prober := NewRemoteMCPReadinessProber(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), fixture.policy, fixture.sessions)
-			result, err := prober.TestUserConnection(ctx, fixture.principal.OrganizationID, fixture.principal.UserID, fixture.projectID, serverID, fixture.remoteID, fixture.userSessionIssuerID)
-			require.NoError(t, err)
-			require.Equal(t, tc.status, result.Status)
-			require.Equal(t, tc.code, result.Code)
-		})
-	}
+	_, err = prober.TestUserConnection(ctx, f.principal.OrganizationID, f.principal.UserID, f.projectID, serverID, f.remoteID, uuid.New())
+	require.ErrorIs(t, err, ErrReadinessInvalid, "stale sign-in target must not use an offered credential")
 }
 
 // A missing grant on the first offer must not hide a usable second offer or
@@ -138,12 +125,12 @@ func TestRemoteMCPReadinessChoosesFirstUsableTypedOffer(t *testing.T) {
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_readiness_usable_offer")
 	require.NoError(t, err)
 	f := seedChainedCatalogFixtureClient(t, ctx, conn, false)
-	_, err = productfeaturesrepo.New(conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: f.principal.OrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
-	require.NoError(t, err)
 	serverID := typedCatalogServer(t, ctx, conn, f, 2)
+	f.serverID = serverID
 	prober := NewRemoteMCPReadinessProber(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), f.policy, f.sessions)
-	clients, err := prober.offeredRegistrations(ctx, f.principal.OrganizationID, f.projectID, []uuid.UUID{serverID}, []string{authz.AuthClientTypeRemoteSession})
+	clients, incomplete, err := prober.offeredRegistrations(ctx, f.principal.OrganizationID, f.projectID, serverID, []string{authz.AuthClientTypeRemoteSession})
 	require.NoError(t, err)
+	require.False(t, incomplete)
 	require.Len(t, clients, 2)
 	chosen := clients[1]
 	token, err := testenv.NewEncryptionClient(t).Encrypt([]byte("usable-offer-token"))
@@ -172,4 +159,11 @@ func TestRemoteMCPReadinessChoosesFirstUsableTypedOffer(t *testing.T) {
 	require.Equal(t, chosen.RemoteSessionIssuerID, result.AuthorizationIdentity.RemoteSessionIssuerID)
 	require.Equal(t, chosen.ID, result.AuthorizationIdentity.RemoteSessionClientID)
 	require.Equal(t, session.ID, result.AuthorizationIdentity.RemoteSessionID)
+
+	// The same source and sign-in do not make the original offer available to
+	// a sibling. The protected upstream rejects this exact target's no-auth probe.
+	f.serverID = typedCatalogServer(t, ctx, conn, f, 0)
+	result = f.probe(t, conn, nil)
+	require.Equal(t, ReadinessNeedsConfiguration, result.State)
+	require.Equal(t, "upstream_identity_provider_not_configured", result.EvidenceCode)
 }

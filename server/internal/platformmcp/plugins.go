@@ -19,7 +19,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/directory"
@@ -492,7 +491,6 @@ type PluginsService struct {
 	assignmentReferences *subjectReferenceCodec
 	assignmentVersionKey []byte
 	remoteSessions       MemberMCPConnectionReader
-	authEnforcement      *authenforcement.Gate
 	identityChaining     IdentityChainingGovernor
 	now                  func() time.Time
 	// recordedPublish reads the project's marketplace connection row, whose
@@ -550,7 +548,6 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 		assignmentReferences:  references,
 		assignmentVersionKey:  versionKey,
 		remoteSessions:        nil,
-		authEnforcement:       authenforcement.NewGate(db),
 		identityChaining:      nil,
 		now:                   time.Now,
 		recordedPublish:       pluginsrepo.New(db).GetGitHubConnection,

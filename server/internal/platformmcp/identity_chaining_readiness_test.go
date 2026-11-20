@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -70,13 +71,16 @@ type chainedCatalogFixture struct {
 	userSessionIssuerID uuid.UUID
 	remoteIssuerID      uuid.UUID
 	registrationID      uuid.UUID
+	serverID            uuid.UUID
 	sessions            *remotesessions.ChallengeManager
 	policy              *guardian.Policy
 }
 
 func seedChainedCatalogFixture(t *testing.T, ctx context.Context, conn *pgxpool.Pool) chainedCatalogFixture {
 	t.Helper()
-	return seedChainedCatalogFixtureClient(t, ctx, conn, true)
+	f := seedChainedCatalogFixtureClient(t, ctx, conn, false)
+	f.serverID = typedCatalogServer(t, ctx, conn, f, 1)
+	return f
 }
 
 // seedChainedCatalogFixtureClient attaches the interactive client only when attach is set.
@@ -130,7 +134,7 @@ func (f chainedCatalogFixture) probe(t *testing.T, conn *pgxpool.Pool, governor 
 	if governor != nil {
 		prober = prober.WithIdentityChaining(governor)
 	}
-	result, err := prober.ProbeCatalogReadiness(t.Context(), f.principal, f.projectID, f.registrationID, f.remoteID, f.userSessionIssuerID, uuid.New(), uuid.New())
+	result, err := prober.ProbeCatalogReadiness(t.Context(), f.principal, f.projectID, f.registrationID, f.serverID, f.remoteID, f.userSessionIssuerID, uuid.New(), uuid.New())
 	require.NoError(t, err)
 	return result
 }
@@ -168,10 +172,19 @@ func TestRemoteMCPReadinessMarksIdentityChainingConfiguredWithoutReady(t *testin
 	require.Equal(t, ReadinessEvidenceIdentityChainingConfigured, result.EvidenceCode)
 	require.Equal(t, "no_session", result.AuthorizationIdentity.Absence)
 	require.Equal(t, fixture.remoteIssuerID, result.AuthorizationIdentity.RemoteSessionIssuerID)
+	require.NotEqual(t, uuid.Nil, result.AuthorizationIdentity.RemoteSessionClientID)
 	fingerprint, err := ProviderAuthorizationFingerprint(result.AuthorizationIdentity)
 	require.NoError(t, err)
 	require.NotEmpty(t, fingerprint)
+	changed := result.AuthorizationIdentity
+	changed.RemoteSessionClientID = uuid.New()
+	changedFingerprint, err := ProviderAuthorizationFingerprint(changed)
+	require.NoError(t, err)
+	require.NotEqual(t, fingerprint, changedFingerprint)
 
+	recorded := governor.recorded()
+	require.Len(t, recorded, 1)
+	require.True(t, recorded[0].RemoteSessionClientID.Valid)
 	require.Equal(t, []identitychaining.Request{{
 		OrganizationID:        fixture.principal.OrganizationID,
 		ProjectID:             fixture.projectID,
@@ -179,7 +192,8 @@ func TestRemoteMCPReadinessMarksIdentityChainingConfiguredWithoutReady(t *testin
 		UserID:                fixture.principal.UserID,
 		UpstreamResource:      fixture.remoteURL,
 		RemoteSessionIssuerID: uuid.NullUUID{},
-	}}, governor.recorded())
+		RemoteSessionClientID: recorded[0].RemoteSessionClientID,
+	}}, recorded)
 }
 
 func TestRemoteMCPReadinessReadyOnUsableChainedCredential(t *testing.T) {
@@ -215,7 +229,7 @@ func TestRemoteMCPReadinessChainingWithoutInteractiveClient(t *testing.T) {
 	ctx := t.Context()
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_catalog_readiness_chained_no_client")
 	require.NoError(t, err)
-	fixture := seedChainedCatalogFixtureClient(t, ctx, conn, false)
+	fixture := seedChainedCatalogFixture(t, ctx, conn)
 
 	result := fixture.probe(t, conn, &recordingGovernor{issuer: fixture.remoteIssuerID, serves: true, usable: true})
 	require.Equal(t, ReadinessReady, result.State)
@@ -299,8 +313,8 @@ func TestMemberMCPConnectionStatusReportsIdentityChaining(t *testing.T) {
 		// The column alone names no provider: only associations do.
 		{name: "column without association chaining configured", noClient: true, serves: true, usable: true, state: MCPConnectionStateNotApplicable, reason: "authorization_not_required", nextAction: "use_mcp", consulted: false},
 		{name: "column without association not chained", noClient: true, state: MCPConnectionStateNotApplicable, reason: "authorization_not_required", nextAction: "use_mcp", consulted: false},
-		{name: "multiple clients chaining configured", multi: true, serves: true, usable: true, state: MCPConnectionStateSetupRequired, reason: "multiple_authorization_clients", nextAction: "ask_administrator", consulted: false},
-		{name: "multiple clients not chained", multi: true, state: MCPConnectionStateSetupRequired, reason: "multiple_authorization_clients", nextAction: "ask_administrator", consulted: false},
+		{name: "multiple clients chaining configured", multi: true, serves: true, usable: true, state: MCPConnectionStateNotConnected, reason: "choose_on_connect", nextAction: "connect", consulted: false},
+		{name: "multiple clients not chained", multi: true, state: MCPConnectionStateNotConnected, reason: "choose_on_connect", nextAction: "connect", consulted: false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			issuer := conv.ToNullUUID(remoteIssuer.ID)
@@ -312,22 +326,13 @@ func TestMemberMCPConnectionStatusReportsIdentityChaining(t *testing.T) {
 			})
 			require.NoError(t, err)
 			require.EqualValues(t, 1, stamped)
-			// A server with no derived issuer has no client configured for it.
 			require.NoError(t, testrepo.New(conn).ClearMCPServerRemoteSessionClientsFixture(ctx, mcpID))
-			associated := []uuid.UUID{clientID}
-			switch {
-			case test.noIssuer, test.noClient:
-				associated = nil
-			case test.multi:
-				associated = append(associated, secondClientID)
-			}
-			for _, id := range associated {
-				require.NoError(t, testrepo.New(conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
-					ProjectID:             project.ID,
-					OrganizationID:        principal.OrganizationID,
-					McpServerID:           mcpID,
-					RemoteSessionClientID: id,
-				}))
+			require.NoError(t, authclientbackfill.New(conn).SoftDeleteServerAuthClientLinksFixture(ctx, mcpID))
+			if !test.noIssuer && !test.noClient {
+				offerMemberMCPClient(t, ctx, conn, principal.OrganizationID, project.ID, mcpID, clientID)
+				if test.multi {
+					offerMemberMCPClient(t, ctx, conn, principal.OrganizationID, project.ID, mcpID, secondClientID)
+				}
 			}
 			readerClients := clients
 			if test.noClient {
@@ -339,7 +344,7 @@ func TestMemberMCPConnectionStatusReportsIdentityChaining(t *testing.T) {
 			governor := &recordingGovernor{issuer: remoteIssuer.ID, serves: test.serves, usable: test.usable}
 			service := NewPluginsService(conn, allowBudget(), "member-chained-status-key").
 				WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)).
-				withMemberMCPConnectionReader(testMemberMCPConnectionReader{clients: readerClients, statuses: test.statuses}).
+				withMemberMCPConnectionReader(testMemberMCPConnectionReader{authClients: readerClients, authStatuses: test.statuses}).
 				WithIdentityChaining(governor).
 				WithInstallLinks(serverURL, serverURL)
 			output, err := service.GetMyMCPConnectionStatus(ctx, principal, input)
@@ -359,7 +364,7 @@ func TestMemberMCPConnectionStatusReportsIdentityChaining(t *testing.T) {
 			require.NotEqual(t, uuid.Nil, req.UserSessionIssuerID)
 			require.Equal(t, "https://cohort.example.test/mcp", req.UpstreamResource)
 			require.False(t, req.RemoteSessionIssuerID.Valid)
-			require.Equal(t, uuid.NullUUID{UUID: clientID, Valid: true}, req.RemoteSessionClientID, "chaining is judged through the one client the sign-in chooses")
+			require.Equal(t, uuid.NullUUID{UUID: clientID, Valid: true}, req.RemoteSessionClientID, "chaining is judged through the exact offered client")
 		})
 	}
 }
