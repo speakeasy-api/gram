@@ -15,7 +15,7 @@ import {
 import { Spinner } from "@/components/ui/Spinner";
 import { Text } from "@/components/ui/Text";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
-import { ClientIconFan } from "@/pages/mcp/overview/PluginStatusBanner";
+import { ClientIconFan } from "@/components/client-icon-fan";
 import type { DistributionPlugin } from "@gram/client/models/components/distributionplugin.js";
 import type { Skill } from "@gram/client/models/components/skill.js";
 import { useDistributeSkillMutation } from "@gram/client/react-query/distributeSkill.js";

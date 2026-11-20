@@ -85,6 +85,17 @@ it("shows the tunnel status without a usage dashboard when the server has no slu
   expect(container.textContent).toBe("Tunnel status");
 });
 
+it("shows an unproxied server's own overview", () => {
+  const { container } = render(
+    <OverviewTab
+      mcpServer={{ ...server, unproxiedMcpServerId: "unproxied" }}
+      agentSetupHref="/settings"
+    />,
+    { wrapper: MemoryRouter },
+  );
+  expect(container.textContent).toBe("Unproxied overview");
+});
+
 it("retains the shared overview for servers without tunnels", () => {
   render(
     <OverviewTab

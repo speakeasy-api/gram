@@ -11,11 +11,6 @@ import {
 } from "@/components/ui/Popover";
 import { RoleLink } from "@/components/role-link";
 import { Text } from "@/components/ui/Text";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/Tooltip";
 import { useRoutes } from "@/routes";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
 import { useAddPluginServerMutation } from "@gram/client/react-query/addPluginServer";
@@ -29,7 +24,10 @@ import {
   usePublishStatus,
 } from "@gram/client/react-query/publishStatus";
 import { useRemovePluginServerMutation } from "@gram/client/react-query/removePluginServer";
-import { useResourceAudience } from "@gram/client/react-query/resourceAudience.js";
+import {
+  invalidateAllResourceAudience,
+  useResourceAudience,
+} from "@gram/client/react-query/resourceAudience.js";
 import { ResourceAudienceEntryAppliesTo } from "@gram/client/models/components/resourceaudienceentry.js";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
@@ -41,7 +39,7 @@ import {
   Info,
   Plus,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { StatusBanner } from "@/components/status-banner";
 import { InstallInstructionsDialog } from "@/pages/plugins/InstallInstructionsDialog";
@@ -49,22 +47,7 @@ import type { HostedServerRef } from "./MCPOverviewTab";
 import { serverMatchesRef } from "./serverMatchesRef";
 import { Spinner } from "@/components/ui/Spinner";
 import { SettingsSection } from "@/components/detail/settings-section";
-
-// A little fanned stack of client badges — purely decorative, gestures at
-// "this is what publishing unlocks" without claiming these are the only
-// supported clients.
-export function ClientIconFan(): React.JSX.Element {
-  return (
-    <div className="relative hidden h-36 shrink-0 sm:block" aria-hidden="true">
-      <div className="absolute inset-6 rounded-full bg-black/15 blur-2xl" />
-      <img
-        src="/icons/decorative/plugin-clients.webp"
-        alt=""
-        className="relative h-full w-full mr-10 object-contain drop-shadow-xl"
-      />
-    </div>
-  );
-}
+import { ClientIconFan } from "@/components/client-icon-fan";
 
 function summarizePluginSelection(
   selectedIds: string[],
@@ -100,9 +83,9 @@ function describeMembership(
   canSeeRoles: boolean,
 ): MembershipRoute[] | null {
   if (plugin.isDefault) {
-    return [
-      { via: { label: "Default plugin" }, access: "All enabled servers" },
-    ];
+    return canSeeRoles
+      ? [{ via: { label: "Default plugin" }, access: "All enabled servers" }]
+      : null;
   }
   if (roles.length > 0) {
     return roles.map((role) => ({
@@ -217,6 +200,9 @@ function WritablePluginStatusBanner({
     plugin.servers?.some((s) => serverMatchesRef(s, server)),
   );
   const isPublished = memberPlugins.length > 0;
+  // Routes stay unknown until the audience has loaded: without it, a role
+  // plugin would look like a direct add.
+  const canSeeRoles = canAdmin && audience !== undefined;
   const rolesByPlugin = new Map<string, MembershipRole[]>();
   for (const match of (canAdmin ? audience?.rolePlugins : undefined) ?? []) {
     const entry = audience?.entries.find(
@@ -303,6 +289,7 @@ function WritablePluginStatusBanner({
       await Promise.all([
         invalidateAllPlugins(queryClient),
         invalidateAllPublishStatus(queryClient),
+        invalidateAllResourceAudience(queryClient),
       ]);
       toast.success(describeSaveResult(toAdd.length, toRemove.length), {
         description: (
@@ -515,7 +502,7 @@ function WritablePluginStatusBanner({
                         routes: describeMembership(
                           plugin,
                           rolesByPlugin.get(plugin.id) ?? [],
-                          canAdmin,
+                          canSeeRoles,
                         ),
                       }))}
                     />
@@ -613,25 +600,47 @@ type MemberPluginItem = {
   routes: MembershipRoute[] | null;
 };
 
-// "N plugins", underlined with an info icon; hovering or focusing it shows a
-// table of each plugin and how the server got into it.
+// "N plugins", underlined with an info icon; hovering or clicking it shows a
+// table of each plugin and how the server got into it. A popover rather than
+// a tooltip so keyboard users can reach the role links inside.
 function MemberPluginsTooltip({
   items,
 }: {
   items: MemberPluginItem[];
 }): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
+  const openNow = () => {
+    clearTimeout(closeTimer.current);
+    setOpen(true);
+  };
+  // A short delay lets the pointer cross the gap onto the table.
+  const closeSoon = () => {
+    clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(() => setOpen(false), 150);
+  };
+  useEffect(() => () => clearTimeout(closeTimer.current), []);
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
         <button
           type="button"
+          onPointerEnter={openNow}
+          onPointerLeave={closeSoon}
           className="inline-flex cursor-help items-center gap-1 underline decoration-dotted underline-offset-4"
         >
           {items.length} plugin{items.length === 1 ? "" : "s"}
           <Info aria-hidden="true" className="size-3.5 shrink-0" />
         </button>
-      </TooltipTrigger>
-      <TooltipContent align="start" className="max-w-none p-0">
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-auto max-w-none p-0"
+        onPointerEnter={openNow}
+        onPointerLeave={closeSoon}
+      >
         <table
           aria-label="Plugins this server is in"
           className="text-foreground w-full text-left text-sm"
@@ -672,7 +681,7 @@ function MemberPluginsTooltip({
             )}
           </tbody>
         </table>
-      </TooltipContent>
-    </Tooltip>
+      </PopoverContent>
+    </Popover>
   );
 }
