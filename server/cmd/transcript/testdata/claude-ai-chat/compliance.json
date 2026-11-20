@@ -1,0 +1,112 @@
+{
+  "id": "claude_chat_01ExampleOffsitePlan",
+  "name": "Team offsite near the coast",
+  "created_at": "2026-11-04T09:00:05Z",
+  "updated_at": "2026-11-04T09:01:49Z",
+  "deleted_at": null,
+  "href": "https://claude.ai/chat/00000000-0000-4000-8000-0000000c4a75",
+  "model": "claude-sonnet-4-5",
+  "organization_id": "org_01ExampleOrganization",
+  "organization_uuid": "00000000-0000-4000-8000-0000000000aa",
+  "project_id": null,
+  "user": {
+    "id": "user_01ExampleActor0000000001",
+    "email_address": "dev@example.com"
+  },
+  "chat_messages": [
+    {
+      "id": "claude_chat_msg_01ExampleOffsite0001",
+      "role": "user",
+      "created_at": "2026-11-04T09:00:05Z",
+      "content": [
+        {
+          "type": "text",
+          "text": "Plan a two-day team offsite near the coast for about 40 people.",
+          "truncated": false,
+          "thinking_redacted": false,
+          "added_as_context": false
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": "claude_chat_msg_01ExampleOffsite0002",
+      "role": "assistant",
+      "created_at": "2026-11-04T09:00:12Z",
+      "content": [
+        {
+          "type": "text",
+          "text": "Here is a draft: workshops on day one and an outdoor activity on day two. Do you have a region in mind?",
+          "truncated": false,
+          "thinking_redacted": false,
+          "added_as_context": false
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "id": "claude_chat_msg_01ExampleOffsite0003",
+      "role": "user",
+      "created_at": "2026-11-04T09:01:30Z",
+      "content": [
+        {
+          "type": "text",
+          "text": "Somewhere near Porto. Check which venues could fit us.",
+          "truncated": false,
+          "thinking_redacted": false,
+          "added_as_context": false
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": "claude_chat_msg_01ExampleOffsite0004",
+      "role": "assistant",
+      "created_at": "2026-11-04T09:01:49Z",
+      "content": [
+        {
+          "type": "text",
+          "text": "Let me look for venues.",
+          "truncated": false,
+          "thinking_redacted": false,
+          "added_as_context": false
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_01ExampleClaudeAiSearch001",
+          "name": "web_search",
+          "input": "{\"query\": \"team offsite venues near Porto for 40 people\"}",
+          "truncated": false,
+          "integration_name": null,
+          "mcp_server_url": null
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "toolu_01ExampleClaudeAiSearch001",
+          "name": "web_search",
+          "is_error": false,
+          "content": [
+            {
+              "type": "text",
+              "text": "Example Quinta: seats 45, 20 minutes from the coast (example.com/quinta)\nRiverside Hall: seats 60, in the city centre (example.com/riverside)"
+            }
+          ],
+          "truncated": false,
+          "integration_name": null,
+          "mcp_server_url": null
+        },
+        {
+          "type": "text",
+          "text": "Two venues fit: Example Quinta seats 45 and is 20 minutes from the coast; Riverside Hall seats 60 in the city centre.",
+          "truncated": false,
+          "thinking_redacted": false,
+          "added_as_context": false
+        }
+      ],
+      "artifacts": []
+    }
+  ],
+  "has_more": true,
+  "first_id": "eyJjdXJzb3IiOiAib2Zmc2l0ZS0wMDAxIn0=",
+  "last_id": "eyJjdXJzb3IiOiAib2Zmc2l0ZS0wMDA0In0="
+}

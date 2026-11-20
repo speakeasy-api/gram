@@ -1,0 +1,135 @@
+{
+  "id": "claude_chat_01ExampleWelcomeNote",
+  "name": "Welcome note for new teammates",
+  "created_at": "2026-11-03T14:00:05Z",
+  "updated_at": "2026-11-03T14:03:09Z",
+  "deleted_at": null,
+  "href": "https://claude.ai/chat/00000000-0000-4000-8000-00000000c0de",
+  "model": "claude-sonnet-4-5",
+  "organization_id": "org_01ExampleOrganization",
+  "organization_uuid": "00000000-0000-4000-8000-0000000000aa",
+  "project_id": null,
+  "user": {
+    "id": "user_01ExampleActor0000000001",
+    "email_address": "dev@example.com"
+  },
+  "chat_messages": [
+    {
+      "id": "claude_chat_msg_01ExampleWelcome0001",
+      "role": "user",
+      "created_at": "2026-11-03T14:00:05Z",
+      "content": [
+        {
+          "type": "text",
+          "text": "Draft a two-sentence welcome note for new teammates.",
+          "truncated": false,
+          "thinking_redacted": false,
+          "added_as_context": false
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": "claude_chat_msg_01ExampleWelcome0002",
+      "role": "assistant",
+      "created_at": "2026-11-03T14:00:11Z",
+      "content": [
+        {
+          "type": "text",
+          "text": "Welcome aboard! We're glad you're here, and your onboarding buddy will reach out today.",
+          "truncated": false,
+          "thinking_redacted": false,
+          "added_as_context": false
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "id": "claude_chat_msg_01ExampleWelcome0003",
+      "role": "user",
+      "created_at": "2026-11-03T14:01:40Z",
+      "content": [
+        {
+          "type": "text",
+          "text": "Look up our office hours and add them.",
+          "truncated": false,
+          "thinking_redacted": false,
+          "added_as_context": false
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": "claude_chat_msg_01ExampleWelcome0004",
+      "role": "assistant",
+      "created_at": "2026-11-03T14:01:52Z",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_01ExampleComplianceDocs001",
+          "name": "search_docs",
+          "input": "{\"query\": \"office hours\"}",
+          "truncated": false,
+          "integration_name": "Example Docs",
+          "mcp_server_url": "https://mcp.example.com"
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "toolu_01ExampleComplianceDocs001",
+          "name": "search_docs",
+          "is_error": false,
+          "integration_name": "Example Docs",
+          "mcp_server_url": "https://mcp.example.com",
+          "content": [
+            {
+              "type": "text",
+              "text": "Office hours: Tuesdays and Thursdays, 2 to 4 pm."
+            }
+          ],
+          "truncated": false
+        },
+        {
+          "type": "text",
+          "text": "Welcome aboard! We're glad you're here. Drop by office hours on Tuesdays and Thursdays from 2 to 4 pm.",
+          "truncated": false,
+          "thinking_redacted": false,
+          "added_as_context": false
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "id": "claude_chat_msg_01ExampleWelcome0005",
+      "role": "user",
+      "created_at": "2026-11-03T14:03:02Z",
+      "content": [
+        {
+          "type": "text",
+          "text": "Make it a little warmer.",
+          "truncated": false,
+          "thinking_redacted": false,
+          "added_as_context": false
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": "claude_chat_msg_01ExampleWelcome0006",
+      "role": "assistant",
+      "created_at": "2026-11-03T14:03:09Z",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hi and welcome! We're so glad you're here. Come say hello at office hours on Tuesdays and Thursdays from 2 to 4 pm.",
+          "truncated": false,
+          "thinking_redacted": false,
+          "added_as_context": false
+        }
+      ],
+      "artifacts": []
+    }
+  ],
+  "has_more": false,
+  "first_id": "eyJjdXJzb3IiOiAiZXhhbXBsZS0wMDAxIn0=",
+  "last_id": "eyJjdXJzb3IiOiAiZXhhbXBsZS0wMDA2In0="
+}
