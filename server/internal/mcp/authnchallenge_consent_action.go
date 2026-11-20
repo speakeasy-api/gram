@@ -517,6 +517,8 @@ func (s *Service) buildRemoteConnectURL(
 	}
 	if err != nil {
 		if errors.Is(err, remotesessions.ErrTypedAuthorizationChanged) {
+			// Authorization passed above; the posted choice no longer names a
+			// live upstream resource. Treat it as stale input, not denied access.
 			t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
 			return "", false, oops.E(oops.CodeBadRequest, err, "connection changed; reload the consent page").LogWarn(ctx, logger)
 		}
