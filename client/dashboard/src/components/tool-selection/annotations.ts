@@ -6,7 +6,7 @@ export type ToolAnnotation =
   | "idempotent"
   | "open_world";
 
-export const TOOL_ANNOTATIONS: readonly ToolAnnotation[] = [
+const TOOL_ANNOTATIONS: readonly ToolAnnotation[] = [
   "read_only",
   "destructive",
   "idempotent",
