@@ -148,6 +148,13 @@ describe("removedToolKindRules", () => {
           { resourceKind: "mcp", resourceId: "gh", disposition: "read_only" },
           { resourceKind: "mcp", resourceId: "gh", disposition: "unannotated" },
           { resourceKind: "mcp", resourceId: "gh", tool: "update_task" },
+          // One tool, named with its kind: removing it removes no kind rule.
+          {
+            resourceKind: "mcp",
+            resourceId: "gh",
+            tool: "delete_task",
+            disposition: "destructive",
+          },
         ],
       },
       {
@@ -158,7 +165,33 @@ describe("removedToolKindRules", () => {
       },
     ];
 
-    expect(removedToolKindRules(removed)).toEqual(["read_only", "unannotated"]);
+    expect(removedToolKindRules(removed, [])).toEqual([
+      "read_only",
+      "unannotated",
+    ]);
+  });
+
+  it("leaves out a kind the saved grants still cover on that server", () => {
+    // Read-only moves from one server to every server; unannotated is gone.
+    const removed: SdkRoleGrant[] = [
+      {
+        scope: "mcp:connect",
+        selectors: [
+          { resourceKind: "mcp", resourceId: "gh", disposition: "read_only" },
+          { resourceKind: "mcp", resourceId: "gh", disposition: "unannotated" },
+        ],
+      },
+    ];
+    const after: SdkRoleGrant[] = [
+      {
+        scope: "mcp:connect",
+        selectors: [
+          { resourceKind: "mcp", resourceId: "*", disposition: "read_only" },
+        ],
+      },
+    ];
+
+    expect(removedToolKindRules(removed, after)).toEqual(["unannotated"]);
   });
 });
 

@@ -1139,7 +1139,7 @@ function ServerToolRows({
       limitMcpUse(
         prev,
         row,
-        limitAfterToggle(limit, name, next, tools.length),
+        limitAfterToggle(limit, tools, name, next),
         serverRows,
       ),
     );

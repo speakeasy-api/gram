@@ -112,24 +112,30 @@ export function toolLimitReaches(limit: ToolLimit, tool: ServerTool): boolean {
  * The limit after a tool is ticked or unticked, given the tools that are then
  * on. A rule limited to kinds keeps them: ticking update_task on read-only
  * tools names update_task beside them, so read-only tools added later stay
- * covered. Unticking a tool one of the kinds covers turns the rule into a list
- * of the tools still on, since a kind cannot leave one tool out.
+ * covered, and the rule never widens to every tool. Unticking a tool one of
+ * the kinds covers turns the rule into a list of the tools still on, since a
+ * kind cannot leave one tool out.
  */
 export function limitAfterToggle(
   limit: ToolLimit,
+  tools: ServerTool[],
   name: string,
   next: string[],
-  total: number,
 ): ToolLimit {
-  if (next.length === total) return { kind: "all" };
-  if (limit.kind === "annotations") {
-    const named = limit.tools ?? [];
-    if (next.includes(name)) {
-      return { ...limit, tools: [...named, name] };
-    }
-    if (named.includes(name)) {
-      return { ...limit, tools: named.filter((tool) => tool !== name) };
-    }
+  if (limit.kind !== "annotations") {
+    if (next.length === tools.length) return { kind: "all" };
+    return { kind: "tools", tools: next };
+  }
+  const named = limit.tools ?? [];
+  const tool = tools.find((candidate) => candidate.name === name);
+  const kindCovers =
+    tool !== undefined && limit.dispositions.includes(toolDisposition(tool));
+  if (next.includes(name)) {
+    if (kindCovers || named.includes(name)) return limit;
+    return { ...limit, tools: [...named, name] };
+  }
+  if (!kindCovers) {
+    return { ...limit, tools: named.filter((other) => other !== name) };
   }
   return { kind: "tools", tools: next };
 }

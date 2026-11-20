@@ -860,7 +860,7 @@ export function CreateRoleDialog({
         ...changes.addGrants,
         ...liftedExceptions(changes.removeGrants, sdkGrants, catalogue),
       ];
-      removedKinds = removedToolKindRules(changes.removeGrants);
+      removedKinds = removedToolKindRules(changes.removeGrants, sdkGrants);
       // Whoever the save adds to the role gains everything it grants, as
       // the save leaves it. A new role's grants are all additions already.
       const members = [...selectedMembers].filter(
