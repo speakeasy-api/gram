@@ -82,7 +82,7 @@ var adminMeanings = map[Code]adminMeaning{
 	CodeToolNotApproved:                  {"The person did not approve this tool when connecting.", ""},
 	CodeInvalidBearerToken:               {"This server could not accept the sign-in the app presented.", ""},
 	CodeAuthCheckUnavailable:             {"Speakeasy could not check the person's sign-in at the time.", ""},
-	CodeInvalidRemoteSession:             {"The person has no usable connection to the service for this server.", ""},
+	CodeInvalidRemoteSession:             {"The person's sign-in to the service behind this server is missing or has expired.", ""},
 	CodeCredentialMisconfigured:          {"The setup that connects this server to the service is incomplete or not valid.", ""},
 	CodeRemoteSessionUnavailable:         {"The service's sign-in system did not answer properly, so Speakeasy could not get or renew access.", ""},
 	CodeProviderRejected:                 {"The server or the service rejected the person's saved access.", ""},
