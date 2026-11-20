@@ -1008,8 +1008,8 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 		return oops.E(oops.CodeUnexpected, err, "delete organization admin remote session client").LogError(ctx, logger)
 	}
 
-	if err := txRepo.DeleteUserSessionIssuerAttachmentsForDeletedRemoteSessionClient(ctx, deleted.ID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete user session issuer attachments for deleted client").LogError(ctx, logger)
+	if err := txRepo.RetirePrincipalAttachmentsForDeletedRegistration(ctx, deleted.ID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "retire principal attachments for deleted client").LogError(ctx, logger)
 	}
 
 	cascaded, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, deleted.ID)
@@ -1027,6 +1027,9 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 	// which they offered its typed client are retired in the same transaction.
 	if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, affectedServers...); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "sync auth clients of the deleted client's servers").LogError(ctx, logger)
+	}
+	if err := txRepo.RetireOffersForDeletedRegistration(ctx, deleted.ID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "retire typed offers for deleted client").LogError(ctx, logger)
 	}
 	if err := bindingServers.Derive(ctx, dbtx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "derive upstream issuer of the deleted client's servers").LogError(ctx, logger)

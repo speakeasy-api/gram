@@ -2755,28 +2755,6 @@ func (q *Queries) DeleteRemoteSessionClient(ctx context.Context, arg DeleteRemot
 	return i, err
 }
 
-const deleteRemoteSessionClientAttachmentsForUserSessionIssuer = `-- name: DeleteRemoteSessionClientAttachmentsForUserSessionIssuer :exec
-DELETE FROM remote_session_client_user_session_issuers AS link
-USING user_session_issuers AS usi
-WHERE link.user_session_issuer_id = usi.id
-  AND usi.id = $1
-  AND (usi.project_id = $2::uuid OR (usi.project_id IS NULL AND usi.organization_id = $3::text))
-`
-
-type DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams struct {
-	UserSessionIssuerID uuid.UUID
-	ProjectID           uuid.UUID
-	OrganizationID      string
-}
-
-// Drops every client binding an issuer holds. Runs only from the orphan
-// cascade, which must tombstone the sessions these rows still make reachable
-// before they go.
-func (q *Queries) DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(ctx context.Context, arg DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams) error {
-	_, err := q.db.Exec(ctx, deleteRemoteSessionClientAttachmentsForUserSessionIssuer, arg.UserSessionIssuerID, arg.ProjectID, arg.OrganizationID)
-	return err
-}
-
 const deleteRemoteSessionIssuer = `-- name: DeleteRemoteSessionIssuer :one
 WITH deleted_parent AS (
 UPDATE remote_session_issuers
@@ -3046,40 +3024,6 @@ func (q *Queries) DeleteTenantRemoteSessionIssuer(ctx context.Context, id uuid.U
 		&i.Deleted,
 	)
 	return i, err
-}
-
-const deleteUserSessionIssuerAttachmentsForDeletedRemoteSessionClient = `-- name: DeleteUserSessionIssuerAttachmentsForDeletedRemoteSessionClient :exec
-DELETE FROM remote_session_client_user_session_issuers AS link
-USING remote_session_clients AS c
-WHERE link.remote_session_client_id = c.id
-  AND c.id = $1
-  AND c.deleted IS TRUE
-`
-
-// Removes every user session issuer binding of a client the caller has just
-// soft-deleted, in any tenant: the client row's deletion is the authorization,
-// so a live client is never touched.
-func (q *Queries) DeleteUserSessionIssuerAttachmentsForDeletedRemoteSessionClient(ctx context.Context, remoteSessionClientID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteUserSessionIssuerAttachmentsForDeletedRemoteSessionClient, remoteSessionClientID)
-	return err
-}
-
-const deleteUserSessionIssuerAttachmentsForRemoteSessionClient = `-- name: DeleteUserSessionIssuerAttachmentsForRemoteSessionClient :exec
-DELETE FROM remote_session_client_user_session_issuers AS link
-USING remote_session_clients AS c
-WHERE link.remote_session_client_id = c.id
-  AND c.id = $1
-  AND c.project_id = $2
-`
-
-type DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams struct {
-	RemoteSessionClientID uuid.UUID
-	ProjectID             uuid.NullUUID
-}
-
-func (q *Queries) DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx context.Context, arg DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams) error {
-	_, err := q.db.Exec(ctx, deleteUserSessionIssuerAttachmentsForRemoteSessionClient, arg.RemoteSessionClientID, arg.ProjectID)
-	return err
 }
 
 const describeBoundClientUse = `-- name: DescribeBoundClientUse :many
@@ -11510,106 +11454,6 @@ func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Conte
 	return items, nil
 }
 
-const listRemoteSessionClientsOrphanedByOrganizationUserSessionIssuer = `-- name: ListRemoteSessionClientsOrphanedByOrganizationUserSessionIssuer :many
-SELECT link.remote_session_client_id
-FROM remote_session_client_user_session_issuers AS link
-JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
-JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
-LEFT JOIN projects AS client_project ON client_project.id = c.project_id
-WHERE link.user_session_issuer_id = $1
-  AND usi.project_id IS NULL
-  AND usi.organization_id = $2::text
-  AND (
-    (c.project_id IS NOT NULL AND client_project.organization_id = $2::text AND client_project.deleted IS FALSE)
-    OR (c.project_id IS NULL AND c.organization_id = $2::text)
-    OR (c.project_id IS NULL AND c.organization_id IS NULL)
-  )
-  AND c.deleted IS FALSE
-  AND NOT EXISTS (
-    SELECT 1
-    FROM remote_session_client_user_session_issuers AS sibling
-    JOIN user_session_issuers AS sibling_usi ON sibling_usi.id = sibling.user_session_issuer_id
-    WHERE sibling.remote_session_client_id = link.remote_session_client_id
-      AND sibling.user_session_issuer_id <> link.user_session_issuer_id
-      AND sibling_usi.deleted IS FALSE
-  )
-`
-
-type ListRemoteSessionClientsOrphanedByOrganizationUserSessionIssuerParams struct {
-	UserSessionIssuerID uuid.UUID
-	OrganizationID      string
-}
-
-func (q *Queries) ListRemoteSessionClientsOrphanedByOrganizationUserSessionIssuer(ctx context.Context, arg ListRemoteSessionClientsOrphanedByOrganizationUserSessionIssuerParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listRemoteSessionClientsOrphanedByOrganizationUserSessionIssuer, arg.UserSessionIssuerID, arg.OrganizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var remote_session_client_id uuid.UUID
-		if err := rows.Scan(&remote_session_client_id); err != nil {
-			return nil, err
-		}
-		items = append(items, remote_session_client_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listRemoteSessionClientsOrphanedByUserSessionIssuer = `-- name: ListRemoteSessionClientsOrphanedByUserSessionIssuer :many
-SELECT link.remote_session_client_id
-FROM remote_session_client_user_session_issuers AS link
-JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
-JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
-WHERE link.user_session_issuer_id = $1
-  AND (usi.project_id = $2::uuid OR (usi.project_id IS NULL AND usi.organization_id = $3::text))
-  AND (c.project_id = $2::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $3::text)))
-  AND c.deleted IS FALSE
-  AND NOT EXISTS (
-    SELECT 1
-    FROM remote_session_client_user_session_issuers AS sibling
-    JOIN user_session_issuers AS sibling_usi ON sibling_usi.id = sibling.user_session_issuer_id
-    WHERE sibling.remote_session_client_id = link.remote_session_client_id
-      AND sibling.user_session_issuer_id <> link.user_session_issuer_id
-      AND sibling_usi.deleted IS FALSE
-  )
-`
-
-type ListRemoteSessionClientsOrphanedByUserSessionIssuerParams struct {
-	UserSessionIssuerID uuid.UUID
-	ProjectID           uuid.UUID
-	OrganizationID      string
-}
-
-// Clients whose only live binding belongs to this issuer: once its bindings
-// go, no live issuer can reach their sessions. Tenancy mirrors
-// CheckRemoteSessionClientBindingForUserSessionIssuer. The target issuer's own
-// deleted flag is ignored (tombstoned first, same tx); sibling bindings count
-// only while their issuer is live.
-func (q *Queries) ListRemoteSessionClientsOrphanedByUserSessionIssuer(ctx context.Context, arg ListRemoteSessionClientsOrphanedByUserSessionIssuerParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listRemoteSessionClientsOrphanedByUserSessionIssuer, arg.UserSessionIssuerID, arg.ProjectID, arg.OrganizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var remote_session_client_id uuid.UUID
-		if err := rows.Scan(&remote_session_client_id); err != nil {
-			return nil, err
-		}
-		items = append(items, remote_session_client_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listRemoteSessionIssuersByIssuerURL = `-- name: ListRemoteSessionIssuersByIssuerURL :many
 SELECT id, project_id, organization_id, attachment_scope, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_last_error, jwks_last_error_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, omit_scope_fallback, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers
@@ -12304,37 +12148,41 @@ func (q *Queries) ListRemoteSessionsByProjectID(ctx context.Context, arg ListRem
 }
 
 const listServerProjectsOnClientIssuers = `-- name: ListServerProjectsOnClientIssuers :many
-SELECT DISTINCT p.organization_id, s.project_id, link.user_session_issuer_id
-FROM remote_session_client_user_session_issuers AS link
-JOIN mcp_servers AS s
-  ON s.user_session_issuer_id = link.user_session_issuer_id
- AND s.deleted IS FALSE
-JOIN projects AS p
-  ON p.id = s.project_id
- AND p.deleted IS FALSE
-WHERE link.remote_session_client_id = $1
-  AND ($2::text IS NULL OR p.organization_id = $2::text)
-ORDER BY p.organization_id, s.project_id, link.user_session_issuer_id
+SELECT DISTINCT p.organization_id, s.project_id, s.user_session_issuer_id
+FROM mcp_servers s
+JOIN projects p ON p.id = s.project_id AND NOT p.deleted
+WHERE NOT s.deleted AND s.user_session_issuer_id IS NOT NULL
+  AND ($1::text IS NULL OR p.organization_id = $1::text)
+  AND (
+    EXISTS (
+      SELECT 1 FROM mcp_server_remote_session_clients a
+      WHERE a.mcp_server_id = s.id AND a.project_id = s.project_id AND a.organization_id = p.organization_id
+        AND a.remote_session_client_id = $2::uuid
+    ) OR EXISTS (
+      SELECT 1 FROM mcp_server_auth_clients offer
+      JOIN mcp_auth_clients auth ON auth.id = offer.auth_client_id AND auth.organization_id = p.organization_id
+      WHERE offer.mcp_server_id = s.id AND offer.project_id = s.project_id AND offer.organization_id = p.organization_id
+        AND NOT offer.deleted AND auth.remote_session_client_id = $2::uuid
+    )
+  )
+ORDER BY p.organization_id, s.project_id, s.user_session_issuer_id
 `
 
 type ListServerProjectsOnClientIssuersParams struct {
-	RemoteSessionClientID uuid.UUID
 	OrganizationID        pgtype.Text
+	RemoteSessionClientID uuid.UUID
 }
 
 type ListServerProjectsOnClientIssuersRow struct {
 	OrganizationID      string
 	ProjectID           uuid.UUID
-	UserSessionIssuerID uuid.UUID
+	UserSessionIssuerID uuid.NullUUID
 }
 
-// Each live project with a live MCP server on a user session issuer the client
-// is bound to, with that issuer, in organization_id, or in any organization
-// when it is null (only a platform-global client reaches several). A writer
-// reads it before it deletes the client's bindings, so that afterwards it can
-// re-derive the upstream issuer of servers that take it from those bindings.
+// Derive issuer stamps only for servers with an actual registration association
+// or offer, not every server reachable from a compatibility parent row.
 func (q *Queries) ListServerProjectsOnClientIssuers(ctx context.Context, arg ListServerProjectsOnClientIssuersParams) ([]ListServerProjectsOnClientIssuersRow, error) {
-	rows, err := q.db.Query(ctx, listServerProjectsOnClientIssuers, arg.RemoteSessionClientID, arg.OrganizationID)
+	rows, err := q.db.Query(ctx, listServerProjectsOnClientIssuers, arg.OrganizationID, arg.RemoteSessionClientID)
 	if err != nil {
 		return nil, err
 	}
@@ -13014,7 +12862,7 @@ FROM user_session_issuers
 WHERE id = $1
   AND (project_id = $2::uuid OR (project_id IS NULL AND organization_id = $3::text))
   AND deleted IS FALSE
-FOR KEY SHARE
+FOR SHARE
 `
 
 type LockLiveUserSessionIssuerForRemoteSessionWriteParams struct {
@@ -13023,17 +12871,9 @@ type LockLiveUserSessionIssuerForRemoteSessionWriteParams struct {
 	OrganizationID string
 }
 
-// First lock of the remote-login callback transaction, taken before the
-// client row. Issuer migration holds the issuer FOR UPDATE and then inserts
-// client links that key-share the same client row, so a callback that locked
-// the client first and only then reached the remote_sessions foreign key
-// would deadlock with it. Locking the issuer first puts both in the same
-// order, and the liveness predicate is re-evaluated once the migration
-// commits, so a login started on a retired issuer is rejected rather than
-// stored against its tombstone. FOR KEY SHARE is the mode the foreign key
-// takes anyway and does not conflict with the FOR NO KEY UPDATE issuer
-// deletion holds, so the callback still never waits on a delete: that race is
-// settled by the delete's cascade sweeping the stored grant.
+// Lock the live source before the registration. FOR SHARE conflicts with
+// issuer retirement's FOR NO KEY UPDATE, so even the first grant cannot
+// publish behind retirement's provenance scan. The waiter rechecks liveness.
 func (q *Queries) LockLiveUserSessionIssuerForRemoteSessionWrite(ctx context.Context, arg LockLiveUserSessionIssuerForRemoteSessionWriteParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, lockLiveUserSessionIssuerForRemoteSessionWrite, arg.ID, arg.ProjectID, arg.OrganizationID)
 	var id uuid.UUID
@@ -13261,6 +13101,21 @@ func (q *Queries) LockProjectUserIssuerForDetach(ctx context.Context, arg LockPr
 	return id, err
 }
 
+const lockRegistrationForAttachmentPublication = `-- name: LockRegistrationForAttachmentPublication :one
+SELECT id FROM remote_session_clients
+WHERE id = $1 AND deleted IS FALSE
+FOR SHARE
+`
+
+// Use the same client-first order as registration and issuer retirement.
+// A new attachment or re-consent cannot commit behind a completed delete.
+func (q *Queries) LockRegistrationForAttachmentPublication(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockRegistrationForAttachmentPublication, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
 const lockRemoteSessionClientForAuthMethodWrite = `-- name: LockRemoteSessionClientForAuthMethodWrite :one
 SELECT id
 FROM remote_session_clients
@@ -13296,17 +13151,13 @@ func (q *Queries) LockRemoteSessionClientForAuthMethodWrite(ctx context.Context,
 }
 
 const lockRemoteSessionClientForSessionWrite = `-- name: LockRemoteSessionClientForSessionWrite :one
-SELECT id
-FROM remote_session_clients
+SELECT id FROM remote_session_clients
 WHERE id = $1 AND deleted IS FALSE
 FOR UPDATE
 `
 
-// Serializes a remote-login callback's session write against the issuer-delete
-// orphan cascade, which locks the same client row before sweeping the client's
-// sessions. A callback that acquires the lock after that cascade committed
-// re-reads the (issuer, client) binding as dead and rejects the write instead
-// of resurrecting an orphaned grant. No rows means the client itself is gone.
+// Serialize callback publication with registration deletion and issuer grant
+// retirement. The callback already locked its live source issuer.
 func (q *Queries) LockRemoteSessionClientForSessionWrite(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, lockRemoteSessionClientForSessionWrite, id)
 	var id_2 uuid.UUID
@@ -13406,82 +13257,21 @@ func (q *Queries) LockRemoteSessionClientUserSessionIssuerLink(ctx context.Conte
 	return err
 }
 
-const lockRemoteSessionClientsBoundToOrganizationUserSessionIssuer = `-- name: LockRemoteSessionClientsBoundToOrganizationUserSessionIssuer :many
+const lockRemoteSessionClientsForIssuerRetirement = `-- name: LockRemoteSessionClientsForIssuerRetirement :many
 SELECT c.id
-FROM remote_session_clients AS c
-JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id
-JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
-LEFT JOIN projects AS client_project ON client_project.id = c.project_id
-WHERE link.user_session_issuer_id = $1
-  AND usi.project_id IS NULL
-  AND usi.organization_id = $2::text
-  AND (
-    (c.project_id IS NOT NULL AND client_project.organization_id = $2::text AND client_project.deleted IS FALSE)
-    OR (c.project_id IS NULL AND c.organization_id = $2::text)
-    OR (c.project_id IS NULL AND c.organization_id IS NULL)
-  )
-  AND c.deleted IS FALSE
+FROM remote_session_clients c
+WHERE NOT c.deleted AND EXISTS (
+    SELECT 1 FROM remote_sessions s
+    WHERE s.remote_session_client_id = c.id AND s.user_session_issuer_id = $1::uuid AND NOT s.deleted
+)
 ORDER BY c.id
 FOR UPDATE OF c
 `
 
-type LockRemoteSessionClientsBoundToOrganizationUserSessionIssuerParams struct {
-	UserSessionIssuerID uuid.UUID
-	OrganizationID      string
-}
-
-// Organization-owned issuers can bind clients from any project in the
-// organization, organization-owned clients, plus global clients. Derive
-// tenancy from projects for legacy project clients whose organization_id was
-// not backfilled. Lock the complete set before deciding which clients become
-// orphaned.
-func (q *Queries) LockRemoteSessionClientsBoundToOrganizationUserSessionIssuer(ctx context.Context, arg LockRemoteSessionClientsBoundToOrganizationUserSessionIssuerParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, lockRemoteSessionClientsBoundToOrganizationUserSessionIssuer, arg.UserSessionIssuerID, arg.OrganizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const lockRemoteSessionClientsBoundToUserSessionIssuer = `-- name: LockRemoteSessionClientsBoundToUserSessionIssuer :many
-SELECT c.id
-FROM remote_session_clients AS c
-JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id
-JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
-WHERE link.user_session_issuer_id = $1
-  AND (usi.project_id = $2::uuid OR (usi.project_id IS NULL AND usi.organization_id = $3::text))
-  AND (c.project_id = $2::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $3::text)))
-  AND c.deleted IS FALSE
-ORDER BY c.id
-FOR UPDATE OF c
-`
-
-type LockRemoteSessionClientsBoundToUserSessionIssuerParams struct {
-	UserSessionIssuerID uuid.UUID
-	ProjectID           uuid.UUID
-	OrganizationID      string
-}
-
-// Serializes concurrent deletes of sibling issuers sharing a client, which
-// could otherwise each see the other's binding as live and both skip the
-// orphan cascade. Ordered so overlapping lock sets acquire deadlock-free.
-// Tenancy and liveness mirror
-// ListRemoteSessionClientsOrphanedByUserSessionIssuer: locking a row that scan
-// can never return would block writers for nothing.
-func (q *Queries) LockRemoteSessionClientsBoundToUserSessionIssuer(ctx context.Context, arg LockRemoteSessionClientsBoundToUserSessionIssuerParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, lockRemoteSessionClientsBoundToUserSessionIssuer, arg.UserSessionIssuerID, arg.ProjectID, arg.OrganizationID)
+// Lock only registrations of grants minted under this issuer. Callback
+// publication locks the live source issuer before taking this client lock.
+func (q *Queries) LockRemoteSessionClientsForIssuerRetirement(ctx context.Context, userSessionIssuerID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, lockRemoteSessionClientsForIssuerRetirement, userSessionIssuerID)
 	if err != nil {
 		return nil, err
 	}
@@ -15032,6 +14822,153 @@ func (q *Queries) RetireLegacyEMACredentialSlot(ctx context.Context, arg RetireL
 	return err
 }
 
+const retireOffersForDeletedRegistration = `-- name: RetireOffersForDeletedRegistration :exec
+UPDATE mcp_server_auth_clients offer
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+FROM mcp_auth_clients auth, remote_session_clients c, mcp_servers server, projects p
+WHERE c.id = $1::uuid AND c.deleted AND auth.remote_session_client_id = c.id
+  AND server.id = offer.mcp_server_id AND server.project_id = offer.project_id AND NOT server.deleted
+  AND p.id = offer.project_id AND p.organization_id = offer.organization_id AND NOT p.deleted
+  AND auth.id = offer.auth_client_id AND auth.organization_id = offer.organization_id
+  AND NOT offer.deleted
+`
+
+// A manual offer might have no server-registration mirror. Retire that offer
+// too, but never retire sibling offers using another registration.
+func (q *Queries) RetireOffersForDeletedRegistration(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, retireOffersForDeletedRegistration, id)
+	return err
+}
+
+const retireOrphanedGrantsForDeletedIssuer = `-- name: RetireOrphanedGrantsForDeletedIssuer :many
+UPDATE remote_sessions s
+SET deleted_at = clock_timestamp(),
+    upstream_subject = NULL, upstream_email = NULL, upstream_display_name = NULL,
+    identity_source = NULL, enrichment = NULL,
+    last_validated_at = NULL, validation_status = NULL, validation_reason = NULL
+FROM user_session_issuers issuer, remote_session_clients c
+WHERE issuer.id = $1::uuid AND issuer.deleted
+  AND (issuer.project_id = $2::uuid OR (issuer.project_id IS NULL AND issuer.organization_id = $3::text))
+  AND s.user_session_issuer_id = issuer.id AND NOT s.deleted
+  AND c.id = s.remote_session_client_id AND NOT c.deleted
+  AND (
+    (c.project_id IS NOT NULL AND EXISTS (SELECT 1 FROM projects p WHERE p.id = c.project_id AND p.organization_id = $3::text
+      AND (issuer.project_id IS NULL OR issuer.project_id = p.id)))
+    OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $3::text))
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM upstream_client_selections choice
+    JOIN projects p ON p.id = choice.project_id AND p.organization_id = choice.organization_id AND NOT p.deleted
+    JOIN mcp_servers server ON server.id = choice.mcp_server_id AND server.project_id = p.id AND NOT server.deleted
+    JOIN mcp_server_auth_clients offer ON offer.mcp_server_id = server.id AND offer.project_id = p.id
+      AND offer.organization_id = p.organization_id AND offer.auth_client_id = choice.auth_client_id AND NOT offer.deleted
+    JOIN mcp_auth_clients auth ON auth.id = offer.auth_client_id AND auth.organization_id = p.organization_id
+      AND (auth.project_id IS NULL OR auth.project_id = p.id) AND NOT auth.deleted AND auth.enabled
+      AND auth.client_type = 'remote_session' AND auth.remote_session_client_id = s.remote_session_client_id
+    JOIN remote_session_issuers provider ON provider.id = c.remote_session_issuer_id AND NOT provider.deleted
+      AND (provider.project_id = p.id OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = p.organization_id)))
+    WHERE choice.credential_kind = 'user_session' AND NOT choice.deleted AND NOT choice.no_auth
+      AND p.organization_id = $3::text AND (issuer.project_id IS NULL OR p.id = issuer.project_id)
+      AND (c.project_id IS NULL OR c.project_id = p.id)
+      AND EXISTS (
+        SELECT 1 FROM user_sessions downstream
+        JOIN user_session_issuers survivor ON survivor.id = downstream.user_session_issuer_id AND NOT survivor.deleted
+        WHERE COALESCE(downstream.credential_id, downstream.id) = choice.credential_id
+          AND downstream.subject_urn = s.subject_urn AND NOT downstream.deleted AND downstream.refresh_expires_at > now()
+          AND (downstream.project_id IS NULL OR downstream.project_id = p.id)
+          AND (survivor.project_id = p.id OR (survivor.project_id IS NULL AND survivor.organization_id = p.organization_id))
+      )
+  )
+RETURNING s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.refresh_token_encrypted, s.refresh_token_org_encrypted
+`
+
+type RetireOrphanedGrantsForDeletedIssuerParams struct {
+	UserSessionIssuerID uuid.UUID
+	ProjectID           uuid.UUID
+	OrganizationID      string
+}
+
+type RetireOrphanedGrantsForDeletedIssuerRow struct {
+	RemoteSessionClientID    uuid.UUID
+	OrganizationID           pgtype.Text
+	AccessTokenEncrypted     pgtype.Text
+	AccessTokenOrgEncrypted  pgtype.Text
+	RefreshTokenEncrypted    pgtype.Text
+	RefreshTokenOrgEncrypted pgtype.Text
+}
+
+// Only grants with the deleted issuer as persisted source are candidates.
+// A still-live downstream credential for the same subject, with its own
+// currently offered typed choice in this scope, keeps the shared grant live.
+// Attachments on other sources stay untouched. An attachment pinned to this
+// deleted source is no longer eligible under the attachment liveness checks.
+func (q *Queries) RetireOrphanedGrantsForDeletedIssuer(ctx context.Context, arg RetireOrphanedGrantsForDeletedIssuerParams) ([]RetireOrphanedGrantsForDeletedIssuerRow, error) {
+	rows, err := q.db.Query(ctx, retireOrphanedGrantsForDeletedIssuer, arg.UserSessionIssuerID, arg.ProjectID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RetireOrphanedGrantsForDeletedIssuerRow
+	for rows.Next() {
+		var i RetireOrphanedGrantsForDeletedIssuerRow
+		if err := rows.Scan(
+			&i.RemoteSessionClientID,
+			&i.OrganizationID,
+			&i.AccessTokenEncrypted,
+			&i.AccessTokenOrgEncrypted,
+			&i.RefreshTokenEncrypted,
+			&i.RefreshTokenOrgEncrypted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const retirePrincipalAttachmentsForDeletedIssuer = `-- name: RetirePrincipalAttachmentsForDeletedIssuer :exec
+UPDATE principal_remote_session_bindings b
+SET revoked_at = clock_timestamp(), updated_at = clock_timestamp()
+FROM user_session_issuers issuer
+WHERE issuer.id = $1::uuid AND issuer.deleted
+  AND b.organization_id = $2::text AND b.revoked_at IS NULL
+  AND (issuer.project_id = b.project_id OR (issuer.project_id IS NULL AND issuer.organization_id = b.organization_id))
+  AND (b.user_session_issuer_id = issuer.id OR EXISTS (
+    SELECT 1 FROM remote_sessions s
+    WHERE s.id = b.remote_session_id AND s.remote_session_client_id = b.remote_session_client_id
+      AND s.user_session_issuer_id = issuer.id
+  ))
+`
+
+type RetirePrincipalAttachmentsForDeletedIssuerParams struct {
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+}
+
+// Keep the compatibility parent row; retire only attachments issued on the
+// deleted surface or pinned to a source that can no longer authorize them.
+func (q *Queries) RetirePrincipalAttachmentsForDeletedIssuer(ctx context.Context, arg RetirePrincipalAttachmentsForDeletedIssuerParams) error {
+	_, err := q.db.Exec(ctx, retirePrincipalAttachmentsForDeletedIssuer, arg.UserSessionIssuerID, arg.OrganizationID)
+	return err
+}
+
+const retirePrincipalAttachmentsForDeletedRegistration = `-- name: RetirePrincipalAttachmentsForDeletedRegistration :exec
+UPDATE principal_remote_session_bindings b
+SET revoked_at = clock_timestamp(), updated_at = clock_timestamp()
+FROM remote_session_clients c
+WHERE c.id = $1::uuid AND c.deleted AND b.remote_session_client_id = c.id AND b.revoked_at IS NULL
+`
+
+// A true registration deletion retires all pinned attachments. Do not
+// remove the compatibility parents: that would physically delete the rows.
+func (q *Queries) RetirePrincipalAttachmentsForDeletedRegistration(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, retirePrincipalAttachmentsForDeletedRegistration, id)
+	return err
+}
+
 const retireSpeakeasyConsentEMACredentials = `-- name: RetireSpeakeasyConsentEMACredentials :exec
 UPDATE remote_session_ema_credentials
 SET access_token_encrypted = NULL, access_token_org_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
@@ -15840,13 +15777,12 @@ func (q *Queries) SetRemoteSessionAccessExpiresAt(ctx context.Context, arg SetRe
 const setRemoteSessionAutoRefresh = `-- name: SetRemoteSessionAutoRefresh :execrows
 UPDATE remote_sessions AS s
 SET auto_refresh = $1
-FROM remote_session_client_user_session_issuers AS link
-JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
-JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+FROM remote_session_clients AS c, user_session_issuers AS usi
 WHERE s.subject_urn = $2
   AND s.remote_session_client_id = $3
-  AND link.remote_session_client_id = s.remote_session_client_id
-  AND link.user_session_issuer_id = $4
+  AND c.id = s.remote_session_client_id
+  AND usi.id = $4
+  AND s.user_session_issuer_id = usi.id
   AND (usi.project_id = $5::uuid OR (usi.project_id IS NULL AND usi.organization_id = $6::text))
   AND (c.project_id = $5::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $6::text)))
   AND c.deleted IS FALSE
@@ -15863,17 +15799,9 @@ type SetRemoteSessionAutoRefreshParams struct {
 	OrganizationID        string
 }
 
-// Records the subject's consent-screen auto-refresh choice. Deliberately does
-// NOT touch updated_at: that column doubles as the refresh CAS token-version
-// signal and keepalive clock, and a preference toggle must not perturb either.
-// Scoped through the requesting user_session_issuer's tenant-scoped client
-// binding (binding row, the issuer's project, and the client's own
-// project/org tenancy, mirroring
-// CheckRemoteSessionClientBindingForUserSessionIssuer) so the write cannot
-// cross tenant boundaries. The session's own user_session_issuer_id is
-// provenance only: the credential is one shared grant per (subject, client),
-// so the preference set from any bound surface is the preference every bound
-// surface reads.
+// Records the subject's preference without changing the refresh CAS version.
+// An untyped surface can control its exact source grant only. Cross-issuer
+// shared grants require tenant-scoped typed authorization at the caller.
 func (q *Queries) SetRemoteSessionAutoRefresh(ctx context.Context, arg SetRemoteSessionAutoRefreshParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setRemoteSessionAutoRefresh,
 		arg.AutoRefresh,
@@ -16288,13 +16216,12 @@ SET deleted_at = clock_timestamp(),
     last_validated_at = NULL,
     validation_status = NULL,
     validation_reason = NULL
-FROM remote_session_client_user_session_issuers AS link
-JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
-JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+FROM remote_session_clients AS c, user_session_issuers AS usi
 WHERE s.subject_urn = $1
   AND s.remote_session_client_id = $2
-  AND link.remote_session_client_id = s.remote_session_client_id
-  AND link.user_session_issuer_id = $3
+  AND c.id = s.remote_session_client_id
+  AND usi.id = $3
+  AND s.user_session_issuer_id = usi.id
   AND (usi.project_id = $4::uuid OR (usi.project_id IS NULL AND usi.organization_id = $5::text))
   AND (c.project_id = $4::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $5::text)))
   AND c.deleted IS FALSE
@@ -16320,21 +16247,8 @@ type SoftDeleteRemoteSessionBySubjectAndClientRow struct {
 	RefreshTokenOrgEncrypted pgtype.Text
 }
 
-// Consent-screen disconnect: soft-deletes the subject's grant for one
-// upstream client. Subject, client and issuer all derived server-side from
-// the challenge state and the endpoint's bindings, never from the form;
-// scoped through the requesting issuer's tenant-scoped client binding
-// (binding row, the issuer's project, and the client's own project/org
-// tenancy, mirroring CheckRemoteSessionClientBindingForUserSessionIssuer) so
-// the write cannot cross tenants. The session's own user_session_issuer_id is
-// provenance only: a disconnect from any bound surface destroys the shared
-// credential globally (the caller then attempts upstream revocation).
-//
-// Returns the stored credentials it tombstones; the partial unique index on
-// (subject_urn, remote_session_client_id) caps that at one row. The
-// user_session_issuers join constrains the *requesting* issuer, never the
-// grant's provenance issuer, so a grant minted through a now-soft-deleted
-// issuer stays reachable — and still RFC 7009'd — from any live bound surface.
+// Untyped disconnect is limited to the subject's grant minted on this exact
+// issuer. Callers controlling a shared grant must use a live typed offer.
 func (q *Queries) SoftDeleteRemoteSessionBySubjectAndClient(ctx context.Context, arg SoftDeleteRemoteSessionBySubjectAndClientParams) ([]SoftDeleteRemoteSessionBySubjectAndClientRow, error) {
 	rows, err := q.db.Query(ctx, softDeleteRemoteSessionBySubjectAndClient,
 		arg.SubjectUrn,
@@ -16595,62 +16509,6 @@ func (q *Queries) SoftDeleteRemoteSessionsByClientID(ctx context.Context, remote
 	return items, nil
 }
 
-const softDeleteRemoteSessionsByClientIDs = `-- name: SoftDeleteRemoteSessionsByClientIDs :many
-UPDATE remote_sessions
-SET deleted_at = clock_timestamp(),
-    -- Tombstones keep credentials for upstream revocation but no identity.
-    upstream_subject = NULL,
-    upstream_email = NULL,
-    upstream_display_name = NULL,
-    identity_source = NULL,
-    enrichment = NULL,
-    -- The credential is gone, so nothing it was observed doing survives it.
-    last_validated_at = NULL,
-    validation_status = NULL,
-    validation_reason = NULL
-WHERE remote_session_client_id = ANY($1::uuid[]) AND deleted IS FALSE
-RETURNING remote_session_client_id, organization_id, access_token_encrypted, access_token_org_encrypted, refresh_token_encrypted, refresh_token_org_encrypted
-`
-
-type SoftDeleteRemoteSessionsByClientIDsRow struct {
-	RemoteSessionClientID    uuid.UUID
-	OrganizationID           pgtype.Text
-	AccessTokenEncrypted     pgtype.Text
-	AccessTokenOrgEncrypted  pgtype.Text
-	RefreshTokenEncrypted    pgtype.Text
-	RefreshTokenOrgEncrypted pgtype.Text
-}
-
-// Bulk form of SoftDeleteRemoteSessionsByClientID: the orphan cascade sweeps
-// every client one issuer deletion stranded, so it sweeps them in a single
-// statement rather than a round trip per client while holding their locks.
-func (q *Queries) SoftDeleteRemoteSessionsByClientIDs(ctx context.Context, remoteSessionClientIds []uuid.UUID) ([]SoftDeleteRemoteSessionsByClientIDsRow, error) {
-	rows, err := q.db.Query(ctx, softDeleteRemoteSessionsByClientIDs, remoteSessionClientIds)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []SoftDeleteRemoteSessionsByClientIDsRow
-	for rows.Next() {
-		var i SoftDeleteRemoteSessionsByClientIDsRow
-		if err := rows.Scan(
-			&i.RemoteSessionClientID,
-			&i.OrganizationID,
-			&i.AccessTokenEncrypted,
-			&i.AccessTokenOrgEncrypted,
-			&i.RefreshTokenEncrypted,
-			&i.RefreshTokenOrgEncrypted,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const softDeleteRemoteSessionsBySubjectAndUserSessionIssuer = `-- name: SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer :many
 UPDATE remote_sessions AS s
 SET deleted_at = COALESCE(s.deleted_at, $1::timestamptz, clock_timestamp()),
@@ -16675,14 +16533,42 @@ WHERE s.subject_urn = $2
   AND (usi.project_id = $5::uuid OR (usi.project_id IS NULL AND usi.organization_id = $6::text))
   AND (c.project_id = $5::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $6::text)))
   AND c.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM user_session_issuers provenance
+    LEFT JOIN projects origin ON origin.id = provenance.project_id
+    WHERE provenance.id = s.user_session_issuer_id
+      AND (origin.organization_id = $6::text
+           OR (provenance.project_id IS NULL AND provenance.organization_id = $6::text))
+  )
   AND (
-    EXISTS (
-      SELECT 1
-      FROM remote_session_client_user_session_issuers AS link
-      WHERE link.remote_session_client_id = s.remote_session_client_id
-        AND link.user_session_issuer_id = usi.id
-    )
+    ($3::boolean AND EXISTS (
+      SELECT 1 FROM user_sessions downstream
+      WHERE downstream.id = $7::uuid AND downstream.subject_urn = s.subject_urn
+        AND downstream.user_session_issuer_id = usi.id AND downstream.deleted_at = $1::timestamptz
+    ))
     OR s.user_session_issuer_id = usi.id
+    OR EXISTS (
+      SELECT 1
+      FROM user_sessions downstream
+      JOIN upstream_client_selections choice
+        ON choice.credential_kind = 'user_session'
+       AND choice.credential_id = COALESCE(downstream.credential_id, downstream.id)
+       AND choice.organization_id = $6::text
+       AND NOT choice.deleted AND NOT choice.no_auth
+      JOIN projects p ON p.id = choice.project_id AND p.organization_id = choice.organization_id AND NOT p.deleted
+      JOIN mcp_servers server ON server.id = choice.mcp_server_id AND server.project_id = p.id AND NOT server.deleted
+      JOIN mcp_server_auth_clients offer ON offer.mcp_server_id = server.id AND offer.project_id = p.id
+        AND offer.organization_id = p.organization_id AND offer.auth_client_id = choice.auth_client_id AND NOT offer.deleted
+      JOIN mcp_auth_clients auth ON auth.id = offer.auth_client_id AND auth.organization_id = p.organization_id
+        AND (auth.project_id IS NULL OR auth.project_id = p.id) AND NOT auth.deleted AND auth.enabled
+        AND auth.client_type = 'remote_session' AND auth.remote_session_client_id = s.remote_session_client_id
+      JOIN remote_session_issuers provider ON provider.id = c.remote_session_issuer_id AND NOT provider.deleted
+        AND (provider.project_id = p.id OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = p.organization_id)))
+      WHERE downstream.id = $7::uuid
+        AND downstream.deleted AND downstream.user_session_issuer_id = usi.id AND downstream.subject_urn = s.subject_urn
+        AND (downstream.project_id IS NULL OR downstream.project_id = p.id)
+        AND ($5::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR p.id = $5::uuid)
+    )
   )
 RETURNING s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.refresh_token_encrypted, s.refresh_token_org_encrypted
 `
@@ -16694,6 +16580,7 @@ type SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerParams struct {
 	UserSessionIssuerID uuid.UUID
 	ProjectID           uuid.UUID
 	OrganizationID      string
+	DownstreamSessionID uuid.NullUUID
 }
 
 type SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow struct {
@@ -16705,26 +16592,10 @@ type SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow struct {
 	RefreshTokenOrgEncrypted pgtype.Text
 }
 
-// Cascade for a revoked user session: tombstones every upstream grant the
-// subject holds that the revoking user session issuer can reach, and returns
-// their stored credentials. Reachable is either arm of the disjunction below:
-// the grant's client is currently bound to that issuer, or the grant was
-// minted through it. The second arm matters because a client detached from
-// the issuer after minting keeps no binding row, and without it the revoke
-// would report success while leaving those upstream tokens live. Both arms
-// name the requesting issuer, so neither crosses a tenant, and the client's
-// own project/org tenancy is checked either way (mirroring
-// CheckRemoteSessionClientBindingForUserSessionIssuer).
-//
-// A subject's grant is shared by every MCP client it authenticates, because
-// remote_sessions is keyed on (subject_urn, remote_session_client_id) with no
-// user-session-client column. The stored user_session_issuer_id is provenance
-// from INSERT, not a lookup key, so a revoke through one bound issuer must
-// still tombstone a row minted by another. A revoke that left the upstream
-// tokens alive would not be a revoke.
-// Agent-management stamps grants with the durable user-session revocation boundary.
-// Retries match only that exact boundary, never live or unrelated deleted grants.
-// Ordinary revocations pass no boundary and only match live grants.
+// A revoked downstream session may retire a same-subject grant minted on its
+// issuer, or a grant reached by that exact downstream credential's live typed
+// choice. A shared registration or compatibility link is not consent.
+// Agent retries use the original timestamp without re-deciding current offers.
 func (q *Queries) SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer(ctx context.Context, arg SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerParams) ([]SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow, error) {
 	rows, err := q.db.Query(ctx, softDeleteRemoteSessionsBySubjectAndUserSessionIssuer,
 		arg.RevokedAt,
@@ -16733,6 +16604,7 @@ func (q *Queries) SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer(ctx cont
 		arg.UserSessionIssuerID,
 		arg.ProjectID,
 		arg.OrganizationID,
+		arg.DownstreamSessionID,
 	)
 	if err != nil {
 		return nil, err

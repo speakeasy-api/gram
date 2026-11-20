@@ -455,21 +455,11 @@ func (s *Service) RevokeUserSessionClient(ctx context.Context, payload *gen.Revo
 		return oops.E(oops.CodeUnexpected, err, "log user session client revocation").LogError(ctx, logger)
 	}
 
-	// Tombstone the upstream grants of every subject whose session just
-	// cascaded, deduplicated: one client can hold a session per user, and a
-	// subject's grants hang off (subject, issuer) rather than off the session,
-	// so without this the same grants would be soft-deleted — and revoked
-	// upstream — once per session the subject held.
-	seenSubjects := make(map[string]struct{}, len(revokedSessions))
+	// Each downstream credential can have different recorded choices, even
+	// for the same subject. The upstream update only returns newly retired rows.
 	var revokedUpstream []remotesessions.RevokedCredentials
 	for _, session := range revokedSessions {
-		key := session.SubjectUrn.String() + "\x00" + session.UserSessionIssuerID.String()
-		if _, seen := seenSubjects[key]; seen {
-			continue
-		}
-		seenSubjects[key] = struct{}{}
-
-		creds, err := s.revoker.SoftDeleteSubjectSessions(ctx, dbtx, session.SubjectUrn, session.UserSessionIssuerID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+		creds, err := s.revoker.SoftDeleteSubjectSessions(ctx, dbtx, session.SubjectUrn, session.UserSessionIssuerID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, session.ID)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "revoke upstream remote sessions").LogError(ctx, logger)
 		}

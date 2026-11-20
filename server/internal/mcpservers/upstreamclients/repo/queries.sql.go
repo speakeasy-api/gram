@@ -1585,12 +1585,21 @@ func (q *Queries) ListServerConsentAuthClients(ctx context.Context, arg ListServ
 }
 
 const listServersAssociatedWithClient = `-- name: ListServersAssociatedWithClient :many
-SELECT DISTINCT a.organization_id, a.mcp_server_id, a.project_id
-FROM mcp_server_remote_session_clients AS a
-JOIN mcp_servers AS s ON s.id = a.mcp_server_id AND s.deleted IS FALSE
-WHERE a.remote_session_client_id = $1::uuid
-  AND ($2::text IS NULL OR a.organization_id = $2::text)
-ORDER BY a.organization_id, a.mcp_server_id
+SELECT DISTINCT reach.organization_id, reach.mcp_server_id, reach.project_id
+FROM (
+  SELECT a.organization_id, a.mcp_server_id, a.project_id
+  FROM mcp_server_remote_session_clients a
+  WHERE a.remote_session_client_id = $1::uuid
+  UNION ALL
+  SELECT offer.organization_id, offer.mcp_server_id, offer.project_id
+  FROM mcp_server_auth_clients offer
+  JOIN mcp_auth_clients auth ON auth.id = offer.auth_client_id AND auth.organization_id = offer.organization_id
+  WHERE auth.remote_session_client_id = $1::uuid AND NOT offer.deleted
+) reach
+JOIN mcp_servers s ON s.id = reach.mcp_server_id AND s.project_id = reach.project_id AND NOT s.deleted
+JOIN projects p ON p.id = s.project_id AND p.organization_id = reach.organization_id AND NOT p.deleted
+WHERE $2::text IS NULL OR reach.organization_id = $2::text
+ORDER BY reach.organization_id, reach.mcp_server_id
 `
 
 type ListServersAssociatedWithClientParams struct {
@@ -1604,9 +1613,8 @@ type ListServersAssociatedWithClientRow struct {
 	ProjectID      uuid.UUID
 }
 
-// Every live MCP server with an association to the client, tombstoned ones
-// included, with the organization and project it sits in. Without an
-// organization it spans every organization, for a platform-global client.
+// Discover both records that the caller may mutate: the association writer's
+// mirror (including tombstones) and typed offers, including unmirrored ones.
 func (q *Queries) ListServersAssociatedWithClient(ctx context.Context, arg ListServersAssociatedWithClientParams) ([]ListServersAssociatedWithClientRow, error) {
 	rows, err := q.db.Query(ctx, listServersAssociatedWithClient, arg.RemoteSessionClientID, arg.OrganizationID)
 	if err != nil {

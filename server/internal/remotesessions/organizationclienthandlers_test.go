@@ -157,7 +157,7 @@ func TestDeleteClient(t *testing.T) {
 
 	bindings, err := testrepo.New(ti.conn).CountRemoteSessionClientBindingsFixture(ctx, uuid.MustParse(clientID))
 	require.NoError(t, err)
-	require.Zero(t, bindings, "a deleted client keeps no user session issuer binding")
+	require.Positive(t, bindings, "retirement does not physically unlink compatibility parents")
 }
 
 // A server that took its upstream issuer from the deleted client no longer

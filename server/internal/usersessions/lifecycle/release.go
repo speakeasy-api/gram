@@ -66,9 +66,9 @@ func ReleaseUnownedIssuer(ctx context.Context, tx pgx.Tx, revoker *remotesession
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "delete user session issuer")
 	}
-	creds, err := revoker.DetachUserSessionIssuerFromClients(ctx, tx, deleted.ID, projectID, organizationID)
+	creds, err := revoker.RetireDeletedUserSessionIssuer(ctx, tx, deleted.ID, projectID, organizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "detach remote session clients from user session issuer")
+		return nil, oops.E(oops.CodeUnexpected, err, "retire grants for deleted user session issuer")
 	}
 	if _, err := q.SoftDeleteUserSessionsByIssuerID(ctx, deleted.ID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "delete user session issuer sessions")

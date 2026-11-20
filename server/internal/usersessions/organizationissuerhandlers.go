@@ -709,7 +709,7 @@ func (s *Service) DeleteIssuer(ctx context.Context, payload *orggen.DeleteIssuer
 		return oops.E(oops.CodeUnexpected, err, "delete organization user session issuer").LogError(ctx, logger)
 	}
 
-	orphanCreds, err := s.revoker.DetachOrganizationUserSessionIssuerFromClients(ctx, dbtx, deleted.ID, authCtx.ActiveOrganizationID)
+	orphanCreds, err := s.revoker.RetireDeletedUserSessionIssuer(ctx, dbtx, deleted.ID, uuid.Nil, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "detach remote session clients from organization user session issuer").LogError(ctx, logger)
 	}

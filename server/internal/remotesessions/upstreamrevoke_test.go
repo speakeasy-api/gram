@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -699,12 +700,25 @@ func TestDeleteRemoteSessionClient_RevokesCascadedSessionsUpstream(t *testing.T)
 
 	clientID, fixtures := seedRevocableClient(t, ctx, ti, "delete-client-cascade", upstream.URL+"/revoke", 2)
 
+	fx := fixtures[0]
+	server := seedRemoteMcpServerForLogin(t, ctx, ti.conn, fx.projectID, fx.userIssuerID, "retire-target", "https://registration.example.com/mcp")
+	target := offerRegistration(t, ctx, ti.conn, fx.organizationID, fx.projectID, server, clientID)
+	other := seedRevocableSession(t, ctx, ti, "retire-sibling", "", "secret", true)
+	sibling := offerRegistration(t, ctx, ti.conn, fx.organizationID, fx.projectID, server, other.clientID)
+
 	err := ti.service.DeleteRemoteSessionClient(ctx, &clientsgen.DeleteRemoteSessionClientPayload{
 		ID:               clientID.String(),
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 	})
+	require.NoError(t, err)
+
+	offers, err := authclientbackfill.New(ti.conn).ListServerAuthClientsFixture(ctx, server)
+	require.NoError(t, err)
+	require.NotContains(t, offers, target)
+	require.Contains(t, offers, sibling)
+	_, err = repo.New(ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: other.subject, RemoteSessionClientID: other.clientID})
 	require.NoError(t, err)
 
 	want := []string{fixtures[0].refreshToken, fixtures[1].refreshToken}
