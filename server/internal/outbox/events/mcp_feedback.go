@@ -13,8 +13,9 @@ var McpFeedbackSubmittedV1 = outbox.NewEventDef[McpFeedbackSubmittedPayloadV1](
 	"An agent sent feedback through an MCP server's built-in feedback tool",
 )
 
-// McpFeedbackSubmittedEventID derives the stable delivery id for one feedback
-// report, so writing the same report again would deliver it once.
+// McpFeedbackSubmittedEventID derives the delivery id of one report's event
+// from the report, so a redelivery of that event carries the same id. Two
+// submissions are two reports, with two ids.
 func McpFeedbackSubmittedEventID(feedbackID uuid.UUID) uuid.UUID {
 	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gram:mcp-feedback:submitted:"+feedbackID.String()))
 }
@@ -56,15 +57,10 @@ type McpFeedbackSubmittedPayloadV1 struct {
 	Model string `json:"model,omitempty"`
 
 	// UserID is the caller's Speakeasy user id, when the caller is a member
-	// of the server's organization.
+	// of the server's organization. The member's email and identity-provider
+	// subject are left out: webhook deliveries are kept by the delivery
+	// service, so the event names a person only by id.
 	UserID string `json:"user_id,omitempty"`
-
-	// UserEmail is that member's email address.
-	UserEmail string `json:"user_email,omitempty"`
-
-	// ExternalUserID is the caller's subject in the identity provider the
-	// server signs people in with.
-	ExternalUserID string `json:"external_user_id,omitempty"`
 
 	// ClientName is the MCP client's name, from its handshake.
 	ClientName string `json:"client_name,omitempty"`

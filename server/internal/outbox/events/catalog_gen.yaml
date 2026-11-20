@@ -6652,8 +6652,6 @@ webhooks:
                                     type: string
                                 created_at:
                                     type: string
-                                external_user_id:
-                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -6672,8 +6670,6 @@ webhooks:
                                 severity:
                                     type: string
                                 tool_name:
-                                    type: string
-                                user_email:
                                     type: string
                                 user_id:
                                     type: string
