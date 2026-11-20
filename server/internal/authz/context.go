@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
@@ -232,6 +233,32 @@ func (a grantAuthorization) policiesFor(check Check) [][]Grant {
 		return a.policies
 	}
 	return append(append([][]Grant{}, a.policies...), a.representedPolicies...)
+}
+
+// keysMissingFrom lists the grant keys the check does not carry, where that
+// alone is why a grant of a scope that would satisfy the check was refused.
+// Only policies that refuse the check are read, since a policy that allows it
+// is not why it was refused. It explains a refusal and decides nothing.
+func (a grantAuthorization) keysMissingFrom(check Check) []string {
+	check = a.bind(check)
+	seen := map[string]bool{}
+	for _, policy := range a.policiesFor(check) {
+		if grant, _ := matchingGrant(policy, check.expand()); grant != nil {
+			continue
+		}
+		for _, grant := range policy {
+			for _, expanded := range check.expand() {
+				if grant.Scope != expanded.Scope {
+					continue
+				}
+				missing, _ := expanded.keysRefusingGrant(grant.Selector)
+				for _, key := range missing {
+					seen[key] = true
+				}
+			}
+		}
+	}
+	return slices.Sorted(maps.Keys(seen))
 }
 
 func (a grantAuthorization) grantCount() int {

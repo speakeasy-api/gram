@@ -132,6 +132,8 @@ const (
 	MandatoryAuthzOutcomeKey = attribute.Key("gram.authz.mandatory.outcome")
 	// MandatoryAuthzSourceKey is the policy the mandatory check evaluated.
 	MandatoryAuthzSourceKey = attribute.Key("gram.authz.mandatory.source")
+	// AuthzMissingSelectorKeysKey lists the grant selector keys a refused check did not carry.
+	AuthzMissingSelectorKeysKey = attribute.Key("gram.authz.missing_selector_keys")
 	// MandatoryAuthzReasonKey is why the mandatory check denied.
 	MandatoryAuthzReasonKey = attribute.Key("gram.authz.mandatory.reason")
 
@@ -2695,6 +2697,10 @@ func SlogAccessRequestID(v string) slog.Attr      { return slog.String(string(Ac
 
 func AccessRequestScope(v string) attribute.KeyValue { return AccessRequestScopeKey.String(v) }
 func SlogAccessRequestScope(v string) slog.Attr      { return slog.String(string(AccessRequestScopeKey), v) }
+
+func SlogAuthzMissingSelectorKeys(v []string) slog.Attr {
+	return slog.Any(string(AuthzMissingSelectorKeysKey), v)
+}
 
 func AccessRequestAdminCount(v int) attribute.KeyValue { return AccessRequestAdminCountKey.Int(v) }
 func SlogAccessRequestAdminCount(v int) slog.Attr {

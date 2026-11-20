@@ -14,7 +14,8 @@ import (
 // {"resource_kind":"project","resource_id":"proj_123"}.
 // Wildcard uses {"resource_kind":"*","resource_id":"*"}.
 // For a grant selector to match a check selector, every key in the grant must
-// either equal the corresponding check value or be the wildcard "*".
+// be carried by the check and either equal its value or be the wildcard "*".
+// Check.mayOmit names the few checks that may leave a grant key out.
 type Selector map[string]string
 
 // The SelectorKey*, AuthClientType* and Disposition* names are generated from
@@ -43,34 +44,10 @@ func IsAgentKeyAuthClientType(clientType string) bool {
 	return IsSharedAuthClientType(clientType) && clientType != AuthClientTypePassThrough
 }
 
-// Matches reports whether this (grant) selector satisfies the given check
-// selector. A nil/empty grant selector matches any check (defensive fallback).
-// For each key present in BOTH the grant and check selectors, the values must
-// be equal or the grant value must be "*". Keys present in the grant but absent
-// from the check are skipped — the check is not constraining that dimension.
-// This allows disposition-scoped grants (e.g. {"disposition":"read_only"}) to
-// match connection-level checks that don't yet specify a disposition.
-func (s Selector) Matches(check Selector) bool {
-	return s.matches(check, "")
-}
-
-func (s Selector) matches(check Selector, representedUser string) bool {
-	for k, grantVal := range s {
-		checkVal, ok := check[k]
-		if !ok {
-			// Check doesn't constrain this dimension — skip.
-			continue
-		}
-		if !selectorValueMatches(k, grantVal, checkVal, representedUser) {
-			return false
-		}
-	}
-	return true
-}
-
-// StrictMatches is like Matches but requires every key in the grant selector
-// to be present in the check selector. Exclusion scopes use strict matching so
-// a tool-scoped exclusion does not match a dimensionless server-level check.
+// StrictMatches reports whether this (grant) selector covers the given check
+// selector: every key the grant names must be present in the check with an
+// equal value, or the grant value must be "*". A key the check omits never
+// matches, so a tool-scoped exclusion does not match a server-level check.
 func (s Selector) StrictMatches(check Selector) bool {
 	return s.strictMatches(check, "")
 }
