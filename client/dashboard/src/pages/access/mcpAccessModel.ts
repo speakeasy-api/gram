@@ -51,18 +51,36 @@ export type ToolLimit =
 export type ToolLimitKind = ToolLimit["kind"];
 
 /**
+ * The order the backend picks a tool's one disposition in when it carries
+ * several (DispositionFromAnnotations in server/internal/conv/tools.go). A
+ * tool that is both read-only and idempotent counts as read-only.
+ */
+export const DISPOSITION_PRECEDENCE = [
+  "read_only",
+  "destructive",
+  "idempotent",
+  "open_world",
+] as const satisfies readonly Disposition[];
+
+const DISPOSITION_HINT = {
+  read_only: "readOnlyHint",
+  destructive: "destructiveHint",
+  idempotent: "idempotentHint",
+  open_world: "openWorldHint",
+} as const;
+
+/**
  * The one disposition the runtime assigns a tool: the first of its hints set
- * to true, in the backend's priority order (server/internal/conv/tools.go).
+ * to true, in DISPOSITION_PRECEDENCE order.
  */
 export function toolDisposition(
   tool: ServerTool,
 ): (typeof DISPOSITIONS)[number] | null {
-  const hints = tool.annotations;
-  if (hints?.readOnlyHint) return "read_only";
-  if (hints?.destructiveHint) return "destructive";
-  if (hints?.idempotentHint) return "idempotent";
-  if (hints?.openWorldHint) return "open_world";
-  return null;
+  return (
+    DISPOSITION_PRECEDENCE.find(
+      (disposition) => tool.annotations?.[DISPOSITION_HINT[disposition]],
+    ) ?? null
+  );
 }
 
 /**
