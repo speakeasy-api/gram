@@ -16,6 +16,7 @@ const routing = createDetailRouting({
     "team-access",
     "guardrails",
     "sessions",
+    "feedback",
     "settings",
   ],
   idSegmentIndex: (segments, mcpServerSlug) =>
@@ -34,6 +35,7 @@ const routing = createDetailRouting({
     "team-access": routes.mcp.details.teamAccess,
     guardrails: routes.mcp.details.guardrails,
     sessions: routes.mcp.details.sessions,
+    feedback: routes.mcp.details.feedback,
     settings: routes.mcp.details.settings,
   }),
 });
