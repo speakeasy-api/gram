@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"unicode/utf8"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -187,6 +188,11 @@ func (s Settings) Tool() Tool {
 	}
 }
 
+// ReservedToolNames are the tools the gateway itself answers on a server in
+// dynamic mode. A feedback tool under one of these names would take calls the
+// gateway needs, so it cannot be named after them.
+var ReservedToolNames = []string{"search_tools", "list_tools", "describe_tools", "execute_tool"}
+
 // Validate reports the first reason these settings cannot be stored, worded
 // for the admin who entered them.
 func (s Settings) Validate() error {
@@ -196,6 +202,9 @@ func (s Settings) Validate() error {
 		}
 		if !toolNamePattern.MatchString(s.ToolName) {
 			return errors.New("tool name may only contain letters, digits, underscores and hyphens")
+		}
+		if slices.Contains(ReservedToolNames, s.ToolName) {
+			return fmt.Errorf("tool name %s is already used by Speakeasy on every server", s.ToolName)
 		}
 	}
 

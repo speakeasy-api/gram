@@ -2,6 +2,7 @@ package mcpfeedback_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -78,20 +79,30 @@ func TestSettingsValidate(t *testing.T) {
 		{Enabled: true, ToolName: "acme-Submit_feedback2", ToolDescription: "Short."},
 		{Enabled: true, ToolName: strings.Repeat("a", mcpfeedback.MaxToolNameLength), ToolDescription: strings.Repeat("é", mcpfeedback.MaxToolDescriptionLength)},
 	}
-	for _, settings := range valid {
-		require.NoError(t, settings.Validate(), settings.ToolName)
+	for i, settings := range valid {
+		t.Run(fmt.Sprintf("valid %d", i), func(t *testing.T) {
+			t.Parallel()
+			require.NoError(t, settings.Validate())
+		})
 	}
 
 	invalid := map[string]mcpfeedback.Settings{
 		"tool name must be at most 64 characters":                             {Enabled: true, ToolName: strings.Repeat("a", mcpfeedback.MaxToolNameLength+1), ToolDescription: ""},
 		"tool name may only contain letters, digits, underscores and hyphens": {Enabled: true, ToolName: "submit feedback", ToolDescription: ""},
 		"tool description must be at most 2000 characters":                    {Enabled: true, ToolName: "", ToolDescription: strings.Repeat("é", mcpfeedback.MaxToolDescriptionLength+1)},
+		"tool name execute_tool is already used by Speakeasy on every server": {Enabled: true, ToolName: "execute_tool", ToolDescription: ""},
 	}
 	for message, settings := range invalid {
-		require.EqualError(t, settings.Validate(), message)
+		t.Run(message, func(t *testing.T) {
+			t.Parallel()
+			require.EqualError(t, settings.Validate(), message)
+		})
 	}
 
-	for _, name := range []string{"submit.feedback", "submit/feedback", "sübmit", "submit_feedback!"} {
-		require.Error(t, mcpfeedback.Settings{Enabled: true, ToolName: name, ToolDescription: ""}.Validate(), name)
+	for _, name := range append([]string{"submit.feedback", "submit/feedback", "sübmit", "submit_feedback!"}, mcpfeedback.ReservedToolNames...) {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			require.Error(t, mcpfeedback.Settings{Enabled: true, ToolName: name, ToolDescription: ""}.Validate())
+		})
 	}
 }

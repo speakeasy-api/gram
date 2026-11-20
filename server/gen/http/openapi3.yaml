@@ -125013,7 +125013,7 @@ components:
                     format: date-time
                 updated_by_email:
                     type: string
-                    description: The email of the person who last changed the settings. Absent when an API key did, or the person has since been removed.
+                    description: The email of the person who last changed the settings; for a change made with an API key, the key's creator. Absent when that person has since been removed.
             description: Whether an MCP server offers the feedback tool, and how an admin set it up.
             required:
                 - mcp_server_id

@@ -47,8 +47,9 @@ type GetSettingsResponseBody struct {
 	Tool *McpFeedbackToolResponseBody `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
 	// When the settings were last changed. Absent when the server never had any.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
-	// The email of the person who last changed the settings. Absent when an API
-	// key did, or the person has since been removed.
+	// The email of the person who last changed the settings; for a change made
+	// with an API key, the key's creator. Absent when that person has since been
+	// removed.
 	UpdatedByEmail *string `form:"updated_by_email,omitempty" json:"updated_by_email,omitempty" xml:"updated_by_email,omitempty"`
 }
 
@@ -72,8 +73,9 @@ type UpdateSettingsResponseBody struct {
 	Tool *McpFeedbackToolResponseBody `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
 	// When the settings were last changed. Absent when the server never had any.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
-	// The email of the person who last changed the settings. Absent when an API
-	// key did, or the person has since been removed.
+	// The email of the person who last changed the settings; for a change made
+	// with an API key, the key's creator. Absent when that person has since been
+	// removed.
 	UpdatedByEmail *string `form:"updated_by_email,omitempty" json:"updated_by_email,omitempty" xml:"updated_by_email,omitempty"`
 }
 
