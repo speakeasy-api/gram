@@ -11952,8 +11952,8 @@ COMMENT ON COLUMN hooks_rollout_stages.percent IS 'Share of organizations follow
 @access: confidential';
 COMMENT ON COLUMN hooks_rollout_stages.state IS 'running, paused, completed or cancelled.
 @access: confidential';
-COMMENT ON COLUMN hooks_rollout_stages.reason IS 'Why the rollout was paused or cancelled, when it was.
-@access: confidential';
+COMMENT ON COLUMN hooks_rollout_stages.reason IS 'Why the rollout was paused or cancelled, when it was. Free text from staff or the rollout workflow.
+@access: opaque-restricted';
 COMMENT ON COLUMN hooks_rollout_stages.set_by IS 'Email of the staff operator who made the change, or the rollout workflow.
 @access: confidential-pii';
 COMMENT ON COLUMN hooks_rollout_stages.created_at IS '@access: confidential';
