@@ -3,9 +3,15 @@
 `Load` reads one database snapshot of the AI client catalog. The API, MCP
 gateway and private ingress processes load it before serving. If the database
 cannot be read, the process does not start. If the catalog is empty or invalid,
-`Load` logs an error and returns `CompiledSnapshot`, the built-in catalog, so a
-fresh environment that has not run the seed takes the same path. Only the
-`ai-client-catalog` startup seed and the demo seed write catalog rows.
+`Load` logs an error and returns the built-in catalog minus what the database
+removed: a soft-deleted product is dropped, a URL whose only live rows are
+disabled is disabled, and a URL with no live row is dropped. A live row with the
+same id or URL is not a removal. Other edits, such as a renamed product or
+changed signatures, are not carried into the fallback. Reading the removals is
+part of the read, so if it fails the process does not start. A fresh
+environment that has not run the seed has nothing removed and serves
+`CompiledSnapshot` itself. Only the `ai-client-catalog` startup seed and the
+demo seed write catalog rows.
 
 `CompiledSnapshot` lists the built-in registry in database order, so it gives
 the same answers in the same order as a freshly seeded database.
@@ -41,8 +47,9 @@ among matching patterns the one with the most literal path segments wins.
 Validation keeps overlapping patterns of different products strictly nested,
 so a tie can only be between one product's own patterns, and goes to the lower
 URL. The database's `is_pattern` discriminator is authoritative. A malformed
-disabled pattern, or a document whose product is not live, is logged and
-omitted; that is a successful partial load, distinct from a database failure.
+disabled pattern is logged and omitted; that is a successful partial load,
+distinct from a database failure. Documents of soft-deleted products are never
+read.
 
 Full fingerprints drive refresh detection. The device scan list version is
 derived from the served targets in `agent/aitargets`, not from the snapshot.
