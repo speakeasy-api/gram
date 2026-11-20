@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -143,7 +144,9 @@ func TestGatewayConsentDiscoversChainedMember(t *testing.T) {
 	upstreamClient := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "chained-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID})
 	_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, McpServerID: memberID, RemoteSessionClientID: upstreamClient})
 	require.NoError(t, err)
+	ti.service.SetAuthClientPermitted(true)
 	fixtures := authclientbackfill.New(ti.conn)
+	require.NoError(t, fixtures.SetRequiresUpstreamAuthFixture(ctx, authclientbackfill.SetRequiresUpstreamAuthFixtureParams{ID: memberID, RequiresUpstreamAuth: pgtype.Bool{Bool: true, Valid: true}}))
 	registration := uuid.NullUUID{UUID: upstreamClient, Valid: true}
 	member, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: memberID, ProjectID: *auth.ProjectID})
 	require.NoError(t, err)

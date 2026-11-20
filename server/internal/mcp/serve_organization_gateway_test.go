@@ -346,7 +346,6 @@ func TestServeConsentAction_OrganizationGatewayConnectsAnotherProjectsClient(t *
 	otherServer, err := mcpserversrepo.New(ti.conn).GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{Slug: conv.ToPGText(otherSlug), ProjectID: otherProject.ID})
 	require.NoError(t, err)
 	client := createConsentRemoteClient(t, ctx, ti.conn, otherProject.ID, authCtx.ActiveOrganizationID, "orggw-"+uuid.NewString()[:8], "", []uuid.UUID{otherServer.UserSessionIssuerID.UUID, fx.issuerID})
-	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, authCtx.ActiveOrganizationID, otherProject.ID, []uuid.UUID{otherServer.UserSessionIssuerID.UUID}))
 	authClientID := seedConsentAuthOffer(t, ctx, ti, authCtx.ActiveOrganizationID, otherProject.ID, otherServer.ID, client, "remote_session")
 	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, fx.subject.ID, otherServer.ID.String())
 

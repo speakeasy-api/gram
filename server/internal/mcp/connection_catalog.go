@@ -262,7 +262,7 @@ func (s *Service) freezeConnectionCatalog(ctx context.Context, endpoint *Resolve
 		return nil, fmt.Errorf("a completed gateway catalog is required; reload consent")
 	}
 	if !inventory.TypedGateway {
-		return nil, errConsentConfigurationChanged
+		return nil, fmt.Errorf("gateway preview predates typed credentials: %w", errConsentConfigurationChanged)
 	}
 	if state.Subject == nil || state.Subject.IsZero() || (mode != toolfilter.CatalogModeCached && mode != toolfilter.CatalogModeLive) {
 		return nil, fmt.Errorf("invalid connection catalog approval")
@@ -300,11 +300,11 @@ func (s *Service) freezeConnectionCatalog(ctx context.Context, endpoint *Resolve
 			})
 		}
 		if member.ServerID == uuid.Nil || member.configurationChanged(hashes[member.ServerID], true) {
-			return nil, errConsentConfigurationChanged
+			return nil, fmt.Errorf("gateway member configuration changed: %w", errConsentConfigurationChanged)
 		}
 		if member.Auth != nil {
 			if err := s.validateCatalogMemberAuth(subjectCtx, endpoint, *state.Subject, member); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("validate gateway member credential: %w", err)
 			}
 		}
 		member.TypedApproval = true

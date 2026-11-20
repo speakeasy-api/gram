@@ -785,7 +785,7 @@ func TestServeConsentAction_MetaMCPConnectRequiresATypedOfferAfterResync(t *test
 	server, err := mcpservers_repo.New(fx.ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: member.mcpServerID, ProjectID: projectID})
 	require.NoError(t, err)
 	require.Equal(t, conv.ToNullUUID(rsiID), server.RemoteSessionIssuerID)
-	requireConnectRefused(t, fx, gatewayClientID, "the issuer written by resync does not offer a proxied registration")
+	_ = requireConnectActionFailsClosed(t, fx, gatewayClientID, oops.CodeForbidden)
 
 	authClientID := seedConsentAuthOffer(t, ctx, fx.ti, orgID, projectID, member.mcpServerID, gatewayClientID, "remote_session")
 	location := postConnectAction(t, fx, gatewayClientID)
